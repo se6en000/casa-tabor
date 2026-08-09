@@ -43,10 +43,10 @@ test('HomeRightPanel surfaces an actionable Gmail health warning independent of 
 })
 
 test('HomeRightPanel and ActionHubPage project source rows into canonical attention topics', () => {
-  assert.match(homeRightPanel, /buildAttentionTopics\(mergeNeedsYouItems\(rawPrepItems, conflicts, directorySuggestionNotifications\)\)/)
+  assert.match(homeRightPanel, /buildAttentionTopics\([\s\S]{0,120}mergeNeedsYouItems\(rawPrepItems, conflicts, directorySuggestionNotifications\),[\s\S]{0,80}attentionTopicRules/)
   assert.match(homeRightPanel, /Casa grouped \{attentionTopics\.reduce/)
   assert.match(homeRightPanel, /dueDateIso=\{item\.due_by \?\? item\.event_date\}/)
-  assert.match(actionHubPage, /buildAttentionTopics\(filteredPrepItems\)/)
+  assert.match(actionHubPage, /buildAttentionTopics\(filteredPrepItems, attentionTopicRules\)/)
   assert.match(actionHubPage, /topic\.transactionVendor \? 'updates' : 'signals'/)
   assert.match(actionHubPage, /topicPrepItemIds/)
 })

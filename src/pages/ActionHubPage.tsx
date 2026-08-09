@@ -30,8 +30,10 @@ import { formatSnoozeHistoryLabel, type SnoozeDuration } from '../utils/snoozeDu
 import PrepItemDetailPanel from '../components/home/PrepItemDetailPanel'
 import PrepItemAssigneeChip from '../components/shared/PrepItemAssigneeChip'
 import SnoozeMenu from '../components/shared/SnoozeMenu'
+import AttentionTopicEvidence from '../components/shared/AttentionTopicEvidence'
 import { useLiveClock } from '../hooks/useLiveClock'
 import { usePageVisibility } from '../hooks/usePageVisibility'
+import { useAttentionTopicLearning } from '../hooks/useAttentionTopicLearning'
 import { buildAttentionTopics } from '../utils/attentionTopics'
 import { Button, Chip, IconButton, SegmentedControl } from '../components/ui'
 
@@ -103,6 +105,7 @@ export default function ActionHubPage() {
   const [typeFilter, setTypeFilter] = useState<PrepFilterKey>('all')
   const [sourceFilter, setSourceFilter] = useState<PrepSourceKey>('all')
   const [activePanel, setActivePanel] = useState<'attention' | 'activity'>('attention')
+  const { rules: attentionTopicRules, learnTopic, separateItem, isSaving: isSavingTopicRule } = useAttentionTopicLearning()
 
   // Merged Needs You feed: prep items plus unresolved conflicts and unseen directory
   // suggestions, normalized into the same PrepItem shape (Phase 1 of feed unification).
@@ -134,7 +137,10 @@ export default function ActionHubPage() {
     return prepItems.filter(item => typeMatch(item) && sourceMatch(item))
   }, [prepItems, typeFilter, sourceFilter])
 
-  const attentionTopics = useMemo(() => buildAttentionTopics(filteredPrepItems), [filteredPrepItems])
+  const attentionTopics = useMemo(
+    () => buildAttentionTopics(filteredPrepItems, attentionTopicRules),
+    [attentionTopicRules, filteredPrepItems],
+  )
 
   const activityLogNotifications = useMemo(
     () => notifications.filter(n => !['conflict', 'policy_conflict', 'policy_prep', 'directory_suggestions'].includes(n.type)),
@@ -363,9 +369,17 @@ export default function ActionHubPage() {
                               {sourceBadge({ source_type: sourceType }).label}
                             </Chip>
                           ))}
-                          <span className="text-caption font-semibold text-casa-muted">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setRevealedItemId(isRevealed ? null : item.id)}
+                            aria-label={`Show ${topic.items.length} grouped ${topic.transactionVendor ? 'updates' : 'signals'}`}
+                            className="h-auto min-h-0 p-0 hover:bg-transparent"
+                            contentClassName="text-caption font-semibold text-casa-muted underline underline-offset-2"
+                          >
                             {signalCount} {topic.transactionVendor ? 'updates' : 'signals'}
-                          </span>
+                          </Button>
                         </div>
                       )}
                       <div className="mt-1.5 flex items-center gap-2">
@@ -414,6 +428,24 @@ export default function ActionHubPage() {
                       </div>
                     </div>
                   </div>
+                  {topic.items.length > 1 && (
+                    <ExpandPanel isOpen={isRevealed}>
+                      <AttentionTopicEvidence
+                        items={topic.items}
+                        isSaving={isSavingTopicRule}
+                        onKeepGrouped={() => {
+                          void learnTopic(topic.items).catch((error) => {
+                            setActionError(error instanceof Error ? error.message : 'Casa could not save this grouping.')
+                          })
+                        }}
+                        onSeparate={(evidence) => {
+                          void separateItem(evidence).catch((error) => {
+                            setActionError(error instanceof Error ? error.message : 'Casa could not separate this item.')
+                          })
+                        }}
+                      />
+                    </ExpandPanel>
+                  )}
                   {/* Conflicts/directory suggestions get their own action row here, using the
                       same primary-resolve + expand-toggle pattern as prep items — just with
                       full-word buttons to match this page's established denser style. */}

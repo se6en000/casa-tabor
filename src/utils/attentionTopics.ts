@@ -12,6 +12,11 @@ export interface AttentionTopic {
   transactionStage: string | null
 }
 
+export interface AttentionTopicRule {
+  signature: string
+  topic_key: string
+}
+
 function attentionKind(item: PrepItem) {
   return item.category?.trim().toLowerCase()
     || item.type.trim().toLowerCase()
@@ -22,6 +27,42 @@ function normalizedTopicText(value: string | null | undefined) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ')
     .trim()
+}
+
+const SEMANTIC_STOP_WORDS = new Set([
+  'and', 'appointment', 'at', 'board', 'event', 'family', 'for', 'help',
+  'meeting', 'needs', 'the', 'to', 'vote', 'your',
+])
+
+function topicTokens(value: string | null | undefined) {
+  return normalizedTopicText(value)
+    .split(' ')
+    .filter((token) => token.length > 2 && !SEMANTIC_STOP_WORDS.has(token))
+}
+
+export function attentionLearningSignature(item: PrepItem) {
+  const date = item.event_date?.slice(0, 10) ?? item.due_by?.slice(0, 10) ?? 'undated'
+  return [
+    item.source_type ?? 'unknown',
+    attentionKind(item),
+    normalizedTopicText(item.event_title ?? item.description),
+    date,
+  ].join(':')
+}
+
+function isSemanticEventMatch(item: PrepItem, topic: AttentionTopic) {
+  if (!item.event_title || !topic.item.event_title) return false
+  if (item.event_id && topic.items.some((candidate) => candidate.event_id && candidate.event_id !== item.event_id)) {
+    return false
+  }
+  const itemTime = Date.parse(item.event_date ?? '')
+  const topicTime = Date.parse(topic.item.event_date ?? '')
+  if (!Number.isFinite(itemTime) || !Number.isFinite(topicTime)) return false
+  if (Math.abs(itemTime - topicTime) > 2 * 60 * 60 * 1000) return false
+
+  const topicTokenSet = new Set(topicTokens(topic.item.event_title))
+  const sharedTokens = topicTokens(item.event_title).filter((token) => topicTokenSet.has(token))
+  return sharedTokens.length >= 2
 }
 
 function isReminderItem(item: PrepItem) {
@@ -55,20 +96,31 @@ function isRecreatedReminderMatch(item: PrepItem, topic: AttentionTopic) {
 export function attentionTopicKey(item: PrepItem) {
   const transaction = vendorTransactionIdentity(item)
   if (transaction) return transaction.key
+  if (item.event_id) return `event:${item.event_id}`
   const kind = attentionKind(item)
-  if (item.event_id) return `event:${item.event_id}:${kind}`
   if (item.source_ref) return `source:${item.source_type ?? 'unknown'}:${item.source_ref}:${kind}`
   return `item:${item.id}`
 }
 
-export function buildAttentionTopics(items: PrepItem[]): AttentionTopic[] {
+export function buildAttentionTopics(items: PrepItem[], learnedRules: AttentionTopicRule[] = []): AttentionTopic[] {
   const topics = new Map<string, AttentionTopic>()
+  const learnedTopicKeys = new Map(learnedRules.map((rule) => [rule.signature, rule.topic_key]))
   for (const item of items) {
+    const learnedTopicKey = learnedTopicKeys.get(attentionLearningSignature(item))
     const transaction = vendorTransactionIdentity(item)
+    const eventTopic = !transaction && !learnedTopicKey
+      ? [...topics.values()].find((topic) =>
+          !topic.transactionVendor
+          && !topic.key.startsWith('separate:')
+          && (
+            Boolean(item.event_id && topic.items.some((candidate) => candidate.event_id === item.event_id))
+            || isSemanticEventMatch(item, topic)
+          ))
+      : undefined
     const reminderTopic = isReminderItem(item)
       ? [...topics.values()].find((topic) => isRecreatedReminderMatch(item, topic))
       : undefined
-    const key = transaction?.key ?? reminderTopic?.key ?? attentionTopicKey(item)
+    const key = learnedTopicKey ?? transaction?.key ?? eventTopic?.key ?? reminderTopic?.key ?? attentionTopicKey(item)
     const topic = topics.get(key)
     if (topic) {
       topic.items.push(item)

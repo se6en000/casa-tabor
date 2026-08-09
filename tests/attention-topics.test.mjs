@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { buildAttentionTopics } from '../src/utils/attentionTopics.ts'
+import { attentionLearningSignature, buildAttentionTopics } from '../src/utils/attentionTopics.ts'
 
 function prep(overrides) {
   return {
@@ -24,14 +24,14 @@ function prep(overrides) {
   }
 }
 
-test('buildAttentionTopics keeps distinct actions for the same event separate', () => {
+test('buildAttentionTopics groups distinct actions for the same event into one decision topic', () => {
   const topics = buildAttentionTopics([
     prep({ id: 'packing', category: 'travel_trips', description: 'Pack overnight bags' }),
     prep({ id: 'payment', category: 'bills_payments', description: 'Pay registration fee' }),
   ])
 
-  assert.equal(topics.length, 2)
-  assert.deepEqual(topics.map((topic) => topic.itemIds), [['packing'], ['payment']])
+  assert.equal(topics.length, 1)
+  assert.deepEqual(topics[0].itemIds, ['packing', 'payment'])
 })
 
 test('buildAttentionTopics merges recreated missed reminders for the same topic and time window', () => {
@@ -230,4 +230,123 @@ test('buildAttentionTopics honors structured transaction keys for any vendor', (
   assert.equal(topics.length, 1)
   assert.equal(topics[0].transactionVendor, 'Target')
   assert.equal(topics[0].item.id, 'target-delivered')
+})
+
+test('buildAttentionTopics groups semantically related event titles near the same time', () => {
+  const topics = buildAttentionTopics([
+    prep({
+      id: 'email',
+      event_id: null,
+      type: 'rsvp',
+      event_title: 'Lake Lytal Needs Your Help',
+      event_date: '2026-08-12T23:30:00.000Z',
+      source_type: 'gmail',
+      source_ref: 'gmail:message-1',
+    }),
+    prep({
+      id: 'calendar',
+      event_id: 'event-board-vote',
+      type: 'general_todo',
+      event_title: 'Lake Lytal Softball Board Vote',
+      event_date: '2026-08-12T22:30:00.000Z',
+      source_type: 'calendar_ai',
+      source_ref: null,
+    }),
+  ])
+
+  assert.equal(topics.length, 1)
+  assert.deepEqual(topics[0].itemIds, ['email', 'calendar'])
+})
+
+test('buildAttentionTopics does not merge generic title overlap on different days', () => {
+  const topics = buildAttentionTopics([
+    prep({
+      id: 'practice-one',
+      event_id: 'event-one',
+      event_title: 'Lake Lytal softball practice',
+      event_date: '2026-08-12T22:30:00.000Z',
+    }),
+    prep({
+      id: 'practice-two',
+      event_id: 'event-two',
+      event_title: 'Lake Lytal softball practice',
+      event_date: '2026-08-15T22:30:00.000Z',
+    }),
+  ])
+
+  assert.equal(topics.length, 2)
+})
+
+test('buildAttentionTopics never semantically merges two distinct linked events', () => {
+  const topics = buildAttentionTopics([
+    prep({
+      id: 'practice',
+      event_id: 'event-practice',
+      event_title: 'Lake Lytal softball practice',
+      event_date: '2026-08-12T21:30:00.000Z',
+    }),
+    prep({
+      id: 'game',
+      event_id: 'event-game',
+      event_title: 'Lake Lytal softball game',
+      event_date: '2026-08-12T22:30:00.000Z',
+    }),
+  ])
+
+  assert.equal(topics.length, 2)
+})
+
+test('learned topic rules reunite future matching evidence', () => {
+  const email = prep({
+    id: 'email',
+    event_id: null,
+    type: 'rsvp',
+    event_title: 'Lake Lytal Needs Your Help',
+    event_date: '2026-08-12T23:30:00.000Z',
+    source_type: 'gmail',
+    source_ref: 'gmail:new-message',
+  })
+  const calendar = prep({
+    id: 'calendar',
+    event_id: 'event-board-vote',
+    type: 'general_todo',
+    event_title: 'Lake Lytal Softball Board Vote',
+    event_date: '2026-08-12T22:30:00.000Z',
+    source_type: 'calendar_ai',
+    source_ref: null,
+  })
+
+  const learnedTopicKey = 'learned:lake-lytal-board-vote'
+  const topics = buildAttentionTopics([email, calendar], [
+    { signature: attentionLearningSignature(email), topic_key: learnedTopicKey },
+    { signature: attentionLearningSignature(calendar), topic_key: learnedTopicKey },
+  ])
+
+  assert.equal(topics.length, 1)
+  assert.equal(topics[0].key, learnedTopicKey)
+})
+
+test('a learned separation prevents an automatic semantic merge', () => {
+  const first = prep({
+    id: 'first',
+    event_id: null,
+    type: 'rsvp',
+    event_title: 'Lake Lytal Needs Your Help',
+    event_date: '2026-08-12T23:30:00.000Z',
+    source_type: 'gmail',
+  })
+  const second = prep({
+    id: 'second',
+    event_id: 'event-board-vote',
+    type: 'general_todo',
+    event_title: 'Lake Lytal Softball Board Vote',
+    event_date: '2026-08-12T22:30:00.000Z',
+    source_type: 'calendar_ai',
+  })
+
+  const topics = buildAttentionTopics([first, second], [
+    { signature: attentionLearningSignature(first), topic_key: 'separate:first' },
+  ])
+
+  assert.equal(topics.length, 2)
 })

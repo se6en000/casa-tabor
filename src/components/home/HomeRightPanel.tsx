@@ -17,6 +17,7 @@ import ConflictNeedsYouActions from '../shared/ConflictNeedsYouActions'
 import DirectorySuggestionActions from '../shared/DirectorySuggestionActions'
 import ExpandPanel from '../shared/ExpandPanel'
 import SnoozeMenu from '../shared/SnoozeMenu'
+import AttentionTopicEvidence from '../shared/AttentionTopicEvidence'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '../../utils/cn'
 import { useWeekEventIndex } from '../../hooks/useCalendarEvents'
@@ -33,6 +34,7 @@ import { eventOverlapsDay } from '../../utils/eventTime'
 import { summarizeGmailHealth, type GmailHealthSummary } from '../../utils/gmailHealth'
 import { priorityVisual } from '../../utils/prepPriority'
 import { usePageVisibility } from '../../hooks/usePageVisibility'
+import { useAttentionTopicLearning } from '../../hooks/useAttentionTopicLearning'
 import { buildAttentionTopics } from '../../utils/attentionTopics'
 import { sourceBadge } from '../../utils/prepSourceBadge'
 import { Button, Chip, EmptyState, Heading, IconButton, PersonAvatarStack, SecondaryRail, Toast } from '../ui'
@@ -192,6 +194,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
   const navigate = useNavigate()
   const isPageVisible = usePageVisibility()
   const { data: rawPrepItems = [] } = usePrepItems()
+  const { rules: attentionTopicRules, learnTopic, separateItem, isSaving: isSavingTopicRule } = useAttentionTopicLearning()
   const { data: familyMembers = [] } = useFamilyMembers()
   const { notifications, markRead } = useNotifications()
   const { data: conflicts = [] } = useWeekConflicts()
@@ -248,8 +251,11 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
     [notifications],
   )
   const attentionTopics = useMemo(
-    () => buildAttentionTopics(mergeNeedsYouItems(rawPrepItems, conflicts, directorySuggestionNotifications)),
-    [conflicts, directorySuggestionNotifications, rawPrepItems],
+    () => buildAttentionTopics(
+      mergeNeedsYouItems(rawPrepItems, conflicts, directorySuggestionNotifications),
+      attentionTopicRules,
+    ),
+    [attentionTopicRules, conflicts, directorySuggestionNotifications, rawPrepItems],
   )
 
   const prioritizedTopics = useMemo(() => {
@@ -559,9 +565,17 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                                   {sourceBadge({ source_type: sourceType }).label}
                                 </Chip>
                               ))}
-                              <span className="text-caption font-semibold text-casa-muted">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setRevealedItemId(isRevealed ? null : item.id)}
+                                aria-label={`Show ${topic.items.length} grouped ${topic.transactionVendor ? 'updates' : 'signals'}`}
+                                className="h-auto min-h-0 p-0 hover:bg-transparent"
+                                contentClassName="text-caption font-semibold text-casa-muted underline underline-offset-2"
+                              >
                                 {topic.items.length} {topic.transactionVendor ? 'updates' : 'signals'}
-                              </span>
+                              </Button>
                             </div>
                           )}
                           <div className="mt-1.5 flex items-center gap-1.5">
@@ -671,6 +685,23 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
                           CSS grid-rows transition can animate open/closed instead of popping
                           content in/out instantly. */}
                       <ExpandPanel isOpen={isRevealed}>
+                        {topic.items.length > 1 && (
+                          <AttentionTopicEvidence
+                            items={topic.items}
+                            isSaving={isSavingTopicRule}
+                            onKeepGrouped={() => {
+                              void learnTopic(topic.items).catch((error) => {
+                                setActionError(error instanceof Error ? error.message : 'Casa could not save this grouping.')
+                              })
+                            }}
+                            onSeparate={(evidence) => {
+                              void separateItem(evidence).catch((error) => {
+                                setActionError(error instanceof Error ? error.message : 'Casa could not separate this item.')
+                              })
+                            }}
+                          />
+                        )}
+
                         {item.source_type === 'conflict' && (() => {
                           const conflict = conflicts.find((c) => c.id === item.source_ref)
                           return conflict ? <ConflictNeedsYouActions conflict={conflict} /> : null

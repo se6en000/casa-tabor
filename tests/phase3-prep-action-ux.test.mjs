@@ -102,7 +102,7 @@ test('clearAll excludes unread conflict/policy_conflict rows from the bulk delet
 })
 
 test('ActionHubPage separates actionable topics from routine activity', () => {
-  assert.match(actionHubPage, /buildAttentionTopics\(filteredPrepItems\)/)
+  assert.match(actionHubPage, /buildAttentionTopics\(filteredPrepItems, attentionTopicRules\)/)
   assert.match(actionHubPage, /activityLogNotifications/)
   assert.match(actionHubPage, /Needs you · \$\{attentionTopics\.length\}/)
   assert.match(actionHubPage, /Routine activity · \$\{activityLogNotifications\.length\}/)
