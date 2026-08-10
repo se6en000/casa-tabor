@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { buildArtworkFeed } from '../lib/artModeLibrary'
+import { usePersonalArtModeData } from './usePersonalArtMode'
 
 const MET_API = 'https://collectionapi.metmuseum.org/public/collection/v1'
 const ARTIC_API = 'https://api.artic.edu/api/v1'
@@ -73,7 +75,7 @@ const FALLBACKS: Artwork[] = [
 ]
 
 export interface Artwork {
-  id: number
+  id: number | string
   title: string
   artist: string
   imageUrl: string
@@ -83,7 +85,7 @@ export interface Artwork {
 }
 
 type ArtworkPreference = 'up' | 'down'
-type ArtworkPreferences = Record<number, ArtworkPreference>
+type ArtworkPreferences = Record<string, ArtworkPreference>
 const PREFS_KEY = 'artwork-preferences-v1'
 
 function shuffled<T>(arr: T[]): T[] {
@@ -106,8 +108,7 @@ function loadPrefs(): ArtworkPreferences {
     const parsed = JSON.parse(raw) as Record<string, ArtworkPreference>
     const out: ArtworkPreferences = {}
     for (const [k, v] of Object.entries(parsed)) {
-      const id = Number(k)
-      if (!Number.isNaN(id) && (v === 'up' || v === 'down')) out[id] = v
+      if (k && (v === 'up' || v === 'down')) out[k] = v
     }
     return out
   } catch {
@@ -191,18 +192,25 @@ async function fetchFromArtic(query: string): Promise<Artwork[]> {
 
 export function useArtwork(rotateSecs = 240) {
   const [artworks, setArtworks]   = useState<Artwork[]>([])
+  const [casaArtworks, setCasaArtworks] = useState<Artwork[]>([])
   const [index, setIndex]         = useState(0)
   const [loaded, setLoaded]       = useState(false)
   const [, setPrefsVersion] = useState(0)
   const rotateRef                 = useRef<ReturnType<typeof setInterval> | null>(null)
-  const failedIdsRef              = useRef<Set<number>>(new Set())
+  const failedIdsRef              = useRef<Set<Artwork['id']>>(new Set())
   const prefsRef                  = useRef<ArtworkPreferences>({})
+  const {
+    artworks: personalArtwork,
+    sourceMode,
+    loading: personalArtworkLoading,
+  } = usePersonalArtModeData()
 
   useEffect(() => {
     prefsRef.current = loadPrefs()
   }, [])
 
   useEffect(() => {
+    if (sourceMode === 'personal') return
     let cancelled = false
     async function load() {
       try {
@@ -220,7 +228,7 @@ export function useArtwork(rotateSecs = 240) {
 
         const combined = [...m1, ...m2, ...m3, ...a1, ...a2]
         // Deduplicate by id
-        const seen = new Set<number>()
+        const seen = new Set<Artwork['id']>()
         const all = combined.filter(a => {
           if (seen.has(a.id)) return false
           seen.add(a.id)
@@ -228,23 +236,34 @@ export function useArtwork(rotateSecs = 240) {
         })
 
         if (!cancelled && all.length > 0) {
-          setArtworks(shuffled(all))
-          setIndex(0)
+          setCasaArtworks(shuffled(all))
         } else if (!cancelled) {
-          setArtworks(FALLBACKS)
-          setIndex(0)
+          setCasaArtworks(FALLBACKS)
         }
       } catch (e) {
         console.error('Failed to load artwork:', e)
         if (!cancelled) {
-          setArtworks(FALLBACKS)
-          setIndex(0)
+          setCasaArtworks(FALLBACKS)
         }
       }
     }
     load()
     return () => { cancelled = true }
-  }, [])
+  }, [sourceMode])
+
+  useEffect(() => {
+    if (personalArtworkLoading) return
+    const personal: Artwork[] = personalArtwork.map(item => ({
+      id: item.id,
+      title: item.title,
+      artist: 'Personal collection',
+      imageUrl: item.imageUrl,
+      medium: 'Uploaded artwork',
+    }))
+    setArtworks(buildArtworkFeed(sourceMode, casaArtworks, personal))
+    setLoaded(false)
+    setIndex(0)
+  }, [casaArtworks, personalArtwork, personalArtworkLoading, sourceMode])
 
   // Auto-rotate — only starts once artworks are loaded
   useEffect(() => {
@@ -278,14 +297,14 @@ export function useArtwork(rotateSecs = 240) {
     setIndex(i => (i + 1) % Math.max(artworks.length, 1))
   }, [artworks.length])
 
-  const setPreference = useCallback((artworkId: number, preference: ArtworkPreference) => {
-    const nextPrefs: ArtworkPreferences = { ...prefsRef.current, [artworkId]: preference }
+  const setPreference = useCallback((artworkId: Artwork['id'], preference: ArtworkPreference) => {
+    const nextPrefs: ArtworkPreferences = { ...prefsRef.current, [String(artworkId)]: preference }
     prefsRef.current = nextPrefs
     savePrefs(nextPrefs)
     setPrefsVersion(v => v + 1)
   }, [])
 
-  const currentPreference = current ? prefsRef.current[current.id] : undefined
+  const currentPreference = current ? prefsRef.current[String(current.id)] : undefined
 
   return {
     artwork: current,

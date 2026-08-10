@@ -1,14 +1,22 @@
 import { useEffect, useRef, useState } from 'react'
-import { Image, Clock, Sun, Palette, Monitor, Plus, Minus, X, ChevronDown, ChevronUp } from 'lucide-react'
+import { Image, Clock, Sun, Palette, Monitor, Plus, Minus, X, ChevronDown, ChevronUp, Upload, Trash2 } from 'lucide-react'
 import { useScreensaverSettings } from '../hooks/useScreensaverSettings'
 import { useArtFeedPrefs, MEDIA_OPTIONS } from '../hooks/useArtFeedPrefs'
+import { usePersonalArtMode, type PersonalArtwork } from '../hooks/usePersonalArtMode'
+import type { ArtSourceMode } from '../lib/artModeLibrary'
 import { cn } from '../utils/cn'
 import { SettingsPageHeader, SettingsToggle as Toggle } from '../components/settings'
-import { Button, Checkbox, IconButton, SegmentedControl, SectionHeader as SharedSectionHeader } from '../components/ui'
+import { Alert, Button, Checkbox, EmptyState, IconButton, Modal, SegmentedControl, SectionHeader as SharedSectionHeader } from '../components/ui'
 
 const ART_FEED_MODE_OPTIONS = [
   { value: 'auto', label: 'Auto Gallery' },
   { value: 'curated', label: 'Curated Gallery' },
+] as const
+
+const ART_SOURCE_OPTIONS = [
+  { value: 'casa', label: 'Casa Gallery' },
+  { value: 'personal', label: 'Personal only' },
+  { value: 'mixed', label: 'Mix both' },
 ] as const
 
 const COASTAL_STARTER_ARTISTS = [
@@ -163,11 +171,27 @@ function TagInput({
 export default function ArtModeSettingsPage() {
   const { settings, update: updateScreensaver } = useScreensaverSettings()
   const { prefs, update: updatePrefs } = useArtFeedPrefs()
+  const {
+    artworks: personalArtwork,
+    sourceMode,
+    loading: personalArtworkLoading,
+    error: personalArtworkLoadError,
+    setSourceMode,
+    uploadArtwork,
+    deleteArtwork,
+    uploading,
+    deleting,
+  } = usePersonalArtMode()
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [yearFromInput, setYearFromInput] = useState('')
   const [yearToInput, setYearToInput] = useState('')
+  const [libraryMessage, setLibraryMessage] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null)
+  const [artworkToDelete, setArtworkToDelete] = useState<PersonalArtwork | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const curatedMode = prefs.feedMode === 'curated'
+  const includesCasaGallery = sourceMode !== 'personal'
+  const includesPersonalArtwork = sourceMode !== 'casa'
 
   useEffect(() => {
     setYearFromInput(prefs.yearFrom != null ? String(prefs.yearFrom) : '')
@@ -180,6 +204,50 @@ export default function ArtModeSettingsPage() {
   const setFeedMode = (mode: 'auto' | 'curated') => {
     updatePrefs({ feedMode: mode })
     if (mode === 'auto') setAdvancedOpen(false)
+  }
+
+  const handleSourceChange = async (mode: ArtSourceMode) => {
+    setLibraryMessage(null)
+    try {
+      await setSourceMode(mode)
+    } catch (error) {
+      setLibraryMessage({
+        tone: 'danger',
+        text: error instanceof Error ? error.message : 'Art Mode source could not be changed.',
+      })
+    }
+  }
+
+  const handleUpload = async (file: File | undefined) => {
+    if (!file) return
+    setLibraryMessage(null)
+    try {
+      await uploadArtwork(file)
+      setLibraryMessage({ tone: 'success', text: `${file.name} is now in your personal gallery.` })
+    } catch (error) {
+      setLibraryMessage({
+        tone: 'danger',
+        text: error instanceof Error ? error.message : 'Artwork could not be uploaded.',
+      })
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  const confirmDelete = async () => {
+    if (!artworkToDelete) return
+    setLibraryMessage(null)
+    try {
+      await deleteArtwork(artworkToDelete)
+      setLibraryMessage({ tone: 'success', text: `${artworkToDelete.title} was removed.` })
+      setArtworkToDelete(null)
+    } catch (error) {
+      setLibraryMessage({
+        tone: 'danger',
+        text: error instanceof Error ? error.message : 'Artwork could not be removed.',
+      })
+      setArtworkToDelete(null)
+    }
   }
 
   const toggleMediaType = (id: string) => {
@@ -225,10 +293,10 @@ export default function ArtModeSettingsPage() {
 
           {settings.enabled && (
             <SegmentedControl
-              aria-label="Art feed mode"
-              value={prefs.feedMode}
-              options={ART_FEED_MODE_OPTIONS}
-              onChange={setFeedMode}
+              aria-label="Art Mode source"
+              value={sourceMode}
+              options={ART_SOURCE_OPTIONS}
+              onChange={mode => void handleSourceChange(mode)}
               fullWidth
               className="mt-2"
             />
@@ -237,7 +305,7 @@ export default function ArtModeSettingsPage() {
           <Button
             type="button"
             onClick={() => document.dispatchEvent(new CustomEvent('screensaver-on'))}
-            disabled={!settings.enabled}
+            disabled={!settings.enabled || personalArtworkLoading || (sourceMode === 'personal' && personalArtwork.length === 0)}
             className={cn(
               'mt-4 w-full py-2.5 rounded-xl text-body-sm font-semibold transition-all',
               settings.enabled
@@ -307,13 +375,103 @@ export default function ArtModeSettingsPage() {
         {settings.enabled && (
           <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
             <SectionHeader icon={Palette} label="Collection" />
-            {!curatedMode && (
+            {libraryMessage && (
+              <Alert tone={libraryMessage.tone} title={libraryMessage.tone === 'success' ? 'Personal gallery updated' : 'Personal gallery error'} onDismiss={() => setLibraryMessage(null)} className="mb-4">
+                {libraryMessage.text}
+              </Alert>
+            )}
+            {personalArtworkLoadError && (
+              <Alert tone="danger" title="Personal gallery unavailable" className="mb-4">
+                Personal artwork could not be loaded. Casa Gallery remains available.
+              </Alert>
+            )}
+
+            {includesPersonalArtwork && (
+              <div className={cn(includesCasaGallery && 'mb-5 border-b border-casa-border pb-5')}>
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-body-sm font-semibold text-casa-navy">Personal gallery</p>
+                    <p className="text-caption text-casa-muted">Shared across the kiosk, mobile, and web.</p>
+                  </div>
+                  <Button
+                    variant="strong"
+                    size="sm"
+                    leadingIcon={<Upload size={16} />}
+                    loading={uploading}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    Upload
+                  </Button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="sr-only"
+                    onChange={event => void handleUpload(event.target.files?.[0])}
+                  />
+                </div>
+
+                {personalArtworkLoading ? (
+                  <p className="text-caption text-casa-muted py-4">Loading personal artwork…</p>
+                ) : personalArtwork.length === 0 ? (
+                  <EmptyState
+                    icon={<Image size={28} />}
+                    title="No personal artwork yet"
+                    description="Upload a JPG, PNG, or WebP image up to 20 MB. Personal-only Art Mode stays empty until you add one."
+                    action={(
+                      <Button
+                        variant="secondary"
+                        leadingIcon={<Upload size={16} />}
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        Choose an image
+                      </Button>
+                    )}
+                  />
+                ) : (
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                    {personalArtwork.map(item => (
+                      <div key={item.id} className="relative overflow-hidden rounded-xl border border-casa-border bg-casa-bg">
+                        <img
+                          src={item.imageUrl}
+                          alt={item.title}
+                          className="aspect-[4/3] w-full object-cover"
+                        />
+                        <div className="flex items-center justify-between gap-2 p-2">
+                          <p className="min-w-0 truncate text-caption font-medium text-casa-navy">{item.title}</p>
+                          <IconButton
+                            size="sm"
+                            variant="ghost"
+                            icon={<Trash2 size={16} />}
+                            aria-label={`Remove ${item.title}`}
+                            onClick={() => setArtworkToDelete(item)}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {includesCasaGallery && (
+              <SegmentedControl
+                aria-label="Art feed mode"
+                value={prefs.feedMode}
+                options={ART_FEED_MODE_OPTIONS}
+                onChange={setFeedMode}
+                fullWidth
+                className="mb-4"
+              />
+            )}
+
+            {includesCasaGallery && !curatedMode && (
               <p className="text-caption text-casa-muted">
                 Auto Gallery uses balanced, modern-leaning public-domain pulls across Met, Art Institute, and Europeana.
               </p>
             )}
 
-            {curatedMode && (
+            {includesCasaGallery && curatedMode && (
               <>
                 <div className="rounded-xl border border-casa-border bg-casa-bg p-3 mb-4">
                   <p className="text-body-sm font-semibold text-casa-navy">Starter themes</p>
@@ -474,6 +632,25 @@ export default function ArtModeSettingsPage() {
           </div>
         )}
       </div>
+      <Modal
+        open={artworkToDelete !== null}
+        onClose={() => setArtworkToDelete(null)}
+        title="Remove artwork?"
+        size="sm"
+        closeDisabled={deleting}
+      >
+        <p className="text-body-sm text-casa-muted py-4">
+          {artworkToDelete?.title} will be removed from every device using this personal gallery.
+        </p>
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={() => setArtworkToDelete(null)} disabled={deleting}>
+            Keep it
+          </Button>
+          <Button variant="danger" loading={deleting} onClick={() => void confirmDelete()}>
+            Remove
+          </Button>
+        </div>
+      </Modal>
     </>
   )
 }
