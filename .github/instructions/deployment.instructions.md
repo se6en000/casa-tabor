@@ -11,6 +11,7 @@ Whenever deploying, **always run both commands** — never just one:
 ```bash
 # 1. Push to GitHub (triggers Vercel auto-deploy AND keeps git in sync)
 git push origin main
+git push deploy main
 
 # 2. Direct Vercel production deploy (immediate, doesn't wait for git hook)
 npx vercel --prod
