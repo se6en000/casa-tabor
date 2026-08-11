@@ -159,6 +159,8 @@ test('PIN credentials and the history gateway use server-only verification with 
   assert.match(gateway, /credential_version/)
   assert.match(gateway, /assertHistorySession/)
   assert.match(gateway, /action === 'unlock_admin'/)
+  assert.match(gateway, /action === 'set_member_pin'/)
+  assert.doesNotMatch(gateway, /upsert\(\{[\s\S]*credential_kind: 'family_member'/)
   assert.match(gateway, /action === 'list_conversations'/)
   assert.match(gateway, /action === 'append_messages'/)
   assert.match(gateway, /action === 'forget_conversation'/)
@@ -189,6 +191,17 @@ test('the app profile, rather than the drawer, owns persistent private-history a
   assert.doesNotMatch(drawer, /Unlock private history/)
   assert.doesNotMatch(drawer, /historyPin/)
   assert.match(drawer, /Sign out/)
+})
+
+test('the launch gate keeps household-admin PIN enrollment reachable before a member profile exists', () => {
+  const source = readFileSync(
+    new URL('../src/components/shared/PinGate.tsx', import.meta.url),
+    'utf8',
+  )
+
+  assert.match(source, /Manage family PINs/)
+  assert.match(source, /unlockAdmin/)
+  assert.match(source, /set_member_pin/)
 })
 
 test('family settings keeps PIN enrollment inside each existing member’s collapsible card', () => {

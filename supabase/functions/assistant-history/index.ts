@@ -145,7 +145,7 @@ async function assertHistorySession(request: Request, sb: ReturnType<typeof crea
 
   const credentialQuery = sb
     .from('ai_history_pin_credentials')
-    .select('credential_version')
+    .select('id,credential_version')
     .eq('credential_kind', session.role)
   const { data: credential, error } = session.role === 'family_member'
     ? await credentialQuery.eq('member_id', session.member_id).maybeSingle()
@@ -331,14 +331,17 @@ Deno.serve(async (request) => {
         .eq('member_id', memberId)
         .maybeSingle()
       if (existingError) throw existingError
-      const { error: saveError } = await sb.from('ai_history_pin_credentials').upsert({
+      const nextCredential = {
         credential_kind: 'family_member',
         member_id: memberId,
         credential_version: (existing?.credential_version ?? 0) + 1,
         failed_attempt_count: 0,
         locked_until: null,
         ...credential,
-      }, { onConflict: 'member_id' })
+      }
+      const { error: saveError } = existing
+        ? await sb.from('ai_history_pin_credentials').update(nextCredential).eq('id', existing.id)
+        : await sb.from('ai_history_pin_credentials').insert(nextCredential)
       if (saveError) throw saveError
       return json(200, { status: 'member_pin_configured' })
     }

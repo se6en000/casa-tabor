@@ -15,9 +15,12 @@ async function errorMessage(error: unknown) {
   const response = error && typeof error === 'object' && 'context' in error
     ? (error as { context?: unknown }).context
     : null
-  if (response instanceof Response) {
+  if (response && typeof response === 'object' && 'json' in response) {
     try {
-      const payload = await response.clone().json() as { error?: unknown }
+      const readableResponse = 'clone' in response && typeof response.clone === 'function'
+        ? response.clone() as { json: () => Promise<unknown> }
+        : response as { json: () => Promise<unknown> }
+      const payload = await readableResponse.json() as { error?: unknown }
       if (typeof payload.error === 'string' && payload.error) return payload.error
     } catch {
       // Use the transport error below when the response has no JSON error payload.
@@ -49,4 +52,16 @@ export async function invokeHistoryUnlock(memberId: string, pin: string) {
     throw new Error(result.error ?? 'Private history could not be unlocked.')
   }
   return { history_session_token: result.history_session_token }
+}
+
+export async function unlockAdmin(pin: string) {
+  const { data, error } = await supabase.functions.invoke('assistant-history', {
+    body: { action: 'unlock_admin', pin },
+  })
+  if (error) throw new Error(await errorMessage(error))
+  const result = data as { history_session_token?: string; error?: string }
+  if (!result.history_session_token) {
+    throw new Error(result.error ?? 'Household admin access could not be unlocked.')
+  }
+  return result.history_session_token
 }
