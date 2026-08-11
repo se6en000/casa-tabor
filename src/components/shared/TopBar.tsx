@@ -1,15 +1,17 @@
 import { useMemo, useRef } from 'react'
 import { format, isAfter, isBefore } from 'date-fns'
-import { Cloud, Sparkles, ImageIcon, Mic, RefreshCw } from 'lucide-react'
+import { Cloud, Sparkles, ImageIcon, Mic, RefreshCw, LogOut, UserRound } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useLiveClock, greetingFor } from '../../hooks/useLiveClock'
 import { useHomeWeather } from '../../hooks/useHomeWeather'
 import { useTodayEvents } from '../../hooks/useCalendarEvents'
 import { cn } from '../../utils/cn'
 import { IconButton } from '../ui'
+import { useProfileSession } from '../../contexts/ProfileSessionContext'
 
 /** Full-width Command Bar — CT logo · current events center · weather + clock + AI right */
 export function TopBarC() {
+  const { profile, signOut } = useProfileSession()
   const now = useLiveClock(10_000)
   const { data: weather } = useHomeWeather()
   const { data: todayEvents = [] } = useTodayEvents(now)
@@ -106,6 +108,23 @@ export function TopBarC() {
           {format(now, 'h:mm')}
           <span className="text-caption text-white/50 ml-0.5">{format(now, 'a')}</span>
         </div>
+
+        {profile && (
+          <>
+            <div className="hidden lg:flex items-center gap-1.5 text-caption text-white/70">
+              <UserRound size={14} aria-hidden="true" />
+              <span>{profile.memberName}</span>
+            </div>
+            <IconButton
+              icon={<LogOut size={16} strokeWidth={1.8} />}
+              aria-label={`Sign out ${profile.memberName}`}
+              onClick={signOut}
+              title={`Sign out ${profile.memberName}`}
+              size="sm"
+              className="bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
+            />
+          </>
+        )}
 
         {/* Refresh button — reloads the kiosk/browser in place */}
         <IconButton

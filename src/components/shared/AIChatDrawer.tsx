@@ -11,13 +11,14 @@ import {
   type VoiceTranscriptRevision,
 } from '../../hooks/useSpeechInput'
 import { useLedStrip } from '../../hooks/useLedStrip'
+import { useProfileSession } from '../../contexts/ProfileSessionContext'
 import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import type { FamilyMember } from '../../types'
 import BounceScroll from '../shared/BounceScroll'
 import MarkdownContent from '../shared/MarkdownContent'
-import { Button, Card, Field, Heading, IconButton, Input, LiveTranscript, Modal, SegmentedControl, Select, Text } from '../ui'
+import { Button, Card, Heading, IconButton, LiveTranscript, Modal, SegmentedControl, Text } from '../ui'
 import { formatTextForMarkdown, stripEvidenceCitationMarkers } from '../../lib/assistantMarkdown.mjs'
 import { createAssistantTraceContext, emitAssistantTrace, getAssistantDeviceId } from '../../lib/assistantTelemetry'
 import { classifyPendingConfirmation } from '../../lib/assistantConfirmation.mjs'
@@ -90,9 +91,6 @@ export default function AIChatDrawer({
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false)
   const [nudgeDismissed, setNudgeDismissed] = useState(false)
   const [historyModalOpen, setHistoryModalOpen] = useState(false)
-  const [historyMemberId, setHistoryMemberId] = useState('')
-  const [historyPin, setHistoryPin] = useState('')
-  const [historyUnlocking, setHistoryUnlocking] = useState(false)
   const [historyUnlockError, setHistoryUnlockError] = useState<string | null>(null)
   const [historyConversations, setHistoryConversations] = useState<Array<{ id: string; title: string; updated_at: string; archived_at: string | null }>>([])
   const [historyListLoading, setHistoryListLoading] = useState(false)
@@ -115,6 +113,7 @@ export default function AIChatDrawer({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
   const qc = useQueryClient()
+  const { profile, signOut } = useProfileSession()
 
   const {
     messages,
@@ -957,15 +956,10 @@ export default function AIChatDrawer({
                       setHistoryModalOpen(true)
                       loadHistoryConversations()
                     }}
-                    title={privateHistory.access ? 'Private history is unlocked on this device' : 'Unlock private conversation history'}
-                    className={cn(
-                      'h-7 px-2 rounded-full text-caption font-medium transition-colors',
-                      privateHistory.access
-                        ? 'bg-casa-gold/10 text-casa-gold'
-                        : 'text-casa-muted hover:text-casa-navy hover:bg-casa-divider',
-                    )}
+                    title={`Open ${profile?.memberName ?? 'your'} private conversation history`}
+                    className="h-7 rounded-full bg-casa-gold/10 px-2 text-caption font-medium text-casa-gold transition-colors hover:bg-casa-gold/20"
                   >
-                    {privateHistory.access ? 'Private' : 'History'}
+                    Private
                   </Button>
                 )}
                 {hasSession && (
@@ -1436,18 +1430,17 @@ export default function AIChatDrawer({
             </div>
             <Modal
               open={historyModalOpen}
-              onClose={() => {
-                if (!historyUnlocking) setHistoryModalOpen(false)
-              }}
+              onClose={() => setHistoryModalOpen(false)}
               title="Private conversation history"
-              closeDisabled={historyUnlocking}
               size="sm"
             >
-              {privateHistory.access ? (
                 <div className="space-y-4 pt-5">
                   <p className="text-body-sm text-casa-muted">
-                    New messages save privately for this browser session. Existing local chats are never uploaded automatically.
+                    {profile?.memberName}'s saved conversations are private, retained for 90 days, and never used as household memory or in Daily Brief.
                   </p>
+                  {(historyUnlockError ?? privateHistory.error) && (
+                    <p role="alert" className="text-body-sm text-casa-error">{historyUnlockError ?? privateHistory.error}</p>
+                  )}
                   <div className="space-y-2">
                     <p className="text-caption font-semibold uppercase tracking-wide text-casa-muted">Saved conversations</p>
                     {historyListLoading && <p className="text-body-sm text-casa-muted">Loading private conversations…</p>}
@@ -1489,61 +1482,13 @@ export default function AIChatDrawer({
                     variant="secondary"
                     fullWidth
                     onClick={() => {
-                      privateHistory.lock()
                       setHistoryModalOpen(false)
+                      signOut()
                     }}
                   >
-                    Lock private history
+                    Sign out of Casa
                   </Button>
                 </div>
-              ) : (
-                <form
-                  className="space-y-4 pt-5"
-                  onSubmit={(event) => {
-                    event.preventDefault()
-                    const memberId = historyMemberId || family[0]?.id
-                    if (!memberId) {
-                      setHistoryUnlockError('Choose a family member first.')
-                      return
-                    }
-                    setHistoryUnlocking(true)
-                    setHistoryUnlockError(null)
-                    void privateHistory.unlock(memberId, historyPin)
-                      .then(() => {
-                        setHistoryPin('')
-                        setHistoryModalOpen(false)
-                      })
-                      .catch((error: unknown) => {
-                        setHistoryUnlockError(error instanceof Error ? error.message : 'Private history could not be unlocked.')
-                      })
-                      .finally(() => setHistoryUnlocking(false))
-                  }}
-                >
-                  <p className="text-body-sm text-casa-muted">
-                    Unlock your own saved conversations. They are private, retained for 90 days, and never used as household memory or in Daily Brief.
-                  </p>
-                  <Field label="Family member">
-                    <Select value={historyMemberId || family[0]?.id || ''} onChange={(event) => setHistoryMemberId(event.target.value)}>
-                      {family.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}
-                    </Select>
-                  </Field>
-                  <Field label="PIN" error={historyUnlockError ?? privateHistory.error}>
-                    <Input
-                      type="password"
-                      inputMode="numeric"
-                      autoComplete="current-password"
-                      pattern="[0-9]{6,12}"
-                      value={historyPin}
-                      onChange={(event) => setHistoryPin(event.target.value)}
-                      placeholder="6 to 12 digits"
-                      required
-                    />
-                  </Field>
-                  <Button type="submit" fullWidth disabled={historyUnlocking || family.length === 0}>
-                    {historyUnlocking ? 'Unlocking…' : 'Unlock private history'}
-                  </Button>
-                </form>
-              )}
             </Modal>
           </motion.div>
         </>

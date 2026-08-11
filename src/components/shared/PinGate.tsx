@@ -1,111 +1,105 @@
-import { useState, useEffect, useRef } from 'react'
-import { cn } from '../../utils/cn'
-import { Button } from '../ui'
+import { useState, type ReactNode } from 'react'
+import { KeyRound, UserRound } from 'lucide-react'
 
-const STORAGE_KEY = 'casa_auth'
-const PIN = import.meta.env.VITE_APP_PIN as string | undefined
+import { useProfileSession, ProfileSessionProvider } from '../../contexts/ProfileSessionContext'
+import { useFamilyMembers } from '../../hooks/useFamilyMembers'
+import { Alert, Button, Card, Field, Heading, Input, Skeleton, Text } from '../ui'
+import type { FamilyMember } from '../../types'
 
-function getStored(): boolean {
-  try { return localStorage.getItem(STORAGE_KEY) === PIN } catch { return false }
-}
+function ProfileUnlockGate({ children }: { children: ReactNode }) {
+  const { profile, unlock } = useProfileSession()
+  const { data: family = [], isLoading, error: familyError } = useFamilyMembers()
+  const [selectedMember, setSelectedMember] = useState<FamilyMember | null>(null)
+  const [pin, setPin] = useState('')
+  const [unlocking, setUnlocking] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-export default function PinGate({ children }: { children: React.ReactNode }) {
-  // If no PIN is configured, pass straight through
-  if (!PIN) return <>{children}</>
+  if (profile) return <>{children}</>
 
-  const [unlocked, setUnlocked] = useState(getStored)
-  const [digits, setDigits] = useState<string[]>([])
-  const [shake, setShake] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const chooseMember = (member: FamilyMember | null) => {
+    setSelectedMember(member)
+    setPin('')
+    setError(null)
+  }
 
-  useEffect(() => { if (!unlocked) inputRef.current?.focus() }, [unlocked])
-
-  function handleKey(d: string) {
-    if (digits.length >= PIN!.length) return
-    const next = [...digits, d]
-    setDigits(next)
-    if (next.length === PIN!.length) {
-      const attempt = next.join('')
-      if (attempt === PIN) {
-        try { localStorage.setItem(STORAGE_KEY, PIN!) } catch { /* */ }
-        setUnlocked(true)
-      } else {
-        setShake(true)
-        setTimeout(() => { setDigits([]); setShake(false); inputRef.current?.focus() }, 600)
-      }
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!selectedMember) return
+    setUnlocking(true)
+    setError(null)
+    try {
+      await unlock(selectedMember, pin)
+    } catch (unlockError) {
+      setPin('')
+      setError(unlockError instanceof Error ? unlockError.message : 'Casa could not open this profile.')
+    } finally {
+      setUnlocking(false)
     }
   }
 
-  function handleBackspace() { setDigits(d => d.slice(0, -1)) }
-
-  if (unlocked) return <>{children}</>
-
-  const pinLen = PIN?.length ?? 4
-
   return (
-    <div className="fixed inset-0 bg-casa-bg flex flex-col items-center justify-center gap-8 z-debug">
-      <div className="flex flex-col items-center gap-2">
-        <span className="text-4xl">🏠</span>
-        <h1 className="font-display text-display-md text-casa-navy">Casa Tabor</h1>
-        <p className="text-body text-casa-muted">Enter your PIN to continue</p>
-      </div>
+    <div className="app-shell flex min-h-screen items-center justify-center bg-casa-bg px-page-gutter py-8">
+      <Card tone="surface" padding="lg" className="w-full max-w-xl">
+        <div className="flex flex-col items-center text-center">
+          <span className="flex size-12 items-center justify-center rounded-full bg-casa-gold/10 text-casa-gold">
+            <UserRound size={24} />
+          </span>
+          <Heading role="display-sm" className="mt-4">Who is using Casa?</Heading>
+          <Text role="body" muted className="mt-2">
+            Choose your profile to keep your conversations private and personal on this device.
+          </Text>
+        </div>
 
-      {/* Dots */}
-      <div className={cn('flex gap-4 transition-all', shake && 'animate-[shake_0.4s_ease]')}>
-        {Array.from({ length: pinLen }).map((_, i) => (
-          <div
-            key={i}
-            className={cn(
-              'w-4 h-4 rounded-full border-2 transition-all duration-150',
-              i < digits.length
-                ? 'bg-casa-navy border-casa-navy scale-110'
-                : 'bg-transparent border-casa-border',
-            )}
-          />
-        ))}
-      </div>
-
-      {/* Hidden input for hardware keyboard */}
-      <input
-        ref={inputRef}
-        type="tel"
-        inputMode="numeric"
-        className="absolute opacity-0 pointer-events-none w-0 h-0"
-        onKeyDown={e => {
-          if (e.key >= '0' && e.key <= '9') handleKey(e.key)
-          if (e.key === 'Backspace') handleBackspace()
-        }}
-      />
-
-      {/* Numpad */}
-      <div className="grid grid-cols-3 gap-3 w-64">
-        {['1','2','3','4','5','6','7','8','9','','0','⌫'].map((k, i) => (
-          <Button variant="ghost"
-            key={i}
-            onClick={() => {
-              if (k === '⌫') handleBackspace()
-              else if (k) handleKey(k)
-            }}
-            disabled={!k}
-            className={cn(
-              'h-16 rounded-2xl font-display text-heading font-semibold transition-all active:scale-95',
-              k
-                ? 'bg-casa-surface border border-casa-border text-casa-navy shadow-card hover:bg-casa-bg hover:shadow-card-hover'
-                : 'invisible',
-            )}
-          >
-            {k}
-          </Button>
-        ))}
-      </div>
-
-      <style>{`
-        @keyframes shake {
-          0%,100% { transform: translateX(0) }
-          20%,60%  { transform: translateX(-8px) }
-          40%,80%  { transform: translateX(8px) }
-        }
-      `}</style>
+        {isLoading && <div className="mt-6 space-y-3"><Skeleton className="h-14 w-full" /><Skeleton className="h-14 w-full" /></div>}
+        {familyError && <Alert tone="danger" title="Family profiles are unavailable" className="mt-6">Refresh and try again.</Alert>}
+        {!isLoading && !familyError && !selectedMember && (
+          <div className="mt-6 grid gap-3 sm:grid-cols-2">
+            {family.map((member) => (
+              <Button key={member.id} variant="secondary" fullWidth align="start" onClick={() => chooseMember(member)}>
+                <span className="flex min-w-0 flex-col text-left">
+                  <span className="truncate">{member.name}</span>
+                  <span className="text-caption font-normal text-casa-muted">{member.role}</span>
+                </span>
+              </Button>
+            ))}
+          </div>
+        )}
+        {!isLoading && !familyError && family.length === 0 && (
+          <Alert tone="warning" title="No family profiles yet" className="mt-6">Add a family member in Settings before signing in.</Alert>
+        )}
+        {selectedMember && (
+          <form className="mt-6 space-y-4" onSubmit={submit}>
+            <div className="flex items-center justify-between gap-3">
+              <Text role="body-sm">Signing in as <strong>{selectedMember.name}</strong></Text>
+              <Button variant="ghost" size="sm" type="button" onClick={() => chooseMember(null)}>Choose someone else</Button>
+            </div>
+            <Field label={`${selectedMember.name}'s PIN`} error={error}>
+              <Input
+                autoFocus
+                type="password"
+                inputMode="numeric"
+                autoComplete="current-password"
+                pattern="[0-9]{6,12}"
+                value={pin}
+                onChange={(event) => setPin(event.target.value)}
+                placeholder="6 to 12 digits"
+                required
+              />
+            </Field>
+            <Button type="submit" fullWidth leadingIcon={<KeyRound size={16} />} loading={unlocking}>
+              Open {selectedMember.name}'s Casa
+            </Button>
+          </form>
+        )}
+      </Card>
     </div>
+  )
+}
+
+export default function PinGate({ children }: { children: ReactNode }) {
+  return (
+    <ProfileSessionProvider>
+      <ProfileUnlockGate>{children}</ProfileUnlockGate>
+    </ProfileSessionProvider>
   )
 }

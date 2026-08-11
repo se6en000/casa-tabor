@@ -11,7 +11,6 @@ const CORS = {
 const PIN_ITERATIONS = 310_000
 const MAX_FAILED_ATTEMPTS = 5
 const LOCKOUT_MS = 15 * 60 * 1000
-const SESSION_MS = 12 * 60 * 60 * 1000
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
 
@@ -19,7 +18,7 @@ type HistorySession = {
   role: 'household_admin' | 'family_member'
   member_id: string | null
   credential_version: number
-  expires_at: number
+  expires_at?: number
 }
 
 type StoredMessage = {
@@ -136,8 +135,10 @@ async function assertHistorySession(request: Request, sb: ReturnType<typeof crea
   if (
     (session.role !== 'household_admin' && session.role !== 'family_member') ||
     !Number.isFinite(session.credential_version) ||
-    !Number.isFinite(session.expires_at) ||
-    session.expires_at <= Date.now()
+    (session.expires_at !== undefined && (
+      !Number.isFinite(session.expires_at) ||
+      session.expires_at <= Date.now()
+    ))
   ) {
     throw new Error('Private history session has expired.')
   }
@@ -286,9 +287,7 @@ Deno.serve(async (request) => {
           role: 'family_member',
           member_id: memberId,
           credential_version: credential.credential_version,
-          expires_at: Date.now() + SESSION_MS,
         }),
-        expires_at: new Date(Date.now() + SESSION_MS).toISOString(),
       })
     }
 
@@ -308,9 +307,7 @@ Deno.serve(async (request) => {
           role: 'household_admin',
           member_id: null,
           credential_version: credential.credential_version,
-          expires_at: Date.now() + SESSION_MS,
         }),
-        expires_at: new Date(Date.now() + SESSION_MS).toISOString(),
       })
     }
 

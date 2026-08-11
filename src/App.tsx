@@ -294,15 +294,15 @@ export default function App() {
   return (
     <AppErrorBoundary>
       <ThemeProvider>
-        <PinGate>
-          <QueryClientProvider client={queryClient}>
+        <QueryClientProvider client={queryClient}>
+          <PinGate>
             <BrowserRouter>
               <AppErrorBoundary>
                 <AppShell />
               </AppErrorBoundary>
             </BrowserRouter>
-          </QueryClientProvider>
-        </PinGate>
+          </PinGate>
+        </QueryClientProvider>
       </ThemeProvider>
     </AppErrorBoundary>
   )

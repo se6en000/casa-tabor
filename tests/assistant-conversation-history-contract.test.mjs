@@ -8,6 +8,10 @@ import {
   buildHistoryRequestOptions,
   sanitizeConversationMessage,
 } from '../src/lib/assistantConversationHistory.mjs'
+import {
+  normalizeProfileSession,
+  PROFILE_SESSION_STORAGE_KEY,
+} from '../src/lib/profileSession.mjs'
 
 test('private conversations are owned by one family member and expire after the configured retention period', () => {
   const createdAt = new Date('2026-08-11T16:00:00.000Z')
@@ -77,11 +81,39 @@ test('rolling summaries preserve bounded context without becoming retrievable fa
   )
 })
 
-test('history requests send only the short-lived unlock token, never a PIN', () => {
+test('history requests send only the signed access token, never a PIN', () => {
   assert.deepEqual(buildHistoryRequestOptions('session-token'), {
     headers: { 'x-casa-history-session': 'session-token' },
   })
   assert.throws(() => buildHistoryRequestOptions(''), /history session/i)
+})
+
+test('member profile sessions remain valid until explicit logout or PIN revocation', () => {
+  const gateway = readFileSync(
+    new URL('../supabase/functions/assistant-history/index.ts', import.meta.url),
+    'utf8',
+  )
+
+  assert.match(gateway, /session\.expires_at !== undefined/)
+  assert.match(gateway, /credential_version/)
+  assert.match(gateway, /action === 'unlock'[\s\S]*?history_session_token[\s\S]*?credential_version: credential\.credential_version[\s\S]*?\}\)/)
+})
+
+test('a selected family profile remains available until explicit logout', () => {
+  assert.equal(PROFILE_SESSION_STORAGE_KEY, 'casa_tabor_profile_session')
+  assert.deepEqual(
+    normalizeProfileSession({
+      memberId: 'member-1',
+      memberName: 'Jake',
+      token: 'history-session-token',
+    }),
+    {
+      memberId: 'member-1',
+      memberName: 'Jake',
+      token: 'history-session-token',
+    },
+  )
+  assert.equal(normalizeProfileSession({ memberId: 'member-1', token: '' }), null)
 })
 
 test('conversation-history migration denies direct client access and excludes transcripts from family retrieval', () => {
@@ -135,13 +167,17 @@ test('PIN credentials and the history gateway use server-only verification with 
   assert.doesNotMatch(gateway, /pin_hash.*body/i)
 })
 
-test('legacy browser sessions remain local until private history is explicitly unlocked', () => {
+test('the app profile, rather than the drawer, owns persistent private-history access', () => {
   const source = readFileSync(
     new URL('../src/hooks/useAIConversationHistory.ts', import.meta.url),
     'utf8',
   )
+  const drawer = readFileSync(
+    new URL('../src/components/shared/AIChatDrawer.tsx', import.meta.url),
+    'utf8',
+  )
 
-  assert.match(source, /sessionStorage/)
+  assert.match(source, /useProfileSession/)
   assert.match(source, /if \(!access\) return/)
   assert.match(source, /create_conversation/)
   assert.match(source, /append_messages/)
@@ -150,6 +186,9 @@ test('legacy browser sessions remain local until private history is explicitly u
   assert.match(source, /export_conversation/)
   assert.match(source, /archive_conversation/)
   assert.match(source, /forget_conversation/)
+  assert.doesNotMatch(drawer, /Unlock private history/)
+  assert.doesNotMatch(drawer, /historyPin/)
+  assert.match(drawer, /Sign out/)
 })
 
 test('family settings keeps PIN enrollment inside each existing member’s collapsible card', () => {

@@ -1,23 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { useProfileSession } from '../contexts/ProfileSessionContext'
 import { sanitizeConversationMessage } from '../lib/assistantConversationHistory.mjs'
 import { invokeAssistantHistory } from '../lib/assistantConversationHistoryClient'
-import { supabase } from '../lib/supabase'
 import type { AIMessage, AISession } from './useAISession'
 
-const ACCESS_STORAGE_KEY = 'casa_tabor_private_history_access'
 const CONVERSATION_MAP_STORAGE_KEY = 'casa_tabor_private_history_conversations'
 
 type PrivateHistoryAccess = {
   memberId: string
   token: string
-  expiresAt: string
-}
-
-type UnlockResult = {
-  history_session_token?: string
-  expires_at?: string
-  error?: string
 }
 
 export type PrivateConversation = {
@@ -32,7 +24,7 @@ export type PrivateConversation = {
 
 function readJson<T>(key: string): T | null {
   try {
-    const value = sessionStorage.getItem(key)
+    const value = localStorage.getItem(key)
     return value ? JSON.parse(value) as T : null
   } catch {
     return null
@@ -41,19 +33,14 @@ function readJson<T>(key: string): T | null {
 
 function writeJson(key: string, value: unknown) {
   try {
-    sessionStorage.setItem(key, JSON.stringify(value))
+    localStorage.setItem(key, JSON.stringify(value))
   } catch {
     throw new Error('Private history could not be stored in this browser session.')
   }
 }
 
-function initialAccess() {
-  const access = readJson<PrivateHistoryAccess>(ACCESS_STORAGE_KEY)
-  return access && new Date(access.expiresAt).getTime() > Date.now() ? access : null
-}
-
-function initialConversationMap() {
-  return readJson<Record<string, string>>(CONVERSATION_MAP_STORAGE_KEY) ?? {}
+function conversationMapStorageKey(memberId: string) {
+  return `${CONVERSATION_MAP_STORAGE_KEY}:${memberId}`
 }
 
 function conversationTitle(session: AISession) {
@@ -63,42 +50,20 @@ function conversationTitle(session: AISession) {
 }
 
 export function useAIConversationHistory() {
-  const [access, setAccess] = useState<PrivateHistoryAccess | null>(initialAccess)
+  const { profile } = useProfileSession()
+  const access: PrivateHistoryAccess | null = profile && {
+    memberId: profile.memberId,
+    token: profile.token,
+  }
   const [error, setError] = useState<string | null>(null)
-  const conversationIdsRef = useRef(initialConversationMap())
+  const conversationIdsRef = useRef<Record<string, string>>({})
   const saveQueueRef = useRef(new Map<string, Promise<void>>())
 
   useEffect(() => {
-    if (access && new Date(access.expiresAt).getTime() <= Date.now()) {
-      sessionStorage.removeItem(ACCESS_STORAGE_KEY)
-      setAccess(null)
-    }
-  }, [access])
-
-  const unlock = useCallback(async (memberId: string, pin: string) => {
-    setError(null)
-    const { data, error: unlockError } = await supabase.functions.invoke('assistant-history', {
-      body: { action: 'unlock', member_id: memberId, pin },
-    })
-    if (unlockError) throw unlockError
-    const result = data as UnlockResult
-    if (!result.history_session_token || !result.expires_at) {
-      throw new Error(result.error ?? 'Private history could not be unlocked.')
-    }
-    const nextAccess = {
-      memberId,
-      token: result.history_session_token,
-      expiresAt: result.expires_at,
-    }
-    writeJson(ACCESS_STORAGE_KEY, nextAccess)
-    setAccess(nextAccess)
-  }, [])
-
-  const lock = useCallback(() => {
-    sessionStorage.removeItem(ACCESS_STORAGE_KEY)
-    setAccess(null)
-    setError(null)
-  }, [])
+    conversationIdsRef.current = access
+      ? readJson<Record<string, string>>(conversationMapStorageKey(access.memberId)) ?? {}
+      : {}
+  }, [access?.memberId])
 
   const saveSession = useCallback((session: AISession) => {
     if (!access) return
@@ -117,7 +82,7 @@ export function useAIConversationHistory() {
           })
           conversationId = created.conversation.id
           conversationIdsRef.current = { ...conversationIdsRef.current, [session.id]: conversationId }
-          writeJson(CONVERSATION_MAP_STORAGE_KEY, conversationIdsRef.current)
+          writeJson(conversationMapStorageKey(access.memberId), conversationIdsRef.current)
         }
         await invokeAssistantHistory(access.token, {
           action: 'append_messages',
@@ -196,7 +161,7 @@ export function useAIConversationHistory() {
       })),
     }
     conversationIdsRef.current = { ...conversationIdsRef.current, [session.id]: conversationId }
-    writeJson(CONVERSATION_MAP_STORAGE_KEY, conversationIdsRef.current)
+    writeJson(conversationMapStorageKey(access.memberId), conversationIdsRef.current)
     return session
   }, [access])
 
@@ -208,5 +173,5 @@ export function useAIConversationHistory() {
     })
   }, [access])
 
-  return { access, error, unlock, lock, saveSession, listConversations, archiveConversation, forgetConversation, resumeConversation, exportConversation }
+  return { access, error, saveSession, listConversations, archiveConversation, forgetConversation, resumeConversation, exportConversation }
 }
