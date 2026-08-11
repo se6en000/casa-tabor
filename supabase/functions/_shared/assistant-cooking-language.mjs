@@ -256,7 +256,11 @@ export function parseCookingLanguage(text, options = {}) {
       /\bwhy (?:is|did|does)\b.*\b(?:sauce|dough|soup|cake|bread|food)\b/.test(input)) {
     return frame('cooking.troubleshoot', 0.95)
   }
-  if (/\b(?:how do i know|what temperature is)\b.*\b(?:done|ready|cooked)\b|\bis .+ done\b/.test(input)) {
+  const asksAboutDoneness = /\b(?:how do i know|what temperature is)\b.*\b(?:done|ready|cooked)\b|\bis .+ done\b/.test(input)
+  const hasDonenessSubject = cookingContext ||
+    isCookingLikeLanguage(input) ||
+    /\b(?:beef|bread|brownies?|cake|casserole|chicken|cookies?|eggs?|fish|food|ham|lasagna|meat|pasta|pork|potatoes?|poultry|rice|salmon|seafood|shrimp|steak|tuna|turkey|vegetables?)\b/.test(input)
+  if (asksAboutDoneness && hasDonenessSubject) {
     return frame('cooking.doneness', 0.96)
   }
   if (/\b(?:what temperature|what should the oven|how hot should)\b/.test(input)) {

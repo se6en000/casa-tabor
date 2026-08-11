@@ -17,3 +17,7 @@ export function resolveTalkPlanIntentGate(text, resolution) {
   if (resolution === 'conversation_only') return { decision: 'answer_conversationally', actionKind }
   return { decision: 'confirm_intent', actionKind }
 }
+
+export function shouldUseTalkPlanDeterministicLane(experienceMode, intentGate) {
+  return experienceMode !== 'talk_plan' || intentGate?.decision === 'run_action'
+}

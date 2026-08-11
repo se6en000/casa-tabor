@@ -18,7 +18,10 @@ import {
 import { normalizeAssistantExperienceMode } from '../_shared/assistant-experience-mode.mjs'
 import { resolveLlmWorkload } from '../_shared/llm-workload-config.mjs'
 import { buildGeminiGenerationConfig } from '../_shared/gemini-generation-config.mjs'
-import { resolveTalkPlanIntentGate } from '../_shared/talk-plan-intent-gate.mjs'
+import {
+  resolveTalkPlanIntentGate,
+  shouldUseTalkPlanDeterministicLane,
+} from '../_shared/talk-plan-intent-gate.mjs'
 import {
   buildReadToolSynthesisContents,
   readToolResultFound,
@@ -499,16 +502,9 @@ Deno.serve(async (req) => {
   )
   const cookingGuidance = cookingFrameGuidance(cookingFrame)
   const cookingMutationIntent = ['recipe.save', 'cooking.add_to_grocery'].includes(cookingFrame?.intent ?? '')
-  const talkPlanCommandLane = experienceMode !== 'talk_plan' ||
-    talkPlanIntentGate?.decision === 'run_action' ||
-    (talkPlanCalendarCommand && !talkPlanIntentGate?.actionKind) ||
-    explicitReminderRead ||
-    (talkPlanIntentResolution === 'confirmed_action' && (
-      explicitReminderCreate ||
-      cookingMutationIntent ||
-      Boolean(groceryFrame)
-    ))
+  const talkPlanCommandLane = shouldUseTalkPlanDeterministicLane(experienceMode, talkPlanIntentGate)
   const requestAmbiguity = classifyAssistantAmbiguity(latestUserText, {
+    experienceMode,
     hasActiveEntity: Boolean(incomingConversationState?.activeEntityType || context?.focusedEvent),
     hasGroundedSemanticIntent: cookingMutationIntent || householdDirectoryQuestion,
   })
@@ -552,7 +548,9 @@ Deno.serve(async (req) => {
     latestUserText &&
     /\b(?:again|retry|try again|do it|go ahead|create it|book it|schedule it|add it|make it|use this|from this|this one)\b/i.test(latestUserText)
   )
-  const intentRoutingDecision = explicitReminderRead
+  const intentRoutingDecision = experienceMode === 'talk_plan' && !talkPlanCommandLane
+    ? { route: { profile: 'talk_plan', forceEventSearch: false }, source: 'talk_plan_conversation' }
+    : explicitReminderRead
     ? { route: { profile: 'event', forceEventSearch: true }, source: 'explicit_reminder' }
     : explicitReminderCreate
     ? { route: { profile: 'event', forceEventSearch: false }, source: 'explicit_reminder_create' }
@@ -679,7 +677,41 @@ Deno.serve(async (req) => {
   }
 
   const run = async (): Promise<{ status: number; payload: Record<string, unknown> }> => {
-  if (reminderClarification) {
+  if (experienceMode === 'talk_plan') {
+    const talkPlanConfigResult = await sb
+      .from('settings')
+      .select('value')
+      .eq('key', 'assistant_talk_plan_config')
+      .maybeSingle()
+    const talkPlanEnabled = (talkPlanConfigResult.data?.value as { enabled?: boolean } | null)?.enabled === true
+    if (!talkPlanEnabled) {
+      return {
+        status: 200,
+        payload: {
+          type: 'error',
+          code: 'talk_plan_unavailable',
+          message: 'Talk & Plan is currently disabled. Turn it on in AI Settings after checking model access.',
+          correlation_id: cid,
+        },
+      }
+    }
+    if (talkPlanIntentGate?.decision === 'confirm_intent') {
+      return {
+        status: 200,
+        payload: {
+          type: 'tool_action',
+          tool: 'confirm_talk_plan_action_intent',
+          args: {
+            action_kind: talkPlanIntentGate.actionKind,
+            original_request: latestUserText,
+          },
+          display_text: `Are you asking Casa to create or change a ${talkPlanIntentGate.actionKind}?`,
+          correlation_id: cid,
+        },
+      }
+    }
+  }
+  if (talkPlanCommandLane && reminderClarification) {
     appendServerTrace('server_ai_assistant_reminder_clarification', reminderClarification, {
       missing_title: /what should/i.test(reminderClarification),
       missing_timing: /when/i.test(reminderClarification),
@@ -703,7 +735,7 @@ Deno.serve(async (req) => {
       },
     }
   }
-  if (bugReportRequest.kind === 'clarify') {
+  if (talkPlanCommandLane && bugReportRequest.kind === 'clarify') {
     const requestTotalMs = Date.now() - requestStartMs
     const text = 'What happened? Include the problem you want me to put in the bug tracker.'
     appendServerTrace('server_ai_assistant_bug_report_clarification', 'missing_report_details', {
@@ -720,7 +752,7 @@ Deno.serve(async (req) => {
       },
     }
   }
-  if (bugReportRequest.kind === 'create') {
+  if (talkPlanCommandLane && bugReportRequest.kind === 'create') {
     if (dryRun) {
       const requestTotalMs = Date.now() - requestStartMs
       appendServerTrace('server_ai_assistant_bug_report_dry_run', bugReportRequest.title, {
@@ -1082,40 +1114,6 @@ Deno.serve(async (req) => {
       },
     }
   }
-  if (experienceMode === 'talk_plan') {
-    const talkPlanConfigResult = await sb
-      .from('settings')
-      .select('value')
-      .eq('key', 'assistant_talk_plan_config')
-      .maybeSingle()
-    const talkPlanEnabled = (talkPlanConfigResult.data?.value as { enabled?: boolean } | null)?.enabled === true
-    if (!talkPlanEnabled) {
-      return {
-        status: 200,
-        payload: {
-          type: 'error',
-          code: 'talk_plan_unavailable',
-          message: 'Talk & Plan is currently disabled. Turn it on in AI Settings after checking model access.',
-          correlation_id: cid,
-        },
-      }
-    }
-    if (talkPlanIntentGate?.decision === 'confirm_intent') {
-      return {
-        status: 200,
-        payload: {
-          type: 'tool_action',
-          tool: 'confirm_talk_plan_action_intent',
-          args: {
-            action_kind: talkPlanIntentGate.actionKind,
-            original_request: latestUserText,
-          },
-          display_text: `Are you asking Casa to create or change a ${talkPlanIntentGate.actionKind}?`,
-          correlation_id: cid,
-        },
-      }
-    }
-  }
   const llmTelemetry: LlmTelemetry = {
     provider,
     model,
@@ -1296,7 +1294,7 @@ Deno.serve(async (req) => {
   const providerListRequest = Boolean(providerListRoleMatch) &&
     (householdDirectoryQuestion || providerListFollowUp) &&
     (providerListFollowUp || /\b(?:list|name|other|what|which|who)\b/i.test(latestUserText ?? ''))
-  if (providerListRequest && providerListEffectiveText) {
+  if (talkPlanCommandLane && providerListRequest && providerListEffectiveText) {
     const normalizedQuestion = normalizeSearchText(providerListEffectiveText)
     const member = (familyMembers as { id?: string; name?: string; full_name?: string | null }[])
       .filter((candidate) => candidate.id && candidate.name)
@@ -1542,7 +1540,7 @@ Deno.serve(async (req) => {
       }
     }
   }
-  if (householdDirectoryQuestion && latestUserText) {
+  if (talkPlanCommandLane && householdDirectoryQuestion && latestUserText) {
     const normalizedQuestion = normalizeSearchText(latestUserText)
     const candidateEntities = [
       ...(suggestedContacts as {
@@ -1601,7 +1599,7 @@ Deno.serve(async (req) => {
   const relationshipLookup = latestUserText?.match(
     /\b(?:(?<memberA>[a-z]+)'s\s+(?<relationshipA>pediatric dentist|dentist|orthodontist|dermatologist|therapist|coach)|(?<relationshipB>pediatric dentist|dentist|orthodontist|dermatologist|therapist|coach)\s+(?:for|of)\s+(?<memberB>[a-z]+))\b/i,
   )
-  if (householdDirectoryQuestion && relationshipLookup) {
+  if (talkPlanCommandLane && householdDirectoryQuestion && relationshipLookup) {
     const memberName = relationshipLookup.groups?.memberA ?? relationshipLookup.groups?.memberB
     const relationship = (relationshipLookup.groups?.relationshipA ?? relationshipLookup.groups?.relationshipB)?.toLowerCase()
     const member = (familyMembers as { id?: string; name?: string }[]).find((candidate) =>
@@ -1692,7 +1690,7 @@ Deno.serve(async (req) => {
       }
     }
   }
-  if (householdDirectoryQuestion && latestUserText) {
+  if (talkPlanCommandLane && householdDirectoryQuestion && latestUserText) {
     const normalizedQuestion = normalizeSearchText(latestUserText)
     const locationQuestion = /\b(?:address|based|located|location|meet|office|usually|where|works?|lives?)\b/i.test(latestUserText)
     const contacts = (savedContacts as {
@@ -1838,7 +1836,7 @@ Deno.serve(async (req) => {
       }
     }
   }
-  if (memoryInsightsReadIntent || bugTrackerReadIntent) {
+  if (talkPlanCommandLane && (memoryInsightsReadIntent || bugTrackerReadIntent)) {
     const memories = (memoriesResult.data ?? []) as MemoryRow[]
     const bugs = (bugReportsResult.data ?? []) as BugReportRow[]
     const textParts: string[] = []
@@ -1877,7 +1875,7 @@ Deno.serve(async (req) => {
       },
     }
   }
-  if (cookingFrame?.intent === 'recipe.find') {
+  if (talkPlanCommandLane && cookingFrame?.intent === 'recipe.find') {
     const query = String(cookingFrame.slots?.query ?? '').trim()
     const matches = findSavedRecipes(recipes, query)
     const text = formatSavedRecipeMatches(matches, query)
@@ -1958,7 +1956,7 @@ Deno.serve(async (req) => {
   const defaultCalendarCreate = calendarFrame?.intent === 'event.create'
     ? resolveDefaultCalendarCreate(latestUserText, { now, utcOffset: context?.utcOffset })
     : null
-  if (defaultCalendarCreate) {
+  if (talkPlanCommandLane && defaultCalendarCreate) {
     appendServerTrace('server_ai_assistant_default_calendar_create', defaultCalendarCreate.args.title, {
       defaults: defaultCalendarCreate.defaults,
       start: defaultCalendarCreate.args.start,
@@ -1995,7 +1993,7 @@ Deno.serve(async (req) => {
     unsupportedBulkMutation: isQuantifiedCalendarDelete(latestUserText),
     sample: Math.random(),
   })
-  if (!shouldRunAgentWrite && latestUserText && context?.pendingAction) {
+  if (talkPlanCommandLane && !shouldRunAgentWrite && latestUserText && context?.pendingAction) {
     const pendingCalendarCorrection = resolvePendingCalendarCorrection(
       latestUserText,
       context.pendingAction,
@@ -2027,6 +2025,7 @@ Deno.serve(async (req) => {
     }
   }
   if (
+    talkPlanCommandLane &&
     latestUserText &&
     !explicitReminderCreate &&
     incomingConversationState?.activeEntityType === 'calendar_clarification'
@@ -2076,7 +2075,7 @@ Deno.serve(async (req) => {
       }
     }
   }
-  if (latestUserText && incomingConversationState?.activeEntityType === 'grocery_clarification') {
+  if (talkPlanCommandLane && latestUserText && incomingConversationState?.activeEntityType === 'grocery_clarification') {
     const selection = resolveGroceryClarificationSelection(
       latestUserText,
       incomingConversationState,
@@ -2123,6 +2122,7 @@ Deno.serve(async (req) => {
     }
   }
   if (
+    talkPlanCommandLane &&
     latestUserText &&
     reminderCompletionFollowUp &&
     activeConversationEvent?.event_type === 'reminder'
@@ -2154,6 +2154,7 @@ Deno.serve(async (req) => {
     }
   }
   if (
+    talkPlanCommandLane &&
     intentRouting.profile === 'event' &&
     latestUserText &&
     activeConversationEvent
@@ -2641,7 +2642,7 @@ Deno.serve(async (req) => {
       authoritative_entity_count: authoritativeEntities.length,
     })
   }
-  if (requestAmbiguity) {
+  if (talkPlanCommandLane && requestAmbiguity) {
     const requestTotalMs = Date.now() - requestStartMs
     appendServerTrace('server_ai_assistant_ambiguity_clarification', requestAmbiguity.kind, {
       ambiguity_kind: requestAmbiguity.kind,
@@ -2827,7 +2828,7 @@ Deno.serve(async (req) => {
     })
   }
 
-  if (intentRouting.profile === 'grocery' && groceryFrame) {
+  if (talkPlanCommandLane && intentRouting.profile === 'grocery' && groceryFrame) {
     const semantic = resolveGrocerySemantic(groceryFrame, groceryItems ?? [], {
       activeItemId: incomingConversationState?.activeEntityType === 'grocery_item'
         ? incomingConversationState.activeGroceryItemId
@@ -3588,10 +3589,10 @@ Deno.serve(async (req) => {
     general: [],
     talk_plan: safeFullProfileToolNames(tools[0].function_declarations.map((tool) => tool.name)),
   }
-  const selectedToolNames = householdDirectoryQuestion
+  const selectedToolNames = intentRouting.profile === 'talk_plan' && !talkPlanCommandLane
+    ? new Set(['search_events', 'search_web', 'search_places', 'get_weather_forecast'])
+    : householdDirectoryQuestion
     ? new Set()
-    : intentRouting.profile === 'talk_plan' && !talkPlanCommandLane
-    ? new Set(['search_web', 'search_places', 'get_weather_forecast'])
     : ['full', 'talk_plan'].includes(intentRouting.profile)
     ? new Set(safeFullProfileToolNames(tools[0].function_declarations.map((tool) => tool.name)))
     : new Set(toolNamesByProfile[intentRouting.profile] ?? [])

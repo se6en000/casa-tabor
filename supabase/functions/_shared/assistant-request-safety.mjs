@@ -21,6 +21,7 @@ const STRUCTURED_DRAFT_FIELD = /\btitle\s*:\s*\S/i
 
 export function classifyAssistantAmbiguity(text, options = {}) {
   if (STRUCTURED_DRAFT_FIELD.test(String(text ?? ''))) return null
+  if (options.experienceMode === 'talk_plan') return null
   const input = normalizeAssistantLanguage(text)
   if (!input || options.hasActiveEntity === true || options.hasGroundedSemanticIntent === true) return null
 

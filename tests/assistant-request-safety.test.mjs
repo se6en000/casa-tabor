@@ -30,6 +30,26 @@ test('grounded follow-ups and explicit targets remain actionable', () => {
   assert.equal(classifyAssistantAmbiguity('add milk to the grocery list'), null)
 })
 
+test('Talk and Plan owns ambiguity handling instead of the generic cross-domain write guard', () => {
+  for (const prompt of [
+    'Help me plan the Casa Tabor frame. My goal is to finish it this month, but I need help and some pushing to get it done.',
+    'I need help changing something in my routine.',
+    'Can we talk through how I get it done?',
+    'Delete the other one.',
+  ]) {
+    assert.equal(
+      classifyAssistantAmbiguity(prompt, { experienceMode: 'talk_plan' }),
+      null,
+      prompt,
+    )
+  }
+
+  assert.equal(
+    classifyAssistantAmbiguity('Delete the other one.', { experienceMode: 'do' })?.kind,
+    'vague_action_target',
+  )
+})
+
 test('app-generated structured draft prompts (Title:/Details:/Due by: fields) are never flagged as vague, even when boilerplate uses "it"', () => {
   const draftPrompt = [
     'Create a reminder from this prep/action item as a draft and ask me to confirm before saving.',

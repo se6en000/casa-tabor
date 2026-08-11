@@ -121,6 +121,19 @@ test('cooking follow-ups require cooking context', () => {
   assert.equal(parseCookingLanguage('Say that step again')?.intent, 'cooking.repeat_step')
 })
 
+test('generic project completion language does not enter the cooking lane', () => {
+  for (const text of [
+    'My goal is to finish it this month, but I need some pushing to get it done.',
+    'How do I know when the renovation is done?',
+    'Is the household project done?',
+  ]) {
+    assert.equal(parseCookingLanguage(text), null, text)
+  }
+
+  assert.equal(parseCookingLanguage('Is it done?', { assistantMode: 'chef' })?.intent, 'cooking.doneness')
+  assert.equal(parseCookingLanguage('How do I know when the salmon is done?')?.intent, 'cooking.doneness')
+})
+
 test('explicit cooking grocery handoff is narrow and confirmation-safe', () => {
   const frame = parseCookingLanguage(
     'Add the missing ingredients to my grocery list',
