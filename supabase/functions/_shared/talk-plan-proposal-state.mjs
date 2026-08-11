@@ -1,5 +1,5 @@
 const ACCEPTANCE_PATTERN =
-  /^(?:(?:yes(?: please)?|yeah|yep|sure|okay|ok|sounds good|looks good)(?:,\s*(?:go ahead|do it|proceed))?|go ahead|do it|make it happen|proceed)(?:\s+(?:with\s+)?(?:that|this|the)\s+(?:plan|schedule|proposal))?[.!]?$/i
+  /^(?:(?:yes(?: please)?|yeah|yep|sure|okay|ok|sounds good|looks good)(?:,\s*(?:go ahead|do it|proceed))?|go ahead|do it|make it happen|proceed|continue(?: with (?:that|the) plan)?|(?:do|prepare) the next one)(?:\s+(?:with\s+)?(?:that|this|the)\s+(?:plan|schedule|proposal))?[.!]?$/i
 
 export function isPlanningProposalAcceptance(value) {
   return ACCEPTANCE_PATTERN.test(String(value ?? '').trim())

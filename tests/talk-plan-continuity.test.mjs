@@ -53,7 +53,13 @@ test('planning proposals persist bounded actionable text and accept natural conf
   assert.equal(state?.activeEntityType, 'planning_proposal')
   assert.match(state?.proposalText ?? '', /Reserve dinner/)
 
-  for (const text of ['Yes please', 'Go ahead with that plan', 'Looks good, do it']) {
+  for (const text of [
+    'Yes please',
+    'Go ahead with that plan',
+    'Looks good, do it',
+    'Continue with the plan',
+    'Prepare the next one',
+  ]) {
     assert.equal(isPlanningProposalAcceptance(text), true, text)
   }
   assert.equal(isPlanningProposalAcceptance('What would that cost?'), false)
