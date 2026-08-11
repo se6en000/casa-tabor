@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Brain, ChefHat, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Brain, ChefHat, FolderKanban, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { Alert, Button, Card, Chip, EmptyState, Field, Input, Modal, SegmentedControl, SkeletonRow, Text, Textarea } from '../components/ui'
@@ -190,6 +190,18 @@ export default function MemorySettingsPage() {
           onClick={() => void createMemory()}
         >
           Add memory
+        </Button>
+      </Card>
+      <Card className="space-y-3 p-4">
+        <div className="flex items-start gap-3">
+          <FolderKanban size={20} className="mt-0.5 shrink-0 text-casa-gold" />
+          <div className="space-y-1">
+            <Text role="body-sm" className="font-semibold text-casa-navy">Planning projects</Text>
+            <Text role="caption" muted>Review goals, decisions, commitments, open questions, and next actions captured from private Talk & Plan conversations.</Text>
+          </div>
+        </div>
+        <Button variant="secondary" onClick={() => navigate('/settings/memory/projects')}>
+          Manage planning projects
         </Button>
       </Card>
       <Card className="space-y-3 p-4">

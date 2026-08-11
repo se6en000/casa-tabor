@@ -4,6 +4,7 @@ import {
   CalendarDays,
   ChevronRight,
   FileText,
+  FolderKanban,
   RefreshCw,
   Settings,
   Sparkles,
@@ -32,6 +33,7 @@ import { supabase } from '../lib/supabase'
 import { useCalendarStore } from '../stores/calendarStore'
 import type { Conflict, PrepItem } from '../types'
 import { useProfileSession } from '../contexts/ProfileSessionContext'
+import { invokeAssistantHistory } from '../lib/assistantConversationHistoryClient'
 
 interface MemberEvent {
   title: string
@@ -55,6 +57,22 @@ interface Briefing {
   member_schedules: Record<string, MemberSchedule>
   generated_by: string | null
   member_id?: string
+  looking_ahead_projects?: LookingAheadProject[]
+}
+
+interface LookingAheadProject {
+  id: string
+  title: string
+  summary: string
+  target_date: string | null
+  source_conversation_id: string
+  ai_project_items: {
+    id: string
+    kind: string
+    content: string
+    status: string
+    due_at: string | null
+  }[]
 }
 
 interface TimelineEvent extends MemberEvent {
@@ -154,6 +172,8 @@ export default function BriefingPage() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [needsPanel, setNeedsPanel] = useState<NeedsPanel>(null)
+  const [projectActionError, setProjectActionError] = useState<string | null>(null)
+  const [actingProjectId, setActingProjectId] = useState<string | null>(null)
   const isNarrow = useIsNarrowScreen()
   const { data: conflicts = [] } = useWeekConflicts()
   const { data: prepItems = [] } = usePrepItems()
@@ -252,6 +272,30 @@ export default function BriefingPage() {
 
   async function dismissConflictGroup(group: ConflictGroup) {
     await Promise.all(group.conflicts.map((conflict) => resolveConflict(conflict.id, 'dismissed')))
+  }
+
+  async function updateProjectBriefing(projectId: string, command: 'snooze' | 'not_relevant' | 'mark_decided') {
+    if (!profile?.token) {
+      setProjectActionError('Sign in to update personal projects.')
+      return
+    }
+    setActingProjectId(projectId)
+    setProjectActionError(null)
+    try {
+      await invokeAssistantHistory(profile.token, {
+        action: 'update_project_briefing',
+        project_id: projectId,
+        command,
+      })
+      setBriefing((current) => current ? {
+        ...current,
+        looking_ahead_projects: (current.looking_ahead_projects ?? []).filter((project) => project.id !== projectId),
+      } : current)
+    } catch (projectError) {
+      setProjectActionError(projectError instanceof Error ? projectError.message : 'Could not update this project.')
+    } finally {
+      setActingProjectId(null)
+    }
   }
 
   function reviewConflict(type: string) {
@@ -368,6 +412,66 @@ export default function BriefingPage() {
                   action={<Button variant="secondary" onClick={() => navigate('/settings/ai')}>Open AI settings</Button>}
                 />
               </Card>
+            ) : null}
+
+            {(briefing?.looking_ahead_projects?.length ?? 0) > 0 ? (
+              <section aria-labelledby="briefing-projects-title" className="space-y-3">
+                <SectionHeader
+                  compact
+                  title={<span id="briefing-projects-title">Looking ahead</span>}
+                  icon={FolderKanban}
+                />
+                {projectActionError ? <Alert tone="danger" title="Project update failed">{projectActionError}</Alert> : null}
+                <div className="space-y-3">
+                  {briefing?.looking_ahead_projects?.map((project) => {
+                    const openItems = project.ai_project_items.filter((item) => item.status === 'open').slice(0, 2)
+                    return (
+                      <Card key={project.id} className="space-y-3 p-4">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="min-w-0 space-y-1">
+                            <Text role="body-sm" className="font-semibold text-casa-navy">{project.title}</Text>
+                            {project.summary ? <Text role="caption" muted>{project.summary}</Text> : null}
+                          </div>
+                          {project.target_date ? <Chip tone="neutral">Target {project.target_date}</Chip> : null}
+                        </div>
+                        {openItems.length > 0 ? (
+                          <div className="space-y-1">
+                            {openItems.map((item) => (
+                              <Text key={item.id} role="caption" muted>• {item.content}</Text>
+                            ))}
+                          </div>
+                        ) : null}
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            loading={actingProjectId === project.id}
+                            onClick={() => void updateProjectBriefing(project.id, 'snooze')}
+                          >
+                            Snooze 1 week
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            loading={actingProjectId === project.id}
+                            onClick={() => void updateProjectBriefing(project.id, 'not_relevant')}
+                          >
+                            Not relevant
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            loading={actingProjectId === project.id}
+                            onClick={() => void updateProjectBriefing(project.id, 'mark_decided')}
+                          >
+                            Mark decided
+                          </Button>
+                        </div>
+                      </Card>
+                    )
+                  })}
+                </div>
+              </section>
             ) : null}
 
             {visibleNeeds.length > 0 && (

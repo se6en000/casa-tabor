@@ -1179,6 +1179,50 @@ Deno.serve(async (req) => {
             partial_sources: scopedMemory.partialSources,
           })
         }
+        if (experienceMode === 'talk_plan') {
+          try {
+            const { data: projects, error: projectError } = await sb
+              .from('ai_projects')
+              .select('id,title,summary,target_date,last_activity_at,ai_project_items(kind,content,status,due_at)')
+              .eq('owner_member_id', activeMemberId)
+              .eq('status', 'active')
+              .order('last_activity_at', { ascending: false })
+              .limit(8)
+            if (projectError) throw projectError
+            const projectEvidence = (projects ?? []).map((project) => {
+              const openItems = project.ai_project_items
+                .filter((item: { status: string }) => item.status === 'open')
+                .slice(0, 5)
+                .map((item: { kind: string; content: string }) => `${item.kind}: ${item.content}`)
+              return {
+                evidence_id: `project:${project.id}`,
+                source_type: 'project',
+                source_id: project.id,
+                title: project.title,
+                excerpt: [project.summary, ...openItems].filter(Boolean).join(' | ').slice(0, 2400),
+                occurred_at: null,
+                effective_at: project.last_activity_at,
+                metadata: {
+                  target_date: project.target_date,
+                  private_owner_member_id: activeMemberId,
+                },
+              }
+            })
+            familyRetrieval.evidence = [...projectEvidence, ...familyRetrieval.evidence]
+            familyRetrieval.sources_considered = [
+              ...new Set([...familyRetrieval.sources_considered, 'projects']),
+            ]
+          } catch (projectError) {
+            familyRetrieval.partial_sources = [
+              ...new Set([...familyRetrieval.partial_sources, 'projects']),
+            ]
+            appendServerTrace(
+              'server_ai_assistant_project_retrieval_failed',
+              projectError instanceof Error ? projectError.message : String(projectError),
+              { partial_sources: ['projects'] },
+            )
+          }
+        }
         familyRetrieval.selected_count = familyRetrieval.evidence.length
       }
       const broadFamilyQuestion = /\b(everything|all|coordinate|coordination|going on|should i know|before (?:monday|tomorrow|next week))\b/i

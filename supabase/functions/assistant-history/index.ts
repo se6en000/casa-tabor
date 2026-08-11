@@ -9,6 +9,10 @@ import {
   inferPersonalMemoryCandidates,
   PERSONAL_MEMORY_EXTRACTOR_VERSION,
 } from '../_shared/personal-memory-extraction.mjs'
+import {
+  inferProjectTurn,
+  PROJECT_EXTRACTOR_VERSION,
+} from '../_shared/talk-plan-project-extraction.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -168,7 +172,7 @@ async function ownedConversation(
 ) {
   const { data, error } = await sb
     .from('ai_conversations')
-    .select('id')
+    .select('id,experience_mode')
     .eq('id', conversationId)
     .eq('owner_member_id', memberId)
     .is('deleted_at', null)
@@ -189,6 +193,143 @@ async function memberIsAdmin(
     .maybeSingle()
   if (error) throw error
   return data?.is_admin === true
+}
+
+async function ownedProject(
+  sb: ReturnType<typeof createClient>,
+  projectId: string,
+  memberId: string,
+) {
+  const { data, error } = await sb
+    .from('ai_projects')
+    .select('id,title,summary,status,briefing_state,version,source_conversation_id')
+    .eq('id', projectId)
+    .eq('owner_member_id', memberId)
+    .neq('status', 'deleted')
+    .maybeSingle()
+  if (error) throw error
+  if (!data) throw new Error('Project not found.')
+  return data
+}
+
+async function addProjectRevision(
+  sb: ReturnType<typeof createClient>,
+  project: {
+    id: string
+    version: number
+    source_conversation_id: string
+    title: string
+    summary: string
+    status: string
+    briefing_state: string
+  },
+  changeKind: string,
+  sourceMessageId: string | null = null,
+) {
+  const { error } = await sb.from('ai_project_revisions').insert({
+    project_id: project.id,
+    version: project.version,
+    source_conversation_id: project.source_conversation_id,
+    source_message_client_id: sourceMessageId,
+    change_kind: changeKind,
+    snapshot: {
+      title: project.title,
+      summary: project.summary,
+      status: project.status,
+      briefing_state: project.briefing_state,
+    },
+  })
+  if (error) throw error
+}
+
+async function persistProjectTurn(
+  sb: ReturnType<typeof createClient>,
+  memberId: string,
+  conversationId: string,
+  message: StoredMessage,
+) {
+  const inferred = inferProjectTurn(message)
+  if (!inferred) return null
+  const { data: existing, error: existingError } = await sb
+    .from('ai_projects')
+    .select('id,title,summary,status,briefing_state,version,source_conversation_id')
+    .eq('owner_member_id', memberId)
+    .eq('source_conversation_id', conversationId)
+    .neq('status', 'deleted')
+    .maybeSingle()
+  if (existingError) throw existingError
+  if (!existing && !inferred.title) return null
+  if (existing) {
+    const { data: existingRevision, error: revisionError } = await sb
+      .from('ai_project_revisions')
+      .select('id')
+      .eq('project_id', existing.id)
+      .eq('source_message_client_id', message.id)
+      .maybeSingle()
+    if (revisionError) throw revisionError
+    if (existingRevision) return existing?.id
+  }
+
+  let project = existing
+  if (!project) {
+    const { data, error } = await sb
+      .from('ai_projects')
+      .insert({
+        owner_member_id: memberId,
+        source_conversation_id: conversationId,
+        title: inferred.title,
+        summary: inferred.summary ?? '',
+      })
+      .select('id,title,summary,status,briefing_state,version,source_conversation_id')
+      .single()
+    if (error) throw error
+    project = data
+    await addProjectRevision(sb, project, 'created', message.id)
+  } else {
+    const version = project.version + 1
+    const { data, error } = await sb
+      .from('ai_projects')
+      .update({
+        version,
+        last_activity_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', project.id)
+      .eq('owner_member_id', memberId)
+      .select('id,title,summary,status,briefing_state,version,source_conversation_id')
+      .single()
+    if (error) throw error
+    project = data
+    await addProjectRevision(sb, project, 'turn_captured', message.id)
+  }
+
+  if (inferred.items.some((item) => item.supersedesPrior)) {
+    const { error } = await sb
+      .from('ai_project_items')
+      .update({ status: 'superseded', updated_at: new Date().toISOString() })
+      .eq('project_id', project.id)
+      .eq('kind', 'decision')
+      .eq('status', 'open')
+    if (error) throw error
+  }
+  if (inferred.items.length > 0) {
+    const { error } = await sb.from('ai_project_items').upsert(
+      inferred.items.map((item) => ({
+        project_id: project.id,
+        source_conversation_id: conversationId,
+        source_message_client_id: message.id,
+        extractor_version: PROJECT_EXTRACTOR_VERSION,
+        kind: item.kind,
+        content: item.content,
+      })),
+      {
+        onConflict: 'project_id,source_message_client_id,extractor_version,kind',
+        ignoreDuplicates: true,
+      },
+    )
+    if (error) throw error
+  }
+  return project.id
 }
 
 async function verifyCredential(
@@ -392,6 +533,130 @@ Deno.serve(async (request) => {
       return json(200, { memory_id: data.id, status: 'created' })
     }
 
+    if (action === 'list_projects') {
+      const session = await assertHistorySession(request, sb)
+      const memberId = requireMemberSession(session)
+      const { data, error } = await sb
+        .from('ai_projects')
+        .select('id,title,summary,status,briefing_state,briefing_snoozed_until,target_date,version,last_activity_at,source_conversation_id,ai_project_items(id,kind,content,status,due_at,created_at)')
+        .eq('owner_member_id', memberId)
+        .neq('status', 'deleted')
+        .order('last_activity_at', { ascending: false })
+        .limit(40)
+      if (error) throw error
+      return json(200, { projects: data ?? [] })
+    }
+
+    if (action === 'update_project') {
+      const session = await assertHistorySession(request, sb)
+      const memberId = requireMemberSession(session)
+      const projectId = requiredText(body?.project_id, 'project_id')
+      const project = await ownedProject(sb, projectId, memberId)
+      const nextStatus = typeof body?.status === 'string' ? body.status : project.status
+      if (!['active', 'paused', 'completed', 'archived'].includes(nextStatus)) {
+        throw new Error('Project status is invalid.')
+      }
+      const title = typeof body?.title === 'string' ? requiredText(body.title, 'title').slice(0, 160) : project.title
+      const summary = typeof body?.summary === 'string' ? body.summary.trim().slice(0, 2000) : project.summary
+      const version = project.version + 1
+      const { data, error } = await sb
+        .from('ai_projects')
+        .update({
+          title,
+          summary,
+          status: nextStatus,
+          target_date: typeof body?.target_date === 'string' && body.target_date ? body.target_date : null,
+          version,
+          last_activity_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', projectId)
+        .eq('owner_member_id', memberId)
+        .select('id,title,summary,status,briefing_state,version,source_conversation_id')
+        .single()
+      if (error) throw error
+      await addProjectRevision(sb, data, 'updated')
+      return json(200, { project: data })
+    }
+
+    if (action === 'update_project_briefing') {
+      const session = await assertHistorySession(request, sb)
+      const memberId = requireMemberSession(session)
+      const projectId = requiredText(body?.project_id, 'project_id')
+      const project = await ownedProject(sb, projectId, memberId)
+      const command = requiredText(body?.command, 'command')
+      if (!['snooze', 'not_relevant', 'mark_decided', 'reactivate'].includes(command)) {
+        throw new Error('Project briefing action is invalid.')
+      }
+      const briefingState = command === 'not_relevant'
+        ? 'not_relevant'
+        : command === 'mark_decided'
+          ? 'decided'
+          : command === 'snooze'
+            ? 'snoozed'
+            : 'active'
+      const snoozedUntil = command === 'snooze'
+        ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+        : null
+      if (command === 'mark_decided') {
+        const { error: itemError } = await sb
+          .from('ai_project_items')
+          .update({ status: 'decided', updated_at: new Date().toISOString() })
+          .eq('project_id', projectId)
+          .eq('status', 'open')
+          .in('kind', ['decision', 'open_question'])
+        if (itemError) throw itemError
+      }
+      const version = project.version + 1
+      const { data, error } = await sb
+        .from('ai_projects')
+        .update({
+          briefing_state: briefingState,
+          briefing_snoozed_until: snoozedUntil,
+          version,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', projectId)
+        .eq('owner_member_id', memberId)
+        .select('id,title,summary,status,briefing_state,version,source_conversation_id')
+        .single()
+      if (error) throw error
+      await addProjectRevision(sb, data, `briefing_${command}`)
+      return json(200, { project: data })
+    }
+
+    if (action === 'update_project_item') {
+      const session = await assertHistorySession(request, sb)
+      const memberId = requireMemberSession(session)
+      const projectId = requiredText(body?.project_id, 'project_id')
+      const project = await ownedProject(sb, projectId, memberId)
+      const itemId = requiredText(body?.item_id, 'item_id')
+      const status = requiredText(body?.status, 'status')
+      if (!['open', 'done', 'decided', 'dismissed'].includes(status)) {
+        throw new Error('Project item status is invalid.')
+      }
+      const { error } = await sb
+        .from('ai_project_items')
+        .update({ status, updated_at: new Date().toISOString() })
+        .eq('id', itemId)
+        .eq('project_id', projectId)
+      if (error) throw error
+      const { data: updatedProject, error: projectError } = await sb
+        .from('ai_projects')
+        .update({
+          version: project.version + 1,
+          last_activity_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', projectId)
+        .eq('owner_member_id', memberId)
+        .select('id,title,summary,status,briefing_state,version,source_conversation_id')
+        .single()
+      if (projectError) throw projectError
+      await addProjectRevision(sb, updatedProject, `item_${status}`)
+      return json(200, { status: 'updated' })
+    }
+
     if (action === 'delete_memory' || action === 'correct_memory') {
       const session = await assertHistorySession(request, sb)
       const memberId = requireMemberSession(session)
@@ -470,7 +735,7 @@ Deno.serve(async (request) => {
       const conversationId = requiredText(body?.conversation_id, 'conversation_id')
       const messages = Array.isArray(body?.messages) ? body.messages.map(sanitizeMessage) : []
       if (messages.length === 0 || messages.length > 30) return json(400, { error: 'Send between 1 and 30 messages.' })
-      await ownedConversation(sb, conversationId, memberId)
+      const conversation = await ownedConversation(sb, conversationId, memberId)
       const { data: existing, error: existingError } = await sb
         .from('ai_conversation_messages')
         .select('client_message_id,sequence_number')
@@ -509,6 +774,11 @@ Deno.serve(async (request) => {
           ignoreDuplicates: true,
         })
         if (memoryError) throw memoryError
+      }
+      for (const message of newMessages) {
+        if (conversation.experience_mode === 'talk_plan' && message.role === 'user') {
+          await persistProjectTurn(sb, memberId, conversationId, message)
+        }
       }
       if (inserts.length > 0) {
         const { error } = await sb.from('ai_conversation_messages').insert(inserts)

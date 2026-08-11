@@ -191,6 +191,32 @@ Deno.serve(async (req) => {
     { status: 500, headers: withCorrelationHeaders({ ...CORS, 'content-type': 'application/json' }, correlationId) },
   )
 
+  const { data: projectRows, error: projectError } = await sb
+    .from('ai_projects')
+    .select('id,title,summary,target_date,last_activity_at,briefing_state,briefing_snoozed_until,source_conversation_id,ai_project_items(id,kind,content,status,due_at)')
+    .eq('owner_member_id', memberId)
+    .eq('status', 'active')
+    .in('briefing_state', ['active', 'snoozed'])
+    .order('last_activity_at', { ascending: false })
+    .limit(20)
+  if (projectError) return new Response(
+    JSON.stringify({ error: projectError.message, correlation_id: correlationId }),
+    { status: 500, headers: withCorrelationHeaders({ ...CORS, 'content-type': 'application/json' }, correlationId) },
+  )
+  const nowMs = Date.now()
+  const recentCutoffMs = nowMs - 14 * 24 * 60 * 60 * 1000
+  const lookingAheadProjects = (projectRows ?? [])
+    .filter((project) => (
+      project.briefing_state === 'active' ||
+      (project.briefing_snoozed_until && new Date(project.briefing_snoozed_until).getTime() <= nowMs)
+    ))
+    .filter((project) => (
+      Boolean(project.target_date) ||
+      new Date(project.last_activity_at).getTime() >= recentCutoffMs ||
+      project.ai_project_items.some((item: { status: string }) => item.status === 'open')
+    ))
+    .slice(0, 5)
+
   const conflicts = (orchestrationData?.conflicts as {
     id: string
     conflict_type: string
@@ -212,6 +238,7 @@ Deno.serve(async (req) => {
         actionQueue,
         emailCommitments ?? [],
         memoryRows ?? [],
+        lookingAheadProjects,
       )
     } catch (err) {
       console.error(`[generate-briefing][${correlationId}] LLM error:`, err)
@@ -228,11 +255,13 @@ Deno.serve(async (req) => {
       action_queue: actionQueue,
       email_commitments: emailCommitments ?? [],
       scoped_memories: memoryRows ?? [],
+      looking_ahead_projects: lookingAheadProjects,
       orchestration_runs: orchestrationData?.runs ?? null,
     },
     member_schedules: memberSchedules,
     conflicts,
     member_id: memberId,
+    looking_ahead_projects: lookingAheadProjects,
     generated_by: llmConfig?.provider ? `${llmConfig.provider}/${llmConfig.model}` : 'none',
     updated_at: new Date().toISOString(),
   }
@@ -270,6 +299,13 @@ async function callLLM(
     content: string
     category: string | null
     confidence: number
+  }[],
+  lookingAheadProjects: {
+    id: string
+    title: string
+    summary: string
+    target_date: string | null
+    ai_project_items: { kind: string; content: string; status: string; due_at: string | null }[]
   }[],
 ): Promise<string> {
   const dateLabel = new Date(date + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
@@ -340,6 +376,16 @@ async function callLLM(
       return `  [${scopeLabel}] ${memory.title}: ${memory.content}`
     }).join('\n')
     : ''
+  const projectLines = lookingAheadProjects.length > 0
+    ? lookingAheadProjects.map((project) => {
+      const openItems = project.ai_project_items
+        .filter((item) => item.status === 'open')
+        .slice(0, 3)
+        .map((item) => `${item.kind}: ${item.content}`)
+        .join('; ')
+      return `  ${project.title}${project.target_date ? ` (target ${project.target_date})` : ''}: ${project.summary}${openItems ? ` | ${openItems}` : ''}`
+    }).join('\n')
+    : ''
 
   const prompt = `You are the Casa Tabor family command center. Write a warm, smart morning briefing for ${dateLabel} for the ${memberNames} family.${weatherCity ? ` They live in ${weatherCity}.` : ''}
 
@@ -353,6 +399,8 @@ ${emailCommitmentLines ? `\nEMAIL COMMITMENTS (source-backed; mention only when 
 ${emailCommitmentLines}` : ''}
 ${scopedMemoryLines ? `\nSCOPED FAMILY MEMORY (include only if directly relevant; personal memory belongs only to the signed-in member):
 ${scopedMemoryLines}` : ''}
+${projectLines ? `\nLOOKING AHEAD PROJECTS (mention only when a deadline, recent activity, or unresolved commitment makes it useful today):
+${projectLines}` : ''}
 
 Write a single flowing paragraph (4–6 sentences) that covers:
 1. A quick read of the day's energy — busy or calm?
@@ -360,7 +408,8 @@ Write a single flowing paragraph (4–6 sentences) that covers:
 3. Any logistics or timing pressure (back-to-back events, driving needed, tight windows)
 4. Any weather-related considerations for outdoor events if relevant
 5. A nod to any prep/action items that need attention today or this week (only if prep/action inputs exist above)
-6. A closing note — encouraging, grounding, or practical
+6. A brief looking-ahead note when an active project is materially relevant
+7. A closing note — encouraging, grounding, or practical
 
 Write in a warm, confident voice like a knowledgeable household manager. Use family member names. No bullet points. No headers. Just one great paragraph.`
 
