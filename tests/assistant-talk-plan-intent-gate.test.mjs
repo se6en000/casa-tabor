@@ -84,3 +84,12 @@ test('Talk and Plan keeps grounded read tools while excluding mutation tools', (
     /includeRawDomainContext = experienceMode !== 'talk_plan' \|\| talkPlanCommandLane/,
   )
 })
+
+test('an accepted durable planning proposal may prepare write confirmations without opening deterministic responders', () => {
+  assert.match(server, /acceptedPlanningProposal/)
+  assert.match(
+    server,
+    /intentRouting\.profile === 'talk_plan' && !talkPlanCommandLane && !acceptedPlanningProposal/,
+  )
+  assert.match(server, /ACCEPTED PLANNING PROPOSAL/)
+})

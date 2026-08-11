@@ -12,6 +12,7 @@ import {
 import {
   inferProjectTurn,
   PROJECT_EXTRACTOR_VERSION,
+  projectTopicKey,
 } from '../_shared/talk-plan-project-extraction.mjs'
 
 const CORS = {
@@ -250,14 +251,19 @@ async function persistProjectTurn(
 ) {
   const inferred = inferProjectTurn(message)
   if (!inferred) return null
-  const { data: existing, error: existingError } = await sb
+  const topicKey = inferred.title ? projectTopicKey(inferred.title) : null
+  let existingQuery = sb
     .from('ai_projects')
-    .select('id,title,summary,status,briefing_state,version,source_conversation_id')
+    .select('id,title,summary,status,briefing_state,version,source_conversation_id,topic_key')
     .eq('owner_member_id', memberId)
     .eq('source_conversation_id', conversationId)
     .neq('status', 'deleted')
-    .maybeSingle()
+  existingQuery = topicKey
+    ? existingQuery.eq('topic_key', topicKey)
+    : existingQuery.order('last_activity_at', { ascending: false }).limit(1)
+  const { data: existingRows, error: existingError } = await existingQuery
   if (existingError) throw existingError
+  const existing = existingRows?.[0] ?? null
   if (!existing && !inferred.title) return null
   if (existing) {
     const { data: existingRevision, error: revisionError } = await sb
@@ -277,10 +283,11 @@ async function persistProjectTurn(
       .insert({
         owner_member_id: memberId,
         source_conversation_id: conversationId,
+        topic_key: topicKey,
         title: inferred.title,
         summary: inferred.summary ?? '',
       })
-      .select('id,title,summary,status,briefing_state,version,source_conversation_id')
+      .select('id,title,summary,status,briefing_state,version,source_conversation_id,topic_key')
       .single()
     if (error) throw error
     project = data
@@ -296,7 +303,7 @@ async function persistProjectTurn(
       })
       .eq('id', project.id)
       .eq('owner_member_id', memberId)
-      .select('id,title,summary,status,briefing_state,version,source_conversation_id')
+      .select('id,title,summary,status,briefing_state,version,source_conversation_id,topic_key')
       .single()
     if (error) throw error
     project = data

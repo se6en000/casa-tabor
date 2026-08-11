@@ -295,6 +295,9 @@ export function useAIAssistant(ctx: AssistantContext) {
       currentMessages,
       activeSession.experienceMode ?? 'do',
     )
+    const privateConversationId = activeSession.experienceMode === 'talk_plan'
+      ? await privateHistory.ensureConversation(activeSession)
+      : null
     const requestBody = {
       messages: allMsgsForApi,
       context: {
@@ -306,6 +309,7 @@ export function useAIAssistant(ctx: AssistantContext) {
       image: imagePayload,
       image_context: imageContext,
       session_id: activeSession.id,
+      private_conversation_id: privateConversationId,
       correlation_id: trace.correlationId ?? buildCorrelationId(userMsg.id, activeSession.id),
       trace_id: trace.traceId,
       turn_id: trace.turnId,

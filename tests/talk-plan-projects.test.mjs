@@ -14,7 +14,7 @@ test('project extraction creates a bounded project with typed planning items', (
     content: 'Help me plan the Casa Tabor frame. My goal is to finish it this month. I decided to use oak. Next step is to measure the display.',
   })
 
-  assert.equal(PROJECT_EXTRACTOR_VERSION, 'rules-v1')
+  assert.equal(PROJECT_EXTRACTOR_VERSION, 'rules-v2')
   assert.equal(result?.title, 'Casa Tabor frame')
   assert.deepEqual(result?.items.map((item) => item.kind), ['goal', 'decision', 'next_action'])
   assert.equal(result?.items[2].content, 'measure the display')
@@ -44,6 +44,18 @@ test('project extraction records changed decisions as superseding decisions', ()
   assert.equal(result?.items[0].content, 'use walnut instead')
 })
 
+test('project extraction starts a distinct project when the user names a new goal', () => {
+  const result = inferProjectTurn({
+    id: 'message-5',
+    role: 'user',
+    content: 'No, create a new goal to book my anniversary trip this week.',
+  })
+
+  assert.equal(result?.title, 'Book anniversary trip')
+  assert.equal(result?.items[0].kind, 'goal')
+  assert.equal(result?.items[0].content, 'Book anniversary trip this week')
+})
+
 test('project schema is private, versioned, provenance-first, and lifecycle aware', () => {
   const migration = readFileSync(new URL('../supabase/migrations/20260811220000_talk_plan_projects.sql', import.meta.url), 'utf8')
   assert.match(migration, /create table if not exists public\.ai_projects/i)
@@ -55,6 +67,13 @@ test('project schema is private, versioned, provenance-first, and lifecycle awar
   assert.match(migration, /source_message_client_id text not null/i)
   assert.match(migration, /create table if not exists public\.ai_project_revisions/i)
   assert.match(migration, /to service_role/i)
+})
+
+test('project schema permits multiple topic projects in one conversation', () => {
+  const migration = readFileSync(new URL('../supabase/migrations/20260811230000_multi_project_conversations.sql', import.meta.url), 'utf8')
+  assert.match(migration, /drop constraint if exists ai_projects_owner_member_id_source_conversation_id_key/i)
+  assert.match(migration, /alter column topic_key set not null/i)
+  assert.match(migration, /owner_member_id, source_conversation_id, topic_key/i)
 })
 
 test('history gateway derives project ownership from the signed profile', () => {
@@ -81,6 +100,14 @@ test('project turn capture is idempotent when history persistence retries', () =
   assert.match(migration, /project_id, source_message_client_id, change_kind/i)
   assert.match(source, /\.eq\('source_message_client_id', message\.id\)/)
   assert.match(source, /if \(existingRevision\) return existing\?\.id/)
+})
+
+test('project capture selects a named topic or the most recently active topic', () => {
+  const source = readFileSync(new URL('../supabase/functions/assistant-history/index.ts', import.meta.url), 'utf8')
+  assert.match(source, /projectTopicKey\(inferred\.title\)/)
+  assert.match(source, /\.eq\('topic_key', topicKey\)/)
+  assert.match(source, /\.order\('last_activity_at', \{ ascending: false \}\)/)
+  assert.doesNotMatch(source, /\.eq\('source_conversation_id', conversationId\)[\s\S]{0,100}\.maybeSingle\(\)/)
 })
 
 test('Mark decided resolves open decision questions before hiding the brief card', () => {

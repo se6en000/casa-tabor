@@ -79,6 +79,12 @@ export interface AIMessage {
         establishedAt: string
       }
     | {
+       activeEntityType: 'planning_proposal'
+       proposalText: string
+       expectedFollowUp: 'planning_proposal_follow_up'
+       establishedAt: string
+     }
+    | {
         activeEntityType: 'none'
         expectedFollowUp: 'none'
         establishedAt: string

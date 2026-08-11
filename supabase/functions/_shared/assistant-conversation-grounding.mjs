@@ -1,12 +1,26 @@
 import { resolveCalendarSemanticTurn } from './assistant-calendar-agent.mjs'
 
 const STATE_TTL_MS = 30 * 60 * 1000
+const PLANNING_PROPOSAL_TTL_MS = 24 * 60 * 60 * 1000
 
 export function normalizeConversationState(value, now = Date.now()) {
   if (!value || typeof value !== 'object') return null
   const establishedAt = typeof value.establishedAt === 'string' ? Date.parse(value.establishedAt) : NaN
-  if (!Number.isFinite(establishedAt) || now - establishedAt > STATE_TTL_MS || establishedAt > now + 60000) {
+  const stateTtlMs = value.activeEntityType === 'planning_proposal'
+    ? PLANNING_PROPOSAL_TTL_MS
+    : STATE_TTL_MS
+  if (!Number.isFinite(establishedAt) || now - establishedAt > stateTtlMs || establishedAt > now + 60000) {
     return null
+  }
+  if (value.activeEntityType === 'planning_proposal') {
+    const proposalText = typeof value.proposalText === 'string' ? value.proposalText.trim().slice(0, 6000) : ''
+    if (!proposalText) return null
+    return {
+      activeEntityType: 'planning_proposal',
+      proposalText,
+      expectedFollowUp: 'planning_proposal_follow_up',
+      establishedAt: new Date(establishedAt).toISOString(),
+    }
   }
   if (value.activeEntityType === 'grocery_item') {
     const activeGroceryItemId = typeof value.activeGroceryItemId === 'string' ? value.activeGroceryItemId.trim() : ''

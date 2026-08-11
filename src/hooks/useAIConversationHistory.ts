@@ -57,6 +57,7 @@ export function useAIConversationHistory() {
   }
   const [error, setError] = useState<string | null>(null)
   const conversationIdsRef = useRef<Record<string, string>>({})
+  const conversationCreationRef = useRef(new Map<string, Promise<string | null>>())
   const saveQueueRef = useRef(new Map<string, Promise<void>>())
 
   useEffect(() => {
@@ -65,25 +66,39 @@ export function useAIConversationHistory() {
       : {}
   }, [access?.memberId])
 
-  const saveSession = useCallback((session: AISession) => {
-    if (!access) return
-    if (session.messages.length === 0) return
+  const ensureConversation = useCallback(async (session: AISession) => {
+    if (!access) return null
+    const existingId = conversationIdsRef.current[session.id]
+    if (existingId) return existingId
+    const pending = conversationCreationRef.current.get(session.id)
+    if (pending) return pending
+    const creation = invokeAssistantHistory<{ conversation: { id: string } }>(access.token, {
+      action: 'create_conversation',
+      title: conversationTitle(session),
+      experience_mode: session.experienceMode,
+    }).then((created) => {
+      const conversationId = created.conversation.id
+      conversationIdsRef.current = { ...conversationIdsRef.current, [session.id]: conversationId }
+      writeJson(conversationMapStorageKey(access.memberId), conversationIdsRef.current)
+      return conversationId
+    }).catch((creationError: unknown) => {
+      setError(creationError instanceof Error ? creationError.message : 'Private history could not be started.')
+      return null
+    }).finally(() => {
+      conversationCreationRef.current.delete(session.id)
+    })
+    conversationCreationRef.current.set(session.id, creation)
+    return creation
+  }, [access])
 
+  const saveSession = useCallback((session: AISession) => {
+    if (!access || session.messages.length === 0) return
     const prior = saveQueueRef.current.get(session.id) ?? Promise.resolve()
     const next = prior
       .catch(() => undefined)
       .then(async () => {
-        let conversationId = conversationIdsRef.current[session.id]
-        if (!conversationId) {
-          const created = await invokeAssistantHistory<{ conversation: { id: string } }>(access.token, {
-            action: 'create_conversation',
-            title: conversationTitle(session),
-            experience_mode: session.experienceMode,
-          })
-          conversationId = created.conversation.id
-          conversationIdsRef.current = { ...conversationIdsRef.current, [session.id]: conversationId }
-          writeJson(conversationMapStorageKey(access.memberId), conversationIdsRef.current)
-        }
+        const conversationId = await ensureConversation(session)
+        if (!conversationId) return
         await invokeAssistantHistory(access.token, {
           action: 'append_messages',
           conversation_id: conversationId,
@@ -94,7 +109,7 @@ export function useAIConversationHistory() {
         setError(saveError instanceof Error ? saveError.message : 'Private history could not be saved.')
       })
     saveQueueRef.current.set(session.id, next)
-  }, [access])
+  }, [access, ensureConversation])
 
   const listConversations = useCallback(async () => {
     if (!access) return []
@@ -173,5 +188,15 @@ export function useAIConversationHistory() {
     })
   }, [access])
 
-  return { access, error, saveSession, listConversations, archiveConversation, forgetConversation, resumeConversation, exportConversation }
+  return {
+    access,
+    error,
+    ensureConversation,
+    saveSession,
+    listConversations,
+    archiveConversation,
+    forgetConversation,
+    resumeConversation,
+    exportConversation,
+  }
 }

@@ -75,3 +75,14 @@ test('assistant uses one compact synthesis call after authoritative calendar ran
   assert.match(assistantEndpoint, /calendarRangeConversationState\(\s*calendarReadContext,\s*authoritativeRead\.events/)
   assert.match(assistantEndpoint, /source: 'calendar_language_contract',\s*semantic_intent: calendarFrame\.intent/)
 })
+
+test('calendar availability uses the same authoritative range path as calendar lists', () => {
+  assert.match(
+    assistantEndpoint,
+    /\['calendar\.list', 'calendar\.availability'\]\.includes\(calendarFrame\?\.intent/,
+  )
+  assert.match(
+    assistantEndpoint,
+    /\['calendar\.list', 'calendar\.availability'\]\.includes\(calendarFrame\?\.intent[\s\S]{0,300}buildAuthoritativeCalendarRead/,
+  )
+})

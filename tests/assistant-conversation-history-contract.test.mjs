@@ -267,6 +267,36 @@ test('assistant retrieval blends signed-in personal memory with household memory
   assert.match(source, /scope\.eq\.personal/)
 })
 
+test('Talk and Plan requests carry the private conversation id and retrieve only signed-profile history', () => {
+  const assistant = readFileSync(
+    new URL('../supabase/functions/ai-assistant/index.ts', import.meta.url),
+    'utf8',
+  )
+  const hook = readFileSync(
+    new URL('../src/hooks/useAIAssistant.ts', import.meta.url),
+    'utf8',
+  )
+  const historyHook = readFileSync(
+    new URL('../src/hooks/useAIConversationHistory.ts', import.meta.url),
+    'utf8',
+  )
+
+  assert.match(historyHook, /ensureConversation/)
+  assert.match(hook, /private_conversation_id: privateConversationId/)
+  assert.match(assistant, /requestsPriorConversationContext\(latestUserText\)/)
+  assert.match(assistant, /\.eq\('owner_member_id', activeMemberId\)/)
+  assert.match(assistant, /buildPriorConversationEvidence/)
+})
+
+test('Talk and Plan no longer claims durable private history is temporary', () => {
+  const assistant = readFileSync(
+    new URL('../supabase/functions/ai-assistant/index.ts', import.meta.url),
+    'utf8',
+  )
+  assert.doesNotMatch(assistant, /local and temporary in Phase 1/i)
+  assert.match(assistant, /private conversation history/i)
+})
+
 test('briefing generation uses signed-in personal memory and scopes daily briefing requests by member', () => {
   const source = readFileSync(
     new URL('../supabase/functions/generate-briefing/index.ts', import.meta.url),
