@@ -161,7 +161,7 @@ async function hydrateAuthoritativeDocument(
       break
     }
     case 'memory': {
-      const result = await sb.from('ai_memory_observations').select('*').eq('id', job.source_id).maybeSingle()
+      const result = await sb.from('ai_memories').select('*').eq('id', job.source_id).maybeSingle()
       data = result.data
       error = result.error
       break

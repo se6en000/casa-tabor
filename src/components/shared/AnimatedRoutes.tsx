@@ -60,6 +60,7 @@ export default function AnimatedRoutes() {
           <Route path="ai/shortcuts" element={<AISettingsPage />} />
           <Route path="bug-tracker" element={<BugTrackerSettingsPage />} />
           <Route path="memory" element={<MemorySettingsPage />} />
+          <Route path="memory/food-profile" element={<FoodProfileSettingsPage />} />
           <Route path="sms"        element={<SmsSettingsPage />} />
           <Route path="music"      element={<MusicPage />} />
           <Route path="display"    element={<DisplaySettingsPage />} />
@@ -71,7 +72,7 @@ export default function AnimatedRoutes() {
           <Route path="grocery-intelligence" element={<GroceryIntelligenceSettingsPage />} />
           {/* Back-compat: old plural path still resolves */}
           <Route path="groceries-intelligence" element={<Navigate to="/settings/grocery-intelligence" replace />} />
-          <Route path="food-profile" element={<FoodProfileSettingsPage />} />
+          <Route path="food-profile" element={<Navigate to="/settings/memory/food-profile" replace />} />
           <Route path="pantry-inventory" element={<PantryInventorySettingsPage />} />
           <Route path="admin-ops" element={<AdminOpsPage />} />
           {/* Design-system gallery is available from Settings in every build. */}

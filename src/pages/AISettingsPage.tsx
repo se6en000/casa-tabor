@@ -15,7 +15,6 @@ import {
 import { VOICE_AUDIT_LOG_KEY } from '../lib/voiceAudit'
 import { Button, Chip, DisclosureSection, IconButton, SegmentedControl, SkeletonRow, Switch } from '../components/ui'
 import { SettingsPageHeader } from '../components/settings'
-import type { AIMemoryObservation } from '../types'
 
 interface LLMConfig {
   provider: string
@@ -30,12 +29,6 @@ interface LLMConfig {
 
 type ReasoningPreset = 'fast' | 'balanced' | 'deep'
 type ModelWorkload = 'do' | 'talk_plan' | 'background'
-
-interface AIMemoryCaptureConfig {
-  enabled: boolean
-  passiveSignalsEnabled: boolean
-  autoCaptureBugs: boolean
-}
 
 interface CaptureDevice {
   id: string
@@ -128,12 +121,6 @@ const REASONING_OPTIONS = [
 const VOICE_TELEMETRY_KEY = 'casa-voice-telemetry'
 const AI_LATENCY_METRICS_KEY = 'casa-ai-latency-rollup'
 const AI_REGRESSION_HISTORY_KEY = 'casa-ai-regression-history-v1'
-const DEFAULT_MEMORY_CAPTURE_CONFIG: AIMemoryCaptureConfig = {
-  enabled: false,
-  passiveSignalsEnabled: false,
-  autoCaptureBugs: false,
-}
-
 type ForensicsSnapshot = {
   windowHours: number
   totalTraces: number
@@ -273,12 +260,6 @@ export default function AISettingsPage() {
   const [regressionResults, setRegressionResults] = useState<RegressionCaseResult[]>([])
   const [regressionHistory, setRegressionHistory] = useState<RegressionRun[]>([])
   const [regressionError, setRegressionError] = useState<string | null>(null)
-  const [memoryCapture, setMemoryCapture] = useState<AIMemoryCaptureConfig>(DEFAULT_MEMORY_CAPTURE_CONFIG)
-  const [memoryObservations, setMemoryObservations] = useState<AIMemoryObservation[]>([])
-  const [memoryLoading, setMemoryLoading] = useState(false)
-  const [memoryError, setMemoryError] = useState<string | null>(null)
-  const [newObservationTitle, setNewObservationTitle] = useState('')
-  const [newObservationDetails, setNewObservationDetails] = useState('')
   const [captureDevices, setCaptureDevices] = useState<CaptureDevice[]>([])
   const [captureLoading, setCaptureLoading] = useState(false)
   const [captureError, setCaptureError] = useState<string | null>(null)
@@ -318,19 +299,6 @@ export default function AISettingsPage() {
     }
   }, [])
 
-  const loadMemoryObservations = useCallback(async () => {
-    setMemoryLoading(true)
-    setMemoryError(null)
-    const obs = await supabase
-      .from('ai_memory_observations')
-      .select('*')
-      .order('observed_at', { ascending: false })
-      .limit(12)
-    if (obs.error) setMemoryError(obs.error.message)
-    else setMemoryObservations((obs.data ?? []) as AIMemoryObservation[])
-    setMemoryLoading(false)
-  }, [])
-
   const loadCaptureDevices = useCallback(async () => {
     setCaptureLoading(true)
     setCaptureError(null)
@@ -347,9 +315,8 @@ export default function AISettingsPage() {
     Promise.all([
       supabase.from('settings').select('value').eq('key', 'llm_config').maybeSingle(),
       supabase.from('settings').select('value').eq('key', 'ai_custom_instructions').maybeSingle(),
-      supabase.from('settings').select('value').eq('key', 'ai_memory_capture_config').maybeSingle(),
       supabase.from('settings').select('value').eq('key', 'assistant_talk_plan_config').maybeSingle(),
-    ]).then(([cfg, ci, memoryCfg, talkPlanCfg]) => {
+    ]).then(([cfg, ci, talkPlanCfg]) => {
       if (cfg.data?.value) {
         const loaded = cfg.data.value as LLMConfig
         // Older settings rows predate the background/automation model field —
@@ -367,17 +334,10 @@ export default function AISettingsPage() {
       setTalkPlanEnabled((talkPlanCfg.data?.value as { enabled?: boolean } | null)?.enabled === true)
       const ciVal = (ci.data?.value as { text?: string } | null)?.text
       if (ciVal) setCustomInstructions(ciVal)
-      if (memoryCfg.data?.value && typeof memoryCfg.data.value === 'object') {
-        setMemoryCapture({
-          ...DEFAULT_MEMORY_CAPTURE_CONFIG,
-          ...(memoryCfg.data.value as Partial<AIMemoryCaptureConfig>),
-        })
-      }
       setIsLoading(false)
-      void loadMemoryObservations()
       void loadCaptureDevices()
     })
-  }, [loadCaptureDevices, loadMemoryObservations])
+  }, [loadCaptureDevices])
 
   const loadForensics = useCallback(async () => {
     setForensicsLoading(true)
@@ -673,7 +633,7 @@ export default function AISettingsPage() {
   const handleSave = useCallback(async () => {
     setSaveStatus('saving')
     const updatedAt = new Date().toISOString()
-    const [a, b, c, d] = await Promise.all([
+    const [a, b, c] = await Promise.all([
       supabase.from('settings').upsert(
         { key: 'llm_config', value: config, updated_at: updatedAt },
         { onConflict: 'key' }
@@ -683,17 +643,13 @@ export default function AISettingsPage() {
         { onConflict: 'key' }
       ),
       supabase.from('settings').upsert(
-        { key: 'ai_memory_capture_config', value: memoryCapture, updated_at: updatedAt },
-        { onConflict: 'key' }
-      ),
-      supabase.from('settings').upsert(
         { key: 'assistant_talk_plan_config', value: { enabled: talkPlanEnabled }, updated_at: updatedAt },
         { onConflict: 'key' }
       ),
     ])
-    setSaveStatus(a.error || b.error || c.error || d.error ? 'error' : 'saved')
-    if (!a.error && !b.error && !c.error && !d.error) setTimeout(() => setSaveStatus('idle'), 3000)
-  }, [config, customInstructions, memoryCapture, talkPlanEnabled])
+    setSaveStatus(a.error || b.error || c.error ? 'error' : 'saved')
+    if (!a.error && !b.error && !c.error) setTimeout(() => setSaveStatus('idle'), 3000)
+  }, [config, customInstructions, talkPlanEnabled])
 
   useEffect(() => {
     if (isLoading) return
@@ -706,7 +662,7 @@ export default function AISettingsPage() {
       handleSave()
     }, 700)
     return () => clearTimeout(t)
-  }, [config, customInstructions, memoryCapture, talkPlanEnabled, isLoading, handleSave])
+  }, [config, customInstructions, talkPlanEnabled, isLoading, handleSave])
 
   async function handleTest(workload: ModelWorkload = 'talk_plan') {
     setTestStatus('testing')
@@ -851,41 +807,6 @@ export default function AISettingsPage() {
     const next = writeVoiceRuntimeConfig({ auditEnabled })
     setVoiceRuntime(next)
   }
-
-  async function addObservation() {
-    const title = newObservationTitle.trim()
-    if (!title) return
-    setMemoryError(null)
-    const { error } = await supabase.from('ai_memory_observations').insert({
-      title,
-      details: newObservationDetails.trim() || null,
-      category: 'operational',
-      source: 'user',
-      status: 'review',
-      confidence: null,
-    })
-    if (error) {
-      setMemoryError(error.message)
-      return
-    }
-    setNewObservationTitle('')
-    setNewObservationDetails('')
-    await loadMemoryObservations()
-  }
-
-  async function updateObservationStatus(id: string, status: AIMemoryObservation['status']) {
-    setMemoryError(null)
-    const { error } = await supabase
-      .from('ai_memory_observations')
-      .update({ status })
-      .eq('id', id)
-    if (error) {
-      setMemoryError(error.message)
-      return
-    }
-    setMemoryObservations((rows) => rows.map((row) => (row.id === id ? { ...row, status } : row)))
-  }
-
 
   if (isLoading) return <div className="space-y-4"><SkeletonRow /><SkeletonRow /><SkeletonRow /></div>
 
@@ -1074,82 +995,6 @@ export default function AISettingsPage() {
               </div>
             )}
             {captureError && <p className="text-caption text-casa-error">{captureError}</p>}
-          </div>
-        </div>
-
-        <div className="bg-casa-surface rounded-card border border-casa-border p-4 shadow-card space-y-4">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-body-sm font-semibold text-casa-navy">AI Memory</p>
-            <Button variant="secondary" size="sm" onClick={() => void loadMemoryObservations()} leadingIcon={<RefreshCw size={14} />}>
-              Refresh
-            </Button>
-          </div>
-          <p className="text-caption text-casa-muted">
-            Memory is explicit and reviewable: no hidden spying. Casa only keeps observations you approve.
-          </p>
-          <div className="rounded-card border border-casa-border bg-casa-bg/60 p-3 space-y-3">
-            <Switch
-              label="Enable AI memory capture"
-              description="Allow Casa to store approved habits/preferences and operational observations."
-              checked={memoryCapture.enabled}
-              onCheckedChange={(enabled) => setMemoryCapture((current) => ({ ...current, enabled }))}
-            />
-            <Switch
-              label="Allow passive signal suggestions"
-              description="Surface suggested observations from app activity for your review."
-              checked={memoryCapture.passiveSignalsEnabled}
-              onCheckedChange={(passiveSignalsEnabled) => setMemoryCapture((current) => ({ ...current, passiveSignalsEnabled }))}
-            />
-          </div>
-          <div className="rounded-card border border-casa-border bg-casa-bg/60 p-3 space-y-2">
-            <p className="text-caption font-semibold uppercase tracking-wide text-casa-muted">New learning observation</p>
-            <input
-              value={newObservationTitle}
-              onChange={(e) => setNewObservationTitle(e.target.value)}
-              placeholder="Example: Owen focuses better after snack + 20 min reset"
-              className="w-full px-3 py-2 rounded-button border border-casa-border text-body-sm text-casa-navy bg-white focus:outline-none focus:ring-2 focus:ring-casa-navy/20"
-            />
-            <textarea
-              value={newObservationDetails}
-              onChange={(e) => setNewObservationDetails(e.target.value)}
-              rows={3}
-              placeholder="Optional detail/context"
-              className="w-full rounded-button border border-casa-border bg-white px-3 py-2 text-body-sm text-casa-navy focus:outline-none focus:border-casa-gold resize-y"
-            />
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={!newObservationTitle.trim()}
-              onClick={() => void addObservation()}
-            >
-              Save observation
-            </Button>
-            {memoryError && <p className="text-caption text-casa-error">{memoryError}</p>}
-            <div className="space-y-2 max-h-56 overflow-y-auto">
-              {memoryLoading ? (
-                <SkeletonRow />
-              ) : memoryObservations.length === 0 ? (
-                <p className="text-caption text-casa-muted">No observations yet.</p>
-              ) : memoryObservations.map((observation) => (
-                <div key={observation.id} className="rounded-button border border-casa-border bg-white p-2.5 space-y-1">
-                  <p className="text-body-sm font-semibold text-casa-navy">{observation.title}</p>
-                  {observation.details && <p className="text-caption text-casa-muted">{observation.details}</p>}
-                  <div className="flex items-center gap-1.5">
-                    <Chip size="sm" tone="neutral">{observation.status}</Chip>
-                    <Button variant="ghost" size="sm" onClick={() => void updateObservationStatus(observation.id, 'active')}>Active</Button>
-                    <Button variant="ghost" size="sm" onClick={() => void updateObservationStatus(observation.id, 'archived')}>Archive</Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="rounded-card border border-casa-border bg-casa-bg/60 p-3">
-            <p className="text-caption text-casa-muted">
-              Bug intake/triage has moved to its own menu for cleaner workflow.
-            </p>
-            <Link to="/settings/bug-tracker" className="inline-flex mt-2 rounded-button border border-casa-border bg-white px-3 py-1.5 text-caption font-semibold text-casa-navy hover:bg-casa-bg">
-              Open Bug Tracker
-            </Link>
           </div>
         </div>
 

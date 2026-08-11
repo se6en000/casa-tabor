@@ -171,19 +171,19 @@ export function buildFamilyDataProjection(sourceType, row) {
       }
     }
     case 'memory':
-      if (!row?.id || row.status !== 'active') return null
+      if (!row?.id || row.status !== 'active' || row.scope !== 'household') return null
       return {
         title: redactFamilyEvidenceText(row.title || 'Family memory').slice(0, 300),
-        redacted_text: safeText([row.title, row.details]),
+        redacted_text: safeText([row.title, row.content]),
         category: row.category ?? 'memory',
         entity_refs: [],
-        occurred_at: row.observed_at ?? row.updated_at ?? row.created_at ?? null,
-        effective_at: row.observed_at ?? null,
-        expires_at: null,
+        occurred_at: row.updated_at ?? row.created_at ?? null,
+        effective_at: row.updated_at ?? null,
+        expires_at: row.expires_at ?? null,
         status: 'active',
         confidence: Number(row.confidence ?? 0.8),
         privacy_class: 'standard',
-        metadata: { source: row.source ?? null },
+        metadata: { scope: row.scope },
       }
     default:
       return null

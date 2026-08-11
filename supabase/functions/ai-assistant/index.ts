@@ -174,11 +174,11 @@ type LlmTelemetry = {
   total_tokens: number
 }
 
-type MemoryObservationRow = {
+type MemoryRow = {
   id: string
   title: string
-  details: string | null
-  status: 'active' | 'review' | 'archived'
+  content: string
+  scope: 'personal' | 'household'
   observed_at: string
 }
 
@@ -850,7 +850,7 @@ Deno.serve(async (req) => {
   const needsAvailabilityData = !requestAmbiguity && ['event', 'full'].includes(intentRouting.profile)
   const memoryInsightsReadIntent = isMemoryInsightsReadRequest(latestUserText)
   const bugTrackerReadIntent = bugReportRequest.kind === 'none' && isBugTrackerReadRequest(latestUserText)
-  const needsMemoryObservationData = !requestAmbiguity && memoryInsightsReadIntent
+  const needsMemoryData = !requestAmbiguity && memoryInsightsReadIntent
   const needsBugReportData = !requestAmbiguity && bugTrackerReadIntent
   const skippedRows = Promise.resolve({ data: [], error: null })
   const skippedRow = Promise.resolve({ data: null, error: null })
@@ -876,7 +876,7 @@ Deno.serve(async (req) => {
     foodProfileResult,
     availabilityRulesResult,
     availabilityExceptionsResult,
-    memoryObservationsResult,
+    memoriesResult,
     bugReportsResult,
   ] = await Promise.all([
     sb.from('settings').select('value').eq('key', 'llm_config').limit(1),
@@ -966,12 +966,15 @@ Deno.serve(async (req) => {
     needsAvailabilityData
       ? sb.from('member_availability_exceptions').select('member_id, start_at, end_at, override_type, note').gte('end_at', windowStart.toISOString()).then(r => r).catch(() => ({ data: null, error: null }))
       : skippedRows,
-    needsMemoryObservationData
-      ? sb.from('ai_memory_observations')
-        .select('id, title, details, status, observed_at')
-        .in('status', ['active', 'review'])
-        .order('observed_at', { ascending: false })
-        .limit(12)
+    needsMemoryData
+      ? sb.from('ai_memories')
+        .select('id,title,content,scope,updated_at')
+        .eq('status', 'active')
+        .or(activeMemberId
+          ? `scope.eq.household,and(scope.eq.personal,owner_member_id.eq.${activeMemberId})`
+          : 'scope.eq.household')
+        .order('updated_at', { ascending: false })
+        .limit(20)
       : skippedRows,
     needsBugReportData
       ? sb.from('ai_bug_reports')
@@ -1792,22 +1795,22 @@ Deno.serve(async (req) => {
     }
   }
   if (memoryInsightsReadIntent || bugTrackerReadIntent) {
-    const observations = (memoryObservationsResult.data ?? []) as MemoryObservationRow[]
+    const memories = (memoriesResult.data ?? []) as MemoryRow[]
     const bugs = (bugReportsResult.data ?? []) as BugReportRow[]
     const textParts: string[] = []
     if (memoryInsightsReadIntent) {
-      textParts.push(formatMemoryInsightsSummary(observations))
+      textParts.push(formatMemoryInsightsSummary(memories))
     }
     if (bugTrackerReadIntent) {
       textParts.push(formatBugTrackerSummary(bugs))
     }
     const requestTotalMs = Date.now() - requestStartMs
-    appendServerTrace('server_ai_assistant_memory_bug_summary', `memory=${observations.length} bugs=${bugs.length}`, {
+    appendServerTrace('server_ai_assistant_memory_bug_summary', `memory=${memories.length} bugs=${bugs.length}`, {
       memory_requested: memoryInsightsReadIntent,
       bug_requested: bugTrackerReadIntent,
-      memory_count: observations.length,
+      memory_count: memories.length,
       bug_count: bugs.length,
-      memory_error: memoryObservationsResult.error?.message ?? null,
+      memory_error: memoriesResult.error?.message ?? null,
       bug_error: bugReportsResult.error?.message ?? null,
       request_ms: requestTotalMs,
     })
@@ -1818,8 +1821,8 @@ Deno.serve(async (req) => {
         text: textParts.join('\n\n'),
         correlation_id: cid,
         authoritative_provenance: {
-          source: 'ai_memory_observations+ai_bug_reports',
-          observation_ids: observations.map((row) => row.id),
+          source: 'ai_memories+ai_bug_reports',
+          memory_ids: memories.map((row) => row.id),
           bug_ids: bugs.map((row) => row.id),
         },
         telemetry: {

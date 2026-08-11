@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
-import { Brain, Pencil, Trash2 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Brain, ChefHat, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-import { Alert, Button, Card, Chip, EmptyState, Field, Input, Modal, SkeletonRow, Text, Textarea } from '../components/ui'
+import { Alert, Button, Card, Chip, EmptyState, Field, Input, Modal, SegmentedControl, SkeletonRow, Text, Textarea } from '../components/ui'
 import { SettingsPageHeader } from '../components/settings'
 import { useProfileSession } from '../contexts/ProfileSessionContext'
 import { invokeAssistantHistory } from '../lib/assistantConversationHistoryClient'
@@ -20,11 +21,15 @@ type MemoryRow = {
 
 export default function MemorySettingsPage() {
   const { profile } = useProfileSession()
+  const navigate = useNavigate()
   const qc = useQueryClient()
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [editing, setEditing] = useState<MemoryRow | null>(null)
   const [draftTitle, setDraftTitle] = useState('')
   const [draftContent, setDraftContent] = useState('')
+  const [newTitle, setNewTitle] = useState('')
+  const [newContent, setNewContent] = useState('')
+  const [newScope, setNewScope] = useState<'personal' | 'household'>('personal')
   const [error, setError] = useState<string | null>(null)
   const [status, setStatus] = useState<string | null>(null)
 
@@ -70,6 +75,21 @@ export default function MemorySettingsPage() {
     },
   })
 
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      if (!profile?.token) throw new Error('Sign in to add memory.')
+      await invokeAssistantHistory(profile.token, {
+        action: 'create_memory',
+        scope: newScope,
+        title: newTitle.trim(),
+        content: newContent.trim(),
+      })
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['ai-memories', profile?.memberId ?? 'none'] })
+    },
+  })
+
   const rows = query.data ?? []
   const personalCount = useMemo(() => rows.filter((row) => row.scope === 'personal').length, [rows])
 
@@ -95,6 +115,19 @@ export default function MemorySettingsPage() {
     setStatus(null)
   }
 
+  async function createMemory() {
+    setError(null)
+    setStatus(null)
+    try {
+      await createMutation.mutateAsync()
+      setNewTitle('')
+      setNewContent('')
+      setStatus('Memory added.')
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : 'Could not add this memory.')
+    }
+  }
+
   async function saveCorrection() {
     if (!editing) return
     setError(null)
@@ -117,8 +150,60 @@ export default function MemorySettingsPage() {
       <SettingsPageHeader
         icon={Brain}
         title="Household Memory"
-        description="Review and remove the personal and household memory currently used for Talk & Plan and your daily brief."
+        description="The one place for preferences and remembered information used by Talk & Plan and your daily brief."
       />
+      <Card className="space-y-4 p-4">
+        <div className="space-y-1">
+          <Text role="body-sm" className="font-semibold text-casa-navy">Remember something</Text>
+          <Text role="caption" muted>Casa learns stable preferences automatically. Add or correct something here whenever you want direct control.</Text>
+        </div>
+        <SegmentedControl
+          aria-label="Memory scope"
+          value={newScope}
+          options={[
+            { value: 'personal', label: 'Personal' },
+            { value: 'household', label: 'Household' },
+          ]}
+          onChange={(value) => setNewScope(value as 'personal' | 'household')}
+          fullWidth
+        />
+        <Field label="Short title">
+          <Input
+            value={newTitle}
+            onChange={(event) => setNewTitle(event.target.value)}
+            placeholder="I prefer morning appointments"
+          />
+        </Field>
+        <Field label="What Casa should remember">
+          <Textarea
+            rows={3}
+            value={newContent}
+            onChange={(event) => setNewContent(event.target.value)}
+            placeholder="Morning appointments work best after school drop-off."
+          />
+        </Field>
+        <Button
+          variant="primary"
+          leadingIcon={<Plus size={16} />}
+          loading={createMutation.isPending}
+          disabled={!newTitle.trim() || !newContent.trim()}
+          onClick={() => void createMemory()}
+        >
+          Add memory
+        </Button>
+      </Card>
+      <Card className="space-y-3 p-4">
+        <div className="flex items-start gap-3">
+          <ChefHat size={20} className="mt-0.5 shrink-0 text-casa-gold" />
+          <div className="space-y-1">
+            <Text role="body-sm" className="font-semibold text-casa-navy">Food & meal preferences</Text>
+            <Text role="caption" muted>Dietary rules, allergies, disliked foods, favorite cuisines, budget, and cooking-time limits stay structured so Meal Planner can apply them reliably.</Text>
+          </div>
+        </div>
+        <Button variant="secondary" onClick={() => navigate('/settings/memory/food-profile')}>
+          Manage food preferences
+        </Button>
+      </Card>
       <div className="flex flex-wrap gap-2">
         <Chip tone="neutral">Total: {rows.length}</Chip>
         <Chip tone="neutral">Personal: {personalCount}</Chip>

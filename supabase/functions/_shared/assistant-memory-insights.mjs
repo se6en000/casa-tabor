@@ -90,16 +90,11 @@ export function isBugTrackerReadRequest(text) {
 
 export function formatMemoryInsightsSummary(observations) {
   const rows = Array.isArray(observations) ? observations : []
-  if (rows.length === 0) return "I haven't stored any approved learnings yet."
-  const active = rows.filter((row) => row?.status === 'active')
-  const review = rows.filter((row) => row?.status === 'review')
-  const top = (active.length > 0 ? active : rows).slice(0, 5)
-  const lines = top.map((row) => `- ${row.title}`)
-  const header = active.length > 0
-    ? `Here's what I've learned so far (${active.length} active):`
-    : `I have ${rows.length} saved observations (still under review).`
-  const reviewLine = review.length > 0 ? `\n${review.length} observation${review.length === 1 ? ' is' : 's are'} in review.` : ''
-  return `${header}\n${lines.join('\n')}${reviewLine}`
+  if (rows.length === 0) return "I haven't saved any personal or household memory yet."
+  const personal = rows.filter((row) => row?.scope === 'personal')
+  const household = rows.filter((row) => row?.scope === 'household')
+  const lines = rows.slice(0, 8).map((row) => `- [${row.scope === 'personal' ? 'Personal' : 'Household'}] ${row.title}`)
+  return `Here's what I've learned so far (${personal.length} personal, ${household.length} household):\n${lines.join('\n')}`
 }
 
 export function formatBugTrackerSummary(bugs) {

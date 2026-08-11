@@ -3,7 +3,7 @@ import { useEffect, useRef } from 'react'
 import {
   Users, Sun, MessageSquare, Bot, Home, Activity,
   BookmarkCheck, Layers, ChevronRight, Music2, LineChart, Bug, Brain,
-  Palette, ShoppingCart, ChefHat, Lock, LayoutGrid,
+  Palette, ShoppingCart, Lock, LayoutGrid,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import BounceScroll from '../shared/BounceScroll'
@@ -24,7 +24,6 @@ const NAV_GROUPS = [
     items: [
       { to: '/settings/home',    icon: Home,          label: 'Home & Profile',      desc: 'Address, home screen layout' },
       { to: '/settings/places',  icon: BookmarkCheck, label: 'Saved Places',        desc: 'Locations & people nicknames' },
-      { to: '/settings/food-profile', icon: ChefHat,   label: 'Food Profile',        desc: 'Meal planning preferences and budget' },
       { to: '/settings/pantry-inventory', icon: ShoppingCart, label: 'Pantry Inventory', desc: 'Stock levels and low-inventory thresholds' },
     ],
   },
@@ -32,6 +31,7 @@ const NAV_GROUPS = [
     label: 'Household',
     items: [
       { to: '/settings/family',  icon: Users,         label: 'Family',              desc: 'Members, colors, roles' },
+      { to: '/settings/memory', icon: Brain,          label: 'Memory',               desc: 'Personal, household, and food preferences' },
     ],
   },
   {
@@ -42,7 +42,6 @@ const NAV_GROUPS = [
       { to: '/settings/music',   icon: Music2,        label: 'Spotify / Music',     desc: 'Connect music playback' },
       { to: '/settings/ai',      icon: Bot,           label: 'AI Provider',         desc: 'Vendor, model, API key' },
       { to: '/settings/ai/shortcuts', icon: Bot,      label: 'AI Shortcuts',        desc: 'Action Button and Apple Shortcut setup' },
-      { to: '/settings/memory', icon: Brain,          label: 'Memory',               desc: 'Personal + household memory used by Talk & Plan and your brief' },
       { to: '/settings/bug-tracker', icon: Bug,       label: 'Bug Tracker',         desc: 'Capture and triage defects' },
       { to: '/settings/sms',     icon: MessageSquare, label: 'Notifications',       desc: 'SMS briefings & alerts' },
     ],

@@ -56,8 +56,8 @@ test('bug-report semantic boundary recognizes explicit creation language without
 
 test('memory and bug summaries are deterministic and truthful', () => {
   const memoryText = formatMemoryInsightsSummary([
-    { title: 'Owen focuses better after snack', status: 'active' },
-    { title: 'Friday traffic spikes after 4pm', status: 'review' },
+    { title: 'Owen focuses better after snack', scope: 'household' },
+    { title: 'I prefer morning appointments', scope: 'personal' },
   ])
   const bugText = formatBugTrackerSummary([
     { title: 'Calendar card mismatch', status: 'open', severity: 'high' },
@@ -65,16 +65,44 @@ test('memory and bug summaries are deterministic and truthful', () => {
   ])
   assert.match(memoryText, /learned/i)
   assert.match(memoryText, /Owen focuses better/)
+  assert.match(memoryText, /I prefer morning appointments/)
+  assert.match(memoryText, /personal/i)
+  assert.match(memoryText, /household/i)
   assert.match(bugText, /open\/in-progress/i)
   assert.match(bugText, /Calendar card mismatch/)
 })
 
-test('ai assistant wires memory and bug summaries to authoritative tables', () => {
+test('ai assistant wires memory and bug summaries to the canonical memory table', () => {
   const source = readFileSync(new URL('../supabase/functions/ai-assistant/index.ts', import.meta.url), 'utf8')
   assert.match(source, /isMemoryInsightsReadRequest/)
-  assert.match(source, /from\('ai_memory_observations'\)/)
+  assert.match(source, /from\('ai_memories'\)/)
+  assert.doesNotMatch(source, /from\('ai_memory_observations'\)/)
   assert.match(source, /from\('ai_bug_reports'\)/)
   assert.match(source, /server_ai_assistant_memory_bug_summary/)
   assert.match(source, /server_ai_assistant_bug_report_created/)
   assert.match(source, /write_verified: true/)
+})
+
+test('memory settings is the only user-facing preferences and memory destination', () => {
+  const aiSettings = readFileSync(new URL('../src/pages/AISettingsPage.tsx', import.meta.url), 'utf8')
+  const memorySettings = readFileSync(new URL('../src/pages/MemorySettingsPage.tsx', import.meta.url), 'utf8')
+  const settingsShell = readFileSync(new URL('../src/components/settings/SettingsShell.tsx', import.meta.url), 'utf8')
+  assert.doesNotMatch(aiSettings, /ai_memory_observations/)
+  assert.doesNotMatch(aiSettings, />AI Memory</)
+  assert.match(memorySettings, /Food & meal preferences/)
+  assert.match(memorySettings, /create_memory/)
+  assert.match(settingsShell, /label: 'Memory'/)
+  assert.doesNotMatch(settingsShell, /label: 'Food Profile'/)
+})
+
+test('legacy observations are migrated and family indexing reads canonical memories', () => {
+  const migration = readFileSync(new URL('../supabase/migrations/20260811210000_consolidate_ai_memory.sql', import.meta.url), 'utf8')
+  const indexer = readFileSync(new URL('../supabase/functions/index-family-data/index.ts', import.meta.url), 'utf8')
+  const projection = readFileSync(new URL('../supabase/functions/_shared/family-data-projection.mjs', import.meta.url), 'utf8')
+  assert.match(migration, /insert into public\.ai_memories/i)
+  assert.match(migration, /from public\.ai_memory_observations/i)
+  assert.match(migration, /family_data_project_ai_memories/i)
+  assert.match(indexer, /from\('ai_memories'\)/)
+  assert.doesNotMatch(indexer, /from\('ai_memory_observations'\)/)
+  assert.match(projection, /row\.scope !== 'household'/)
 })

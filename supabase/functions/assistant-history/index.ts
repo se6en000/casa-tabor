@@ -366,6 +366,32 @@ Deno.serve(async (request) => {
       })
     }
 
+    if (action === 'create_memory') {
+      const session = await assertHistorySession(request, sb)
+      const memberId = requireMemberSession(session)
+      const scope = body?.scope === 'household' ? 'household' : 'personal'
+      if (scope === 'household' && !(await memberIsAdmin(sb, memberId))) {
+        throw new Error('Household memory can only be added by a household admin.')
+      }
+      const title = requiredText(body?.title, 'title').slice(0, 160)
+      const content = requiredText(body?.content, 'content').slice(0, 2000)
+      const { data, error } = await sb
+        .from('ai_memories')
+        .insert({
+          scope,
+          owner_member_id: scope === 'personal' ? memberId : null,
+          title,
+          content,
+          category: 'preference',
+          confidence: 1,
+          extractor_version: 'manual-v1',
+        })
+        .select('id')
+        .single()
+      if (error) throw error
+      return json(200, { memory_id: data.id, status: 'created' })
+    }
+
     if (action === 'delete_memory' || action === 'correct_memory') {
       const session = await assertHistorySession(request, sb)
       const memberId = requireMemberSession(session)
