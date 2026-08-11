@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { KeyRound, UserRound } from 'lucide-react'
+import { Delete, KeyRound, UserRound } from 'lucide-react'
 
 import { useProfileSession, ProfileSessionProvider } from '../../contexts/ProfileSessionContext'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
@@ -92,6 +92,7 @@ function ProfileUnlockGate({ children }: { children: ReactNode }) {
                 required
               />
             </Field>
+            <PinKeypad value={pin} onChange={(nextPin) => { setPin(nextPin); setError(null) }} disabled={unlocking} />
             <Button type="submit" fullWidth leadingIcon={<KeyRound size={16} />} loading={unlocking}>
               Open {selectedMember.name}'s Casa
             </Button>
@@ -164,6 +165,7 @@ function FamilyPinEnrollment({ onDone }: { onDone: () => void }) {
             <Field label="Household-admin PIN" error={error}>
               <Input autoFocus type="password" inputMode="numeric" autoComplete="current-password" pattern="[0-9]{6,12}" value={adminPin} onChange={(event) => setAdminPin(event.target.value)} placeholder="6 to 12 digits" required />
             </Field>
+            <PinKeypad value={adminPin} onChange={(nextPin) => { setAdminPin(nextPin); setError(null) }} disabled={saving} />
             <Button type="submit" fullWidth loading={saving}>Unlock family PIN management</Button>
           </form>
         )}
@@ -178,11 +180,37 @@ function FamilyPinEnrollment({ onDone }: { onDone: () => void }) {
             <Field label="New member PIN">
               <Input type="password" inputMode="numeric" autoComplete="new-password" pattern="[0-9]{6,12}" value={memberPin} onChange={(event) => setMemberPin(event.target.value)} placeholder="6 to 12 digits" required />
             </Field>
+            <PinKeypad value={memberPin} onChange={(nextPin) => { setMemberPin(nextPin); setError(null) }} disabled={saving} />
             <Button type="submit" fullWidth loading={saving} disabled={!selectedMemberId}>Save member PIN</Button>
           </form>
         )}
         <Button variant="ghost" fullWidth className="mt-5" onClick={onDone}>Back to profile sign-in</Button>
       </Card>
+    </div>
+  )
+}
+
+function PinKeypad({ value, onChange, disabled = false }: {
+  value: string
+  onChange: (value: string) => void
+  disabled?: boolean
+}) {
+  const pressDigit = (digit: string) => {
+    if (value.length < 12) onChange(`${value}${digit}`)
+  }
+
+  return (
+    <div className="grid grid-cols-3 gap-2" aria-label="PIN keypad">
+      {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
+        <Button key={digit} variant="secondary" type="button" disabled={disabled} onClick={() => pressDigit(digit)} className="min-h-control text-heading">
+          {digit}
+        </Button>
+      ))}
+      <div aria-hidden="true" />
+      <Button variant="secondary" type="button" disabled={disabled} onClick={() => pressDigit('0')} className="min-h-control text-heading">0</Button>
+      <Button variant="secondary" type="button" disabled={disabled || value.length === 0} onClick={() => onChange(value.slice(0, -1))} aria-label="Delete PIN digit" className="min-h-control">
+        <Delete size={20} />
+      </Button>
     </div>
   )
 }

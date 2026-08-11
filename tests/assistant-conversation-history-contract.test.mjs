@@ -202,6 +202,8 @@ test('the launch gate keeps household-admin PIN enrollment reachable before a me
   assert.match(source, /Manage family PINs/)
   assert.match(source, /unlockAdmin/)
   assert.match(source, /set_member_pin/)
+  assert.match(source, /function PinKeypad/)
+  assert.match(source, /aria-label="Delete PIN digit"/)
 })
 
 test('family settings keeps PIN enrollment inside each existing member’s collapsible card', () => {
