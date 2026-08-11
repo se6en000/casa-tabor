@@ -25,6 +25,7 @@ import PantryInventorySettingsPage from '../../pages/PantryInventorySettingsPage
 import AdminOpsPage from '../../pages/AdminOpsPage'
 import DesignSystemGalleryPage from '../../pages/DesignSystemGalleryPage'
 import BugTrackerSettingsPage from '../../pages/BugTrackerSettingsPage'
+import MemorySettingsPage from '../../pages/MemorySettingsPage'
 import SettingsShell from '../settings/SettingsShell'
 import PageTransition from './PageTransition'
 
@@ -58,6 +59,7 @@ export default function AnimatedRoutes() {
           <Route path="ai"         element={<AISettingsPage />} />
           <Route path="ai/shortcuts" element={<AISettingsPage />} />
           <Route path="bug-tracker" element={<BugTrackerSettingsPage />} />
+          <Route path="memory" element={<MemorySettingsPage />} />
           <Route path="sms"        element={<SmsSettingsPage />} />
           <Route path="music"      element={<MusicPage />} />
           <Route path="display"    element={<DisplaySettingsPage />} />

@@ -3,11 +3,12 @@ import { getCorrelationId, invocationHeaders, withCorrelationHeaders } from '../
 import { requireEnv } from '../_shared/env.ts'
 import { resolveBackgroundLlmConfig } from '../_shared/background-llm-model.mjs'
 import { createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
+import { verifyProfileSessionToken } from '../_shared/profile-session.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-correlation-id',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-correlation-id, x-casa-history-session',
 }
 const providerFetch = createTrackedProviderFetch({
   functionName: 'generate-briefing',
@@ -20,6 +21,44 @@ Deno.serve(async (req) => {
   const correlationId = getCorrelationId(req, 'briefing')
   try {
     const sb = createClient(requireEnv('SUPABASE_URL'), requireEnv('SUPABASE_SERVICE_ROLE_KEY'))
+    const profileToken = req.headers.get('x-casa-history-session')?.trim()
+    if (!profileToken) return new Response(
+      JSON.stringify({ error: 'Profile session is required.', correlation_id: correlationId }),
+      { status: 401, headers: withCorrelationHeaders({ ...CORS, 'content-type': 'application/json' }, correlationId) },
+    )
+    let profileSession: { role: string; member_id: string | null }
+    try {
+      profileSession = await verifyProfileSessionToken({
+        token: profileToken,
+        secret: requireEnv('AI_HISTORY_SESSION_SECRET'),
+        loadCredentialVersion: async (claims: { role: string; member_id: string | null }) => {
+          const query = sb
+            .from('ai_history_pin_credentials')
+            .select('credential_version')
+            .eq('credential_kind', claims.role)
+          const { data, error } = claims.role === 'family_member'
+            ? await query.eq('member_id', claims.member_id).maybeSingle()
+            : await query.is('member_id', null).maybeSingle()
+          if (error) throw error
+          return data?.credential_version ?? null
+        },
+      })
+    } catch (error) {
+      return new Response(
+        JSON.stringify({
+          error: error instanceof Error ? error.message : String(error),
+          correlation_id: correlationId,
+        }),
+        { status: 401, headers: withCorrelationHeaders({ ...CORS, 'content-type': 'application/json' }, correlationId) },
+      )
+    }
+    if (profileSession.role !== 'family_member' || !profileSession.member_id) {
+      return new Response(
+        JSON.stringify({ error: 'A family member profile is required.', correlation_id: correlationId }),
+        { status: 403, headers: withCorrelationHeaders({ ...CORS, 'content-type': 'application/json' }, correlationId) },
+      )
+    }
+    const memberId = profileSession.member_id
 
   // Client sends UTC ISO strings for local-day boundaries so timezone is always correct.
   // e.g. for EDT (UTC-4): dayStartUtc = "2026-05-30T04:00:00.000Z", dayEndUtc = "2026-05-31T03:59:59.999Z"
@@ -140,6 +179,18 @@ Deno.serve(async (req) => {
     { status: 500, headers: withCorrelationHeaders({ ...CORS, 'content-type': 'application/json' }, correlationId) },
   )
 
+  const { data: memoryRows, error: memoryError } = await sb
+    .from('ai_memories')
+    .select('id,scope,title,content,category,confidence,updated_at')
+    .eq('status', 'active')
+    .or(`scope.eq.household,and(scope.eq.personal,owner_member_id.eq.${memberId})`)
+    .order('updated_at', { ascending: false })
+    .limit(12)
+  if (memoryError) return new Response(
+    JSON.stringify({ error: memoryError.message, correlation_id: correlationId }),
+    { status: 500, headers: withCorrelationHeaders({ ...CORS, 'content-type': 'application/json' }, correlationId) },
+  )
+
   const conflicts = (orchestrationData?.conflicts as {
     id: string
     conflict_type: string
@@ -160,6 +211,7 @@ Deno.serve(async (req) => {
         prepItems,
         actionQueue,
         emailCommitments ?? [],
+        memoryRows ?? [],
       )
     } catch (err) {
       console.error(`[generate-briefing][${correlationId}] LLM error:`, err)
@@ -167,7 +219,6 @@ Deno.serve(async (req) => {
     }
   }
 
-  // Upsert to daily_briefings
   const briefingRow = {
     briefing_date: today,
     summary_text: summaryText,
@@ -176,25 +227,17 @@ Deno.serve(async (req) => {
       events_count: (events ?? []).length,
       action_queue: actionQueue,
       email_commitments: emailCommitments ?? [],
+      scoped_memories: memoryRows ?? [],
       orchestration_runs: orchestrationData?.runs ?? null,
     },
     member_schedules: memberSchedules,
     conflicts,
+    member_id: memberId,
     generated_by: llmConfig?.provider ? `${llmConfig.provider}/${llmConfig.model}` : 'none',
     updated_at: new Date().toISOString(),
   }
-  const { data: briefing, error: bErr } = await sb
-    .from('daily_briefings')
-    .upsert(briefingRow, { onConflict: 'briefing_date' })
-    .select()
-    .single()
-
-  if (bErr) return new Response(
-    JSON.stringify({ error: bErr.message, correlation_id: correlationId }),
-    { status: 500, headers: withCorrelationHeaders({ ...CORS, 'content-type': 'application/json' }, correlationId) },
-  )
     return new Response(
-      JSON.stringify({ ok: true, correlation_id: correlationId, briefing }),
+      JSON.stringify({ ok: true, correlation_id: correlationId, briefing: briefingRow }),
       { headers: withCorrelationHeaders({ ...CORS, 'content-type': 'application/json' }, correlationId) },
     )
   } catch (error) {
@@ -219,6 +262,14 @@ async function callLLM(
     expires_at: string | null
     family_members: { name: string } | null
     canonical_inbox_emails: { from_email: string | null, subject: string | null } | null
+  }[],
+  scopedMemories: {
+    id: string
+    scope: 'personal' | 'household'
+    title: string
+    content: string
+    category: string | null
+    confidence: number
   }[],
 ): Promise<string> {
   const dateLabel = new Date(date + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
@@ -283,6 +334,12 @@ async function callLLM(
       return `  ${claim.title}${owner}${due} — ${claim.summary ?? 'No additional summary'}`
     }).join('\n')
     : ''
+  const scopedMemoryLines = scopedMemories.length > 0
+    ? scopedMemories.map((memory) => {
+      const scopeLabel = memory.scope === 'personal' ? 'personal memory' : 'household memory'
+      return `  [${scopeLabel}] ${memory.title}: ${memory.content}`
+    }).join('\n')
+    : ''
 
   const prompt = `You are the Casa Tabor family command center. Write a warm, smart morning briefing for ${dateLabel} for the ${memberNames} family.${weatherCity ? ` They live in ${weatherCity}.` : ''}
 
@@ -294,6 +351,8 @@ ${actionLines ? `\nACTION QUEUE (highest-priority items from conflict + prep + w
 ${actionLines}` : ''}
 ${emailCommitmentLines ? `\nEMAIL COMMITMENTS (source-backed; mention only when due or materially helpful):
 ${emailCommitmentLines}` : ''}
+${scopedMemoryLines ? `\nSCOPED FAMILY MEMORY (include only if directly relevant; personal memory belongs only to the signed-in member):
+${scopedMemoryLines}` : ''}
 
 Write a single flowing paragraph (4–6 sentences) that covers:
 1. A quick read of the day's energy — busy or calm?

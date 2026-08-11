@@ -31,6 +31,7 @@ import { useDismissPrepItem, usePrepItems, useSnoozePrepItem } from '../hooks/us
 import { supabase } from '../lib/supabase'
 import { useCalendarStore } from '../stores/calendarStore'
 import type { Conflict, PrepItem } from '../types'
+import { useProfileSession } from '../contexts/ProfileSessionContext'
 
 interface MemberEvent {
   title: string
@@ -53,6 +54,7 @@ interface Briefing {
   summary_text: string | null
   member_schedules: Record<string, MemberSchedule>
   generated_by: string | null
+  member_id?: string
 }
 
 interface TimelineEvent extends MemberEvent {
@@ -160,6 +162,7 @@ export default function BriefingPage() {
   const dismissPrep = useDismissPrepItem()
   const snoozePrep = useSnoozePrepItem()
   const setSelectedDate = useCalendarStore((state) => state.setSelectedDate)
+  const { profile } = useProfileSession()
   const today = new Date().toLocaleDateString('en-CA')
 
   const generate = useCallback(async () => {
@@ -176,6 +179,7 @@ export default function BriefingPage() {
           dayStartUtc: dayStart.toISOString(),
           dayEndUtc: dayEnd.toISOString(),
         },
+        headers: profile?.token ? { 'x-casa-history-session': profile.token } : undefined,
       })
       if (functionError) {
         const message = (functionError as { context?: { message?: string }; message?: string })
@@ -192,34 +196,16 @@ export default function BriefingPage() {
       setIsGenerating(false)
       setIsLoading(false)
     }
-  }, [today])
+  }, [profile?.memberId, today])
 
   useEffect(() => {
-    let active = true
-    void supabase
-      .from('daily_briefings')
-      .select('*')
-      .eq('briefing_date', today)
-      .maybeSingle()
-      .then(({ data, error: queryError }) => {
-        if (!active) return
-        if (queryError) {
-          console.error('[Briefing] load error:', queryError)
-          setError(queryError.message)
-          setIsLoading(false)
-          return
-        }
-        if (data) {
-          setBriefing(data as Briefing)
-          setIsLoading(false)
-          return
-        }
-        void generate()
-      })
-    return () => {
-      active = false
+    if (!profile?.memberId) {
+      setError('Sign in to your family profile to load your daily brief.')
+      setIsLoading(false)
+      return
     }
-  }, [generate, today])
+    void generate()
+  }, [generate, profile?.memberId, today])
 
   const members = briefing ? Object.values(briefing.member_schedules) : []
   const emptyMembers = members.filter((member) => member.events.length === 0)

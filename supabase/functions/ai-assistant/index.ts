@@ -132,6 +132,8 @@ import {
   trimConversationToTokenBudget,
 } from '../_shared/assistant-context-budget.mjs'
 import { retrieveFamilyContext } from '../_shared/retrieve-family-context.mjs'
+import { loadScopedMemoryEvidence } from '../_shared/scoped-memory.mjs'
+import { verifyProfileSessionToken } from '../_shared/profile-session.mjs'
 import {
   explicitReminderCreateRequestForMessages,
   explicitReminderSubject,
@@ -149,7 +151,7 @@ import {
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-casa-history-session',
 }
 
 interface ImagePayload { mimeType: string; data: string }
@@ -232,6 +234,37 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
 
   const sb = createClient(requireEnv('SUPABASE_URL'), requireEnv('SUPABASE_SERVICE_ROLE_KEY'))
+  const profileToken = req.headers.get('x-casa-history-session')?.trim()
+  let activeMemberId: string | null = null
+  if (profileToken) {
+    try {
+      const session = await verifyProfileSessionToken({
+        token: profileToken,
+        secret: requireEnv('AI_HISTORY_SESSION_SECRET'),
+        loadCredentialVersion: async (claims: { role: string; member_id: string | null }) => {
+          const query = sb
+            .from('ai_history_pin_credentials')
+            .select('credential_version')
+            .eq('credential_kind', claims.role)
+          const { data, error } = claims.role === 'family_member'
+            ? await query.eq('member_id', claims.member_id).maybeSingle()
+            : await query.is('member_id', null).maybeSingle()
+          if (error) throw error
+          return data?.credential_version ?? null
+        },
+      })
+      activeMemberId = session.role === 'family_member' ? session.member_id : null
+    } catch (error) {
+      return new Response(JSON.stringify({
+        type: 'error',
+        code: 'profile_session_invalid',
+        message: error instanceof Error ? error.message : String(error),
+      }), {
+        status: 401,
+        headers: { ...CORS, 'content-type': 'application/json' },
+      })
+    }
+  }
   const routeEtaCache = createSupabaseRouteEtaCache(sb)
   const mapsKey = optionalEnv('GOOGLE_MAPS_API_KEY', '')
   const braveKey = optionalEnv('BRAVE_API_KEY', '')
@@ -1119,6 +1152,32 @@ Deno.serve(async (req) => {
         apiKey: embeddingApiKey,
         query: latestUserText,
       })
+      if (activeMemberId) {
+        const scopedMemory = await loadScopedMemoryEvidence({
+          memberId: activeMemberId,
+          fetchRows: async (memberId: string) => {
+            const { data, error } = await sb
+              .from('ai_memories')
+              .select('id,scope,title,content,category,confidence,updated_at')
+              .eq('status', 'active')
+              .or(`scope.eq.household,and(scope.eq.personal,owner_member_id.eq.${memberId})`)
+              .order('updated_at', { ascending: false })
+              .limit(10)
+            if (error) throw error
+            return data ?? []
+          },
+        })
+        familyRetrieval.evidence = [...scopedMemory.evidence, ...familyRetrieval.evidence]
+        familyRetrieval.partial_sources = [
+          ...new Set([...familyRetrieval.partial_sources, ...scopedMemory.partialSources]),
+        ]
+        if (scopedMemory.error) {
+          appendServerTrace('server_ai_assistant_memory_retrieval_failed', scopedMemory.error, {
+            partial_sources: scopedMemory.partialSources,
+          })
+        }
+        familyRetrieval.selected_count = familyRetrieval.evidence.length
+      }
       const broadFamilyQuestion = /\b(everything|all|coordinate|coordination|going on|should i know|before (?:monday|tomorrow|next week))\b/i
         .test(latestUserText)
       assistantContextPacket = buildAssistantContextPacket({

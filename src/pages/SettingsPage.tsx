@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Users, Sun, MessageSquare, Bot, ChevronRight, Music2, Home, Activity, BookmarkCheck, Layers, Lock, Bug } from 'lucide-react'
+import { Users, Sun, MessageSquare, Bot, ChevronRight, Music2, Home, Activity, BookmarkCheck, Layers, Lock, Bug, Brain } from 'lucide-react'
 import BounceScroll from '../components/shared/BounceScroll'
 
 const sections = [
@@ -7,6 +7,7 @@ const sections = [
   { to: '/settings/home',   icon: Home,           label: 'Home & Profile',          desc: 'Home address and home screen layout configuration' },
   { to: '/settings/google',  icon: Layers,        label: 'Google Services',         desc: 'Calendar sync + Gmail inbox scan — one auth per member' },
   { to: '/settings/ai',      icon: Bot,           label: 'AI Settings',             desc: 'Vendor, model, and API key for briefings' },
+  { to: '/settings/memory',  icon: Brain,         label: 'Memory',                  desc: 'Personal and household memory used by Talk & Plan and Briefing' },
   { to: '/settings/bug-tracker', icon: Bug,       label: 'Bug Tracker',             desc: 'Capture and triage defects' },
   { to: '/settings/family',  icon: Users,         label: 'Family',                  desc: 'Members, colors, roles' },
   { to: '/settings/places',  icon: BookmarkCheck, label: 'Saved Places & Contacts', desc: 'Favorite locations and people the AI can look up by nickname' },

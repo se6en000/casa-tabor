@@ -16,6 +16,7 @@ import {
   type AssistantTraceContext,
 } from '../lib/assistantTelemetry'
 import { assistantErrorMessage } from '../lib/assistantErrors.mjs'
+import { useProfileSession } from '../contexts/ProfileSessionContext'
 
 export type { AIMessage }
 
@@ -162,6 +163,7 @@ function buildContext(ctx: AssistantContext, messages: AIMessage[], experienceMo
 }
 
 export function useAIAssistant(ctx: AssistantContext) {
+  const { profile } = useProfileSession()
   const {
     session,
     loading: sessionLoading,
@@ -381,7 +383,10 @@ export function useAIAssistant(ctx: AssistantContext) {
 
     const runNonStreaming = async (): Promise<AssistantTurnOutcome> => {
       emitAssistantTrace('assistant_non_streaming_started', trace)
-      const invokePromise = supabase.functions.invoke('ai-assistant', { body: requestBody })
+      const invokePromise = supabase.functions.invoke('ai-assistant', {
+        body: requestBody,
+        headers: profile?.token ? { 'x-casa-history-session': profile.token } : undefined,
+      })
       const timeoutPromise = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('AI request timed out')), 30000)
       )
@@ -416,6 +421,7 @@ export function useAIAssistant(ctx: AssistantContext) {
           method: 'POST',
           headers: {
             'content-type': 'application/json',
+            ...(profile?.token ? { 'x-casa-history-session': profile.token } : {}),
             apikey: supabaseAnonKey,
             authorization: `Bearer ${supabaseAnonKey}`,
           },
@@ -544,7 +550,7 @@ export function useAIAssistant(ctx: AssistantContext) {
     } finally {
       setLoading(false)
     }
-  }, [startNewSession, endSession, persistSessionMessages, buildCorrelationId])
+  }, [startNewSession, endSession, persistSessionMessages, buildCorrelationId, profile?.token])
 
   const updateMessageToolStatus = useCallback((
     messageId: string,

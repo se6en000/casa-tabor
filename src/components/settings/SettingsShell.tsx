@@ -2,7 +2,7 @@ import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useEffect, useRef } from 'react'
 import {
   Users, Sun, MessageSquare, Bot, Home, Activity,
-  BookmarkCheck, Layers, ChevronRight, Music2, LineChart, Bug,
+  BookmarkCheck, Layers, ChevronRight, Music2, LineChart, Bug, Brain,
   Palette, ShoppingCart, ChefHat, Lock, LayoutGrid,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
@@ -42,6 +42,7 @@ const NAV_GROUPS = [
       { to: '/settings/music',   icon: Music2,        label: 'Spotify / Music',     desc: 'Connect music playback' },
       { to: '/settings/ai',      icon: Bot,           label: 'AI Provider',         desc: 'Vendor, model, API key' },
       { to: '/settings/ai/shortcuts', icon: Bot,      label: 'AI Shortcuts',        desc: 'Action Button and Apple Shortcut setup' },
+      { to: '/settings/memory', icon: Brain,          label: 'Memory',               desc: 'Personal + household memory used by Talk & Plan and your brief' },
       { to: '/settings/bug-tracker', icon: Bug,       label: 'Bug Tracker',         desc: 'Capture and triage defects' },
       { to: '/settings/sms',     icon: MessageSquare, label: 'Notifications',       desc: 'SMS briefings & alerts' },
     ],

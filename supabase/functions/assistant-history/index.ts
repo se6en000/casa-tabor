@@ -1,6 +1,14 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 
 import { requireEnv } from '../_shared/env.ts'
+import {
+  createProfileSessionToken,
+  verifyProfileSessionToken,
+} from '../_shared/profile-session.mjs'
+import {
+  inferPersonalMemoryCandidates,
+  PERSONAL_MEMORY_EXTRACTOR_VERSION,
+} from '../_shared/personal-memory-extraction.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -12,7 +20,6 @@ const PIN_ITERATIONS = 310_000
 const MAX_FAILED_ATTEMPTS = 5
 const LOCKOUT_MS = 15 * 60 * 1000
 const encoder = new TextEncoder()
-const decoder = new TextDecoder()
 
 type HistorySession = {
   role: 'household_admin' | 'family_member'
@@ -97,64 +104,30 @@ async function matchesPin(pin: string, credential: {
   return constantTimeEqual(actual, fromBase64url(credential.pin_hash))
 }
 
-async function hmac(secret: string, content: string) {
-  const key = await crypto.subtle.importKey(
-    'raw',
-    encoder.encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  )
-  return new Uint8Array(await crypto.subtle.sign('HMAC', key, encoder.encode(content)))
-}
-
 async function createHistorySession(session: HistorySession) {
-  const secret = requireEnv('AI_HISTORY_SESSION_SECRET')
-  const payload = base64url(encoder.encode(JSON.stringify(session)))
-  const signature = base64url(await hmac(secret, payload))
-  return `${payload}.${signature}`
+  return createProfileSessionToken({
+    session,
+    secret: requireEnv('AI_HISTORY_SESSION_SECRET'),
+  })
 }
 
 async function assertHistorySession(request: Request, sb: ReturnType<typeof createClient>) {
   const token = request.headers.get('x-casa-history-session')?.trim()
-  if (!token) throw new Error('Private history is locked.')
-  const [payload, signature, extra] = token.split('.')
-  if (!payload || !signature || extra) throw new Error('Private history session is invalid.')
-
-  const expected = await hmac(requireEnv('AI_HISTORY_SESSION_SECRET'), payload)
-  if (!constantTimeEqual(expected, fromBase64url(signature))) {
-    throw new Error('Private history session is invalid.')
-  }
-
-  let session: HistorySession
-  try {
-    session = JSON.parse(decoder.decode(fromBase64url(payload))) as HistorySession
-  } catch {
-    throw new Error('Private history session is invalid.')
-  }
-  if (
-    (session.role !== 'household_admin' && session.role !== 'family_member') ||
-    !Number.isFinite(session.credential_version) ||
-    (session.expires_at !== undefined && (
-      !Number.isFinite(session.expires_at) ||
-      session.expires_at <= Date.now()
-    ))
-  ) {
-    throw new Error('Private history session has expired.')
-  }
-
-  const credentialQuery = sb
-    .from('ai_history_pin_credentials')
-    .select('id,credential_version')
-    .eq('credential_kind', session.role)
-  const { data: credential, error } = session.role === 'family_member'
-    ? await credentialQuery.eq('member_id', session.member_id).maybeSingle()
-    : await credentialQuery.is('member_id', null).maybeSingle()
-  if (error) throw error
-  if (!credential || credential.credential_version !== session.credential_version) {
-    throw new Error('Private history session is no longer valid.')
-  }
-  return session
+  return verifyProfileSessionToken({
+    token,
+    secret: requireEnv('AI_HISTORY_SESSION_SECRET'),
+    loadCredentialVersion: async (session: HistorySession) => {
+      const credentialQuery = sb
+        .from('ai_history_pin_credentials')
+        .select('credential_version')
+        .eq('credential_kind', session.role)
+      const { data: credential, error } = session.role === 'family_member'
+        ? await credentialQuery.eq('member_id', session.member_id).maybeSingle()
+        : await credentialQuery.is('member_id', null).maybeSingle()
+      if (error) throw error
+      return credential?.credential_version ?? null
+    },
+  }) as Promise<HistorySession>
 }
 
 function requireMemberSession(session: HistorySession) {
@@ -203,6 +176,19 @@ async function ownedConversation(
   if (error) throw error
   if (!data) throw new Error('Conversation not found.')
   return data
+}
+
+async function memberIsAdmin(
+  sb: ReturnType<typeof createClient>,
+  memberId: string,
+) {
+  const { data, error } = await sb
+    .from('family_members')
+    .select('is_admin')
+    .eq('id', memberId)
+    .maybeSingle()
+  if (error) throw error
+  return data?.is_admin === true
 }
 
 async function verifyCredential(
@@ -360,6 +346,55 @@ Deno.serve(async (request) => {
       return json(200, { conversations: data ?? [] })
     }
 
+    if (action === 'list_memories') {
+      const session = await assertHistorySession(request, sb)
+      const memberId = requireMemberSession(session)
+      const isAdmin = await memberIsAdmin(sb, memberId)
+      const { data, error } = await sb
+        .from('ai_memories')
+        .select('id,scope,title,content,category,confidence,updated_at')
+        .eq('status', 'active')
+        .or(`scope.eq.household,and(scope.eq.personal,owner_member_id.eq.${memberId})`)
+        .order('updated_at', { ascending: false })
+        .limit(60)
+      if (error) throw error
+      return json(200, {
+        memories: (data ?? []).map((memory) => ({
+          ...memory,
+          can_manage: memory.scope === 'personal' || isAdmin,
+        })),
+      })
+    }
+
+    if (action === 'delete_memory' || action === 'correct_memory') {
+      const session = await assertHistorySession(request, sb)
+      const memberId = requireMemberSession(session)
+      const memoryId = requiredText(body?.memory_id, 'memory_id')
+      const { data: memory, error: memoryError } = await sb
+        .from('ai_memories')
+        .select('id,scope,owner_member_id')
+        .eq('id', memoryId)
+        .eq('status', 'active')
+        .maybeSingle()
+      if (memoryError) throw memoryError
+      if (!memory) throw new Error('Memory not found.')
+      const canManage = memory.scope === 'personal'
+        ? memory.owner_member_id === memberId
+        : await memberIsAdmin(sb, memberId)
+      if (!canManage) throw new Error('Memory access denied.')
+      const update = action === 'delete_memory'
+        ? { status: 'deleted', updated_at: new Date().toISOString() }
+        : {
+            title: requiredText(body?.title, 'title').slice(0, 160),
+            content: requiredText(body?.content, 'content').slice(0, 2000),
+            extractor_version: 'manual-v1',
+            updated_at: new Date().toISOString(),
+          }
+      const { error } = await sb.from('ai_memories').update(update).eq('id', memoryId)
+      if (error) throw error
+      return json(200, { status: action === 'delete_memory' ? 'deleted' : 'corrected' })
+    }
+
     if (action === 'create_conversation') {
       const session = await assertHistorySession(request, sb)
       const memberId = requireMemberSession(session)
@@ -417,8 +452,8 @@ Deno.serve(async (request) => {
       if (existingError) throw existingError
       const existingById = new Map((existing ?? []).map((message) => [message.client_message_id, message.sequence_number]))
       const nextSequence = Math.max(0, ...(existing ?? []).map((message) => message.sequence_number)) + 1
-      const inserts = messages
-        .filter((message) => !existingById.has(message.id))
+      const newMessages = messages.filter((message) => !existingById.has(message.id))
+      const inserts = newMessages
         .map((message, index) => ({
           conversation_id: conversationId,
           client_message_id: message.id,
@@ -431,6 +466,24 @@ Deno.serve(async (request) => {
           conversation_state: message.conversation_state,
           tool_action: message.tool_action,
         }))
+      const memories = inferPersonalMemoryCandidates(newMessages)
+      if (memories.length > 0) {
+        const { error: memoryError } = await sb.from('ai_memories').upsert(memories.map((memory) => ({
+          scope: 'personal',
+          owner_member_id: memberId,
+          source_conversation_id: conversationId,
+          source_message_client_id: memory.sourceMessageId,
+          extractor_version: PERSONAL_MEMORY_EXTRACTOR_VERSION,
+          title: memory.title,
+          content: memory.content,
+          category: memory.category ?? 'preference',
+          confidence: memory.confidence,
+        })), {
+          onConflict: 'source_conversation_id,source_message_client_id,extractor_version',
+          ignoreDuplicates: true,
+        })
+        if (memoryError) throw memoryError
+      }
       if (inserts.length > 0) {
         const { error } = await sb.from('ai_conversation_messages').insert(inserts)
         if (error) throw error
@@ -465,7 +518,12 @@ Deno.serve(async (request) => {
     return json(400, { error: 'Unsupported history action.' })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Private history request failed.'
-    return json(/PIN|Private history|attempts/i.test(message) ? 401 : 400, { error: message })
+    const status = /access denied|not allowed/i.test(message)
+      ? 403
+      : /PIN|Private history|Profile session|attempts/i.test(message)
+        ? 401
+        : 400
+    return json(status, { error: message })
   }
 })
 

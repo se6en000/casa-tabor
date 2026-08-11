@@ -93,9 +93,13 @@ test('member profile sessions remain valid until explicit logout or PIN revocati
     new URL('../supabase/functions/assistant-history/index.ts', import.meta.url),
     'utf8',
   )
+  const verifier = readFileSync(
+    new URL('../supabase/functions/_shared/profile-session.mjs', import.meta.url),
+    'utf8',
+  )
 
-  assert.match(gateway, /session\.expires_at !== undefined/)
-  assert.match(gateway, /credential_version/)
+  assert.match(verifier, /session\.expires_at !== undefined/)
+  assert.match(verifier, /credential_version/)
   assert.match(gateway, /action === 'unlock'[\s\S]*?history_session_token[\s\S]*?credential_version: credential\.credential_version[\s\S]*?\}\)/)
 })
 
@@ -163,6 +167,9 @@ test('PIN credentials and the history gateway use server-only verification with 
   assert.doesNotMatch(gateway, /upsert\(\{[\s\S]*credential_kind: 'family_member'/)
   assert.match(gateway, /action === 'list_conversations'/)
   assert.match(gateway, /action === 'append_messages'/)
+  assert.match(gateway, /inferPersonalMemoryCandidates/)
+  assert.match(gateway, /PERSONAL_MEMORY_EXTRACTOR_VERSION/)
+  assert.match(gateway, /source_conversation_id: conversationId/)
   assert.match(gateway, /action === 'forget_conversation'/)
   assert.match(gateway, /session\.role !== 'family_member'/)
   assert.match(gateway, /\.eq\('owner_member_id', session\.member_id\)/)
@@ -217,4 +224,82 @@ test('family settings keeps PIN enrollment inside each existing member’s colla
   assert.match(source, /set_member_pin/)
   assert.match(source, /unlock_admin/)
   assert.match(source, /setup_admin/)
+})
+
+test('automatic memory separates personal and household scope with private-conversation deletion cascades', () => {
+  const source = readFileSync(
+    new URL('../supabase/migrations/20260811190000_automatic_profile_memory.sql', import.meta.url),
+    'utf8',
+  )
+
+  assert.match(source, /create table if not exists public\.ai_memories/i)
+  assert.match(source, /scope text not null check \(scope in \('personal', 'household'\)\)/i)
+  assert.match(source, /owner_member_id uuid references public\.family_members\(id\)/i)
+  assert.match(source, /source_conversation_id uuid references public\.ai_conversations\(id\) on delete cascade/i)
+  assert.match(source, /source_message_client_id text/i)
+  assert.match(source, /unique \(source_conversation_id, source_message_client_id, extractor_version\)/i)
+  assert.match(source, /scope = 'personal' and owner_member_id is not null/i)
+  assert.match(source, /to service_role/i)
+  const gateway = readFileSync(
+    new URL('../supabase/functions/assistant-history/index.ts', import.meta.url),
+    'utf8',
+  )
+  assert.match(gateway, /inferPersonalMemoryCandidates\(newMessages\)/)
+  assert.match(gateway, /ignoreDuplicates: true/)
+})
+
+test('assistant retrieval blends signed-in personal memory with household memory', () => {
+  const source = readFileSync(
+    new URL('../supabase/functions/ai-assistant/index.ts', import.meta.url),
+    'utf8',
+  )
+  const client = readFileSync(
+    new URL('../src/hooks/useAIAssistant.ts', import.meta.url),
+    'utf8',
+  )
+
+  assert.match(source, /verifyProfileSessionToken/)
+  assert.match(source, /x-casa-history-session/)
+  assert.doesNotMatch(source, /context\?\.active_member_id/)
+  assert.match(client, /'x-casa-history-session': profile\.token/)
+  assert.match(source, /from\('ai_memories'\)/)
+  assert.match(source, /scope\.eq\.household/)
+  assert.match(source, /scope\.eq\.personal/)
+})
+
+test('briefing generation uses signed-in personal memory and scopes daily briefing requests by member', () => {
+  const source = readFileSync(
+    new URL('../supabase/functions/generate-briefing/index.ts', import.meta.url),
+    'utf8',
+  )
+  const briefingPage = readFileSync(
+    new URL('../src/pages/BriefingPage.tsx', import.meta.url),
+    'utf8',
+  )
+
+  assert.match(source, /from\('ai_memories'\)/)
+  assert.match(source, /verifyProfileSessionToken/)
+  assert.match(source, /x-casa-history-session/)
+  assert.doesNotMatch(source, /body\.member_id/)
+  assert.match(source, /personal memory/i)
+  assert.match(briefingPage, /useProfileSession/)
+  assert.match(briefingPage, /'x-casa-history-session': profile\.token/)
+})
+
+test('settings includes a memory manager with personal plus household scoped rows', () => {
+  const source = readFileSync(
+    new URL('../src/pages/MemorySettingsPage.tsx', import.meta.url),
+    'utf8',
+  )
+  const gateway = readFileSync(
+    new URL('../supabase/functions/assistant-history/index.ts', import.meta.url),
+    'utf8',
+  )
+  assert.match(source, /invokeAssistantHistory/)
+  assert.match(source, /action: 'list_memories'/)
+  assert.match(source, /action: 'delete_memory'/)
+  assert.match(source, /action: 'correct_memory'/)
+  assert.doesNotMatch(source, /\.from\('ai_memories'\)/)
+  assert.match(gateway, /memory\.scope === 'personal'/)
+  assert.match(gateway, /memberIsAdmin/)
 })
