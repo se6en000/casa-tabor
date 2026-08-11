@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { classifyAssistantIntent } from '../supabase/functions/_shared/assistant-intent-profile.mjs'
+import {
+  classifyAssistantIntent,
+  shouldUseTalkPlanCalendarCommandLane,
+} from '../supabase/functions/_shared/assistant-intent-profile.mjs'
 import { isHouseholdDirectoryQuestion, isDirectoryFollowUpLanguage } from '../supabase/functions/_shared/assistant-household-directory.mjs'
 
 test('calendar reads and edits require authoritative event search', () => {
@@ -166,4 +169,31 @@ test('cross-domain requests preserve the full tool lane', () => {
     classifyAssistantIntent('Should I move tomorrow’s event because of rain?').profile,
     'full',
   )
+})
+
+test('explicit Talk and Plan mode selects the collaborative profile without guessing from wording', () => {
+  assert.deepEqual(
+    classifyAssistantIntent('Help me plan an anniversary weekend', { experienceMode: 'talk_plan' }),
+    { profile: 'talk_plan', forceEventSearch: false },
+  )
+  assert.deepEqual(
+    classifyAssistantIntent('Help me plan an anniversary weekend'),
+    { profile: 'general', forceEventSearch: false },
+  )
+})
+
+test('Talk and Plan only enters deterministic calendar lanes for explicit operations', () => {
+  for (const text of [
+    'I want to take the weekend with my wife for our anniversary',
+    'Can you help me plan it out?',
+    'Yes, let’s plan it for that weekend',
+    'Hey I want to plan a gateway for my anniversary',
+    'I want to play a gataway for my aniversary',
+  ]) {
+    assert.equal(shouldUseTalkPlanCalendarCommandLane(text), false)
+  }
+
+  assert.equal(shouldUseTalkPlanCalendarCommandLane('Show me my calendar next weekend'), true)
+  assert.equal(shouldUseTalkPlanCalendarCommandLane('Create an appointment next Friday at 7'), true)
+  assert.equal(shouldUseTalkPlanCalendarCommandLane('Move that appointment to Saturday', { hasActiveEvent: true }), true)
 })

@@ -105,12 +105,11 @@ test('AI Settings can independently pick the background/automation model from th
       api_key: 'test-key',
     },
   )
-  // An unpinned/mutable/expensive Gemini alias in background_model must still
-  // fall back to the safe default — the production pinning guard applies to
-  // the background selection exactly like it does for the primary model.
-  assert.equal(
-    resolveBackgroundLlmConfig({ provider: 'gemini', background_model: 'gemini-flash-latest' }).model,
-    'gemini-2.5-flash-lite',
+  // Invalid saved aliases fail explicitly rather than silently running a
+  // different model than the one shown in AI Settings.
+  assert.throws(
+    () => resolveBackgroundLlmConfig({ provider: 'gemini', background_model: 'gemini-flash-latest' }),
+    /Unsupported Gemini model/,
   )
   // A user can also opt background work into the premium Pro tier if desired
   // (e.g. testing higher-quality briefings) — Pro is a pinned production
@@ -149,7 +148,7 @@ test('low-risk background functions use the shared model resolver but ai-assista
 })
 
 test('routine assistant profiles disable thinking and use bounded output', () => {
-  assert.match(aiAssistant, /thinking_budget: intentRouting\.profile === 'full' \? 512 : 0/)
+  assert.match(aiAssistant, /kind: 'budget', value: intentRouting\.profile === 'full' \? 512 : 0/)
   assert.match(aiAssistant, /intentRouting\.profile === 'general'\s+\? 1024\s+: 768/)
   assert.doesNotMatch(analyzePrep, /maxOutputTokens: 8192/)
 })

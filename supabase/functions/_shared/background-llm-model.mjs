@@ -1,4 +1,5 @@
-import { BACKGROUND_GEMINI_MODEL, resolveProductionGeminiModel } from './llm-model-policy.mjs'
+import { BACKGROUND_GEMINI_MODEL } from './llm-model-policy.mjs'
+import { resolveLlmWorkload } from './llm-workload-config.mjs'
 
 export { BACKGROUND_GEMINI_MODEL }
 
@@ -9,14 +10,10 @@ export { BACKGROUND_GEMINI_MODEL }
 // resolveProductionGeminiModel so an unpinned/mutable/expensive alias can
 // never reach production regardless of what's stored.
 export function resolveBackgroundLlmConfig(config = {}) {
-  const provider = String(config?.provider ?? 'gemini').trim().toLowerCase()
-  const requestedBackgroundModel = String(config?.background_model ?? '').trim().toLowerCase()
-  const primaryModel = String(config?.model ?? '').trim()
+  const resolved = resolveLlmWorkload(config, 'background')
   return {
     ...config,
-    provider,
-    model: provider === 'gemini'
-      ? resolveProductionGeminiModel(requestedBackgroundModel, BACKGROUND_GEMINI_MODEL)
-      : (requestedBackgroundModel || primaryModel),
+    provider: resolved.provider,
+    model: resolved.model,
   }
 }

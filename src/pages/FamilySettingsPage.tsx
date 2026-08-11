@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Plus, Trash2, GripVertical, Crown } from 'lucide-react'
+import { Plus, Trash2, GripVertical, Crown, ShieldCheck } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
@@ -8,7 +8,7 @@ import type {
   MemberAvailabilityException,
   MemberAvailabilityRule,
 } from '../types'
-import { Button, SegmentedControl, SkeletonRow, Switch } from '../components/ui'
+import { Button, DisclosureSection, Field, Input, Modal, SegmentedControl, SkeletonRow, Switch } from '../components/ui'
 import { SettingsPageHeader } from '../components/settings'
 import {
   FALLBACK_PROFILE_COLOR,
@@ -115,6 +115,16 @@ export default function FamilySettingsPage() {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [dayOffDraftByMember, setDayOffDraftByMember] = useState<Record<string, string>>({})
+  const [historyModalOpen, setHistoryModalOpen] = useState(false)
+  const [historySetupMode, setHistorySetupMode] = useState<'unlock' | 'bootstrap'>('unlock')
+  const [adminPin, setAdminPin] = useState('')
+  const [bootstrapToken, setBootstrapToken] = useState('')
+  const [adminSessionToken, setAdminSessionToken] = useState<string | null>(() => {
+    try { return sessionStorage.getItem('casa_tabor_history_admin_session') } catch { return null }
+  })
+  const [memberPinDrafts, setMemberPinDrafts] = useState<Record<string, string>>({})
+  const [historySavingMemberId, setHistorySavingMemberId] = useState<string | null>(null)
+  const [historyError, setHistoryError] = useState<string | null>(null)
   const hydratedRef = useRef(false)
   const formatRoleLabel = (role?: string | null) => {
     if (!role) return 'Child'
@@ -152,6 +162,52 @@ export default function FamilySettingsPage() {
     return availabilityExceptions
       .filter((exception) => exception.member_id === memberId)
       .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
+  }
+
+  async function invokeHistory(body: Record<string, unknown>, sessionToken?: string) {
+    const { data, error } = await supabase.functions.invoke('assistant-history', {
+      body,
+      headers: sessionToken ? { 'x-casa-history-session': sessionToken } : undefined,
+    })
+    if (error) throw error
+    if (data?.error) throw new Error(String(data.error))
+    return data as Record<string, unknown>
+  }
+
+  async function unlockAdmin() {
+    setHistoryError(null)
+    const data = await invokeHistory({ action: 'unlock_admin', pin: adminPin })
+    const token = typeof data.history_session_token === 'string' ? data.history_session_token : ''
+    if (!token) throw new Error('Household admin access could not be unlocked.')
+    sessionStorage.setItem('casa_tabor_history_admin_session', token)
+    setAdminSessionToken(token)
+    setAdminPin('')
+    setHistoryModalOpen(false)
+  }
+
+  async function bootstrapAdmin() {
+    setHistoryError(null)
+    await invokeHistory({ action: 'setup_admin', bootstrap_token: bootstrapToken, pin: adminPin })
+    await unlockAdmin()
+    setBootstrapToken('')
+  }
+
+  async function saveMemberPin(memberId: string) {
+    const pin = memberPinDrafts[memberId] ?? ''
+    if (!adminSessionToken) {
+      setHistoryModalOpen(true)
+      return
+    }
+    setHistorySavingMemberId(memberId)
+    setHistoryError(null)
+    try {
+      await invokeHistory({ action: 'set_member_pin', member_id: memberId, pin }, adminSessionToken)
+      setMemberPinDrafts((current) => ({ ...current, [memberId]: '' }))
+    } catch (error) {
+      setHistoryError(error instanceof Error ? error.message : 'The member PIN could not be saved.')
+    } finally {
+      setHistorySavingMemberId(null)
+    }
   }
 
   async function upsertWorkRule(memberId: string, dayOfWeek: number, enabled: boolean, startLocal: string, endLocal: string) {
@@ -501,6 +557,48 @@ export default function FamilySettingsPage() {
                     </div>
                   </div>
 
+                  {!isNew && m.id && (
+                    <DisclosureSection
+                      title="Private conversation history"
+                      summary={adminSessionToken ? 'Set or change this member’s private-history PIN' : 'Unlock household admin access to enroll or change a PIN'}
+                      icon={<ShieldCheck size={18} />}
+                      className="rounded-card border border-casa-border"
+                    >
+                      <div className="space-y-3 pt-1">
+                        <p className="text-body-sm text-casa-muted">
+                          Conversations stay private to {m.name || 'this member'}, are retained for 90 days, and never become household memory or Daily Brief content.
+                        </p>
+                        {adminSessionToken ? (
+                          <>
+                            <Field label="New PIN" hint="Use 6 to 12 digits. Saving immediately replaces the prior PIN and locks existing sessions.">
+                              <Input
+                                type="password"
+                                inputMode="numeric"
+                                autoComplete="new-password"
+                                pattern="[0-9]{6,12}"
+                                value={memberPinDrafts[m.id] ?? ''}
+                                onChange={(event) => setMemberPinDrafts((current) => ({ ...current, [m.id!]: event.target.value }))}
+                                placeholder="6 to 12 digits"
+                              />
+                            </Field>
+                            <Button
+                              variant="secondary"
+                              fullWidth
+                              disabled={historySavingMemberId === m.id || !(memberPinDrafts[m.id] ?? '')}
+                              onClick={() => { void saveMemberPin(m.id!) }}
+                            >
+                              {historySavingMemberId === m.id ? 'Saving PIN…' : 'Set or change PIN'}
+                            </Button>
+                          </>
+                        ) : (
+                          <Button variant="secondary" fullWidth onClick={() => setHistoryModalOpen(true)}>
+                            Unlock household admin access
+                          </Button>
+                        )}
+                      </div>
+                    </DisclosureSection>
+                  )}
+
                   {/* Driving + availability */}
                   <div className="rounded-xl border border-casa-border p-3 space-y-3">
                     <div>
@@ -735,6 +833,62 @@ export default function FamilySettingsPage() {
           <Plus size={16} /> Add Family Member
         </Button>
       </div>
+      <Modal
+        open={historyModalOpen}
+        onClose={() => setHistoryModalOpen(false)}
+        title="Household private-history admin"
+        size="sm"
+      >
+        <form
+          className="space-y-4 pt-5"
+          onSubmit={(event) => {
+            event.preventDefault()
+            setHistoryError(null)
+            void (historySetupMode === 'bootstrap' ? bootstrapAdmin() : unlockAdmin())
+              .catch((error) => setHistoryError(error instanceof Error ? error.message : 'Household admin access could not be unlocked.'))
+          }}
+        >
+          <p className="text-body-sm text-casa-muted">
+            Admin access only enrolls or resets family PINs. It cannot open anyone’s private conversations.
+          </p>
+          <SegmentedControl
+            aria-label="Private-history admin action"
+            value={historySetupMode}
+            options={[
+              { value: 'unlock', label: 'Unlock admin' },
+              { value: 'bootstrap', label: 'First setup' },
+            ]}
+            onChange={setHistorySetupMode}
+            fullWidth
+          />
+          {historySetupMode === 'bootstrap' && (
+            <Field label="Secure setup token" hint="The server-provisioned one-time token for initial household setup.">
+              <Input
+                type="password"
+                autoComplete="off"
+                value={bootstrapToken}
+                onChange={(event) => setBootstrapToken(event.target.value)}
+                required
+              />
+            </Field>
+          )}
+          <Field label="Household admin PIN" error={historyError}>
+            <Input
+              type="password"
+              inputMode="numeric"
+              autoComplete={historySetupMode === 'bootstrap' ? 'new-password' : 'current-password'}
+              pattern="[0-9]{6,12}"
+              value={adminPin}
+              onChange={(event) => setAdminPin(event.target.value)}
+              placeholder="6 to 12 digits"
+              required
+            />
+          </Field>
+          <Button type="submit" fullWidth>
+            {historySetupMode === 'bootstrap' ? 'Set household admin PIN' : 'Unlock admin access'}
+          </Button>
+        </form>
+      </Modal>
     </>
   )
 }

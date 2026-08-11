@@ -2,7 +2,13 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { supabase, supabaseUrl, supabaseAnonKey } from '../lib/supabase'
 import type { EventWithDetails } from './useCalendarEvents'
 import type { FamilyMember } from '../types'
-import { useAISession, type AIMessage, type FamilyEvidence } from './useAISession'
+import {
+  useAISession,
+  type AIMessage,
+  type AssistantExperienceMode,
+  type FamilyEvidence,
+} from './useAISession'
+import { useAIConversationHistory } from './useAIConversationHistory'
 import {
   createAssistantTraceContext,
   emitAssistantTrace,
@@ -80,7 +86,7 @@ function deriveLastContextReference(messages: AIMessage[]): { summary: string } 
   return undefined
 }
 
-function buildContext(ctx: AssistantContext, messages: AIMessage[]) {
+function buildContext(ctx: AssistantContext, messages: AIMessage[], experienceMode: AssistantExperienceMode) {
   const now = new Date()
   const offsetMins = -now.getTimezoneOffset()
   const offsetSign = offsetMins >= 0 ? '+' : '-'
@@ -93,12 +99,17 @@ function buildContext(ctx: AssistantContext, messages: AIMessage[]) {
     ?.conversationState
   const pendingAction = [...messages]
     .reverse()
-    .find((message) => message.role === 'assistant' && message.toolAction?.status === 'pending')
+    .find((message) =>
+      message.role === 'assistant' &&
+      message.toolAction?.status === 'pending' &&
+      message.toolAction.tool !== 'confirm_talk_plan_action_intent'
+    )
     ?.toolAction
 
   return {
     page: ctx.page,
     assistant_mode: ctx.assistantMode ?? 'general',
+    experience_mode: experienceMode,
     currentDate: now.toISOString(),
     utcOffset,
     family: ctx.family.map(f => ({ id: f.id, name: f.name, full_name: f.full_name })),
@@ -151,7 +162,16 @@ function buildContext(ctx: AssistantContext, messages: AIMessage[]) {
 }
 
 export function useAIAssistant(ctx: AssistantContext) {
-  const { session, loading: sessionLoading, startNewSession, endSession, saveMessages } = useAISession()
+  const {
+    session,
+    loading: sessionLoading,
+    startNewSession,
+    endSession,
+    saveMessages,
+    setExperienceMode,
+    setSession,
+  } = useAISession()
+  const privateHistory = useAIConversationHistory()
   const [messages, setMessages] = useState<AIMessage[]>([])
   const [loading, setLoading] = useState(false)
   const sessionRef = useRef(session)
@@ -161,6 +181,14 @@ export function useAIAssistant(ctx: AssistantContext) {
   useEffect(() => { sessionRef.current = session }, [session])
   useEffect(() => { messagesRef.current = messages }, [messages])
   useEffect(() => { ctxRef.current = ctx })
+
+  const persistSessionMessages = useCallback((sessionId: string, updatedMessages: AIMessage[]) => {
+    saveMessages(sessionId, updatedMessages)
+    const currentSession = sessionRef.current
+    if (currentSession?.id === sessionId) {
+      privateHistory.saveSession({ ...currentSession, messages: updatedMessages })
+    }
+  }, [privateHistory.saveSession, saveMessages])
 
   // Sync messages from session when session loads — but never overwrite messages
   // already accumulated (e.g. user spoke before sessionLoading resolved)
@@ -179,6 +207,19 @@ export function useAIAssistant(ctx: AssistantContext) {
     startNewSession()
   }, [endSession, startNewSession])
 
+  const selectExperienceMode = useCallback((mode: AssistantExperienceMode) => {
+    const updated = setExperienceMode(mode)
+    sessionRef.current = updated
+  }, [setExperienceMode])
+
+  const resumePrivateConversation = useCallback(async (conversationId: string) => {
+    const resumed = await privateHistory.resumeConversation(conversationId)
+    activeImageRef.current = null
+    sessionRef.current = resumed
+    setSession(resumed)
+    setMessages(resumed.messages)
+  }, [privateHistory.resumeConversation, setSession])
+
   const buildCorrelationId = useCallback((messageId: string, sessionId?: string) => {
     const sid = sessionId ?? 'no-session'
     return `${sid}:${messageId}:${Date.now().toString(36)}`
@@ -188,6 +229,10 @@ export function useAIAssistant(ctx: AssistantContext) {
     text: string,
     image?: { dataUrl: string; mimeType: string },
     sendTrace?: AssistantSendTrace,
+    options?: {
+      replayExistingUserMessage?: boolean
+      talkPlanIntentResolution?: 'confirmed_action' | 'conversation_only'
+    },
   ) => {
     if (image) activeImageRef.current = image
     const activeImage = image ?? activeImageRef.current ?? undefined
@@ -213,7 +258,7 @@ export function useAIAssistant(ctx: AssistantContext) {
       const farewell: AIMessage = { id: genId(), role: 'assistant', content: "You're welcome! Session saved. Say hi when you need me 👋" }
       setMessages(prev => {
         const updated = [...prev, { id: genId(), role: 'user' as const, content: text }, farewell]
-        if (sessionRef.current) saveMessages(sessionRef.current.id, updated)
+        if (sessionRef.current) persistSessionMessages(sessionRef.current.id, updated)
         return updated
       })
       endSession()
@@ -225,8 +270,9 @@ export function useAIAssistant(ctx: AssistantContext) {
       return
     }
 
+    const replayExistingUserMessage = options?.replayExistingUserMessage === true
     const userMsg: AIMessage = { id: genId(), role: 'user', content: text, imageDataUrl: image?.dataUrl }
-    setMessages(prev => [...prev, userMsg])
+    if (!replayExistingUserMessage) setMessages(prev => [...prev, userMsg])
     setLoading(true)
 
     let activeSession = sessionRef.current
@@ -238,11 +284,23 @@ export function useAIAssistant(ctx: AssistantContext) {
       ? { mimeType: activeImage.mimeType, data: activeImage.dataUrl.replace(/^data:[^;]+;base64,/, '') }
       : undefined
 
-    const currentMessages = [...messagesRef.current, userMsg]
+    const currentMessages = replayExistingUserMessage
+      ? messagesRef.current
+      : [...messagesRef.current, userMsg]
     const allMsgsForApi = currentMessages.map(m => ({ role: m.role, content: m.content }))
+    const assistantContext = buildContext(
+      ctxRef.current,
+      currentMessages,
+      activeSession.experienceMode ?? 'do',
+    )
     const requestBody = {
       messages: allMsgsForApi,
-      context: buildContext(ctxRef.current, currentMessages),
+      context: {
+        ...assistantContext,
+        ...(options?.talkPlanIntentResolution
+          ? { talk_plan_intent_resolution: options.talkPlanIntentResolution }
+          : {}),
+      },
       image: imagePayload,
       image_context: imageContext,
       session_id: activeSession.id,
@@ -313,7 +371,7 @@ export function useAIAssistant(ctx: AssistantContext) {
             ))
           : prev
         const updated = [...revised, assistantMsg]
-        if (activeSession) saveMessages(activeSession.id, updated)
+        if (activeSession) persistSessionMessages(activeSession.id, updated)
         return updated
       })
     }
@@ -410,7 +468,7 @@ export function useAIAssistant(ctx: AssistantContext) {
               const updated = exists
                 ? revised.map(m => m.id === streamMsgId ? { ...finalMsg, streaming: false } : m)
                 : [...revised, { ...finalMsg, streaming: false }]
-              if (activeSession) saveMessages(activeSession.id, updated)
+              if (activeSession) persistSessionMessages(activeSession.id, updated)
               return updated
             })
           }
@@ -486,7 +544,7 @@ export function useAIAssistant(ctx: AssistantContext) {
     } finally {
       setLoading(false)
     }
-  }, [startNewSession, endSession, saveMessages, buildCorrelationId])
+  }, [startNewSession, endSession, persistSessionMessages, buildCorrelationId])
 
   const updateMessageToolStatus = useCallback((
     messageId: string,
@@ -513,10 +571,10 @@ export function useAIAssistant(ctx: AssistantContext) {
             }
           : m
       )
-      if (sessionRef.current) saveMessages(sessionRef.current.id, updated)
+      if (sessionRef.current) persistSessionMessages(sessionRef.current.id, updated)
       return updated
     })
-  }, [saveMessages])
+  }, [persistSessionMessages])
 
   // Backward-compat reset alias
   const reset = useCallback(() => {
@@ -532,10 +590,10 @@ export function useAIAssistant(ctx: AssistantContext) {
   const appendSyntheticMessage = useCallback((msg: AIMessage) => {
     setMessages(prev => {
       const updated = [...prev, msg]
-      if (sessionRef.current) saveMessages(sessionRef.current.id, updated)
+      if (sessionRef.current) persistSessionMessages(sessionRef.current.id, updated)
       return updated
     })
-  }, [saveMessages])
+  }, [persistSessionMessages])
 
   return {
     messages,
@@ -548,5 +606,8 @@ export function useAIAssistant(ctx: AssistantContext) {
     primeMessages,
     appendSyntheticMessage,
     updateMessageToolStatus,
+    selectExperienceMode,
+    privateHistory,
+    resumePrivateConversation,
   }
 }

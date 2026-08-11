@@ -15,8 +15,22 @@ import {
   PRIMARY_GEMINI_MODEL,
   resolveProductionGeminiModel,
 } from '../_shared/llm-model-policy.mjs'
+import { normalizeAssistantExperienceMode } from '../_shared/assistant-experience-mode.mjs'
+import { resolveLlmWorkload } from '../_shared/llm-workload-config.mjs'
+import { buildGeminiGenerationConfig } from '../_shared/gemini-generation-config.mjs'
+import { resolveTalkPlanIntentGate } from '../_shared/talk-plan-intent-gate.mjs'
+import {
+  buildReadToolSynthesisContents,
+  readToolResultFound,
+  readToolSynthesisInstruction,
+  shouldExposeSynthesisTools,
+  shouldSynthesizeReadTool,
+} from '../_shared/assistant-read-tool-synthesis.mjs'
 import { createTrackedMapsFetch, createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
-import { classifyAssistantIntent } from '../_shared/assistant-intent-profile.mjs'
+import {
+  classifyAssistantIntent,
+  shouldUseTalkPlanCalendarCommandLane,
+} from '../_shared/assistant-intent-profile.mjs'
 import { isHouseholdDirectoryQuestion, isDirectoryFollowUpLanguage } from '../_shared/assistant-household-directory.mjs'
 import {
   canonicalizeFamilyReferences,
@@ -238,6 +252,7 @@ Deno.serve(async (req) => {
     model_override: modelOverrideRaw,
     stream: streamRaw,
     image_context: imageContextRaw,
+    model_access_check: modelAccessCheckRaw,
   } = await req.json()
   const wantStream = streamRaw === true
   // Assigned by the SSE ReadableStream controller when streaming; no-op otherwise.
@@ -266,10 +281,13 @@ Deno.serve(async (req) => {
     ? clientTracePresentRaw
     : inferredClientTracePresent
   const requestStartMs = Date.now()
+  const experienceMode = normalizeAssistantExperienceMode(context?.experience_mode)
   const NORMAL_REQUEST_HARD_TIMEOUT_MS = 9000
+  const TALK_PLAN_REQUEST_HARD_TIMEOUT_MS = 20000
   const RECIPE_REQUEST_HARD_TIMEOUT_MS = 15000
   const IMAGE_REQUEST_HARD_TIMEOUT_MS = 26000
   const PRIMARY_HARD_TIMEOUT_MS = 6800
+  const TALK_PLAN_PRIMARY_HARD_TIMEOUT_MS = 15000
   const RECIPE_PRIMARY_HARD_TIMEOUT_MS = 14500
   const IMAGE_PRIMARY_HARD_TIMEOUT_MS = 22000
   const SECONDARY_HARD_TIMEOUT_MS = 5000
@@ -354,11 +372,33 @@ Deno.serve(async (req) => {
   const structuredReminderDueBy = explicitReminderCreate
     ? resolveStructuredReminderDueBy(reminderCreateRequestText, { utcOffset: context?.utcOffset })
     : null
-  const parsedCalendarFrame = parseCalendarLanguage(latestUserText, {
-    focusedEvent: Boolean(context?.focusedEvent),
-    activeEntityType: incomingConversationState?.activeEntityType,
-  })
-  const previousCalendarFrame = previousUserText
+  const talkPlanIntentResolution = context?.talk_plan_intent_resolution === 'confirmed_action'
+    ? 'confirmed_action'
+    : context?.talk_plan_intent_resolution === 'conversation_only'
+      ? 'conversation_only'
+      : null
+  const talkPlanIntentGate = experienceMode === 'talk_plan'
+    ? resolveTalkPlanIntentGate(latestUserText, talkPlanIntentResolution)
+    : null
+  const explicitTalkPlanCalendarCommand = shouldUseTalkPlanCalendarCommandLane(latestUserText, {
+      hasActiveEvent: Boolean(
+        context?.focusedEvent ||
+        incomingConversationState?.activeEntityType === 'event' ||
+        context?.pendingAction,
+      ),
+    })
+  const talkPlanCalendarCommand = experienceMode !== 'talk_plan' ||
+    (explicitTalkPlanCalendarCommand && (
+      !talkPlanIntentGate?.actionKind ||
+      talkPlanIntentGate.decision === 'run_action'
+    ))
+  const parsedCalendarFrame = talkPlanCalendarCommand
+    ? parseCalendarLanguage(latestUserText, {
+        focusedEvent: Boolean(context?.focusedEvent),
+        activeEntityType: incomingConversationState?.activeEntityType,
+      })
+    : null
+  const previousCalendarFrame = talkPlanCalendarCommand && previousUserText
     ? parseCalendarLanguage(previousUserText, {
       focusedEvent: Boolean(context?.focusedEvent),
       activeEntityType: incomingConversationState?.activeEntityType,
@@ -426,6 +466,15 @@ Deno.serve(async (req) => {
   )
   const cookingGuidance = cookingFrameGuidance(cookingFrame)
   const cookingMutationIntent = ['recipe.save', 'cooking.add_to_grocery'].includes(cookingFrame?.intent ?? '')
+  const talkPlanCommandLane = experienceMode !== 'talk_plan' ||
+    talkPlanIntentGate?.decision === 'run_action' ||
+    (talkPlanCalendarCommand && !talkPlanIntentGate?.actionKind) ||
+    explicitReminderRead ||
+    (talkPlanIntentResolution === 'confirmed_action' && (
+      explicitReminderCreate ||
+      cookingMutationIntent ||
+      Boolean(groceryFrame)
+    ))
   const requestAmbiguity = classifyAssistantAmbiguity(latestUserText, {
     hasActiveEntity: Boolean(incomingConversationState?.activeEntityType || context?.focusedEvent),
     hasGroundedSemanticIntent: cookingMutationIntent || householdDirectoryQuestion,
@@ -433,6 +482,7 @@ Deno.serve(async (req) => {
   const classifiedIntentRouting = classifyAssistantIntent(latestUserText, {
     focusedEvent: Boolean(context?.focusedEvent),
     assistantMode: context?.assistant_mode,
+    experienceMode,
     activeEntityType: incomingConversationState?.activeEntityType,
     pendingEventAction: [
       'create_event',
@@ -501,12 +551,14 @@ Deno.serve(async (req) => {
     ? Math.max(IMAGE_REQUEST_HARD_TIMEOUT_MS, intentRouting.profile === 'recipe' ? RECIPE_REQUEST_HARD_TIMEOUT_MS : NORMAL_REQUEST_HARD_TIMEOUT_MS)
     : intentRouting.profile === 'recipe'
       ? RECIPE_REQUEST_HARD_TIMEOUT_MS
-      : NORMAL_REQUEST_HARD_TIMEOUT_MS
+      : experienceMode === 'talk_plan'
+        ? TALK_PLAN_REQUEST_HARD_TIMEOUT_MS
+        : NORMAL_REQUEST_HARD_TIMEOUT_MS
   const imageContext = image
     ? imageContextRaw === 'conversation' ? 'conversation' : 'current_turn'
     : 'none'
   const requiresCompleteRecipe = cookingFrame?.intent === 'cooking.recipe'
-  const userRequestedWriteIntent = /\b(move|resched|reschedule|change|update|edit|delete|remove|cancel|add|create|set|shift|push|book|schedule|plan)\b/i
+  const userRequestedWriteIntent = /\b(move|resched|reschedule|change|update|edit|delete|remove|cancel|add|create|set|shift|push|book|schedule)\b/i
     .test(latestUserText ?? '') && (!authoritativeCookingContext || cookingMutationIntent)
   appendServerTrace('server_ai_assistant_start', `messages=${Array.isArray(messages) ? messages.length : 0}`, {
     message_count: Array.isArray(messages) ? messages.length : 0,
@@ -517,6 +569,7 @@ Deno.serve(async (req) => {
     client_build: clientBuild,
     client_trace_source: clientTraceSource,
     intent_profile: intentRouting.profile,
+    experience_mode: experienceMode,
     intent_routing_source: intentRoutingDecision.source,
     force_event_search: intentRouting.forceEventSearch,
     active_entity_type: incomingConversationState?.activeEntityType ?? null,
@@ -730,25 +783,25 @@ Deno.serve(async (req) => {
     intentRouting.profile === 'event' &&
     !intentRouting.forceEventSearch
   const needsFamilyDataContext = !requestAmbiguity && [
-    'general', 'full', 'event', 'places', 'travel', 'grocery', 'recipe',
+    'general', 'talk_plan', 'full', 'event', 'places', 'travel', 'grocery', 'recipe',
   ].includes(intentRouting.profile)
   const needsEventData = !requestAmbiguity &&
-    ['event', 'full', 'travel', 'general'].includes(intentRouting.profile) &&
+    ['event', 'full', 'travel', 'general', 'talk_plan'].includes(intentRouting.profile) &&
     !imageDirectEventCreateFlow &&
     !directReminderCreateFlow
   const needsPlaceData = !requestAmbiguity && (
-    ['event', 'full', 'travel', 'places'].includes(intentRouting.profile) ||
+    ['event', 'full', 'travel', 'places', 'talk_plan'].includes(intentRouting.profile) ||
     householdDirectoryQuestion ||
     needsFamilyDataContext
   )
   const needsContactData = !requestAmbiguity && (
-    ['event', 'full', 'places'].includes(intentRouting.profile) ||
+    ['event', 'full', 'places', 'talk_plan'].includes(intentRouting.profile) ||
     householdDirectoryQuestion ||
     needsFamilyDataContext
   )
   const needsGroceryData = !requestAmbiguity && (
     context?.page === 'grocery' ||
-    ['grocery', 'full'].includes(intentRouting.profile) ||
+    ['grocery', 'full', 'talk_plan'].includes(intentRouting.profile) ||
     needsFamilyDataContext
   )
   const referencesSavedRecipe = Boolean(
@@ -757,7 +810,7 @@ Deno.serve(async (req) => {
     /\b(?:(?:saved|my)\s+recipes?|recipe library)\b/i.test(latestUserText)
   )
   const needsRecipeData = !requestAmbiguity && (
-    intentRouting.profile === 'full' ||
+    ['full', 'talk_plan'].includes(intentRouting.profile) ||
     (intentRouting.profile === 'recipe' && referencesSavedRecipe)
   )
   const needsFoodProfileData = !requestAmbiguity && ['recipe', 'full'].includes(intentRouting.profile)
@@ -924,7 +977,27 @@ Deno.serve(async (req) => {
   const config = cfgRow?.[0]?.value ?? { provider: 'gemini', model: DEFAULT_GEMINI_MODEL, api_key: '' }
   const apiKey = config.api_key as string
   const provider = String(config.provider ?? 'gemini')
-  const configuredModel = ((config.model as string) || DEFAULT_GEMINI_MODEL).trim()
+  const requestedAccessCheckWorkload = typeof modelAccessCheckRaw === 'string' &&
+    ['do', 'talk_plan', 'background'].includes(modelAccessCheckRaw)
+    ? modelAccessCheckRaw as 'do' | 'talk_plan' | 'background'
+    : null
+  const workload = requestedAccessCheckWorkload ?? (experienceMode === 'talk_plan' ? 'talk_plan' : 'do')
+  let resolvedWorkload: ReturnType<typeof resolveLlmWorkload>
+  try {
+    resolvedWorkload = resolveLlmWorkload(config, workload)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return {
+      status: 200,
+      payload: {
+        type: 'error',
+        code: 'unsupported_ai_configuration',
+        message,
+        correlation_id: cid,
+      },
+    }
+  }
+  const configuredModel = resolvedWorkload.model
   const validatedConfiguredModel = provider === 'gemini'
     ? resolveProductionGeminiModel(configuredModel)
     : configuredModel
@@ -932,6 +1005,81 @@ Deno.serve(async (req) => {
     ? null
     : modelOverride
   const model = validatedOverrideModel ?? validatedConfiguredModel
+  const effectiveWorkload = model === resolvedWorkload.model
+    ? resolvedWorkload
+    : resolveLlmWorkload({
+        ...config,
+        ...(workload === 'talk_plan' ? { talk_plan_model: model } : { model }),
+      }, workload)
+  if (requestedAccessCheckWorkload) {
+    if (provider !== 'gemini' || !apiKey) {
+      return {
+        status: 400,
+        payload: {
+          type: 'model_access',
+          success: false,
+          model,
+          error: provider !== 'gemini' ? `Model checks are not implemented for ${provider}.` : 'Gemini API key is missing.',
+        },
+      }
+    }
+    const checkStartedAt = Date.now()
+    const checkResponse = await providerFetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}?key=${apiKey}`,
+      { method: 'GET' },
+      { correlationId: cid, lane: 'model_access_check', callIndex: 1 },
+    )
+    const metadata = checkResponse.ok
+      ? await checkResponse.json() as { supportedGenerationMethods?: string[] }
+      : null
+    const supportedMethods = metadata?.supportedGenerationMethods ?? []
+    return {
+      status: checkResponse.ok ? 200 : checkResponse.status,
+      payload: {
+        type: 'model_access',
+        success: checkResponse.ok && supportedMethods.includes('generateContent'),
+        model,
+        api_family: effectiveWorkload.apiFamily,
+        supported_generation_methods: supportedMethods,
+        latency_ms: Date.now() - checkStartedAt,
+        ...(!checkResponse.ok ? { error: await checkResponse.text().catch(() => 'Model access check failed.') } : {}),
+      },
+    }
+  }
+  if (experienceMode === 'talk_plan') {
+    const talkPlanConfigResult = await sb
+      .from('settings')
+      .select('value')
+      .eq('key', 'assistant_talk_plan_config')
+      .maybeSingle()
+    const talkPlanEnabled = (talkPlanConfigResult.data?.value as { enabled?: boolean } | null)?.enabled === true
+    if (!talkPlanEnabled) {
+      return {
+        status: 200,
+        payload: {
+          type: 'error',
+          code: 'talk_plan_unavailable',
+          message: 'Talk & Plan is currently disabled. Turn it on in AI Settings after checking model access.',
+          correlation_id: cid,
+        },
+      }
+    }
+    if (talkPlanIntentGate?.decision === 'confirm_intent') {
+      return {
+        status: 200,
+        payload: {
+          type: 'tool_action',
+          tool: 'confirm_talk_plan_action_intent',
+          args: {
+            action_kind: talkPlanIntentGate.actionKind,
+            original_request: latestUserText,
+          },
+          display_text: `Are you asking Casa to create or change a ${talkPlanIntentGate.actionKind}?`,
+          correlation_id: cid,
+        },
+      }
+    }
+  }
   const llmTelemetry: LlmTelemetry = {
     provider,
     model,
@@ -975,7 +1123,7 @@ Deno.serve(async (req) => {
         .test(latestUserText)
       assistantContextPacket = buildAssistantContextPacket({
         turnType: broadFamilyQuestion ? 'complex_family_read' : 'family_read',
-        currentRequest: latestUserText,
+        request: latestUserText,
         safetyPolicy: 'Use only cited family evidence for family-specific claims. Preserve uncertainty and privacy.',
         authoritativeState: {
           activeEntityType: incomingConversationState?.activeEntityType ?? null,
@@ -1727,7 +1875,7 @@ Deno.serve(async (req) => {
       },
     }
   }
-  const shouldRunAgentWrite = shouldUseAgentWritePlanner({
+  const shouldRunAgentWrite = talkPlanCommandLane && shouldUseAgentWritePlanner({
     agentRuntimeEnabled,
     agentWriteEnabled: agentWriteConfig?.enabled === true,
     agentWriteRate,
@@ -2187,7 +2335,8 @@ Deno.serve(async (req) => {
       }
     }
   }
-  const shouldRunAgentRead = !dryRun &&
+  const shouldRunAgentRead = talkPlanCommandLane &&
+    !dryRun &&
     agentRuntimeEnabled &&
     agentReadConfig?.enabled === true &&
     agentReadRate > 0 &&
@@ -2289,7 +2438,8 @@ Deno.serve(async (req) => {
       failure: agentReadResult.error?.message ?? 'unsupported_plan',
     })
   }
-  const shouldRunAgentShadow = !shouldRunAgentWrite && !shouldRunAgentRead && !dryRun &&
+  const shouldRunAgentShadow = experienceMode !== 'talk_plan' &&
+    !shouldRunAgentWrite && !shouldRunAgentRead && !dryRun &&
     agentRuntimeEnabled &&
     agentShadowConfig?.enabled === true &&
     agentShadowRate > 0 &&
@@ -2453,13 +2603,13 @@ Deno.serve(async (req) => {
     if (!opts.stream) {
       const res = await providerFetch(`${base}:generateContent?key=${apiKey}`, {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(reqBody), signal: controller.signal,
-      }, { correlationId: cid, lane: intentRouting.profile, callIndex: llmTelemetry.llm_calls + 1 })
+      }, { correlationId: cid, lane: experienceMode, callIndex: llmTelemetry.llm_calls + 1 })
       if (!res.ok) return { ok: false, status: res.status, data: null, errText: await res.text().catch(() => '') }
       return { ok: true, status: res.status, data: await res.json(), errText: '' }
     }
     const res = await providerFetch(`${base}:streamGenerateContent?alt=sse&key=${apiKey}`, {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(reqBody), signal: controller.signal,
-    }, { correlationId: cid, lane: intentRouting.profile, callIndex: llmTelemetry.llm_calls + 1 })
+    }, { correlationId: cid, lane: experienceMode, callIndex: llmTelemetry.llm_calls + 1 })
     if (!res.ok || !res.body) {
       return { ok: res.ok && Boolean(res.body), status: res.status, data: null, errText: await res.text().catch(() => '') }
     }
@@ -3330,10 +3480,13 @@ Deno.serve(async (req) => {
     web: ['search_web'],
     recipe: recipeToolNames,
     general: [],
+    talk_plan: safeFullProfileToolNames(tools[0].function_declarations.map((tool) => tool.name)),
   }
   const selectedToolNames = householdDirectoryQuestion
     ? new Set()
-    : intentRouting.profile === 'full'
+    : intentRouting.profile === 'talk_plan' && !talkPlanCommandLane
+    ? new Set(['search_web', 'search_places', 'get_weather_forecast'])
+    : ['full', 'talk_plan'].includes(intentRouting.profile)
     ? new Set(safeFullProfileToolNames(tools[0].function_declarations.map((tool) => tool.name)))
     : new Set(toolNamesByProfile[intentRouting.profile] ?? [])
   const selectedToolDeclarations = tools[0].function_declarations
@@ -3364,14 +3517,19 @@ Deno.serve(async (req) => {
     ? [{ function_declarations: secondaryToolDeclarations }]
     : []
 
-  const includeEventContext =
+  const includeRawDomainContext = experienceMode !== 'talk_plan' || talkPlanCommandLane
+  const includeEventContext = includeRawDomainContext && (
     intentRouting.profile === 'full' ||
     (intentRouting.profile === 'event' && !intentRouting.forceEventSearch)
-  const includeGroceryContext = needsGroceryData
-  const includeRecipeContext = needsRecipeData
+  )
+  const includeGroceryContext = includeRawDomainContext && needsGroceryData
+  const includeRecipeContext = includeRawDomainContext && needsRecipeData
   const includeFoodProfileContext = needsFoodProfileData
-  const includePlaceContext = ['full', 'event', 'places', 'travel'].includes(intentRouting.profile) || householdDirectoryQuestion
-  const includeAvailabilityContext = ['full', 'event'].includes(intentRouting.profile)
+  const includePlaceContext = includeRawDomainContext && (
+    ['full', 'event', 'places', 'travel'].includes(intentRouting.profile) ||
+    householdDirectoryQuestion
+  )
+  const includeAvailabilityContext = includeRawDomainContext && ['full', 'event'].includes(intentRouting.profile)
 
   // Build Gemini conversation with system instruction + history
   // Pull user-editable custom instructions (persist across all chats)
@@ -3393,6 +3551,18 @@ TEMPORAL ASSUMPTIONS (default unless user clearly overrides):
   - "10" should usually be treated as 10 AM unless context strongly indicates otherwise.
 
 INTENT PROFILE: ${intentRouting.profile}
+EXPERIENCE MODE: ${experienceMode}
+${experienceMode === 'talk_plan' ? `TALK & PLAN MODE:
+- Collaborate on sustained planning and ideation. Track the current goal, constraints, considered options, rejected options, decisions, and open questions across the supplied conversation.
+- Treat later corrections as authoritative and do not resurrect superseded preferences.
+- Ask at most one high-value follow-up question when it materially advances the plan.
+- Clearly distinguish user statements, Casa evidence, current web facts, and your suggestions.
+- Give enough detail to advance the discussion; do not force every reply into 1–3 sentences.
+- This conversation is local and temporary in Phase 1. Never claim it will be remembered after the session ends.
+- You may prepare an action only after the user explicitly asks. Every write must be presented as a confirmation action and must never be described as completed before verified execution.` : ''}
+${experienceMode === 'talk_plan' && talkPlanIntentResolution === 'conversation_only' ? `CONVERSATION-ONLY RESOLUTION:
+- The user explicitly declined to treat their previous wording as a Casa action.
+- Answer the underlying request conversationally. Do not call any write tool or reinterpret it as an action.` : ''}
 ${householdDirectoryQuestion ? `HOUSEHOLD DIRECTORY ANSWER MODE: Answer from the confirmed SAVED PLACES and SAVED CONTACTS below. Do not call external place or event search tools. If the user asks where to schedule something with a person or provider, give their usual place and full saved address first; only then ask for the missing event details needed to schedule it.` : ''}
 ${directReminderCreateFlow ? `REMINDER CREATE MODE: Create a new reminder with create_event and event_type="reminder". Never search for or update an appointment merely because the reminder text mentions changing, calling, cancelling, or rescheduling one. Missing details were already checked before this model call, so call create_event rather than asking again.${(structuredReminderDueBy ?? reminderDaypartRange) ? ` Casa deterministically resolved the exact date/time to ${(structuredReminderDueBy ?? reminderDaypartRange)!.start} through ${(structuredReminderDueBy ?? reminderDaypartRange)!.end}; use those exact timestamps.` : ''}` : ''}
 FAMILY MEMBERS: ${familyNames}
@@ -3477,11 +3647,11 @@ INSTRUCTIONS:
 - You are allowed to answer general/random questions directly (facts, explanations, ideas, writing help, etc.) when no Casa data/action is needed.
 - If assistant_mode is "chef", bias responses toward cooking, recipe planning, pantry-aware substitutions, and grocery execution.
 - Call create_recipe only when the COOKING SEMANTIC FRAME is recipe.save; include complete structured ingredients and ordered steps.
-- create_recipe is low-risk and should execute immediately once the explicit recipe.save request has structured details ready.
+- create_recipe is low-risk and ${experienceMode === 'talk_plan' ? 'must still wait for explicit confirmation in Talk & Plan mode' : 'should execute immediately once the explicit recipe.save request has structured details ready'}.
 - In cooking mode, use add_grocery_items only when the COOKING SEMANTIC FRAME is cooking.add_to_grocery. Never mutate groceries merely because you suggested a recipe or listed missing ingredients.
 - Treat recipe IDs, saved ingredients, saved steps, grocery rows, and the food profile supplied by Casa as authoritative. Conversationally generated recipes are suggestions until explicitly saved.
 - For simple math and calculations (tips, percentages, unit conversions, arithmetic) — answer directly from reasoning. Do NOT call search_web.
-- Use tools for calendar/grocery/place actions. Reads (search) execute immediately. Most writes need confirmation, but low-risk create_event, create_recipe, and add_grocery_items should execute immediately.
+- Use tools for calendar/grocery/place actions. Reads (search) execute immediately. ${experienceMode === 'talk_plan' ? 'Every write must wait for explicit confirmation.' : 'Most writes need confirmation, but low-risk create_event, create_recipe, and add_grocery_items should execute immediately.'}
 - Always operate on UUIDs from the events list. ALWAYS call search_events FIRST for delete_event, delete_events_by_title, bulk_update_events, and update_event — never attempt them without a search result providing the event ID(s). Use search_events when unsure, then update/delete with the exact ID(s) from the search result.
 - For update_event, always copy the event's updated_at value from context/events list into expected_updated_at.
 - Batch related field updates into a single update_event action instead of many small ones.
@@ -3492,10 +3662,10 @@ INSTRUCTIONS:
 - IMPORTANT: For write proposals (update_event, bulk_update_events, create_event, create_recipe, delete_event, delete_events_by_title) — return the tool_action DIRECTLY. Do NOT show a "Will change / Will preserve" text turn before the tool_action. The confirmation card in the UI is the preflight diff. One step only.
 - If user asks to delete all appointments/events with a specific name, run search_events first and then use delete_events_by_title with every matched ID in one confirmation.
 - If user asks to update all events/appointments matching a title, run search_events first and then use bulk_update_events with every matched ID in one confirmation.
-- For add_grocery_items, do NOT ask for confirmation. Just add items immediately. If you inferred/corrected an item name or category, mention it briefly after adding.
+- For add_grocery_items, ${experienceMode === 'talk_plan' ? 'prepare a confirmation action and do not execute it yet' : 'do NOT ask for confirmation; add items immediately'}. If you inferred/corrected an item name or category, mention it briefly after adding.
 - Treat shopping, groceries, pantry restocks, and food purchase intents as add_grocery_items by default. Unless user explicitly asks a question instead of an action, auto-add immediately.
 - Confirmation budget: one confirmation only. If the user says "yes", "confirmed", "ok", "do it", or similar — that IS the confirmation; execute immediately.
-- For low-risk write intents (add_grocery_items, create_recipe, and straightforward create_event), execute immediately and offer undo language instead of asking for confirmation.
+- For low-risk write intents (add_grocery_items, create_recipe, and straightforward create_event), ${experienceMode === 'talk_plan' ? 'prepare a confirmation action; Talk & Plan never auto-executes writes' : 'execute immediately and offer undo language instead of asking for confirmation'}.
 - Never claim "done/completed/updated/saved" for write actions unless the tool execution result confirms success; for calendar writes, only use completion wording when sync_status is synced.
 - If user already stated a time, do not ask for time again unless there is a true ambiguity conflict.
 - Default time window: when no date is given, search from NOW (${context.currentDate}) forward — never return past events.
@@ -3513,7 +3683,7 @@ INSTRUCTIONS:
 - SAVED PLACES: when a place name matches, use its address directly — never ask for the address.
 - Conflict awareness: warn if a new event overlaps an existing one by >15 min.
 - Prefer edit over create: if a similar event exists at the same time, update it instead of creating a duplicate.
-- Tone: warm and proactive. Except when a semantic requirement explicitly calls for complete long-form output, stay concise (1–3 sentences).
+- Tone: warm and proactive. ${experienceMode === 'talk_plan' ? 'Use the detail needed to move the discussion forward without becoming repetitive.' : 'Except when a semantic requirement explicitly calls for complete long-form output, stay concise (1–3 sentences).'}
 - AVAILABILITY AWARENESS: when scheduling or moving events, prefer times when the involved members are available per MEMBER AVAILABILITY, and warn (briefly) if a proposed time lands in someone's unavailable window or an upcoming day-off/block.
 - FOOD PROFILE AWARENESS: for any meal, recipe, or grocery suggestion, respect FOOD PROFILE — never suggest allergens, avoid disliked foods, honor dietary rules, and lean on preferred cuisines/proteins and pantry staples. Do not over-explain; just make good suggestions that fit.
 - For timeless facts and general knowledge (e.g., ages/biographies/math/history), answer directly from model knowledge and simple reasoning. Do not refuse just because live web access is unavailable.
@@ -4047,7 +4217,9 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       ? Math.max(IMAGE_PRIMARY_HARD_TIMEOUT_MS, intentRouting.profile === 'recipe' ? RECIPE_PRIMARY_HARD_TIMEOUT_MS : PRIMARY_HARD_TIMEOUT_MS)
       : intentRouting.profile === 'recipe'
         ? RECIPE_PRIMARY_HARD_TIMEOUT_MS
-        : PRIMARY_HARD_TIMEOUT_MS
+        : experienceMode === 'talk_plan'
+          ? TALK_PLAN_PRIMARY_HARD_TIMEOUT_MS
+          : PRIMARY_HARD_TIMEOUT_MS
     if (
       calendarFrame?.intent === 'calendar.list' &&
       calendarReadContext &&
@@ -4133,12 +4305,14 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       : userLikelyRequestedWrite && primaryWriteToolNames.length > 0
         ? { function_calling_config: { mode: 'ANY', allowed_function_names: primaryWriteToolNames } }
         : { function_calling_config: { mode: 'AUTO' } }
-    const budgetedConversation = assistantContextPacket
+    const budgetedConversation = assistantContextPacket || experienceMode === 'talk_plan'
       ? trimConversationToTokenBudget({
           systemInstruction,
           tools: primaryTools,
           contents,
-          maxInputTokens: assistantContextPacket.maxInputTokens,
+          maxInputTokens: experienceMode === 'talk_plan'
+            ? 12000
+            : assistantContextPacket!.maxInputTokens,
         })
       : {
           contents,
@@ -4146,22 +4320,26 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           droppedTurns: 0,
           overflow: false,
         }
-    const body = {
-      system_instruction: { parts: [{ text: systemInstruction }] },
-      contents: budgetedConversation.contents,
-      generation_config: {
-        temperature: 0.4,
-        max_output_tokens: intentRouting.profile === 'full'
+    const generationConfig = buildGeminiGenerationConfig({
+      model,
+      maxOutputTokens: experienceMode === 'talk_plan'
+        ? 4096
+        : intentRouting.profile === 'full'
           ? 2048
           : intentRouting.profile === 'recipe'
             ? 1536
             : intentRouting.profile === 'general'
               ? 1024
               : 768,
-        thinking_config: {
-          thinking_budget: intentRouting.profile === 'full' ? 512 : 0,
-        },
-      },
+      thinking: experienceMode === 'talk_plan'
+        ? effectiveWorkload.thinking
+        : { kind: 'budget', value: intentRouting.profile === 'full' ? 512 : 0 },
+      temperature: experienceMode === 'talk_plan' ? undefined : 0.4,
+    })
+    const body = {
+      system_instruction: { parts: [{ text: systemInstruction }] },
+      contents: budgetedConversation.contents,
+      generation_config: generationConfig,
       ...(primaryTools.length > 0 ? {
         tools: primaryTools,
         tool_config: primaryToolConfig,
@@ -4172,6 +4350,11 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       `profile=${intentRouting.profile} tools=${primaryToolDeclarations.length} chars=${systemInstruction.length}`,
       {
         intent_profile: intentRouting.profile,
+        experience_mode: experienceMode,
+        reasoning_preset: effectiveWorkload.preset,
+        thinking_kind: effectiveWorkload.thinking.kind,
+        thinking_value: effectiveWorkload.thinking.value,
+        provider_api_family: effectiveWorkload.apiFamily,
         force_event_search: intentRouting.forceEventSearch,
         tool_count: primaryToolDeclarations.length,
         tool_names: primaryToolDeclarations.map((tool) => tool.name),
@@ -4212,7 +4395,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       ?.parts.flatMap((part) => 'text' in part && typeof part.text === 'string' ? [part.text.trim()] : [])
       .find((part) => part.length > 0)
 
-    const runCompactFallback = async (reason: 'empty_response' | 'primary_timeout') => {
+    const runCompactFallback = async (reason: 'empty_response' | 'primary_timeout' | 'max_tokens') => {
       if (
         intentRouting.profile === 'recipe' ||
         !latestUserTextForFallback ||
@@ -4341,6 +4524,8 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         if (recoveredRecipe) return recoveredRecipe
       }
       if (finishReason === 'MAX_TOKENS') {
+        const recovered = await runCompactFallback('max_tokens')
+        if (recovered) return recovered
         return {
           type: 'text',
           text: "I couldn't finish that response within the answer limit, so I left out the partial result. Please try once more.",
@@ -4534,22 +4719,24 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         // Read-only tools: execute server-side. Only escalate to a second LLM call when the user likely wants a write.
         if (name === 'search_events' || name === 'search_places' || name === 'search_web' || name === 'get_weather_forecast' || name === 'get_travel_eta') {
           const toolResult = await executeReadTool(name, args)
-          const resultFound = Boolean((toolResult as { found?: boolean }).found)
+          const resultFound = readToolResultFound(toolResult)
           const isMathQuery = Boolean((toolResult as { math_query?: boolean }).math_query)
-          const isWeatherForecast = name === 'get_weather_forecast'
-          const isTravelEta = name === 'get_travel_eta'
           // Run secondary LLM call when:
           // - user wants a write (search → then propose change), OR
           // - a question requires actual analysis of the results
           // - math_query intercepted: LLM needs to compute directly
           const userAsksSynthesis = /\b(how busy|compare|any.*overlap|conflict|double[- ]?book|together)\b/i
             .test(latestUserText ?? '')
-          const shouldRunSecondary = secondaryDepth === 0 && remainingRequestBudgetMs() >= 1000 && (
-            (name === 'search_events' && needsUnifiedFamilyRetrieval) ||
-            (name === 'search_events' && (userLikelyRequestedWrite || (resultFound && userAsksSynthesis))) ||
-            (name === 'search_web' && isMathQuery) ||
-            (name === 'get_weather_forecast' && resultFound)
-          )
+          const shouldRunSecondary = shouldSynthesizeReadTool({
+            name,
+            resultFound,
+            isMathQuery,
+            needsUnifiedFamilyRetrieval,
+            userLikelyRequestedWrite,
+            userAsksSynthesis,
+            secondaryDepth,
+            remainingBudgetMs: remainingRequestBudgetMs(),
+          })
 
           if (!shouldRunSecondary) {
             if (secondaryDepth > 0) {
@@ -4574,24 +4761,23 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
             return { type: 'text', text: summarizeReadTool(name, toolResult) }
           }
 
-          // Feed result back to Gemini for final answer
-          const newContents: GeminiContent[] = [
-            ...contents,
-            { role: 'model', parts: [funcCallPart as GeminiPart] },
-            { role: 'user', parts: [{ functionResponse: { name, response: toolResult } } as GeminiPart] },
-          ]
+          // Read-only synthesis gets plain evidence, not function-call history, so it
+          // cannot recurse into another search instead of answering.
+          const exposeSynthesisTools = shouldExposeSynthesisTools({ userLikelyRequestedWrite })
+          const newContents = buildReadToolSynthesisContents({
+            contents,
+            functionCallPart: funcCallPart as GeminiPart,
+            name,
+            toolResult,
+            exposeTools: exposeSynthesisTools,
+          }) as GeminiContent[]
 
           // Second call for final answer.
           const isListRead = !userLikelyRequestedWrite
-          const secondaryAddendum = isMathQuery
-            ? '\n\nSECONDARY CALL — MATH MODE: The search_web call was intercepted because this is a math/calculation query. Ignore the empty web results. Compute the answer directly from your own reasoning and give a concise numerical answer.'
-            : isWeatherForecast
-              ? '\n\nSECONDARY CALL — WEATHER MODE: Use the get_weather_forecast result above to answer directly and concretely. Include practical guidance (umbrella/heat timing/UV/rain window) when relevant. Do NOT call other tools unless weather data is missing.'
-            : isTravelEta
-              ? '\n\nSECONDARY CALL — TRAVEL MODE: Use get_travel_eta result above to answer with a concrete leave-by recommendation, drive duration, and traffic impact. Keep it operationally clear.'
-            : isListRead
-              ? '\n\nSECONDARY CALL — LIST MODE: The search_events result above contains all matching events. Enumerate them clearly in a concise list. Do NOT ask for clarification. Do NOT call any write tool.'
-              : '\n\nSECONDARY CALL — WRITE MODE: You have the search result. Now IMMEDIATELY call the appropriate write tool (update_event, bulk_update_events, delete_event, delete_events_by_title, create_event, create_recipe). Do not output text first — call the tool directly.'
+          const secondaryAddendum = `\n\nSECONDARY CALL: ${readToolSynthesisInstruction(name, {
+            isMathQuery,
+            userLikelyRequestedWrite,
+          })}`
           const secondaryPrompt = systemInstruction + secondaryAddendum
           const budgetedSecondaryConversation = assistantContextPacket
             ? trimConversationToTokenBudget({
@@ -4601,17 +4787,29 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
                 maxInputTokens: assistantContextPacket.maxInputTokens,
               })
             : { contents: newContents }
+          const synthesisTools = exposeSynthesisTools ? secondaryTools : []
+          const synthesisToolDeclarations = exposeSynthesisTools ? secondaryToolDeclarations : []
+          const synthesisGenerationConfig = exposeSynthesisTools
+            ? body.generation_config
+            : buildGeminiGenerationConfig({
+                model,
+                maxOutputTokens: 1024,
+                thinking: model.startsWith('gemini-3')
+                  ? { kind: 'level', value: 'low' }
+                  : { kind: 'budget', value: 0 },
+                temperature: model.startsWith('gemini-3') ? undefined : 0.3,
+              })
           const secondaryBody = {
             system_instruction: { parts: [{ text: secondaryPrompt }] },
             contents: budgetedSecondaryConversation.contents,
-            generation_config: body.generation_config,
-            ...(secondaryTools.length > 0
+            generation_config: synthesisGenerationConfig,
+            ...(synthesisTools.length > 0
               ? {
-                tools: secondaryTools,
+                tools: synthesisTools,
                 tool_config: {
                   function_calling_config: isListRead
                     ? { mode: 'AUTO' }
-                    : { mode: 'ANY', allowed_function_names: secondaryToolDeclarations.map((tool) => tool.name) },
+                    : { mode: 'ANY', allowed_function_names: synthesisToolDeclarations.map((tool) => tool.name) },
                 },
               }
               : {}),
@@ -4619,7 +4817,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           const secondaryStartMs = Date.now()
           const res2 = await callModel(secondaryBody, {
             stream: wantStream,
-            timeoutMs: SECONDARY_HARD_TIMEOUT_MS,
+            timeoutMs: experienceMode === 'talk_plan' ? 8000 : SECONDARY_HARD_TIMEOUT_MS,
           })
           const secondaryElapsedMs = Date.now() - secondaryStartMs
           console.log(`[ai-assistant][${cid}] stage=llm_secondary ms=${secondaryElapsedMs} status=${res2.status}`)
@@ -4667,7 +4865,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
             }
           }
           const groceryArgs = { ...args, items: itemsList }
-          if (dryRun) {
+          if (dryRun || experienceMode === 'talk_plan') {
             return {
               type: 'tool_action',
               tool: name,
@@ -4773,7 +4971,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
             notes.length === 0
           )
 
-          if (isLowRiskCreate && !dryRun) {
+          if (isLowRiskCreate && experienceMode !== 'talk_plan' && !dryRun) {
             const autoActionId = `auto-create-${Date.now().toString(36)}`
             const execResult = await sb.functions.invoke('execute-ai-action', {
               body: {
@@ -4822,7 +5020,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           }
         }
 
-        if (name === 'create_recipe' && !dryRun) {
+        if (name === 'create_recipe' && experienceMode !== 'talk_plan' && !dryRun) {
           const autoActionId = `auto-recipe-${Date.now().toString(36)}`
           const execResult = await sb.functions.invoke('execute-ai-action', {
             body: {

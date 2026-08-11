@@ -1,4 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
+import { normalizeAssistantExperienceMode } from '../../supabase/functions/_shared/assistant-experience-mode.mjs'
+
+export type AssistantExperienceMode = 'do' | 'talk_plan'
 
 export interface FamilyEvidence {
   evidenceId: string
@@ -99,6 +102,7 @@ export interface AISession {
   id: string
   created_at: string
   ended_at?: string
+  experienceMode: AssistantExperienceMode
   messages: AIMessage[]
 }
 
@@ -139,7 +143,13 @@ function readStorage(): AISession | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return null
-    return JSON.parse(raw) as AISession
+    const stored = JSON.parse(raw) as Partial<AISession>
+    if (!stored.id || !stored.created_at) return null
+    return {
+      ...stored,
+      experienceMode: normalizeAssistantExperienceMode(stored.experienceMode),
+      messages: Array.isArray(stored.messages) ? stored.messages : [],
+    } as AISession
   } catch { return null }
 }
 
@@ -187,6 +197,7 @@ export function useAISession() {
     const newSession: AISession = {
       id: genId(),
       created_at: new Date().toISOString(),
+      experienceMode: 'do',
       messages: [],
     }
     setSession(newSession)
@@ -216,5 +227,20 @@ export function useAISession() {
     })
   }, [])
 
-  return { session, loading, startNewSession, endSession, saveMessages, setSession }
+  const setExperienceMode = useCallback((experienceMode: AssistantExperienceMode): AISession => {
+    const current = session ?? {
+      id: genId(),
+      created_at: new Date().toISOString(),
+      experienceMode: 'do' as const,
+      messages: [],
+    }
+    const updated = {
+      ...current,
+      experienceMode: normalizeAssistantExperienceMode(experienceMode) as AssistantExperienceMode,
+    }
+    setSession(updated)
+    return updated
+  }, [session, setSession])
+
+  return { session, loading, startNewSession, endSession, saveMessages, setSession, setExperienceMode }
 }

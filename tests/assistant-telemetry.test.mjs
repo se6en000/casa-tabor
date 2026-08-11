@@ -88,7 +88,7 @@ test('assistant model calls have hard budgets and only one secondary synthesis r
   assert.match(assistantFunction, /setTimeout\(\(\) => controller\.abort\(\), timeoutMs\)/)
   assert.match(assistantFunction, /clearTimeout\(timeoutId\)/)
   assert.match(assistantFunction, /PRIMARY_HARD_TIMEOUT_MS = 6800/)
-  assert.match(assistantFunction, /secondaryDepth === 0 && remainingRequestBudgetMs\(\) >= 1000/)
+  assert.match(assistantFunction, /shouldSynthesizeReadTool\(\{/)
   assert.match(assistantFunction, /resolveModelParts\(secondaryParts, secondaryDepth \+ 1,\s*writeRescueUsed\)/)
   assert.match(assistantFunction, /server_ai_assistant_secondary_cap/)
   assert.match(assistantFunction, /runCompactFallback\('primary_timeout'\)/)

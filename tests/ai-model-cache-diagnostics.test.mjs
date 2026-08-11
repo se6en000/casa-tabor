@@ -12,6 +12,7 @@ const migration = readFileSync(new URL('../supabase/migrations/20260717000000_ad
 const conversationalModels = [
   'gemini-2.5-flash-lite',
   'gemini-2.5-flash',
+  'gemini-3.6-flash',
 ]
 
 test('Gemini conversational catalog exposes only pinned production models', () => {
@@ -21,7 +22,7 @@ test('Gemini conversational catalog exposes only pinned production models', () =
   }
   assert.match(assistant, /resolveProductionGeminiModel/)
   assert.match(shadow, /resolveProductionGeminiModel/)
-  assert.doesNotMatch(settings, /id: 'gemini-(?:3|[^']*-latest)/)
+  assert.doesNotMatch(settings, /id: 'gemini-[^']*-latest/)
   assert.doesNotMatch(settings, /id: 'gemini-[^']*(?:image|tts|robotics|computer-use)/)
 })
 

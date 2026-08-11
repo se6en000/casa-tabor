@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import type { ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { FlaskConical, CheckCircle, AlertCircle, Home, Mic, Activity, RefreshCw, Gauge, BarChart3, Minus, Plus } from 'lucide-react'
+import { FlaskConical, CheckCircle, AlertCircle, Home, Mic, Activity, RefreshCw, Gauge, BarChart3, Minus, Plus, Zap, MessagesSquare, Workflow } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
 import { useScreensaverSettings } from '../hooks/useScreensaverSettings'
@@ -12,7 +13,7 @@ import {
   type VoiceRuntimeConfig,
 } from '../lib/voiceRuntimeConfig'
 import { VOICE_AUDIT_LOG_KEY } from '../lib/voiceAudit'
-import { Button, Chip, IconButton, SegmentedControl, SkeletonRow, Switch } from '../components/ui'
+import { Button, Chip, DisclosureSection, IconButton, SegmentedControl, SkeletonRow, Switch } from '../components/ui'
 import { SettingsPageHeader } from '../components/settings'
 import type { AIMemoryObservation } from '../types'
 
@@ -20,8 +21,15 @@ interface LLMConfig {
   provider: string
   model: string
   background_model?: string
+  talk_plan_model?: string
+  do_reasoning_preset?: ReasoningPreset
+  talk_plan_reasoning_preset?: ReasoningPreset
+  background_reasoning_preset?: ReasoningPreset
   api_key: string
 }
+
+type ReasoningPreset = 'fast' | 'balanced' | 'deep'
+type ModelWorkload = 'do' | 'talk_plan' | 'background'
 
 interface AIMemoryCaptureConfig {
   enabled: boolean
@@ -46,6 +54,7 @@ type ModelOption = {
   reasoning?: 'Everyday' | 'Advanced' | 'Deep'
   description?: string
   fast?: boolean
+  workloads?: ModelWorkload[]
 }
 
 const VENDORS: Record<string, { label: string; models: ModelOption[] }> = {
@@ -55,6 +64,7 @@ const VENDORS: Record<string, { label: string; models: ModelOption[] }> = {
       { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', group: 'Recommended', speed: 'Fast', reasoning: 'Advanced', description: 'Best production balance for Casa voice, tools, and everyday planning.' },
       { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite', group: 'Recommended', speed: 'Fastest', reasoning: 'Everyday', description: 'Lowest latency and cost for simple household requests.' },
       { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', group: 'Advanced / Preview', speed: 'Balanced', reasoning: 'Deep', description: 'Strongest reasoning and multimodal understanding — noticeably smarter on complex, multi-step, or ambiguous requests. Slower and costlier than Flash; pick this when quality matters more than speed.' },
+      { id: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash', group: 'Recommended', speed: 'Fast', reasoning: 'Deep', description: 'GA model for sustained planning and agentic reasoning. Casa uses its newer high-thinking request contract.', workloads: ['talk_plan'] },
     ],
   },
   openai: {
@@ -102,6 +112,18 @@ const DEFAULT_BACKGROUND_MODEL: Record<string, string> = {
   openai: 'gpt-4o-mini',
   anthropic: 'claude-haiku-4-5',
 }
+
+const DEFAULT_TALK_PLAN_MODEL: Record<string, string> = {
+  gemini: 'gemini-3.6-flash',
+  openai: 'gpt-4o',
+  anthropic: 'claude-sonnet-4-5',
+}
+
+const REASONING_OPTIONS = [
+  { value: 'fast', label: 'Fast' },
+  { value: 'balanced', label: 'Balanced' },
+  { value: 'deep', label: 'Deep' },
+] as const
 
 const VOICE_TELEMETRY_KEY = 'casa-voice-telemetry'
 const AI_LATENCY_METRICS_KEY = 'casa-ai-latency-rollup'
@@ -223,11 +245,23 @@ const REGRESSION_CASES: RegressionCase[] = [
 
 export default function AISettingsPage() {
   const location = useLocation()
-  const [config, setConfig] = useState<LLMConfig>({ provider: 'gemini', model: 'gemini-2.0-flash', background_model: 'gemini-2.5-flash-lite', api_key: '' })
+  const [config, setConfig] = useState<LLMConfig>({
+    provider: 'gemini',
+    model: 'gemini-2.5-flash',
+    background_model: 'gemini-2.5-flash-lite',
+    talk_plan_model: 'gemini-3.6-flash',
+    do_reasoning_preset: 'balanced',
+    talk_plan_reasoning_preset: 'deep',
+    background_reasoning_preset: 'fast',
+    api_key: '',
+  })
+  const [talkPlanEnabled, setTalkPlanEnabled] = useState(false)
   const [customInstructions, setCustomInstructions] = useState('')
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle')
   const [testMessage, setTestMessage] = useState('')
+  const [modeTestStatus, setModeTestStatus] = useState<Partial<Record<ModelWorkload, 'idle' | 'testing' | 'ok' | 'fail'>>>({})
+  const [modeTestMessage, setModeTestMessage] = useState<Partial<Record<ModelWorkload, string>>>({})
   const [isLoading, setIsLoading] = useState(true)
   const [voiceTelemetry, setVoiceTelemetry] = useState<{ counts: Record<string, number>; updatedAt?: string }>({ counts: {} })
   const [voiceRuntime, setVoiceRuntime] = useState<VoiceRuntimeConfig>(() => readVoiceRuntimeConfig())
@@ -314,7 +348,8 @@ export default function AISettingsPage() {
       supabase.from('settings').select('value').eq('key', 'llm_config').maybeSingle(),
       supabase.from('settings').select('value').eq('key', 'ai_custom_instructions').maybeSingle(),
       supabase.from('settings').select('value').eq('key', 'ai_memory_capture_config').maybeSingle(),
-    ]).then(([cfg, ci, memoryCfg]) => {
+      supabase.from('settings').select('value').eq('key', 'assistant_talk_plan_config').maybeSingle(),
+    ]).then(([cfg, ci, memoryCfg, talkPlanCfg]) => {
       if (cfg.data?.value) {
         const loaded = cfg.data.value as LLMConfig
         // Older settings rows predate the background/automation model field —
@@ -323,8 +358,13 @@ export default function AISettingsPage() {
         setConfig({
           ...loaded,
           background_model: loaded.background_model || DEFAULT_BACKGROUND_MODEL[loaded.provider] || '',
+          talk_plan_model: loaded.talk_plan_model || DEFAULT_TALK_PLAN_MODEL[loaded.provider] || '',
+          do_reasoning_preset: loaded.do_reasoning_preset || 'balanced',
+          talk_plan_reasoning_preset: loaded.talk_plan_reasoning_preset || 'deep',
+          background_reasoning_preset: loaded.background_reasoning_preset || 'fast',
         })
       }
+      setTalkPlanEnabled((talkPlanCfg.data?.value as { enabled?: boolean } | null)?.enabled === true)
       const ciVal = (ci.data?.value as { text?: string } | null)?.text
       if (ciVal) setCustomInstructions(ciVal)
       if (memoryCfg.data?.value && typeof memoryCfg.data.value === 'object') {
@@ -593,6 +633,10 @@ export default function AISettingsPage() {
       provider,
       model: DEFAULT_FAST_MODEL[provider] ?? '',
       background_model: DEFAULT_BACKGROUND_MODEL[provider] ?? '',
+      talk_plan_model: DEFAULT_TALK_PLAN_MODEL[provider] ?? '',
+      do_reasoning_preset: 'balanced',
+      talk_plan_reasoning_preset: 'deep',
+      background_reasoning_preset: 'fast',
     }))
     setSaveStatus('idle')
     setTestStatus('idle')
@@ -610,10 +654,26 @@ export default function AISettingsPage() {
     setTestStatus('idle')
   }
 
+  function handleTalkPlanModelChange(talk_plan_model: string) {
+    setConfig(c => ({ ...c, talk_plan_model }))
+    setSaveStatus('idle')
+    setTestStatus('idle')
+  }
+
+  function handleReasoningPresetChange(workload: ModelWorkload, preset: ReasoningPreset) {
+    const field = workload === 'do'
+      ? 'do_reasoning_preset'
+      : workload === 'talk_plan'
+        ? 'talk_plan_reasoning_preset'
+        : 'background_reasoning_preset'
+    setConfig(current => ({ ...current, [field]: preset }))
+    setSaveStatus('idle')
+  }
+
   const handleSave = useCallback(async () => {
     setSaveStatus('saving')
     const updatedAt = new Date().toISOString()
-    const [a, b, c] = await Promise.all([
+    const [a, b, c, d] = await Promise.all([
       supabase.from('settings').upsert(
         { key: 'llm_config', value: config, updated_at: updatedAt },
         { onConflict: 'key' }
@@ -626,10 +686,14 @@ export default function AISettingsPage() {
         { key: 'ai_memory_capture_config', value: memoryCapture, updated_at: updatedAt },
         { onConflict: 'key' }
       ),
+      supabase.from('settings').upsert(
+        { key: 'assistant_talk_plan_config', value: { enabled: talkPlanEnabled }, updated_at: updatedAt },
+        { onConflict: 'key' }
+      ),
     ])
-    setSaveStatus(a.error || b.error || c.error ? 'error' : 'saved')
-    if (!a.error && !b.error && !c.error) setTimeout(() => setSaveStatus('idle'), 3000)
-  }, [config, customInstructions, memoryCapture])
+    setSaveStatus(a.error || b.error || c.error || d.error ? 'error' : 'saved')
+    if (!a.error && !b.error && !c.error && !d.error) setTimeout(() => setSaveStatus('idle'), 3000)
+  }, [config, customInstructions, memoryCapture, talkPlanEnabled])
 
   useEffect(() => {
     if (isLoading) return
@@ -642,21 +706,39 @@ export default function AISettingsPage() {
       handleSave()
     }, 700)
     return () => clearTimeout(t)
-  }, [config, customInstructions, memoryCapture, isLoading, handleSave])
+  }, [config, customInstructions, memoryCapture, talkPlanEnabled, isLoading, handleSave])
 
-  async function handleTest() {
+  async function handleTest(workload: ModelWorkload = 'talk_plan') {
     setTestStatus('testing')
     setTestMessage('')
+    setModeTestStatus(current => ({ ...current, [workload]: 'testing' }))
+    setModeTestMessage(current => ({ ...current, [workload]: '' }))
     try {
-      // Save first so the function picks up the latest config
-      await supabase.from('settings').upsert({ key: 'llm_config', value: config, updated_at: new Date().toISOString() }, { onConflict: 'key' })
-      const { data, error } = await supabase.functions.invoke('generate-briefing')
+      const saved = await supabase.from('settings').upsert(
+        { key: 'llm_config', value: config, updated_at: new Date().toISOString() },
+        { onConflict: 'key' },
+      )
+      if (saved.error) throw saved.error
+      const { data, error } = await supabase.functions.invoke('ai-assistant', {
+        body: {
+          model_access_check: workload,
+          messages: [{ role: 'user', content: 'Model access check' }],
+          context: { page: 'ai-settings', experience_mode: workload === 'talk_plan' ? 'talk_plan' : 'do' },
+        },
+      })
       if (error) throw error
+      if (data?.success !== true) throw new Error(data?.error || 'The model does not support Casa’s tool contract.')
+      const message = `${data.model} supports ${data.api_family} (${data.latency_ms ?? 0} ms).`
       setTestStatus('ok')
-      setTestMessage(`Generated successfully using ${data?.briefing?.generated_by ?? config.provider}`)
+      setTestMessage(message)
+      setModeTestStatus(current => ({ ...current, [workload]: 'ok' }))
+      setModeTestMessage(current => ({ ...current, [workload]: message }))
     } catch (err) {
+      const message = (err as Error).message
       setTestStatus('fail')
-      setTestMessage((err as Error).message)
+      setTestMessage(message)
+      setModeTestStatus(current => ({ ...current, [workload]: 'fail' }))
+      setModeTestMessage(current => ({ ...current, [workload]: message }))
     }
   }
 
@@ -750,7 +832,6 @@ export default function AISettingsPage() {
 
   const vendor = VENDORS[config.provider]
   const models = vendor?.models ?? []
-  const modelGroups = Array.from(new Set(models.map(model => model.group).filter(Boolean))) as NonNullable<ModelOption['group']>[]
 
   function setWakeWordSensitivity(next: number) {
     updateScreensaver({ wakeWordSensitivity: next })
@@ -810,7 +891,7 @@ export default function AISettingsPage() {
 
   return (
     <>
-      <SettingsPageHeader title="AI Settings" description="Choose the provider, and pick separate models for Alexa (voice/chat) and background automation. Fast, low-cost models work best for background work." />
+      <SettingsPageHeader title="AI Settings" description="Choose one provider account, then tune separate models for fast actions, deeper planning, and background work." />
 
       <div className="mt-6 space-y-4">
         {/* Vendor */}
@@ -825,83 +906,57 @@ export default function AISettingsPage() {
           />
         </div>
 
-        {/* Model — Alexa / Voice Assistant */}
-        <div className="bg-casa-surface rounded-card border border-casa-border p-4 shadow-card space-y-3">
-          <label className="block text-body-sm font-semibold text-casa-navy">Alexa Model <span className="text-casa-muted font-normal">(voice &amp; chat)</span></label>
-          <p className="text-caption text-casa-muted">
-            Powers the conversational assistant — wake-word chat, calendar/grocery commands, and quick answers. Prioritize speed and tool-call reliability here.
-          </p>
-          {config.provider === 'gemini' && (
-            <p className="text-caption text-casa-muted">
-              Models shown here support Casa's conversational API and tool contract. Image, TTS, robotics, and computer-use models are intentionally excluded.
-            </p>
-          )}
-          <div className="space-y-4">
-            {(modelGroups.length > 0 ? modelGroups : [undefined]).map(group => (
-              <div key={group ?? 'models'} className="space-y-2">
-                {group && <p className="text-caption font-semibold uppercase tracking-wide text-casa-muted">{group}</p>}
-                {models.filter(model => model.group === group || !group).map(m => (
-                  <Button
-                    key={m.id}
-                    variant={config.model === m.id ? 'strong' : 'secondary'}
-                    onClick={() => handleModelChange(m.id)}
-                    fullWidth
-                    align="between"
-                    aria-pressed={config.model === m.id}
-                    className="h-auto min-h-control py-3"
-                  >
-                    <span className="min-w-0 text-left">
-                      <span className="block text-body-sm font-medium">{m.label}</span>
-                      {m.description && <span className="mt-0.5 block text-caption font-normal opacity-80">{m.description}</span>}
-                    </span>
-                    {(m.speed || m.reasoning) && (
-                      <span className="ml-3 flex shrink-0 flex-wrap justify-end gap-1">
-                        {m.speed && <Chip size="sm" tone={m.speed === 'Fastest' ? 'success' : 'neutral'}>{m.speed}</Chip>}
-                        {m.reasoning && <Chip size="sm" tone={m.reasoning === 'Deep' ? 'accent' : 'info'}>{m.reasoning}</Chip>}
-                      </span>
-                    )}
-                  </Button>
-                ))}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Model — Background & Automation */}
-        <div className="bg-casa-surface rounded-card border border-casa-border p-4 shadow-card space-y-3">
-          <label className="block text-body-sm font-semibold text-casa-navy">Background &amp; Automation Model</label>
-          <p className="text-caption text-casa-muted">
-            Powers everything that runs without you watching — daily briefings, Gmail/travel scanning, grocery normalization, event enrichment, recipe extraction, and SMS. These run far more often than voice chat, so cheaper/faster models here have an outsized effect on cost.
-          </p>
-          <div className="space-y-4">
-            {(modelGroups.length > 0 ? modelGroups : [undefined]).map(group => (
-              <div key={group ?? 'background-models'} className="space-y-2">
-                {group && <p className="text-caption font-semibold uppercase tracking-wide text-casa-muted">{group}</p>}
-                {models.filter(model => model.group === group || !group).map(m => (
-                  <Button
-                    key={m.id}
-                    variant={(config.background_model || DEFAULT_BACKGROUND_MODEL[config.provider]) === m.id ? 'strong' : 'secondary'}
-                    onClick={() => handleBackgroundModelChange(m.id)}
-                    fullWidth
-                    align="between"
-                    aria-pressed={(config.background_model || DEFAULT_BACKGROUND_MODEL[config.provider]) === m.id}
-                    className="h-auto min-h-control py-3"
-                  >
-                    <span className="min-w-0 text-left">
-                      <span className="block text-body-sm font-medium">{m.label}</span>
-                      {m.description && <span className="mt-0.5 block text-caption font-normal opacity-80">{m.description}</span>}
-                    </span>
-                    {(m.speed || m.reasoning) && (
-                      <span className="ml-3 flex shrink-0 flex-wrap justify-end gap-1">
-                        {m.speed && <Chip size="sm" tone={m.speed === 'Fastest' ? 'success' : 'neutral'}>{m.speed}</Chip>}
-                        {m.reasoning && <Chip size="sm" tone={m.reasoning === 'Deep' ? 'accent' : 'info'}>{m.reasoning}</Chip>}
-                      </span>
-                    )}
-                  </Button>
-                ))}
-              </div>
-            ))}
-          </div>
+        <div className="overflow-hidden rounded-card border border-casa-border bg-casa-surface shadow-card">
+          <ModelWorkloadDisclosure
+            workload="do"
+            title="Alexa / Do"
+            purpose="Fast commands and quick household answers"
+            icon={<Zap size={18} />}
+            models={models}
+            selectedModel={config.model}
+            preset={config.do_reasoning_preset ?? 'balanced'}
+            onModelChange={handleModelChange}
+            onPresetChange={(preset) => handleReasoningPresetChange('do', preset)}
+            testStatus={modeTestStatus.do}
+            testMessage={modeTestMessage.do}
+            onTest={() => handleTest('do')}
+          />
+          <ModelWorkloadDisclosure
+            workload="talk_plan"
+            title="Talk & Plan"
+            purpose="Longer discussion, comparison, and ideation"
+            icon={<MessagesSquare size={18} />}
+            models={models}
+            selectedModel={config.talk_plan_model || DEFAULT_TALK_PLAN_MODEL[config.provider]}
+            preset={config.talk_plan_reasoning_preset ?? 'deep'}
+            onModelChange={handleTalkPlanModelChange}
+            onPresetChange={(preset) => handleReasoningPresetChange('talk_plan', preset)}
+            testStatus={modeTestStatus.talk_plan}
+            testMessage={modeTestMessage.talk_plan}
+            onTest={() => handleTest('talk_plan')}
+            defaultOpen
+          >
+            <Switch
+              label="Enable Talk & Plan"
+              description="Allow this household to use the deeper planning lane after model access is verified."
+              checked={talkPlanEnabled}
+              onCheckedChange={setTalkPlanEnabled}
+            />
+          </ModelWorkloadDisclosure>
+          <ModelWorkloadDisclosure
+            workload="background"
+            title="Background"
+            purpose="Briefings, scans, enrichment, and unattended jobs"
+            icon={<Workflow size={18} />}
+            models={models}
+            selectedModel={config.background_model || DEFAULT_BACKGROUND_MODEL[config.provider]}
+            preset={config.background_reasoning_preset ?? 'fast'}
+            onModelChange={handleBackgroundModelChange}
+            onPresetChange={(preset) => handleReasoningPresetChange('background', preset)}
+            testStatus={modeTestStatus.background}
+            testMessage={modeTestMessage.background}
+            onTest={() => handleTest('background')}
+          />
         </div>
 
         {/* API Key */}
@@ -1360,11 +1415,11 @@ export default function AISettingsPage() {
         <div className="flex gap-2 justify-end">
           <Button
             variant="secondary"
-            onClick={handleTest}
+            onClick={() => handleTest('talk_plan')}
             disabled={!config.api_key || testStatus === 'testing'}
             leadingIcon={<FlaskConical size={14} className={cn(testStatus === 'testing' && 'animate-spin')} />}
           >
-            {testStatus === 'testing' ? 'Testing…' : 'Test connection'}
+            {testStatus === 'testing' ? 'Checking…' : 'Check Talk & Plan model'}
           </Button>
         </div>
         {saveStatus === 'saving' && (
@@ -1372,6 +1427,114 @@ export default function AISettingsPage() {
         )}
       </div>
     </>
+  )
+}
+
+function ModelWorkloadDisclosure({
+  workload,
+  title,
+  purpose,
+  icon,
+  models,
+  selectedModel,
+  preset,
+  onModelChange,
+  onPresetChange,
+  testStatus,
+  testMessage,
+  onTest,
+  defaultOpen = false,
+  children,
+}: {
+  workload: ModelWorkload
+  title: string
+  purpose: string
+  icon: ReactNode
+  models: ModelOption[]
+  selectedModel: string
+  preset: ReasoningPreset
+  onModelChange: (model: string) => void
+  onPresetChange: (preset: ReasoningPreset) => void
+  testStatus?: 'idle' | 'testing' | 'ok' | 'fail'
+  testMessage?: string
+  onTest: () => void
+  defaultOpen?: boolean
+  children?: ReactNode
+}) {
+  const eligibleModels = models.filter(model => !model.workloads || model.workloads.includes(workload))
+  const selectedLabel = eligibleModels.find(model => model.id === selectedModel)?.label || selectedModel
+  const relativeCost = preset === 'fast' ? 'Lowest' : preset === 'balanced' ? 'Moderate' : 'Highest'
+  const availability = testStatus === 'ok' ? 'Available' : testStatus === 'fail' ? 'Unavailable' : 'Not checked'
+  const effectiveThinking = selectedModel.startsWith('gemini-3.')
+    ? preset === 'deep' ? 'high thinking' : preset === 'balanced' ? 'medium thinking' : 'minimum supported thinking'
+    : preset === 'deep' ? 'a larger bounded thinking budget' : preset === 'balanced' ? 'moderate bounded thinking' : 'minimal reasoning'
+  const groups = Array.from(new Set(eligibleModels.map(model => model.group).filter(Boolean))) as NonNullable<ModelOption['group']>[]
+
+  return (
+    <DisclosureSection
+      title={title}
+      icon={icon}
+      defaultOpen={defaultOpen}
+      summary={`${selectedLabel} · ${preset[0].toUpperCase()}${preset.slice(1)} · ${relativeCost} relative cost · ${availability}`}
+    >
+      <div className="space-y-4">
+        <p className="text-body-sm text-casa-muted">{purpose}</p>
+        {children}
+        <div className="space-y-4">
+          {(groups.length > 0 ? groups : [undefined]).map(group => (
+            <div key={group ?? `${workload}-models`} className="space-y-2">
+              {group && <p className="text-caption font-semibold uppercase tracking-wide text-casa-muted">{group}</p>}
+              {eligibleModels.filter(model => model.group === group || !group).map(model => (
+                <Button
+                  key={model.id}
+                  variant={selectedModel === model.id ? 'strong' : 'secondary'}
+                  onClick={() => onModelChange(model.id)}
+                  fullWidth
+                  align="between"
+                  aria-pressed={selectedModel === model.id}
+                  className="h-auto min-h-control py-3"
+                >
+                  <span className="min-w-0 text-left">
+                    <span className="block text-body-sm font-medium">{model.label}</span>
+                    {model.description && <span className="mt-0.5 block text-caption font-normal opacity-80">{model.description}</span>}
+                  </span>
+                  <span className="ml-3 flex shrink-0 flex-wrap justify-end gap-1">
+                    {model.speed && <Chip size="sm" tone={model.speed === 'Fastest' ? 'success' : 'neutral'}>{model.speed}</Chip>}
+                    {model.reasoning && <Chip size="sm" tone={model.reasoning === 'Deep' ? 'accent' : 'info'}>{model.reasoning}</Chip>}
+                  </span>
+                </Button>
+              ))}
+            </div>
+          ))}
+        </div>
+        <div className="space-y-2">
+          <p className="text-body-sm font-semibold text-casa-navy">Reasoning</p>
+          <SegmentedControl
+            aria-label={`${title} reasoning preset`}
+            value={preset}
+            options={[...REASONING_OPTIONS]}
+            onChange={onPresetChange}
+            fullWidth
+          />
+          <p className="text-caption text-casa-muted">
+            {preset[0].toUpperCase()}{preset.slice(1)} uses {effectiveThinking}. Casa still enforces hard context, output, call, and timeout limits.
+          </p>
+        </div>
+        <Button
+          variant="secondary"
+          onClick={onTest}
+          disabled={testStatus === 'testing'}
+          leadingIcon={<FlaskConical size={14} className={cn(testStatus === 'testing' && 'animate-spin')} />}
+        >
+          {testStatus === 'testing' ? 'Checking…' : 'Test this mode'}
+        </Button>
+        {testStatus && testStatus !== 'idle' && testStatus !== 'testing' && (
+          <p className={cn('text-caption', testStatus === 'ok' ? 'text-casa-success' : 'text-casa-error')} role="status">
+            {testMessage}
+          </p>
+        )}
+      </div>
+    </DisclosureSection>
   )
 }
 

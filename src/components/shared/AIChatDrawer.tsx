@@ -17,7 +17,7 @@ import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import type { FamilyMember } from '../../types'
 import BounceScroll from '../shared/BounceScroll'
 import MarkdownContent from '../shared/MarkdownContent'
-import { Button, Card, Heading, IconButton, LiveTranscript, Text } from '../ui'
+import { Button, Card, Field, Heading, IconButton, Input, LiveTranscript, Modal, SegmentedControl, Select, Text } from '../ui'
 import { formatTextForMarkdown, stripEvidenceCitationMarkers } from '../../lib/assistantMarkdown.mjs'
 import { createAssistantTraceContext, emitAssistantTrace, getAssistantDeviceId } from '../../lib/assistantTelemetry'
 import { classifyPendingConfirmation } from '../../lib/assistantConfirmation.mjs'
@@ -30,7 +30,6 @@ const LOW_CONFIDENCE_REJECT_PHRASES = /\b(no|nope|try again|wrong|not that|cance
 
 const NO_ACTIVITY_AUTO_CLOSE_MS = 30_000
 const CONVERSATION_MODE_KEY = 'casa_ai_conversation_mode'
-
 type PendingVoiceAction = {
   messageId: string
   state: 'pending' | 'executing'
@@ -90,6 +89,13 @@ export default function AIChatDrawer({
   const [attachedImage, setAttachedImage] = useState<{ dataUrl: string; mimeType: string } | null>(null)
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false)
   const [nudgeDismissed, setNudgeDismissed] = useState(false)
+  const [historyModalOpen, setHistoryModalOpen] = useState(false)
+  const [historyMemberId, setHistoryMemberId] = useState('')
+  const [historyPin, setHistoryPin] = useState('')
+  const [historyUnlocking, setHistoryUnlocking] = useState(false)
+  const [historyUnlockError, setHistoryUnlockError] = useState<string | null>(null)
+  const [historyConversations, setHistoryConversations] = useState<Array<{ id: string; title: string; updated_at: string; archived_at: string | null }>>([])
+  const [historyListLoading, setHistoryListLoading] = useState(false)
   const [conversationMode, setConversationMode] = useState<boolean>(() => {
     // Conversational by default: opening the assistant starts listening and
     // re-arms between turns until dismissed. Users can opt into press-to-talk
@@ -110,7 +116,21 @@ export default function AIChatDrawer({
   const cameraInputRef = useRef<HTMLInputElement>(null)
   const qc = useQueryClient()
 
-  const { messages, loading, send, reset, session, sessionLoading, startFresh, primeMessages, appendSyntheticMessage, updateMessageToolStatus } = useAIAssistant({
+  const {
+    messages,
+    loading,
+    send,
+    reset,
+    session,
+    sessionLoading,
+    startFresh,
+    primeMessages,
+    appendSyntheticMessage,
+    updateMessageToolStatus,
+    selectExperienceMode,
+    privateHistory,
+    resumePrivateConversation,
+  } = useAIAssistant({
     page,
     assistantMode: launchContext?.agent ?? 'general',
     events,
@@ -808,7 +828,25 @@ export default function AIChatDrawer({
   }, [markUserInteraction, speech])
 
   const hasSession = !sessionLoading && !!session && session.messages.length > 0
+  const experienceMode = session?.experienceMode ?? 'do'
+  const showExperienceMode = !focusedEvent && (launchContext?.agent ?? 'general') === 'general'
+  const experienceModeOptions = useMemo(() => {
+    const disabled = loading || hasPendingToolAction
+    return [
+      { value: 'do', label: 'Do', disabled },
+      { value: 'talk_plan', label: 'Talk & Plan', disabled },
+    ] as const
+  }, [hasPendingToolAction, loading])
   const voiceLevel = Math.max(0, Math.min(1, speech.volume / 100))
+
+  const loadHistoryConversations = useCallback(() => {
+    if (!privateHistory.access) return
+    setHistoryListLoading(true)
+    void privateHistory.listConversations()
+      .then(setHistoryConversations)
+      .catch((error: unknown) => setHistoryUnlockError(error instanceof Error ? error.message : 'Private history could not be loaded.'))
+      .finally(() => setHistoryListLoading(false))
+  }, [privateHistory.access, privateHistory.listConversations])
   const isVoiceActive = speech.listening && voiceLevel > 0.12
   const hasTypedInput = input.trim().length > 0 && !loading && !speech.listening
   const voiceComposerActive = speech.listening || speech.connecting || speech.phase === 'processing'
@@ -897,8 +935,8 @@ export default function AIChatDrawer({
                     onClick={handleConversationToggle}
                     aria-pressed={conversationMode}
                     title={conversationMode
-                      ? 'Conversation mode ON — mic stays on for hands-free back-and-forth. Tap to turn off.'
-                      : 'Conversation mode OFF — tap to talk hands-free (mic re-arms after each reply).'}
+                      ? 'Hands-free ON — mic stays armed for back-and-forth. Tap to turn off.'
+                      : 'Hands-free OFF — tap the microphone for each turn.'}
                     className={cn(
                       'h-7 px-2 flex items-center gap-1 rounded-full text-caption font-medium transition-colors',
                       conversationMode
@@ -907,7 +945,27 @@ export default function AIChatDrawer({
                     )}
                   >
                     <MessagesSquare size={13} />
-                    {conversationMode && <span>Convo</span>}
+                    {conversationMode && <span>Hands-free</span>}
+                  </Button>
+                )}
+                {showExperienceMode && (
+                  <Button
+                    variant="ghost"
+                    type="button"
+                    onClick={() => {
+                      setHistoryUnlockError(null)
+                      setHistoryModalOpen(true)
+                      loadHistoryConversations()
+                    }}
+                    title={privateHistory.access ? 'Private history is unlocked on this device' : 'Unlock private conversation history'}
+                    className={cn(
+                      'h-7 px-2 rounded-full text-caption font-medium transition-colors',
+                      privateHistory.access
+                        ? 'bg-casa-gold/10 text-casa-gold'
+                        : 'text-casa-muted hover:text-casa-navy hover:bg-casa-divider',
+                    )}
+                  >
+                    {privateHistory.access ? 'Private' : 'History'}
                   </Button>
                 )}
                 {hasSession && (
@@ -931,6 +989,23 @@ export default function AIChatDrawer({
                 </Button>
               </div>
             </div>
+
+            {showExperienceMode && (
+              <div className="border-b border-casa-border px-5 py-3">
+                <SegmentedControl
+                  aria-label="Assistant experience"
+                  value={experienceMode}
+                  options={experienceModeOptions}
+                  onChange={selectExperienceMode}
+                  fullWidth
+                />
+                <p className="mt-2 text-caption text-casa-muted">
+                  {experienceMode === 'talk_plan'
+                    ? 'Discuss, compare, and plan. Casa will ask before changing anything.'
+                    : 'Fast commands, household actions, and quick answers.'}
+                </p>
+              </div>
+            )}
 
             {/* Messages */}
             <BounceScroll nativeScroll className="flex-1 min-h-0" innerClassName="px-4 py-4 space-y-3">
@@ -998,6 +1073,14 @@ export default function AIChatDrawer({
                   editSeed={messages.slice(0, messageIndex).findLast((message) => message.role === 'user')?.content ?? ''}
                   onQuickSaveRecipe={quickSaveRecipeSuggestion}
                   onConfirmToolAction={async (messageId, tool, args) => {
+                    if (tool === 'confirm_talk_plan_action_intent') {
+                      updateMessageToolStatus(messageId, 'done')
+                      await send(String(args.original_request ?? ''), undefined, undefined, {
+                        replayExistingUserMessage: true,
+                        talkPlanIntentResolution: 'confirmed_action',
+                      })
+                      return true
+                    }
                     updateMessageToolStatus(messageId, 'loading')
                     const actionTrace = activeTraceRef.current
                     const actionCorrelationId = buildCorrelationId(messageId)
@@ -1100,6 +1183,7 @@ export default function AIChatDrawer({
                     }
                   }}
                   onCancelToolAction={(messageId) => {
+                    const message = messages.find(item => item.id === messageId)
                     updateMessageToolStatus(messageId, 'cancelled')
                     const trace = activeTraceRef.current
                     if (trace) {
@@ -1107,6 +1191,17 @@ export default function AIChatDrawer({
                         detail: 'Confirmation cancelled',
                         payload: { message_id: messageId },
                       })
+                    }
+                    if (message?.toolAction?.tool === 'confirm_talk_plan_action_intent') {
+                      void send(
+                        String(message.toolAction.args.original_request ?? ''),
+                        undefined,
+                        undefined,
+                        {
+                          replayExistingUserMessage: true,
+                          talkPlanIntentResolution: 'conversation_only',
+                        },
+                      )
                     }
                   }}
                   onRefreshToolAction={() => {
@@ -1339,6 +1434,117 @@ export default function AIChatDrawer({
 
 
             </div>
+            <Modal
+              open={historyModalOpen}
+              onClose={() => {
+                if (!historyUnlocking) setHistoryModalOpen(false)
+              }}
+              title="Private conversation history"
+              closeDisabled={historyUnlocking}
+              size="sm"
+            >
+              {privateHistory.access ? (
+                <div className="space-y-4 pt-5">
+                  <p className="text-body-sm text-casa-muted">
+                    New messages save privately for this browser session. Existing local chats are never uploaded automatically.
+                  </p>
+                  <div className="space-y-2">
+                    <p className="text-caption font-semibold uppercase tracking-wide text-casa-muted">Saved conversations</p>
+                    {historyListLoading && <p className="text-body-sm text-casa-muted">Loading private conversations…</p>}
+                    {!historyListLoading && historyConversations.length === 0 && <p className="text-body-sm text-casa-muted">No saved conversations yet.</p>}
+                    {historyConversations.filter((conversation) => !conversation.archived_at).map((conversation) => (
+                      <div key={conversation.id} className="flex items-center gap-2 rounded-card border border-casa-border p-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-body-sm font-semibold text-casa-navy">{conversation.title}</p>
+                          <p className="text-caption text-casa-muted">Updated {new Date(conversation.updated_at).toLocaleDateString()}</p>
+                        </div>
+                        <Button variant="ghost" size="sm" onClick={() => {
+                          void resumePrivateConversation(conversation.id)
+                            .then(() => setHistoryModalOpen(false))
+                            .catch((error: unknown) => setHistoryUnlockError(error instanceof Error ? error.message : 'Conversation could not be resumed.'))
+                        }}>Resume</Button>
+                        <Button variant="ghost" size="sm" onClick={() => {
+                          void privateHistory.exportConversation(conversation.id)
+                            .then((payload) => {
+                              const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+                              const url = URL.createObjectURL(blob)
+                              const link = document.createElement('a')
+                              link.href = url
+                              link.download = `${conversation.title.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'casa-conversation'}.json`
+                              link.click()
+                              URL.revokeObjectURL(url)
+                            })
+                            .catch((error: unknown) => setHistoryUnlockError(error instanceof Error ? error.message : 'Conversation export failed.'))
+                        }}>Export</Button>
+                        <Button variant="ghost" size="sm" onClick={() => {
+                          void privateHistory.archiveConversation(conversation.id).then(loadHistoryConversations)
+                        }}>Archive</Button>
+                        <Button variant="ghost" size="sm" className="text-casa-error" onClick={() => {
+                          void privateHistory.forgetConversation(conversation.id).then(loadHistoryConversations)
+                        }}>Forget</Button>
+                      </div>
+                    ))}
+                  </div>
+                  <Button
+                    variant="secondary"
+                    fullWidth
+                    onClick={() => {
+                      privateHistory.lock()
+                      setHistoryModalOpen(false)
+                    }}
+                  >
+                    Lock private history
+                  </Button>
+                </div>
+              ) : (
+                <form
+                  className="space-y-4 pt-5"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    const memberId = historyMemberId || family[0]?.id
+                    if (!memberId) {
+                      setHistoryUnlockError('Choose a family member first.')
+                      return
+                    }
+                    setHistoryUnlocking(true)
+                    setHistoryUnlockError(null)
+                    void privateHistory.unlock(memberId, historyPin)
+                      .then(() => {
+                        setHistoryPin('')
+                        setHistoryModalOpen(false)
+                      })
+                      .catch((error: unknown) => {
+                        setHistoryUnlockError(error instanceof Error ? error.message : 'Private history could not be unlocked.')
+                      })
+                      .finally(() => setHistoryUnlocking(false))
+                  }}
+                >
+                  <p className="text-body-sm text-casa-muted">
+                    Unlock your own saved conversations. They are private, retained for 90 days, and never used as household memory or in Daily Brief.
+                  </p>
+                  <Field label="Family member">
+                    <Select value={historyMemberId || family[0]?.id || ''} onChange={(event) => setHistoryMemberId(event.target.value)}>
+                      {family.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}
+                    </Select>
+                  </Field>
+                  <Field label="PIN" error={historyUnlockError ?? privateHistory.error}>
+                    <Input
+                      type="password"
+                      inputMode="numeric"
+                      autoComplete="current-password"
+                      pattern="[0-9]{6,12}"
+                      value={historyPin}
+                      onChange={(event) => setHistoryPin(event.target.value)}
+                      placeholder="6 to 12 digits"
+                      required
+                    />
+                  </Field>
+                  <Button type="submit" fullWidth disabled={historyUnlocking || family.length === 0}>
+                    {historyUnlocking ? 'Unlocking…' : 'Unlock private history'}
+                  </Button>
+                </form>
+              )}
+            </Modal>
           </motion.div>
         </>
       )}
@@ -1587,7 +1793,8 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
               <div className="space-y-1">
                 <div className="flex items-center gap-1.5 text-emerald-600 text-caption font-semibold">
                   <Check size={13} />
-                  {ta.tool === 'create_event' ? 'Created & added to calendar ✓'
+                  {ta.tool === 'confirm_talk_plan_action_intent' ? 'Action intent confirmed'
+                    : ta.tool === 'create_event' ? 'Created & added to calendar ✓'
                     : ta.tool === 'create_recipe' ? 'Saved to recipe library ✓'
                     : ta.tool === 'update_event' ? 'Updated ✓'
                     : ta.tool === 'bulk_update_events' ? 'Bulk updates applied ✓'
@@ -1709,6 +1916,8 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
                           : ta.tool === 'delete_events_by_title'
                             ? 'Delete matching events'
                           : 'Clear checked items'
+                        : ta.tool === 'confirm_talk_plan_action_intent'
+                          ? 'Yes, prepare it'
                         : ta.tool === 'update_event'
                           ? 'Apply change'
                           : ta.tool === 'create_event'
@@ -1717,7 +1926,7 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
                               : 'Create event'
                             : confirmActionLabel(ta.tool)}
                   </Button>
-                  {!isDestructiveAction && onEditMessage && editSeed?.trim() && (
+                  {ta.tool !== 'confirm_talk_plan_action_intent' && !isDestructiveAction && onEditMessage && editSeed?.trim() && (
                     <Button
                       variant="secondary"
                       type="button"
@@ -1736,7 +1945,8 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
                     onClick={doCancel}
                     className="min-h-control flex items-center gap-2 px-4 rounded-button border border-casa-border text-body-sm text-casa-navy hover:bg-casa-divider transition-colors"
                   >
-                    <XCircle size={12} /> Cancel
+                    <XCircle size={12} />
+                    {ta.tool === 'confirm_talk_plan_action_intent' ? 'No, answer conversationally' : 'Cancel'}
                   </Button>
                 </div>
               </>
@@ -1962,6 +2172,20 @@ function DirectorySuggestionCard({ tool, args, loading, onAccept, onCancel }: {
 
 function ToolActionPreview({ tool, args, events }: { tool: string; args: Record<string, unknown>; events: EventWithDetails[] }) {
   const [expanded, setExpanded] = useState(false)
+
+  if (tool === 'confirm_talk_plan_action_intent') {
+    return (
+      <Card tone="subtle" padding="sm" className="space-y-2">
+        <Heading role="heading">Use Casa action mode?</Heading>
+        <Text role="body-sm">
+          Are you asking Casa to create or change a {String(args.action_kind ?? 'household item')}?
+        </Text>
+        <Text role="caption" muted>
+          Yes prepares the normal detailed action card. No continues this as a Talk & Plan conversation.
+        </Text>
+      </Card>
+    )
+  }
 
   if (tool === 'create_event') {
     const preview = buildCreatePreviewCopy(args, { now: new Date() })

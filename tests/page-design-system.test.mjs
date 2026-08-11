@@ -633,8 +633,8 @@ test('AI provider and model selections use readable semantic controls', () => {
   const aiSettings = readFileSync(resolve('src/pages/AISettingsPage.tsx'), 'utf8')
 
   assert.match(aiSettings, /<SegmentedControl[\s\S]*?aria-label="AI provider"[\s\S]*?fullWidth/)
-  assert.match(aiSettings, /variant=\{config\.model === m\.id \? 'strong' : 'secondary'\}/)
-  assert.match(aiSettings, /aria-pressed=\{config\.model === m\.id\}/)
+  assert.match(aiSettings, /variant=\{selectedModel === model\.id \? 'strong' : 'secondary'\}/)
+  assert.match(aiSettings, /aria-pressed=\{selectedModel === model\.id\}/)
   assert.match(aiSettings, /align="between"/)
   assert.doesNotMatch(
     aiSettings,

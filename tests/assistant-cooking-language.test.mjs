@@ -246,7 +246,7 @@ test('cooking authority outranks overlapping grocery parsing only in cooking con
   )
   assert.match(source, /intentRouting\.profile === 'recipe' && referencesSavedRecipe/)
   assert.match(source, /const includeFoodProfileContext = needsFoodProfileData/)
-  assert.match(source, /const includeRecipeContext = needsRecipeData/)
+  assert.match(source, /const includeRecipeContext = includeRawDomainContext && needsRecipeData/)
   assert.match(source, /cookingFrame\?\.intent === 'recipe\.find'/)
   assert.match(source, /server_ai_assistant_recipe_find/)
   assert.match(source, /!authoritativeCookingContext \|\| cookingMutationIntent/)

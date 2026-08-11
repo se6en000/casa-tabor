@@ -1,0 +1,166 @@
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import test from 'node:test'
+
+import {
+  buildConversationRecord,
+  buildConversationSummaryRecord,
+  buildHistoryRequestOptions,
+  sanitizeConversationMessage,
+} from '../src/lib/assistantConversationHistory.mjs'
+
+test('private conversations are owned by one family member and expire after the configured retention period', () => {
+  const createdAt = new Date('2026-08-11T16:00:00.000Z')
+  const conversation = buildConversationRecord({
+    id: 'conversation-1',
+    ownerMemberId: 'member-1',
+    title: 'Bimini anniversary getaway',
+    experienceMode: 'talk_plan',
+    createdAt,
+  })
+
+  assert.deepEqual(conversation, {
+    id: 'conversation-1',
+    owner_member_id: 'member-1',
+    visibility: 'private',
+    title: 'Bimini anniversary getaway',
+    experience_mode: 'talk_plan',
+    created_at: createdAt.toISOString(),
+    expires_at: '2026-11-09T16:00:00.000Z',
+  })
+})
+
+test('stored messages exclude transient rendering state and base64 image payloads', () => {
+  assert.deepEqual(
+    sanitizeConversationMessage({
+      id: 'message-1',
+      role: 'assistant',
+      content: 'Here is the plan.',
+      imageDataUrl: 'data:image/png;base64,secret-image',
+      streaming: true,
+      evidence: [{ evidenceId: 'evidence-1' }],
+      toolAction: {
+        tool: 'create_event',
+        args: { title: 'Dinner' },
+        displayText: 'Create Dinner',
+        status: 'pending',
+      },
+    }),
+    {
+      id: 'message-1',
+      role: 'assistant',
+      content: 'Here is the plan.',
+      evidence: [{ evidenceId: 'evidence-1' }],
+      tool_action: {
+        tool: 'create_event',
+        args: { title: 'Dinner' },
+        display_text: 'Create Dinner',
+        status: 'pending',
+      },
+    },
+  )
+})
+
+test('rolling summaries preserve bounded context without becoming retrievable family memory', () => {
+  assert.deepEqual(
+    buildConversationSummaryRecord({
+      conversationId: 'conversation-1',
+      throughMessageId: 'message-20',
+      content: 'They prefer a $1,500 Bimini anniversary trip.',
+    }),
+    {
+      conversation_id: 'conversation-1',
+      through_message_id: 'message-20',
+      content: 'They prefer a $1,500 Bimini anniversary trip.',
+      retrieval_scope: 'conversation_only',
+    },
+  )
+})
+
+test('history requests send only the short-lived unlock token, never a PIN', () => {
+  assert.deepEqual(buildHistoryRequestOptions('session-token'), {
+    headers: { 'x-casa-history-session': 'session-token' },
+  })
+  assert.throws(() => buildHistoryRequestOptions(''), /history session/i)
+})
+
+test('conversation-history migration denies direct client access and excludes transcripts from family retrieval', () => {
+  const source = readFileSync(
+    new URL('../supabase/migrations/20260811170000_durable_private_conversations.sql', import.meta.url),
+    'utf8',
+  )
+
+  assert.match(source, /create table if not exists public\.ai_conversations/i)
+  assert.match(source, /owner_member_id uuid not null references public\.family_members\(id\)/i)
+  assert.match(source, /visibility text not null default 'private' check \(visibility in \('private'\)\)/i)
+  assert.match(source, /expires_at timestamptz not null/i)
+  assert.match(source, /create table if not exists public\.ai_conversation_messages/i)
+  assert.match(source, /create table if not exists public\.ai_conversation_summaries/i)
+  assert.match(source, /retrieval_scope text not null default 'conversation_only'/i)
+  assert.match(source, /alter table public\.ai_conversations enable row level security/i)
+  assert.match(source, /to service_role/i)
+  assert.doesNotMatch(source, /family_data_evidence/i)
+  assert.match(source, /prune_expired_ai_conversations/i)
+  assert.match(source, /delete from public\.ai_conversations/i)
+  assert.match(source, /expires_at <= now\(\)/i)
+  assert.match(source, /prune-expired-ai-conversations/i)
+})
+
+test('PIN credentials and the history gateway use server-only verification with a bootstrap guard', () => {
+  const migration = readFileSync(
+    new URL('../supabase/migrations/20260811171000_ai_history_pin_credentials.sql', import.meta.url),
+    'utf8',
+  )
+  const gateway = readFileSync(
+    new URL('../supabase/functions/assistant-history/index.ts', import.meta.url),
+    'utf8',
+  )
+
+  assert.match(migration, /pin_salt text not null/i)
+  assert.match(migration, /pin_hash text not null/i)
+  assert.match(migration, /pin_iterations integer not null/i)
+  assert.match(migration, /credential_version integer not null default 1/i)
+  assert.match(migration, /to service_role/i)
+  assert.match(gateway, /CASA_HISTORY_BOOTSTRAP_TOKEN/)
+  assert.match(gateway, /AI_HISTORY_SESSION_SECRET/)
+  assert.match(gateway, /PBKDF2/)
+  assert.match(gateway, /credential_version/)
+  assert.match(gateway, /assertHistorySession/)
+  assert.match(gateway, /action === 'unlock_admin'/)
+  assert.match(gateway, /action === 'list_conversations'/)
+  assert.match(gateway, /action === 'append_messages'/)
+  assert.match(gateway, /action === 'forget_conversation'/)
+  assert.match(gateway, /session\.role !== 'family_member'/)
+  assert.match(gateway, /\.eq\('owner_member_id', session\.member_id\)/)
+  assert.doesNotMatch(gateway, /pin_hash.*body/i)
+})
+
+test('legacy browser sessions remain local until private history is explicitly unlocked', () => {
+  const source = readFileSync(
+    new URL('../src/hooks/useAIConversationHistory.ts', import.meta.url),
+    'utf8',
+  )
+
+  assert.match(source, /sessionStorage/)
+  assert.match(source, /if \(!access\) return/)
+  assert.match(source, /create_conversation/)
+  assert.match(source, /append_messages/)
+  assert.match(source, /list_conversations/)
+  assert.match(source, /get_conversation/)
+  assert.match(source, /export_conversation/)
+  assert.match(source, /archive_conversation/)
+  assert.match(source, /forget_conversation/)
+})
+
+test('family settings keeps PIN enrollment inside each existing member’s collapsible card', () => {
+  const source = readFileSync(
+    new URL('../src/pages/FamilySettingsPage.tsx', import.meta.url),
+    'utf8',
+  )
+
+  assert.match(source, /DisclosureSection/)
+  assert.match(source, /Private conversation history/)
+  assert.match(source, /set_member_pin/)
+  assert.match(source, /unlock_admin/)
+  assert.match(source, /setup_admin/)
+})

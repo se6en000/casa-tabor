@@ -2,6 +2,14 @@ const EVENT_TERMS = /\b(calendar|event|events|appointment|appointments|appt|apt|
 const GENERIC_ACTION = /\b(add|create|save|store|check|clear|delete|remove|update|change|move|send|book|schedule)\b/i
 const AMBIGUOUS_MUTATION = /\b(delete|remove|update|change|move)\b/i
 const ADDITIVE_ACTION = /\b(add|create|book|schedule)\b/i
+const EXPLICIT_CALENDAR_OPERATION = /\b(show|list|search|find|look up|check|add|create|book|schedule|move|reschedule|change|update|edit|delete|remove|cancel|complete|mark done)\b/i
+const EXPLICIT_CALENDAR_ANCHOR = /\b(calendar|event|events|appointment|appointments|appt|apt|reminder|reminders|schedule)\b/i
+
+export function shouldUseTalkPlanCalendarCommandLane(text, options = {}) {
+  const input = String(text ?? '').trim()
+  if (!EXPLICIT_CALENDAR_OPERATION.test(input)) return false
+  return options.hasActiveEvent === true || EXPLICIT_CALENDAR_ANCHOR.test(input)
+}
 
 export function classifyAssistantIntent(text, options = {}) {
   const input = String(text ?? '').trim()
@@ -10,6 +18,9 @@ export function classifyAssistantIntent(text, options = {}) {
   const activeGroceryItem = options.activeEntityType === 'grocery_item'
   const pendingEventAction = options.pendingEventAction === true
   const assistantMode = options.assistantMode === 'chef' ? 'chef' : 'general'
+  if (options.experienceMode === 'talk_plan' && assistantMode === 'general' && !focusedEvent) {
+    return { profile: 'talk_plan', forceEventSearch: false }
+  }
   const eventFollowUp = pendingEventAction || (activeEvent && (
     /\b(it|that|this|one|party|location|address|venue|calendar|time|when|where|who|attend|bring|prep|prepare|details?|drive|travel|traffic|route|eta|leave|get there|how long)\b/i.test(input) ||
     /^(?:yes|yeah|yep|correct|right|do it|update it|change it)\b/i.test(input)
