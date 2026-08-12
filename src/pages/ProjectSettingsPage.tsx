@@ -135,6 +135,15 @@ export default function ProjectSettingsPage() {
   const projects = query.data ?? []
   const visible = projects.filter((project) => project.status === filter)
 
+  function openEdit(project: ProjectRow) {
+    setEditing(project)
+    setDraftTitle(project.title)
+    setDraftSummary(project.summary)
+    setDraftTargetDate(project.target_date ?? '')
+    setError(null)
+    setStatus(null)
+  }
+
   function openCreate() {
     setDraftTitle('')
     setDraftSummary('')
