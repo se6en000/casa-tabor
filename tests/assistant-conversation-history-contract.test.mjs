@@ -199,6 +199,7 @@ test('the app profile, rather than the drawer, owns persistent private-history a
   assert.doesNotMatch(drawer, /Unlock private history/)
   assert.doesNotMatch(drawer, /historyPin/)
   assert.match(drawer, /className="z-toast"/)
+  assert.match(drawer, /flex flex-col gap-3 rounded-card border border-casa-border p-3/)
   assert.match(drawer, /conversation\.summary/)
   assert.match(drawer, /toLocaleString\(/)
   assert.match(drawer, /experience_mode === 'talk_plan'/)

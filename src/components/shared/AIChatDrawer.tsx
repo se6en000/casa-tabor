@@ -1448,8 +1448,8 @@ export default function AIChatDrawer({
                     {historyListLoading && <p className="text-body-sm text-casa-muted">Loading private conversations…</p>}
                     {!historyListLoading && historyConversations.length === 0 && <p className="text-body-sm text-casa-muted">No saved conversations yet.</p>}
                     {historyConversations.filter((conversation) => !conversation.archived_at).map((conversation) => (
-                      <div key={conversation.id} className="flex items-center gap-2 rounded-card border border-casa-border p-3">
-                        <div className="min-w-0 flex-1">
+                      <div key={conversation.id} className="flex flex-col gap-3 rounded-card border border-casa-border p-3">
+                        <div className="min-w-0">
                           <p className="truncate text-body-sm font-semibold text-casa-navy">{conversation.display_title ?? conversation.title}</p>
                           {conversation.summary && (
                             <p className="mt-1 line-clamp-2 text-caption text-casa-muted">{conversation.summary}</p>
@@ -1462,30 +1462,32 @@ export default function AIChatDrawer({
                             Started {new Date(conversation.created_at).toLocaleDateString()}
                           </p>
                         </div>
-                        <Button variant="ghost" size="sm" onClick={() => {
-                          void resumePrivateConversation(conversation.id)
-                            .then(() => setHistoryModalOpen(false))
-                            .catch((error: unknown) => setHistoryUnlockError(error instanceof Error ? error.message : 'Conversation could not be resumed.'))
-                        }}>Resume</Button>
-                        <Button variant="ghost" size="sm" onClick={() => {
-                          void privateHistory.exportConversation(conversation.id)
-                            .then((payload) => {
-                              const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
-                              const url = URL.createObjectURL(blob)
-                              const link = document.createElement('a')
-                              link.href = url
-                              link.download = `${conversation.title.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'casa-conversation'}.json`
-                              link.click()
-                              URL.revokeObjectURL(url)
-                            })
-                            .catch((error: unknown) => setHistoryUnlockError(error instanceof Error ? error.message : 'Conversation export failed.'))
-                        }}>Export</Button>
-                        <Button variant="ghost" size="sm" onClick={() => {
-                          void privateHistory.archiveConversation(conversation.id).then(loadHistoryConversations)
-                        }}>Archive</Button>
-                        <Button variant="ghost" size="sm" className="text-casa-error" onClick={() => {
-                          void privateHistory.forgetConversation(conversation.id).then(loadHistoryConversations)
-                        }}>Forget</Button>
+                        <div className="flex flex-wrap gap-2">
+                          <Button variant="ghost" size="sm" onClick={() => {
+                            void resumePrivateConversation(conversation.id)
+                              .then(() => setHistoryModalOpen(false))
+                              .catch((error: unknown) => setHistoryUnlockError(error instanceof Error ? error.message : 'Conversation could not be resumed.'))
+                          }}>Resume</Button>
+                          <Button variant="ghost" size="sm" onClick={() => {
+                            void privateHistory.exportConversation(conversation.id)
+                              .then((payload) => {
+                                const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+                                const url = URL.createObjectURL(blob)
+                                const link = document.createElement('a')
+                                link.href = url
+                                link.download = `${conversation.title.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'casa-conversation'}.json`
+                                link.click()
+                                URL.revokeObjectURL(url)
+                              })
+                              .catch((error: unknown) => setHistoryUnlockError(error instanceof Error ? error.message : 'Conversation export failed.'))
+                          }}>Export</Button>
+                          <Button variant="ghost" size="sm" onClick={() => {
+                            void privateHistory.archiveConversation(conversation.id).then(loadHistoryConversations)
+                          }}>Archive</Button>
+                          <Button variant="ghost" size="sm" className="text-casa-error" onClick={() => {
+                            void privateHistory.forgetConversation(conversation.id).then(loadHistoryConversations)
+                          }}>Forget</Button>
+                        </div>
                       </div>
                     ))}
                   </div>
