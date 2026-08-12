@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Check, FolderKanban, Pause, Pencil, Play, Archive } from 'lucide-react'
+import { Check, FolderKanban, Pause, Pencil, Play, Archive, Plus } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import {
@@ -61,9 +61,12 @@ export default function ProjectSettingsPage() {
   const qc = useQueryClient()
   const [filter, setFilter] = useState<ProjectStatus>('active')
   const [editing, setEditing] = useState<ProjectRow | null>(null)
+  const [creating, setCreating] = useState(false)
   const [draftTitle, setDraftTitle] = useState('')
   const [draftSummary, setDraftSummary] = useState('')
   const [draftTargetDate, setDraftTargetDate] = useState('')
+  const [draftGoalItem, setDraftGoalItem] = useState('')
+  const [draftNextActionItem, setDraftNextActionItem] = useState('')
   const [actingId, setActingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [status, setStatus] = useState<string | null>(null)
@@ -77,6 +80,16 @@ export default function ProjectSettingsPage() {
         action: 'list_projects',
       })
       return result.projects
+    },
+  })
+
+  const createMutation = useMutation({
+    mutationFn: async (payload: { title: string; summary?: string; target_date?: string | null; items?: { kind: string; content: string }[] }) => {
+      if (!profile?.token) throw new Error('Sign in to manage planning projects.')
+      await invokeAssistantHistory(profile.token, { action: 'create_project', ...payload })
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['ai-projects', profile?.memberId ?? 'none'] })
     },
   })
 
@@ -122,13 +135,37 @@ export default function ProjectSettingsPage() {
   const projects = query.data ?? []
   const visible = projects.filter((project) => project.status === filter)
 
-  function openEdit(project: ProjectRow) {
-    setEditing(project)
-    setDraftTitle(project.title)
-    setDraftSummary(project.summary)
-    setDraftTargetDate(project.target_date ?? '')
+  function openCreate() {
+    setDraftTitle('')
+    setDraftSummary('')
+    setDraftTargetDate('')
+    setDraftGoalItem('')
+    setDraftNextActionItem('')
     setError(null)
     setStatus(null)
+    setCreating(true)
+  }
+
+  async function saveCreate() {
+    if (!draftTitle.trim()) return
+    setError(null)
+    setStatus(null)
+    try {
+      const items: { kind: string; content: string }[] = []
+      if (draftGoalItem.trim()) items.push({ kind: 'goal', content: draftGoalItem.trim() })
+      if (draftNextActionItem.trim()) items.push({ kind: 'next_action', content: draftNextActionItem.trim() })
+
+      await createMutation.mutateAsync({
+        title: draftTitle.trim(),
+        summary: draftSummary.trim(),
+        target_date: draftTargetDate || null,
+        items,
+      })
+      setCreating(false)
+      setStatus('Planning project created.')
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : 'Could not create project.')
+    }
   }
 
   async function updateProject(project: ProjectRow, nextStatus?: ProjectStatus) {
@@ -206,13 +243,23 @@ export default function ProjectSettingsPage() {
         title="Planning projects"
         description="Goals, decisions, commitments, questions, and next actions captured from your private Talk & Plan conversations."
       />
-      <SegmentedControl
-        aria-label="Project status"
-        value={filter}
-        options={FILTERS}
-        onChange={(value) => setFilter(value as ProjectStatus)}
-        fullWidth
-      />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <SegmentedControl
+          aria-label="Project status"
+          value={filter}
+          options={FILTERS}
+          onChange={(value) => setFilter(value as ProjectStatus)}
+          fullWidth={false}
+        />
+        <Button variant="primary" size="sm" leadingIcon={<Plus size={15} />} onClick={openCreate}>
+          New project
+        </Button>
+      </div>
+      {!profile?.token ? (
+        <Alert tone="warning" title="Private profile required">
+          Sign in to your private profile in Talk & Plan to view and manage your planning projects.
+        </Alert>
+      ) : null}
       {error ? <Alert tone="danger" title="Project update failed">{error}</Alert> : null}
       {!error && status ? <Alert tone="success" title={status} /> : null}
       {!error && query.error ? (
@@ -319,6 +366,32 @@ export default function ProjectSettingsPage() {
             <Button variant="ghost" onClick={() => setEditing(null)} disabled={updateMutation.isPending}>Cancel</Button>
             <Button variant="primary" loading={updateMutation.isPending} disabled={!draftTitle.trim()} onClick={() => void saveEdit()}>
               Save project
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={creating} onClose={() => setCreating(false)} closeDisabled={createMutation.isPending} title="New planning project">
+        <div className="space-y-4 pt-4">
+          <Field label="Project title">
+            <Input placeholder="e.g. Owen's 5th Birthday, Backyard Landscaping" value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} />
+          </Field>
+          <Field label="Summary / Overview">
+            <Textarea rows={3} placeholder="Brief summary of goals and context..." value={draftSummary} onChange={(event) => setDraftSummary(event.target.value)} />
+          </Field>
+          <Field label="Target date (optional)">
+            <Input type="date" value={draftTargetDate} onChange={(event) => setDraftTargetDate(event.target.value)} />
+          </Field>
+          <Field label="Primary goal (optional)">
+            <Input placeholder="e.g. Host 15 kids at local park" value={draftGoalItem} onChange={(event) => setDraftGoalItem(event.target.value)} />
+          </Field>
+          <Field label="First next action (optional)">
+            <Input placeholder="e.g. Reserve pavilion and order cake" value={draftNextActionItem} onChange={(event) => setDraftNextActionItem(event.target.value)} />
+          </Field>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setCreating(false)} disabled={createMutation.isPending}>Cancel</Button>
+            <Button variant="primary" loading={createMutation.isPending} disabled={!draftTitle.trim()} onClick={() => void saveCreate()}>
+              Create project
             </Button>
           </div>
         </div>

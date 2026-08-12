@@ -203,7 +203,7 @@ async function ownedConversation(
 ) {
   const { data, error } = await sb
     .from('ai_conversations')
-    .select('id,experience_mode')
+    .select('id,title,experience_mode')
     .eq('id', conversationId)
     .eq('owner_member_id', memberId)
     .is('deleted_at', null)
@@ -278,8 +278,9 @@ async function persistProjectTurn(
   memberId: string,
   conversationId: string,
   message: StoredMessage,
+  conversationTitle?: string,
 ) {
-  const inferred = inferProjectTurn(message)
+  const inferred = inferProjectTurn(message, { conversationTitle })
   if (!inferred) return null
   const topicKey = inferred.title ? projectTopicKey(inferred.title) : null
   let existingQuery = sb
@@ -591,6 +592,67 @@ Deno.serve(async (request) => {
       return json(200, { projects: data ?? [] })
     }
 
+    if (action === 'create_project') {
+      const session = await assertHistorySession(request, sb)
+      const memberId = requireMemberSession(session)
+      const title = requiredText(body?.title, 'title').slice(0, 160)
+      const summary = typeof body?.summary === 'string' ? body.summary.trim().slice(0, 2000) : ''
+      const targetDate = typeof body?.target_date === 'string' && body.target_date ? body.target_date : null
+      const topicKey = projectTopicKey(title)
+
+      let conversationId = typeof body?.source_conversation_id === 'string' && body.source_conversation_id ? body.source_conversation_id : null
+      if (!conversationId) {
+        const expiresAt = new Date(Date.now())
+        expiresAt.setUTCDate(expiresAt.getUTCDate() + 90)
+        const { data: newConvo, error: convoError } = await sb
+          .from('ai_conversations')
+          .insert({
+            owner_member_id: memberId,
+            title,
+            experience_mode: 'talk_plan',
+            expires_at: expiresAt.toISOString(),
+          })
+          .select('id')
+          .single()
+        if (convoError) throw convoError
+        conversationId = newConvo.id
+      }
+
+      const { data: project, error } = await sb
+        .from('ai_projects')
+        .insert({
+          owner_member_id: memberId,
+          source_conversation_id: conversationId,
+          topic_key: topicKey,
+          title,
+          summary,
+          target_date: targetDate,
+        })
+        .select('id,title,summary,status,briefing_state,version,source_conversation_id,topic_key')
+        .single()
+      if (error) throw error
+      await addProjectRevision(sb, project, 'created', null)
+
+      const items = Array.isArray(body?.items) ? body.items : []
+      if (items.length > 0) {
+        const { error: itemsError } = await sb.from('ai_project_items').insert(
+          items.map((item: Record<string, unknown>) => ({
+            project_id: project.id,
+            source_conversation_id: conversationId,
+            source_message_client_id: 'manual-entry',
+            extractor_version: 'manual-v1',
+            kind: ['goal', 'decision', 'commitment', 'open_question', 'next_action'].includes(String(item.kind))
+              ? String(item.kind)
+              : 'next_action',
+            content: requiredText(item.content, 'item.content').slice(0, 1000),
+          }))
+        )
+        if (itemsError) throw itemsError
+      }
+
+      return json(201, { project })
+    }
+
     if (action === 'update_project') {
       const session = await assertHistorySession(request, sb)
       const memberId = requireMemberSession(session)
@@ -822,8 +884,8 @@ Deno.serve(async (request) => {
         if (memoryError) throw memoryError
       }
       for (const message of newMessages) {
-        if (conversation.experience_mode === 'talk_plan' && message.role === 'user') {
-          await persistProjectTurn(sb, memberId, conversationId, message)
+        if (conversation.experience_mode === 'talk_plan') {
+          await persistProjectTurn(sb, memberId, conversationId, message, conversation.title)
         }
       }
       if (inserts.length > 0) {

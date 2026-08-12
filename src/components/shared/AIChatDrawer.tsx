@@ -996,7 +996,7 @@ export default function AIChatDrawer({
                 />
                 <p className="mt-2 text-caption text-casa-muted">
                   {experienceMode === 'talk_plan'
-                    ? 'Discuss, compare, and plan. Casa will ask before changing anything.'
+                    ? 'Discuss, compare, and plan. Goals & decisions are captured directly to your Planning Projects.'
                     : 'Fast commands, household actions, and quick answers.'}
                 </p>
               </div>

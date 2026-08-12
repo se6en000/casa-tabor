@@ -14,10 +14,34 @@ test('project extraction creates a bounded project with typed planning items', (
     content: 'Help me plan the Casa Tabor frame. My goal is to finish it this month. I decided to use oak. Next step is to measure the display.',
   })
 
-  assert.equal(PROJECT_EXTRACTOR_VERSION, 'rules-v2')
+  assert.equal(PROJECT_EXTRACTOR_VERSION, 'rules-v3')
   assert.equal(result?.title, 'Casa Tabor frame')
   assert.deepEqual(result?.items.map((item) => item.kind), ['goal', 'decision', 'next_action'])
   assert.equal(result?.items[2].content, 'measure the display')
+})
+
+test('project extraction handles conversational natural phrasing and conversation title fallback', () => {
+  const result = inferProjectTurn({
+    id: 'message-1b',
+    role: 'user',
+    content: 'Let\'s plan Owen\'s 5th birthday party. I want to host 15 kids at the park. Next action is to reserve the pavilion.',
+  }, { conversationTitle: 'Owen\'s 5th Birthday' })
+
+  assert.equal(result?.title, 'Owen\'s 5th birthday party')
+  assert.equal(result?.items[0].kind, 'goal')
+  assert.equal(result?.items[1].kind, 'next_action')
+})
+
+test('project extraction falls back to conversation title when content is conversational', () => {
+  const result = inferProjectTurn({
+    id: 'message-1c',
+    role: 'user',
+    content: 'We decided on Mexican food for dinner.',
+  }, { conversationTitle: 'Family Dinner Planning' })
+
+  assert.equal(result?.title, 'Family Dinner Planning')
+  assert.equal(result?.items[0].kind, 'decision')
+  assert.equal(result?.items[0].content, 'Mexican food for dinner')
 })
 
 test('project extraction ignores ordinary preferences and assistant messages', () => {
