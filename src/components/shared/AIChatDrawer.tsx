@@ -1433,10 +1433,12 @@ export default function AIChatDrawer({
               open={historyModalOpen}
               onClose={() => setHistoryModalOpen(false)}
               title="Private conversation history"
-              size="sm"
+              size="lg"
               className="z-toast"
+              panelClassName="max-h-[88vh]"
+              contentClassName="overflow-y-auto max-h-[calc(88vh-4rem)]"
             >
-                <div className="space-y-4 pt-5">
+                <div className="space-y-4">
                   <p className="text-body-sm text-casa-muted">
                     {profile?.memberName}'s saved conversations are private, retained for 90 days, and never used as household memory or in Daily Brief.
                   </p>
