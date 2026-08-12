@@ -15,6 +15,8 @@ type PrivateHistoryAccess = {
 export type PrivateConversation = {
   id: string
   title: string
+  display_title?: string
+  summary?: string | null
   experience_mode: 'do' | 'talk_plan'
   created_at: string
   updated_at: string

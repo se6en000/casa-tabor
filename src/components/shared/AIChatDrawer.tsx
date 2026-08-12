@@ -5,6 +5,7 @@ import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIc
 import { format } from 'date-fns'
 import { cn } from '../../utils/cn'
 import { useAIAssistant, type AIMessage } from '../../hooks/useAIAssistant'
+import type { PrivateConversation } from '../../hooks/useAIConversationHistory'
 import {
   useSpeechInput,
   IS_SAFE_MODE,
@@ -92,7 +93,7 @@ export default function AIChatDrawer({
   const [nudgeDismissed, setNudgeDismissed] = useState(false)
   const [historyModalOpen, setHistoryModalOpen] = useState(false)
   const [historyUnlockError, setHistoryUnlockError] = useState<string | null>(null)
-  const [historyConversations, setHistoryConversations] = useState<Array<{ id: string; title: string; updated_at: string; archived_at: string | null }>>([])
+  const [historyConversations, setHistoryConversations] = useState<PrivateConversation[]>([])
   const [historyListLoading, setHistoryListLoading] = useState(false)
   const [conversationMode, setConversationMode] = useState<boolean>(() => {
     // Conversational by default: opening the assistant starts listening and
@@ -1433,6 +1434,7 @@ export default function AIChatDrawer({
               onClose={() => setHistoryModalOpen(false)}
               title="Private conversation history"
               size="sm"
+              className="z-toast"
             >
                 <div className="space-y-4 pt-5">
                   <p className="text-body-sm text-casa-muted">
@@ -1448,8 +1450,17 @@ export default function AIChatDrawer({
                     {historyConversations.filter((conversation) => !conversation.archived_at).map((conversation) => (
                       <div key={conversation.id} className="flex items-center gap-2 rounded-card border border-casa-border p-3">
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-body-sm font-semibold text-casa-navy">{conversation.title}</p>
-                          <p className="text-caption text-casa-muted">Updated {new Date(conversation.updated_at).toLocaleDateString()}</p>
+                          <p className="truncate text-body-sm font-semibold text-casa-navy">{conversation.display_title ?? conversation.title}</p>
+                          {conversation.summary && (
+                            <p className="mt-1 line-clamp-2 text-caption text-casa-muted">{conversation.summary}</p>
+                          )}
+                          <p className="mt-1 text-caption text-casa-muted">
+                            {conversation.experience_mode === 'talk_plan' ? 'Talk & Plan' : 'Do'}
+                            {' · '}
+                            Updated {new Date(conversation.updated_at).toLocaleString()}
+                            {' · '}
+                            Started {new Date(conversation.created_at).toLocaleDateString()}
+                          </p>
                         </div>
                         <Button variant="ghost" size="sm" onClick={() => {
                           void resumePrivateConversation(conversation.id)

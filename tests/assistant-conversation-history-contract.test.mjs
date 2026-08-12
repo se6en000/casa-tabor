@@ -191,13 +191,29 @@ test('the app profile, rather than the drawer, owns persistent private-history a
   assert.match(source, /create_conversation/)
   assert.match(source, /append_messages/)
   assert.match(source, /list_conversations/)
+  assert.match(source, /summary\?: string \| null/)
   assert.match(source, /get_conversation/)
   assert.match(source, /export_conversation/)
   assert.match(source, /archive_conversation/)
   assert.match(source, /forget_conversation/)
   assert.doesNotMatch(drawer, /Unlock private history/)
   assert.doesNotMatch(drawer, /historyPin/)
+  assert.match(drawer, /className="z-toast"/)
+  assert.match(drawer, /conversation\.summary/)
+  assert.match(drawer, /toLocaleString\(/)
+  assert.match(drawer, /experience_mode === 'talk_plan'/)
   assert.match(drawer, /Sign out/)
+})
+
+test('conversation listing includes the latest conversation summary for history cards', () => {
+  const gateway = readFileSync(
+    new URL('../supabase/functions/assistant-history/index.ts', import.meta.url),
+    'utf8',
+  )
+  assert.match(gateway, /action === 'list_conversations'/)
+  assert.match(gateway, /ai_conversation_summaries\(/)
+  assert.match(gateway, /foreignTable: 'ai_conversation_summaries'/)
+  assert.match(gateway, /summary: c\.ai_conversation_summaries\?\.\[0\]\?\.content/)
 })
 
 test('the launch gate keeps household-admin PIN enrollment reachable before a member profile exists', () => {

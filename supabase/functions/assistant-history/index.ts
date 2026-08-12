@@ -44,6 +44,36 @@ type StoredMessage = {
   tool_action: Record<string, unknown> | null
 }
 
+function compactText(value: unknown, max = 240) {
+  return String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, max)
+}
+
+function summarizeConversation(messages: StoredMessage[]) {
+  const userTurns = messages
+    .filter((message) => message.role === 'user')
+    .map((message) => compactText(message.content, 220))
+    .filter(Boolean)
+  if (userTurns.length === 0) return null
+  const first = userTurns[0]
+  const latest = userTurns[userTurns.length - 1]
+  if (!latest || first === latest) return first
+  return `${first} — Latest focus: ${latest}`.slice(0, 320)
+}
+
+function conversationDisplayTitle(title: string, summary: string | null) {
+  const normalized = compactText(title, 160)
+  if (
+    normalized &&
+    !/^new conversation$/i.test(normalized) &&
+    !/^respond via text\b/i.test(normalized)
+  ) {
+    return normalized
+  }
+  if (!summary) return normalized || 'Conversation'
+  const fallback = summary.split(/[.!?]/)[0]?.trim() ?? summary
+  return compactText(fallback, 120) || 'Conversation'
+}
+
 function json(status: number, body: Record<string, unknown>) {
   return new Response(JSON.stringify(body), {
     status,
@@ -482,16 +512,23 @@ Deno.serve(async (request) => {
 
     if (action === 'list_conversations') {
       const session = await assertHistorySession(request, sb)
-      const memberId = requireMemberSession(session)
+      requireMemberSession(session)
       const { data, error } = await sb
         .from('ai_conversations')
-        .select('id,title,experience_mode,created_at,updated_at,archived_at,expires_at')
+        .select('id,title,experience_mode,created_at,updated_at,archived_at,expires_at,ai_conversation_summaries(content,created_at)')
         .eq('owner_member_id', session.member_id)
         .is('deleted_at', null)
+        .order('created_at', { foreignTable: 'ai_conversation_summaries', ascending: false })
+        .limit(1, { foreignTable: 'ai_conversation_summaries' })
         .order('updated_at', { ascending: false })
         .limit(100)
       if (error) throw error
-      return json(200, { conversations: data ?? [] })
+      const conversations = (data ?? []).map((c) => ({
+        ...c,
+        summary: c.ai_conversation_summaries?.[0]?.content ?? null,
+        display_title: conversationDisplayTitle(c.title, c.ai_conversation_summaries?.[0]?.content ?? null),
+      }))
+      return json(200, { conversations })
     }
 
     if (action === 'list_memories') {
@@ -764,6 +801,8 @@ Deno.serve(async (request) => {
           conversation_state: message.conversation_state,
           tool_action: message.tool_action,
         }))
+      const summary = summarizeConversation(messages)
+      const throughMessageId = messages[messages.length - 1]?.id ?? null
       const memories = inferPersonalMemoryCandidates(newMessages)
       if (memories.length > 0) {
         const { error: memoryError } = await sb.from('ai_memories').upsert(memories.map((memory) => ({
@@ -790,6 +829,30 @@ Deno.serve(async (request) => {
       if (inserts.length > 0) {
         const { error } = await sb.from('ai_conversation_messages').insert(inserts)
         if (error) throw error
+      }
+      if (summary && throughMessageId) {
+        const { data: latestSummary, error: latestSummaryError } = await sb
+          .from('ai_conversation_summaries')
+          .select('through_message_id,content')
+          .eq('conversation_id', conversationId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        if (latestSummaryError) throw latestSummaryError
+        const summaryChanged = !latestSummary ||
+          latestSummary.through_message_id !== throughMessageId ||
+          latestSummary.content !== summary
+        if (summaryChanged) {
+          const { error: summaryInsertError } = await sb
+            .from('ai_conversation_summaries')
+            .insert({
+              conversation_id: conversationId,
+              through_message_id: throughMessageId,
+              content: summary,
+              retrieval_scope: 'conversation_only',
+            })
+          if (summaryInsertError) throw summaryInsertError
+        }
       }
       const { error: touchError } = await sb
         .from('ai_conversations')
