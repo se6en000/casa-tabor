@@ -276,7 +276,12 @@ export default function ProjectSettingsPage() {
       {!query.isLoading && visible.length === 0 ? (
         <EmptyState
           title={`No ${filter} projects`}
-          description='Start a private Talk & Plan conversation with “Help me plan…” and Casa will organize the project here.'
+          description='Start a private Talk & Plan conversation with “Help me plan…” or create a project manually.'
+          action={
+            <Button variant="primary" size="sm" leadingIcon={<Plus size={15} />} onClick={openCreate}>
+              New project
+            </Button>
+          }
         />
       ) : null}
       <div className="space-y-3">
