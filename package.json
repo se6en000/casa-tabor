@@ -11,6 +11,7 @@
     "test:visual:update": "playwright test --update-snapshots=all",
     "lint": "eslint .",
     "preview": "vite preview",
+    "deploy": "bash scripts/deploy.sh",
     "tokens:generate": "node scripts/generate-design-tokens.mjs",
     "tokens:check": "node scripts/generate-design-tokens.mjs --check",
     "qa:ai-calendar-conversations": "node scripts/ai-calendar-conversation-stress.mjs --count=100",
