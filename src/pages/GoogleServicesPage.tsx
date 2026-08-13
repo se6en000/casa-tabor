@@ -6,20 +6,21 @@
  * to enable. Shows live green status + last activity timestamp per service.
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   Calendar, Mail, Check,
   RefreshCw, Unlink,
 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Chip } from '../components/ui'
+import { Alert, Button, Chip, DisclosureSection } from '../components/ui'
 import { SettingsPageHeader } from '../components/settings'
 import { formatDistanceToNow, format } from 'date-fns'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
 import type { FamilyMember } from '../types'
 import { FALLBACK_PROFILE_COLOR } from '../design-system/memberColors'
+import { splitGoogleServiceMembers } from '../utils/googleServicesGrouping'
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -88,6 +89,10 @@ export default function GoogleServicesPage() {
   const qc = useQueryClient()
 
   const { data: members, isLoading, refetch } = useGoogleServices()
+  const { activeMembers, inactiveMembers } = useMemo(
+    () => splitGoogleServiceMembers(members ?? []),
+    [members],
+  )
 
   const connectedParam = params.get('connected')
   const gmailParam = params.get('gmail')
@@ -209,29 +214,71 @@ export default function GoogleServicesPage() {
         )}
 
         {/* Member cards */}
-        <div className="space-y-4">
-          {isLoading ? (
-            <p className="text-body-sm text-casa-muted">Loading…</p>
-          ) : (
-            members?.map(member => (
-              <MemberCard
-                key={member.id}
-                member={member}
-                onConnect={(includeGmail) => connectGoogle.mutate({ memberId: member.id, includeGmail })}
-                onToggleGmail={(enabled) => toggleGmail.mutate({ memberId: member.id, enabled })}
-                onSyncCalendar={() => syncCalendar.mutate(member.id)}
-                onScanGmail={() => runGmailScan(member.id)}
-                onDisconnect={() => disconnect.mutate(member.id)}
-                isBusy={
-                  (connectGoogle.isPending && (connectGoogle.variables as { memberId: string })?.memberId === member.id) ||
-                  (disconnect.isPending && disconnect.variables === member.id) ||
-                  (syncCalendar.isPending && syncCalendar.variables === member.id) ||
-                  scanning
-                }
-              />
-            ))
-          )}
-        </div>
+        {isLoading ? (
+          <p className="text-body-sm text-casa-muted">Loading…</p>
+        ) : (
+          <div className="mt-6 space-y-4">
+            <DisclosureSection
+              title="Active accounts"
+              summary={`${activeMembers.length} connected account${activeMembers.length === 1 ? '' : 's'}`}
+              defaultOpen
+              className="overflow-hidden rounded-card border border-casa-border bg-casa-surface shadow-card"
+            >
+              <div className="space-y-3 pt-1">
+                {activeMembers.length > 0 ? (
+                  activeMembers.map(member => (
+                    <MemberCard
+                      key={member.id}
+                      member={member}
+                      onConnect={(includeGmail) => connectGoogle.mutate({ memberId: member.id, includeGmail })}
+                      onToggleGmail={(enabled) => toggleGmail.mutate({ memberId: member.id, enabled })}
+                      onSyncCalendar={() => syncCalendar.mutate(member.id)}
+                      onScanGmail={() => runGmailScan(member.id)}
+                      onDisconnect={() => disconnect.mutate(member.id)}
+                      isBusy={
+                        (connectGoogle.isPending && (connectGoogle.variables as { memberId: string })?.memberId === member.id) ||
+                        (disconnect.isPending && disconnect.variables === member.id) ||
+                        (syncCalendar.isPending && syncCalendar.variables === member.id) ||
+                        scanning
+                      }
+                    />
+                  ))
+                ) : (
+                  <p className="px-6 pb-2 text-body-sm text-casa-muted">No active accounts yet.</p>
+                )}
+              </div>
+            </DisclosureSection>
+
+            {inactiveMembers.length > 0 && (
+              <DisclosureSection
+                title="Inactive accounts"
+                summary={`${inactiveMembers.length} disconnected or need reconnect`}
+                defaultOpen={false}
+                className="overflow-hidden rounded-card border border-casa-border bg-casa-surface shadow-card"
+              >
+                <div className="space-y-3 pt-1">
+                  {inactiveMembers.map(member => (
+                    <MemberCard
+                      key={member.id}
+                      member={member}
+                      onConnect={(includeGmail) => connectGoogle.mutate({ memberId: member.id, includeGmail })}
+                      onToggleGmail={(enabled) => toggleGmail.mutate({ memberId: member.id, enabled })}
+                      onSyncCalendar={() => syncCalendar.mutate(member.id)}
+                      onScanGmail={() => runGmailScan(member.id)}
+                      onDisconnect={() => disconnect.mutate(member.id)}
+                      isBusy={
+                        (connectGoogle.isPending && (connectGoogle.variables as { memberId: string })?.memberId === member.id) ||
+                        (disconnect.isPending && disconnect.variables === member.id) ||
+                        (syncCalendar.isPending && syncCalendar.variables === member.id) ||
+                        scanning
+                      }
+                    />
+                  ))}
+                </div>
+              </DisclosureSection>
+            )}
+          </div>
+        )}
     </>
   )
 }
