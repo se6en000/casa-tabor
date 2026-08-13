@@ -1095,7 +1095,9 @@ export default function AIChatDrawer({
                         : undefined
                       const requestArgs = tool === 'update_event' && matchedEvent
                         ? { ...args, expected_updated_at: matchedEvent.updated_at }
-                        : args
+                        : tool === 'create_event' && args.calendar_preflight
+                          ? { ...args, allow_calendar_conflicts: true }
+                          : args
                       const { data, error } = await supabase.functions.invoke('execute-ai-action', {
                         body: {
                           tool,
@@ -1110,6 +1112,7 @@ export default function AIChatDrawer({
                           client_trace_present: Boolean(actionTrace),
                           client_build: typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'unknown',
                           client_trace_source: actionTrace?.source ?? 'ai-drawer-confirmation',
+                          confirmed_by_user: true,
                         },
                       })
                       if (error) throw error

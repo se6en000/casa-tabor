@@ -145,7 +145,7 @@ test('Talk and Plan never auto-executes low-risk writes', () => {
   )
   assert.match(
     assistantSource,
-    /if \(isLowRiskCreate && experienceMode !== 'talk_plan' && !dryRun\)/,
+    /isLowRiskCreate[\s\S]{0,180}experienceMode !== 'talk_plan'[\s\S]{0,180}!dryRun[\s\S]{0,180}!temporalEvidence\.requiresExactDateConfirmation/,
   )
   assert.match(
     assistantSource,

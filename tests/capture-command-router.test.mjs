@@ -23,15 +23,22 @@ test('resolveCaptureCommand parses grocery adds into add_grocery_items tool args
   })
 })
 
-test('resolveCaptureCommand turns explicit reminder dayparts into reminder create_event args', () => {
+test('resolveCaptureCommand resolves relative reminder dayparts before execution', () => {
   const result = resolveCaptureCommand('Remind me to pick up my meds this morning at Walgreens', OPTIONS)
+  assert.deepEqual(result, {
+    status: 'needs_clarification',
+    clarification_question: 'I resolved this morning as August 8, 2026. Please repeat the reminder with that exact date to confirm.',
+  })
+})
+
+test('resolveCaptureCommand executes an explicitly dated structured reminder', () => {
+  const result = resolveCaptureCommand('Reminder to pick up my meds. Due: 2026-08-09 10:15 AM ET', OPTIONS)
   assert.equal(result.status, 'execute')
   assert.equal(result.tool, 'create_event')
   assert.equal(result.args.event_type, 'reminder')
   assert.equal(result.args.title, 'Pick up my meds')
-  assert.equal(result.args.location, 'Walgreens')
-  assert.equal(result.args.start, '2026-08-08T10:15:00-04:00')
-  assert.equal(result.args.end, '2026-08-08T10:30:00-04:00')
+  assert.equal(result.args.start, '2026-08-09T10:15:00-04:00')
+  assert.equal(result.args.end, '2026-08-09T10:30:00-04:00')
 })
 
 test('resolveCaptureCommand asks one clarification when reminder timing is missing', () => {
@@ -42,8 +49,16 @@ test('resolveCaptureCommand asks one clarification when reminder timing is missi
   })
 })
 
-test('resolveCaptureCommand parses simple event creates into create_event args', () => {
-  const result = resolveCaptureCommand('Create dinner with Kelly tomorrow at 7pm at Avocado Grill', OPTIONS)
+test('resolveCaptureCommand resolves relative reminder dates exactly before execution', () => {
+  const result = resolveCaptureCommand('Remind me to call the hotel Saturday at 3pm', OPTIONS)
+  assert.deepEqual(result, {
+    status: 'needs_clarification',
+    clarification_question: 'I resolved Saturday as August 15, 2026. Please repeat the reminder with that exact date to confirm.',
+  })
+})
+
+test('resolveCaptureCommand parses explicitly dated event creates into create_event args', () => {
+  const result = resolveCaptureCommand('Create dinner with Kelly on 2026-08-09 at 7pm at Avocado Grill', OPTIONS)
   assert.equal(result.status, 'execute')
   assert.equal(result.tool, 'create_event')
   assert.equal(result.args.event_type, 'event')
@@ -59,6 +74,22 @@ test('resolveCaptureCommand asks for time when event create is missing one criti
   assert.deepEqual(result, {
     status: 'needs_clarification',
     clarification_question: 'What time should I create that event for?',
+  })
+})
+
+test('resolveCaptureCommand asks for a date instead of guessing today', () => {
+  const result = resolveCaptureCommand('Create dinner at 7pm', OPTIONS)
+  assert.deepEqual(result, {
+    status: 'needs_clarification',
+    clarification_question: 'What date should I create that event for?',
+  })
+})
+
+test('resolveCaptureCommand resolves relative dates exactly and requires confirmation', () => {
+  const result = resolveCaptureCommand('Create dinner with Kelly Saturday at 7pm', OPTIONS)
+  assert.deepEqual(result, {
+    status: 'needs_clarification',
+    clarification_question: 'I resolved Saturday as August 15, 2026. Please repeat the request with that exact date to confirm.',
   })
 })
 

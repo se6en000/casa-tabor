@@ -214,7 +214,12 @@ Deno.serve(async (request) => {
     }
 
     const { data, error } = await sb.functions.invoke('execute-ai-action', {
-      body: { tool: route.tool, args: route.args },
+      body: {
+        tool: route.tool,
+        args: route.args,
+        correlation_id: clientRequestId,
+        client_trace_source: 'capture-command',
+      },
     })
     if (error) throw new Error(error.message)
     const payload = data && typeof data === 'object' ? data as Record<string, unknown> : {}

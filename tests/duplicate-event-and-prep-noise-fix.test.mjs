@@ -24,6 +24,7 @@ import test from 'node:test'
 // signal.
 
 const executeAiAction = readFileSync(new URL('../supabase/functions/execute-ai-action/index.ts', import.meta.url), 'utf8')
+const createPreflight = readFileSync(new URL('../supabase/functions/_shared/assistant-calendar-create-preflight.mjs', import.meta.url), 'utf8')
 const applyPolicy = readFileSync(new URL('../supabase/functions/apply-notification-policy/index.ts', import.meta.url), 'utf8')
 const aiChatDrawer = readFileSync(new URL('../src/components/shared/AIChatDrawer.tsx', import.meta.url), 'utf8')
 
@@ -40,7 +41,8 @@ const migration = findMigration('fix_duplicate_events_and_prep_escalation_noise'
 test('create_event checks for an existing non-deleted event with the same title + start_time before inserting', () => {
   assert.match(executeAiAction, /is\(\s*['"]deleted_at['"],\s*null\s*\)/, 'duplicate lookup must exclude soft-deleted events')
   assert.match(executeAiAction, /duplicate:\s*true/, 'expected a duplicate response flag when an existing event matches')
-  assert.match(executeAiAction, /toLowerCase\(\)\s*===\s*normalizedTitle\.toLowerCase\(\)/, 'title comparison must be case-insensitive')
+  assert.match(executeAiAction, /assessCalendarCreatePreflight/, 'create handler must use the shared deterministic preflight')
+  assert.match(createPreflight, /normalizeTitle\(event\?\.title\)\s*===\s*normalizeTitle\(args\?\.title\)/, 'title comparison must be normalized and case-insensitive')
 })
 
 test('AIChatDrawer surfaces the duplicate message to the user instead of silently succeeding', () => {

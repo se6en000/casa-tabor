@@ -80,6 +80,29 @@ test('project extraction starts a distinct project when the user names a new goa
   assert.equal(result?.items[0].content, 'Book anniversary trip this week')
 })
 
+test('project extraction preserves explicit source dates but leaves undated ideas unassigned', () => {
+  const dated = inferProjectTurn({
+    id: 'message-6',
+    role: 'user',
+    content: 'Help me plan a trip to Miami from August 28 through August 30, 2026.',
+  }, {
+    now: new Date('2026-08-13T16:00:00.000Z'),
+    utcOffset: '-04:00',
+  })
+  const undated = inferProjectTurn({
+    id: 'message-7',
+    role: 'user',
+    content: 'I want to add a ghost tour to my anniversary weekend.',
+  }, {
+    now: new Date('2026-08-13T16:00:00.000Z'),
+    utcOffset: '-04:00',
+  })
+
+  assert.equal(dated?.temporalEvidence?.rangeStart, '2026-08-28')
+  assert.equal(dated?.temporalEvidence?.rangeEnd, '2026-08-30')
+  assert.equal(undated?.temporalEvidence, null)
+})
+
 test('project schema is private, versioned, provenance-first, and lifecycle aware', () => {
   const migration = readFileSync(new URL('../supabase/migrations/20260811220000_talk_plan_projects.sql', import.meta.url), 'utf8')
   assert.match(migration, /create table if not exists public\.ai_projects/i)
@@ -98,6 +121,19 @@ test('project schema permits multiple topic projects in one conversation', () =>
   assert.match(migration, /drop constraint if exists ai_projects_owner_member_id_source_conversation_id_key/i)
   assert.match(migration, /alter column topic_key set not null/i)
   assert.match(migration, /owner_member_id, source_conversation_id, topic_key/i)
+})
+
+test('history persistence stores temporal provenance without assigning undated project items', () => {
+  const migration = readFileSync(new URL('../supabase/migrations/20260813130000_ai_temporal_provenance.sql', import.meta.url), 'utf8')
+  const source = readFileSync(new URL('../supabase/functions/assistant-history/index.ts', import.meta.url), 'utf8')
+
+  assert.match(migration, /ai_memories[\s\S]*temporal_evidence jsonb/i)
+  assert.match(migration, /ai_projects[\s\S]*temporal_evidence jsonb/i)
+  assert.match(migration, /ai_project_items[\s\S]*temporal_evidence jsonb/i)
+  assert.match(source, /temporal_evidence: memory\.temporalEvidence/)
+  assert.match(source, /temporal_evidence: inferred\.temporalEvidence/)
+  assert.match(source, /target_date: inferred\.temporalEvidence\?\.rangeStart/)
+  assert.match(source, /due_at: null/)
 })
 
 test('history gateway derives project ownership from the signed profile', () => {

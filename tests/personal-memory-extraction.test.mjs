@@ -27,3 +27,21 @@ test('memory extraction ignores assistant messages and unstable short statements
     [],
   )
 })
+
+test('memory extraction records only user-authored explicit temporal evidence', () => {
+  const [memory] = inferPersonalMemoryCandidates([
+    { id: 'message-3', role: 'user', content: 'I want to plan my Miami anniversary from August 28 through August 30, 2026.' },
+  ], {
+    now: new Date('2026-08-13T16:00:00.000Z'),
+    utcOffset: '-04:00',
+  })
+
+  assert.deepEqual(memory.temporalEvidence, {
+    sourceMessageId: 'message-3',
+    sourceText: 'I want to plan my Miami anniversary from August 28 through August 30, 2026.',
+    rangeStart: '2026-08-28',
+    rangeEnd: '2026-08-30',
+    resolutionKind: 'explicit_range',
+    requiresExactDateConfirmation: true,
+  })
+})

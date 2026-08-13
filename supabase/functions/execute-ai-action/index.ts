@@ -20,6 +20,8 @@ import {
   isCanonicalRecurringEvent,
 } from '../_shared/assistant-recurring-mutation.mjs'
 import { normalizeLegacyCalendarActionArgs } from '../_shared/assistant-agent-write.mjs'
+import { validateCalendarTemporalProvenance } from '../_shared/assistant-temporal-evidence.mjs'
+import { assessCalendarCreatePreflight } from '../_shared/assistant-calendar-create-preflight.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -85,6 +87,65 @@ async function updateAuditResult(
     .eq('id', historyId)
 
   if (error) throw new Error(error.message)
+}
+
+async function auditEventCreate(
+  sb: ReturnType<typeof createClient>,
+  input: {
+    actionId: string
+    eventId?: string | null
+    sessionId?: string | null
+    args: Record<string, unknown>
+    status: 'applied' | 'failed'
+    result: Record<string, unknown>
+    errorMessage?: string | null
+    confirmedByUser?: boolean
+  },
+) {
+  const { error } = await sb.from('ai_event_edit_history').upsert({
+    action_id: input.actionId,
+    event_id: input.eventId ?? null,
+    tool: 'create_event',
+    ai_session_id: input.sessionId ?? null,
+    confirmed_by_user: input.confirmedByUser === true,
+    request_payload: input.args,
+    before_state: null,
+    after_state: input.eventId ? { event_id: input.eventId } : null,
+    status: input.status,
+    sync_status: input.status === 'applied' ? 'succeeded' : 'not_needed',
+    result_payload: input.result,
+    error_message: input.errorMessage ?? null,
+    applied_at: input.status === 'applied' ? new Date().toISOString() : null,
+  }, { onConflict: 'action_id' })
+  if (error) throw new Error(error.message)
+}
+
+async function promoteCalendarDraft(
+  sb: ReturnType<typeof createClient>,
+  draftProjectItemId: string | null,
+  eventId: string,
+  dueAt: string,
+): Promise<boolean> {
+  if (!draftProjectItemId) return false
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(draftProjectItemId)) {
+    throw new Error('draft_project_item_id must be a valid UUID')
+  }
+  const { data, error } = await sb
+    .from('ai_project_items')
+    .update({
+      status: 'done',
+      due_at: dueAt,
+      calendar_event_id: eventId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', draftProjectItemId)
+    .eq('kind', 'next_action')
+    .eq('status', 'open')
+    .is('due_at', null)
+    .select('id')
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  return Boolean(data?.id)
 }
 
 async function queueGoogleSyncRetry(
@@ -320,6 +381,7 @@ Deno.serve(async (req) => {
     client_trace_present: clientTracePresentRaw,
     client_build: clientBuildRaw,
     client_trace_source: clientTraceSourceRaw,
+    confirmed_by_user: confirmedByUserRaw,
   } = await req.json()
   const args = normalizeLegacyCalendarActionArgs(tool, rawArgs) as Record<string, unknown>
   const cid = correlationId ?? `${sessionId ?? 'no-session'}:${actionId ?? 'no-action'}`
@@ -327,6 +389,8 @@ Deno.serve(async (req) => {
   const turnId = normalizeOptionalText(turnIdRaw, 160)
   const lane = normalizeOptionalText(laneRaw, 80) ?? 'tool_action'
   const deviceId = normalizeOptionalText(deviceIdRaw, 160)
+  const clientTraceSource = normalizeOptionalText(clientTraceSourceRaw, 80)
+  const confirmedByUser = confirmedByUserRaw === true
   const appendActionTrace = (event: string, detail: string, payload?: Record<string, unknown>) => {
     sb.from('ai_drawer_debug_events').insert({
       event,
@@ -341,7 +405,7 @@ Deno.serve(async (req) => {
         tool: tool ?? null,
         client_trace_present: clientTracePresentRaw === true,
         client_build: normalizeOptionalText(clientBuildRaw, 120),
-        client_trace_source: normalizeOptionalText(clientTraceSourceRaw, 80),
+        client_trace_source: clientTraceSource,
         ...payload,
       },
       device_id: deviceId,
@@ -551,36 +615,154 @@ Deno.serve(async (req) => {
       if (!normalizedTitle) throw new Error('title is required for create_event')
       if (!normalizedStart) throw new Error('start is required for create_event')
       if (!normalizedEnd) throw new Error('end is required for create_event')
+      const createActionId = normalizeOptionalText(actionId, 200) ?? `create:${cid}`
+      const existingResult = await getExistingActionResult(sb, createActionId)
+      if (existingResult) {
+        return new Response(JSON.stringify(existingResult), {
+          headers: { ...CORS, 'content-type': 'application/json' },
+        })
+      }
 
-      // ── Duplicate guard ──
-      // AI chat/voice has no memory of what it already created, so the same
-      // request re-run (retry, re-heard voice command, user re-asking) would
-      // otherwise silently create a second near-identical event/reminder that
-      // then spawns its own prep item and notification stream forever. Treat
-      // "same normalized title + same exact start time, not deleted" as the
-      // same real-world thing and hand back the existing event instead.
-      if (normalizedStart) {
-        const { data: possibleDupes } = await sb
-          .from('events')
-          .select('id, title, start_time, event_type, updated_at')
-          .is('deleted_at', null)
-          .eq('start_time', normalizedStart)
-        const existing = (possibleDupes ?? []).find(
-          (e: { title: string }) => e.title.trim().toLowerCase() === normalizedTitle.toLowerCase()
+      const requiresTemporalProvenance = clientTraceSource === 'capture-command' ||
+        clientTraceSource === 'ai-assistant-auto' ||
+        clientTraceSource === 'assistant_drawer' ||
+        clientTraceSource === 'ai-drawer-confirmation'
+      if (requiresTemporalProvenance) {
+        const validation = validateCalendarTemporalProvenance(
+          args.temporal_provenance,
+          { start: normalizedStart, end: normalizedEnd },
+          { utcOffset: normalizeOptionalText((args.temporal_provenance as Record<string, unknown> | undefined)?.utcOffset, 10) },
         )
-        if (existing) {
-          return new Response(JSON.stringify({
-            success: true,
-            duplicate: true,
-            event_id: existing.id,
-            event_updated_at: existing.updated_at,
-            sync_status: 'synced',
+        if (!validation.valid) {
+          const result = {
+            success: false,
+            error: `Calendar date evidence is invalid: ${validation.reason}`,
+            code: validation.reason,
             correlation_id: cid,
-            message: `"${normalizedTitle}" already exists on your calendar at this time — I didn't create a second one.`,
-          }), {
+          }
+          await auditEventCreate(sb, {
+            actionId: createActionId,
+            sessionId,
+            args,
+            status: 'failed',
+            result,
+            errorMessage: result.error,
+            confirmedByUser,
+          })
+          appendActionTrace('date_mismatch_blocked', normalizedTitle, {
+            reason: validation.reason,
+          })
+          return new Response(JSON.stringify(result), {
+            status: 409,
             headers: { ...CORS, 'content-type': 'application/json' },
           })
         }
+        const provenance = args.temporal_provenance as { requiresExactDateConfirmation?: boolean }
+        if (provenance.requiresExactDateConfirmation === true && !confirmedByUser) {
+          const result = {
+            success: false,
+            error: 'This resolved date must be shown exactly and confirmed before calendar creation.',
+            code: 'exact_date_confirmation_required',
+            correlation_id: cid,
+          }
+          await auditEventCreate(sb, {
+            actionId: createActionId,
+            sessionId,
+            args,
+            status: 'failed',
+            result,
+            errorMessage: result.error,
+            confirmedByUser,
+          })
+          return new Response(JSON.stringify(result), {
+            status: 409,
+            headers: { ...CORS, 'content-type': 'application/json' },
+          })
+        }
+      }
+
+      const proposedStartMs = Date.parse(normalizedStart)
+      const proposedEndMs = Date.parse(normalizedEnd)
+      if (!Number.isFinite(proposedStartMs) || !Number.isFinite(proposedEndMs) || proposedEndMs <= proposedStartMs) {
+        throw new Error('create_event requires a valid end after start')
+      }
+      const { data: nearbyEvents, error: nearbyEventsError } = await sb
+        .from('events')
+        .select('id, title, start_time, end_time, event_type, event_members(family_members(name))')
+        .is('deleted_at', null)
+        .eq('status', 'confirmed')
+        .lt('start_time', new Date(proposedEndMs + 2 * 60 * 60 * 1000).toISOString())
+        .gt('end_time', new Date(proposedStartMs - 2 * 60 * 60 * 1000).toISOString())
+      if (nearbyEventsError) throw new Error(nearbyEventsError.message)
+      const calendarPreflight = assessCalendarCreatePreflight(nearbyEvents ?? [], {
+        ...args,
+        title: normalizedTitle,
+        start: normalizedStart,
+        end: normalizedEnd,
+        event_type: normalizedEventType,
+      })
+      if (calendarPreflight.status === 'exact_duplicate') {
+        const draftPromoted = await promoteCalendarDraft(
+          sb,
+          normalizeOptionalText(args.draft_project_item_id, 80),
+          calendarPreflight.exactDuplicate.id,
+          normalizedStart,
+        )
+        const response = {
+            success: true,
+            duplicate: true,
+            event_id: calendarPreflight.exactDuplicate.id,
+            draft_promoted: draftPromoted,
+            sync_status: 'synced',
+            correlation_id: cid,
+            message: `"${normalizedTitle}" already exists on your calendar at this time — I didn't create a second one.`,
+          }
+        await auditEventCreate(sb, {
+          actionId: createActionId,
+          eventId: calendarPreflight.exactDuplicate.id,
+          sessionId,
+          args,
+          status: 'applied',
+          result: response,
+          confirmedByUser,
+        })
+        appendActionTrace('exact_duplicate_suppressed', normalizedTitle, {
+          existing_event: calendarPreflight.exactDuplicate,
+        })
+        if (draftPromoted) {
+          appendActionTrace('draft_promoted', normalizedTitle, {
+            draft_project_item_id: args.draft_project_item_id,
+            event_id: calendarPreflight.exactDuplicate.id,
+          })
+        }
+        return new Response(JSON.stringify(response), {
+            headers: { ...CORS, 'content-type': 'application/json' },
+        })
+      }
+      if (calendarPreflight.status === 'requires_confirmation' && args.allow_calendar_conflicts !== true) {
+        const result = {
+          success: false,
+          error: 'A probable duplicate or calendar conflict requires explicit keep-both confirmation.',
+          code: 'calendar_conflict_confirmation_required',
+          calendar_preflight: calendarPreflight,
+          correlation_id: cid,
+        }
+        await auditEventCreate(sb, {
+          actionId: createActionId,
+          sessionId,
+          args,
+          status: 'failed',
+          result,
+          errorMessage: result.error,
+          confirmedByUser,
+        })
+        appendActionTrace('probable_duplicate_blocked', normalizedTitle, {
+          calendar_preflight: calendarPreflight,
+        })
+        return new Response(JSON.stringify(result), {
+          status: 409,
+          headers: { ...CORS, 'content-type': 'application/json' },
+        })
       }
 
       // Prefer an existing saved_places match over the raw typed/spoken
@@ -633,9 +815,10 @@ Deno.serve(async (req) => {
           .map((name: string) => resolveFamilyMemberByName(family, name)?.id)
           .filter(Boolean)
         if (memberIds.length > 0) {
-          await sb.from('event_members').insert(
+          const { error: memberInsertError } = await sb.from('event_members').insert(
             memberIds.map((id, i) => ({ event_id: event.id, family_member_id: id, role: i === 0 ? 'primary' : 'attendee' }))
           )
+          if (memberInsertError) throw new Error(memberInsertError.message)
         }
       }
 
@@ -663,13 +846,38 @@ Deno.serve(async (req) => {
         sb.functions.invoke('enrich-event', { body: { event_id: event.id, target_fields: ENRICHMENT_FIELDS } }).catch(() => {})
       }
 
-      return new Response(JSON.stringify({
+      const draftPromoted = await promoteCalendarDraft(
+        sb,
+        normalizeOptionalText(args.draft_project_item_id, 80),
+        event.id,
+        normalizedStart,
+      )
+      if (draftPromoted) {
+        appendActionTrace('draft_promoted', normalizedTitle, {
+          draft_project_item_id: args.draft_project_item_id,
+          event_id: event.id,
+        })
+      }
+
+      const response = {
         success: true,
         event_id: event.id,
         event_updated_at: event.updated_at,
+        draft_promoted: draftPromoted,
         sync_status: 'synced',
         correlation_id: cid,
-      }), {
+      }
+      await auditEventCreate(sb, {
+        actionId: createActionId,
+        eventId: event.id,
+        sessionId,
+        args,
+        status: 'applied',
+        result: response,
+        confirmedByUser,
+      })
+
+      return new Response(JSON.stringify(response), {
         headers: { ...CORS, 'content-type': 'application/json' },
       })
     }

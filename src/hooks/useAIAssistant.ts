@@ -289,7 +289,7 @@ export function useAIAssistant(ctx: AssistantContext) {
     const currentMessages = replayExistingUserMessage
       ? messagesRef.current
       : [...messagesRef.current, userMsg]
-    const allMsgsForApi = currentMessages.map(m => ({ role: m.role, content: m.content }))
+    const allMsgsForApi = currentMessages.map(m => ({ id: m.id, role: m.role, content: m.content }))
     const assistantContext = buildContext(
       ctxRef.current,
       currentMessages,

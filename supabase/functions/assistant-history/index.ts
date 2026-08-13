@@ -279,8 +279,9 @@ async function persistProjectTurn(
   conversationId: string,
   message: StoredMessage,
   conversationTitle?: string,
+  temporalOptions: { now: Date; utcOffset: string } = { now: new Date(), utcOffset: '-04:00' },
 ) {
-  const inferred = inferProjectTurn(message, { conversationTitle })
+  const inferred = inferProjectTurn(message, { conversationTitle, ...temporalOptions })
   if (!inferred) return null
   const topicKey = inferred.title ? projectTopicKey(inferred.title) : null
   let existingQuery = sb
@@ -317,6 +318,8 @@ async function persistProjectTurn(
         topic_key: topicKey,
         title: inferred.title,
         summary: inferred.summary ?? '',
+        target_date: inferred.temporalEvidence?.rangeStart ?? null,
+        temporal_evidence: inferred.temporalEvidence,
       })
       .select('id,title,summary,status,briefing_state,version,source_conversation_id,topic_key')
       .single()
@@ -331,6 +334,12 @@ async function persistProjectTurn(
         version,
         last_activity_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
+        ...(inferred.temporalEvidence
+          ? {
+              target_date: inferred.temporalEvidence.rangeStart,
+              temporal_evidence: inferred.temporalEvidence,
+            }
+          : {}),
       })
       .eq('id', project.id)
       .eq('owner_member_id', memberId)
@@ -359,6 +368,8 @@ async function persistProjectTurn(
         extractor_version: PROJECT_EXTRACTOR_VERSION,
         kind: item.kind,
         content: item.content,
+        due_at: null,
+        temporal_evidence: inferred.temporalEvidence,
       })),
       {
         onConflict: 'project_id,source_message_client_id,extractor_version,kind',
@@ -865,7 +876,11 @@ Deno.serve(async (request) => {
         }))
       const summary = summarizeConversation(messages)
       const throughMessageId = messages[messages.length - 1]?.id ?? null
-      const memories = inferPersonalMemoryCandidates(newMessages)
+      const temporalOptions = {
+        now: new Date(),
+        utcOffset: typeof body?.utc_offset === 'string' ? body.utc_offset : '-04:00',
+      }
+      const memories = inferPersonalMemoryCandidates(newMessages, temporalOptions)
       if (memories.length > 0) {
         const { error: memoryError } = await sb.from('ai_memories').upsert(memories.map((memory) => ({
           scope: 'personal',
@@ -877,6 +892,7 @@ Deno.serve(async (request) => {
           content: memory.content,
           category: memory.category ?? 'preference',
           confidence: memory.confidence,
+          temporal_evidence: memory.temporalEvidence,
         })), {
           onConflict: 'source_conversation_id,source_message_client_id,extractor_version',
           ignoreDuplicates: true,
@@ -885,7 +901,7 @@ Deno.serve(async (request) => {
       }
       for (const message of newMessages) {
         if (conversation.experience_mode === 'talk_plan') {
-          await persistProjectTurn(sb, memberId, conversationId, message, conversation.title)
+          await persistProjectTurn(sb, memberId, conversationId, message, conversation.title, temporalOptions)
         }
       }
       if (inserts.length > 0) {

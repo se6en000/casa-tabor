@@ -158,6 +158,8 @@ import {
   resolveExplicitReminderDaypartRange,
   resolveStructuredReminderDueBy,
 } from '../_shared/assistant-reminder-intent.mjs'
+import { classifyCalendarTemporalEvidence } from '../_shared/assistant-temporal-evidence.mjs'
+import { assessCalendarCreatePreflight } from '../_shared/assistant-calendar-create-preflight.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -214,6 +216,101 @@ const mapsFetch = createTrackedMapsFetch({
   callPurpose: 'assistant-place-search',
 })
 const AGENT_GENERAL_PAGES = new Set(['app', 'briefing', 'calendar', 'grocery', 'home'])
+
+async function saveUndatedCalendarDraft(
+  sb: ReturnType<typeof createClient>,
+  options: {
+    memberId: string
+    conversationId: string
+    sourceMessageId: string
+    title: string
+  },
+) {
+  const { data: projects, error: projectLookupError } = await sb
+    .from('ai_projects')
+    .select('id')
+    .eq('owner_member_id', options.memberId)
+    .eq('source_conversation_id', options.conversationId)
+    .eq('status', 'active')
+    .order('last_activity_at', { ascending: false })
+    .limit(1)
+  if (projectLookupError) throw projectLookupError
+
+  let projectId = projects?.[0]?.id as string | undefined
+  if (!projectId) {
+    const { data: project, error: projectCreateError } = await sb
+      .from('ai_projects')
+      .insert({
+        owner_member_id: options.memberId,
+        source_conversation_id: options.conversationId,
+        topic_key: 'calendar-ideas',
+        title: 'Calendar ideas',
+        summary: 'Undated ideas waiting for an explicit calendar date.',
+        target_date: null,
+        temporal_evidence: null,
+      })
+      .select('id')
+      .single()
+    if (projectCreateError) throw projectCreateError
+    projectId = project.id
+  }
+
+  const { error: itemError } = await sb.from('ai_project_items').upsert({
+    project_id: projectId,
+    source_conversation_id: options.conversationId,
+    source_message_client_id: options.sourceMessageId,
+    extractor_version: 'calendar-draft-v1',
+    kind: 'next_action',
+    content: options.title,
+    status: 'open',
+    due_at: null,
+    temporal_evidence: null,
+  }, {
+    onConflict: 'project_id,source_message_client_id,extractor_version,kind',
+    ignoreDuplicates: true,
+  })
+  if (itemError) throw itemError
+  return projectId
+}
+
+async function findUndatedCalendarDraft(
+  sb: ReturnType<typeof createClient>,
+  options: {
+    memberId: string
+    conversationId: string
+    title: string
+  },
+): Promise<string | null> {
+  const { data: projects, error: projectLookupError } = await sb
+    .from('ai_projects')
+    .select('id')
+    .eq('owner_member_id', options.memberId)
+    .eq('source_conversation_id', options.conversationId)
+    .eq('status', 'active')
+    .order('last_activity_at', { ascending: false })
+    .limit(1)
+  if (projectLookupError) throw projectLookupError
+  const projectId = projects?.[0]?.id as string | undefined
+  if (!projectId) return null
+
+  const { data: items, error: itemLookupError } = await sb
+    .from('ai_project_items')
+    .select('id,content')
+    .eq('project_id', projectId)
+    .eq('kind', 'next_action')
+    .eq('status', 'open')
+    .is('due_at', null)
+    .order('created_at', { ascending: false })
+    .limit(20)
+  if (itemLookupError) throw itemLookupError
+
+  const normalizedTitle = normalizeCalendarDraftTitle(options.title)
+  return items?.find((item) => normalizeCalendarDraftTitle(String(item.content ?? '')) === normalizedTitle)?.id ?? null
+}
+
+function normalizeCalendarDraftTitle(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+}
 
 function isSupportedGeminiModel(value: string): boolean {
   return isProductionGeminiModel(value)
@@ -2029,18 +2126,27 @@ Deno.serve(async (req) => {
     ? resolveDefaultCalendarCreate(latestUserText, { now, utcOffset: context?.utcOffset })
     : null
   if (talkPlanCommandLane && defaultCalendarCreate) {
-    appendServerTrace('server_ai_assistant_default_calendar_create', defaultCalendarCreate.args.title, {
+    appendServerTrace('date_clarification_required', defaultCalendarCreate.args.title, {
       defaults: defaultCalendarCreate.defaults,
       start: defaultCalendarCreate.args.start,
       end: defaultCalendarCreate.args.end,
     })
+    if (experienceMode === 'talk_plan' && activeMemberId && privateConversationId && !dryRun) {
+      await saveUndatedCalendarDraft(sb, {
+        memberId: activeMemberId,
+        conversationId: privateConversationId,
+        sourceMessageId: messages?.at(-1)?.id ?? turnId ?? `draft-${Date.now().toString(36)}`,
+        title: defaultCalendarCreate.args.title,
+      })
+      appendServerTrace('draft_saved', defaultCalendarCreate.args.title, { due_at: null })
+    }
     return {
       status: 200,
       payload: {
-        type: 'tool_action',
-        tool: defaultCalendarCreate.tool,
-        args: defaultCalendarCreate.args,
-        display_text: buildDisplayText(defaultCalendarCreate.tool, defaultCalendarCreate.args),
+        type: 'text',
+        text: experienceMode === 'talk_plan'
+          ? `I saved "${defaultCalendarCreate.args.title}" as an undated planning task. What date should it go on the calendar?`
+          : `What date should I use for "${defaultCalendarCreate.args.title}"? Nothing was added to the calendar.`,
         semantic_intent: 'calendar.default_create',
         correlation_id: cid,
         telemetry: {
@@ -2392,6 +2498,68 @@ Deno.serve(async (req) => {
       normalizedAgentWriteArgs &&
       typeof normalizedAgentWriteArgs === 'object'
     ) {
+      if (agentWriteData.tool === 'create_event') {
+        const temporalEvidence = classifyCalendarTemporalEvidence(
+          messages,
+          normalizedAgentWriteArgs,
+          { now, utcOffset: context?.utcOffset },
+        )
+        if (!temporalEvidence.allowed) {
+          appendServerTrace(
+            temporalEvidence.status === 'mismatch' ? 'date_mismatch_blocked' : 'date_clarification_required',
+            String(normalizedAgentWriteArgs.title ?? 'calendar create'),
+            { temporal_evidence: temporalEvidence },
+          )
+          if (experienceMode === 'talk_plan' && activeMemberId && privateConversationId && !dryRun) {
+            await saveUndatedCalendarDraft(sb, {
+              memberId: activeMemberId,
+              conversationId: privateConversationId,
+              sourceMessageId: temporalEvidence.sourceMessageId ?? turnId ?? `draft-${Date.now().toString(36)}`,
+              title: String(normalizedAgentWriteArgs.title ?? latestUserText ?? 'Undated calendar idea'),
+            })
+            appendServerTrace('draft_saved', String(normalizedAgentWriteArgs.title ?? 'calendar idea'), { due_at: null })
+          }
+          return {
+            status: 200,
+            payload: {
+              type: 'text',
+              text: experienceMode === 'talk_plan'
+                ? `I saved "${String(normalizedAgentWriteArgs.title ?? 'that idea')}" as an undated planning task. What date should it go on the calendar?`
+                : 'What exact date should I use? Nothing was added to the calendar.',
+              correlation_id: cid,
+            },
+          }
+        }
+        normalizedAgentWriteArgs.temporal_provenance = temporalEvidence
+        if (experienceMode === 'talk_plan' && activeMemberId && privateConversationId && !dryRun) {
+          const draftItemId = await findUndatedCalendarDraft(sb, {
+            memberId: activeMemberId,
+            conversationId: privateConversationId,
+            title: String(normalizedAgentWriteArgs.title ?? ''),
+          })
+          if (draftItemId) normalizedAgentWriteArgs.draft_project_item_id = draftItemId
+        }
+        const preflight = assessCalendarCreatePreflight(allEvents ?? [], normalizedAgentWriteArgs)
+        if (preflight.status === 'exact_duplicate') {
+          appendServerTrace('exact_duplicate_suppressed', String(normalizedAgentWriteArgs.title ?? ''), {
+            existing_event: preflight.exactDuplicate,
+          })
+          return {
+            status: 200,
+            payload: {
+              type: 'text',
+              text: `"${preflight.exactDuplicate.title}" already exists at ${preflight.exactDuplicate.start_time}. I did not create another copy.`,
+              correlation_id: cid,
+            },
+          }
+        }
+        if (preflight.status === 'requires_confirmation') {
+          normalizedAgentWriteArgs.calendar_preflight = preflight
+          appendServerTrace('calendar_conflict_detected', String(normalizedAgentWriteArgs.title ?? ''), {
+            calendar_preflight: preflight,
+          })
+        }
+      }
       appendServerTrace('server_agent_write_adopted', `tool=${agentWriteData.plan?.toolName ?? agentWriteData.tool}`, {
         tool_name: agentWriteData.plan?.toolName ?? null,
         legacy_tool_name: agentWriteData.tool,
@@ -5141,6 +5309,89 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           const members = Array.isArray(args.members)
             ? args.members.filter((member): member is string => typeof member === 'string' && member.trim().length > 0)
             : []
+          const temporalEvidence = classifyCalendarTemporalEvidence(
+            messages,
+            { start, end },
+            { now, utcOffset: context?.utcOffset },
+          )
+          if (!temporalEvidence.allowed) {
+            const traceEvent = temporalEvidence.status === 'mismatch'
+              ? 'date_mismatch_blocked'
+              : 'date_clarification_required'
+            appendServerTrace(traceEvent, title || 'calendar create', {
+              proposed_start: start,
+              proposed_end: end,
+              temporal_evidence: temporalEvidence,
+            })
+            if (
+              experienceMode === 'talk_plan' &&
+              activeMemberId &&
+              privateConversationId &&
+              !dryRun
+            ) {
+              await saveUndatedCalendarDraft(sb, {
+                memberId: activeMemberId,
+                conversationId: privateConversationId,
+                sourceMessageId: temporalEvidence.sourceMessageId ?? turnId ?? `draft-${Date.now().toString(36)}`,
+                title: title || latestUserText || 'Undated calendar idea',
+              })
+              appendServerTrace('draft_saved', title || 'calendar idea', {
+                due_at: null,
+                source_message_id: temporalEvidence.sourceMessageId,
+              })
+              return {
+                type: 'text',
+                text: `I saved "${title || 'that idea'}" as an undated planning task. What date should it go on the calendar?`,
+              }
+            }
+            return {
+              type: 'text',
+              text: temporalEvidence.status === 'mismatch'
+                ? `I did not create "${title || 'that event'}" because the proposed date does not match the date range you provided. What exact date should I use?`
+                : `What date should I use for "${title || 'that event'}"? Nothing was added to the calendar.`,
+            }
+          }
+          args.temporal_provenance = temporalEvidence
+          if (experienceMode === 'talk_plan' && activeMemberId && privateConversationId && !dryRun) {
+            const draftItemId = await findUndatedCalendarDraft(sb, {
+              memberId: activeMemberId,
+              conversationId: privateConversationId,
+              title,
+            })
+            if (draftItemId) args.draft_project_item_id = draftItemId
+          }
+          appendServerTrace('date_grounded', title, {
+            temporal_evidence: temporalEvidence,
+          })
+
+          const calendarPreflight = assessCalendarCreatePreflight(allEvents ?? [], args)
+          if (calendarPreflight.status === 'exact_duplicate') {
+            appendServerTrace('exact_duplicate_suppressed', title, {
+              existing_event: calendarPreflight.exactDuplicate,
+            })
+            return {
+              type: 'text',
+              text: `"${calendarPreflight.exactDuplicate.title}" already exists at ${calendarPreflight.exactDuplicate.start_time}. I did not create another copy.`,
+              write_verified: true,
+            }
+          }
+          if (calendarPreflight.status === 'requires_confirmation') {
+            args.calendar_preflight = calendarPreflight
+            appendServerTrace('calendar_conflict_detected', title, {
+              probable_duplicates: calendarPreflight.probableDuplicates,
+              conflicts: calendarPreflight.conflicts,
+            })
+            const warningRows = [
+              ...calendarPreflight.probableDuplicates.map((event) => `Possible duplicate: ${event.title} at ${event.start_time}`),
+              ...calendarPreflight.conflicts.map((event) => `Conflict: ${event.title} at ${event.start_time}`),
+            ]
+            return {
+              type: 'tool_action',
+              tool: name,
+              args,
+              display_text: `${buildDisplayText(name, args)}\n\n${warningRows.join('\n')}\n\nConfirm only if you want to keep both.`,
+            }
+          }
           const startMs = Date.parse(start)
           const endMs = Date.parse(end)
           const durationMinutes = Number.isFinite(startMs) && Number.isFinite(endMs)
@@ -5157,7 +5408,12 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
             notes.length === 0
           )
 
-          if (isLowRiskCreate && experienceMode !== 'talk_plan' && !dryRun) {
+          if (
+            isLowRiskCreate &&
+            experienceMode !== 'talk_plan' &&
+            !dryRun &&
+            !temporalEvidence.requiresExactDateConfirmation
+          ) {
             const autoActionId = `auto-create-${Date.now().toString(36)}`
             const execResult = await sb.functions.invoke('execute-ai-action', {
               body: {

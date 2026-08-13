@@ -7,7 +7,7 @@ const MEMORY_SIGNALS = [
 
 export const PERSONAL_MEMORY_EXTRACTOR_VERSION = 'rules-v1'
 
-export function inferPersonalMemoryCandidates(messages) {
+export function inferPersonalMemoryCandidates(messages, options = {}) {
   const inferred = []
   for (const message of messages) {
     if (message.role !== 'user') continue
@@ -18,12 +18,14 @@ export function inferPersonalMemoryCandidates(messages) {
       if (!match) continue
       const content = match[1].trim().replace(/\s+/g, ' ')
       if (content.length < 12) continue
+      const temporalEvidence = extractUserTemporalEvidence(message, options)
       inferred.push({
         sourceMessageId: message.id,
         title: signal.title,
         content: content.slice(0, 2000),
         category: signal.category,
         confidence: 0.9,
+        ...(temporalEvidence ? { temporalEvidence } : {}),
       })
       break
     }
@@ -31,3 +33,4 @@ export function inferPersonalMemoryCandidates(messages) {
   }
   return inferred
 }
+import { extractUserTemporalEvidence } from './assistant-temporal-evidence.mjs'

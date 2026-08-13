@@ -6,6 +6,7 @@ import {
   resolveStructuredReminderDueBy,
 } from './assistant-reminder-intent.mjs'
 import { resolveDeterministicEventMutation } from './deterministic-event-mutation.mjs'
+import { extractUserTemporalEvidence } from './assistant-temporal-evidence.mjs'
 
 const DAY_HINT = /\b(?:today|tomorrow|sunday|monday|tuesday|wednesday|thursday|friday|saturday|\d{4}-\d{2}-\d{2})\b/i
 const TIME_HINT = /\b(?:at|from)\s+\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)\b/i
@@ -98,6 +99,14 @@ function resolveReminderCommand(input, options) {
     }
   }
 
+  const temporalProvenance = captureTemporalProvenance(input, reminderRange, options)
+  if (temporalProvenance.resolutionKind === 'relative') {
+    return {
+      status: 'needs_clarification',
+      clarification_question: `I resolved ${relativeDateLabel(input)} as ${formatExactDate(temporalProvenance.rangeStart)}. Please repeat the reminder with that exact date to confirm.`,
+    }
+  }
+
   return {
     status: 'execute',
     tool: 'create_event',
@@ -106,6 +115,7 @@ function resolveReminderCommand(input, options) {
       start: reminderRange.start,
       end: reminderRange.end,
       event_type: 'reminder',
+      temporal_provenance: temporalProvenance,
       ...(locationSplit.location ? { location: locationSplit.location } : {}),
       members: [],
     },
@@ -120,6 +130,23 @@ function resolveEventCommand(input, options) {
   })
   if (mutation?.tool === 'create_event' && mutation.args) {
     const location = parseEventLocation(input)
+    const temporalProvenance = extractUserTemporalEvidence({
+      id: 'capture-command',
+      role: 'user',
+      content: input,
+    }, options)
+    if (!temporalProvenance) {
+      return {
+        status: 'needs_clarification',
+        clarification_question: 'What date should I create that event for?',
+      }
+    }
+    if (temporalProvenance.resolutionKind === 'relative') {
+      return {
+        status: 'needs_clarification',
+        clarification_question: `I resolved ${relativeDateLabel(input)} as ${formatExactDate(temporalProvenance.rangeStart)}. Please repeat the request with that exact date to confirm.`,
+      }
+    }
     return {
       status: 'execute',
       tool: 'create_event',
@@ -127,9 +154,11 @@ function resolveEventCommand(input, options) {
         ...mutation.args,
         start: ensureOffsetIso(mutation.args.start, options.utcOffset),
         end: ensureOffsetIso(mutation.args.end, options.utcOffset),
+        temporal_provenance: temporalProvenance,
         ...(location ? { location } : {}),
       },
     }
+
   }
 
   if (hasSingleMissingEventTime(input)) {
@@ -139,9 +168,49 @@ function resolveEventCommand(input, options) {
     }
   }
 
+  if (EVENT_PREFIX.test(input) && TIME_HINT.test(input) && !DAY_HINT.test(input)) {
+    return {
+      status: 'needs_clarification',
+      clarification_question: 'What date should I create that event for?',
+    }
+  }
+
   return {
     status: 'unsupported',
     message: 'Quick Actions can create events, reminders, and grocery items right now.',
+  }
+}
+
+function relativeDateLabel(input) {
+  return String(input).match(/\b(?:this\s+(?:morning|afternoon|evening)|tonight|(?:this\s+|next\s+)?(?:today|tomorrow|weekend|sunday|monday|tuesday|wednesday|thursday|friday|saturday))\b/i)?.[0] ?? 'that date'
+}
+
+function formatExactDate(value) {
+  const [year, month, day] = String(value).split('-').map(Number)
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(Date.UTC(year, month - 1, day)))
+}
+
+function captureTemporalProvenance(input, range, options) {
+  const direct = extractUserTemporalEvidence({
+    id: 'capture-command',
+    role: 'user',
+    content: input,
+  }, options)
+  if (direct) return direct
+  const start = ensureOffsetIso(range.start, options.utcOffset)
+  const localDate = String(start).slice(0, 10)
+  return {
+    sourceMessageId: 'capture-command',
+    sourceText: input,
+    rangeStart: localDate,
+    rangeEnd: localDate,
+    resolutionKind: 'relative',
+    requiresExactDateConfirmation: true,
   }
 }
 

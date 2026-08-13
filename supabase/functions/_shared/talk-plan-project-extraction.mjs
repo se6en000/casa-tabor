@@ -148,5 +148,7 @@ export function inferProjectTurn(message, options = {}) {
     title,
     summary: title ? `Planning ${title}` : null,
     items: items.slice(0, 6),
+    temporalEvidence: isUser ? extractUserTemporalEvidence(message, options) : null,
   }
 }
+import { extractUserTemporalEvidence } from './assistant-temporal-evidence.mjs'
