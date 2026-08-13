@@ -12,6 +12,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "deploy": "bash scripts/deploy.sh",
+    "supabase:check": "node scripts/verify-supabase.mjs",
+    "supabase:query": "node scripts/supabase-query.mjs",
     "tokens:generate": "node scripts/generate-design-tokens.mjs",
     "tokens:check": "node scripts/generate-design-tokens.mjs --check",
     "qa:ai-calendar-conversations": "node scripts/ai-calendar-conversation-stress.mjs --count=100",
