@@ -31,6 +31,8 @@ import { useWeekConflicts, useResolveConflict, useSnoozeConflict } from '../hook
 import { useDismissPrepItem, usePrepItems, useSnoozePrepItem } from '../hooks/usePrepItems'
 import { supabase } from '../lib/supabase'
 import { useCalendarStore } from '../stores/calendarStore'
+import { useAppStore } from '../stores/appStore'
+import { cn } from '../utils/cn'
 import type { Conflict, PrepItem } from '../types'
 import { useProfileSession } from '../contexts/ProfileSessionContext'
 import { invokeAssistantHistory } from '../lib/assistantConversationHistoryClient'
@@ -167,6 +169,7 @@ function prepTitle(item: PrepItem) {
 
 export default function BriefingPage() {
   const navigate = useNavigate()
+  const aiDrawerOpen = useAppStore((s) => s.aiDrawerOpen)
   const [briefing, setBriefing] = useState<Briefing | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -311,7 +314,12 @@ export default function BriefingPage() {
   return (
     <BounceScroll className="flex-1">
       <PageShell width="wide" className="briefing-page">
-        <div className="grid min-w-0 gap-section-gap xl:grid-cols-[minmax(0,1fr)_minmax(20rem,25rem)] xl:items-start">
+        <div className={cn(
+          'grid min-w-0 gap-section-gap',
+          aiDrawerOpen
+            ? 'grid-cols-1'
+            : 'xl:grid-cols-[minmax(0,1fr)_minmax(20rem,25rem)] xl:items-start',
+        )}>
           <main className="min-w-0 space-y-section-gap">
             <section className="relative overflow-hidden rounded-modal border border-casa-navy/30 bg-casa-navy p-card-padding text-casa-on-dark shadow-modal sm:p-7 lg:p-8">
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-black/10" />

@@ -11,6 +11,7 @@ import { appendPantryInventoryAudit, normalizePackageUnit, normalizePantryKey, s
 import { cn } from '../utils/cn'
 import recipeFallbackHero from '../assets/hero.png'
 import { Alert, Button, Card, Checkbox, Chip, DisclosureSection, Heading, IconButton, Input, Progress, SegmentedControl, Switch, Text, Textarea } from '../components/ui'
+import { useAppStore } from '../stores/appStore'
 
 type RecipeScale = '0.5' | '1' | '2'
 
@@ -469,6 +470,7 @@ function InfoHint({ label, text }: { label: string; text: string }) {
 
 export default function CookPage() {
   const navigate = useNavigate()
+  const aiDrawerOpen = useAppStore((s) => s.aiDrawerOpen)
   const [cookRecipeId, setCookRecipeId] = useState<string | null>(null)
   const [recipeSearch, setRecipeSearch] = useState('')
   const [cookLandingMode, setCookLandingMode] = useState<CookLandingMode>(() => {
@@ -2999,7 +3001,10 @@ export default function CookPage() {
                 </Button>
               </Card>
             ) : (
-              <div className="mt-3 grid grid-cols-1 xl:grid-cols-[1.25fr_1fr_1fr] gap-4">
+              <div className={cn(
+                'mt-3 grid gap-4',
+                aiDrawerOpen ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1 xl:grid-cols-[1.25fr_1fr_1fr]',
+              )}>
                 {moodShortlistRecipes.map((insight, index) => {
                   const focus = parseRecipeImageFocus(insight.recipe.image_url)
                   const isTop = index === 0
@@ -3649,7 +3654,10 @@ export default function CookPage() {
             No recipes match this filter yet. Try switching filters or importing a recipe.
           </p>
         )}
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+        <div className={cn(
+          'grid gap-3',
+          aiDrawerOpen ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-2 xl:grid-cols-3',
+        )}>
           {filteredRecipes.slice(0, 24).map((recipe) => (
             <article
               key={recipe.id}
@@ -4133,11 +4141,17 @@ export default function CookPage() {
 
       {cookRecipe && (
         <div
-          className="fixed inset-0 z-modal casa-scrim flex items-start justify-center overflow-y-auto p-4 sm:p-6"
+          className={cn(
+            'fixed inset-0 z-modal casa-scrim flex items-start justify-center overflow-y-auto p-4 sm:p-6',
+            aiDrawerOpen && 'lg:right-[440px]',
+          )}
           onClick={closeCookRecipe}
         >
           <div
-            className="w-[min(64rem,calc(100vw-2rem))] my-auto max-h-[calc(100vh-2rem)] rounded-modal border border-casa-border bg-casa-bg shadow-modal flex flex-col overflow-hidden"
+            className={cn(
+              'my-auto max-h-[calc(100vh-2rem)] rounded-modal border border-casa-border bg-casa-bg shadow-modal flex flex-col overflow-hidden',
+              aiDrawerOpen ? 'w-[min(54rem,calc(100vw-460px))]' : 'w-[min(64rem,calc(100vw-2rem))]',
+            )}
             onClick={(event) => event.stopPropagation()}
             role="dialog"
             aria-modal="true"

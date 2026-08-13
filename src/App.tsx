@@ -25,6 +25,7 @@ import { useWakeWord } from './hooks/useWakeWord'
 import { useIdleTimer } from './hooks/useIdleTimer'
 import { useScreensaverSettings } from './hooks/useScreensaverSettings'
 import EventDetailPanel from './components/calendar/EventDetailPanel'
+import { useAppStore } from './stores/appStore'
 
 const SAFE_MODE = String(import.meta.env.VITE_SAFE_MODE ?? '').toLowerCase()
 const IS_SAFE_MODE = SAFE_MODE === '1' || SAFE_MODE === 'true' || SAFE_MODE === 'yes'
@@ -178,7 +179,7 @@ function AppShell() {
   useIdleTimer(ssMs, dispMs)
 
   const [screensaverActive, setScreensaverActive] = useState(false)
-  const [aiDrawerOpen, setAiDrawerOpen] = useState(false)
+  const { aiDrawerOpen, setAiDrawerOpen } = useAppStore()
   const [quickCreateOpen, setQuickCreateOpen] = useState(false)
   const [selectedDrawerEvent, setSelectedDrawerEvent] = useState<EventWithDetails | null>(null)
   const location = useLocation()
@@ -260,7 +261,7 @@ function AppShell() {
       {/* Bottom nav only visible on mobile */}
       <NavBar />
 
-      {!hideFab && (
+      {!hideFab && !aiDrawerOpen && (
         <AddEventFab onClick={() => setQuickCreateOpen(true)} visible={!quickCreateOpen} />
       )}
 

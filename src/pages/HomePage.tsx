@@ -9,6 +9,7 @@ import { useFamilyMembers } from '../hooks/useFamilyMembers'
 import { useRollingEvents } from '../hooks/useCalendarEvents'
 import { useLiveClock } from '../hooks/useLiveClock'
 import { useCalendarStore } from '../stores/calendarStore'
+import { useAppStore } from '../stores/appStore'
 import { cn } from '../utils/cn'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
 import EventDetailPanel from '../components/calendar/EventDetailPanel'
@@ -206,6 +207,7 @@ export default function HomePage() {
     [rollingEvents, tomorrow],
   )
   const { visibleMembers } = useCalendarStore()
+  const aiDrawerOpen = useAppStore((s) => s.aiDrawerOpen)
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [selectedPrepItem, setSelectedPrepItem] = useState<PrepItem | null>(null)
   const [pastItemsOpen, setPastItemsOpen] = useState(false)
@@ -617,7 +619,9 @@ export default function HomePage() {
       </PrimaryRail>
 
       {/* ── Right panel (tablet only) ──────────────────────── */}
-      <HomeRightPanel now={now} allTodayEvents={allTodayEvents ?? []} onSelectPrepItem={setSelectedPrepItem} />
+      {!aiDrawerOpen && (
+        <HomeRightPanel now={now} allTodayEvents={allTodayEvents ?? []} onSelectPrepItem={setSelectedPrepItem} />
+      )}
 
       <div onClick={e => e.stopPropagation()}>
         <PrepItemDetailPanel item={selectedPrepItem} onClose={() => setSelectedPrepItem(null)} />

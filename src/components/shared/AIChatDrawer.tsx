@@ -19,7 +19,7 @@ import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import type { FamilyMember } from '../../types'
 import BounceScroll from '../shared/BounceScroll'
 import MarkdownContent from '../shared/MarkdownContent'
-import { Button, Card, Heading, IconButton, LiveTranscript, Modal, SegmentedControl, Text } from '../ui'
+import { Button, Card, Heading, IconButton, LiveTranscript, Modal, Text } from '../ui'
 import { formatTextForMarkdown, stripEvidenceCitationMarkers } from '../../lib/assistantMarkdown.mjs'
 import { createAssistantTraceContext, emitAssistantTrace, getAssistantDeviceId } from '../../lib/assistantTelemetry'
 import { classifyPendingConfirmation } from '../../lib/assistantConfirmation.mjs'
@@ -127,7 +127,6 @@ export default function AIChatDrawer({
     primeMessages,
     appendSyntheticMessage,
     updateMessageToolStatus,
-    selectExperienceMode,
     privateHistory,
     resumePrivateConversation,
   } = useAIAssistant({
@@ -838,15 +837,6 @@ export default function AIChatDrawer({
   }, [markUserInteraction, speech])
 
   const hasSession = !sessionLoading && !!session && session.messages.length > 0
-  const experienceMode = session?.experienceMode ?? 'do'
-  const showExperienceMode = !focusedEvent && (launchContext?.agent ?? 'general') === 'general'
-  const experienceModeOptions = useMemo(() => {
-    const disabled = loading || hasPendingToolAction
-    return [
-      { value: 'do', label: 'Do', disabled },
-      { value: 'talk_plan', label: 'Talk & Plan', disabled },
-    ] as const
-  }, [hasPendingToolAction, loading])
   const voiceLevel = Math.max(0, Math.min(1, speech.volume / 100))
 
   const loadHistoryConversations = useCallback(() => {
@@ -878,98 +868,83 @@ export default function AIChatDrawer({
   const drawerBody = (
     <>
       {/* Header */}
-      <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-casa-border">
-              <div className="flex items-center gap-2.5">
-                <div className={cn(
-                  'w-7 h-7 rounded-full bg-casa-gold/10 flex items-center justify-center transition-all',
-                  loading && 'bg-casa-gold/20',
-                )}>
-                  <Sparkles size={15} className={cn('text-casa-gold', loading && 'animate-pulse')} />
-                </div>
-                <p className="font-display text-heading text-casa-navy">
-                  Casa Tabor AI
-                  {loading && <span className="text-casa-gold text-caption font-normal ml-2">thinking…</span>}
-                  {!loading && speech.listening && (
-                    <span className="text-red-500 text-caption font-normal ml-2 flex items-center gap-1 inline-flex">
-                      <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse inline-block" />
-                      listening
-                    </span>
-                  )}
-                </p>
-              </div>
-              <div className="flex items-center gap-1">
-                {speech.supported && (
-                  <Button variant="ghost"
-                    type="button"
-                    onClick={handleConversationToggle}
-                    aria-pressed={conversationMode}
-                    title={conversationMode
-                      ? 'Hands-free ON — mic stays armed for back-and-forth. Tap to turn off.'
-                      : 'Hands-free OFF — tap the microphone for each turn.'}
-                    className={cn(
-                      'h-7 px-2 flex items-center gap-1 rounded-full text-caption font-medium transition-colors',
-                      conversationMode
-                        ? 'bg-casa-gold text-white'
-                        : 'text-casa-muted hover:text-casa-navy hover:bg-casa-divider',
-                    )}
-                  >
-                    <MessagesSquare size={13} />
-                    {conversationMode && <span>Hands-free</span>}
-                  </Button>
-                )}
-                {showExperienceMode && (
-                  <Button
-                    variant="ghost"
-                    type="button"
-                    onClick={() => {
-                      setHistoryUnlockError(null)
-                      setHistoryModalOpen(true)
-                      loadHistoryConversations()
-                    }}
-                    title={`Open ${profile?.memberName ?? 'your'} private conversation history`}
-                    className="h-7 rounded-full bg-casa-gold/10 px-2 text-caption font-medium text-casa-gold transition-colors hover:bg-casa-gold/20"
-                  >
-                    Private
-                  </Button>
-                )}
-                {hasSession && (
-                  <Button variant="ghost"
-                    type="button"
-                    onClick={startFresh}
-                    title="New conversation"
-                    className="size-control flex items-center justify-center text-casa-muted hover:text-casa-navy rounded-button hover:bg-casa-divider outline-none transition-colors focus-visible:ring-2 focus-visible:ring-casa-gold"
-                    aria-label="New conversation"
-                  >
-                    <RotateCcw size={14} />
-                  </Button>
-                )}
-                <Button variant="ghost"
-                  type="button"
-                  onClick={onClose}
-                  className="size-control flex items-center justify-center text-casa-muted hover:text-casa-navy rounded-button hover:bg-casa-divider outline-none transition-colors focus-visible:ring-2 focus-visible:ring-casa-gold"
-                  aria-label="Close assistant"
-                >
-                  <X size={18} />
-                </Button>
-              </div>
-            </div>
-
-            {showExperienceMode && (
-              <div className="border-b border-casa-border px-5 py-3">
-                <SegmentedControl
-                  aria-label="Assistant experience"
-                  value={experienceMode}
-                  options={experienceModeOptions}
-                  onChange={selectExperienceMode}
-                  fullWidth
-                />
-                <p className="mt-2 text-caption text-casa-muted">
-                  {experienceMode === 'talk_plan'
-                    ? 'Discuss, compare, and plan. Goals & decisions are captured directly to your Planning Projects.'
-                    : 'Fast commands, household actions, and quick answers.'}
-                </p>
-              </div>
+      <div className="flex items-center justify-between px-4 py-3 border-b border-casa-border">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className={cn(
+            'w-7 h-7 rounded-full bg-casa-gold/10 flex items-center justify-center transition-all shrink-0',
+            loading && 'bg-casa-gold/20',
+          )}>
+            <Sparkles size={15} className={cn('text-casa-gold', loading && 'animate-pulse')} />
+          </div>
+          <div className="min-w-0 flex items-baseline gap-2">
+            <p className="font-display text-heading text-casa-navy truncate">
+              Casa AI
+            </p>
+            {loading && <span className="text-casa-gold text-caption font-normal animate-pulse">thinking…</span>}
+            {!loading && speech.listening && (
+              <span className="text-red-500 text-caption font-normal flex items-center gap-1 inline-flex">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse inline-block" />
+                listening
+              </span>
             )}
+          </div>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          {speech.supported && (
+            <Button variant="ghost"
+              type="button"
+              onClick={handleConversationToggle}
+              aria-pressed={conversationMode}
+              title={conversationMode
+                ? 'Hands-free ON — mic stays armed for back-and-forth. Tap to turn off.'
+                : 'Hands-free OFF — tap the microphone for each turn.'}
+              className={cn(
+                'h-7 px-2.5 flex items-center gap-1 rounded-full text-caption font-medium transition-colors',
+                conversationMode
+                  ? 'bg-casa-gold text-white'
+                  : 'text-casa-muted hover:text-casa-navy hover:bg-casa-divider',
+              )}
+            >
+              <MessagesSquare size={13} />
+              {conversationMode && <span>Hands-free</span>}
+            </Button>
+          )}
+          {Boolean(profile?.token || privateHistory.access) && (
+            <Button
+              variant="ghost"
+              type="button"
+              onClick={() => {
+                setHistoryUnlockError(null)
+                setHistoryModalOpen(true)
+                loadHistoryConversations()
+              }}
+              title={`Open ${profile?.memberName ?? 'your'} private conversation history`}
+              className="h-7 rounded-full bg-casa-gold/10 px-2.5 text-caption font-medium text-casa-gold transition-colors hover:bg-casa-gold/20"
+            >
+              Private
+            </Button>
+          )}
+          {(hasSession || messages.length > 0) && (
+            <Button variant="ghost"
+              type="button"
+              onClick={startFresh}
+              title="New conversation"
+              className="size-control flex items-center justify-center text-casa-muted hover:text-casa-navy rounded-button hover:bg-casa-divider outline-none transition-colors focus-visible:ring-2 focus-visible:ring-casa-gold"
+              aria-label="New conversation"
+            >
+              <RotateCcw size={14} />
+            </Button>
+          )}
+          <Button variant="ghost"
+            type="button"
+            onClick={onClose}
+            className="size-control flex items-center justify-center text-casa-muted hover:text-casa-navy rounded-button hover:bg-casa-divider outline-none transition-colors focus-visible:ring-2 focus-visible:ring-casa-gold"
+            aria-label="Close assistant"
+          >
+            <X size={18} />
+          </Button>
+        </div>
+      </div>
 
             {/* Messages */}
             <BounceScroll nativeScroll className="flex-1 min-h-0" innerClassName="px-4 py-4 space-y-3">
@@ -989,16 +964,21 @@ export default function AIChatDrawer({
               )}
 
               {messages.length === 0 && (
-                <div className="flex flex-col items-center gap-3 py-6 text-center">
-                  <Sparkles size={28} className="text-casa-gold opacity-60" />
-                  <p className="text-body-sm font-semibold text-casa-navy">What can I help with?</p>
+                <div className="flex flex-col items-center gap-3 py-8 px-2 text-center">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-casa-gold/20 via-casa-gold/10 to-transparent border border-casa-gold/30 flex items-center justify-center shadow-subtle">
+                    <Sparkles size={24} className="text-casa-gold" />
+                  </div>
+                  <div>
+                    <p className="text-body font-semibold text-casa-navy">What can I help with?</p>
+                    <p className="text-caption text-casa-muted mt-0.5">Manage schedules, meals, groceries, or plan ahead.</p>
+                  </div>
                   {proactiveNudge && !nudgeDismissed && (
-                    <div className="w-full flex items-start gap-2 px-3 py-2.5 rounded-2xl bg-casa-gold/8 border border-casa-gold/25 text-left">
-                      <Sparkles size={13} className="text-casa-gold flex-shrink-0 mt-0.5" />
+                    <div className="w-full flex items-start gap-2.5 px-3.5 py-2.5 rounded-2xl bg-casa-gold/10 border border-casa-gold/30 text-left mt-2 shadow-subtle">
+                      <Sparkles size={14} className="text-casa-gold flex-shrink-0 mt-0.5" />
                       <Button variant="ghost"
                         type="button"
                         onClick={() => { markUserInteraction(); sendCurrentInput(proactiveNudge.prompt) }}
-                        className="flex-1 text-caption text-casa-navy leading-snug hover:underline"
+                        className="flex-1 text-caption text-casa-navy leading-snug hover:underline text-left"
                       >
                         {proactiveNudge.text}
                       </Button>
@@ -1006,18 +986,19 @@ export default function AIChatDrawer({
                         type="button"
                         onClick={() => setNudgeDismissed(true)}
                         aria-label="Dismiss"
-                        className="flex-shrink-0 text-casa-muted hover:text-casa-navy"
+                        className="flex-shrink-0 text-casa-muted hover:text-casa-navy p-0.5"
                       >
                         <X size={13} />
                       </Button>
                     </div>
                   )}
-                  <div className="flex flex-wrap justify-center gap-2 mt-1">
+                  <div className="flex flex-wrap justify-center gap-2 mt-2">
                     {dynamicSuggestions.map(s => (
                       <Button variant="ghost"
                         key={s}
+                        type="button"
                         onClick={() => { markUserInteraction(); setInput(s); textareaRef.current?.focus() }}
-                        className="px-3 py-1.5 rounded-full border border-casa-border text-caption text-casa-muted hover:bg-casa-bg hover:text-casa-navy transition-colors"
+                        className="px-3 py-1.5 rounded-full border border-casa-border bg-casa-bg text-caption text-casa-muted hover:bg-casa-card hover:text-casa-navy hover:border-casa-gold/40 transition-all shadow-subtle"
                       >
                         {s}
                       </Button>
@@ -1234,6 +1215,21 @@ export default function AIChatDrawer({
                   </motion.div>
                 )}
               </AnimatePresence>
+
+              {messages.length > 0 && !hasTypedInput && !voiceComposerActive && dynamicSuggestions.length > 0 && (
+                <div className="mb-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                  {dynamicSuggestions.map(s => (
+                    <Button variant="ghost"
+                      key={s}
+                      type="button"
+                      onClick={() => { markUserInteraction(); sendCurrentInput(s) }}
+                      className="px-2.5 py-1 rounded-full border border-casa-border bg-casa-bg text-caption text-casa-muted hover:text-casa-navy hover:border-casa-gold/40 transition-colors whitespace-nowrap shrink-0"
+                    >
+                      {s}
+                    </Button>
+                  ))}
+                </div>
+              )}
 
               <div
                 className={cn(
@@ -2515,11 +2511,12 @@ function deriveProactiveNudge(events: EventWithDetails[], now: Date): ProactiveN
 }
 
 const SUGGESTIONS: Record<string, string[]> = {
-  home: ["What's next up today?", "Add an event tonight", "Any conflicts this week?"],
-  calendar: ["What does tomorrow look like?", "Add a new appointment", "Who's busiest this week?"],
-  briefing: ["Summarize today for me", "Add an event", "Any prep needed today?"],
-  grocery: ["Add milk and eggs", "What's on the list?", "Clear checked items"],
-  cook: ["Plan 4 quick weeknight dinners", "Optimize my meals for budget", "Build grocery list from the plan"],
+  home: ["What's next up today?", "Add an event tonight", "Any conflicts this week?", "Give me a quick rundown"],
+  calendar: ["What does tomorrow look like?", "Add a new appointment", "Who's busiest this week?", "Find free time Saturday"],
+  briefing: ["Summarize today for me", "What needs my attention?", "Walk me through today's timeline", "Any prep needed today?"],
+  grocery: ["Add milk and eggs", "What's on the list?", "Clear checked items", "Suggest pantry staples"],
+  cook: ["Plan 4 quick weeknight dinners", "Suggest a dinner with pantry items", "Optimize my meals for budget", "Build grocery list from the plan"],
+  settings: ["How do I connect Google Calendars?", "Check sync status", "Set up family member PINs"],
   app: ["What's next up today?", "Add an event tonight", "What's on the grocery list?"],
 }
 
