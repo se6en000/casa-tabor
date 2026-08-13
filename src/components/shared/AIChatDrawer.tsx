@@ -147,8 +147,18 @@ export default function AIChatDrawer({
     [open, events],
   )
 
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth < 640 : false)
   useEffect(() => {
-    if (!open) return
+    const mq = window.matchMedia('(max-width: 639px)')
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
+
+  useEffect(() => {
+    // Only lock background scroll on small mobile screens where the drawer is a modal bottom sheet.
+    // On tablet and desktop, the drawer is an in-flow sidecar companion panel, so the background remains fully interactive and scrollable.
+    if (!open || !isMobile) return
 
     const root = document.documentElement
     const body = document.body
@@ -181,7 +191,7 @@ export default function AIChatDrawer({
         appMain.style.overscrollBehavior = previous.appMainOverscroll
       }
     }
-  }, [open])
+  }, [open, isMobile])
 
   const dynamicSuggestions = useMemo(
     () => buildDynamicSuggestions(page, events, new Date()),
@@ -865,57 +875,10 @@ export default function AIChatDrawer({
               : 'idle'
   const presenceStyle = { ['--voice-level' as '--voice-level']: String(voiceLevel) } as React.CSSProperties
 
-  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth < 640 : false)
-  useEffect(() => {
-    const mq = window.matchMedia('(max-width: 639px)')
-    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches)
-    mq.addEventListener('change', handler)
-    return () => mq.removeEventListener('change', handler)
-  }, [])
-
-  return (
-    <AnimatePresence>
-      {open && (
-        <>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-scrim max-sm:bg-black/40 sm:bg-casa-navy/5 sm:backdrop-blur-[0.5px]"
-            onClick={onClose}
-          />
-
-          <motion.div
-            initial={isMobile ? { y: '100%', opacity: 0.95 } : { x: '100%', opacity: 0.95 }}
-            animate={isMobile ? { y: 0, opacity: 1 } : { x: 0, opacity: 1 }}
-            exit={isMobile ? { y: '100%', opacity: 0.95 } : { x: '100%', opacity: 0.95 }}
-            transition={{ type: 'spring', damping: 30, stiffness: 320 }}
-            className={cn(
-              'fixed z-popover bg-casa-surface flex flex-col transition-shadow',
-              'max-sm:inset-x-0 max-sm:bottom-0 max-sm:rounded-t-2xl max-sm:w-full max-sm:shadow-modal',
-              'sm:inset-y-0 sm:right-0 sm:top-0 sm:bottom-0 sm:h-full sm:w-[460px] md:w-[480px] lg:w-[500px] sm:max-w-[92vw] sm:rounded-none sm:border-l sm:border-casa-border sm:shadow-modal',
-              loading && 'ai-thinking',
-            )}
-            data-panel-overlay
-            data-touch-keyboard="ignore"
-            style={{
-              ...(isMobile ? {
-                maxHeight: '88vh',
-                paddingBottom: 'env(safe-area-inset-bottom)',
-              } : {
-                height: '100vh',
-              })
-            }}
-            onClick={e => e.stopPropagation()}
-            onPaste={handlePaste}
-          >
-            {/* Drag handle — mobile only */}
-            <div className="flex justify-center pt-3 pb-1 sm:hidden flex-shrink-0">
-              <div className="w-9 h-1 bg-casa-divider rounded-full" />
-            </div>
-
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-casa-border">
+  const drawerBody = (
+    <>
+      {/* Header */}
+      <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-casa-border">
               <div className="flex items-center gap-2.5">
                 <div className={cn(
                   'w-7 h-7 rounded-full bg-casa-gold/10 flex items-center justify-center transition-all',
@@ -1514,8 +1477,69 @@ export default function AIChatDrawer({
                   </Button>
                 </div>
             </Modal>
-          </motion.div>
-        </>
+    </>
+  )
+
+  return (
+    <AnimatePresence>
+      {open && (
+        isMobile ? (
+          <>
+            <motion.div
+              key="ai-scrim-mobile"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-scrim bg-black/40 sm:hidden"
+              onClick={onClose}
+            />
+            <motion.div
+              key="ai-sheet-mobile"
+              initial={{ y: '100%', opacity: 0.95 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: '100%', opacity: 0.95 }}
+              transition={{ type: 'spring', damping: 30, stiffness: 320 }}
+              className={cn(
+                'fixed inset-x-0 bottom-0 z-popover bg-casa-surface flex flex-col sm:hidden shadow-modal rounded-t-2xl',
+                loading && 'ai-thinking',
+              )}
+              data-panel-overlay
+              data-touch-keyboard="ignore"
+              style={{
+                maxHeight: '88vh',
+                paddingBottom: 'env(safe-area-inset-bottom)',
+              }}
+              onClick={e => e.stopPropagation()}
+              onPaste={handlePaste}
+            >
+              {/* Drag handle — mobile only */}
+              <div className="flex justify-center pt-3 pb-1 sm:hidden flex-shrink-0">
+                <div className="w-9 h-1 bg-casa-divider rounded-full" />
+              </div>
+              {drawerBody}
+            </motion.div>
+          </>
+        ) : (
+          <motion.aside
+            key="ai-sidecar-desktop"
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width: 440, opacity: 1 }}
+            exit={{ width: 0, opacity: 0 }}
+            transition={{ type: 'spring', damping: 28, stiffness: 260 }}
+            className={cn(
+              'hidden sm:flex flex-col flex-shrink-0 h-full overflow-hidden border-l border-casa-border bg-casa-surface relative z-10 shadow-lg',
+              loading && 'ai-thinking',
+            )}
+            data-panel-overlay
+            data-touch-keyboard="ignore"
+            onClick={e => e.stopPropagation()}
+            onPaste={handlePaste}
+          >
+            <div className="w-[440px] h-full flex flex-col min-w-[440px]">
+              {drawerBody}
+            </div>
+          </motion.aside>
+        )
       )}
     </AnimatePresence>
   )

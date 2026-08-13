@@ -240,11 +240,21 @@ function AppShell() {
       {/* Full-width top bar — sticky, never scrolls */}
       <TopBarC />
 
-      <div className="app-shell-main flex flex-1 min-h-0">
-        <TabletSidebar />
+      <div className="app-shell-main flex flex-1 min-h-0 relative overflow-hidden">
+        <TabletSidebar aiDrawerOpen={aiDrawerOpen} />
         <div className="flex-1 min-w-0 overflow-hidden h-full">
           <AnimatedRoutes />
         </div>
+        {/* Global AI drawer / sidecar */}
+        <GlobalAIDrawer
+          screensaverActive={screensaverActive}
+          open={aiDrawerOpen}
+          setOpen={setAiDrawerOpen}
+          safeMode={IS_SAFE_MODE}
+          routePath={location.pathname}
+          wakeWordEnabled={settings.wakeWordEnabled}
+          onOpenEventDetails={openEventDetailsFromAssistant}
+        />
       </div>
 
       {/* Bottom nav only visible on mobile */}
@@ -260,17 +270,6 @@ function AppShell() {
       />
 
       <TouchKeyboard />
-
-      {/* Global AI drawer — opens from TopBar sparkle or wake word */}
-      <GlobalAIDrawer
-        screensaverActive={screensaverActive}
-        open={aiDrawerOpen}
-        setOpen={setAiDrawerOpen}
-        safeMode={IS_SAFE_MODE}
-        routePath={location.pathname}
-        wakeWordEnabled={settings.wakeWordEnabled}
-        onOpenEventDetails={openEventDetailsFromAssistant}
-      />
 
       <EventDetailPanel
         event={selectedDrawerEvent}

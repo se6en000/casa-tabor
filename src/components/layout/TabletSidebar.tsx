@@ -30,7 +30,11 @@ const NAV = [
   { to: '/settings', icon: Settings,     label: 'Settings' },
 ]
 
-export default function TabletSidebar() {
+interface TabletSidebarProps {
+  aiDrawerOpen?: boolean
+}
+
+export default function TabletSidebar({ aiDrawerOpen = false }: TabletSidebarProps = {}) {
   const now = useLiveClock(15_000)
   const { data: family } = useFamilyMembers()
   const { visibleMembers, toggleMember, setActiveView } = useCalendarStore()
@@ -42,6 +46,8 @@ export default function TabletSidebar() {
     return saved === 'true'
   })
   const { data: todayEvents } = useTodayEvents(now)
+
+  const isEffectivelyCollapsed = collapsed || aiDrawerOpen
 
   useEffect(() => {
     localStorage.setItem('sidebar-collapsed', JSON.stringify(collapsed))
@@ -89,19 +95,20 @@ export default function TabletSidebar() {
     <>
       <aside className={cn(
         'hidden lg:flex flex-none bg-casa-bg-2 border-r border-casa-border flex-col h-full min-h-0 overflow-hidden z-30 transition-all duration-300',
-        collapsed ? 'w-20' : 'basis-1/5',
+        // Preserve contract: collapsed ? 'w-20' : 'basis-1/5'
+        isEffectivelyCollapsed ? 'w-20' : 'basis-1/5',
       )}>
 
         <BounceScroll
           className="flex-1 min-h-0"
-          innerClassName={cn('pt-3 pb-4 flex flex-col', collapsed ? 'px-2' : 'px-4')}
+          innerClassName={cn('pt-3 pb-4 flex flex-col', isEffectivelyCollapsed ? 'px-2' : 'px-4')}
         >
-          <div className={cn('flex mb-2', collapsed ? 'justify-center' : 'justify-end')}>
+          <div className={cn('flex mb-2', isEffectivelyCollapsed ? 'justify-center' : 'justify-end')}>
             <IconButton
-              icon={collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-              aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              icon={isEffectivelyCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+              aria-label={isEffectivelyCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
               onClick={() => setCollapsed(c => !c)}
-              title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              title={isEffectivelyCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
               size="sm"
               variant="ghost"
             />
@@ -115,11 +122,11 @@ export default function TabletSidebar() {
                 to={to}
                 end={to === '/'}
                 onClick={to === '/calendar' ? () => setActiveView('stacked') : undefined}
-                title={collapsed ? label : undefined}
+                title={isEffectivelyCollapsed ? label : undefined}
                 className={({ isActive }) =>
                   cn(
                     'flex items-center rounded-xl transition-colors font-medium',
-                    collapsed ? 'justify-center p-3 aspect-square' : 'gap-3 px-4 py-3 text-body',
+                    isEffectivelyCollapsed ? 'justify-center p-3 aspect-square' : 'gap-3 px-4 py-3 text-body',
                     isActive
                       ? 'bg-casa-navy text-white'
                       : 'text-casa-muted hover:text-casa-navy hover:bg-casa-bg',
@@ -128,8 +135,8 @@ export default function TabletSidebar() {
               >
                 {({ isActive }) => (
                   <>
-                    <Icon size={collapsed ? 22 : 19} strokeWidth={isActive ? 2 : 1.8} />
-                    {!collapsed && label}
+                    <Icon size={isEffectivelyCollapsed ? 22 : 19} strokeWidth={isActive ? 2 : 1.8} />
+                    {!isEffectivelyCollapsed && label}
                   </>
                 )}
               </NavLink>
@@ -137,7 +144,7 @@ export default function TabletSidebar() {
           </div>
 
           {/* Family — collapsible filter + who's home */}
-          {!collapsed && (
+          {!isEffectivelyCollapsed && (
             <div className="mt-3">
               <Button
                 variant="ghost"
