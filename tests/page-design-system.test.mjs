@@ -619,10 +619,9 @@ test('every Settings route is covered by the shared Settings surface contract', 
 test('Google service maintenance actions use soft semantic button variants', () => {
   const googleServices = readFileSync(resolve('src/pages/GoogleServicesPage.tsx'), 'utf8')
 
-  assert.match(googleServices, /variant="subtle"[\s\S]*?>[\s\S]*?Sync now/)
-  assert.match(googleServices, /variant="subtle"[\s\S]*?>[\s\S]*?Scan now/)
+  assert.match(googleServices, /variant="subtle"[\s\S]*?>[\s\S]*?Sync/)
   assert.match(googleServices, /variant="ghost"[\s\S]*?text-casa-error[\s\S]*?>[\s\S]*?Disconnect/)
-  assert.match(googleServices, /variant="ghost"[\s\S]*?text-casa-error[\s\S]*?>[\s\S]*?Disable/)
+  assert.match(googleServices, /<Switch/)
   assert.doesNotMatch(
     googleServices,
     /className="[^"]*(?:border-red-200|text-red-500|hover:bg-red-50)[^"]*"/,

@@ -1,26 +1,32 @@
 /**
  * GoogleServicesPage
  *
- * Combined Google Services settings — Calendar sync + Gmail Inbox Scan.
- * One auth flow per family member, with checkboxes to select which services
- * to enable. Shows live green status + last activity timestamp per service.
+ * Streamlined Google Services management — Calendar sync + Gmail Inbox Scan.
+ * Features:
+ * - Universal "Sync all services" button with aggregate feedback
+ * - Flat, scannable family member cards with clear health indicators
+ * - Native Switch toggles for Gmail scanning (no conflicting inline triggers)
+ * - Safe disconnect dialog to prevent accidental unlinking
+ * - Clean visual hierarchy adhering to Casa design system
  */
 
 import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   Calendar, Mail, Check,
-  RefreshCw, Unlink,
+  RefreshCw, Unlink, AlertCircle, Layers,
 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Chip, DisclosureSection } from '../components/ui'
+import {
+  Alert, Button, Chip, ConfirmationDialog,
+  Switch, Checkbox,
+} from '../components/ui'
 import { SettingsPageHeader } from '../components/settings'
 import { formatDistanceToNow, format } from 'date-fns'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
 import type { FamilyMember } from '../types'
 import { FALLBACK_PROFILE_COLOR } from '../design-system/memberColors'
-import { splitGoogleServiceMembers } from '../utils/googleServicesGrouping'
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -67,7 +73,6 @@ function useGoogleServices() {
       const byId = new Map(
         (statuses ?? []).map((s: GoogleStatus) => [s.family_member_id, s]),
       )
-      // Most recent Gmail scan per member
       const lastScanById = new Map<string, string>()
       for (const msg of gmailMsgs ?? []) {
         if (!lastScanById.has(msg.family_member_id)) {
@@ -87,15 +92,12 @@ function useGoogleServices() {
 
 export default function GoogleServicesPage() {
   const [params, setParams] = useSearchParams()
-  const [scanning, setScanning] = useState(false)
-  const [scanResult, setScanResult] = useState<string | null>(null)
+  const [isSyncingAll, setIsSyncingAll] = useState(false)
+  const [syncResult, setSyncResult] = useState<{ tone: 'success' | 'danger'; title: string; message?: string } | null>(null)
+  const [memberToDisconnect, setMemberToDisconnect] = useState<MemberWithStatus | null>(null)
   const qc = useQueryClient()
 
   const { data: members, isLoading, refetch } = useGoogleServices()
-  const { gmailActiveMembers, calendarOnlyMembers, inactiveMembers } = useMemo(
-    () => splitGoogleServiceMembers(members ?? []),
-    [members],
-  )
 
   const connectedParam = params.get('connected')
   const gmailParam = params.get('gmail')
@@ -114,7 +116,7 @@ export default function GoogleServicesPage() {
     }
   }, [connectedParam, errorParam, params, refetch, setParams])
 
-  // Connect / re-auth
+  // OAuth start mutation
   const connectGoogle = useMutation({
     mutationFn: async ({ memberId, includeGmail }: { memberId: string; includeGmail: boolean }) => {
       const { data, error } = await supabase.functions.invoke('google-oauth-start', {
@@ -125,7 +127,7 @@ export default function GoogleServicesPage() {
     },
   })
 
-  // Toggle Gmail scan on/off via Edge Function (service role needed to write google_tokens)
+  // Toggle Gmail scan on/off via Edge Function
   const toggleGmail = useMutation({
     mutationFn: async ({ memberId, enabled }: { memberId: string; enabled: boolean }) => {
       const { data, error } = await supabase.functions.invoke('toggle-gmail-scan', {
@@ -140,7 +142,7 @@ export default function GoogleServicesPage() {
     },
   })
 
-  // Disconnect
+  // Disconnect Google account
   const disconnect = useMutation({
     mutationFn: async (memberId: string) => {
       const { data, error } = await supabase.functions.invoke('disconnect-calendar', {
@@ -150,26 +152,40 @@ export default function GoogleServicesPage() {
       if (data?.error) throw new Error(data.error)
     },
     onSuccess: () => {
+      setMemberToDisconnect(null)
       qc.invalidateQueries({ queryKey: ['google-services'] })
       refetch()
     },
   })
 
-  // Sync calendar now
-  const syncCalendar = useMutation({
+  // Sync individual account
+  const syncAccount = useMutation({
     mutationFn: async (memberId: string) => {
-      // Run calendar sync and Gmail scan in parallel — one button does both
-      const [calResult, gmailResult] = await Promise.allSettled([
+      const member = members?.find((m) => m.id === memberId)
+      const tasks: Promise<{ data: any; error: any }>[] = [
         supabase.functions.invoke('sync-calendars', { body: { family_member_id: memberId } }),
-        supabase.functions.invoke('scan-gmail-inbox', { body: { family_member_id: memberId } }),
-      ])
-      if (calResult.status === 'rejected') throw calResult.reason
-      if (calResult.value.error) throw calResult.value.error
-      if (gmailResult.status === 'fulfilled' && !gmailResult.value.error) {
-        const results = gmailResult.value.data?.results ?? []
-        const created = results.reduce((s: number, r: { created: number }) => s + r.created, 0)
-        const scanned = results.reduce((s: number, r: { scanned: number }) => s + r.scanned, 0)
-        setScanResult(`Scanned ${scanned} emails · ${created} event${created !== 1 ? 's' : ''} added`)
+      ]
+      if (member?.status?.gmail_scan_enabled) {
+        tasks.push(supabase.functions.invoke('scan-gmail-inbox', { body: { family_member_id: memberId } }))
+      }
+
+      const results = await Promise.allSettled(tasks)
+      const calRes = results[0]
+      if (calRes.status === 'rejected') throw calRes.reason
+      if (calRes.status === 'fulfilled' && calRes.value.error) throw calRes.value.error
+
+      const gmailRes = results[1]
+      if (gmailRes && gmailRes.status === 'fulfilled' && !gmailRes.value.error) {
+        const gmailData = gmailRes.value.data?.results ?? []
+        const created = gmailData.reduce((s: number, r: { created: number }) => s + (r.created ?? 0), 0)
+        const scanned = gmailData.reduce((s: number, r: { scanned: number }) => s + (r.scanned ?? 0), 0)
+        if (scanned > 0 || created > 0) {
+          setSyncResult({
+            tone: 'success',
+            title: `${member?.name ?? 'Account'} synced`,
+            message: `Scanned ${scanned} emails · ${created} event${created !== 1 ? 's' : ''} added`,
+          })
+        }
       }
     },
     onSuccess: () => {
@@ -179,79 +195,113 @@ export default function GoogleServicesPage() {
     },
   })
 
-  // Scan Gmail now
-  async function runGmailScan(memberId: string) {
-    setScanning(true)
-    setScanResult(null)
-    try {
-      const { data, error } = await supabase.functions.invoke('scan-gmail-inbox', {
-        body: { family_member_id: memberId },
-      })
-      if (error) throw error
-      const results = data?.results ?? []
-      const created = results.reduce((s: number, r: { created: number }) => s + r.created, 0)
-      const scanned = results.reduce((s: number, r: { scanned: number }) => s + r.scanned, 0)
-      setScanResult(`Scanned ${scanned} emails · ${created} event${created !== 1 ? 's' : ''} added`)
-      refetch()
-      qc.invalidateQueries({ queryKey: ['events'] })
-    } catch (e) {
-      setScanResult(`Error: ${e instanceof Error ? e.message : String(e)}`)
-    } finally {
-      setScanning(false)
+  // Universal Sync All Services
+  async function handleSyncAll() {
+    setIsSyncingAll(true)
+    setSyncResult(null)
+
+    const activeMembers = (members ?? []).filter(
+      (m) => !!m.status?.google_email && m.status?.is_enabled !== false && !m.status?.reauthorization_required,
+    )
+
+    if (activeMembers.length === 0) {
+      setIsSyncingAll(false)
+      return
     }
-  }
 
-  function renderMemberDisclosure(member: MemberWithStatus, defaultOpen: boolean) {
-    const status = member.status
-    const isConnected = !!status?.google_email
-    const isGmailActive = isConnected && !!status?.gmail_scan_enabled
-    const isCalendarActive = isConnected && status?.is_enabled !== false && !status?.reauthorization_required
+    let totalEmailsScanned = 0
+    let totalEventsCreated = 0
+    const errors: string[] = []
 
-    let summary = 'Not connected'
-    if (isConnected) {
-      if (status?.reauthorization_required) {
-        summary = `${status.google_email} · Reconnect required`
-      } else if (isGmailActive) {
-        const lastScan = status.gmail_last_scan_success_at
-          ? `Scanned ${formatDistanceToNow(new Date(status.gmail_last_scan_success_at))} ago`
-          : 'Gmail scan active'
-        summary = `${status.google_email} · ${status.access_mode === 'writable' ? 'Write target' : 'Connected'} · ${lastScan}`
-      } else if (isCalendarActive) {
-        const lastSync = status.last_sync_at
-          ? `Synced ${formatDistanceToNow(new Date(status.last_sync_at))} ago`
-          : 'Calendar connected'
-        summary = `${status.google_email} · Calendar only · ${lastSync}`
-      } else {
-        summary = `${status.google_email} · Inactive`
+    const tasks: Promise<unknown>[] = []
+
+    for (const m of activeMembers) {
+      // 1. Calendar sync
+      tasks.push(
+        supabase.functions
+          .invoke('sync-calendars', { body: { family_member_id: m.id } })
+          .then((res) => {
+            if (res.error) throw new Error(`${m.name} Calendar: ${res.error.message ?? 'Sync failed'}`)
+          })
+          .catch((err) => {
+            errors.push(err instanceof Error ? err.message : String(err))
+          }),
+      )
+
+      // 2. Gmail scan if enabled
+      if (m.status?.gmail_scan_enabled) {
+        tasks.push(
+          supabase.functions
+            .invoke('scan-gmail-inbox', { body: { family_member_id: m.id } })
+            .then((res) => {
+              if (res.error) throw new Error(`${m.name} Gmail: ${res.error.message ?? 'Scan failed'}`)
+              const results = res.data?.results ?? []
+              for (const r of results) {
+                totalEventsCreated += r.created ?? 0
+                totalEmailsScanned += r.scanned ?? 0
+              }
+            })
+            .catch((err) => {
+              errors.push(err instanceof Error ? err.message : String(err))
+            }),
+        )
       }
     }
 
-    return (
-      <DisclosureSection
-        key={member.id}
-        title={member.name}
-        summary={summary}
-        defaultOpen={defaultOpen}
-        className="overflow-hidden rounded-card border border-casa-border bg-casa-surface shadow-card transition-all"
-      >
-        <MemberCard
-          member={member}
-          showIdentity={false}
-          onConnect={(includeGmail) => connectGoogle.mutate({ memberId: member.id, includeGmail })}
-          onToggleGmail={(enabled) => toggleGmail.mutate({ memberId: member.id, enabled })}
-          onSyncCalendar={() => syncCalendar.mutate(member.id)}
-          onScanGmail={() => runGmailScan(member.id)}
-          onDisconnect={() => disconnect.mutate(member.id)}
-          isBusy={
-            (connectGoogle.isPending && (connectGoogle.variables as { memberId: string })?.memberId === member.id) ||
-            (disconnect.isPending && disconnect.variables === member.id) ||
-            (syncCalendar.isPending && syncCalendar.variables === member.id) ||
-            scanning
-          }
-        />
-      </DisclosureSection>
-    )
+    await Promise.allSettled(tasks)
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ['google-services'] }),
+      qc.invalidateQueries({ queryKey: ['events'] }),
+    ])
+    await refetch()
+    setIsSyncingAll(false)
+
+    if (errors.length > 0) {
+      setSyncResult({
+        tone: 'danger',
+        title: 'Sync completed with warnings',
+        message: errors.join(' · '),
+      })
+    } else {
+      setSyncResult({
+        tone: 'success',
+        title: 'All services synchronized',
+        message: `Updated ${activeMembers.length} connected account${activeMembers.length === 1 ? '' : 's'}${
+          totalEmailsScanned > 0
+            ? ` · ${totalEmailsScanned} emails scanned · ${totalEventsCreated} event${totalEventsCreated === 1 ? '' : 's'} added`
+            : ''
+        }`,
+      })
+    }
   }
+
+  // Summary counts
+  const { connectedCount, gmailActiveCount, latestSyncDate } = useMemo(() => {
+    let connected = 0
+    let gmailActive = 0
+    let latest: Date | null = null
+
+    for (const m of members ?? []) {
+      if (m.status?.google_email) {
+        connected++
+        if (m.status.gmail_scan_enabled) gmailActive++
+        if (m.status.last_sync_at) {
+          const d = new Date(m.status.last_sync_at)
+          if (!latest || d > latest) latest = d
+        }
+        if (m.status.gmail_last_scan_success_at) {
+          const d = new Date(m.status.gmail_last_scan_success_at)
+          if (!latest || d > latest) latest = d
+        }
+      }
+    }
+
+    return {
+      connectedCount: connected,
+      gmailActiveCount: gmailActive,
+      latestSyncDate: latest,
+    }
+  }, [members])
 
   const hasAnyMembers = (members?.length ?? 0) > 0
 
@@ -260,17 +310,71 @@ export default function GoogleServicesPage() {
       <SettingsPageHeader
         title="Google Services"
         description="Connect each family member's account for calendar sync and Gmail scanning."
+        actions={
+          connectedCount > 0 ? (
+            <Button
+              variant="subtle"
+              size="sm"
+              onClick={handleSyncAll}
+              disabled={isSyncingAll}
+              leadingIcon={<RefreshCw size={14} className={isSyncingAll ? 'animate-spin' : ''} />}
+            >
+              {isSyncingAll ? 'Syncing all…' : 'Sync all services'}
+            </Button>
+          ) : null
+        }
       />
 
       {/* Status banners */}
       {connectedParam && (
-        <Alert className="mt-6" tone="success" title={gmailParam ? 'Calendar sync and Gmail scan are active' : 'Calendar sync is active'} />
+        <Alert
+          className="mt-6"
+          tone="success"
+          title={gmailParam ? 'Calendar sync and Gmail scan are active' : 'Calendar sync is active'}
+        />
       )}
       {errorParam && (
-        <Alert className="mt-6" tone="danger" title="Google connection failed">{errorParam.replace(/_/g, ' ')}</Alert>
+        <Alert className="mt-6" tone="danger" title="Google connection failed">
+          {errorParam.replace(/_/g, ' ')}
+        </Alert>
       )}
-      {scanResult && (
-        <Alert className="mt-6" title="Gmail scan complete">{scanResult}</Alert>
+      {syncResult && (
+        <Alert
+          className="mt-6"
+          tone={syncResult.tone}
+          title={syncResult.title}
+        >
+          {syncResult.message}
+        </Alert>
+      )}
+
+      {/* Overview stats bar */}
+      {!isLoading && hasAnyMembers && connectedCount > 0 && (
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-card border border-casa-border bg-casa-surface/60 p-4 shadow-card">
+          <div className="flex items-center gap-3">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-casa-bg text-casa-navy">
+              <Layers size={18} />
+            </div>
+            <div>
+              <p className="text-body-sm font-semibold text-casa-navy">
+                {connectedCount} of {members?.length} accounts connected
+              </p>
+              <p className="text-caption text-casa-muted">
+                {gmailActiveCount} active inbox {gmailActiveCount === 1 ? 'monitor' : 'monitors'} ·{' '}
+                {latestSyncDate ? `Last sync ${formatDistanceToNow(latestSyncDate)} ago` : 'Ready to sync'}
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="subtle"
+            size="sm"
+            onClick={handleSyncAll}
+            disabled={isSyncingAll}
+            leadingIcon={<RefreshCw size={14} className={isSyncingAll ? 'animate-spin' : ''} />}
+          >
+            {isSyncingAll ? 'Syncing…' : 'Sync now'}
+          </Button>
+        </div>
       )}
 
       {/* Member cards */}
@@ -279,283 +383,262 @@ export default function GoogleServicesPage() {
       ) : !hasAnyMembers ? (
         <p className="mt-6 text-body-sm text-casa-muted">No family members found.</p>
       ) : (
-        <div className="mt-6 space-y-6">
-          {/* 1. Active Gmail Monitored Accounts (Priority Tier) */}
-          <DisclosureSection
-            title="Active Gmail monitoring"
-            summary={`${gmailActiveMembers.length} account${gmailActiveMembers.length === 1 ? '' : 's'} · Continuous inbox scan + calendar sync`}
-            icon={<Mail size={18} className="text-casa-navy" />}
-            defaultOpen={true}
-            className="overflow-hidden rounded-card border border-casa-border bg-casa-surface/60 shadow-card"
-          >
-            {gmailActiveMembers.length > 0 ? (
-              <div className="space-y-3 pt-2">
-                {gmailActiveMembers.map((member) => renderMemberDisclosure(member, true))}
-              </div>
-            ) : (
-              <p className="py-2 text-body-sm text-casa-muted">
-                No accounts currently have Gmail inbox monitoring enabled. Enable Gmail scanning on an active account below to auto-import actionable emails.
-              </p>
-            )}
-          </DisclosureSection>
-
-          {/* 2. Calendar-Only Accounts */}
-          {calendarOnlyMembers.length > 0 && (
-            <DisclosureSection
-              title="Calendar sync only"
-              summary={`${calendarOnlyMembers.length} account${calendarOnlyMembers.length === 1 ? '' : 's'} · Calendar sync active (Gmail scanning disabled)`}
-              icon={<Calendar size={18} className="text-casa-navy" />}
-              defaultOpen={true}
-              className="overflow-hidden rounded-card border border-casa-border bg-casa-surface/60 shadow-card"
-            >
-              <div className="space-y-3 pt-2">
-                {calendarOnlyMembers.map((member) => renderMemberDisclosure(member, false))}
-              </div>
-            </DisclosureSection>
-          )}
-
-          {/* 3. Inactive / Unconnected Accounts */}
-          {inactiveMembers.length > 0 && (
-            <DisclosureSection
-              title="Inactive & unconnected accounts"
-              summary={`${inactiveMembers.length} account${inactiveMembers.length === 1 ? '' : 's'} not connected or requiring reconnection`}
-              icon={<Unlink size={18} className="text-casa-muted" />}
-              defaultOpen={false}
-              className="overflow-hidden rounded-card border border-casa-border bg-casa-surface/60 shadow-card"
-            >
-              <div className="space-y-3 pt-2">
-                {inactiveMembers.map((member) => renderMemberDisclosure(member, false))}
-              </div>
-            </DisclosureSection>
-          )}
+        <div className="mt-6 space-y-4">
+          {(members ?? []).map((member) => (
+            <MemberCard
+              key={member.id}
+              member={member}
+              onConnect={(includeGmail) => connectGoogle.mutate({ memberId: member.id, includeGmail })}
+              onToggleGmail={(enabled) => toggleGmail.mutate({ memberId: member.id, enabled })}
+              onSyncAccount={() => syncAccount.mutate(member.id)}
+              onRequestDisconnect={() => setMemberToDisconnect(member)}
+              isBusy={
+                (connectGoogle.isPending && (connectGoogle.variables as { memberId: string })?.memberId === member.id) ||
+                (disconnect.isPending && disconnect.variables === member.id) ||
+                (syncAccount.isPending && syncAccount.variables === member.id) ||
+                (toggleGmail.isPending && (toggleGmail.variables as { memberId: string })?.memberId === member.id) ||
+                isSyncingAll
+              }
+            />
+          ))}
         </div>
+      )}
+
+      {/* Disconnect confirmation modal */}
+      {memberToDisconnect && (
+        <ConfirmationDialog
+          open={true}
+          onClose={() => setMemberToDisconnect(null)}
+          onConfirm={() => disconnect.mutate(memberToDisconnect.id)}
+          title={`Disconnect ${memberToDisconnect.name}'s Google Account?`}
+          description={`This will disconnect ${memberToDisconnect.status?.google_email ?? 'Google account'} from Casa. Calendar sync and Gmail monitoring will stop, but existing events in your household schedule will be kept.`}
+          confirmLabel="Disconnect"
+          destructive={true}
+          loading={disconnect.isPending}
+        />
       )}
     </>
   )
 }
 
-// ── Member card ────────────────────────────────────────────────────
+// ── Member Card Component ──────────────────────────────────────────
 
 function MemberCard({
-  member, onConnect, onToggleGmail, onSyncCalendar, onScanGmail, onDisconnect, isBusy, showIdentity = true,
+  member,
+  onConnect,
+  onToggleGmail,
+  onSyncAccount,
+  onRequestDisconnect,
+  isBusy,
 }: {
   member: MemberWithStatus
   onConnect: (includeGmail: boolean) => void
   onToggleGmail: (enabled: boolean) => void
-  onSyncCalendar: () => void
-  onScanGmail: () => void
-  onDisconnect: () => void
+  onSyncAccount: () => void
+  onRequestDisconnect: () => void
   isBusy: boolean
-  showIdentity?: boolean
 }) {
   const s = member.status
   const isConnected = !!s?.google_email
   const calendarActive = isConnected && s?.is_enabled !== false && !s?.reauthorization_required
   const gmailActive = isConnected && !!s?.gmail_scan_enabled
+  const reauthRequired = isConnected && !!s?.reauthorization_required
   const [wantGmail, setWantGmail] = useState(true)
 
   return (
-    <div className={cn(showIdentity && 'bg-casa-surface border border-casa-border rounded-card p-5 shadow-card')}>
-      {/* Header row */}
-      {(showIdentity || isConnected) && (
-        <div className="flex items-center justify-end gap-3 mb-4">
-          {showIdentity && (
-            <>
-              <div
-                className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-body shrink-0"
-                style={{ backgroundColor: member.color_hex ?? FALLBACK_PROFILE_COLOR }}
-              >
-                {member.name.charAt(0).toUpperCase()}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-casa-navy text-body leading-none">{member.name}</p>
-                {s?.google_email && (
-                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                    <p className="text-caption text-casa-muted truncate">{s.google_email}</p>
-                    {s.access_mode === 'writable' && <Chip tone="accent">Casa write target</Chip>}
-                    {s.access_mode === 'read_only' && <Chip tone="neutral">Read-only source</Chip>}
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-          {isConnected && s?.reauthorization_required ? (
-            <Button variant="strong" size="sm" onClick={() => onConnect(gmailActive)} disabled={isBusy}>
+    <div
+      className={cn(
+        'rounded-card border bg-casa-surface p-5 shadow-card transition-all',
+        reauthRequired ? 'border-casa-gold/60 ring-1 ring-casa-gold/30' : 'border-casa-border',
+      )}
+    >
+      {/* ── Card Header ── */}
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-casa-border/60 pb-4">
+        {/* Left: Avatar + Identity */}
+        <div className="flex min-w-0 items-center gap-3">
+          <div
+            className="flex size-10 shrink-0 items-center justify-center rounded-full font-semibold text-body text-white"
+            style={{ backgroundColor: member.color_hex ?? FALLBACK_PROFILE_COLOR }}
+          >
+            {member.name.charAt(0).toUpperCase()}
+          </div>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="font-semibold text-body text-casa-navy leading-none">{member.name}</p>
+              {isConnected && s?.access_mode === 'writable' && (
+                <Chip tone="accent">Casa write target</Chip>
+              )}
+              {isConnected && s?.access_mode === 'read_only' && (
+                <Chip tone="neutral">Read-only</Chip>
+              )}
+            </div>
+            {isConnected ? (
+              <p className="mt-1 truncate text-caption text-casa-muted">{s.google_email}</p>
+            ) : (
+              <p className="mt-1 text-caption text-casa-muted">Google account not connected</p>
+            )}
+          </div>
+        </div>
+
+        {/* Right: Actions */}
+        <div className="flex shrink-0 items-center gap-2">
+          {isConnected && reauthRequired ? (
+            <Button
+              variant="strong"
+              size="sm"
+              onClick={() => onConnect(gmailActive)}
+              disabled={isBusy}
+              leadingIcon={<GoogleIcon />}
+            >
               Reconnect
             </Button>
           ) : isConnected ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onDisconnect}
-              disabled={isBusy}
-              className="text-casa-error hover:bg-casa-error/10"
-              title="Disconnect Google account"
-              leadingIcon={<Unlink size={14} />}
-            >
-              Disconnect
-            </Button>
-          ) : null}
-        </div>
-      )}
-
-      {isConnected ? (
-        /* ── Connected: show status rows ── */
-        <div className="space-y-3">
-          {/* Calendar row */}
-          <ServiceRow
-            icon={<Calendar size={14} />}
-            label="Google Calendar"
-            active={calendarActive}
-            statusText={calendarActive
-              ? (s?.last_sync_at
-                  ? `synced ${formatDistanceToNow(new Date(s.last_sync_at))} ago`
-                  : `connected ${format(new Date(s!.connected_at), 'MMM d, h:mm a')}`)
-              : (s?.reauthorization_required ? 'Reconnect required' : 'Not active')}
-            errorText={s?.last_sync_error ?? undefined}
-            action={
+            <>
               <Button
                 variant="subtle"
                 size="sm"
-                onClick={onSyncCalendar}
+                onClick={onSyncAccount}
                 disabled={isBusy || !calendarActive}
-                title="Sync now"
+                title="Sync account"
                 leadingIcon={<RefreshCw size={14} className={isBusy ? 'animate-spin' : ''} />}
               >
-                Sync now
+                Sync
               </Button>
-            }
-          />
-          <p className="px-3 text-caption text-casa-muted">
-            {s?.access_mode === 'writable'
-              ? 'Casa-created and adopted events project automatically to this calendar.'
-              : 'Events from this calendar remain read-only until explicitly adopted into Casa.'}
-          </p>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onRequestDisconnect}
+                disabled={isBusy}
+                className="text-casa-error hover:bg-casa-error/10"
+                title="Disconnect Google account"
+                leadingIcon={<Unlink size={14} />}
+              >
+                Disconnect
+              </Button>
+            </>
+          ) : null}
+        </div>
+      </div>
 
-          {/* Gmail row */}
-          <ServiceRow
-            icon={<Mail size={14} />}
-            label="Gmail Inbox Scan"
-            active={gmailActive}
-            statusText={gmailActive
-              ? (s?.gmail_last_scan_success_at
-                  ? `checked ${formatDistanceToNow(new Date(s.gmail_last_scan_success_at))} ago`
-                  : 'enabled — no scans yet')
-              : 'Not enabled'}
-            errorText={s?.gmail_last_scan_error ?? undefined}
-            action={
-              gmailActive ? (
-                <div className="flex items-center gap-1.5">
-                  <Button
-                    variant="subtle"
-                    size="sm"
-                    onClick={onScanGmail}
-                    disabled={isBusy}
-                    title="Scan now"
-                    leadingIcon={<RefreshCw size={14} className={isBusy ? 'animate-spin' : ''} />}
-                  >
-                    Scan now
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onToggleGmail(false)}
-                    disabled={isBusy}
-                    className="text-casa-error hover:bg-casa-error/10"
-                    aria-label="Disable Gmail inbox scan"
-                  >
-                    Disable
-                  </Button>
-                </div>
-              ) : (
-                <Button
-                  variant="strong"
-                  size="sm"
-                  onClick={() => onToggleGmail(true)}
-                  disabled={isBusy}
-                  leadingIcon={<Mail size={14} />}
-                >
-                  Enable
-                </Button>
-              )
-            }
-          />
+      {/* ── Card Body ── */}
+      {isConnected ? (
+        <div className="space-y-3 pt-4">
+          {reauthRequired && (
+            <div className="flex items-center gap-2 rounded-xl bg-casa-gold/10 p-3 text-body-sm text-casa-navy">
+              <AlertCircle size={16} className="shrink-0 text-casa-gold" />
+              <span>Google session expired. Please reconnect to resume sync and email scanning.</span>
+            </div>
+          )}
+
+          {/* 1. Calendar Sync Row */}
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-casa-border/50 bg-casa-bg px-4 py-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className={cn('shrink-0', calendarActive ? 'text-casa-navy' : 'text-casa-muted')}>
+                <Calendar size={18} />
+              </div>
+              <div className="min-w-0">
+                <p className="font-semibold text-body-sm text-casa-navy leading-none">Google Calendar Sync</p>
+                <p className="mt-1 text-caption text-casa-muted">
+                  {calendarActive ? (
+                    <>
+                      <span className="mr-1 inline-block size-1.5 rounded-full bg-green-500" />
+                      {s.last_sync_at
+                        ? `Synced ${formatDistanceToNow(new Date(s.last_sync_at))} ago`
+                        : `Connected ${format(new Date(s.connected_at), 'MMM d, h:mm a')}`}
+                    </>
+                  ) : reauthRequired ? (
+                    'Reauthorization needed'
+                  ) : (
+                    'Sync paused'
+                  )}
+                </p>
+              </div>
+            </div>
+            <div className="shrink-0">
+              <Chip tone={calendarActive ? 'success' : 'neutral'}>
+                {calendarActive ? 'Active' : 'Inactive'}
+              </Chip>
+            </div>
+          </div>
+
+          {/* 2. Gmail Inbox Scan Row with Native Switch */}
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-casa-border/50 bg-casa-bg px-4 py-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className={cn('shrink-0', gmailActive ? 'text-casa-navy' : 'text-casa-muted')}>
+                <Mail size={18} />
+              </div>
+              <div className="min-w-0">
+                <p className="font-semibold text-body-sm text-casa-navy leading-none">Gmail Inbox Scan</p>
+                <p className="mt-1 text-caption text-casa-muted">
+                  {gmailActive ? (
+                    <>
+                      <span className="mr-1 inline-block size-1.5 rounded-full bg-green-500" />
+                      {s.gmail_last_scan_success_at
+                        ? `Checked ${formatDistanceToNow(new Date(s.gmail_last_scan_success_at))} ago`
+                        : 'Active · Auto-importing event invitations'}
+                    </>
+                  ) : (
+                    'Disabled · Auto-import off'
+                  )}
+                </p>
+              </div>
+            </div>
+            <div className="shrink-0">
+              <Switch
+                label=""
+                checked={gmailActive}
+                onCheckedChange={(checked) => onToggleGmail(checked)}
+                disabled={isBusy || reauthRequired}
+                aria-label={`Toggle Gmail scanning for ${member.name}`}
+              />
+            </div>
+          </div>
+
+          {/* Context footnote */}
+          <p className="px-1 text-caption text-casa-muted">
+            {s.access_mode === 'writable'
+              ? 'Casa-created and adopted events project automatically to this calendar.'
+              : 'Events from this calendar stay read-only until explicitly adopted into Casa.'}
+          </p>
         </div>
       ) : (
-        /* ── Not connected: checkbox selection + connect button ── */
-        <div className="space-y-3">
-          <p className="text-caption text-casa-muted">Choose which services to enable, then connect:</p>
+        /* ── Not Connected State ── */
+        <div className="space-y-3 pt-4">
+          <p className="text-caption text-casa-muted">
+            Connect to synchronize calendar events and optionally auto-scan Gmail for invites:
+          </p>
 
-          {/* Calendar — always required */}
-          <label className="flex items-center gap-3 cursor-not-allowed opacity-70">
-            <div className="w-4 h-4 rounded border-2 border-casa-gold bg-casa-gold flex items-center justify-center shrink-0">
-              <Check size={10} className="text-white" />
+          <div className="space-y-2 rounded-xl border border-casa-border/50 bg-casa-bg p-3">
+            {/* Calendar — always required */}
+            <div className="flex items-center gap-2 opacity-80">
+              <div className="flex size-4 shrink-0 items-center justify-center rounded border-2 border-casa-navy bg-casa-navy">
+                <Check size={10} className="text-white" />
+              </div>
+              <span className="font-semibold text-body-sm text-casa-navy">Google Calendar Sync</span>
+              <span className="rounded-full bg-casa-divider px-1.5 py-0.5 text-caption text-casa-muted">Required</span>
             </div>
-            <div className="flex items-center gap-2">
-              <Calendar size={14} className="text-casa-muted" />
-              <span className="text-body-sm text-casa-navy font-semibold">Google Calendar</span>
-              <span className="text-caption text-casa-muted bg-casa-divider px-1.5 py-0.5 rounded-full">Required</span>
-            </div>
-          </label>
 
-          {/* Gmail — optional */}
-          <label className="flex items-center gap-3 cursor-pointer group">
-            <div
-              className={cn(
-                'w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors',
-                wantGmail ? 'border-casa-gold bg-casa-gold' : 'border-casa-border bg-white group-hover:border-casa-gold/50',
-              )}
-              onClick={() => setWantGmail(v => !v)}
-            >
-              {wantGmail && <Check size={10} className="text-white" />}
-            </div>
-            <div className="flex items-center gap-2" onClick={() => setWantGmail(v => !v)}>
-              <Mail size={14} className="text-casa-muted" />
-              <span className="text-body-sm text-casa-navy">Gmail Inbox Scan</span>
-              <span className="text-caption text-casa-muted">Auto-import events from email</span>
-            </div>
-          </label>
+            {/* Gmail — selectable toggle */}
+            <Checkbox
+              label="Gmail Inbox Scan"
+              description="Automatically import invitations & confirmations from email"
+              checked={wantGmail}
+              onChange={(e) => setWantGmail(e.target.checked)}
+            />
+          </div>
 
           <Button
             variant="strong"
             onClick={() => onConnect(wantGmail)}
             disabled={isBusy}
             fullWidth
-            className="mt-1"
+            className="mt-2"
             leadingIcon={<GoogleIcon />}
           >
-            {isBusy ? 'Redirecting…' : 'Connect Google Account'}
+            {isBusy ? 'Redirecting to Google…' : 'Connect Google Account'}
           </Button>
         </div>
       )}
-    </div>
-  )
-}
-
-function ServiceRow({
-  icon, label, active, statusText, errorText, action,
-}: {
-  icon: React.ReactNode
-  label: string
-  active: boolean
-  statusText: string
-  errorText?: string
-  action?: React.ReactNode
-}) {
-  return (
-    <div className="flex items-center gap-3 py-2.5 px-3 rounded-xl bg-casa-bg border border-casa-border/50">
-      <div className={cn('shrink-0', active ? 'text-casa-navy' : 'text-casa-muted')}>{icon}</div>
-      <div className="flex-1 min-w-0">
-        <p className={cn('text-body-sm font-semibold leading-none', active ? 'text-casa-navy' : 'text-casa-muted')}>
-          {label}
-        </p>
-        <p className={cn('text-caption mt-0.5', active ? 'text-green-600' : 'text-casa-muted')}>
-          {active && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 mr-1 mb-px" />}
-          {statusText}
-        </p>
-        {errorText && <p className="text-caption text-casa-error mt-0.5">{errorText}</p>}
-      </div>
-      {action && <div className="shrink-0">{action}</div>}
     </div>
   )
 }
