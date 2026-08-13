@@ -69,7 +69,7 @@ const SLEEP_PHRASES = /\b(sleep|goodnight|good night|art mode|screen saver|scree
 export default function AIChatDrawer({
   open,
   onClose,
-  anchor,
+  anchor: _anchor,
   page,
   launchContext,
   events,
@@ -865,6 +865,14 @@ export default function AIChatDrawer({
               : 'idle'
   const presenceStyle = { ['--voice-level' as '--voice-level']: String(voiceLevel) } as React.CSSProperties
 
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth < 640 : false)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)')
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
+
   return (
     <AnimatePresence>
       {open && (
@@ -873,31 +881,29 @@ export default function AIChatDrawer({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-scrim max-sm:bg-black/40 sm:bg-transparent"
+            className="fixed inset-0 z-scrim max-sm:bg-black/40 sm:bg-casa-navy/5 sm:backdrop-blur-[0.5px]"
             onClick={onClose}
           />
 
           <motion.div
-            initial={{ opacity: 0, y: -8, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -8, scale: 0.97 }}
-            transition={{ type: 'spring', damping: 28, stiffness: 260 }}
+            initial={isMobile ? { y: '100%', opacity: 0.95 } : { x: '100%', opacity: 0.95 }}
+            animate={isMobile ? { y: 0, opacity: 1 } : { x: 0, opacity: 1 }}
+            exit={isMobile ? { y: '100%', opacity: 0.95 } : { x: '100%', opacity: 0.95 }}
+            transition={{ type: 'spring', damping: 30, stiffness: 320 }}
             className={cn(
               'fixed z-popover bg-casa-surface flex flex-col transition-shadow',
               'max-sm:inset-x-0 max-sm:bottom-0 max-sm:rounded-t-2xl max-sm:w-full max-sm:shadow-modal',
-              'sm:rounded-2xl sm:w-[760px] sm:shadow-[0_8px_40px_rgba(0,0,0,0.22)] sm:border sm:border-casa-border',
+              'sm:inset-y-0 sm:right-0 sm:top-0 sm:bottom-0 sm:h-full sm:w-[460px] md:w-[480px] lg:w-[500px] sm:max-w-[92vw] sm:rounded-none sm:border-l sm:border-casa-border sm:shadow-modal',
               loading && 'ai-thinking',
             )}
             data-panel-overlay
             data-touch-keyboard="ignore"
             style={{
-              ...(window.innerWidth < 640 ? {
+              ...(isMobile ? {
                 maxHeight: '88vh',
                 paddingBottom: 'env(safe-area-inset-bottom)',
               } : {
-                height: '72vh',
-                right: anchor ? Math.max(8, anchor.right) : 16,
-                top: anchor ? anchor.top + 6 : 56,
+                height: '100vh',
               })
             }}
             onClick={e => e.stopPropagation()}
