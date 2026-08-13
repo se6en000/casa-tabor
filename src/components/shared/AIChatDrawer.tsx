@@ -3,6 +3,7 @@ import type React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIcon, Camera, Mic, Keyboard, RotateCcw, MessagesSquare, Plus, Square, CalendarDays, ShoppingCart, ChefHat, Pencil, AlertTriangle, Clock3, Utensils, Bell, UserPlus, MapPin, Mail, Activity, ChevronRight } from 'lucide-react'
 import { format } from 'date-fns'
+import { useNavigate } from 'react-router-dom'
 import { cn } from '../../utils/cn'
 import { useAIAssistant, type AIMessage } from '../../hooks/useAIAssistant'
 import type { PrivateConversation } from '../../hooks/useAIConversationHistory'
@@ -24,7 +25,7 @@ import { formatTextForMarkdown, stripEvidenceCitationMarkers } from '../../lib/a
 import { createAssistantTraceContext, emitAssistantTrace, getAssistantDeviceId } from '../../lib/assistantTelemetry'
 import { classifyPendingConfirmation } from '../../lib/assistantConfirmation.mjs'
 import { conversationStateAfterCalendarAction } from '../../lib/assistantConversationState.mjs'
-import { linkAssistantEventMentions, parseAssistantEventHref } from '../../lib/assistantEventLinks'
+import { linkAssistantEventMentions, parseAssistantEventHref, parseAssistantHref } from '../../lib/assistantEntityLinks'
 import { buildCreatePreviewCopy, buildDeleteManyPreviewCopy, buildDeletePreviewCopy, buildUpdatePreviewCopy } from '../../utils/aiConfirmPreview'
 
 const LOW_CONFIDENCE_CONFIRM_PHRASES = /\b(yes|yeah|yep|ok|okay|use it|that one|correct|right|go ahead)\b/i
@@ -242,12 +243,31 @@ export default function AIChatDrawer({
     }
   }, [])
 
+  const navigate = useNavigate()
+
   const handleOpenEventDetails = useCallback((eventId: string) => {
     const event = eventById.get(eventId)
     if (!event) return
     onClose()
     onOpenEventDetails?.(event)
   }, [eventById, onClose, onOpenEventDetails])
+
+  const handleLinkClick = useCallback((href: string) => {
+    const parsed = parseAssistantHref(href)
+    if (parsed.type === 'event') {
+      const event = eventById.get(parsed.idOrPath)
+      if (event) {
+        onClose()
+        onOpenEventDetails?.(event)
+      }
+    } else if (parsed.type === 'recipe') {
+      navigate(`/cook?search=${encodeURIComponent(parsed.idOrPath)}`)
+    } else if (parsed.type === 'grocery') {
+      navigate('/grocery')
+    } else if (parsed.type === 'navigate') {
+      navigate(`/${parsed.idOrPath}`)
+    }
+  }, [eventById, onClose, onOpenEventDetails, navigate])
 
   const markUserInteraction = useCallback(() => {
     hadUserInteractionRef.current = true
@@ -1031,6 +1051,13 @@ export default function AIChatDrawer({
                       </Button>
                     </div>
                   )}
+                  <AmbientGlanceCards
+                    events={events}
+                    onPromptSelect={(prompt) => {
+                      markUserInteraction()
+                      sendCurrentInput(prompt)
+                    }}
+                  />
                   <div className="flex flex-wrap justify-center gap-2 mt-2">
                     {dynamicSuggestions.map(s => (
                       <Button variant="ghost"
@@ -1059,6 +1086,7 @@ export default function AIChatDrawer({
                       isActivePending={msg.id === activePendingToolMessageId}
                       events={events}
                       onOpenEventDetails={handleOpenEventDetails}
+                      onLinkClick={handleLinkClick}
                       enableQuickSaveRecipe={page === 'cook' || launchContext?.agent === 'chef'}
                       editSeed={messages.slice(0, messageIndex).findLast((message) => message.role === 'user')?.content ?? ''}
                       onQuickSaveRecipe={quickSaveRecipeSuggestion}
@@ -1644,13 +1672,14 @@ export default function AIChatDrawer({
 
 const MAX_VISIBLE_SOURCES = 3
 
-function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, events, onOpenEventDetails, onQuickSaveRecipe, onConfirmToolAction, onUndoToolAction, onCancelToolAction, onRefreshToolAction, registerPendingAction, onSelectSuggestion, onEditMessage }: {
+function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, events, onOpenEventDetails, onLinkClick, onQuickSaveRecipe, onConfirmToolAction, onUndoToolAction, onCancelToolAction, onRefreshToolAction, registerPendingAction, onSelectSuggestion, onEditMessage }: {
   msg: AIMessage
   isActivePending: boolean
   enableQuickSaveRecipe?: boolean
   editSeed?: string
   events: EventWithDetails[]
   onOpenEventDetails?: (eventId: string) => void
+  onLinkClick?: (href: string) => void
   onQuickSaveRecipe?: (recipeMessage: string) => Promise<void>
   onConfirmToolAction: (messageId: string, tool: string, args: Record<string, unknown>) => Promise<boolean>
   onUndoToolAction: (messageId: string, actionId: string) => Promise<void>
@@ -1744,9 +1773,12 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
               <MarkdownContent
                 content={assistantContent ?? formatTextForMarkdown(msg.content)}
                 onLinkClick={(href) => {
-                  const eventId = parseAssistantEventHref(href)
-                  if (!eventId) return
-                  onOpenEventDetails?.(eventId)
+                  if (onLinkClick) {
+                    onLinkClick(href)
+                  } else {
+                    const eventId = parseAssistantEventHref(href)
+                    if (eventId) onOpenEventDetails?.(eventId)
+                  }
                 }}
               />
             )
@@ -2834,3 +2866,70 @@ function deriveDynamicFollowUpSuggestions(
 
   return buildDynamicSuggestions(page, events, now)
 }
+
+function AmbientGlanceCards({
+  events,
+  onPromptSelect,
+}: {
+  events: EventWithDetails[]
+  onPromptSelect: (prompt: string) => void
+}) {
+  const now = new Date()
+  const nowMs = now.getTime()
+  const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59).getTime()
+
+  const nextEvent = useMemo(() => {
+    return (events ?? [])
+      .filter((e) => {
+        if (!e.start_time) return false
+        const t = new Date(e.start_time).getTime()
+        return Number.isFinite(t) && t >= nowMs && t <= todayEnd
+      })
+      .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())[0] ?? null
+  }, [events, nowMs, todayEnd])
+
+  return (
+    <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 text-left">
+      <Button
+        variant="ghost"
+        type="button"
+        onClick={() => onPromptSelect(nextEvent ? `Prep me for "${nextEvent.title}"` : "What's on our schedule today?")}
+        className="group flex items-start gap-2.5 p-2.5 h-auto rounded-xl border border-casa-border bg-casa-surface/80 hover:bg-casa-surface hover:border-casa-gold/50 transition-all shadow-xs cursor-pointer text-left whitespace-normal justify-start"
+      >
+        <div className="p-2 rounded-lg bg-casa-gold/15 text-casa-gold shrink-0 group-hover:scale-105 transition-transform">
+          <CalendarDays size={15} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-caption font-semibold text-casa-muted uppercase tracking-wider">
+            {nextEvent ? 'Next Up' : 'Schedule'}
+          </p>
+          <p className="text-body-sm font-medium text-casa-navy truncate">
+            {nextEvent ? nextEvent.title : 'Free for today'}
+          </p>
+          {nextEvent && (
+            <p className="text-caption text-casa-gold font-medium">
+              {format(new Date(nextEvent.start_time), 'h:mm a')}
+            </p>
+          )}
+        </div>
+      </Button>
+
+      <Button
+        variant="ghost"
+        type="button"
+        onClick={() => onPromptSelect('Plan a quick weeknight dinner for tonight')}
+        className="group flex items-start gap-2.5 p-2.5 h-auto rounded-xl border border-casa-border bg-casa-surface/80 hover:bg-casa-surface hover:border-casa-gold/50 transition-all shadow-xs cursor-pointer text-left whitespace-normal justify-start"
+      >
+        <div className="p-2 rounded-lg bg-amber-500/15 text-amber-600 shrink-0 group-hover:scale-105 transition-transform">
+          <Utensils size={15} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-caption font-semibold text-casa-muted uppercase tracking-wider">Tonight's Meal</p>
+          <p className="text-body-sm font-medium text-casa-navy truncate">Dinner Plan</p>
+          <p className="text-caption text-casa-muted">Pantry-friendly & fast</p>
+        </div>
+      </Button>
+    </div>
+  )
+}
+

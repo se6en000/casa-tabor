@@ -1,4 +1,7 @@
 import type { ReactNode } from 'react'
+import { Calendar, UtensilsCrossed, ShoppingCart, ArrowRight, ExternalLink } from 'lucide-react'
+import { parseAssistantHref } from '../../lib/assistantEntityLinks'
+import { Button } from '../ui'
 import { cn } from '../../utils/cn'
 
 function renderInlineMarkdown(
@@ -6,7 +9,7 @@ function renderInlineMarkdown(
   keyPrefix: string,
   onLinkClick?: (href: string) => void,
 ): ReactNode[] {
-  const tokenRegex = /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\(((?:https?:\/\/|casa:\/\/event\/)[^)\s]+)\))/g
+  const tokenRegex = /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\(((?:https?:\/\/|casa:\/\/[a-z0-9_/-]+)[^)\s]*)\))/g
   const nodes: ReactNode[] = []
   let lastIndex = 0
   let match: RegExpExecArray | null
@@ -24,27 +27,51 @@ function renderInlineMarkdown(
         </code>,
       )
     } else {
-      const linkMatch = token.match(/^\[([^\]]+)\]\(((?:https?:\/\/|casa:\/\/event\/)[^)\s]+)\)$/)
+      const linkMatch = token.match(/^\[([^\]]+)\]\(((?:https?:\/\/|casa:\/\/[a-z0-9_/-]+)[^)\s]*)\)$/)
       if (linkMatch) {
+        const label = linkMatch[1]
         const href = linkMatch[2]
-        const isCasaEventLink = href.startsWith('casa://event/')
-        nodes.push(
-          <a
-            key={`${keyPrefix}-a-${tokenIndex}`}
-            href={href}
-            target={isCasaEventLink ? undefined : '_blank'}
-            rel={isCasaEventLink ? undefined : 'noreferrer'}
-            className="text-casa-gold underline underline-offset-2"
-            onClick={isCasaEventLink
-              ? (event) => {
-                  event.preventDefault()
-                  onLinkClick?.(href)
-                }
-              : undefined}
-          >
-            {linkMatch[1]}
-          </a>,
-        )
+        const isCasaLink = href.startsWith('casa://')
+        const parsed = parseAssistantHref(href)
+
+        if (isCasaLink) {
+          const icon = parsed.type === 'event'
+            ? <Calendar size={13} className="text-casa-gold shrink-0" />
+            : parsed.type === 'recipe'
+              ? <UtensilsCrossed size={13} className="text-amber-600 shrink-0" />
+              : parsed.type === 'grocery'
+                ? <ShoppingCart size={13} className="text-emerald-600 shrink-0" />
+                : <ArrowRight size={13} className="text-casa-navy shrink-0" />
+
+          nodes.push(
+            <Button
+              variant="ghost"
+              key={`${keyPrefix}-btn-${tokenIndex}`}
+              type="button"
+              className="inline-flex items-center gap-1 mx-0.5 px-2 py-0.5 h-auto rounded-full bg-casa-surface hover:bg-casa-surface-hover border border-casa-border hover:border-casa-gold/40 text-caption font-semibold text-casa-navy hover:text-casa-gold transition-colors align-baseline shadow-xs cursor-pointer"
+              onClick={(event) => {
+                event.preventDefault()
+                onLinkClick?.(href)
+              }}
+            >
+              {icon}
+              <span>{label}</span>
+            </Button>,
+          )
+        } else {
+          nodes.push(
+            <a
+              key={`${keyPrefix}-a-${tokenIndex}`}
+              href={href}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-0.5 text-casa-gold underline underline-offset-2 hover:text-casa-gold-dark"
+            >
+              <span>{label}</span>
+              <ExternalLink size={11} className="shrink-0 opacity-70" />
+            </a>,
+          )
+        }
       } else {
         nodes.push(token)
       }

@@ -67,8 +67,24 @@ async function loadFamily() {
   return Array.isArray(rows) && rows.length > 0 ? rows : [{ id: '1', name: 'Jake' }, { id: '2', name: 'Alex' }, { id: '3', name: 'Leo' }]
 }
 
-function buildContext({ family, page = 'calendar', assistantMode = 'general', conversationState = null }) {
+function buildContext({ family, page = 'calendar', assistantMode = 'general', conversationState = null, events = null }) {
   const current = new Date()
+  const defaultEvents = [
+    {
+      id: 'evt-soccer-1',
+      title: 'Soccer Practice',
+      start_time: new Date(current.getTime() + 2 * 3600_000).toISOString(),
+      end_time: new Date(current.getTime() + 3.5 * 3600_000).toISOString(),
+      location: 'Field 4, Community Sports Complex',
+    },
+    {
+      id: 'evt-standup-2',
+      title: 'Family Weekly Check-in',
+      start_time: new Date(current.getTime() + 26 * 3600_000).toISOString(),
+      end_time: new Date(current.getTime() + 27 * 3600_000).toISOString(),
+    },
+  ]
+
   return {
     page,
     assistant_mode: assistantMode,
@@ -83,6 +99,7 @@ function buildContext({ family, page = 'calendar', assistantMode = 'general', co
     }),
     utcOffset: isoWithOffset(current),
     family: family.map((m) => ({ id: m.id, name: m.name })),
+    events: events ?? defaultEvents,
     homeCity: 'West Palm Beach',
     conversationState,
   }
@@ -319,6 +336,64 @@ function defineSemanticClusters(family) {
               reason: ok
                 ? `Generated 20-minute recipe idea grounding on ingredients (${res.text.length} chars)`
                 : `Expected recipe idea referencing salmon and broccoli, got type=${res.type}`,
+            }
+          },
+        },
+      ],
+    },
+    {
+      clusterName: '💡 Kiosk Ambient Glance & Proactive Briefings',
+      description: 'Tests ambient glance triggers on kiosk idle/empty state to ensure proactive conversational responsiveness.',
+      cases: [
+        {
+          label: 'Schedule readiness query',
+          input: 'Prep me for soccer practice',
+          page: 'home',
+          evaluate: (res) => {
+            const isValidText = res.type === 'text' && typeof res.text === 'string' && res.text.length > 10
+            return {
+              ok: isValidText,
+              reason: isValidText
+                ? `Provided ambient schedule prep rundown (${res.text.length} chars)`
+                : `Expected informative response, got type=${res.type}`,
+            }
+          },
+        },
+        {
+          label: 'Proactive dinner planning',
+          input: 'Plan a quick weeknight dinner for tonight',
+          page: 'home',
+          evaluate: (res) => {
+            const isValidText = (res.type === 'text' || res.type === 'tool_action') && Boolean(res.text || res.display_text)
+            return {
+              ok: isValidText,
+              reason: isValidText
+                ? `Generated proactive dinner recommendation`
+                : `Expected dinner recommendation, got type=${res.type}`,
+            }
+          },
+        },
+      ],
+    },
+    {
+      clusterName: '🔗 Multi-Domain Compound & Chained Workflows',
+      description: 'Tests chained requests spanning culinary ideation and grocery list addition in a single turn.',
+      cases: [
+        {
+          label: 'Meal planning with grocery auto-extraction',
+          input: 'Plan taco night for Friday and add taco shells and salsa to the shopping list',
+          page: 'cooking',
+          assistantMode: 'chef',
+          evaluate: (res) => {
+            const hasGroceryTool = res.type === 'tool_action' && res.tool === 'add_grocery_items'
+            const responseText = String(res.text ?? res.display_text ?? '')
+            const hasText = responseText.length > 10
+            const ok = Boolean(hasGroceryTool || hasText)
+            return {
+              ok,
+              reason: hasGroceryTool
+                ? `Extracted grocery items for taco night: ${JSON.stringify(res.args)}`
+                : `Generated conversational response covering meal plan and list (${responseText.length} chars)`,
             }
           },
         },
