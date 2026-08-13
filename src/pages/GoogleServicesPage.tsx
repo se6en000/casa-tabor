@@ -38,6 +38,9 @@ interface GoogleStatus {
   is_enabled: boolean | null
   health_status: 'connected' | 'healthy' | 'degraded' | 'reauthorization_required' | 'disabled' | null
   reauthorization_required: boolean
+  gmail_last_scan_attempt_at: string | null
+  gmail_last_scan_success_at: string | null
+  gmail_last_scan_error: string | null
 }
 
 interface MemberWithStatus extends FamilyMember {
@@ -198,6 +201,39 @@ export default function GoogleServicesPage() {
     }
   }
 
+  function renderMemberDisclosure(member: MemberWithStatus, defaultOpen: boolean) {
+    const status = member.status
+    const summary = status?.google_email
+      ? `${status.google_email} · ${status.reauthorization_required ? 'Reconnect required' : status.access_mode === 'writable' ? 'Casa write target' : 'Connected'}`
+      : 'Not connected'
+
+    return (
+      <DisclosureSection
+        key={member.id}
+        title={member.name}
+        summary={summary}
+        defaultOpen={defaultOpen}
+        className="overflow-hidden rounded-card border border-casa-border bg-casa-surface shadow-card"
+      >
+        <MemberCard
+          member={member}
+          showIdentity={false}
+          onConnect={(includeGmail) => connectGoogle.mutate({ memberId: member.id, includeGmail })}
+          onToggleGmail={(enabled) => toggleGmail.mutate({ memberId: member.id, enabled })}
+          onSyncCalendar={() => syncCalendar.mutate(member.id)}
+          onScanGmail={() => runGmailScan(member.id)}
+          onDisconnect={() => disconnect.mutate(member.id)}
+          isBusy={
+            (connectGoogle.isPending && (connectGoogle.variables as { memberId: string })?.memberId === member.id) ||
+            (disconnect.isPending && disconnect.variables === member.id) ||
+            (syncCalendar.isPending && syncCalendar.variables === member.id) ||
+            scanning
+          }
+        />
+      </DisclosureSection>
+    )
+  }
+
   return (
     <>
         <SettingsPageHeader title="Google Services" description="Connect each family member's account for calendar sync and Gmail scanning." />
@@ -218,64 +254,15 @@ export default function GoogleServicesPage() {
           <p className="text-body-sm text-casa-muted">Loading…</p>
         ) : (
           <div className="mt-6 space-y-4">
-            <DisclosureSection
-              title="Active accounts"
-              summary={`${activeMembers.length} connected account${activeMembers.length === 1 ? '' : 's'}`}
-              defaultOpen
-              className="overflow-hidden rounded-card border border-casa-border bg-casa-surface shadow-card"
-            >
-              <div className="space-y-3 pt-1">
-                {activeMembers.length > 0 ? (
-                  activeMembers.map(member => (
-                    <MemberCard
-                      key={member.id}
-                      member={member}
-                      onConnect={(includeGmail) => connectGoogle.mutate({ memberId: member.id, includeGmail })}
-                      onToggleGmail={(enabled) => toggleGmail.mutate({ memberId: member.id, enabled })}
-                      onSyncCalendar={() => syncCalendar.mutate(member.id)}
-                      onScanGmail={() => runGmailScan(member.id)}
-                      onDisconnect={() => disconnect.mutate(member.id)}
-                      isBusy={
-                        (connectGoogle.isPending && (connectGoogle.variables as { memberId: string })?.memberId === member.id) ||
-                        (disconnect.isPending && disconnect.variables === member.id) ||
-                        (syncCalendar.isPending && syncCalendar.variables === member.id) ||
-                        scanning
-                      }
-                    />
-                  ))
-                ) : (
-                  <p className="px-6 pb-2 text-body-sm text-casa-muted">No active accounts yet.</p>
-                )}
-              </div>
-            </DisclosureSection>
-
+            <p className="text-body-sm font-semibold text-casa-navy">Active accounts</p>
+            {activeMembers.length > 0
+              ? activeMembers.map(member => renderMemberDisclosure(member, true))
+              : <p className="text-body-sm text-casa-muted">No active accounts yet.</p>}
             {inactiveMembers.length > 0 && (
-              <DisclosureSection
-                title="Inactive accounts"
-                summary={`${inactiveMembers.length} disconnected or need reconnect`}
-                defaultOpen={false}
-                className="overflow-hidden rounded-card border border-casa-border bg-casa-surface shadow-card"
-              >
-                <div className="space-y-3 pt-1">
-                  {inactiveMembers.map(member => (
-                    <MemberCard
-                      key={member.id}
-                      member={member}
-                      onConnect={(includeGmail) => connectGoogle.mutate({ memberId: member.id, includeGmail })}
-                      onToggleGmail={(enabled) => toggleGmail.mutate({ memberId: member.id, enabled })}
-                      onSyncCalendar={() => syncCalendar.mutate(member.id)}
-                      onScanGmail={() => runGmailScan(member.id)}
-                      onDisconnect={() => disconnect.mutate(member.id)}
-                      isBusy={
-                        (connectGoogle.isPending && (connectGoogle.variables as { memberId: string })?.memberId === member.id) ||
-                        (disconnect.isPending && disconnect.variables === member.id) ||
-                        (syncCalendar.isPending && syncCalendar.variables === member.id) ||
-                        scanning
-                      }
-                    />
-                  ))}
-                </div>
-              </DisclosureSection>
+              <>
+                <p className="pt-2 text-body-sm font-semibold text-casa-navy">Inactive accounts</p>
+                {inactiveMembers.map(member => renderMemberDisclosure(member, false))}
+              </>
             )}
           </div>
         )}
@@ -286,7 +273,7 @@ export default function GoogleServicesPage() {
 // ── Member card ────────────────────────────────────────────────────
 
 function MemberCard({
-  member, onConnect, onToggleGmail, onSyncCalendar, onScanGmail, onDisconnect, isBusy,
+  member, onConnect, onToggleGmail, onSyncCalendar, onScanGmail, onDisconnect, isBusy, showIdentity = true,
 }: {
   member: MemberWithStatus
   onConnect: (includeGmail: boolean) => void
@@ -295,6 +282,7 @@ function MemberCard({
   onScanGmail: () => void
   onDisconnect: () => void
   isBusy: boolean
+  showIdentity?: boolean
 }) {
   const s = member.status
   const isConnected = !!s?.google_email
@@ -303,48 +291,49 @@ function MemberCard({
   const [wantGmail, setWantGmail] = useState(true)
 
   return (
-    <div className="bg-casa-surface border border-casa-border rounded-card p-5 shadow-card">
+    <div className={cn(showIdentity && 'bg-casa-surface border border-casa-border rounded-card p-5 shadow-card')}>
       {/* Header row */}
-      <div className="flex items-center gap-3 mb-4">
-        <div
-          className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-body shrink-0"
-          style={{ backgroundColor: member.color_hex ?? FALLBACK_PROFILE_COLOR }}
-        >
-          {member.name.charAt(0).toUpperCase()}
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="font-semibold text-casa-navy text-body leading-none">{member.name}</p>
-          {s?.google_email && (
-            <div className="mt-1 flex flex-wrap items-center gap-1.5">
-              <p className="text-caption text-casa-muted truncate">{s.google_email}</p>
-              {s.access_mode === 'writable' && <Chip tone="accent">Casa write target</Chip>}
-              {s.access_mode === 'read_only' && <Chip tone="neutral">Read-only source</Chip>}
-            </div>
+      {(showIdentity || isConnected) && (
+        <div className="flex items-center justify-end gap-3 mb-4">
+          {showIdentity && (
+            <>
+              <div
+                className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-body shrink-0"
+                style={{ backgroundColor: member.color_hex ?? FALLBACK_PROFILE_COLOR }}
+              >
+                {member.name.charAt(0).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-casa-navy text-body leading-none">{member.name}</p>
+                {s?.google_email && (
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    <p className="text-caption text-casa-muted truncate">{s.google_email}</p>
+                    {s.access_mode === 'writable' && <Chip tone="accent">Casa write target</Chip>}
+                    {s.access_mode === 'read_only' && <Chip tone="neutral">Read-only source</Chip>}
+                  </div>
+                )}
+              </div>
+            </>
           )}
+          {isConnected && s?.reauthorization_required ? (
+            <Button variant="strong" size="sm" onClick={() => onConnect(gmailActive)} disabled={isBusy}>
+              Reconnect
+            </Button>
+          ) : isConnected ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onDisconnect}
+              disabled={isBusy}
+              className="text-casa-error hover:bg-casa-error/10"
+              title="Disconnect Google account"
+              leadingIcon={<Unlink size={14} />}
+            >
+              Disconnect
+            </Button>
+          ) : null}
         </div>
-        {isConnected && s?.reauthorization_required ? (
-          <Button
-            variant="strong"
-            size="sm"
-            onClick={() => onConnect(gmailActive)}
-            disabled={isBusy}
-          >
-            Reconnect
-          </Button>
-        ) : isConnected ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onDisconnect}
-            disabled={isBusy}
-            className="text-casa-error hover:bg-casa-error/10"
-            title="Disconnect Google account"
-            leadingIcon={<Unlink size={14} />}
-          >
-            Disconnect
-          </Button>
-        ) : null}
-      </div>
+      )}
 
       {isConnected ? (
         /* ── Connected: show status rows ── */
@@ -385,10 +374,11 @@ function MemberCard({
             label="Gmail Inbox Scan"
             active={gmailActive}
             statusText={gmailActive
-              ? (member.lastGmailScan
-                  ? `last scanned ${formatDistanceToNow(new Date(member.lastGmailScan))} ago`
+              ? (s?.gmail_last_scan_success_at
+                  ? `checked ${formatDistanceToNow(new Date(s.gmail_last_scan_success_at))} ago`
                   : 'enabled — no scans yet')
               : 'Not enabled'}
+            errorText={s?.gmail_last_scan_error ?? undefined}
             action={
               gmailActive ? (
                 <div className="flex items-center gap-1.5">

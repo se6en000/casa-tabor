@@ -710,27 +710,31 @@ async function handleGmailScan(req: Request): Promise<Response> {
     const tokenBelongsToImmediateFamily = familyMembers.some((member) => member.id === memberId)
     const sharedInboxToken = isSharedFamilyInbox(tok.google_email)
     if (!tokenBelongsToImmediateFamily && !sharedInboxToken) continue
-    let accessToken = tok.access_token
+    const attemptedAt = new Date().toISOString()
+    await sb.from('google_tokens').update({ gmail_last_scan_attempt_at: attemptedAt }).eq('family_member_id', memberId)
 
-    // Refresh if needed
-    if (!accessToken || !tok.expires_at || new Date(tok.expires_at) < new Date(Date.now() + 60_000)) {
-      const refreshed = await refreshToken(tok.refresh_token, clientId, clientSecret)
-      if (!refreshed) { results.push({ member_id: memberId, scanned: 0, created: 0, updated: 0, travel: 0, skipped: 0, conflicts: 0, actions: 0, evidence: 0, error: 'token refresh failed' }); continue }
-      accessToken = refreshed.access_token
-      await sb.from('google_tokens').update({
-        access_token: refreshed.access_token,
-        expires_at: new Date(Date.now() + refreshed.expires_in * 1000).toISOString(),
-      }).eq('family_member_id', memberId)
-    }
+    try {
+      let accessToken = tok.access_token
 
-    const { messages, newHistoryId } = await getRecentMessages(accessToken, tok.gmail_history_id, backfillSince, backfillBefore)
-    if (newHistoryId) {
-      await sb.from('google_tokens').update({ gmail_history_id: newHistoryId }).eq('family_member_id', memberId)
-    }
+      // Refresh if needed
+      if (!accessToken || !tok.expires_at || new Date(tok.expires_at) < new Date(Date.now() + 60_000)) {
+        const refreshed = await refreshToken(tok.refresh_token, clientId, clientSecret)
+        if (!refreshed) throw new Error('token refresh failed')
+        accessToken = refreshed.access_token
+        await sb.from('google_tokens').update({
+          access_token: refreshed.access_token,
+          expires_at: new Date(Date.now() + refreshed.expires_in * 1000).toISOString(),
+        }).eq('family_member_id', memberId)
+      }
 
-    let scanned = 0, created = 0, updated = 0, travel = 0, skipped = 0, conflicts = 0, actions = 0, evidence = 0
+      const { messages, newHistoryId } = await getRecentMessages(accessToken, tok.gmail_history_id, backfillSince, backfillBefore)
+      if (newHistoryId) {
+        await sb.from('google_tokens').update({ gmail_history_id: newHistoryId }).eq('family_member_id', memberId)
+      }
 
-    for (const { id: msgId } of messages) {
+      let scanned = 0, created = 0, updated = 0, travel = 0, skipped = 0, conflicts = 0, actions = 0, evidence = 0
+
+      for (const { id: msgId } of messages) {
       // Skip already-processed
       const { data: alreadyDone } = await sb.from('gmail_processed_messages')
         .select('id').eq('family_member_id', memberId).eq('gmail_message_id', msgId).maybeSingle()
@@ -1171,9 +1175,18 @@ async function handleGmailScan(req: Request): Promise<Response> {
         }, { onConflict: 'family_member_id,gmail_message_id' })
         created++
       }
-    }
+      }
 
-    results.push({ member_id: memberId, scanned, created, updated, travel, skipped, conflicts, actions, evidence })
+      await sb.from('google_tokens').update({
+        gmail_last_scan_success_at: new Date().toISOString(),
+        gmail_last_scan_error: null,
+      }).eq('family_member_id', memberId)
+      results.push({ member_id: memberId, scanned, created, updated, travel, skipped, conflicts, actions, evidence })
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause)
+      await sb.from('google_tokens').update({ gmail_last_scan_error: message }).eq('family_member_id', memberId)
+      results.push({ member_id: memberId, scanned: 0, created: 0, updated: 0, travel: 0, skipped: 0, conflicts: 0, actions: 0, evidence: 0, error: message })
+    }
   }
 
   if (indexedEvidenceTotal > 0) {
