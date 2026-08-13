@@ -169,9 +169,10 @@ export default function GmailScanPage() {
         {enabledCount > 0 && (
           <Button
             type="button"
+            variant="strong"
             onClick={() => runScan()}
             disabled={scanning}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-casa-navy text-white text-body-sm font-semibold hover:bg-casa-navy/90 disabled:opacity-60 transition-all shrink-0 ml-4"
+            className="shrink-0 ml-4"
           >
             <RefreshCw size={15} className={scanning ? 'animate-spin' : ''} />
             {scanning ? 'Scanning…' : 'Scan Now'}
@@ -258,16 +259,18 @@ export default function GmailScanPage() {
                     <>
                       <Button
                         type="button"
+                        variant="secondary"
+                        size="sm"
                         onClick={() => runScan(member.id)}
                         disabled={scanning}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-casa-border text-body-sm text-casa-navy hover:bg-casa-bg disabled:opacity-60 transition-colors"
                       >
                         <RefreshCw size={13} className={scanning ? 'animate-spin' : ''} /> Scan now
                       </Button>
                       <Button
                         type="button"
+                        variant="danger"
+                        size="sm"
                         onClick={() => disableGmail.mutate(member.id)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 text-body-sm text-red-600 hover:bg-red-50 transition-colors"
                       >
                         Disable
                       </Button>
@@ -275,9 +278,9 @@ export default function GmailScanPage() {
                   ) : (
                     <Button
                       type="button"
+                      variant="strong"
                       onClick={() => enableGmail.mutate(member.id)}
                       disabled={enableGmail.isPending}
-                      className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-casa-navy text-white text-body-sm font-semibold hover:bg-casa-navy/90 disabled:opacity-60 transition-all"
                     >
                       <Mail size={14} />
                       {enableGmail.isPending ? 'Redirecting…' : 'Enable Gmail Scan'}

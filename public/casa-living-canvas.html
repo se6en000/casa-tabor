@@ -1,0 +1,1685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Casa Tabor — The Living Canvas (Interactive Mockup)</title>
+  
+  <!-- Fonts: Cormorant Garamond, DM Sans, JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <!-- Lucide Icons -->
+  <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.js"></script>
+
+  <style>
+    :root {
+      /* Brand Tokens */
+      --color-gold: #C9A96E;
+      --color-gold-hover: #b89555;
+      --color-gold-soft: #F4E2CD;
+      --color-gold-subtle: #FAF0E2;
+      --color-gold-border: #EBD9BF;
+      --color-navy: #1B2A4A;
+      --color-navy-dark: #0f1a30;
+      
+      /* Surface & Canvas */
+      --color-bg: #FAF8F5;
+      --color-bg-2: #F2EEE7;
+      --color-surface: #FFFFFF;
+      --color-surface-subtle: #FAF6EE;
+      --color-surface-raised: #FFFFFF;
+      
+      /* Text */
+      --color-text: #2D2D2D;
+      --color-text-secondary: #5C5D66;
+      --color-text-tertiary: #8D8E99;
+      --color-text-faint: #A9A398;
+      
+      /* Borders & Dividers */
+      --color-border: #E8E2D9;
+      --color-control-border: #E3DACB;
+      --color-divider: #E4DBCB;
+      
+      /* Semantics */
+      --color-error: #C0392B;
+      --color-error-soft: #FDE8E8;
+      --color-success: #27AE60;
+      --color-success-soft: #DBF0DC;
+      --color-warning: #E67E22;
+      --color-warning-soft: #FDF0E2;
+      --color-info: #10A5AC;
+      --color-info-soft: #E7F4F4;
+
+      /* Family Members */
+      --member-jake: #1B2A4A;
+      --member-kelly: #C4693A;
+      --member-liv: #6A9E7F;
+      --member-emme: #C47A8A;
+      --member-owen: #D4A44C;
+
+      /* Fonts */
+      --font-display: 'Cormorant Garamond', Georgia, serif;
+      --font-body: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+
+      /* Shadows & Radii */
+      --shadow-sm: 0 1px 3px rgba(27,42,74,0.06), 0 1px 2px rgba(27,42,74,0.04);
+      --shadow-md: 0 4px 16px rgba(27,42,74,0.08), 0 1px 3px rgba(27,42,74,0.03);
+      --shadow-lg: 0 12px 36px rgba(27,42,74,0.12), 0 2px 6px rgba(27,42,74,0.04);
+      --shadow-glow: 0 0 0 3px rgba(201,169,110,0.45);
+
+      --radius-sm: 8px;
+      --radius-md: 14px;
+      --radius-lg: 20px;
+      --radius-pill: 9999px;
+
+      --transition-fast: 140ms cubic-bezier(0.2, 0, 0, 1);
+      --transition-base: 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+      --transition-spring: 400ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    body.dark-mode {
+      --color-gold: #9F8658;
+      --color-gold-hover: #bda373;
+      --color-gold-soft: #3a3122;
+      --color-gold-subtle: #241e15;
+      --color-gold-border: #4a3c2e;
+      --color-navy: #0E1218;
+      --color-navy-dark: #05070a;
+      
+      --color-bg: #090C11;
+      --color-bg-2: #0e131b;
+      --color-surface: #121923;
+      --color-surface-subtle: #171F2C;
+      --color-surface-raised: #1A2433;
+      
+      --color-text: #E3DDD1;
+      --color-text-secondary: #BCC7D8;
+      --color-text-tertiary: #93A4BC;
+      --color-text-faint: #63738a;
+      
+      --color-border: #263244;
+      --color-control-border: #324157;
+      --color-divider: #2B374C;
+      
+      --color-error-soft: #381a17;
+      --color-success-soft: #14331d;
+      --color-warning-soft: #3b2812;
+      --color-info-soft: #123136;
+
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
+      --shadow-md: 0 4px 16px rgba(0,0,0,0.55);
+      --shadow-lg: 0 12px 36px rgba(0,0,0,0.7);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-body);
+      background-color: var(--color-bg);
+      color: var(--color-text);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      transition: background-color var(--transition-base), color var(--transition-base);
+      overflow-x: hidden;
+    }
+
+    /* Top Command Header */
+    .command-header {
+      background: linear-gradient(135deg, #1B2A4A 0%, #111a2e 100%);
+      color: #FFFFFF;
+      padding: 16px 24px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      border-bottom: 1px solid rgba(201, 169, 110, 0.3);
+      backdrop-filter: blur(12px);
+    }
+
+    .header-inner {
+      max-width: 1600px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: var(--radius-md);
+      background: rgba(201,169,110,0.2);
+      border: 1px solid rgba(201,169,110,0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--color-gold);
+    }
+
+    .brand-title {
+      font-family: var(--font-display);
+      font-size: 24px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      line-height: 1.1;
+    }
+
+    .brand-subtitle {
+      font-size: 11px;
+      color: rgba(255,255,255,0.7);
+      font-family: var(--font-mono);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    /* Viewport Mode Switcher */
+    .mode-switch-group {
+      display: flex;
+      background: rgba(0,0,0,0.3);
+      padding: 4px;
+      border-radius: var(--radius-pill);
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+
+    .mode-btn {
+      padding: 6px 14px;
+      border-radius: var(--radius-pill);
+      border: none;
+      background: transparent;
+      color: rgba(255,255,255,0.7);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all var(--transition-fast);
+      font-family: var(--font-body);
+    }
+
+    .mode-btn.active {
+      background: var(--color-gold);
+      color: #1B2A4A;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .header-btn {
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.2);
+      color: #fff;
+      padding: 6px 12px;
+      border-radius: var(--radius-pill);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all var(--transition-fast);
+    }
+    .header-btn:hover {
+      background: rgba(255,255,255,0.2);
+    }
+
+    /* Canvas Root Layout */
+    .canvas-root {
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 24px;
+      min-height: calc(100vh - 80px);
+    }
+
+    /* ══════════════════════════════════════════════════════════════ */
+    /* MODE 1: LIVING CANVAS (3-PANE UNIFIED WORKSPACE)               */
+    /* ══════════════════════════════════════════════════════════════ */
+    .living-canvas-grid {
+      display: grid;
+      grid-template-columns: 380px minmax(460px, 1fr) 420px;
+      gap: 24px;
+      align-items: start;
+    }
+
+    @media (max-width: 1300px) {
+      .living-canvas-grid {
+        grid-template-columns: 340px 1fr 360px;
+        gap: 16px;
+      }
+    }
+
+    @media (max-width: 1024px) {
+      .living-canvas-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Common Pane Styling */
+    .canvas-pane {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      height: calc(100vh - 140px);
+      position: sticky;
+      top: 96px;
+      transition: all var(--transition-base);
+    }
+
+    @media (max-width: 1024px) {
+      .canvas-pane {
+        height: auto;
+        position: static;
+      }
+    }
+
+    .pane-header {
+      padding: 16px 20px;
+      background: var(--color-surface-subtle);
+      border-bottom: 1px solid var(--color-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    .pane-title-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .pane-title {
+      font-family: var(--font-display);
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--color-navy);
+    }
+    body.dark-mode .pane-title { color: #FFFFFF; }
+
+    .pane-badge {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: var(--radius-pill);
+      font-weight: 600;
+      background: var(--color-gold-subtle);
+      color: #8A5A1E;
+      border: 1px solid var(--color-gold-border);
+    }
+    body.dark-mode .pane-badge {
+      background: var(--color-gold-subtle);
+      color: var(--color-gold);
+    }
+
+    .pane-scrollable {
+      padding: 20px;
+      overflow-y: auto;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* ── PANE 1: MORNING BRIEFING & LOGISTICS NARRATIVE ────────── */
+    .briefing-story-hero {
+      background: linear-gradient(180deg, var(--color-surface-subtle) 0%, var(--color-surface) 100%);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      padding: 20px;
+      position: relative;
+    }
+
+    .briefing-date-label {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--color-gold);
+      font-weight: 600;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .briefing-prose {
+      font-family: var(--font-display);
+      font-size: 21px;
+      font-weight: 400;
+      line-height: 1.45;
+      color: var(--color-text);
+      font-style: italic;
+    }
+
+    .briefing-prose strong {
+      font-style: normal;
+      font-weight: 600;
+      color: var(--color-navy);
+    }
+    body.dark-mode .briefing-prose strong { color: var(--color-gold); }
+
+    .handoff-section-title {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 700;
+      color: var(--color-text-tertiary);
+      margin-top: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .handoff-card {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-left: 4px solid var(--color-warning);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      box-shadow: var(--shadow-sm);
+      cursor: pointer;
+      transition: all var(--transition-fast);
+      position: relative;
+    }
+
+    .handoff-card:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-md);
+      border-color: var(--color-control-border);
+    }
+
+    .handoff-card.active-cross-highlight {
+      border-color: var(--color-gold) !important;
+      box-shadow: var(--shadow-glow) !important;
+      background: var(--color-gold-subtle) !important;
+    }
+
+    .handoff-time-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 600;
+      background: var(--color-warning-soft);
+      color: var(--color-warning);
+      padding: 2px 8px;
+      border-radius: var(--radius-pill);
+      margin-bottom: 6px;
+    }
+
+    .handoff-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--color-navy);
+      margin-bottom: 4px;
+    }
+    body.dark-mode .handoff-title { color: #FFFFFF; }
+
+    .handoff-desc {
+      font-size: 13px;
+      color: var(--color-text-secondary);
+      line-height: 1.4;
+    }
+
+    .handoff-action-hint {
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--color-gold);
+      font-weight: 600;
+    }
+
+    .weather-brief-card {
+      background: var(--color-surface-subtle);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      padding: 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .weather-icon-box {
+      width: 42px;
+      height: 42px;
+      border-radius: var(--radius-md);
+      background: #E0F2FE;
+      color: #0369A1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    body.dark-mode .weather-icon-box {
+      background: #082f49;
+      color: #7dd3fc;
+    }
+
+    /* ── PANE 2: SCHEDULE & TIMELINE (LIVE TODAY) ────────────── */
+    .hero-schedule-card {
+      background: linear-gradient(135deg, #1B2A4A 0%, #111a2e 100%);
+      color: #FFFFFF;
+      border-radius: var(--radius-lg);
+      padding: 22px;
+      box-shadow: var(--shadow-md);
+      position: relative;
+      overflow: hidden;
+      border: 1px solid rgba(201,169,110,0.3);
+    }
+
+    .hero-countdown-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(201,169,110,0.2);
+      border: 1px solid rgba(201,169,110,0.4);
+      color: var(--color-gold);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 3px 10px;
+      border-radius: var(--radius-pill);
+      font-weight: 600;
+      margin-bottom: 10px;
+    }
+
+    .hero-event-title {
+      font-family: var(--font-display);
+      font-size: 26px;
+      font-weight: 600;
+      line-height: 1.2;
+      margin-bottom: 6px;
+    }
+
+    .hero-meta-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 13px;
+      color: rgba(255,255,255,0.85);
+      flex-wrap: wrap;
+    }
+
+    .hero-driver-badge {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255,255,255,0.12);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+    }
+
+    .now-indicator-line {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 0;
+      user-select: none;
+    }
+
+    .now-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--color-error);
+      box-shadow: 0 0 0 3px rgba(192, 57, 43, 0.25);
+      animation: pulseDot 2s infinite;
+    }
+
+    @keyframes pulseDot {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.3); opacity: 0.8; }
+    }
+
+    .now-line-fill {
+      flex: 1;
+      height: 1px;
+      background: rgba(192, 57, 43, 0.35);
+    }
+
+    .now-time-text {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--color-error);
+    }
+
+    /* Timeline Event Rows */
+    .timeline-row {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      box-shadow: var(--shadow-sm);
+      cursor: pointer;
+      transition: all var(--transition-fast);
+      position: relative;
+    }
+
+    .timeline-row:hover {
+      border-color: var(--color-control-border);
+      box-shadow: var(--shadow-md);
+    }
+
+    .timeline-row.has-conflict {
+      border-left: 4px solid var(--color-error);
+      background: var(--color-error-soft);
+    }
+
+    .timeline-row.active-cross-highlight {
+      border-color: var(--color-gold) !important;
+      box-shadow: var(--shadow-glow) !important;
+      background: var(--color-gold-subtle) !important;
+    }
+
+    .timeline-time-col {
+      width: 72px;
+      flex-shrink: 0;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--color-text-secondary);
+    }
+
+    .timeline-content-col {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .timeline-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--color-text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .timeline-sub {
+      font-size: 12px;
+      color: var(--color-text-tertiary);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 2px;
+    }
+
+    .member-avatar-pill {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 700;
+      color: #fff;
+      flex-shrink: 0;
+    }
+
+    /* ── PANE 3: ATTENTION & ACTION COMMAND HUB ───────────────── */
+    .action-filter-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      background: var(--color-surface-subtle);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-pill);
+      padding: 3px;
+    }
+
+    .action-filter-pill {
+      flex: 1;
+      text-align: center;
+      padding: 5px 10px;
+      border-radius: var(--radius-pill);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--color-text-secondary);
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      transition: all var(--transition-fast);
+    }
+
+    .action-filter-pill.active {
+      background: var(--color-surface);
+      color: var(--color-navy);
+      box-shadow: var(--shadow-sm);
+    }
+    body.dark-mode .action-filter-pill.active {
+      background: var(--color-surface-raised);
+      color: #fff;
+    }
+
+    /* Interactive Attention Card */
+    .attention-card {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      box-shadow: var(--shadow-sm);
+      transition: all var(--transition-base);
+      position: relative;
+    }
+
+    .attention-card:hover {
+      border-color: var(--color-control-border);
+      box-shadow: var(--shadow-md);
+    }
+
+    .attention-card.active-cross-highlight {
+      border-color: var(--color-gold) !important;
+      box-shadow: var(--shadow-glow) !important;
+      background: var(--color-gold-subtle) !important;
+      animation: highlightGlow 2s ease-in-out;
+    }
+
+    @keyframes highlightGlow {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.02); }
+    }
+
+    .attention-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .attention-badge-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .source-tag {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: var(--radius-pill);
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .tag-gmail { background: #f3e8ff; color: #6b21a8; border: 1px solid #e9d5ff; }
+    .tag-conflict { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+    .tag-reminder { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+
+    body.dark-mode .tag-gmail { background: #3b0764; color: #d8b4fe; border-color: #581c87; }
+    body.dark-mode .tag-conflict { background: #450a0a; color: #fca5a5; border-color: #7f1d1d; }
+    body.dark-mode .tag-reminder { background: #451a03; color: #fde68a; border-color: #78350f; }
+
+    .attention-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--color-text);
+      line-height: 1.4;
+      margin-bottom: 4px;
+    }
+
+    .attention-desc {
+      font-size: 12px;
+      color: var(--color-text-secondary);
+      line-height: 1.45;
+      margin-bottom: 12px;
+    }
+
+    /* 1-Click Inline Resolvers */
+    .inline-resolvers {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      padding-top: 10px;
+      border-top: 1px solid var(--color-divider);
+    }
+
+    .resolver-btn {
+      padding: 6px 12px;
+      border-radius: var(--radius-pill);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid var(--color-border);
+      background: var(--color-surface-subtle);
+      color: var(--color-text);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all var(--transition-fast);
+    }
+
+    .resolver-btn:hover {
+      background: var(--color-surface);
+      border-color: var(--color-control-border);
+      transform: translateY(-1px);
+    }
+
+    .resolver-btn.primary {
+      background: var(--color-navy);
+      color: #FFFFFF;
+      border-color: var(--color-navy);
+    }
+    body.dark-mode .resolver-btn.primary {
+      background: var(--color-gold);
+      color: #1B2A4A;
+      border-color: var(--color-gold);
+    }
+
+    .resolver-btn.success {
+      background: var(--color-success);
+      color: #FFFFFF;
+      border-color: var(--color-success);
+    }
+
+    .resolver-btn.snooze:hover {
+      color: var(--color-gold);
+      border-color: var(--color-gold);
+    }
+
+    /* ══════════════════════════════════════════════════════════════ */
+    /* MODE 2: AMBIENT KIOSK GLANCE                                   */
+    /* ══════════════════════════════════════════════════════════════ */
+    .kiosk-glance-view {
+      display: none;
+      animation: fadeIn 0.3s ease-out forwards;
+    }
+
+    .kiosk-hero-container {
+      background: linear-gradient(135deg, #1B2A4A 0%, #0d1627 100%);
+      color: #FFFFFF;
+      border-radius: var(--radius-lg);
+      padding: 40px;
+      border: 1px solid rgba(201,169,110,0.3);
+      box-shadow: var(--shadow-lg);
+      margin-bottom: 24px;
+    }
+
+    .kiosk-time-display {
+      font-family: var(--font-display);
+      font-size: 64px;
+      font-weight: 600;
+      line-height: 1;
+      color: #FFFFFF;
+      margin-bottom: 8px;
+    }
+
+    .kiosk-ticker-banner {
+      background: rgba(201,169,110,0.15);
+      border: 1px solid rgba(201,169,110,0.35);
+      border-radius: var(--radius-pill);
+      padding: 10px 20px;
+      font-size: 16px;
+      font-style: italic;
+      color: var(--color-gold);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 20px;
+    }
+
+    .kiosk-cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap: 20px;
+    }
+
+    /* ══════════════════════════════════════════════════════════════ */
+    /* MODE 3: DEEP INBOX ZERO TRIAGE STACK                           */
+    /* ══════════════════════════════════════════════════════════════ */
+    .triage-deck-view {
+      display: none;
+      animation: fadeIn 0.3s ease-out forwards;
+      max-width: 680px;
+      margin: 0 auto;
+      text-align: center;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Interactive Modal for DocuSign Demo */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      backdrop-filter: blur(4px);
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .modal-backdrop.open {
+      display: flex;
+    }
+
+    .signature-modal {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      max-width: 520px;
+      width: 100%;
+      padding: 28px;
+      box-shadow: var(--shadow-lg);
+      text-align: left;
+      animation: zoomIn 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    @keyframes zoomIn {
+      from { opacity: 0; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    .signature-pad-box {
+      border: 2px dashed var(--color-control-border);
+      border-radius: var(--radius-md);
+      background: var(--color-surface-subtle);
+      height: 120px;
+      margin: 16px 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Cormorant Garamond', cursive;
+      font-size: 32px;
+      color: var(--color-navy);
+      cursor: pointer;
+      user-select: none;
+    }
+    body.dark-mode .signature-pad-box { color: var(--color-gold); }
+
+    /* Interactive Toast */
+    .canvas-toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(120%);
+      background: var(--color-navy);
+      color: #FFFFFF;
+      padding: 12px 24px;
+      border-radius: var(--radius-pill);
+      box-shadow: var(--shadow-lg);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      z-index: 999;
+      font-size: 13px;
+      font-weight: 500;
+      transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    .canvas-toast.show {
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .toast-undo {
+      background: var(--color-gold);
+      color: #1B2A4A;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: var(--radius-pill);
+      border: none;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Command Header -->
+  <header class="command-header">
+    <div class="header-inner">
+      
+      <div class="brand-group">
+        <div class="brand-icon">
+          <i data-lucide="sparkles" size="20"></i>
+        </div>
+        <div>
+          <div class="brand-title">Casa Tabor Living Canvas</div>
+          <div class="brand-subtitle">Unified Household OS · Door #3 Interactive Prototype</div>
+        </div>
+      </div>
+
+      <!-- Mode Switcher -->
+      <div class="mode-switch-group">
+        <button class="mode-btn active" onclick="switchCanvasMode('canvas', this)">
+          <i data-lucide="columns" size="14"></i> 3-Pane Canvas (Orient &amp; Act)
+        </button>
+        <button class="mode-btn" onclick="switchCanvasMode('kiosk', this)">
+          <i data-lucide="tv" size="14"></i> Ambient Kiosk (Glance)
+        </button>
+        <button class="mode-btn" onclick="switchCanvasMode('triage', this)">
+          <i data-lucide="check-square" size="14"></i> Inbox Zero (Speed Triage)
+        </button>
+      </div>
+
+      <!-- Action Tools -->
+      <div class="header-actions">
+        <button class="header-btn" onclick="toggleDarkMode()">
+          <i data-lucide="moon" size="13"></i>
+          <span id="themeToggleText">Midnight</span>
+        </button>
+        <button class="header-btn" onclick="triggerResetDemo()">
+          <i data-lucide="rotate-ccw" size="13"></i> Reset State
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- Interactive Floating Undo Toast -->
+  <div class="canvas-toast" id="globalToast">
+    <span id="globalToastText">Action completed successfully</span>
+    <button class="toast-undo" onclick="undoLastAction()">UNDO (4s)</button>
+  </div>
+
+  <!-- Main Canvas Container -->
+  <main class="canvas-root">
+
+    <!-- ══════════════════════════════════════════════════════════════ -->
+    <!-- VIEW 1: THE 3-PANE LIVING CANVAS                               -->
+    <!-- ══════════════════════════════════════════════════════════════ -->
+    <div class="living-canvas-grid" id="view-canvas">
+
+      <!-- ── PANE 1: MORNING BRIEFING & LOGISTICS NARRATIVE ──────── -->
+      <div class="canvas-pane">
+        <div class="pane-header">
+          <div class="pane-title-group">
+            <i data-lucide="coffee" size="18" style="color: var(--color-gold);"></i>
+            <div class="pane-title">Daily Briefing</div>
+          </div>
+          <span class="pane-badge">Friday, Oct 24</span>
+        </div>
+
+        <div class="pane-scrollable">
+          
+          <!-- Editorial Story Card -->
+          <div class="briefing-story-hero">
+            <div class="briefing-date-label">
+              <i data-lucide="sparkles" size="12"></i> Household Intelligence
+            </div>
+            <div class="briefing-prose">
+              "Good morning Kelly. Today has <strong>3 critical logistical handoffs</strong>. Jake is presenting during Owen's soccer pickup, but your 4:15 PM window is open."
+            </div>
+          </div>
+
+          <!-- Weather & Gear Alert -->
+          <div class="weather-brief-card">
+            <div class="weather-icon-box">
+              <i data-lucide="cloud-sun" size="22"></i>
+            </div>
+            <div>
+              <div style="font-size: 13px; font-weight: 600; color: var(--color-text);">Breezy &amp; 64°F this afternoon</div>
+              <div style="font-size: 12px; color: var(--color-text-secondary);">Pack windbreakers for Owen's outdoor practice at Oakridge.</div>
+            </div>
+          </div>
+
+          <!-- Critical Daily Handoffs -->
+          <div class="handoff-section-title">
+            <span>Critical Handoffs</span>
+            <span style="font-size: 11px; font-family: var(--font-mono); color: var(--color-gold);">Tap to cross-focus</span>
+          </div>
+
+          <!-- Handoff 1: Soccer Ride Clash (Interactive Cross-Highlight) -->
+          <div class="handoff-card" id="briefing-handoff-1" onclick="crossHighlight('soccer-clash')">
+            <div class="handoff-time-badge">
+              <i data-lucide="alert-triangle" size="11"></i> 4:15 PM · Ride Conflict
+            </div>
+            <div class="handoff-title">Owen Soccer Pickup vs. Jake Meeting</div>
+            <div class="handoff-desc">
+              Jake has "Q3 Strategy Review" (4:00–5:00 PM). Kelly is suggested to drive Owen to Oakridge Park.
+            </div>
+            <div class="handoff-action-hint">
+              <i data-lucide="mouse-pointer-click" size="13"></i> Linked to Attention Card →
+            </div>
+          </div>
+
+          <!-- Handoff 2: Science Camp Form -->
+          <div class="handoff-card" id="briefing-handoff-2" style="border-left-color: var(--color-error);" onclick="crossHighlight('science-slip')">
+            <div class="handoff-time-badge" style="background: var(--color-error-soft); color: var(--color-error);">
+              <i data-lucide="clock" size="11"></i> 3:00 PM Deadline
+            </div>
+            <div class="handoff-title">Liv's Science Camp Permission Slip</div>
+            <div class="handoff-desc">
+              Oakridge 5th Grade trip waiver requires Kelly's digital signature today.
+            </div>
+            <div class="handoff-action-hint" style="color: var(--color-error);">
+              <i data-lucide="mouse-pointer-click" size="13"></i> Needs 1-tap DocuSign →
+            </div>
+          </div>
+
+          <!-- Looking Ahead Weekend Preview -->
+          <div class="handoff-section-title" style="margin-top: 12px;">
+            <span>Looking Ahead</span>
+          </div>
+
+          <div style="background: var(--color-surface-subtle); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 14px; font-size: 13px;">
+            <div style="font-weight: 600; color: var(--color-navy); margin-bottom: 2px;">Tomorrow (Saturday)</div>
+            <div style="color: var(--color-text-secondary);">10:00 AM: Liv's Gymnastics Regional Showcase at Lincoln Arena.</div>
+          </div>
+
+        </div>
+      </div>
+
+
+      <!-- ── PANE 2: TODAY'S SCHEDULE & REAL-TIME TIMELINE ───────── -->
+      <div class="canvas-pane">
+        <div class="pane-header">
+          <div class="pane-title-group">
+            <i data-lucide="calendar" size="18" style="color: var(--color-navy);"></i>
+            <div class="pane-title">Today's Schedule</div>
+          </div>
+          <span style="font-size: 11px; background: var(--color-success-soft); color: var(--color-success); padding: 2px 8px; border-radius: var(--radius-pill); font-weight: 600;">
+            ● Live Timeline
+          </span>
+        </div>
+
+        <div class="pane-scrollable">
+
+          <!-- Hero Next Up Card -->
+          <div class="hero-schedule-card">
+            <div class="hero-countdown-pill">
+              <i data-lucide="navigation" size="11"></i> Leave in 35 mins
+            </div>
+            <div class="hero-event-title">Owen Soccer Practice</div>
+            <div class="hero-meta-row">
+              <span><i data-lucide="clock" size="13" style="vertical-align: middle;"></i> 4:30 – 6:00 PM</span>
+              <span>·</span>
+              <span><i data-lucide="map-pin" size="13" style="vertical-align: middle;"></i> Oakridge Park</span>
+            </div>
+            <div class="hero-driver-badge">
+              <span id="hero-driver-status">🚗 Assigned Driver: <strong>Pending Kelly</strong></span>
+              <span style="color: var(--color-gold); font-weight: 600;">10 min buffer</span>
+            </div>
+          </div>
+
+          <!-- Timeline Items -->
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            
+            <!-- Earlier Event (Completed) -->
+            <div class="timeline-row" style="opacity: 0.65;">
+              <div class="timeline-time-col">8:30 AM</div>
+              <div class="timeline-content-col">
+                <div class="timeline-title">School Dropoff (Liv &amp; Owen)</div>
+                <div class="timeline-sub">
+                  <span class="member-avatar-pill" style="background: var(--member-jake);">J</span> Jake drove · Completed
+                </div>
+              </div>
+              <i data-lucide="check-circle" size="16" style="color: var(--color-success);"></i>
+            </div>
+
+            <!-- Now Line Indicator -->
+            <div class="now-indicator-line">
+              <div class="now-dot"></div>
+              <div class="now-line-fill"></div>
+              <div class="now-time-text">NOW · 3:55 PM</div>
+              <div class="now-line-fill"></div>
+            </div>
+
+            <!-- Conflict Timeline Row (Interactive Target) -->
+            <div class="timeline-row has-conflict" id="timeline-row-conflict" onclick="crossHighlight('soccer-clash')">
+              <div class="timeline-time-col" style="color: var(--color-error);">4:00 PM</div>
+              <div class="timeline-content-col">
+                <div class="timeline-title">Jake: Q3 Client Strategy Call (Zoom)</div>
+                <div class="timeline-sub" style="color: var(--color-error);">
+                  <i data-lucide="alert-circle" size="12"></i> Overlaps with Owen 4:30 PM practice
+                </div>
+              </div>
+              <span class="member-avatar-pill" style="background: var(--member-jake);">J</span>
+            </div>
+
+            <!-- Owen Soccer Row -->
+            <div class="timeline-row" id="timeline-row-soccer" onclick="crossHighlight('soccer-clash')">
+              <div class="timeline-time-col">4:30 PM</div>
+              <div class="timeline-content-col">
+                <div class="timeline-title">Owen Soccer Practice</div>
+                <div class="timeline-sub">
+                  <span class="member-avatar-pill" style="background: var(--member-owen);">O</span> Oakridge Field · Field #3
+                </div>
+              </div>
+              <span class="member-avatar-pill" id="soccer-driver-avatar" style="background: var(--color-gold); color: #1B2A4A;">?</span>
+            </div>
+
+            <!-- Evening Event -->
+            <div class="timeline-row">
+              <div class="timeline-time-col">6:30 PM</div>
+              <div class="timeline-content-col">
+                <div class="timeline-title">Family Dinner &amp; Pasta Night</div>
+                <div class="timeline-sub">Home Kitchen · Everyone</div>
+              </div>
+              <div style="display: flex; gap: -4px;">
+                <span class="member-avatar-pill" style="background: var(--member-jake);">J</span>
+                <span class="member-avatar-pill" style="background: var(--member-kelly);">K</span>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+      </div>
+
+
+      <!-- ── PANE 3: ATTENTION & ACTION COMMAND HUB ──────────────── -->
+      <div class="canvas-pane">
+        <div class="pane-header">
+          <div class="pane-title-group">
+            <i data-lucide="check-circle-2" size="18" style="color: var(--color-success);"></i>
+            <div class="pane-title">Attention Hub</div>
+          </div>
+          <span class="pane-badge" id="action-count-badge">3 Actions</span>
+        </div>
+
+        <div class="pane-scrollable">
+
+          <!-- Action Filter Bar -->
+          <div class="action-filter-bar">
+            <button class="action-filter-pill active" onclick="filterAttention('all', this)">All (3)</button>
+            <button class="action-filter-pill" onclick="filterAttention('urgent', this)">Urgent (2)</button>
+            <button class="action-filter-pill" onclick="filterAttention('school', this)">School</button>
+            <button class="action-filter-pill" onclick="filterAttention('rides', this)">Rides</button>
+          </div>
+
+          <!-- Attention Card 1: Soccer Ride Conflict (Interactive Resolver) -->
+          <div class="attention-card" id="action-card-soccer">
+            <div class="attention-header">
+              <div class="attention-badge-row">
+                <span class="source-tag tag-conflict"><i data-lucide="car" size="10"></i> Ride Conflict</span>
+                <span class="person-chip" style="font-size: 11px; display: inline-flex; align-items: center; gap: 4px; background: var(--color-surface-subtle); padding: 2px 6px; border-radius: var(--radius-pill); border: 1px solid var(--color-border);">
+                  <span class="member-avatar-pill" style="width: 14px; height: 14px; font-size: 8px; background: var(--member-owen);">O</span> Owen
+                </span>
+              </div>
+              <span style="font-size: 11px; color: var(--color-error); font-weight: 600; font-family: var(--font-mono);">4:15 PM</span>
+            </div>
+
+            <div class="attention-title">Assign driver for Owen's 4:30 PM Soccer Practice</div>
+            <div class="attention-desc">
+              Jake is unavailable (client call). AI suggests assigning Kelly who has no conflicting events.
+            </div>
+
+            <div class="inline-resolvers">
+              <button class="resolver-btn primary" id="btn-assign-kelly" onclick="resolveSoccerRide()">
+                <i data-lucide="user-check" size="13"></i> Kelly Drives
+              </button>
+              <button class="resolver-btn" onclick="delegateToJake()">
+                <i data-lucide="message-square" size="13"></i> Ask Jake
+              </button>
+              <button class="resolver-btn snooze" onclick="snoozeAction('action-card-soccer')">
+                <i data-lucide="moon" size="13"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Attention Card 2: DocuSign Science Camp (Interactive Modal Trigger) -->
+          <div class="attention-card" id="action-card-science">
+            <div class="attention-header">
+              <div class="attention-badge-row">
+                <span class="source-tag tag-gmail"><i data-lucide="mail" size="10"></i> Gmail</span>
+                <span class="person-chip" style="font-size: 11px; display: inline-flex; align-items: center; gap: 4px; background: var(--color-surface-subtle); padding: 2px 6px; border-radius: var(--radius-pill); border: 1px solid var(--color-border);">
+                  <span class="member-avatar-pill" style="width: 14px; height: 14px; font-size: 8px; background: var(--member-liv);">L</span> Liv
+                </span>
+              </div>
+              <span style="font-size: 11px; color: var(--color-error); font-weight: 600; font-family: var(--font-mono);">Due 3 PM</span>
+            </div>
+
+            <div class="attention-title">Sign 5th Grade Science Camp Permission Slip</div>
+            <div class="attention-desc">
+              From Ms. Robinson · Oakridge Elementary. Digital waiver &amp; emergency contact required.
+            </div>
+
+            <div class="inline-resolvers">
+              <button class="resolver-btn success" onclick="openSignatureModal()">
+                <i data-lucide="edit-3" size="13"></i> 1-Tap Quick Sign
+              </button>
+              <button class="resolver-btn" onclick="snoozeAction('action-card-science')">
+                <i data-lucide="moon" size="13"></i> Snooze
+              </button>
+            </div>
+          </div>
+
+          <!-- Attention Card 3: Medical / Dental Copay -->
+          <div class="attention-card" id="action-card-copay">
+            <div class="attention-header">
+              <div class="attention-badge-row">
+                <span class="source-tag tag-reminder"><i data-lucide="credit-card" size="10"></i> Payment</span>
+                <span class="person-chip" style="font-size: 11px; display: inline-flex; align-items: center; gap: 4px; background: var(--color-surface-subtle); padding: 2px 6px; border-radius: var(--radius-pill); border: 1px solid var(--color-border);">
+                  <span class="member-avatar-pill" style="width: 14px; height: 14px; font-size: 8px; background: var(--member-emme);">E</span> Emme
+                </span>
+              </div>
+              <span style="font-size: 11px; color: var(--color-text-tertiary); font-family: var(--font-mono);">Due in 3d</span>
+            </div>
+
+            <div class="attention-title">Dr. Miller Orthodontic Statement ($45.00)</div>
+            <div class="attention-desc">
+              Invoice ready for auto-pay via HSA card on file.
+            </div>
+
+            <div class="inline-resolvers">
+              <button class="resolver-btn primary" onclick="payCopay()">
+                <i data-lucide="check" size="13"></i> Pay $45 HSA
+              </button>
+              <button class="resolver-btn snooze" onclick="snoozeAction('action-card-copay')">
+                <i data-lucide="moon" size="13"></i> Later
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+
+
+    <!-- ══════════════════════════════════════════════════════════════ -->
+    <!-- VIEW 2: AMBIENT KIOSK GLANCE                                   -->
+    <!-- ══════════════════════════════════════════════════════════════ -->
+    <div class="kiosk-glance-view" id="view-kiosk">
+      <div class="kiosk-hero-container">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap;">
+          <div>
+            <div class="kiosk-time-display">3:55 PM</div>
+            <div style="font-family: var(--font-display); font-size: 24px; color: rgba(255,255,255,0.9);">
+              Friday, October 24 · Casa Tabor
+            </div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 32px; font-weight: 600; color: var(--color-gold);">64°F</div>
+            <div style="font-size: 14px; color: rgba(255,255,255,0.7);">Sunny &amp; Breezy</div>
+          </div>
+        </div>
+
+        <div class="kiosk-ticker-banner">
+          <i data-lucide="sparkles" size="20"></i>
+          <span>"Owen's soccer ride at 4:30 PM needs a driver assigned. Kelly is free to cover."</span>
+        </div>
+      </div>
+
+      <div class="kiosk-cards-grid">
+        
+        <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 24px; box-shadow: var(--shadow-md);">
+          <div style="font-size: 12px; text-transform: uppercase; font-weight: 700; color: var(--color-gold); margin-bottom: 8px;">
+            Next Event · 4:30 PM
+          </div>
+          <div style="font-family: var(--font-display); font-size: 26px; font-weight: 600; color: var(--color-navy); margin-bottom: 6px;">
+            Owen Soccer Practice
+          </div>
+          <div style="font-size: 14px; color: var(--color-text-secondary); margin-bottom: 16px;">
+            Oakridge Park · Field 3 (10 min drive)
+          </div>
+          <button class="resolver-btn primary" style="width: 100%; justify-content: center; padding: 10px;" onclick="resolveSoccerRide()">
+            <i data-lucide="user-check" size="16"></i> 1-Tap: Kelly Drives Owen
+          </button>
+        </div>
+
+        <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 24px; box-shadow: var(--shadow-md);">
+          <div style="font-size: 12px; text-transform: uppercase; font-weight: 700; color: var(--color-error); margin-bottom: 8px;">
+            Action Needed · Due 3:00 PM
+          </div>
+          <div style="font-family: var(--font-display); font-size: 26px; font-weight: 600; color: var(--color-navy); margin-bottom: 6px;">
+            Liv Science Camp Slip
+          </div>
+          <div style="font-size: 14px; color: var(--color-text-secondary); margin-bottom: 16px;">
+            Oakridge Elementary 5th Grade Waiver
+          </div>
+          <button class="resolver-btn success" style="width: 100%; justify-content: center; padding: 10px;" onclick="openSignatureModal()">
+            <i data-lucide="edit-3" size="16"></i> 1-Tap: Quick Sign Form
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+
+    <!-- ══════════════════════════════════════════════════════════════ -->
+    <!-- VIEW 3: INBOX ZERO SPEED TRIAGE DECK                           -->
+    <!-- ══════════════════════════════════════════════════════════════ -->
+    <div class="triage-deck-view" id="view-triage">
+      <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 36px; box-shadow: var(--shadow-md);" id="triage-card-container">
+        
+        <div style="font-family: var(--font-mono); font-size: 11px; background: var(--color-gold-subtle); color: var(--color-gold); border: 1px solid var(--color-gold-border); padding: 3px 12px; border-radius: var(--radius-pill); font-weight: 600; display: inline-block; margin-bottom: 16px;" id="deck-counter">
+          Card 1 of 3 · Household Inbox Zero
+        </div>
+
+        <div style="font-family: var(--font-display); font-size: 28px; font-weight: 600; color: var(--color-navy); margin-bottom: 8px;" id="deck-title">
+          Assign driver for Owen's 4:30 PM Soccer
+        </div>
+
+        <div style="font-size: 15px; color: var(--color-text-secondary); max-width: 480px; margin: 0 auto 24px;" id="deck-desc">
+          Jake is locked in a client call from 4:00 to 5:00 PM. Kelly is free to take Owen to Oakridge Park.
+        </div>
+
+        <div style="display: flex; justify-content: center; gap: 20px;">
+          <button class="resolver-btn" style="width: 52px; height: 52px; border-radius: 50%; padding: 0; justify-content: center; color: var(--color-error);" title="Dismiss" onclick="advanceTriageDeck('dismissed')">
+            <i data-lucide="thumbs-down" size="20"></i>
+          </button>
+          <button class="resolver-btn" style="width: 52px; height: 52px; border-radius: 50%; padding: 0; justify-content: center; color: var(--color-gold);" title="Snooze to Tomorrow" onclick="advanceTriageDeck('snoozed')">
+            <i data-lucide="moon" size="20"></i>
+          </button>
+          <button class="resolver-btn success" style="width: 52px; height: 52px; border-radius: 50%; padding: 0; justify-content: center;" title="Assign & Resolve" onclick="advanceTriageDeck('completed')">
+            <i data-lucide="check" size="24"></i>
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- INTERACTIVE MODAL: 1-TAP QUICK SIGN DEMO                       -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <div class="modal-backdrop" id="signatureModal" onclick="closeSignatureModal()">
+    <div class="signature-modal" onclick="event.stopPropagation()">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <div style="font-family: var(--font-display); font-size: 22px; font-weight: 600; color: var(--color-navy);">
+          Sign Science Camp Waiver
+        </div>
+        <button style="background: none; border: none; cursor: pointer; color: var(--color-text-tertiary);" onclick="closeSignatureModal()">
+          <i data-lucide="x" size="20"></i>
+        </button>
+      </div>
+
+      <p style="font-size: 13px; color: var(--color-text-secondary); margin-bottom: 12px;">
+        Student: <strong>Liv Tabor (5th Grade)</strong> · Trip: <strong>Camp Ocean Pines</strong>
+      </p>
+
+      <div class="signature-pad-box" id="signPad" onclick="applySignature()">
+        <span id="signPlaceholder">Click here to apply saved signature</span>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button class="resolver-btn" onclick="closeSignatureModal()">Cancel</button>
+        <button class="resolver-btn success" id="btnSubmitSign" disabled onclick="submitSignature()">
+          <i data-lucide="send" size="14"></i> Submit to School
+        </button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- JavaScript Logic & Interactive State Machine -->
+  <script>
+    // Initialize Lucide Icons
+    lucide.createIcons();
+
+    // Mode Switcher Function
+    function switchCanvasMode(mode, btn) {
+      document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      document.getElementById('view-canvas').style.display = mode === 'canvas' ? 'grid' : 'none';
+      document.getElementById('view-kiosk').style.display = mode === 'kiosk' ? 'block' : 'none';
+      document.getElementById('view-triage').style.display = mode === 'triage' ? 'block' : 'none';
+      lucide.createIcons();
+    }
+
+    // Theme Toggle
+    function toggleDarkMode() {
+      document.body.classList.toggle('dark-mode');
+      const isDark = document.body.classList.contains('dark-mode');
+      document.getElementById('themeToggleText').innerText = isDark ? 'Warm Day' : 'Midnight';
+      lucide.createIcons();
+    }
+
+    // Bi-directional Cross Highlighting
+    function crossHighlight(targetKey) {
+      // Clear previous active highlights
+      document.querySelectorAll('.active-cross-highlight').forEach(el => el.classList.remove('active-cross-highlight'));
+
+      if (targetKey === 'soccer-clash') {
+        const briefingCard = document.getElementById('briefing-handoff-1');
+        const timelineConflict = document.getElementById('timeline-row-conflict');
+        const timelineSoccer = document.getElementById('timeline-row-soccer');
+        const actionCard = document.getElementById('action-card-soccer');
+
+        [briefingCard, timelineConflict, timelineSoccer, actionCard].forEach(el => {
+          if (el) el.classList.add('active-cross-highlight');
+        });
+
+        actionCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        showGlobalToast('Cross-focused Owen Soccer Ride conflict & resolution');
+      } else if (targetKey === 'science-slip') {
+        const briefingCard = document.getElementById('briefing-handoff-2');
+        const actionCard = document.getElementById('action-card-science');
+
+        [briefingCard, actionCard].forEach(el => {
+          if (el) el.classList.add('active-cross-highlight');
+        });
+
+        actionCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        showGlobalToast('Cross-focused Science Camp slip in Attention Hub');
+      }
+    }
+
+    // 1-Click Resolvers with Optimistic Updates
+    let lastUndoAction = null;
+    let toastTimer = null;
+
+    function showGlobalToast(message, undoCallback) {
+      const toast = document.getElementById('globalToast');
+      document.getElementById('globalToastText').innerText = message;
+      toast.classList.add('show');
+      lastUndoAction = undoCallback;
+
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        toast.classList.remove('show');
+      }, 4000);
+    }
+
+    function undoLastAction() {
+      if (lastUndoAction) {
+        lastUndoAction();
+        document.getElementById('globalToast').classList.remove('show');
+      }
+    }
+
+    function resolveSoccerRide() {
+      const actionCard = document.getElementById('action-card-soccer');
+      const timelineConflict = document.getElementById('timeline-row-conflict');
+      const heroDriver = document.getElementById('hero-driver-status');
+      const soccerAvatar = document.getElementById('soccer-driver-avatar');
+
+      // Optimistic schedule update
+      timelineConflict.classList.remove('has-conflict');
+      timelineConflict.style.borderLeftColor = 'var(--color-border)';
+      timelineConflict.style.background = 'var(--color-surface)';
+      heroDriver.innerHTML = '🚗 Assigned Driver: <strong style="color: var(--color-gold);">Kelly Tabor</strong>';
+      soccerAvatar.innerText = 'K';
+      soccerAvatar.style.background = 'var(--member-kelly)';
+      soccerAvatar.style.color = '#fff';
+
+      // Hide action card
+      actionCard.style.transition = 'all 0.3s ease';
+      actionCard.style.opacity = '0';
+      actionCard.style.transform = 'translateX(20px)';
+      setTimeout(() => {
+        actionCard.style.display = 'none';
+        updateActionCount();
+      }, 300);
+
+      showGlobalToast('Kelly assigned to drive Owen to Soccer', () => {
+        actionCard.style.display = 'block';
+        setTimeout(() => {
+          actionCard.style.opacity = '1';
+          actionCard.style.transform = 'translateX(0)';
+          timelineConflict.classList.add('has-conflict');
+          heroDriver.innerHTML = '🚗 Assigned Driver: <strong>Pending Kelly</strong>';
+          soccerAvatar.innerText = '?';
+          updateActionCount();
+        }, 10);
+      });
+    }
+
+    function delegateToJake() {
+      showGlobalToast('Sent WhatsApp reminder to Jake: "Can you take Owen?"');
+    }
+
+    function snoozeAction(cardId) {
+      const card = document.getElementById(cardId);
+      if (card) {
+        card.style.transition = 'all 0.3s ease';
+        card.style.opacity = '0';
+        card.style.transform = 'translateY(-10px)';
+        setTimeout(() => {
+          card.style.display = 'none';
+          updateActionCount();
+        }, 300);
+        showGlobalToast('Snoozed until tomorrow morning', () => {
+          card.style.display = 'block';
+          setTimeout(() => {
+            card.style.opacity = '1';
+            card.style.transform = 'translateY(0)';
+            updateActionCount();
+          }, 10);
+        });
+      }
+    }
+
+    function payCopay() {
+      const card = document.getElementById('action-card-copay');
+      card.style.transition = 'all 0.3s ease';
+      card.style.opacity = '0';
+      setTimeout(() => {
+        card.style.display = 'none';
+        updateActionCount();
+      }, 300);
+      showGlobalToast('Paid $45.00 Dr. Miller statement via HSA Card');
+    }
+
+    function updateActionCount() {
+      const visible = document.querySelectorAll('.attention-card:not([style*="display: none"])').length;
+      document.getElementById('action-count-badge').innerText = visible + ' Actions';
+    }
+
+    // Modal Signature Logic
+    function openSignatureModal() {
+      document.getElementById('signatureModal').classList.add('open');
+      document.getElementById('signPad').innerHTML = '<span>Click here to apply saved signature</span>';
+      document.getElementById('btnSubmitSign').disabled = true;
+    }
+
+    function closeSignatureModal() {
+      document.getElementById('signatureModal').classList.remove('open');
+    }
+
+    function applySignature() {
+      document.getElementById('signPad').innerHTML = '<span style="font-family: Cormorant Garamond, serif; font-size: 34px; font-style: italic; font-weight: 600;">Kelly Tabor</span>';
+      document.getElementById('btnSubmitSign').disabled = false;
+    }
+
+    function submitSignature() {
+      closeSignatureModal();
+      const card = document.getElementById('action-card-science');
+      card.style.transition = 'all 0.3s ease';
+      card.style.opacity = '0';
+      setTimeout(() => {
+        card.style.display = 'none';
+        updateActionCount();
+      }, 300);
+      showGlobalToast('Science Camp waiver signed and submitted to Oakridge Elementary!');
+    }
+
+    // Triage Deck Speed Flow
+    const deckItems = [
+      {
+        title: "Assign driver for Owen's 4:30 PM Soccer",
+        desc: "Jake has client review call at 4:00 PM. Kelly is available to drive.",
+        counter: "Card 1 of 3 · Rides & Logistics"
+      },
+      {
+        title: "Sign Liv's 5th Grade Science Camp Slip",
+        desc: "Requires digital signature and emergency contact info by 3:00 PM.",
+        counter: "Card 2 of 3 · School & Forms"
+      },
+      {
+        title: "Pay Orthodontic Copay Statement ($45.00)",
+        desc: "Dr. Miller invoice ready for 1-tap HSA charge.",
+        counter: "Card 3 of 3 · Bills & Finance"
+      }
+    ];
+
+    let deckIdx = 0;
+
+    function advanceTriageDeck(action) {
+      const container = document.getElementById('triage-card-container');
+      container.style.transition = 'all 0.25s ease';
+      container.style.opacity = '0';
+      container.style.transform = action === 'completed' ? 'translateX(60px)' : (action === 'snoozed' ? 'translateY(-40px)' : 'translateX(-60px)');
+
+      showGlobalToast(action === 'completed' ? 'Item completed!' : (action === 'snoozed' ? 'Snoozed to tomorrow' : 'Dismissed'));
+
+      setTimeout(() => {
+        deckIdx++;
+        if (deckIdx < deckItems.length) {
+          const item = deckItems[deckIdx];
+          document.getElementById('deck-title').innerText = item.title;
+          document.getElementById('deck-desc').innerText = item.desc;
+          document.getElementById('deck-counter').innerText = item.counter;
+
+          container.style.opacity = '1';
+          container.style.transform = 'translate(0,0)';
+        } else {
+          container.innerHTML = `
+            <div style="padding: 20px 0;">
+              <div style="width: 54px; height: 54px; border-radius: 50%; background: var(--color-success-soft); color: var(--color-success); display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
+                <i data-lucide="check-check" size="28"></i>
+              </div>
+              <h3 style="font-family: var(--font-display); font-size: 26px; color: var(--color-navy); margin-bottom: 6px;">Inbox Zero Achieved!</h3>
+              <p style="font-size: 14px; color: var(--color-text-secondary); margin-bottom: 18px;">All urgent household items are resolved for today.</p>
+              <button class="resolver-btn primary" style="margin: 0 auto;" onclick="resetDemo()">Reset Deck</button>
+            </div>
+          `;
+          lucide.createIcons();
+        }
+      }, 260);
+    }
+
+    function triggerResetDemo() {
+      location.reload();
+    }
+
+    function resetDemo() {
+      deckIdx = 0;
+      location.reload();
+    }
+  </script>
+</body>
+</html>

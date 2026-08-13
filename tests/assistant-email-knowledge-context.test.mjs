@@ -12,6 +12,8 @@ const assistantSession = readFileSync(new URL('../src/hooks/useAISession.ts', im
 const assistantDrawer = readFileSync(new URL('../src/components/shared/AIChatDrawer.tsx', import.meta.url), 'utf8')
 const briefing = readFileSync(new URL('../supabase/functions/generate-briefing/index.ts', import.meta.url), 'utf8')
 
+const assistantSynthesis = readFileSync(new URL('../supabase/functions/_shared/assistant-read-tool-synthesis.mjs', import.meta.url), 'utf8')
+
 test('assistant retrieves ranked family evidence and returns its source contract', () => {
   assert.match(assistant, /retrieveFamilyContext/)
   assert.match(assistant, /buildAssistantContextPacket/)
@@ -26,7 +28,8 @@ test('assistant retrieves ranked family evidence and returns its source contract
   assert.doesNotMatch(assistant, /formatFamilyKnowledgeContext\(emailKnowledgeResult\.data \?\? \[\]\)/)
   assert.match(assistant, /Do not invent undocumented family requirements or generic advice/)
   assert.match(assistant, /could not search your family data/i)
-  assert.match(assistant, /name === 'search_events' && needsUnifiedFamilyRetrieval/)
+  assert.match(assistant, /needsUnifiedFamilyRetrieval/)
+  assert.match(assistantSynthesis, /name === 'search_events'[\s\S]*needsUnifiedFamilyRetrieval/)
 })
 
 test('family-data questions cannot be finalized by calendar-only short-circuits', () => {

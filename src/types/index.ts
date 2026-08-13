@@ -324,6 +324,8 @@ export type PrepItemCategory =
 
 export type CalendarView = 'today' | 'week' | 'month' | 'agenda' | 'family-split' | 'stacked'
 export type AppMode = 'interactive' | 'ambient'
+export type ExperienceMode = 'living_canvas' | 'classic'
+export type CanvasSubmode = 'calm' | 'turbo'
 
 export interface AIMemoryObservation {
   id: string

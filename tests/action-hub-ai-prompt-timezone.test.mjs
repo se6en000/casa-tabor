@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
+
+process.env.TZ = 'America/New_York'
+
 import { formatDueByForAiPrompt, buildAiDraftPrompt } from '../src/utils/eventTime.ts'
 
 // Regression coverage for a real bug: clicking "Create event"/"Create reminder"

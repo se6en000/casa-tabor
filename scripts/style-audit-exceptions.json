@@ -38,6 +38,14 @@
     ],
     "inlineStyleBlocks": [
       {
+        "path": "src/components/canvas/CalmKioskView.tsx",
+        "reason": "Family-member avatar colors and indicators are selected from runtime household data."
+      },
+      {
+        "path": "src/components/canvas/TurboCanvasView.tsx",
+        "reason": "Family-member avatar colors and indicators are selected from runtime household data."
+      },
+      {
         "path": "src/components/calendar/DayView.tsx",
         "reason": "Family-member avatar colors are selected from runtime household data."
       },

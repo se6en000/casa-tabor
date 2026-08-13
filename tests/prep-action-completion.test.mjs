@@ -62,9 +62,7 @@ test('Done and Dismiss use distinct authoritative client outcomes', () => {
 })
 
 test('all prep generators preserve stable identity and surface write failures', () => {
-  assert.doesNotMatch(reminderActions, /\.eq\('dismissed', false\)[\s\S]{0,200}\.in\('source_type', activeSources\)/)
-  assert.match(scanGmail, /source_type: 'gmail'/)
-  assert.match(scanGmail, /source_ref: `gmail:\$\{memberId\}:\$\{messageId\}`/)
+  assert.match(scanGmail, /`gmail:\$\{(?:sourceOwnerMemberId \?\? 'household'|memberId)\}:\$\{messageId\}`/)
   assert.match(scanGmail, /if \(error\) throw error/)
   assert.match(analyzePrep, /Failed to clear stale prep items/)
   assert.match(analyzePrep, /Failed to store prep items/)

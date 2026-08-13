@@ -32,7 +32,7 @@ test('status reads are sanitized while retry only accepts failed operations', ()
 })
 
 test('calendar settings provides truthful rollout state and actionable failures', () => {
-  assert.match(hook, /refetchInterval: 30_000/)
+  assert.match(hook, /refetchInterval:\s*(?:isPageVisible\s*\?\s*)?30_000/)
   assert.match(card, /Google recurrence projection is paused/)
   assert.match(card, /Retry now/)
   assert.match(card, /Casa version kept/)

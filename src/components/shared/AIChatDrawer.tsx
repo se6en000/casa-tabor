@@ -26,6 +26,7 @@ import { createAssistantTraceContext, emitAssistantTrace, getAssistantDeviceId }
 import { classifyPendingConfirmation } from '../../lib/assistantConfirmation.mjs'
 import { conversationStateAfterCalendarAction } from '../../lib/assistantConversationState.mjs'
 import { linkAssistantEventMentions, parseAssistantEventHref, parseAssistantHref } from '../../lib/assistantEntityLinks'
+import { openEventDetails } from '../../utils/openEventDetails'
 import { buildCreatePreviewCopy, buildDeleteManyPreviewCopy, buildDeletePreviewCopy, buildUpdatePreviewCopy } from '../../utils/aiConfirmPreview'
 
 const LOW_CONFIDENCE_CONFIRM_PHRASES = /\b(yes|yeah|yep|ok|okay|use it|that one|correct|right|go ahead)\b/i
@@ -154,11 +155,11 @@ export default function AIChatDrawer({
     return () => window.removeEventListener('resize', handleResize)
   }, [])
 
-  // Sidecar width scales as a responsive percentage of the screen (~32vw),
-  // clamped between 440px (tablet/laptop) and 720px for high-res kiosk screens.
+  // Sidecar width scales as a responsive percentage of the screen (~33vw),
+  // clamped between 380px (tablet/laptop) and 720px for high-res kiosk screens.
   const sidecarWidth = useMemo(() => {
     if (isMobile) return windowWidth
-    return Math.min(720, Math.max(440, Math.round(windowWidth * 0.32)))
+    return Math.min(720, Math.max(380, Math.round(windowWidth * 0.33)))
   }, [isMobile, windowWidth])
 
   useEffect(() => {
@@ -259,6 +260,9 @@ export default function AIChatDrawer({
       if (event) {
         onClose()
         onOpenEventDetails?.(event)
+      } else {
+        onClose()
+        openEventDetails(parsed.idOrPath)
       }
     } else if (parsed.type === 'recipe') {
       navigate(`/cook?search=${encodeURIComponent(parsed.idOrPath)}`)

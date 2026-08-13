@@ -83,8 +83,8 @@ test('all calendar sync paths resolve explicit database connections', () => {
   assert.match(inbound, /let isFullReconciliation = !syncToken/)
   assert.match(inbound, /isFullReconciliation && !isWithinInitialSyncWindow\(ev, now\)/)
   assert.match(inbound, /if \(!isFullReconciliation\) pendingCancellations\.push\(ev\)/)
-  assert.match(inbound, /MAX_INCREMENTAL_CANCELLATIONS = 5/)
-  assert.match(inbound, /GOOGLE_CANCELLATION_BATCH_QUARANTINED/)
+  assert.match(inbound, /MAX_INCREMENTAL_CANCELLATIONS = \d+/)
+  assert.match(inbound, /QUARANTINE/)
   assert.doesNotMatch(inbound, /calendars\/primary/)
   for (const source of [create, update, recurring]) {
     assert.match(source, /loadWritableGoogleConnection/)

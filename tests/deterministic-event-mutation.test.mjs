@@ -112,47 +112,47 @@ test('creates an explicit named event with bounded defaults', () => {
     },
     event: null,
   })
+})
 
-  test('creates naturally named scheduled activities without synthetic event wording', () => {
-    for (const input of [
-      'Schedule swim practice Friday at 4 PM.',
-      'Book tutoring Friday at 4 PM.',
-      'Add piano lesson Friday at 4 PM.',
-    ]) {
-      const result = resolveDeterministicEventMutation(input, events, options)
-      assert.equal(result?.tool, 'create_event', input)
-      assert.ok(result?.args.title, input)
-    }
-  })
+test('creates naturally named scheduled activities without synthetic event wording', () => {
+  for (const input of [
+    'Schedule swim practice Friday at 4 PM.',
+    'Book tutoring Friday at 4 PM.',
+    'Add piano lesson Friday at 4 PM.',
+  ]) {
+    const result = resolveDeterministicEventMutation(input, events, options)
+    assert.equal(result?.tool, 'create_event', input)
+    assert.ok(result?.args.title, input)
+  }
+})
 
-  test('creates cross-midnight ranges without collapsing their duration', () => {
-    const result = resolveDeterministicEventMutation(
-      'Add an event called Late airport pickup Friday from 11:30 PM until 1 AM Saturday.',
-      events,
-      options,
-    )
-    assert.equal(result?.tool, 'create_event')
-    assert.equal(Date.parse(result.args.end) - Date.parse(result.args.start), 90 * 60000)
-  })
+test('creates cross-midnight ranges without collapsing their duration', () => {
+  const result = resolveDeterministicEventMutation(
+    'Add an event called Late airport pickup Friday from 11:30 PM until 1 AM Saturday.',
+    events,
+    options,
+  )
+  assert.equal(result?.tool, 'create_event')
+  assert.equal(Date.parse(result.args.end) - Date.parse(result.args.start), 90 * 60000)
+})
 
-  test('prepares selective day clearing while preserving exclusions', () => {
-    const mondayEvents = [
-      ...events,
-      {
-        id: 'school-pickup',
-        title: 'School pickup',
-        start_time: '2026-07-13T19:00:00.000Z',
-        end_time: '2026-07-13T19:30:00.000Z',
-      },
-    ]
-    const result = resolveDeterministicEventMutation(
-      'Clear my calendar Monday except ABA Therapy Drop Off.',
-      mondayEvents,
-      options,
-    )
-    assert.equal(result?.tool, 'delete_events_by_title')
-    assert.deepEqual(result?.args.ids, ['school-pickup'])
-  })
+test('prepares selective day clearing while preserving exclusions', () => {
+  const mondayEvents = [
+    ...events,
+    {
+      id: 'school-pickup',
+      title: 'School pickup',
+      start_time: '2026-07-13T19:00:00.000Z',
+      end_time: '2026-07-13T19:30:00.000Z',
+    },
+  ]
+  const result = resolveDeterministicEventMutation(
+    'Clear my calendar Monday except ABA Therapy Drop Off.',
+    mondayEvents,
+    options,
+  )
+  assert.equal(result?.tool, 'delete_events_by_title')
+  assert.deepEqual(result?.args.ids, ['school-pickup'])
 })
 
 test('refuses create commands without an explicit title, date, or meridiem', () => {

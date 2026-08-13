@@ -1,0 +1,1746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Casa Tabor — UX Strategy & Interactive Prototypes</title>
+  <!-- Google Fonts: Cormorant Garamond & DM Sans & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.js"></script>
+  
+  <style>
+    :root {
+      --color-gold: #C9A96E;
+      --color-gold-hover: #b89555;
+      --color-gold-soft: #F4E2CD;
+      --color-gold-subtle: #FAF0E2;
+      --color-navy: #1B2A4A;
+      --color-navy-dark: #0f1a30;
+      --color-bg: #FAF8F5;
+      --color-bg-2: #F2EEE7;
+      --color-surface: #FFFFFF;
+      --color-surface-subtle: #FAF6EE;
+      --color-text: #2D2D2D;
+      --color-text-secondary: #5C5D66;
+      --color-text-tertiary: #8D8E99;
+      --color-text-faint: #A9A398;
+      --color-border: #E8E2D9;
+      --color-control-border: #E3DACB;
+      --color-divider: #E4DBCB;
+      
+      --color-error: #C0392B;
+      --color-error-soft: #FDE8E8;
+      --color-success: #27AE60;
+      --color-success-soft: #DBF0DC;
+      --color-warning: #E67E22;
+      --color-warning-soft: #FDF0E2;
+      --color-info: #10A5AC;
+      --color-info-soft: #E7F4F4;
+
+      /* Family tokens */
+      --member-jake: #1B2A4A;
+      --member-kelly: #C4693A;
+      --member-liv: #6A9E7F;
+      --member-emme: #C47A8A;
+      --member-owen: #D4A44C;
+
+      --font-display: 'Cormorant Garamond', Georgia, serif;
+      --font-body: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+
+      --shadow-sm: 0 1px 3px rgba(27,42,74,0.06), 0 1px 2px rgba(27,42,74,0.04);
+      --shadow-md: 0 4px 14px rgba(27,42,74,0.08), 0 1px 3px rgba(27,42,74,0.03);
+      --shadow-lg: 0 12px 32px rgba(27,42,74,0.12), 0 2px 6px rgba(27,42,74,0.04);
+      --shadow-fab: 0 4px 14px rgba(201,169,110,0.35);
+
+      --radius-sm: 8px;
+      --radius-md: 14px;
+      --radius-lg: 20px;
+      --radius-pill: 9999px;
+
+      --transition-fast: 150ms cubic-bezier(0.2, 0, 0, 1);
+      --transition-base: 250ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    body.dark-mode {
+      --color-gold: #9F8658;
+      --color-gold-hover: #bda373;
+      --color-gold-soft: #3a3122;
+      --color-gold-subtle: #241e15;
+      --color-navy: #0E1218;
+      --color-navy-dark: #05070a;
+      --color-bg: #090C11;
+      --color-bg-2: #0e131b;
+      --color-surface: #121923;
+      --color-surface-subtle: #171F2C;
+      --color-text: #E3DDD1;
+      --color-text-secondary: #BCC7D8;
+      --color-text-tertiary: #93A4BC;
+      --color-text-faint: #63738a;
+      --color-border: #263244;
+      --color-control-border: #324157;
+      --color-divider: #2B374C;
+      
+      --color-error-soft: #381a17;
+      --color-success-soft: #14331d;
+      --color-warning-soft: #3b2812;
+      --color-info-soft: #123136;
+
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
+      --shadow-md: 0 4px 16px rgba(0,0,0,0.55);
+      --shadow-lg: 0 12px 36px rgba(0,0,0,0.7);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-body);
+      background-color: var(--color-bg);
+      color: var(--color-text);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      transition: background-color var(--transition-base), color var(--transition-base);
+      padding-bottom: 80px;
+    }
+
+    /* Top Navigation Banner */
+    .top-hero-banner {
+      background: linear-gradient(135deg, #1B2A4A 0%, #111a2e 100%);
+      color: #FFFFFF;
+      padding: 32px 24px;
+      border-bottom: 1px solid rgba(201, 169, 110, 0.3);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: blur(12px);
+    }
+
+    .top-hero-content {
+      max-width: 1300px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .banner-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .banner-title {
+      font-family: var(--font-display);
+      font-size: 28px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .banner-title span.tag {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      background: rgba(201, 169, 110, 0.2);
+      color: var(--color-gold);
+      padding: 4px 10px;
+      border-radius: var(--radius-pill);
+      border: 1px solid rgba(201, 169, 110, 0.4);
+    }
+
+    .banner-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .theme-toggle-btn {
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #fff;
+      padding: 6px 14px;
+      border-radius: var(--radius-pill);
+      cursor: pointer;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--font-body);
+      transition: all var(--transition-fast);
+    }
+    .theme-toggle-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    /* Strategy Tabs Bar */
+    .strategy-nav {
+      display: flex;
+      gap: 8px;
+      background: rgba(0,0,0,0.25);
+      padding: 4px;
+      border-radius: var(--radius-pill);
+      width: fit-content;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .strategy-tab {
+      padding: 8px 18px;
+      border-radius: var(--radius-pill);
+      font-size: 13px;
+      font-weight: 500;
+      color: rgba(255,255,255,0.7);
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      transition: all var(--transition-fast);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .strategy-tab.active {
+      background: var(--color-gold);
+      color: #1B2A4A;
+      font-weight: 600;
+      box-shadow: var(--shadow-sm);
+    }
+
+    /* Main Container */
+    .app-container {
+      max-width: 1300px;
+      margin: 0 auto;
+      padding: 32px 24px;
+    }
+
+    /* Section Cards */
+    .critique-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap: 20px;
+      margin-bottom: 40px;
+    }
+
+    .critique-card {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      box-shadow: var(--shadow-sm);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .critique-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+    }
+    .critique-card.current::before { background: var(--color-error); }
+    .critique-card.principle::before { background: var(--color-gold); }
+    .critique-card.vision::before { background: var(--color-info); }
+
+    .critique-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .critique-icon-box {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .critique-card.current .critique-icon-box { background: var(--color-error-soft); color: var(--color-error); }
+    .critique-card.principle .critique-icon-box { background: var(--color-gold-subtle); color: var(--color-gold); }
+    .critique-card.vision .critique-icon-box { background: var(--color-info-soft); color: var(--color-info); }
+
+    .critique-title {
+      font-family: var(--font-display);
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--color-navy);
+    }
+    body.dark-mode .critique-title { color: #FFFFFF; }
+
+    .critique-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      font-size: 14px;
+      color: var(--color-text-secondary);
+    }
+
+    .critique-list li {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      line-height: 1.45;
+    }
+    .critique-list li i {
+      flex-shrink: 0;
+      margin-top: 3px;
+    }
+
+    /* Conceptual Model Visualizer */
+    .model-box {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      padding: 32px;
+      margin-bottom: 48px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .model-header {
+      text-align: center;
+      max-width: 680px;
+      margin: 0 auto 32px;
+    }
+
+    .model-header h2 {
+      font-family: var(--font-display);
+      font-size: 32px;
+      font-weight: 600;
+      color: var(--color-navy);
+      margin-bottom: 8px;
+    }
+    body.dark-mode .model-header h2 { color: #FFFFFF; }
+
+    .model-header p {
+      color: var(--color-text-secondary);
+      font-size: 15px;
+    }
+
+    .three-speeds-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      position: relative;
+    }
+
+    @media (max-width: 900px) {
+      .three-speeds-grid { grid-template-columns: 1fr; }
+    }
+
+    .speed-column {
+      background: var(--color-surface-subtle);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+    }
+
+    .speed-column:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-md);
+    }
+
+    .speed-badge {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 3px 10px;
+      border-radius: var(--radius-pill);
+      width: fit-content;
+      margin-bottom: 12px;
+      font-weight: 600;
+    }
+    .speed-1 .speed-badge { background: #E7F4F4; color: #0A6266; }
+    .speed-2 .speed-badge { background: #FAF0E2; color: #8A5A1E; }
+    .speed-3 .speed-badge { background: #DBF0DC; color: #2A6A34; }
+
+    body.dark-mode .speed-1 .speed-badge { background: #1B3A40; color: #8EE3E3; }
+    body.dark-mode .speed-2 .speed-badge { background: #342C23; color: #F0C98F; }
+    body.dark-mode .speed-3 .speed-badge { background: #1E3D28; color: #7BD58B; }
+
+    .speed-title {
+      font-family: var(--font-display);
+      font-size: 22px;
+      font-weight: 600;
+      color: var(--color-navy);
+      margin-bottom: 4px;
+    }
+    body.dark-mode .speed-title { color: #FFFFFF; }
+
+    .speed-location {
+      font-size: 12px;
+      color: var(--color-text-tertiary);
+      font-family: var(--font-mono);
+      margin-bottom: 16px;
+    }
+
+    .speed-desc {
+      font-size: 14px;
+      color: var(--color-text-secondary);
+      margin-bottom: 18px;
+      flex-grow: 1;
+    }
+
+    .speed-rules {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      padding: 12px;
+      font-size: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .speed-rules span {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--color-text);
+      font-weight: 500;
+    }
+
+    /* Mockup Showcase Containers */
+    .mockup-section {
+      display: none;
+      animation: fadeIn 0.3s ease-out forwards;
+    }
+    .mockup-section.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .prototype-frame {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-md);
+      overflow: hidden;
+      margin-top: 24px;
+    }
+
+    .frame-toolbar {
+      background: var(--color-surface-subtle);
+      border-bottom: 1px solid var(--color-border);
+      padding: 12px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .frame-title-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .frame-badge {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: var(--radius-pill);
+      background: var(--color-gold-soft);
+      color: #8A5A1E;
+      font-weight: 600;
+    }
+    body.dark-mode .frame-badge {
+      background: var(--color-gold-soft);
+      color: var(--color-gold);
+    }
+
+    .frame-title {
+      font-weight: 600;
+      font-size: 15px;
+      color: var(--color-navy);
+    }
+    body.dark-mode .frame-title { color: #FFFFFF; }
+
+    .frame-interactive-notes {
+      font-size: 12px;
+      color: var(--color-text-tertiary);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .prototype-body {
+      padding: 24px;
+      background: var(--color-bg);
+      min-height: 520px;
+    }
+
+    /* Light Refactor: Unified Attention Card UI */
+    .unified-card {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      box-shadow: var(--shadow-sm);
+      margin-bottom: 12px;
+      transition: all var(--transition-fast);
+      position: relative;
+    }
+
+    .unified-card:hover {
+      border-color: var(--color-control-border);
+      box-shadow: var(--shadow-md);
+    }
+
+    .unified-card-main {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      cursor: pointer;
+    }
+
+    .unified-status-indicator {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-top: 6px;
+      flex-shrink: 0;
+    }
+    .status-urgent { background: var(--color-error); box-shadow: 0 0 0 3px var(--color-error-soft); }
+    .status-warning { background: var(--color-warning); box-shadow: 0 0 0 3px var(--color-warning-soft); }
+    .status-calm { background: var(--color-success); box-shadow: 0 0 0 3px var(--color-success-soft); }
+
+    .unified-card-content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .unified-card-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+      flex-wrap: wrap;
+    }
+
+    .source-tag {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: var(--radius-pill);
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .tag-gmail { background: #f3e8ff; color: #6b21a8; border: 1px solid #e9d5ff; }
+    .tag-calendar { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
+    .tag-reminder { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+    .tag-conflict { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+
+    body.dark-mode .tag-gmail { background: #3b0764; color: #d8b4fe; border-color: #581c87; }
+    body.dark-mode .tag-calendar { background: #082f49; color: #7dd3fc; border-color: #0369a1; }
+    body.dark-mode .tag-reminder { background: #451a03; color: #fde68a; border-color: #78350f; }
+    body.dark-mode .tag-conflict { background: #450a0a; color: #fca5a5; border-color: #7f1d1d; }
+
+    .person-chip {
+      font-size: 11px;
+      font-weight: 500;
+      padding: 2px 8px;
+      border-radius: var(--radius-pill);
+      background: var(--color-surface-subtle);
+      color: var(--color-text-secondary);
+      border: 1px solid var(--color-border);
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .person-avatar {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--member-kelly);
+      color: #fff;
+      font-size: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+    }
+
+    .unified-card-title {
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--color-text);
+      line-height: 1.4;
+    }
+
+    .unified-card-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .action-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--color-border);
+      background: var(--color-surface);
+      color: var(--color-text-secondary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all var(--transition-fast);
+    }
+    .action-btn:hover {
+      background: var(--color-surface-subtle);
+      color: var(--color-text);
+      border-color: var(--color-control-border);
+    }
+    .action-btn.done:hover {
+      background: var(--color-success-soft);
+      color: var(--color-success);
+      border-color: var(--color-success);
+    }
+    .action-btn.snooze:hover {
+      background: var(--color-gold-subtle);
+      color: var(--color-gold);
+      border-color: var(--color-gold);
+    }
+    .action-btn.downvote:hover {
+      background: var(--color-error-soft);
+      color: var(--color-error);
+      border-color: var(--color-error);
+    }
+
+    /* Expand Tray */
+    .card-tray {
+      display: none;
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid var(--color-divider);
+      font-size: 13px;
+      animation: slideDown 0.2s ease-out;
+    }
+    .card-tray.expanded {
+      display: block;
+    }
+
+    @keyframes slideDown {
+      from { opacity: 0; transform: translateY(-4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .tray-details {
+      color: var(--color-text-secondary);
+      margin-bottom: 12px;
+      background: var(--color-surface-subtle);
+      padding: 10px 14px;
+      border-radius: var(--radius-sm);
+      line-height: 1.45;
+    }
+
+    .tray-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .pill-btn {
+      padding: 6px 14px;
+      border-radius: var(--radius-pill);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid var(--color-border);
+      background: var(--color-surface);
+      color: var(--color-text);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all var(--transition-fast);
+    }
+    .pill-btn:hover {
+      background: var(--color-surface-subtle);
+      border-color: var(--color-control-border);
+    }
+    .pill-btn.primary {
+      background: var(--color-navy);
+      color: #FFFFFF;
+      border-color: var(--color-navy);
+    }
+    body.dark-mode .pill-btn.primary {
+      background: var(--color-gold);
+      color: #1B2A4A;
+      border-color: var(--color-gold);
+    }
+    .pill-btn.primary:hover {
+      opacity: 0.9;
+    }
+
+    /* Medium Refactor: Speed Triage Stack */
+    .triage-hero-box {
+      background: linear-gradient(180deg, var(--color-surface) 0%, var(--color-surface-subtle) 100%);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      padding: 28px;
+      text-align: center;
+      max-width: 600px;
+      margin: 0 auto 28px;
+      box-shadow: var(--shadow-md);
+      position: relative;
+    }
+
+    .triage-badge {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      background: var(--color-gold-subtle);
+      color: var(--color-gold);
+      border: 1px solid var(--color-gold-soft);
+      padding: 3px 10px;
+      border-radius: var(--radius-pill);
+      font-weight: 600;
+      display: inline-block;
+      margin-bottom: 12px;
+    }
+
+    .triage-title {
+      font-family: var(--font-display);
+      font-size: 24px;
+      font-weight: 600;
+      color: var(--color-navy);
+      margin-bottom: 8px;
+    }
+    body.dark-mode .triage-title { color: #FFFFFF; }
+
+    .triage-desc {
+      font-size: 15px;
+      color: var(--color-text-secondary);
+      margin-bottom: 20px;
+    }
+
+    .triage-controls {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+    }
+
+    .triage-action-circle {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+      border: 1px solid var(--color-border);
+      background: var(--color-surface);
+      box-shadow: var(--shadow-sm);
+    }
+    .triage-action-circle:hover {
+      transform: scale(1.08);
+      box-shadow: var(--shadow-md);
+    }
+    .triage-action-circle.snooze { color: var(--color-gold); }
+    .triage-action-circle.downvote { color: var(--color-error); }
+    .triage-action-circle.done { background: var(--color-success); color: #fff; border-color: var(--color-success); }
+
+    /* Large Refactor: Unified Adaptive Canvas */
+    .unified-canvas-layout {
+      display: grid;
+      grid-template-columns: 380px 1fr 380px;
+      gap: 20px;
+      height: 640px;
+    }
+
+    @media (max-width: 1100px) {
+      .unified-canvas-layout {
+        grid-template-columns: 1fr;
+        height: auto;
+      }
+    }
+
+    .canvas-pane {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .pane-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--color-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--color-surface-subtle);
+    }
+
+    .pane-title {
+      font-family: var(--font-display);
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--color-navy);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    body.dark-mode .pane-title { color: #FFFFFF; }
+
+    .pane-content {
+      padding: 20px;
+      overflow-y: auto;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .briefing-story {
+      font-family: var(--font-display);
+      font-size: 20px;
+      font-style: italic;
+      color: var(--color-text);
+      line-height: 1.4;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--color-divider);
+    }
+
+    .briefing-handoff-card {
+      background: var(--color-surface-subtle);
+      border: 1px solid var(--color-border);
+      border-left: 3px solid var(--color-gold);
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+      font-size: 13px;
+    }
+    .briefing-handoff-title {
+      font-weight: 600;
+      color: var(--color-navy);
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    body.dark-mode .briefing-handoff-title { color: var(--color-gold); }
+
+    /* Interactive Demo Controls */
+    .interactive-toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--color-navy);
+      color: #FFFFFF;
+      padding: 12px 20px;
+      border-radius: var(--radius-pill);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 13px;
+      font-weight: 500;
+      box-shadow: var(--shadow-lg);
+      z-index: 999;
+      transform: translateY(120%);
+      transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+    .interactive-toast.show {
+      transform: translateY(0);
+    }
+    .toast-undo-btn {
+      background: var(--color-gold);
+      color: #1B2A4A;
+      border: none;
+      padding: 4px 10px;
+      border-radius: var(--radius-pill);
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    /* Comparison Table */
+    .comparison-table-wrapper {
+      overflow-x: auto;
+      margin-top: 32px;
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .comparison-table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 14px;
+    }
+
+    .comparison-table th,
+    .comparison-table td {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    .comparison-table th {
+      background: var(--color-surface-subtle);
+      font-weight: 600;
+      color: var(--color-navy);
+      font-family: var(--font-display);
+      font-size: 16px;
+    }
+    body.dark-mode .comparison-table th { color: #FFFFFF; }
+
+    .comparison-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .comparison-table td.dim {
+      color: var(--color-text-secondary);
+    }
+
+    .score-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: var(--radius-pill);
+    }
+    .score-high { background: var(--color-success-soft); color: var(--color-success); }
+    .score-med { background: var(--color-warning-soft); color: var(--color-warning); }
+    .score-low { background: var(--color-error-soft); color: var(--color-error); }
+  </style>
+</head>
+<body>
+
+  <!-- Top Hero Banner -->
+  <header class="top-hero-banner">
+    <div class="top-hero-content">
+      <div class="banner-header">
+        <div class="banner-title">
+          <i data-lucide="sparkles" style="color: var(--color-gold);"></i>
+          Casa Tabor UX Architecture Strategy
+          <span class="tag">Needs You · Briefing · Action Hub</span>
+        </div>
+        <div class="banner-actions">
+          <button class="theme-toggle-btn" id="themeToggleBtn" onclick="toggleDarkMode()">
+            <i data-lucide="moon" size="14"></i>
+            <span id="themeBtnText">Midnight Mode</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Strategy Navigation -->
+      <div class="strategy-nav">
+        <button class="strategy-tab active" onclick="switchStrategyTab('overview', this)">
+          <i data-lucide="compass" size="15"></i> Architectural Diagnosis
+        </button>
+        <button class="strategy-tab" onclick="switchStrategyTab('light', this)">
+          <i data-lucide="feather" size="15"></i> Light Refactor: Component Harmony
+        </button>
+        <button class="strategy-tab" onclick="switchStrategyTab('medium', this)">
+          <i data-lucide="layers" size="15"></i> Medium Refactor: Attention Engine
+        </button>
+        <button class="strategy-tab" onclick="switchStrategyTab('large', this)">
+          <i data-lucide="sparkles" size="15"></i> Large Refactor: Living Canvas
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Interactive Toast Notification -->
+  <div class="interactive-toast" id="interactiveToast">
+    <span id="toastMessage">Item marked as done</span>
+    <button class="toast-undo-btn" onclick="undoLastAction()">UNDO (4s)</button>
+  </div>
+
+  <main class="app-container">
+
+    <!-- ══════════════════════════════════════════════════════════════ -->
+    <!-- TAB 1: ARCHITECTURAL OVERVIEW & DIAGNOSIS                     -->
+    <!-- ══════════════════════════════════════════════════════════════ -->
+    <div class="mockup-section active" id="tab-overview">
+      
+      <!-- Critical Assessment Cards -->
+      <div class="critique-grid">
+        <div class="critique-card current">
+          <div class="critique-header">
+            <div class="critique-icon-box"><i data-lucide="alert-triangle" size="20"></i></div>
+            <div class="critique-title">Current Pain Points</div>
+          </div>
+          <ul class="critique-list">
+            <li>
+              <i data-lucide="x" size="14" style="color: var(--color-error);"></i>
+              <strong>Mental Model Schism:</strong> "Needs You" (Kiosk Rail), "Briefing" (Narrative), and "Action Hub" (Admin Table) present the exact same data in three unaligned ways.
+            </li>
+            <li>
+              <i data-lucide="x" size="14" style="color: var(--color-error);"></i>
+              <strong>Micro-action Clutter:</strong> 3 icon buttons (Done, Snooze, Dislike) are crammed on 44px rows with nested click targets, causing accidental taps.
+            </li>
+            <li>
+              <i data-lucide="x" size="14" style="color: var(--color-error);"></i>
+              <strong>Briefing Identity Crisis:</strong> Briefing duplicates the entire day's raw calendar timeline, making it redundant with the Home screen.
+            </li>
+          </ul>
+        </div>
+
+        <div class="critique-card principle">
+          <div class="critique-header">
+            <div class="critique-icon-box"><i data-lucide="shield-check" size="20"></i></div>
+            <div class="critique-title">World-Class Principles</div>
+          </div>
+          <ul class="critique-list">
+            <li>
+              <i data-lucide="check" size="14" style="color: var(--color-gold);"></i>
+              <strong>The 3 Speeds of Attention:</strong> Tailor each surface for its precise physical context: 3-second glance (countertop), 60-second orientation (morning coffee), 3-minute resolution (evening triage).
+            </li>
+            <li>
+              <i data-lucide="check" size="14" style="color: var(--color-gold);"></i>
+              <strong>Single Card Anatomy:</strong> A single, universally recognizable Attention Card token across all views.
+            </li>
+            <li>
+              <i data-lucide="check" size="14" style="color: var(--color-gold);"></i>
+              <strong>Generous Tactility:</strong> Zero tiny buttons on ambient cards; primary action is 1-tap, secondary is swipe or long-press with 4-second optimistic undo.
+            </li>
+          </ul>
+        </div>
+
+        <div class="critique-card vision">
+          <div class="critique-header">
+            <div class="critique-icon-box"><i data-lucide="sparkles" size="20"></i></div>
+            <div class="critique-title">The Target Experience</div>
+          </div>
+          <ul class="critique-list">
+            <li>
+              <i data-lucide="zap" size="14" style="color: var(--color-info);"></i>
+              <strong>Warm Family Hospitality:</strong> Feels like a discreet private concierge, not Jira or an enterprise inbox.
+            </li>
+            <li>
+              <i data-lucide="zap" size="14" style="color: var(--color-info);"></i>
+              <strong>Contextual Cohesion:</strong> What you see on the Kiosk smoothly expands into the Morning Briefing and deepens into the Action Hub without resetting your mental map.
+            </li>
+            <li>
+              <i data-lucide="zap" size="14" style="color: var(--color-info);"></i>
+              <strong>Zero Redundancy:</strong> Briefing delivers high-level logistics intelligence; Home delivers real-time schedule; Action Hub delivers bulk resolution.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- The Three Speeds Conceptual Framework -->
+      <div class="model-box">
+        <div class="model-header">
+          <h2>The 3 Speeds of Household Attention</h2>
+          <p>A world-class family OS respects where and how the user interacts. The three features should not compete; they represent three progressive depths of engagement.</p>
+        </div>
+
+        <div class="three-speeds-grid">
+          <!-- Speed 1 -->
+          <div class="speed-column speed-1">
+            <div class="speed-badge">⚡ Speed 1 · 3 Seconds</div>
+            <div class="speed-title">Needs You Rail</div>
+            <div class="speed-location">Kitchen Kiosk · Wall Mount</div>
+            <div class="speed-desc">
+              Walking past the counter with a child in one arm. Needs zero cognitive overhead. Max 3 urgent cards. Single-tap "Done" or "Got it".
+            </div>
+            <div class="speed-rules">
+              <span><i data-lucide="eye" size="14"></i> 1-glance clarity</span>
+              <span><i data-lucide="check-circle-2" size="14"></i> 1-tap resolution</span>
+              <span><i data-lucide="slash" size="14"></i> No nested accordions</span>
+            </div>
+          </div>
+
+          <!-- Speed 2 -->
+          <div class="speed-column speed-2">
+            <div class="speed-badge">☕ Speed 2 · 60 Seconds</div>
+            <div class="speed-title">Daily Briefing</div>
+            <div class="speed-location">Morning Coffee · iPad / Mobile</div>
+            <div class="speed-desc">
+              Sitting with morning coffee. Synthesizes logistics, carpool handoffs, weather prep, and upcoming family deadlines into an editorial narrative.
+            </div>
+            <div class="speed-rules">
+              <span><i data-lucide="file-text" size="14"></i> Editorial prose story</span>
+              <span><i data-lucide="users" size="14"></i> Driver / Caregiver handoffs</span>
+              <span><i data-lucide="calendar" size="14"></i> No raw calendar repetition</span>
+            </div>
+          </div>
+
+          <!-- Speed 3 -->
+          <div class="speed-column speed-3">
+            <div class="speed-badge">🎯 Speed 3 · 3 Minutes</div>
+            <div class="speed-title">Action Hub</div>
+            <div class="speed-location">Sunday Planning · Laptop / Tablet</div>
+            <div class="speed-desc">
+              Dedicated sit-down triage. Clearing school permission slips, resolving schedule overlaps, paying medical copays, and delegating tasks.
+            </div>
+            <div class="speed-rules">
+              <span><i data-lucide="layers" size="14"></i> Batch triage & swimlanes</span>
+              <span><i data-lucide="bot" size="14"></i> AI 1-click execution</span>
+              <span><i data-lucide="archive" size="14"></i> Complete history & audit</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Comparative Refactoring Matrix -->
+      <div class="comparison-table-wrapper">
+        <table class="comparison-table">
+          <thead>
+            <tr>
+              <th>Refactor Option</th>
+              <th>Core Focus</th>
+              <th>Effort</th>
+              <th>Impact</th>
+              <th>Key Architectural Shift</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Option A: Light Refactor</strong></td>
+              <td class="dim">Component & Touch Target Harmonization</td>
+              <td><span class="score-badge score-high">Low (1-2 days)</span></td>
+              <td><span class="score-badge score-med">Moderate</span></td>
+              <td>Standardizes <code>&lt;AttentionCard&gt;</code>, removes micro-button clusters, aligns typography & undo toast.</td>
+            </tr>
+            <tr>
+              <td><strong>Option B: Medium Refactor</strong></td>
+              <td class="dim">Attention Engine + Speed Triage Stack</td>
+              <td><span class="score-badge score-med">Medium (3-4 days)</span></td>
+              <td><span class="score-badge score-high">High</span></td>
+              <td>Unified <code>useAttentionStore</code>, Tinder/Superhuman-style speed triage card stack, smart cluster batches.</td>
+            </tr>
+            <tr>
+              <td><strong>Option C: Large Refactor</strong></td>
+              <td class="dim">The Casa Living Canvas (Adaptive System)</td>
+              <td><span class="score-badge score-low">High (1-2 weeks)</span></td>
+              <td><span class="score-badge score-high">Transformative</span></td>
+              <td>Merges Briefing, Schedule, and Action Hub into an adaptive 3-pane live canvas with connected cross-highlighting.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+
+
+    <!-- ══════════════════════════════════════════════════════════════ -->
+    <!-- TAB 2: LIGHT REFACTOR (Interactive Prototype)                  -->
+    <!-- ══════════════════════════════════════════════════════════════ -->
+    <div class="mockup-section" id="tab-light">
+      <div class="critique-header" style="margin-bottom: 8px;">
+        <div class="critique-icon-box" style="background: var(--color-gold-subtle); color: var(--color-gold);">
+          <i data-lucide="feather" size="20"></i>
+        </div>
+        <div>
+          <h2 style="font-family: var(--font-display); font-size: 24px; color: var(--color-navy);">Option A: Light Refactor — Component Harmonization</h2>
+          <p style="font-size: 14px; color: var(--color-text-secondary);">Unifies the card structure, fixes touch target collisions, and brings predictable drawer interactions without major architectural rewrites.</p>
+        </div>
+      </div>
+
+      <div class="prototype-frame">
+        <div class="frame-toolbar">
+          <div class="frame-title-group">
+            <span class="frame-badge">Interactive Prototype</span>
+            <span class="frame-title">Unified Attention Cards (Live Preview)</span>
+          </div>
+          <div class="frame-interactive-notes">
+            <i data-lucide="info" size="14"></i>
+            Click any card to expand actions, or click the checkmark to trigger optimistic completion.
+          </div>
+        </div>
+
+        <div class="prototype-body">
+          <div style="max-width: 620px; margin: 0 auto;">
+            
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+              <span style="font-family: var(--font-display); font-size: 18px; font-weight: 600; color: var(--color-navy);">Needs You · Today (3 items)</span>
+              <span style="font-size: 12px; color: var(--color-text-tertiary);">All sources unified</span>
+            </div>
+
+            <!-- Card 1: School Form -->
+            <div class="unified-card" id="light-card-1">
+              <div class="unified-card-main" onclick="toggleCardTray('light-card-1')">
+                <div class="unified-status-indicator status-urgent"></div>
+                <div class="unified-card-content">
+                  <div class="unified-card-meta">
+                    <span class="source-tag tag-gmail"><i data-lucide="mail" size="10"></i> Email</span>
+                    <span class="person-chip"><span class="person-avatar">L</span> Liv</span>
+                    <span style="font-size: 11px; color: var(--color-error); font-weight: 600;">Due 3:00 PM</span>
+                  </div>
+                  <div class="unified-card-title">Sign 5th Grade Science Camp Permission Slip</div>
+                </div>
+                <div class="unified-card-actions" onclick="event.stopPropagation()">
+                  <button class="action-btn done" title="Mark Done" onclick="completeCard('light-card-1', 'Signed Science Camp Slip')">
+                    <i data-lucide="check" size="16"></i>
+                  </button>
+                  <button class="action-btn snooze" title="Snooze" onclick="snoozeCard('light-card-1')">
+                    <i data-lucide="moon" size="16"></i>
+                  </button>
+                </div>
+              </div>
+              <div class="card-tray" id="light-card-1-tray">
+                <div class="tray-details">
+                  From: Ms. Robinson (Oakridge Elementary) · "Please sign by Friday 3pm to guarantee cabin placement."
+                </div>
+                <div class="tray-actions">
+                  <button class="pill-btn primary"><i data-lucide="external-link" size="13"></i> Open DocuSign</button>
+                  <button class="pill-btn"><i data-lucide="share-2" size="13"></i> Send to Jake</button>
+                  <button class="pill-btn" style="color: var(--color-error);" onclick="downvoteCard('light-card-1')"><i data-lucide="thumbs-down" size="13"></i> Not Relevant</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Card 2: Calendar Driver Conflict -->
+            <div class="unified-card" id="light-card-2">
+              <div class="unified-card-main" onclick="toggleCardTray('light-card-2')">
+                <div class="unified-status-indicator status-warning"></div>
+                <div class="unified-card-content">
+                  <div class="unified-card-meta">
+                    <span class="source-tag tag-conflict"><i data-lucide="alert-circle" size="10"></i> Ride Conflict</span>
+                    <span class="person-chip"><span class="person-avatar" style="background: var(--member-owen);">O</span> Owen</span>
+                    <span style="font-size: 11px; color: var(--color-text-tertiary);">4:30 PM Today</span>
+                  </div>
+                  <div class="unified-card-title">Owen needs ride to Soccer Practice (Jake in meeting)</div>
+                </div>
+                <div class="unified-card-actions" onclick="event.stopPropagation()">
+                  <button class="action-btn done" title="Resolve" onclick="completeCard('light-card-2', 'Resolved Soccer Ride')">
+                    <i data-lucide="check" size="16"></i>
+                  </button>
+                  <button class="action-btn snooze" title="Snooze" onclick="snoozeCard('light-card-2')">
+                    <i data-lucide="moon" size="16"></i>
+                  </button>
+                </div>
+              </div>
+              <div class="card-tray" id="light-card-2-tray">
+                <div class="tray-details">
+                  Jake is hosting "Q3 Strategy Call" from 4:00 – 5:00 PM. Kelly is free at 4:15 PM.
+                </div>
+                <div class="tray-actions">
+                  <button class="pill-btn primary" onclick="completeCard('light-card-2', 'Assigned Kelly as Driver')"><i data-lucide="user-check" size="13"></i> Assign Kelly to Drive</button>
+                  <button class="pill-btn"><i data-lucide="message-square" size="13"></i> Carpool with Davis Family</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Card 3: Reminder -->
+            <div class="unified-card" id="light-card-3">
+              <div class="unified-card-main" onclick="toggleCardTray('light-card-3')">
+                <div class="unified-status-indicator status-calm"></div>
+                <div class="unified-card-content">
+                  <div class="unified-card-meta">
+                    <span class="source-tag tag-reminder"><i data-lucide="bell" size="10"></i> Prep</span>
+                    <span class="person-chip"><span class="person-avatar" style="background: var(--member-emme);">E</span> Emme</span>
+                    <span style="font-size: 11px; color: var(--color-text-tertiary);">Tomorrow</span>
+                  </div>
+                  <div class="unified-card-title">Pack violin & sheet music for Emme's rehearsal</div>
+                </div>
+                <div class="unified-card-actions" onclick="event.stopPropagation()">
+                  <button class="action-btn done" title="Mark Done" onclick="completeCard('light-card-3', 'Violin Packed')">
+                    <i data-lucide="check" size="16"></i>
+                  </button>
+                  <button class="action-btn snooze" title="Snooze" onclick="snoozeCard('light-card-3')">
+                    <i data-lucide="moon" size="16"></i>
+                  </button>
+                </div>
+              </div>
+              <div class="card-tray" id="light-card-3-tray">
+                <div class="tray-details">
+                  Rehearsal at Lincoln Hall at 8:30 AM tomorrow with Mr. Henderson.
+                </div>
+                <div class="tray-actions">
+                  <button class="pill-btn primary" onclick="completeCard('light-card-3', 'Packed and Ready')"><i data-lucide="check" size="13"></i> Done &amp; Packed</button>
+                  <button class="pill-btn" onclick="snoozeCard('light-card-3')"><i data-lucide="moon" size="13"></i> Remind Tomorrow 7 AM</button>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ══════════════════════════════════════════════════════════════ -->
+    <!-- TAB 3: MEDIUM REFACTOR (Interactive Prototype)                 -->
+    <!-- ══════════════════════════════════════════════════════════════ -->
+    <div class="mockup-section" id="tab-medium">
+      <div class="critique-header" style="margin-bottom: 8px;">
+        <div class="critique-icon-box" style="background: var(--color-gold-subtle); color: var(--color-gold);">
+          <i data-lucide="layers" size="20"></i>
+        </div>
+        <div>
+          <h2 style="font-family: var(--font-display); font-size: 24px; color: var(--color-navy);">Option B: Medium Refactor — Attention Engine & Speed Triage</h2>
+          <p style="font-size: 14px; color: var(--color-text-secondary);">Introduces a dedicated Speed Triage Stack for zero-friction clearing, smart batching by household theme, and a shared attention state engine.</p>
+        </div>
+      </div>
+
+      <div class="prototype-frame">
+        <div class="frame-toolbar">
+          <div class="frame-title-group">
+            <span class="frame-badge">Speed Triage Mode</span>
+            <span class="frame-title">Fast Household Inbox Zero (Card Stack)</span>
+          </div>
+          <div class="frame-interactive-notes">
+            <i data-lucide="zap" size="14"></i>
+            Use the circular action buttons to rapidly triage cards with instant optimistic feedback.
+          </div>
+        </div>
+
+        <div class="prototype-body">
+          <div class="triage-hero-box" id="triage-active-stack">
+            <div class="triage-badge" id="triage-counter">Card 1 of 4 · School &amp; Activities</div>
+            <div class="triage-title" id="triage-title">Sign Liv's 5th Grade Science Camp Slip</div>
+            <div class="triage-desc" id="triage-desc">
+              Ms. Robinson sent this via Gmail. Requires digital signature and medical waiver by 3:00 PM today.
+            </div>
+
+            <div style="margin-bottom: 24px; display: flex; justify-content: center; gap: 8px;">
+              <span class="person-chip"><span class="person-avatar">L</span> Liv</span>
+              <span class="source-tag tag-gmail"><i data-lucide="mail" size="10"></i> Gmail</span>
+              <span style="font-size: 11px; background: var(--color-error-soft); color: var(--color-error); padding: 2px 8px; border-radius: var(--radius-pill); font-weight: 600;">High Urgency</span>
+            </div>
+
+            <div class="triage-controls">
+              <button class="triage-action-circle downvote" title="Not Relevant" onclick="advanceTriage('dismissed')">
+                <i data-lucide="thumbs-down" size="20"></i>
+              </button>
+              <button class="triage-action-circle snooze" title="Snooze to Tomorrow" onclick="advanceTriage('snoozed')">
+                <i data-lucide="moon" size="20"></i>
+              </button>
+              <button class="triage-action-circle done" title="Mark Done" onclick="advanceTriage('completed')">
+                <i data-lucide="check" size="24"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Smart Batches Grid -->
+          <div style="max-width: 800px; margin: 0 auto;">
+            <div style="font-family: var(--font-display); font-size: 18px; font-weight: 600; margin-bottom: 12px; color: var(--color-navy);">
+              Or Batch by Household Domain
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px;">
+              
+              <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 16px; box-shadow: var(--shadow-sm); cursor: pointer;" onclick="showToast('Opened School Batch (3 items)')">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                  <span style="font-weight: 600; font-size: 14px; color: var(--color-navy);"><i data-lucide="graduation-cap" size="14" style="color: var(--color-gold); margin-right: 4px; vertical-align: middle;"></i> School &amp; Forms</span>
+                  <span style="font-size: 11px; background: var(--color-gold-soft); color: #8A5A1E; padding: 2px 6px; border-radius: var(--radius-pill); font-weight: 600;">3 items</span>
+                </div>
+                <div style="font-size: 12px; color: var(--color-text-secondary);">Science camp slip, PTA lunch form, band fee.</div>
+              </div>
+
+              <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 16px; box-shadow: var(--shadow-sm); cursor: pointer;" onclick="showToast('Opened Logistics Batch (2 items)')">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                  <span style="font-weight: 600; font-size: 14px; color: var(--color-navy);"><i data-lucide="car" size="14" style="color: var(--color-info); margin-right: 4px; vertical-align: middle;"></i> Logistics &amp; Rides</span>
+                  <span style="font-size: 11px; background: var(--color-info-soft); color: #0A6266; padding: 2px 6px; border-radius: var(--radius-pill); font-weight: 600;">2 items</span>
+                </div>
+                <div style="font-size: 12px; color: var(--color-text-secondary);">Soccer ride conflict, swim carpool check-in.</div>
+              </div>
+
+              <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 16px; box-shadow: var(--shadow-sm); cursor: pointer;" onclick="showToast('Opened Bills Batch (1 item)')">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                  <span style="font-weight: 600; font-size: 14px; color: var(--color-navy);"><i data-lucide="credit-card" size="14" style="color: var(--color-success); margin-right: 4px; vertical-align: middle;"></i> Bills &amp; Medical</span>
+                  <span style="font-size: 11px; background: var(--color-success-soft); color: #2A6A34; padding: 2px 6px; border-radius: var(--radius-pill); font-weight: 600;">1 item</span>
+                </div>
+                <div style="font-size: 12px; color: var(--color-text-secondary);">Dr. Miller orthodontic copay statement.</div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ══════════════════════════════════════════════════════════════ -->
+    <!-- TAB 4: LARGE REFACTOR (Interactive Prototype)                  -->
+    <!-- ══════════════════════════════════════════════════════════════ -->
+    <div class="mockup-section" id="tab-large">
+      <div class="critique-header" style="margin-bottom: 8px;">
+        <div class="critique-icon-box" style="background: var(--color-gold-subtle); color: var(--color-gold);">
+          <i data-lucide="sparkles" size="20"></i>
+        </div>
+        <div style="flex: 1;">
+          <h2 style="font-family: var(--font-display); font-size: 24px; color: var(--color-navy);">Option C: Large Refactor — The Casa Living Canvas</h2>
+          <p style="font-size: 14px; color: var(--color-text-secondary);">A unified 3-pane adaptive workspace combining the Narrative Daily Briefing, Today's Timeline, and the Active Attention Rail with dynamic cross-linking.</p>
+        </div>
+        <a href="/casa-living-canvas.html" target="_blank" class="pill-btn primary" style="text-decoration: none; padding: 8px 16px; font-size: 13px;">
+          <i data-lucide="external-link" size="14"></i> Open Fullscreen Door #3 Canvas
+        </a>
+      </div>
+
+      <div class="prototype-frame">
+        <div class="frame-toolbar">
+          <div class="frame-title-group">
+            <span class="frame-badge">Unified Canvas State</span>
+            <span class="frame-title">Adaptive Household Intelligence Workspace</span>
+          </div>
+          <div class="frame-interactive-notes">
+            <i data-lucide="mouse-pointer-click" size="14"></i>
+            Clicking a logistic handoff in the Briefing highlights the corresponding action item in real time.
+          </div>
+        </div>
+
+        <div class="prototype-body" style="padding: 16px;">
+          <div class="unified-canvas-layout">
+            
+            <!-- Pane 1: Executive Briefing & Narrative -->
+            <div class="canvas-pane">
+              <div class="pane-header">
+                <div class="pane-title">
+                  <i data-lucide="coffee" size="16" style="color: var(--color-gold);"></i> Morning Briefing
+                </div>
+                <span style="font-size: 11px; color: var(--color-text-tertiary); font-family: var(--font-mono);">Friday, Oct 24</span>
+              </div>
+              <div class="pane-content">
+                <div class="briefing-story">
+                  "Good morning Kelly. You have 3 critical handoffs this afternoon. Jake's strategy call conflicts with Owen's soccer pickup at 4:30 PM."
+                </div>
+
+                <div class="briefing-handoff-card" onclick="highlightActionItem('canvas-action-ride')" style="cursor: pointer;">
+                  <div class="briefing-handoff-title">
+                    <i data-lucide="car" size="14"></i> Handoff 1 · 4:15 PM
+                  </div>
+                  <div style="color: var(--color-text-secondary);">
+                    Owen soccer drop-off at Oakridge Field. Kelly is clear to cover while Jake is in client call.
+                  </div>
+                  <div style="margin-top: 6px; font-size: 11px; color: var(--color-gold); font-weight: 600;">
+                    Tap to view linked action →
+                  </div>
+                </div>
+
+                <div class="briefing-handoff-card" style="border-left-color: var(--color-info);">
+                  <div class="briefing-handoff-title" style="color: var(--color-info);">
+                    <i data-lucide="cloud-sun" size="14"></i> Weather Prep
+                  </div>
+                  <div style="color: var(--color-text-secondary);">
+                    62°F and breezy by 5 PM. Pack lightweight jackets for Owen's practice.
+                  </div>
+                </div>
+
+                <div class="briefing-handoff-card" style="border-left-color: var(--color-success);">
+                  <div class="briefing-handoff-title" style="color: var(--color-success);">
+                    <i data-lucide="calendar" size="14"></i> Looking Ahead
+                  </div>
+                  <div style="color: var(--color-text-secondary);">
+                    Saturday 10 AM: Liv's gymnastics showcase at Westview Arena.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Pane 2: Live Today Schedule -->
+            <div class="canvas-pane">
+              <div class="pane-header">
+                <div class="pane-title">
+                  <i data-lucide="calendar" size="16" style="color: var(--color-navy);"></i> Today's Schedule
+                </div>
+                <span style="font-size: 11px; background: var(--color-success-soft); color: var(--color-success); padding: 2px 8px; border-radius: var(--radius-pill); font-weight: 600;">On Track</span>
+              </div>
+              <div class="pane-content">
+                
+                <!-- Hero Next Up -->
+                <div style="background: linear-gradient(135deg, var(--color-navy) 0%, #111a2e 100%); color: #fff; border-radius: var(--radius-md); padding: 18px; box-shadow: var(--shadow-sm);">
+                  <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-gold); font-weight: 600; margin-bottom: 4px;">
+                    Next Up · In 45 mins
+                  </div>
+                  <div style="font-family: var(--font-display); font-size: 20px; font-weight: 600; margin-bottom: 4px;">
+                    Owen Soccer Practice
+                  </div>
+                  <div style="font-size: 13px; color: rgba(255,255,255,0.8); display: flex; align-items: center; gap: 8px;">
+                    <span><i data-lucide="clock" size="13" style="vertical-align: middle;"></i> 4:30 – 6:00 PM</span>
+                    <span>·</span>
+                    <span><i data-lucide="map-pin" size="13" style="vertical-align: middle;"></i> Oakridge Park</span>
+                  </div>
+                </div>
+
+                <!-- Timeline Items -->
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 10px; background: var(--color-surface-subtle); border-radius: var(--radius-sm); border: 1px solid var(--color-border);">
+                    <span style="font-size: 12px; font-weight: 600; font-family: var(--font-mono); color: var(--color-text-secondary); width: 60px;">4:00 PM</span>
+                    <div style="flex: 1;">
+                      <div style="font-size: 13px; font-weight: 500;">Jake: Q3 Client Strategy Call</div>
+                      <div style="font-size: 11px; color: var(--color-text-tertiary);">Zoom · 60 mins</div>
+                    </div>
+                  </div>
+
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 10px; background: var(--color-surface-subtle); border-radius: var(--radius-sm); border: 1px solid var(--color-border);">
+                    <span style="font-size: 12px; font-weight: 600; font-family: var(--font-mono); color: var(--color-text-secondary); width: 60px;">6:30 PM</span>
+                    <div style="flex: 1;">
+                      <div style="font-size: 13px; font-weight: 500;">Family Dinner &amp; Pasta Night</div>
+                      <div style="font-size: 11px; color: var(--color-text-tertiary);">Home Kitchen</div>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- Pane 3: Interactive Attention Rail -->
+            <div class="canvas-pane">
+              <div class="pane-header">
+                <div class="pane-title">
+                  <i data-lucide="check-circle" size="16" style="color: var(--color-success);"></i> Needs Attention (3)
+                </div>
+                <button class="pill-btn" style="padding: 2px 8px; font-size: 11px;" onclick="showToast('Cleared all non-urgent!')">Clear</button>
+              </div>
+              <div class="pane-content">
+                
+                <div class="unified-card" id="canvas-action-ride" style="border-left: 3px solid var(--color-warning);">
+                  <div class="unified-card-meta">
+                    <span class="source-tag tag-conflict"><i data-lucide="car" size="10"></i> Ride Conflict</span>
+                    <span class="person-chip"><span class="person-avatar" style="background: var(--member-owen);">O</span> Owen</span>
+                  </div>
+                  <div class="unified-card-title" style="margin-top: 4px;">Assign driver for 4:30 PM Soccer</div>
+                  <div style="margin-top: 10px; display: flex; gap: 6px;">
+                    <button class="pill-btn primary" style="padding: 4px 10px; font-size: 11px;" onclick="completeCard('canvas-action-ride', 'Assigned Kelly as Driver')">
+                      <i data-lucide="check" size="12"></i> Kelly Drives
+                    </button>
+                    <button class="pill-btn" style="padding: 4px 10px; font-size: 11px;" onclick="snoozeCard('canvas-action-ride')">
+                      <i data-lucide="moon" size="12"></i> Later
+                    </button>
+                  </div>
+                </div>
+
+                <div class="unified-card" id="canvas-action-doc">
+                  <div class="unified-card-meta">
+                    <span class="source-tag tag-gmail"><i data-lucide="mail" size="10"></i> Science Camp</span>
+                    <span class="person-chip"><span class="person-avatar">L</span> Liv</span>
+                  </div>
+                  <div class="unified-card-title" style="margin-top: 4px;">Sign Camp Waiver Form</div>
+                  <div style="margin-top: 10px; display: flex; gap: 6px;">
+                    <button class="pill-btn primary" style="padding: 4px 10px; font-size: 11px;" onclick="completeCard('canvas-action-doc', 'Signed Science Camp Waiver')">
+                      <i data-lucide="edit-3" size="12"></i> Quick Sign
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    // Initialize Lucide Icons
+    lucide.createIcons();
+
+    // Theme Toggle Functionality
+    function toggleDarkMode() {
+      document.body.classList.toggle('dark-mode');
+      const isDark = document.body.classList.contains('dark-mode');
+      document.getElementById('themeBtnText').innerText = isDark ? 'Warm Day Mode' : 'Midnight Mode';
+      lucide.createIcons();
+    }
+
+    // Strategy Tab Switcher
+    function switchStrategyTab(tabId, btn) {
+      document.querySelectorAll('.strategy-tab').forEach(t => t.classList.remove('active'));
+      btn.classList.add('active');
+
+      document.querySelectorAll('.mockup-section').forEach(s => s.classList.remove('active'));
+      const target = document.getElementById('tab-' + tabId);
+      if (target) {
+        target.classList.add('active');
+      }
+      lucide.createIcons();
+    }
+
+    // Card Drawer Accordion Toggle
+    function toggleCardTray(cardId) {
+      const tray = document.getElementById(cardId + '-tray');
+      if (tray) {
+        tray.classList.toggle('expanded');
+      }
+    }
+
+    // Optimistic Complete with Toast & Undo Window
+    let toastTimeout = null;
+    let lastCompletedElement = null;
+
+    function completeCard(cardId, label) {
+      const card = document.getElementById(cardId);
+      if (card) {
+        lastCompletedElement = {
+          element: card,
+          parent: card.parentNode,
+          nextSibling: card.nextSibling
+        };
+        card.style.transition = 'all 0.3s ease-out';
+        card.style.opacity = '0';
+        card.style.transform = 'translateX(20px)';
+        setTimeout(() => {
+          card.style.display = 'none';
+        }, 300);
+
+        showToast(label + ' marked done');
+      }
+    }
+
+    function snoozeCard(cardId) {
+      const card = document.getElementById(cardId);
+      if (card) {
+        card.style.transition = 'all 0.3s ease-out';
+        card.style.opacity = '0';
+        card.style.transform = 'translateY(-10px)';
+        setTimeout(() => {
+          card.style.display = 'none';
+        }, 300);
+
+        showToast('Snoozed until tomorrow');
+      }
+    }
+
+    function downvoteCard(cardId) {
+      const card = document.getElementById(cardId);
+      if (card) {
+        card.style.transition = 'all 0.3s ease-out';
+        card.style.opacity = '0';
+        setTimeout(() => {
+          card.style.display = 'none';
+        }, 300);
+
+        showToast('Downvoted — AI will learn this pattern');
+      }
+    }
+
+    function showToast(message) {
+      const toast = document.getElementById('interactiveToast');
+      document.getElementById('toastMessage').innerText = message;
+      toast.classList.add('show');
+
+      if (toastTimeout) clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => {
+        toast.classList.remove('show');
+      }, 4000);
+    }
+
+    function undoLastAction() {
+      if (lastCompletedElement && lastCompletedElement.element) {
+        const el = lastCompletedElement.element;
+        el.style.display = 'block';
+        setTimeout(() => {
+          el.style.opacity = '1';
+          el.style.transform = 'translateX(0) translateY(0)';
+        }, 20);
+        document.getElementById('interactiveToast').classList.remove('show');
+      }
+    }
+
+    // Speed Triage Card Stack Engine
+    const triageData = [
+      {
+        title: "Sign Liv's 5th Grade Science Camp Slip",
+        desc: "Ms. Robinson sent this via Gmail. Requires digital signature and medical waiver by 3:00 PM today.",
+        counter: "Card 1 of 3 · School & Forms",
+        badgeColor: "tag-gmail"
+      },
+      {
+        title: "Owen Soccer Ride: Jake In Conflict Call",
+        desc: "4:30 PM soccer pickup overlaps with Jake's quarterly review call. Kelly is free to drive.",
+        counter: "Card 2 of 3 · Logistics & Rides",
+        badgeColor: "tag-conflict"
+      },
+      {
+        title: "Pay Orthodontic Copay Statement ($45.00)",
+        desc: "Dr. Miller's dental office invoice received yesterday. Auto-pay link ready.",
+        counter: "Card 3 of 3 · Bills & Finance",
+        badgeColor: "tag-reminder"
+      }
+    ];
+
+    let currentTriageIndex = 0;
+
+    function advanceTriage(action) {
+      const hero = document.getElementById('triage-active-stack');
+      hero.style.transition = 'all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1)';
+      
+      if (action === 'completed') {
+        hero.style.transform = 'translateX(60px) scale(0.95)';
+        hero.style.opacity = '0';
+        showToast('Completed item!');
+      } else if (action === 'snoozed') {
+        hero.style.transform = 'translateY(-40px) scale(0.95)';
+        hero.style.opacity = '0';
+        showToast('Snoozed to tomorrow');
+      } else {
+        hero.style.transform = 'translateX(-60px) scale(0.95)';
+        hero.style.opacity = '0';
+        showToast('Dismissed & AI updated');
+      }
+
+      setTimeout(() => {
+        currentTriageIndex++;
+        if (currentTriageIndex < triageData.length) {
+          const next = triageData[currentTriageIndex];
+          document.getElementById('triage-title').innerText = next.title;
+          document.getElementById('triage-desc').innerText = next.desc;
+          document.getElementById('triage-counter').innerText = next.counter;
+
+          hero.style.transform = 'translateX(0) translateY(0) scale(1)';
+          hero.style.opacity = '1';
+        } else {
+          hero.innerHTML = `
+            <div style="padding: 24px 0;">
+              <div style="width: 56px; height: 56px; border-radius: 50%; background: var(--color-success-soft); color: var(--color-success); display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
+                <i data-lucide="check-check" size="28"></i>
+              </div>
+              <h3 style="font-family: var(--font-display); font-size: 24px; color: var(--color-navy); margin-bottom: 6px;">Inbox Zero Achieved!</h3>
+              <p style="font-size: 14px; color: var(--color-text-secondary);">All urgent household items are resolved for today.</p>
+              <button class="pill-btn primary" style="margin: 18px auto 0;" onclick="resetTriage()">Reset Demo Stack</button>
+            </div>
+          `;
+          lucide.createIcons();
+        }
+      }, 260);
+    }
+
+    function resetTriage() {
+      currentTriageIndex = 0;
+      location.reload();
+    }
+
+    // Canvas Cross-Highlighting
+    function highlightActionItem(id) {
+      const el = document.getElementById(id);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        el.style.transition = 'all 0.3s ease';
+        el.style.transform = 'scale(1.03)';
+        el.style.boxShadow = '0 0 0 3px var(--color-gold)';
+        setTimeout(() => {
+          el.style.transform = 'scale(1)';
+          el.style.boxShadow = 'var(--shadow-sm)';
+        }, 1500);
+      }
+    }
+  </script>
+</body>
+</html>

@@ -29,15 +29,25 @@ import MemorySettingsPage from '../../pages/MemorySettingsPage'
 import ProjectSettingsPage from '../../pages/ProjectSettingsPage'
 import SettingsShell from '../settings/SettingsShell'
 import PageTransition from './PageTransition'
+import LivingCanvasHome from '../canvas/LivingCanvasHome'
+import { useAppStore } from '../../stores/appStore'
 
 export default function AnimatedRoutes() {
   const location = useLocation()
+  const experienceMode = useAppStore((s) => s.experienceMode)
   // Use top-level path for AnimatePresence key so shell persists across sub-routes
   const topPath = '/' + (location.pathname.split('/')[1] ?? '')
   return (
     <AnimatePresence mode="wait">
       <Routes location={location} key={topPath}>
-        <Route path="/" element={<PageTransition><HomePage /></PageTransition>} />
+        <Route
+          path="/"
+          element={
+            <PageTransition>
+              {experienceMode === 'living_canvas' ? <LivingCanvasHome /> : <HomePage />}
+            </PageTransition>
+          }
+        />
         <Route path="/calendar" element={<PageTransition><CalendarPage /></PageTransition>} />
         <Route path="/grocery" element={<PageTransition><GroceryPage /></PageTransition>} />
         <Route path="/cook" element={<PageTransition><CookPage /></PageTransition>} />

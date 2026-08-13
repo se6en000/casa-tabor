@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { CheckCircle, Monitor, Clock, Eye, Sunset, Sliders, Cpu, Palette, Image, ToggleLeft, Sun, RotateCcw, Type } from 'lucide-react'
+import { CheckCircle, Monitor, Clock, Eye, Sunset, Sliders, Cpu, Palette, Image, ToggleLeft, Sun, RotateCcw, Type, Sparkles, LayoutGrid } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
@@ -8,6 +8,7 @@ import { Alert, Button, Card, DisclosureSection, IconButton, SegmentedControl, S
 import { useTheme, PRESETS, DEFAULTS, MIDNIGHT_GALLERY_DEFAULTS, type ThemeColors } from '../contexts/ThemeContext'
 import { DEFAULT_FONT_SCALE, MAX_FONT_SCALE, MIN_FONT_SCALE } from '../design-system/tokens.mjs'
 import { getThemeContrastIssues } from '../design-system/themeContrast.mjs'
+import { useAppStore } from '../stores/appStore'
 import {
   useRoomTone,
   getZoneForHour,
@@ -252,6 +253,7 @@ export default function DisplaySettingsPage() {
     resetToDefaults,
     isDefault,
   } = useTheme()
+  const { experienceMode, setExperienceMode } = useAppStore()
   const [config, setConfig] = useState<DisplayConfig>(DISPLAY_DEFAULTS)
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
   const [previewZone, setPreviewZone] = useState<RoomToneZone>('day')
@@ -314,6 +316,73 @@ export default function DisplaySettingsPage() {
       </div>
 
       <div className="space-y-4">
+
+        {/* ── UX EXPERIENCE ARCHITECTURE TOGGLE ── */}
+        <Card padding="sm" className="border-2 border-casa-gold/40 bg-gradient-to-r from-casa-surface to-casa-gold/5">
+          <SectionHeader icon={Sparkles} label="Experience Architecture" />
+          <p className="mb-3 text-body-sm text-casa-text-secondary">
+            Switch between the next-generation Living Canvas OS (Calm Ambient Kiosk + Turbo 3-Pane) and Classic multi-tab view.
+          </p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Button
+              variant="secondary"
+              onClick={() => setExperienceMode('living_canvas')}
+              aria-pressed={experienceMode === 'living_canvas'}
+              className={cn(
+                'h-auto min-h-control-lg items-start rounded-card border-2 p-3 text-left transition-all',
+                experienceMode === 'living_canvas'
+                  ? 'border-casa-navy bg-casa-surface shadow-card-hover'
+                  : 'border-casa-border bg-casa-surface/60 opacity-80 hover:opacity-100'
+              )}
+            >
+              <div className="w-full">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-body-sm font-bold text-casa-navy flex items-center gap-1.5">
+                    <Sparkles size={14} className="text-casa-gold" />
+                    Living Canvas
+                  </span>
+                  {experienceMode === 'living_canvas' && (
+                    <span className="text-caption uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-casa-gold/20 text-casa-navy">
+                      Active
+                    </span>
+                  )}
+                </div>
+                <p className="text-caption text-casa-text-secondary">
+                  Calm Ambient entry for wall mounts, 1-tap expandable Turbo 3-pane triage canvas, and persistent AI sidecar.
+                </p>
+              </div>
+            </Button>
+
+            <Button
+              variant="secondary"
+              onClick={() => setExperienceMode('classic')}
+              aria-pressed={experienceMode === 'classic'}
+              className={cn(
+                'h-auto min-h-control-lg items-start rounded-card border-2 p-3 text-left transition-all',
+                experienceMode === 'classic'
+                  ? 'border-casa-navy bg-casa-surface shadow-card-hover'
+                  : 'border-casa-border bg-casa-surface/60 opacity-80 hover:opacity-100'
+              )}
+            >
+              <div className="w-full">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-body-sm font-bold text-casa-navy flex items-center gap-1.5">
+                    <LayoutGrid size={14} className="text-casa-muted" />
+                    Classic Mode
+                  </span>
+                  {experienceMode === 'classic' && (
+                    <span className="text-caption uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-casa-border text-casa-navy">
+                      Active
+                    </span>
+                  )}
+                </div>
+                <p className="text-caption text-casa-text-secondary">
+                  Traditional sidebar navigation with standalone Briefing, Action Hub, and Home pages.
+                </p>
+              </div>
+            </Button>
+          </div>
+        </Card>
 
         {/* ─────────────────────────────────────────────────────────────────── */}
         {/* 1. THEME & COLORS ──────────────────────────────────────────────── */}

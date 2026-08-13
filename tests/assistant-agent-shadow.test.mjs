@@ -95,68 +95,68 @@ test('completed clear conflict checks cannot loop', () => {
       }],
     },
   })
-
-  test('pending actions expose reads and only the same mutation capability', () => {
-    const request = buildAgentShadowRequest({
-      messages: [{ role: 'user', content: 'Actually, Saturday morning instead.' }],
-      context: {
-        pendingAction: {
-          actionId: 'pending-create-1',
-          toolName: 'calendar.create',
-          args: {
-            title: 'Swim practice',
-            start: '2026-07-17T16:00:00-04:00',
-            end: '2026-07-17T17:00:00-04:00',
-          },
-        },
-      },
-    })
-    const names = request.tools[0].function_declarations.map((tool) => tool.name)
-    assert.ok(names.includes('calendar_create'))
-    assert.ok(names.includes('calendar_check_conflicts'))
-    assert.ok(!names.includes('calendar_update'))
-    assert.ok(!names.includes('grocery_add_items'))
-  })
-
-  test('plans cannot invoke capabilities omitted from the current request', () => {
-    const request = buildAgentShadowRequest({
-      messages: [{ role: 'user', content: 'Schedule swim practice Friday at 4 PM.' }],
-      context: {
-        completedToolCalls: [{
-          toolName: 'calendar.check_conflicts',
-          result: { conflicts: [], count: 0 },
-        }],
-      },
-    })
-    assert.equal(isAgentPlanAllowedByRequest({
-      kind: 'tool',
-      toolName: 'calendar.check_conflicts',
-      args: {},
-    }, request), false)
-    assert.equal(isAgentPlanAllowedByRequest({
-      kind: 'tool',
-      toolName: 'calendar.create',
-      args: {},
-    }, request), true)
-
-    const writeRequest = buildAgentShadowRequest({
-      messages: [{ role: 'user', content: 'Check off milk.' }],
-      plannerMode: 'additive_write',
-    })
-    assert.equal(isAgentPlanAllowedByRequest({
-      kind: 'tool',
-      toolName: 'grocery.update_item',
-      args: {},
-    }, writeRequest), true)
-    assert.equal(isAgentPlanAllowedByRequest({
-      kind: 'tool',
-      toolName: 'grocery.remove_item',
-      args: {},
-    }, writeRequest), true)
-  })
   const names = request.tools[0].function_declarations.map((tool) => tool.name)
   assert.ok(!names.includes('calendar_check_conflicts'))
   assert.ok(names.includes('calendar_create'))
+})
+
+test('pending actions expose reads and only the same mutation capability', () => {
+  const request = buildAgentShadowRequest({
+    messages: [{ role: 'user', content: 'Actually, Saturday morning instead.' }],
+    context: {
+      pendingAction: {
+        actionId: 'pending-create-1',
+        toolName: 'calendar.create',
+        args: {
+          title: 'Swim practice',
+          start: '2026-07-17T16:00:00-04:00',
+          end: '2026-07-17T17:00:00-04:00',
+        },
+      },
+    },
+  })
+  const names = request.tools[0].function_declarations.map((tool) => tool.name)
+  assert.ok(names.includes('calendar_create'))
+  assert.ok(names.includes('calendar_check_conflicts'))
+  assert.ok(!names.includes('calendar_update'))
+  assert.ok(!names.includes('grocery_add_items'))
+})
+
+test('plans cannot invoke capabilities omitted from the current request', () => {
+  const request = buildAgentShadowRequest({
+    messages: [{ role: 'user', content: 'Schedule swim practice Friday at 4 PM.' }],
+    context: {
+      completedToolCalls: [{
+        toolName: 'calendar.check_conflicts',
+        result: { conflicts: [], count: 0 },
+      }],
+    },
+  })
+  assert.equal(isAgentPlanAllowedByRequest({
+    kind: 'tool',
+    toolName: 'calendar.check_conflicts',
+    args: {},
+  }, request), false)
+  assert.equal(isAgentPlanAllowedByRequest({
+    kind: 'tool',
+    toolName: 'calendar.create',
+    args: {},
+  }, request), true)
+
+  const writeRequest = buildAgentShadowRequest({
+    messages: [{ role: 'user', content: 'Check off milk.' }],
+    plannerMode: 'additive_write',
+  })
+  assert.equal(isAgentPlanAllowedByRequest({
+    kind: 'tool',
+    toolName: 'grocery.update_item',
+    args: {},
+  }, writeRequest), true)
+  assert.equal(isAgentPlanAllowedByRequest({
+    kind: 'tool',
+    toolName: 'grocery.remove_item',
+    args: {},
+  }, writeRequest), true)
 })
 
 test('shadow response parser maps provider function names to capability names', () => {
@@ -176,173 +176,173 @@ test('shadow response parser maps provider function names to capability names', 
       },
     }],
   })
-
-  test('semantic planner preserves reminder type and relative-minute intent', () => {
-    const result = parseAgentShadowResponse({
-      candidates: [{
-        content: {
-          parts: [{
-            functionCall: {
-              name: 'calendar_interpret_turn',
-              args: {
-                action: 'create',
-                patch: {
-                  title: 'Switch the laundry',
-                  event_type: 'reminder',
-                  relative_minutes: 20,
-                },
-              },
-            },
-          }],
-        },
-      }],
-    })
-    assert.equal(result.kind, 'calendar_semantic')
-    assert.equal(result.turn.patch.event_type, 'reminder')
-    assert.equal(result.turn.patch.relative_minutes, 20)
-  })
-
-  test('calendar write planning returns semantic deltas instead of model-authored timestamps', () => {
-    const request = buildAgentShadowRequest({
-      messages: [{ role: 'user', content: 'Actually make it Saturday at ten.' }],
-      context: {
-        pendingAction: {
-          toolName: 'calendar.create',
-          args: {
-            title: 'Dinner with Mom',
-            start: '2026-07-19T18:00:00-04:00',
-            end: '2026-07-19T19:30:00-04:00',
-          },
-        },
-      },
-      plannerMode: 'additive_write',
-    })
-
-    test('calendar semantic parsing normalizes provider clock aliases at the boundary', () => {
-      const result = parseAgentShadowResponse({
-        candidates: [{
-          content: {
-            parts: [{
-              functionCall: {
-                name: 'calendar_interpret_turn',
-                args: {
-                  action: 'create',
-                  patch: {
-                    title: 'Dinner with Mom',
-                    time: { hour: 6, day_part: 'evening' },
-                  },
-                },
-              },
-            }],
-          },
-        }],
-      })
-      assert.deepEqual(result.turn.patch, {
-        title: 'Dinner with Mom',
-        time: { hour: 6, period: 'pm' },
-      })
-    })
-    const declarations = request.tools[0].function_declarations
-    assert.deepEqual(declarations.map((declaration) => declaration.name), ['assistant_interpret_write'])
-    assert.ok(!declarations.some((declaration) => declaration.name === 'calendar_update'))
-    assert.match(request.system_instruction.parts[0].text, /Never calculate or emit calendar timestamps/)
-    assert.match(request.system_instruction.parts[0].text, /Never replace an explicit range with a default duration/)
-    assert.match(request.system_instruction.parts[0].text, /Resolve conversational identity clarifications/)
-    assert.match(request.system_instruction.parts[0].text, /Sky Zone Palm Springs/)
-    assert.match(request.system_instruction.parts[0].text, /Never create a duplicate/)
-
-    assert.deepEqual(parseAgentShadowResponse({
-      candidates: [{
-        content: {
-          parts: [{
-            functionCall: {
-              name: 'calendar_interpret_turn',
-              args: {
-                action: 'revise',
-                patch: {
-                  date_reference: { kind: 'weekday', weekday: 'saturday' },
-                  time: { hour: 10, period: 'ambiguous' },
-                },
-              },
-            },
-          }],
-        },
-      }],
-    }), {
-      kind: 'calendar_semantic',
-      turn: {
-        version: 'calendar-semantic-turn-v1',
-        action: 'revise',
-        patch: {
-          date_reference: { kind: 'weekday', weekday: 'saturday' },
-          time: { hour: 10, period: 'ambiguous' },
-        },
-      },
-    })
-
-    assert.deepEqual(parseAgentShadowResponse({
-      candidates: [{
-        content: {
-          parts: [{
-            functionCall: {
-              name: 'assistant_interpret_write',
-              args: {
-                requested_domain: 'grocery',
-                requested_outcome: 'update_item',
-                grocery_tool_name: 'grocery.update_item',
-                grocery_tool_args: {
-                  id: 'milk-1',
-                  expected_updated_at: 'v1',
-                  quantity: '2',
-                  name: 'Barista oat milk',
-                },
-              },
-            },
-          }],
-        },
-      }],
-    }), {
-      kind: 'tool',
-      toolName: 'grocery.update_item',
-      args: {
-        id: 'milk-1',
-        expected_updated_at: 'v1',
-        quantity: '2',
-      },
-    })
-  })
   assert.equal(result.kind, 'tool')
   assert.equal(result.toolName, 'calendar.create')
+})
+
+test('semantic planner preserves reminder type and relative-minute intent', () => {
+  const result = parseAgentShadowResponse({
+    candidates: [{
+      content: {
+        parts: [{
+          functionCall: {
+            name: 'calendar_interpret_turn',
+            args: {
+              action: 'create',
+              patch: {
+                title: 'Switch the laundry',
+                event_type: 'reminder',
+                relative_minutes: 20,
+              },
+            },
+          },
+        }],
+      },
+    }],
+  })
+  assert.equal(result.kind, 'calendar_semantic')
+  assert.equal(result.turn.patch.event_type, 'reminder')
+  assert.equal(result.turn.patch.relative_minutes, 20)
+})
+
+test('calendar write planning returns semantic deltas instead of model-authored timestamps', () => {
+  const request = buildAgentShadowRequest({
+    messages: [{ role: 'user', content: 'Actually make it Saturday at ten.' }],
+    context: {
+      pendingAction: {
+        toolName: 'calendar.create',
+        args: {
+          title: 'Dinner with Mom',
+          start: '2026-07-19T18:00:00-04:00',
+          end: '2026-07-19T19:30:00-04:00',
+        },
+      },
+    },
+    plannerMode: 'additive_write',
+  })
+  const declarations = request.tools[0].function_declarations
+  assert.deepEqual(declarations.map((declaration) => declaration.name), ['assistant_interpret_write'])
+  assert.ok(!declarations.some((declaration) => declaration.name === 'calendar_update'))
+  assert.match(request.system_instruction.parts[0].text, /Never calculate or emit calendar timestamps/)
+  assert.match(request.system_instruction.parts[0].text, /Never replace an explicit range with a default duration/)
+  assert.match(request.system_instruction.parts[0].text, /Resolve conversational identity clarifications/)
+  assert.match(request.system_instruction.parts[0].text, /Sky Zone Palm Springs/)
+  assert.match(request.system_instruction.parts[0].text, /Never create a duplicate/)
+
+  assert.deepEqual(parseAgentShadowResponse({
+    candidates: [{
+      content: {
+        parts: [{
+          functionCall: {
+            name: 'calendar_interpret_turn',
+            args: {
+              action: 'revise',
+              patch: {
+                date_reference: { kind: 'weekday', weekday: 'saturday' },
+                time: { hour: 10, period: 'ambiguous' },
+              },
+            },
+          },
+        }],
+      },
+    }],
+  }), {
+    kind: 'calendar_semantic',
+    turn: {
+      version: 'calendar-semantic-turn-v1',
+      action: 'revise',
+      patch: {
+        date_reference: { kind: 'weekday', weekday: 'saturday' },
+        time: { hour: 10, period: 'ambiguous' },
+      },
+    },
+  })
+
+  assert.deepEqual(parseAgentShadowResponse({
+    candidates: [{
+      content: {
+        parts: [{
+          functionCall: {
+            name: 'assistant_interpret_write',
+            args: {
+              requested_domain: 'grocery',
+              requested_outcome: 'update_item',
+              grocery_tool_name: 'grocery.update_item',
+              grocery_tool_args: {
+                id: 'milk-1',
+                expected_updated_at: 'v1',
+                quantity: '2',
+                name: 'Barista oat milk',
+              },
+            },
+          },
+        }],
+      },
+    }],
+  }), {
+    kind: 'tool',
+    toolName: 'grocery.update_item',
+    args: {
+      id: 'milk-1',
+      expected_updated_at: 'v1',
+      quantity: '2',
+    },
+  })
+})
+
+test('calendar semantic parsing normalizes provider clock aliases at the boundary', () => {
+  const result = parseAgentShadowResponse({
+    candidates: [{
+      content: {
+        parts: [{
+          functionCall: {
+            name: 'calendar_interpret_turn',
+            args: {
+              action: 'create',
+              patch: {
+                title: 'Dinner with Mom',
+                time: { hour: 6, day_part: 'evening' },
+              },
+            },
+          },
+        }],
+      },
+    }],
+  })
+  assert.deepEqual(result.turn.patch, {
+    title: 'Dinner with Mom',
+    time: { hour: 6, period: 'pm' },
+  })
 })
 
 test('shadow response parser preserves clarification without treating it as execution', () => {
   const result = parseAgentShadowResponse({
     candidates: [{ content: { parts: [{ text: 'Which dentist appointment do you mean?' }] } }],
   })
-
-  test('semantic write parser preserves structured read deferrals', () => {
-    const result = parseAgentShadowResponse({
-      candidates: [{
-        content: {
-          parts: [{
-            functionCall: {
-              name: 'assistant_interpret_write',
-              args: {
-                requested_domain: 'calendar',
-                requested_outcome: 'read',
-                reason: 'The user asked a question about an event.',
-              },
-            },
-          }],
-        },
-      }],
-    })
-    assert.deepEqual(result, { kind: 'defer', reason: 'read' })
-  })
   assert.deepEqual(result, {
     kind: 'clarify',
     text: 'Which dentist appointment do you mean?',
   })
+})
+
+test('semantic write parser preserves structured read deferrals', () => {
+  const result = parseAgentShadowResponse({
+    candidates: [{
+      content: {
+        parts: [{
+          functionCall: {
+            name: 'assistant_interpret_write',
+            args: {
+              requested_domain: 'calendar',
+              requested_outcome: 'read',
+              reason: 'The user asked a question about an event.',
+            },
+          },
+        }],
+      },
+    }],
+  })
+  assert.deepEqual(result, { kind: 'defer', reason: 'read' })
 })
 
 test('forced structured planning retries only unusable provider output', () => {

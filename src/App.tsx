@@ -26,6 +26,8 @@ import { useIdleTimer } from './hooks/useIdleTimer'
 import { useScreensaverSettings } from './hooks/useScreensaverSettings'
 import EventDetailPanel from './components/calendar/EventDetailPanel'
 import { useAppStore } from './stores/appStore'
+import CanvasTopBar from './components/canvas/CanvasTopBar'
+import CanvasUndoToast from './components/canvas/CanvasUndoToast'
 
 const SAFE_MODE = String(import.meta.env.VITE_SAFE_MODE ?? '').toLowerCase()
 const IS_SAFE_MODE = SAFE_MODE === '1' || SAFE_MODE === 'true' || SAFE_MODE === 'yes'
@@ -184,7 +186,7 @@ function AppShell() {
   useIdleTimer(ssMs, dispMs)
 
   const [screensaverActive, setScreensaverActive] = useState(false)
-  const { aiDrawerOpen, setAiDrawerOpen } = useAppStore()
+  const { aiDrawerOpen, setAiDrawerOpen, experienceMode } = useAppStore()
   const [quickCreateOpen, setQuickCreateOpen] = useState(false)
   const [selectedDrawerEvent, setSelectedDrawerEvent] = useState<EventWithDetails | null>(null)
   const location = useLocation()
@@ -233,7 +235,7 @@ function AppShell() {
     }
     document.addEventListener('casa:open-event-details', onOpenEventById)
     return () => document.removeEventListener('casa:open-event-details', onOpenEventById)
-  }, [])
+  }, [setAiDrawerOpen])
 
   const openEventDetailsFromAssistant = (event: EventWithDetails) => {
     document.dispatchEvent(new CustomEvent('casa:close-event-details'))
@@ -244,10 +246,10 @@ function AppShell() {
   return (
     <div className="app-shell flex flex-col overflow-hidden bg-casa-bg">
       {/* Full-width top bar — sticky, never scrolls */}
-      <TopBarC />
+      {experienceMode === 'living_canvas' ? <CanvasTopBar /> : <TopBarC />}
 
       <div className="app-shell-main flex flex-1 min-h-0 relative overflow-hidden">
-        <TabletSidebar aiDrawerOpen={aiDrawerOpen} />
+        {experienceMode === 'classic' && <TabletSidebar aiDrawerOpen={aiDrawerOpen} />}
         <div className="flex-1 min-w-0 overflow-hidden h-full">
           <AnimatedRoutes />
         </div>
@@ -263,10 +265,10 @@ function AppShell() {
         />
       </div>
 
-      {/* Bottom nav only visible on mobile */}
-      <NavBar />
+      {/* Bottom nav only visible on mobile in classic mode */}
+      {experienceMode === 'classic' && <NavBar />}
 
-      {!hideFab && !aiDrawerOpen && (
+      {!hideFab && !aiDrawerOpen && experienceMode === 'classic' && (
         <AddEventFab onClick={() => setQuickCreateOpen(true)} visible={!quickCreateOpen} />
       )}
 
@@ -281,6 +283,9 @@ function AppShell() {
         event={selectedDrawerEvent}
         onClose={() => setSelectedDrawerEvent(null)}
       />
+
+      {/* Global Living Canvas Undo Toast */}
+      {experienceMode === 'living_canvas' && <CanvasUndoToast />}
 
       {/* Art screensaver overlay — always available when triggered manually; idle auto-fire respects settings.enabled */}
       {screensaverActive && (
