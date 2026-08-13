@@ -9,10 +9,11 @@ const migration = readFileSync(
 const scanner = readFileSync(new URL('../supabase/functions/scan-gmail-inbox/index.ts', import.meta.url), 'utf8')
 const deploy = readFileSync(new URL('../pi/deploy-prod-and-refresh-pi.sh', import.meta.url), 'utf8')
 
-test('repairs both Google service schedules at 15-minute cadence with vault auth', () => {
+test('repairs both Google service schedules at 15-minute cadence with current vault auth', () => {
   assert.match(migration, /'sync-google-calendars',\s*'\*\/15 \* \* \* \*'/)
   assert.match(migration, /'scan-gmail-inbox',\s*'\*\/15 \* \* \* \*'/)
   assert.match(migration, /vault\.decrypted_secrets/)
+  assert.match(migration, /SUPABASE_ANON_KEY/)
   assert.match(migration, /cron\.unschedule/)
 })
 

@@ -11,9 +11,6 @@ select
   connection.last_incremental_sync_at as last_sync_at,
   connection.last_sync_error,
   tokens.gmail_scan_enabled,
-  tokens.gmail_last_scan_attempt_at,
-  tokens.gmail_last_scan_success_at,
-  tokens.gmail_last_scan_error,
   connection.id as connection_id,
   connection.calendar_id,
   connection.access_mode,
@@ -24,7 +21,10 @@ select
   connection.last_success_at,
   connection.last_error_at,
   connection.last_error_code,
-  connection.health_status = 'reauthorization_required' as reauthorization_required
+  connection.health_status = 'reauthorization_required' as reauthorization_required,
+  tokens.gmail_last_scan_attempt_at,
+  tokens.gmail_last_scan_success_at,
+  tokens.gmail_last_scan_error
 from public.google_tokens tokens
 left join public.calendar_connections connection
   on connection.family_member_id = tokens.family_member_id
@@ -41,9 +41,9 @@ declare
 begin
   if not exists (
     select 1 from vault.decrypted_secrets
-    where name = 'SUPABASE_SERVICE_ROLE_KEY'
+    where name = 'SUPABASE_ANON_KEY'
   ) then
-    raise exception 'SUPABASE_SERVICE_ROLE_KEY is missing from vault';
+    raise exception 'SUPABASE_ANON_KEY is missing from vault';
   end if;
 
   for v_job in
@@ -63,8 +63,8 @@ select cron.schedule(
     url := 'https://sjiejymuuuqzqukyeagk.supabase.co/functions/v1/sync-calendars',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
-      'apikey', (select decrypted_secret from vault.decrypted_secrets where name = 'SUPABASE_SERVICE_ROLE_KEY' limit 1),
-      'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'SUPABASE_SERVICE_ROLE_KEY' limit 1)
+      'apikey', (select decrypted_secret from vault.decrypted_secrets where name = 'SUPABASE_ANON_KEY' limit 1),
+      'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'SUPABASE_ANON_KEY' limit 1)
     ),
     body := '{}'::jsonb
   );
@@ -79,8 +79,8 @@ select cron.schedule(
     url := 'https://sjiejymuuuqzqukyeagk.supabase.co/functions/v1/scan-gmail-inbox',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
-      'apikey', (select decrypted_secret from vault.decrypted_secrets where name = 'SUPABASE_SERVICE_ROLE_KEY' limit 1),
-      'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'SUPABASE_SERVICE_ROLE_KEY' limit 1)
+      'apikey', (select decrypted_secret from vault.decrypted_secrets where name = 'SUPABASE_ANON_KEY' limit 1),
+      'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'SUPABASE_ANON_KEY' limit 1)
     ),
     body := '{}'::jsonb
   );
