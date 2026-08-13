@@ -353,40 +353,40 @@ If no actionable task exists, return {"actions":[]}.`
   }
 }
 
+function normalizeTransactionKeyPart(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+}
+
+function transactionDescriptor(action: InboxActionItem): string | null {
+  const text = `${action.title ?? ''} ${action.description}`
+  const descriptor = text.match(
+    /(?:delivered:\s*|delivery of\s+)([a-z0-9][a-z0-9™+ .'-]{2,100}?\+\s*\d+\s*items?)/i,
+  )?.[1]
+  return descriptor ? normalizeTransactionKeyPart(descriptor) : null
+}
+
+function transactionIdentity(action: InboxActionItem, sourceRef: string) {
+  const vendor = action.vendor?.trim()
+  if (!vendor) return { threadKey: null, vendor: null, stage: null }
+  const transactionId = action.transaction_id?.trim()
+  const descriptor = transactionDescriptor(action)
+  const vendorKey = normalizeTransactionKeyPart(vendor)
+  const transactionKey = transactionId
+    ? normalizeTransactionKeyPart(transactionId)
+    : descriptor
+      ? `items:${descriptor}`
+      : `message:${sourceRef}`
+  return {
+    threadKey: `transaction:${vendorKey}:${transactionKey}`,
+    vendor,
+    stage: action.transaction_status?.trim() || null,
+  }
+}
+
 function parseDueDateOrFallback(due: string | undefined, receivedAtIso: string, eventStartIso?: string | null): string {
   if (due) {
     const parsed = new Date(due)
     if (!isNaN(parsed.getTime())) return parsed.toISOString()
-  }
-
-  function normalizeTransactionKeyPart(value: string): string {
-    return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
-  }
-
-  function transactionDescriptor(action: InboxActionItem): string | null {
-    const text = `${action.title ?? ''} ${action.description}`
-    const descriptor = text.match(
-      /(?:delivered:\s*|delivery of\s+)([a-z0-9][a-z0-9™+ .'-]{2,100}?\+\s*\d+\s*items?)/i,
-    )?.[1]
-    return descriptor ? normalizeTransactionKeyPart(descriptor) : null
-  }
-
-  function transactionIdentity(action: InboxActionItem, sourceRef: string) {
-    const vendor = action.vendor?.trim()
-    if (!vendor) return { threadKey: null, vendor: null, stage: null }
-    const transactionId = action.transaction_id?.trim()
-    const descriptor = transactionDescriptor(action)
-    const vendorKey = normalizeTransactionKeyPart(vendor)
-    const transactionKey = transactionId
-      ? normalizeTransactionKeyPart(transactionId)
-      : descriptor
-        ? `items:${descriptor}`
-        : `message:${sourceRef}`
-    return {
-      threadKey: `transaction:${vendorKey}:${transactionKey}`,
-      vendor,
-      stage: action.transaction_status?.trim() || null,
-    }
   }
   if (eventStartIso) {
     const parsedEvent = new Date(eventStartIso)

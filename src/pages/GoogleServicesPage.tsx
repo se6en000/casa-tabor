@@ -92,7 +92,7 @@ export default function GoogleServicesPage() {
   const qc = useQueryClient()
 
   const { data: members, isLoading, refetch } = useGoogleServices()
-  const { activeMembers, inactiveMembers } = useMemo(
+  const { gmailActiveMembers, calendarOnlyMembers, inactiveMembers } = useMemo(
     () => splitGoogleServiceMembers(members ?? []),
     [members],
   )
@@ -203,9 +203,28 @@ export default function GoogleServicesPage() {
 
   function renderMemberDisclosure(member: MemberWithStatus, defaultOpen: boolean) {
     const status = member.status
-    const summary = status?.google_email
-      ? `${status.google_email} · ${status.reauthorization_required ? 'Reconnect required' : status.access_mode === 'writable' ? 'Casa write target' : 'Connected'}`
-      : 'Not connected'
+    const isConnected = !!status?.google_email
+    const isGmailActive = isConnected && !!status?.gmail_scan_enabled
+    const isCalendarActive = isConnected && status?.is_enabled !== false && !status?.reauthorization_required
+
+    let summary = 'Not connected'
+    if (isConnected) {
+      if (status?.reauthorization_required) {
+        summary = `${status.google_email} · Reconnect required`
+      } else if (isGmailActive) {
+        const lastScan = status.gmail_last_scan_success_at
+          ? `Scanned ${formatDistanceToNow(new Date(status.gmail_last_scan_success_at))} ago`
+          : 'Gmail scan active'
+        summary = `${status.google_email} · ${status.access_mode === 'writable' ? 'Write target' : 'Connected'} · ${lastScan}`
+      } else if (isCalendarActive) {
+        const lastSync = status.last_sync_at
+          ? `Synced ${formatDistanceToNow(new Date(status.last_sync_at))} ago`
+          : 'Calendar connected'
+        summary = `${status.google_email} · Calendar only · ${lastSync}`
+      } else {
+        summary = `${status.google_email} · Inactive`
+      }
+    }
 
     return (
       <DisclosureSection
@@ -213,7 +232,7 @@ export default function GoogleServicesPage() {
         title={member.name}
         summary={summary}
         defaultOpen={defaultOpen}
-        className="overflow-hidden rounded-card border border-casa-border bg-casa-surface shadow-card"
+        className="overflow-hidden rounded-card border border-casa-border bg-casa-surface shadow-card transition-all"
       >
         <MemberCard
           member={member}
@@ -234,38 +253,83 @@ export default function GoogleServicesPage() {
     )
   }
 
+  const hasAnyMembers = (members?.length ?? 0) > 0
+
   return (
     <>
-        <SettingsPageHeader title="Google Services" description="Connect each family member's account for calendar sync and Gmail scanning." />
+      <SettingsPageHeader
+        title="Google Services"
+        description="Connect each family member's account for calendar sync and Gmail scanning."
+      />
 
-        {/* Status banners */}
-        {connectedParam && (
-          <Alert className="mt-6" tone="success" title={gmailParam ? 'Calendar sync and Gmail scan are active' : 'Calendar sync is active'} />
-        )}
-        {errorParam && (
-          <Alert className="mt-6" tone="danger" title="Google connection failed">{errorParam.replace(/_/g, ' ')}</Alert>
-        )}
-        {scanResult && (
-          <Alert className="mt-6" title="Gmail scan complete">{scanResult}</Alert>
-        )}
+      {/* Status banners */}
+      {connectedParam && (
+        <Alert className="mt-6" tone="success" title={gmailParam ? 'Calendar sync and Gmail scan are active' : 'Calendar sync is active'} />
+      )}
+      {errorParam && (
+        <Alert className="mt-6" tone="danger" title="Google connection failed">{errorParam.replace(/_/g, ' ')}</Alert>
+      )}
+      {scanResult && (
+        <Alert className="mt-6" title="Gmail scan complete">{scanResult}</Alert>
+      )}
 
-        {/* Member cards */}
-        {isLoading ? (
-          <p className="text-body-sm text-casa-muted">Loading…</p>
-        ) : (
-          <div className="mt-6 space-y-4">
-            <p className="text-body-sm font-semibold text-casa-navy">Active accounts</p>
-            {activeMembers.length > 0
-              ? activeMembers.map(member => renderMemberDisclosure(member, true))
-              : <p className="text-body-sm text-casa-muted">No active accounts yet.</p>}
-            {inactiveMembers.length > 0 && (
-              <>
-                <p className="pt-2 text-body-sm font-semibold text-casa-navy">Inactive accounts</p>
-                {inactiveMembers.map(member => renderMemberDisclosure(member, false))}
-              </>
+      {/* Member cards */}
+      {isLoading ? (
+        <p className="mt-6 text-body-sm text-casa-muted">Loading…</p>
+      ) : !hasAnyMembers ? (
+        <p className="mt-6 text-body-sm text-casa-muted">No family members found.</p>
+      ) : (
+        <div className="mt-6 space-y-6">
+          {/* 1. Active Gmail Monitored Accounts (Priority Tier) */}
+          <DisclosureSection
+            title="Active Gmail monitoring"
+            summary={`${gmailActiveMembers.length} account${gmailActiveMembers.length === 1 ? '' : 's'} · Continuous inbox scan + calendar sync`}
+            icon={<Mail size={18} className="text-casa-navy" />}
+            defaultOpen={true}
+            className="overflow-hidden rounded-card border border-casa-border bg-casa-surface/60 shadow-card"
+          >
+            {gmailActiveMembers.length > 0 ? (
+              <div className="space-y-3 pt-2">
+                {gmailActiveMembers.map((member) => renderMemberDisclosure(member, true))}
+              </div>
+            ) : (
+              <p className="py-2 text-body-sm text-casa-muted">
+                No accounts currently have Gmail inbox monitoring enabled. Enable Gmail scanning on an active account below to auto-import actionable emails.
+              </p>
             )}
-          </div>
-        )}
+          </DisclosureSection>
+
+          {/* 2. Calendar-Only Accounts */}
+          {calendarOnlyMembers.length > 0 && (
+            <DisclosureSection
+              title="Calendar sync only"
+              summary={`${calendarOnlyMembers.length} account${calendarOnlyMembers.length === 1 ? '' : 's'} · Calendar sync active (Gmail scanning disabled)`}
+              icon={<Calendar size={18} className="text-casa-navy" />}
+              defaultOpen={true}
+              className="overflow-hidden rounded-card border border-casa-border bg-casa-surface/60 shadow-card"
+            >
+              <div className="space-y-3 pt-2">
+                {calendarOnlyMembers.map((member) => renderMemberDisclosure(member, false))}
+              </div>
+            </DisclosureSection>
+          )}
+
+          {/* 3. Inactive / Unconnected Accounts */}
+          {inactiveMembers.length > 0 && (
+            <DisclosureSection
+              title="Inactive & unconnected accounts"
+              summary={`${inactiveMembers.length} account${inactiveMembers.length === 1 ? '' : 's'} not connected or requiring reconnection`}
+              icon={<Unlink size={18} className="text-casa-muted" />}
+              defaultOpen={false}
+              className="overflow-hidden rounded-card border border-casa-border bg-casa-surface/60 shadow-card"
+            >
+              <div className="space-y-3 pt-2">
+                {inactiveMembers.map((member) => renderMemberDisclosure(member, false))}
+              </div>
+            </DisclosureSection>
+          )}
+        </div>
+      )}
     </>
   )
 }
