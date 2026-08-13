@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import type React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIcon, Camera, Mic, Keyboard, RotateCcw, MessagesSquare, Plus, Square, CalendarDays, ShoppingCart, ChefHat, Pencil, AlertTriangle, Clock3, Utensils, Bell, UserPlus, MapPin, Mail, Activity } from 'lucide-react'
+import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIcon, Camera, Mic, Keyboard, RotateCcw, MessagesSquare, Plus, Square, CalendarDays, ShoppingCart, ChefHat, Pencil, AlertTriangle, Clock3, Utensils, Bell, UserPlus, MapPin, Mail, Activity, ChevronRight } from 'lucide-react'
 import { format } from 'date-fns'
 import { cn } from '../../utils/cn'
 import { useAIAssistant, type AIMessage } from '../../hooks/useAIAssistant'
@@ -30,7 +30,6 @@ import { buildCreatePreviewCopy, buildDeleteManyPreviewCopy, buildDeletePreviewC
 const LOW_CONFIDENCE_CONFIRM_PHRASES = /\b(yes|yeah|yep|ok|okay|use it|that one|correct|right|go ahead)\b/i
 const LOW_CONFIDENCE_REJECT_PHRASES = /\b(no|nope|try again|wrong|not that|cancel)\b/i
 
-const NO_ACTIVITY_AUTO_CLOSE_MS = 30_000
 const CONVERSATION_MODE_KEY = 'casa_ai_conversation_mode'
 type PendingVoiceAction = {
   messageId: string
@@ -86,7 +85,6 @@ export default function AIChatDrawer({
     isFinal: false,
   })
   const interimRef = useRef('')
-  const idleAutoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hadUserInteractionRef = useRef(false)
   const [attachedImage, setAttachedImage] = useState<{ dataUrl: string; mimeType: string } | null>(null)
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false)
@@ -212,8 +210,8 @@ export default function AIChatDrawer({
   }, [open, isMobile])
 
   const dynamicSuggestions = useMemo(
-    () => buildDynamicSuggestions(page, events, new Date()),
-    [page, events],
+    () => deriveDynamicFollowUpSuggestions(messages, page, events, new Date()),
+    [messages, page, events],
   )
   const eventById = useMemo(
     () => new Map(events.map((event) => [event.id, event])),
@@ -244,13 +242,6 @@ export default function AIChatDrawer({
     }
   }, [])
 
-  const clearIdleAutoCloseTimer = useCallback(() => {
-    if (idleAutoCloseTimerRef.current) {
-      clearTimeout(idleAutoCloseTimerRef.current)
-      idleAutoCloseTimerRef.current = null
-    }
-  }, [])
-
   const handleOpenEventDetails = useCallback((eventId: string) => {
     const event = eventById.get(eventId)
     if (!event) return
@@ -260,8 +251,7 @@ export default function AIChatDrawer({
 
   const markUserInteraction = useCallback(() => {
     hadUserInteractionRef.current = true
-    clearIdleAutoCloseTimer()
-  }, [clearIdleAutoCloseTimer])
+  }, [])
 
   const clearVoiceTranscript = useCallback(() => {
     setVoiceTranscript({ committed: '', interim: '', isFinal: false })
@@ -272,6 +262,50 @@ export default function AIChatDrawer({
     .find(message => message.toolAction?.status === 'pending')
   const hasPendingToolAction = Boolean(activePendingToolMessage)
   const activePendingToolMessageId = activePendingToolMessage?.id
+
+  // Auto-execute grocery additions seamlessly with instant undo availability
+  const autoGroceryExecutingRef = useRef<Set<string>>(new Set())
+  const autoGroceryCreatedIdsRef = useRef<Map<string, string[]>>(new Map())
+  useEffect(() => {
+    const pendingGrocery = messages.find(
+      (m) => m.role === 'assistant' && m.toolAction?.tool === 'add_grocery_items' && m.toolAction.status === 'pending'
+    )
+    if (pendingGrocery && pendingGrocery.toolAction && !autoGroceryExecutingRef.current.has(pendingGrocery.id)) {
+      const messageId = pendingGrocery.id
+      const toolAction = pendingGrocery.toolAction
+      autoGroceryExecutingRef.current.add(messageId)
+      void (async () => {
+        updateMessageToolStatus(messageId, 'loading')
+        try {
+          const { data, error } = await supabase.functions.invoke('execute-ai-action', {
+            body: {
+              tool: toolAction.tool,
+              args: toolAction.args,
+              action_id: messageId,
+              session_id: session?.id ?? null,
+              correlation_id: buildCorrelationId(messageId),
+              confirmed_by_user: true,
+            },
+          })
+          if (error || data?.success === false) throw (error || new Error(data?.error ?? 'Failed to add grocery items'))
+
+          const createdIds = Array.isArray(data?.items)
+            ? data.items.map((i: any) => i.id).filter(Boolean)
+            : []
+
+          autoGroceryCreatedIdsRef.current.set(messageId, createdIds)
+
+          updateMessageToolStatus(messageId, 'done', {
+            actionId: messageId,
+            undoStatus: 'idle',
+          })
+          qc.invalidateQueries({ queryKey: ['grocery'] })
+        } catch (err) {
+          updateMessageToolStatus(messageId, 'error', { errorMsg: (err as Error).message })
+        }
+      })()
+    }
+  }, [messages, session?.id, updateMessageToolStatus, qc])
 
   const dispatchPendingConfirmation = useCallback((text: string) => {
     const intent = classifyPendingConfirmation(text)
@@ -585,12 +619,6 @@ export default function AIChatDrawer({
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    return () => {
-      clearIdleAutoCloseTimer()
-    }
-  }, [clearIdleAutoCloseTimer])
-
   // Keep speechStopRef current so the onFinalTranscript callback can stop the mic
   // without creating a circular dependency on the speech object.
   useEffect(() => { speechStopRef.current = speech.stop }, [speech.stop])
@@ -599,13 +627,6 @@ export default function AIChatDrawer({
     if (open) {
       hadUserInteractionRef.current = false
       setNudgeDismissed(false)
-      clearIdleAutoCloseTimer()
-      idleAutoCloseTimerRef.current = setTimeout(() => {
-        if (!hadUserInteractionRef.current) {
-          startFresh()
-          onClose()
-        }
-      }, NO_ACTIVITY_AUTO_CLOSE_MS)
       if (IS_SAFE_MODE) return
       // Launch intent controls the initial mode: wake word is voice-first;
       // manual opens remain text-first even when conversation mode is enabled.
@@ -615,7 +636,6 @@ export default function AIChatDrawer({
       // Focus textarea slightly after animation settles (UI only, doesn't affect mic)
       setTimeout(() => textareaRef.current?.focus(), 300)
     } else {
-      clearIdleAutoCloseTimer()
       speech.stop()
       led.off()
       reset()
@@ -1026,172 +1046,229 @@ export default function AIChatDrawer({
                 </div>
               )}
 
-              {messages.map((msg, messageIndex) => (
-                <MessageBubble
-                  key={msg.id}
-                  msg={msg}
-                  isActivePending={msg.id === activePendingToolMessageId}
-                  events={events}
-                  onOpenEventDetails={handleOpenEventDetails}
-                  enableQuickSaveRecipe={page === 'cook' || launchContext?.agent === 'chef'}
-                  editSeed={messages.slice(0, messageIndex).findLast((message) => message.role === 'user')?.content ?? ''}
-                  onQuickSaveRecipe={quickSaveRecipeSuggestion}
-                  onConfirmToolAction={async (messageId, tool, args) => {
-                    if (tool === 'confirm_talk_plan_action_intent') {
-                      updateMessageToolStatus(messageId, 'done')
-                      await send(String(args.original_request ?? ''), undefined, undefined, {
-                        replayExistingUserMessage: true,
-                        talkPlanIntentResolution: 'confirmed_action',
-                      })
-                      return true
-                    }
-                    updateMessageToolStatus(messageId, 'loading')
-                    const actionTrace = activeTraceRef.current
-                    const actionCorrelationId = buildCorrelationId(messageId)
-                    if (actionTrace) {
-                      emitAssistantTrace('confirmation_accepted', actionTrace, {
-                        detail: 'Confirmation accepted',
-                        payload: { message_id: messageId, tool },
-                      })
-                      emitAssistantTrace('action_execute_started', actionTrace, {
-                        detail: tool,
-                        payload: { message_id: messageId, tool, action_correlation_id: actionCorrelationId },
-                      })
-                    }
-                    try {
-                      const matchedEvent = tool === 'update_event'
-                        ? events.find((event) => event.id === String(args.id ?? ''))
-                        : undefined
-                      const requestArgs = tool === 'update_event' && matchedEvent
-                        ? { ...args, expected_updated_at: matchedEvent.updated_at }
-                        : tool === 'create_event' && args.calendar_preflight
-                          ? { ...args, allow_calendar_conflicts: true }
-                          : args
-                      const { data, error } = await supabase.functions.invoke('execute-ai-action', {
-                        body: {
-                          tool,
-                          args: requestArgs,
-                          action_id: messageId,
-                          session_id: session?.id ?? null,
-                          correlation_id: actionCorrelationId,
-                          trace_id: actionTrace?.traceId ?? null,
-                          turn_id: actionTrace?.turnId ?? null,
-                          lane: actionTrace?.lane ?? 'llm',
-                          device_id: getAssistantDeviceId(),
-                          client_trace_present: Boolean(actionTrace),
-                          client_build: typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'unknown',
-                          client_trace_source: actionTrace?.source ?? 'ai-drawer-confirmation',
-                          confirmed_by_user: true,
-                        },
-                      })
-                      if (error) throw error
-                      if (data?.success === false) throw new Error(data.error ?? 'Action failed')
-                      updateMessageToolStatus(messageId, 'done', {
-                        actionId: data?.action_id,
-                        resultEventId: data?.event_id,
-                        conversationState: conversationStateAfterCalendarAction(
-                          tool,
-                          requestArgs,
-                          data,
-                          new Date(),
-                          msg.conversationState,
-                        ),
-                        syncWarning: data?.duplicate ? data?.message : data?.sync_warning,
-                        syncStatus: data?.sync_status === 'queued' ? 'queued' : data?.sync_status === 'failed' ? 'failed' : 'synced',
-                        undoStatus: 'idle',
-                        undoErrorMsg: undefined,
-                      })
-                      qc.invalidateQueries({ queryKey: ['events'] })
-                      qc.invalidateQueries({ queryKey: ['grocery'] })
-                      if (actionTrace) {
-                        emitAssistantTrace('action_execute_completed', actionTrace, {
-                          detail: tool,
-                          payload: { message_id: messageId, tool, action_correlation_id: actionCorrelationId },
-                        })
-                      }
-                      return true
-                    } catch (err) {
-                      updateMessageToolStatus(messageId, 'error', { errorMsg: (err as Error).message })
-                      if (actionTrace) {
-                        emitAssistantTrace('action_execute_failed', actionTrace, {
-                          detail: (err as Error).message,
-                          payload: { message_id: messageId, tool, action_correlation_id: actionCorrelationId },
-                        })
-                      }
-                      return false
-                    }
-                  }}
-                  onUndoToolAction={async (messageId, actionId) => {
-                    updateMessageToolStatus(messageId, 'done', { undoStatus: 'loading', undoErrorMsg: undefined })
-                    try {
-                      const { data, error } = await supabase.functions.invoke('execute-ai-action', {
-                        body: {
-                          tool: 'undo_event_edit',
-                          args: { action_id: actionId },
-                          action_id: `${messageId}:undo`,
-                          session_id: session?.id ?? null,
-                          correlation_id: buildCorrelationId(`${messageId}:undo`),
-                        },
-                      })
-                      if (error) throw error
-                      if (data?.success === false) throw new Error(data.error ?? 'Undo failed')
-                      updateMessageToolStatus(messageId, 'done', {
-                        syncWarning: data?.sync_warning,
-                        syncStatus: data?.sync_status === 'queued' ? 'queued' : data?.sync_status === 'failed' ? 'failed' : 'synced',
-                        undoStatus: 'done',
-                        undoErrorMsg: undefined,
-                      })
-                      qc.invalidateQueries({ queryKey: ['events'] })
-                    } catch (err) {
-                      updateMessageToolStatus(messageId, 'done', {
-                        undoStatus: 'error',
-                        undoErrorMsg: (err as Error).message,
-                      })
-                    }
-                  }}
-                  onCancelToolAction={(messageId) => {
-                    const message = messages.find(item => item.id === messageId)
-                    updateMessageToolStatus(messageId, 'cancelled')
-                    const trace = activeTraceRef.current
-                    if (trace) {
-                      emitAssistantTrace('confirmation_cancelled', trace, {
-                        detail: 'Confirmation cancelled',
-                        payload: { message_id: messageId },
-                      })
-                    }
-                    if (message?.toolAction?.tool === 'confirm_talk_plan_action_intent') {
-                      void send(
-                        String(message.toolAction.args.original_request ?? ''),
-                        undefined,
-                        undefined,
-                        {
-                          replayExistingUserMessage: true,
-                          talkPlanIntentResolution: 'conversation_only',
-                        },
-                      )
-                    }
-                  }}
-                  onRefreshToolAction={() => {
-                    qc.invalidateQueries({ queryKey: ['events'] })
-                  }}
-                  registerPendingAction={registerPendingVoiceAction}
-                  onEditMessage={(content) => {
-                    markUserInteraction()
-                    if (speech.listening || speech.connecting) speech.stop()
-                    setInput(content)
-                    interimRef.current = content
-                    if (textareaRef.current) {
-                      textareaRef.current.value = content
-                      setTimeout(() => {
-                        const el = textareaRef.current
-                        if (!el) return
-                        el.focus()
-                        el.setSelectionRange(el.value.length, el.value.length)
-                      }, 0)
-                    }
-                  }}
-                />
-              ))}
+              {messages.map((msg, messageIndex) => {
+                const isLatestAssistant =
+                  messageIndex === messages.length - 1 &&
+                  msg.role === 'assistant' &&
+                  !msg.streaming &&
+                  !loading
+                return (
+                  <div key={msg.id} className="space-y-2">
+                    <MessageBubble
+                      msg={msg}
+                      isActivePending={msg.id === activePendingToolMessageId}
+                      events={events}
+                      onOpenEventDetails={handleOpenEventDetails}
+                      enableQuickSaveRecipe={page === 'cook' || launchContext?.agent === 'chef'}
+                      editSeed={messages.slice(0, messageIndex).findLast((message) => message.role === 'user')?.content ?? ''}
+                      onQuickSaveRecipe={quickSaveRecipeSuggestion}
+                      onConfirmToolAction={async (messageId, tool, args) => {
+                        if (tool === 'confirm_talk_plan_action_intent') {
+                          updateMessageToolStatus(messageId, 'done')
+                          await send(String(args.original_request ?? ''), undefined, undefined, {
+                            replayExistingUserMessage: true,
+                            talkPlanIntentResolution: 'confirmed_action',
+                          })
+                          return true
+                        }
+                        updateMessageToolStatus(messageId, 'loading')
+                        const actionTrace = activeTraceRef.current
+                        const actionCorrelationId = buildCorrelationId(messageId)
+                        if (actionTrace) {
+                          emitAssistantTrace('confirmation_accepted', actionTrace, {
+                            detail: 'Confirmation accepted',
+                            payload: { message_id: messageId, tool },
+                          })
+                          emitAssistantTrace('action_execute_started', actionTrace, {
+                            detail: tool,
+                            payload: { message_id: messageId, tool, action_correlation_id: actionCorrelationId },
+                          })
+                        }
+                        try {
+                          const matchedEvent = tool === 'update_event'
+                            ? events.find((event) => event.id === String(args.id ?? ''))
+                            : undefined
+                          const requestArgs = tool === 'update_event' && matchedEvent
+                            ? { ...args, expected_updated_at: matchedEvent.updated_at }
+                            : tool === 'create_event' && args.calendar_preflight
+                              ? { ...args, allow_calendar_conflicts: true }
+                              : args
+                          const { data, error } = await supabase.functions.invoke('execute-ai-action', {
+                            body: {
+                              tool,
+                              args: requestArgs,
+                              action_id: messageId,
+                              session_id: session?.id ?? null,
+                              correlation_id: actionCorrelationId,
+                              trace_id: actionTrace?.traceId ?? null,
+                              turn_id: actionTrace?.turnId ?? null,
+                              lane: actionTrace?.lane ?? 'llm',
+                              device_id: getAssistantDeviceId(),
+                              client_trace_present: Boolean(actionTrace),
+                              client_build: typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'unknown',
+                              client_trace_source: actionTrace?.source ?? 'ai-drawer-confirmation',
+                              confirmed_by_user: true,
+                            },
+                          })
+                          if (error) throw error
+                          if (data?.success === false) throw new Error(data.error ?? 'Action failed')
+                          updateMessageToolStatus(messageId, 'done', {
+                            actionId: data?.action_id,
+                            resultEventId: data?.event_id,
+                            conversationState: conversationStateAfterCalendarAction(
+                              tool,
+                              requestArgs,
+                              data,
+                              new Date(),
+                              msg.conversationState,
+                            ),
+                            syncWarning: data?.duplicate ? data?.message : data?.sync_warning,
+                            syncStatus: data?.sync_status === 'queued' ? 'queued' : data?.sync_status === 'failed' ? 'failed' : 'synced',
+                            undoStatus: 'idle',
+                            undoErrorMsg: undefined,
+                          })
+                          qc.invalidateQueries({ queryKey: ['events'] })
+                          qc.invalidateQueries({ queryKey: ['grocery'] })
+                          if (actionTrace) {
+                            emitAssistantTrace('action_execute_completed', actionTrace, {
+                              detail: tool,
+                              payload: { message_id: messageId, tool, action_correlation_id: actionCorrelationId },
+                            })
+                          }
+                          return true
+                        } catch (err) {
+                          updateMessageToolStatus(messageId, 'error', { errorMsg: (err as Error).message })
+                          if (actionTrace) {
+                            emitAssistantTrace('action_execute_failed', actionTrace, {
+                              detail: (err as Error).message,
+                              payload: { message_id: messageId, tool, action_correlation_id: actionCorrelationId },
+                            })
+                          }
+                          return false
+                        }
+                      }}
+                      onUndoToolAction={async (messageId, actionId) => {
+                        const targetMsg = messages.find((m) => m.id === messageId)
+                        if (targetMsg?.toolAction?.tool === 'add_grocery_items') {
+                          updateMessageToolStatus(messageId, 'done', { undoStatus: 'loading', undoErrorMsg: undefined })
+                          try {
+                            const createdIds = autoGroceryCreatedIdsRef.current.get(messageId) ?? []
+                            if (createdIds.length > 0) {
+                              const { error } = await supabase
+                                .from('grocery_items')
+                                .update({ deleted_at: new Date().toISOString(), last_modified_source: 'casa' })
+                                .in('id', createdIds)
+                              if (error) throw error
+                            }
+                            updateMessageToolStatus(messageId, 'done', {
+                              undoStatus: 'done',
+                              undoErrorMsg: undefined,
+                            })
+                            qc.invalidateQueries({ queryKey: ['grocery'] })
+                          } catch (err) {
+                            updateMessageToolStatus(messageId, 'done', {
+                              undoStatus: 'error',
+                              undoErrorMsg: (err as Error).message,
+                            })
+                          }
+                          return
+                        }
+
+                        updateMessageToolStatus(messageId, 'done', { undoStatus: 'loading', undoErrorMsg: undefined })
+                        try {
+                          const { data, error } = await supabase.functions.invoke('execute-ai-action', {
+                            body: {
+                              tool: 'undo_event_edit',
+                              args: { action_id: actionId },
+                              action_id: `${messageId}:undo`,
+                              session_id: session?.id ?? null,
+                              correlation_id: buildCorrelationId(`${messageId}:undo`),
+                            },
+                          })
+                          if (error) throw error
+                          if (data?.success === false) throw new Error(data.error ?? 'Undo failed')
+                          updateMessageToolStatus(messageId, 'done', {
+                            syncWarning: data?.sync_warning,
+                            syncStatus: data?.sync_status === 'queued' ? 'queued' : data?.sync_status === 'failed' ? 'failed' : 'synced',
+                            undoStatus: 'done',
+                            undoErrorMsg: undefined,
+                          })
+                          qc.invalidateQueries({ queryKey: ['events'] })
+                        } catch (err) {
+                          updateMessageToolStatus(messageId, 'done', {
+                            undoStatus: 'error',
+                            undoErrorMsg: (err as Error).message,
+                          })
+                        }
+                      }}
+                      onCancelToolAction={(messageId) => {
+                        const message = messages.find(item => item.id === messageId)
+                        updateMessageToolStatus(messageId, 'cancelled')
+                        const trace = activeTraceRef.current
+                        if (trace) {
+                          emitAssistantTrace('confirmation_cancelled', trace, {
+                            detail: 'Confirmation cancelled',
+                            payload: { message_id: messageId },
+                          })
+                        }
+                        if (message?.toolAction?.tool === 'confirm_talk_plan_action_intent') {
+                          void send(
+                            String(message.toolAction.args.original_request ?? ''),
+                            undefined,
+                            undefined,
+                            {
+                              replayExistingUserMessage: true,
+                              talkPlanIntentResolution: 'conversation_only',
+                            },
+                          )
+                        }
+                      }}
+                      onRefreshToolAction={() => {
+                        qc.invalidateQueries({ queryKey: ['events'] })
+                      }}
+                      registerPendingAction={registerPendingVoiceAction}
+                      onSelectSuggestion={(text) => {
+                        markUserInteraction()
+                        sendCurrentInput(text)
+                      }}
+                      onEditMessage={(content) => {
+                        markUserInteraction()
+                        if (speech.listening || speech.connecting) speech.stop()
+                        setInput(content)
+                        interimRef.current = content
+                        if (textareaRef.current) {
+                          textareaRef.current.value = content
+                          setTimeout(() => {
+                            const el = textareaRef.current
+                            if (!el) return
+                            el.focus()
+                            el.setSelectionRange(el.value.length, el.value.length)
+                          }, 0)
+                        }
+                      }}
+                    />
+                    {isLatestAssistant && !hasPendingToolAction && dynamicSuggestions.length > 0 && (
+                      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 pl-1">
+                        {dynamicSuggestions.map((s) => (
+                          <Button
+                            variant="ghost"
+                            key={s}
+                            type="button"
+                            onClick={() => {
+                              markUserInteraction()
+                              sendCurrentInput(s)
+                            }}
+                            className="px-3 py-1.5 rounded-full border border-casa-gold/30 bg-casa-gold/5 text-caption font-medium text-casa-navy hover:bg-casa-gold/15 hover:border-casa-gold/60 transition-all whitespace-nowrap shrink-0 shadow-xs"
+                          >
+                            <Sparkles size={11} className="inline mr-1 text-casa-gold" />
+                            {s}
+                          </Button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
 
               {loading && !messages.some(m => m.streaming) && (
                 <div className="flex items-center gap-2 text-casa-muted pl-1">
@@ -1234,21 +1311,6 @@ export default function AIChatDrawer({
                   </motion.div>
                 )}
               </AnimatePresence>
-
-              {messages.length > 0 && !hasTypedInput && !voiceComposerActive && dynamicSuggestions.length > 0 && (
-                <div className="mb-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-                  {dynamicSuggestions.map(s => (
-                    <Button variant="ghost"
-                      key={s}
-                      type="button"
-                      onClick={() => { markUserInteraction(); sendCurrentInput(s) }}
-                      className="px-2.5 py-1 rounded-full border border-casa-border bg-casa-bg text-caption text-casa-muted hover:text-casa-navy hover:border-casa-gold/40 transition-colors whitespace-nowrap shrink-0"
-                    >
-                      {s}
-                    </Button>
-                  ))}
-                </div>
-              )}
 
               <div
                 className={cn(
@@ -1582,7 +1644,7 @@ export default function AIChatDrawer({
 
 const MAX_VISIBLE_SOURCES = 3
 
-function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, events, onOpenEventDetails, onQuickSaveRecipe, onConfirmToolAction, onUndoToolAction, onCancelToolAction, onRefreshToolAction, registerPendingAction, onEditMessage }: {
+function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, events, onOpenEventDetails, onQuickSaveRecipe, onConfirmToolAction, onUndoToolAction, onCancelToolAction, onRefreshToolAction, registerPendingAction, onSelectSuggestion, onEditMessage }: {
   msg: AIMessage
   isActivePending: boolean
   enableQuickSaveRecipe?: boolean
@@ -1598,6 +1660,7 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
     messageId: string,
     handlers: Pick<PendingVoiceAction, 'confirm' | 'cancel'> | null,
   ) => void
+  onSelectSuggestion?: (text: string) => void
   onEditMessage?: (content: string) => void
 }) {
   const isUser = msg.role === 'user'
@@ -1812,28 +1875,87 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
           </div>
         )}
 
+        {/* Disambiguation and clarification selection cards */}
+        {msg.conversationState?.activeEntityType === 'calendar_clarification' && Array.isArray(msg.conversationState.candidateEvents) && msg.conversationState.candidateEvents.length > 0 && (
+          <div className="mt-2.5 space-y-1.5 pt-2 border-t border-casa-border/50">
+            <p className="text-caption font-semibold text-casa-muted">Select an event:</p>
+            <div className="flex flex-col gap-1.5">
+              {msg.conversationState.candidateEvents.map((evt) => {
+                const timeLabel = evt.start ? format(new Date(evt.start), 'EEE, MMM d · h:mm a') : 'Scheduled'
+                return (
+                  <Button
+                    key={evt.id}
+                    variant="ghost"
+                    type="button"
+                    onClick={() => onSelectSuggestion?.(`Select "${evt.title}" on ${timeLabel}`)}
+                    className="flex items-center justify-between gap-2 p-2 rounded-lg border border-casa-border bg-casa-surface/80 hover:bg-casa-gold/10 hover:border-casa-gold/50 text-left transition-all"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-body-sm font-semibold text-casa-navy truncate">{evt.title}</p>
+                      <p className="text-caption text-casa-muted">{timeLabel}</p>
+                    </div>
+                    <ChevronRight size={14} className="text-casa-muted shrink-0" />
+                  </Button>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {msg.conversationState?.activeEntityType === 'grocery_clarification' && Array.isArray(msg.conversationState.candidateGroceryItems) && msg.conversationState.candidateGroceryItems.length > 0 && (
+          <div className="mt-2.5 space-y-1.5 pt-2 border-t border-casa-border/50">
+            <p className="text-caption font-semibold text-casa-muted">Select a grocery item:</p>
+            <div className="flex flex-wrap gap-1.5">
+              {msg.conversationState.candidateGroceryItems.map((item) => (
+                <Button
+                  key={item.id}
+                  variant="ghost"
+                  type="button"
+                  onClick={() => onSelectSuggestion?.(`Select ${item.name}`)}
+                  className="px-2.5 py-1 rounded-full border border-casa-border bg-casa-surface/80 hover:bg-casa-gold/10 hover:border-casa-gold/50 text-caption font-medium text-casa-navy transition-all"
+                >
+                  {item.name}
+                </Button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Tool action confirmation card */}
         {ta && (
           <div className="mt-2.5 pt-2.5 border-t border-casa-divider">
             {ta.status === 'done' ? (
               <div className="space-y-1">
-                <div className="flex items-center gap-1.5 text-emerald-600 text-caption font-semibold">
-                  <Check size={13} />
-                  {ta.tool === 'confirm_talk_plan_action_intent' ? 'Action intent confirmed'
-                    : ta.tool === 'create_event' ? 'Created & added to calendar ✓'
-                    : ta.tool === 'create_recipe' ? 'Saved to recipe library ✓'
-                    : ta.tool === 'update_event' ? 'Updated ✓'
-                    : ta.tool === 'bulk_update_events' ? 'Bulk updates applied ✓'
-                    : ta.tool === 'delete_event' ? 'Deleted ✓'
-                    : ta.tool === 'delete_events_by_title' ? 'Deleted matching events ✓'
-                    : ta.tool === 'add_grocery_items' ? 'Added to grocery list ✓'
-                    : ta.tool === 'check_grocery_item' ? 'Grocery item updated ✓'
-                    : ta.tool === 'remove_grocery_item' ? 'Removed from grocery list ✓'
-                    : ta.tool === 'update_grocery_item_quantity' ? 'Grocery quantity updated ✓'
-                    : ta.tool === 'associate_family_contact' ? 'Saved to Household Directory ✓'
-                    : ta.tool === 'associate_contact_place' ? 'Location saved ✓'
-                    : ta.tool === 'confirm_directory_entity' ? 'Added to Household Directory ✓'
-                    : 'Done ✓'}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 text-emerald-600 text-caption font-semibold">
+                    <Check size={13} />
+                    {ta.tool === 'confirm_talk_plan_action_intent' ? 'Action intent confirmed'
+                      : ta.tool === 'create_event' ? 'Created & added to calendar ✓'
+                      : ta.tool === 'create_recipe' ? 'Saved to recipe library ✓'
+                      : ta.tool === 'update_event' ? 'Updated ✓'
+                      : ta.tool === 'bulk_update_events' ? 'Bulk updates applied ✓'
+                      : ta.tool === 'delete_event' ? 'Deleted ✓'
+                      : ta.tool === 'delete_events_by_title' ? 'Deleted matching events ✓'
+                      : ta.tool === 'add_grocery_items' ? 'Added to grocery list ✓'
+                      : ta.tool === 'check_grocery_item' ? 'Grocery item updated ✓'
+                      : ta.tool === 'remove_grocery_item' ? 'Removed from grocery list ✓'
+                      : ta.tool === 'update_grocery_item_quantity' ? 'Grocery quantity updated ✓'
+                      : ta.tool === 'associate_family_contact' ? 'Saved to Household Directory ✓'
+                      : ta.tool === 'associate_contact_place' ? 'Location saved ✓'
+                      : ta.tool === 'confirm_directory_entity' ? 'Added to Household Directory ✓'
+                      : 'Done ✓'}
+                  </div>
+                  {ta.tool === 'add_grocery_items' && ta.undoStatus !== 'done' && (
+                    <Button variant="ghost"
+                      type="button"
+                      onClick={() => onUndoToolAction(msg.id, ta.actionId ?? msg.id)}
+                      disabled={ta.undoStatus === 'loading'}
+                      className="flex items-center gap-1 px-2.5 py-0.5 rounded-button border border-casa-border text-casa-navy text-caption font-semibold hover:bg-casa-surface transition-all disabled:opacity-60 shrink-0"
+                    >
+                      {ta.undoStatus === 'loading' ? <Loader2 size={11} className="animate-spin" /> : <RotateCcw size={11} />}
+                      Undo
+                    </Button>
+                  )}
                 </div>
                 {ta.tool === 'create_event' && ta.resultEventId && (
                   <div className="space-y-1">
@@ -1879,6 +2001,9 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
                 )}
                 {ta.undoStatus === 'done' && (
                   <p className="text-caption text-casa-muted">Undo applied.</p>
+                )}
+                {ta.undoStatus === 'error' && ta.undoErrorMsg && ta.tool === 'add_grocery_items' && (
+                  <p className="text-caption text-red-500">{ta.undoErrorMsg}</p>
                 )}
               </div>
             ) : ta.status === 'cancelled' ? (
@@ -2196,6 +2321,29 @@ function DirectorySuggestionCard({ tool, args, loading, onAccept, onCancel }: {
   )
 }
 
+function findOverlappingEvent(
+  events: EventWithDetails[],
+  startTimeStr: unknown,
+  endTimeStr: unknown,
+  ignoreEventId?: string | null,
+): EventWithDetails | null {
+  if (!startTimeStr || typeof startTimeStr !== 'string') return null
+  const startMs = new Date(startTimeStr).getTime()
+  if (!Number.isFinite(startMs)) return null
+  const endMs = (typeof endTimeStr === 'string' && Number.isFinite(new Date(endTimeStr).getTime()))
+    ? new Date(endTimeStr).getTime()
+    : startMs + 3600_000
+
+  return events.find((e) => {
+    if (ignoreEventId && e.id === ignoreEventId) return false
+    if (e.all_day || !e.start_time) return false
+    const eStart = new Date(e.start_time).getTime()
+    const eEnd = new Date(e.end_time ?? e.start_time).getTime()
+    if (!Number.isFinite(eStart) || !Number.isFinite(eEnd)) return false
+    return Math.max(startMs, eStart) < Math.min(endMs, eEnd)
+  }) ?? null
+}
+
 function ToolActionPreview({ tool, args, events }: { tool: string; args: Record<string, unknown>; events: EventWithDetails[] }) {
   const [expanded, setExpanded] = useState(false)
 
@@ -2216,10 +2364,18 @@ function ToolActionPreview({ tool, args, events }: { tool: string; args: Record<
   if (tool === 'create_event') {
     const preview = buildCreatePreviewCopy(args, { now: new Date() })
     const isReminder = args.event_type === 'reminder'
+    const conflict = !isReminder ? findOverlappingEvent(events, args.start_time, args.end_time) : null
+
     return (
       <div className="space-y-3">
         <ConfirmationHeading kind={isReminder ? 'reminder' : 'calendar'}>{preview.heading}</ConfirmationHeading>
         {preview.when && <p className="text-body-sm font-semibold text-casa-navy">{preview.when}</p>}
+        {conflict && (
+          <div className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-caption text-amber-900 font-medium">
+            <AlertTriangle size={14} className="text-amber-600 shrink-0" />
+            <span>Overlaps with "{conflict.title}" ({format(new Date(conflict.start_time), 'h:mm a')})</span>
+          </div>
+        )}
         {preview.details.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {preview.details.map((detail) => (
@@ -2238,6 +2394,7 @@ function ToolActionPreview({ tool, args, events }: { tool: string; args: Record<
     const preview = buildUpdatePreviewCopy(args, matchedEvent)
     const changes = summarizeUpdateArgs(args)
     const scopeLabel = recurrenceScopeLabel(args.recurrence_scope)
+    const conflict = findOverlappingEvent(events, args.start_time ?? matchedEvent?.start_time, args.end_time ?? matchedEvent?.end_time, String(args.id ?? ''))
     const MAX_VISIBLE = 6
     const visibleChanges = expanded ? changes : changes.slice(0, MAX_VISIBLE)
     return (
@@ -2245,6 +2402,12 @@ function ToolActionPreview({ tool, args, events }: { tool: string; args: Record<
         <ConfirmationHeading kind="calendar">{preview.heading}?</ConfirmationHeading>
         {scopeLabel && (
           <p className="text-caption font-semibold text-casa-gold">{scopeLabel}</p>
+        )}
+        {conflict && (
+          <div className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-caption text-amber-900 font-medium">
+            <AlertTriangle size={14} className="text-amber-600 shrink-0" />
+            <span>Overlaps with "{conflict.title}" ({format(new Date(conflict.start_time), 'h:mm a')})</span>
+          </div>
         )}
         {preview.currentSpan && preview.nextSpan && (
           <div className="rounded-lg border border-casa-border bg-casa-surface px-3 py-2.5 text-caption text-casa-navy space-y-1">
@@ -2585,4 +2748,89 @@ function buildDynamicSuggestions(page: string, events: EventWithDetails[], now: 
 
   const merged = [...dynamic, ...base.filter(s => !dynamic.includes(s))]
   return merged.slice(0, 4)
+}
+
+/**
+ * Derives dynamic follow-up chips based on the latest conversation turns,
+ * current schedule, and active context.
+ */
+function deriveDynamicFollowUpSuggestions(
+  messages: AIMessage[],
+  page: string,
+  events: EventWithDetails[],
+  now: Date,
+): string[] {
+  if (!messages || messages.length === 0) {
+    return buildDynamicSuggestions(page, events, now)
+  }
+
+  const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant')
+  if (!lastAssistant) {
+    return buildDynamicSuggestions(page, events, now)
+  }
+
+  const ta = lastAssistant.toolAction
+  const content = (lastAssistant.content || '').toLowerCase()
+  const state = lastAssistant.conversationState
+
+  // 1. If last action was creating / updating an event
+  if (ta?.tool === 'create_event' || ta?.tool === 'update_event' || state?.activeEntityType === 'event') {
+    return [
+      "Who's driving?",
+      "Add a 30m reminder",
+      "What else is on that day?",
+      "Any conflicts with this?",
+    ]
+  }
+
+  // 2. If last action was grocery addition or list read
+  if (
+    ta?.tool === 'add_grocery_items' ||
+    ta?.tool === 'check_grocery_item' ||
+    state?.activeEntityType === 'grocery_item' ||
+    content.includes('grocery') ||
+    content.includes('shopping list')
+  ) {
+    return [
+      "What else is on the list?",
+      "Clear checked items",
+      "Suggest weeknight dinner staples",
+      "Add milk and eggs",
+    ]
+  }
+
+  // 3. If last message was cooking / recipes
+  if (
+    page === 'cook' ||
+    ta?.tool === 'create_recipe' ||
+    content.includes('recipe') ||
+    content.includes('ingredients') ||
+    content.includes('dinner') ||
+    content.includes('cook')
+  ) {
+    return [
+      "Add ingredients to grocery list",
+      "What can I prep ahead?",
+      "Suggest a quick side dish",
+      "Scale this for 6 people",
+    ]
+  }
+
+  // 4. If last message was calendar rundown / queries
+  if (
+    content.includes('calendar') ||
+    content.includes('schedule') ||
+    content.includes('tomorrow') ||
+    content.includes('today') ||
+    content.includes('appointment')
+  ) {
+    return [
+      "Any conflicts this weekend?",
+      "What's on tomorrow?",
+      "Give me a full week overview",
+      "Find free time Saturday",
+    ]
+  }
+
+  return buildDynamicSuggestions(page, events, now)
 }

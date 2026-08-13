@@ -16,6 +16,7 @@
     "supabase:query": "node scripts/supabase-query.mjs",
     "tokens:generate": "node scripts/generate-design-tokens.mjs",
     "tokens:check": "node scripts/generate-design-tokens.mjs --check",
+    "test:ai:semantic": "node scripts/test-ai-conversational-semantics.mjs",
     "qa:ai-calendar-conversations": "node scripts/ai-calendar-conversation-stress.mjs --count=100",
     "qa:ai-assistant": "node scripts/ai-assistant-qa-sweep.mjs --mode=smoke --model=gemini-2.5-flash",
     "qa:ai-assistant:core": "node scripts/ai-assistant-qa-sweep.mjs --mode=full --count=41 --model=gemini-2.5-flash",
