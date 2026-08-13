@@ -76,7 +76,7 @@ export default function WeekView() {
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
   const weekEnd = addDays(weekStart, 6)
 
-  const { data: allEvents, isLoading } = useWeekEvents(selectedDate)
+  const { data: allEvents, isLoading, isError, refetch } = useWeekEvents(selectedDate)
   const events = useMemo(() => {
     if (!allEvents) return []
     if (visibleMembers.length === 0) return allEvents
@@ -336,10 +336,24 @@ export default function WeekView() {
   // Are there any visible multi-day events this week?
   const visibleMultiDay = multiDayEvents.filter(ev => getMultiDaySpan(ev))
 
-  if (isLoading) {
+  if (isLoading && !allEvents) {
     return (
       <div className="flex items-center justify-center h-64">
         <span className="text-casa-muted text-body animate-breathe">Loading events...</span>
+      </div>
+    )
+  }
+
+  if (isError && !allEvents) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-3">
+        <span className="text-casa-muted text-body">Unable to load calendar events</span>
+        <button
+          onClick={() => void refetch()}
+          className="text-casa-gold text-body-sm font-semibold hover:underline"
+        >
+          Try again
+        </button>
       </div>
     )
   }

@@ -67,16 +67,21 @@ Deno.serve(async (req) => {
 
     if (master.google_event_id) {
       // PATCH existing Google recurring event — updates title, times, location, recurrence rule
+      // If the ID was an occurrence ID with timestamp suffix, use the base series ID for recurring patch
+      const targetGoogleId = (master.google_event_id as string).includes('_')
+        ? (master.google_event_id as string).split('_')[0]
+        : (master.google_event_id as string)
+
       try {
         const current = await getGoogleEvent({
           accessToken,
           calendarId,
-          eventId: master.google_event_id as string,
+          eventId: targetGoogleId,
         })
         await patchGoogleEvent({
           accessToken,
           calendarId,
-          eventId: master.google_event_id as string,
+          eventId: targetGoogleId,
           patch: {
             ...eventBody,
             description: buildGoogleEventDescription({
@@ -87,14 +92,15 @@ Deno.serve(async (req) => {
           },
         })
         await sb.from('events').update({
+          google_event_id: targetGoogleId,
           google_connection_id: connection.id,
           source_member_id: connection.family_member_id,
           google_calendar_id: calendarId,
           updated_at: new Date().toISOString(),
         }).eq('id', master_event_id)
         await markGoogleConnectionHealthy(sb, connection.id)
-        console.log('[update-recurring-google] patched:', master.google_event_id)
-        return ok({ patched: master.google_event_id })
+        console.log('[update-recurring-google] patched:', targetGoogleId)
+        return ok({ patched: targetGoogleId })
       } catch (errPatch) {
         const msg = (errPatch as Error).message ?? String(errPatch)
         if (!msg.includes('404')) throw errPatch

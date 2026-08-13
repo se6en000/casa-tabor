@@ -64,16 +64,16 @@ function expandRrule(masterStart: string, masterEnd: string, rrule: string): Arr
   const until = untilRaw
     ? new Date(`${untilRaw.slice(0,4)}-${untilRaw.slice(4,6)}-${untilRaw.slice(6,8)}T23:59:59Z`)
     : null
-  const maxCount = countStr ? parseInt(countStr, 10) : 500
+  // Keep local instance expansion lightweight (12 weeks horizon / max 24 occurrences)
+  // Google sync and canonical recurrence handle longer term expansion dynamically.
+  const maxCount = countStr ? Math.min(parseInt(countStr, 10), 25) : 25
 
   const origin = new Date(masterStart)
   const duration = new Date(masterEnd).getTime() - origin.getTime()
   const results: Array<{ start: string; end: string }> = []
 
-  // Generate all candidate dates, collect all that are > origin (or same date but excluded)
-  // Hard cap: never generate more than 500 instances
   const addOcc = (d: Date) => {
-    if (results.length >= Math.min(maxCount - 1, 499)) return false
+    if (results.length >= Math.min(maxCount - 1, 24)) return false
     if (until && d > until) return false
     if (d.toDateString() === origin.toDateString()) return true // skip master
     const s = new Date(d); s.setHours(origin.getHours(), origin.getMinutes(), origin.getSeconds(), 0)
@@ -83,7 +83,7 @@ function expandRrule(masterStart: string, masterEnd: string, rrule: string): Arr
 
   if (freq === 'DAILY') {
     const cur = new Date(origin); cur.setDate(cur.getDate() + interval)
-    while ((until ? cur <= until : results.length < maxCount - 1) && results.length < 499) {
+    while ((until ? cur <= until : results.length < maxCount - 1) && results.length < 24) {
       if (!addOcc(cur)) break
       cur.setDate(cur.getDate() + interval)
     }
@@ -92,7 +92,7 @@ function expandRrule(masterStart: string, masterEnd: string, rrule: string): Arr
     // Start from the Sunday of the origin week and walk forward week-by-week
     const weekSun = new Date(origin); weekSun.setDate(origin.getDate() - origin.getDay())
     let weekOffset = 0
-    const maxWeeks = 260 // 5 years safety
+    const maxWeeks = 12 // 12 weeks / 3 months near-term horizon
     outer: while (weekOffset < maxWeeks) {
       const ws = new Date(weekSun); ws.setDate(weekSun.getDate() + weekOffset * 7 * interval)
       const sorted = [...effectiveByDay].sort((a, b) => a - b)
@@ -100,20 +100,20 @@ function expandRrule(masterStart: string, masterEnd: string, rrule: string): Arr
         const day = new Date(ws); day.setDate(ws.getDate() + d)
         if (day < origin) continue // before master
         if (until && day > until) break outer
-        if (results.length >= Math.min(maxCount - 1, 499)) break outer
+        if (results.length >= Math.min(maxCount - 1, 24)) break outer
         addOcc(day)
       }
       weekOffset++
     }
   } else if (freq === 'MONTHLY') {
     const cur = new Date(origin); cur.setMonth(cur.getMonth() + interval)
-    while ((until ? cur <= until : results.length < maxCount - 1) && results.length < 499) {
+    while ((until ? cur <= until : results.length < maxCount - 1) && results.length < 24) {
       if (!addOcc(cur)) break
       cur.setMonth(cur.getMonth() + interval)
     }
   } else if (freq === 'YEARLY') {
     const cur = new Date(origin); cur.setFullYear(cur.getFullYear() + interval)
-    while ((until ? cur <= until : results.length < maxCount - 1) && results.length < 499) {
+    while ((until ? cur <= until : results.length < maxCount - 1) && results.length < 24) {
       if (!addOcc(cur)) break
       cur.setFullYear(cur.getFullYear() + interval)
     }
