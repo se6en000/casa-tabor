@@ -76,6 +76,7 @@ interface AIDrawerLaunchContext {
 }
 
 type OpenAIChatDetail = {
+  toggle?: boolean
   right?: number
   top?: number
   anchor?: { right: number; top: number }
@@ -128,6 +129,10 @@ function GlobalAIDrawer({
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = ((e as CustomEvent<OpenAIChatDetail>).detail ?? {}) as OpenAIChatDetail
+      if (detail.toggle) {
+        setOpen(!open)
+        return
+      }
       const anchorFromEvent = detail.anchor ?? (
         typeof detail.right === 'number' && typeof detail.top === 'number'
           ? { right: detail.right, top: detail.top }
@@ -149,7 +154,7 @@ function GlobalAIDrawer({
     }
     document.addEventListener('open-ai-chat', handler)
     return () => document.removeEventListener('open-ai-chat', handler)
-  }, [routePage, setOpen])
+  }, [open, routePage, setOpen])
 
   return (
     <AIChatDrawer

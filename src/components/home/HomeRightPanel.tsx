@@ -52,6 +52,7 @@ interface Props {
   now: Date
   allTodayEvents: EventWithDetails[]
   onSelectPrepItem?: (item: PrepItem) => void
+  className?: string
 }
 
 interface GmailConnectionStatus {
@@ -190,7 +191,7 @@ function PrepAssignPicker({
   )
 }
 
-export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }: Props) {
+export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem, className }: Props) {
   const navigate = useNavigate()
   const isPageVisible = usePageVisibility()
   const { data: rawPrepItems = [] } = usePrepItems()
@@ -390,7 +391,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
   }
 
   return (
-    <SecondaryRail className="flex-col border-l border-casa-border bg-surface-subtle self-stretch overflow-hidden">
+    <SecondaryRail className={cn('flex-col border-l border-casa-border bg-surface-subtle self-stretch overflow-hidden', className)}>
       <BounceScroll className="flex-1 min-h-0">
         <section className="px-4 py-4">
           <div className="flex items-center justify-between">

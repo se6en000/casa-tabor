@@ -146,13 +146,32 @@ export default function AIChatDrawer({
     [open, events],
   )
 
-  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth < 640 : false)
+  const [windowWidth, setWindowWidth] = useState(() => typeof window !== 'undefined' ? window.innerWidth : 1280)
+  const isMobile = windowWidth < 640
+
   useEffect(() => {
-    const mq = window.matchMedia('(max-width: 639px)')
-    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches)
-    mq.addEventListener('change', handler)
-    return () => mq.removeEventListener('change', handler)
+    const handleResize = () => setWindowWidth(window.innerWidth)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
   }, [])
+
+  // Sidecar width scales as a responsive percentage of the screen (~32vw),
+  // clamped between 440px (tablet/laptop) and 720px for high-res kiosk screens.
+  const sidecarWidth = useMemo(() => {
+    if (isMobile) return windowWidth
+    return Math.min(720, Math.max(440, Math.round(windowWidth * 0.32)))
+  }, [isMobile, windowWidth])
+
+  useEffect(() => {
+    if (open && !isMobile) {
+      document.documentElement.style.setProperty('--ai-sidecar-width', `${sidecarWidth}px`)
+    } else {
+      document.documentElement.style.setProperty('--ai-sidecar-width', '0px')
+    }
+    return () => {
+      document.documentElement.style.setProperty('--ai-sidecar-width', '0px')
+    }
+  }, [open, isMobile, sidecarWidth])
 
   useEffect(() => {
     // Only lock background scroll on small mobile screens where the drawer is a modal bottom sheet.
@@ -1233,8 +1252,8 @@ export default function AIChatDrawer({
 
               <div
                 className={cn(
-                  'ai-presence-composer relative overflow-hidden bg-casa-bg rounded-xl border border-casa-border transition-all duration-300',
-                  voiceComposerActive ? 'p-4' : 'px-3 py-2',
+                  'ai-presence-composer relative overflow-hidden bg-casa-bg rounded-2xl border border-casa-border transition-all duration-300 shadow-sm focus-within:border-casa-gold/60 focus-within:ring-2 focus-within:ring-casa-gold/15',
+                  voiceComposerActive ? 'p-4' : 'p-3',
                   aiPresence === 'listening' && 'ai-presence-listening',
                   aiPresence === 'voice_active' && 'ai-presence-voice',
                   aiPresence === 'processing' && 'ai-presence-processing',
@@ -1277,15 +1296,15 @@ export default function AIChatDrawer({
                     </div>
                   </div>
                 ) : (
-                  <div className="w-full">
+                  <div className="w-full flex flex-col gap-2">
                     <AnimatePresence initial={false}>
                       {attachmentMenuOpen && (
                         <motion.div
                           id="assistant-attachment-actions"
-                          initial={{ opacity: 0, y: 4 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: 4 }}
-                          className="mb-2 flex gap-2"
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="flex gap-2 overflow-hidden pb-1"
                         >
                           <Button
                             variant="subtle"
@@ -1294,7 +1313,7 @@ export default function AIChatDrawer({
                               setAttachmentMenuOpen(false)
                               fileInputRef.current?.click()
                             }}
-                            className="min-h-control flex-1 gap-2"
+                            className="min-h-control flex-1 gap-2 text-body-sm"
                           >
                             <Paperclip size={16} /> Attach image
                           </Button>
@@ -1305,76 +1324,94 @@ export default function AIChatDrawer({
                               setAttachmentMenuOpen(false)
                               cameraInputRef.current?.click()
                             }}
-                            className="min-h-control flex-1 gap-2"
+                            className="min-h-control flex-1 gap-2 text-body-sm"
                           >
                             <Camera size={16} /> Take photo
                           </Button>
                         </motion.div>
                       )}
                     </AnimatePresence>
-                    <div className="flex items-end gap-2">
-                      <Button variant="ghost"
-                        type="button"
-                        onClick={() => setAttachmentMenuOpen(value => !value)}
-                        title="Add attachment"
-                        className="size-control rounded-button text-casa-muted outline-none transition-colors shrink-0 focus-visible:ring-2 focus-visible:ring-casa-gold"
-                        aria-label="Add attachment"
-                        aria-expanded={attachmentMenuOpen}
-                        aria-controls="assistant-attachment-actions"
-                      >
-                        <Plus size={16} />
-                      </Button>
-                      <div className="relative min-w-0 flex-1">
-                        <textarea
-                          ref={textareaRef}
-                          value={input}
-                          onChange={e => handleInputChange(e.target.value)}
-                          onKeyDown={handleKeyDown}
-                          placeholder={attachedImage ? 'Ask about this image…' : 'Ask Casa anything…'}
-                          rows={1}
-                          aria-label="Assistant message"
-                          className="w-full min-h-6 max-h-30 bg-transparent text-body text-casa-navy placeholder:text-casa-muted outline-none resize-none leading-relaxed"
-                        />
-                      </div>
-                      {speech.supported && (
-                        <Button variant="ghost"
+
+                    {/* Top: Full-width Textarea with ample room for multi-sentence prompts */}
+                    <div className="relative w-full">
+                      <textarea
+                        ref={textareaRef}
+                        value={input}
+                        onChange={e => handleInputChange(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        placeholder={attachedImage ? 'Ask about this image…' : 'Ask Casa anything…'}
+                        rows={2}
+                        aria-label="Assistant message"
+                        className="w-full min-h-[44px] max-h-[160px] bg-transparent text-body text-casa-navy placeholder:text-casa-muted outline-none resize-none leading-relaxed px-1 py-0.5"
+                      />
+                    </div>
+
+                    {/* Bottom: Dedicated Action Toolbar */}
+                    <div className="flex items-center justify-between pt-1.5 border-t border-casa-divider/40">
+                      <div className="flex items-center gap-1.5">
+                        <Button
+                          variant="ghost"
                           type="button"
-                          onClick={() => {
-                            markUserInteraction()
-                            setAttachmentMenuOpen(false)
-                            speech.start()
-                          }}
-                          title="Start voice input"
-                          className="min-h-control min-w-control rounded-button flex items-center justify-center gap-2 px-3 outline-none transition-all shrink-0 focus-visible:ring-2 focus-visible:ring-casa-gold bg-casa-divider text-casa-muted hover:text-casa-gold"
-                          aria-label="Start voice input"
+                          onClick={() => setAttachmentMenuOpen(value => !value)}
+                          title="Add attachment"
+                          className="size-control rounded-button text-casa-muted hover:text-casa-navy outline-none transition-colors shrink-0 focus-visible:ring-2 focus-visible:ring-casa-gold"
+                          aria-label="Add attachment"
+                          aria-expanded={attachmentMenuOpen}
+                          aria-controls="assistant-attachment-actions"
                         >
-                          <Mic size={14} />
-                          <span className="hidden md:inline">Speak</span>
+                          <Plus size={18} />
                         </Button>
-                      )}
-                      <Button variant="ghost"
-                        type="button"
-                        onClick={handleKeyboardToggle}
-                        title="Toggle on-screen keyboard"
-                        className="ai-composer-kiosk-only size-control rounded-button items-center justify-center outline-none transition-all shrink-0 bg-casa-divider text-casa-muted hover:text-casa-gold focus-visible:ring-2 focus-visible:ring-casa-gold"
-                        aria-label="Toggle on-screen keyboard"
-                      >
-                        <Keyboard size={14} />
-                      </Button>
-                      <Button variant="ghost"
-                        type="button"
-                        onClick={handleSend}
-                        disabled={(!input.trim() && !attachedImage) || loading}
-                        className={cn(
-                          'size-control rounded-button flex items-center justify-center outline-none transition-all shrink-0 focus-visible:ring-2 focus-visible:ring-casa-gold',
-                          (input.trim() || attachedImage) && !loading
-                            ? 'bg-casa-gold text-white hover:brightness-110'
-                            : 'bg-casa-divider text-casa-muted'
+                        {attachedImage && (
+                          <span className="text-caption text-casa-gold font-semibold truncate max-w-[120px]">
+                            1 image attached
+                          </span>
                         )}
-                        aria-label="Send message"
-                      >
-                        <Send size={14} />
-                      </Button>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {speech.supported && (
+                          <Button
+                            variant="ghost"
+                            type="button"
+                            onClick={() => {
+                              markUserInteraction()
+                              setAttachmentMenuOpen(false)
+                              speech.start()
+                            }}
+                            title="Start voice input"
+                            className="min-h-control px-3 rounded-button flex items-center justify-center gap-1.5 outline-none transition-all shrink-0 focus-visible:ring-2 focus-visible:ring-casa-gold bg-casa-divider text-casa-navy hover:text-casa-gold hover:bg-casa-divider text-body-sm font-medium"
+                            aria-label="Start voice input"
+                          >
+                            <Mic size={15} />
+                            <span>Speak</span>
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          type="button"
+                          onClick={handleKeyboardToggle}
+                          title="Toggle on-screen keyboard"
+                          className="ai-composer-kiosk-only size-control rounded-button items-center justify-center outline-none transition-all shrink-0 bg-casa-divider text-casa-muted hover:text-casa-gold focus-visible:ring-2 focus-visible:ring-casa-gold"
+                          aria-label="Toggle on-screen keyboard"
+                        >
+                          <Keyboard size={15} />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          type="button"
+                          onClick={handleSend}
+                          disabled={(!input.trim() && !attachedImage) || loading}
+                          className={cn(
+                            'size-control rounded-button flex items-center justify-center outline-none transition-all shrink-0 focus-visible:ring-2 focus-visible:ring-casa-gold',
+                            (input.trim() || attachedImage) && !loading
+                              ? 'bg-casa-gold text-white hover:brightness-110 shadow-sm'
+                              : 'bg-casa-divider text-casa-muted'
+                          )}
+                          aria-label="Send message"
+                        >
+                          <Send size={15} />
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -1519,9 +1556,9 @@ export default function AIChatDrawer({
           <motion.aside
             key="ai-sidecar-desktop"
             initial={{ width: 0, opacity: 0 }}
-            animate={{ width: 440, opacity: 1 }}
+            animate={{ width: sidecarWidth, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
-            transition={{ type: 'spring', damping: 28, stiffness: 260 }}
+            transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
             className={cn(
               'hidden sm:flex flex-col flex-shrink-0 h-full overflow-hidden border-l border-casa-border bg-casa-surface relative z-10 shadow-lg',
               loading && 'ai-thinking',
@@ -1531,7 +1568,7 @@ export default function AIChatDrawer({
             onClick={e => e.stopPropagation()}
             onPaste={handlePaste}
           >
-            <div className="w-[440px] h-full flex flex-col min-w-[440px]">
+            <div style={{ width: sidecarWidth }} className="h-full flex flex-col flex-shrink-0">
               {drawerBody}
             </div>
           </motion.aside>

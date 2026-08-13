@@ -619,9 +619,25 @@ export default function HomePage() {
       </PrimaryRail>
 
       {/* ── Right panel (tablet only) ──────────────────────── */}
-      {!aiDrawerOpen && (
-        <HomeRightPanel now={now} allTodayEvents={allTodayEvents ?? []} onSelectPrepItem={setSelectedPrepItem} />
-      )}
+      <AnimatePresence initial={false}>
+        {!aiDrawerOpen && (
+          <motion.div
+            key="home-right-panel-motion"
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width: 'auto', opacity: 1 }}
+            exit={{ width: 0, opacity: 0 }}
+            transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
+            className="hidden lg:flex flex-none basis-5/16 min-w-0 h-full overflow-hidden"
+          >
+            <HomeRightPanel
+              now={now}
+              allTodayEvents={allTodayEvents ?? []}
+              onSelectPrepItem={setSelectedPrepItem}
+              className="w-full basis-full flex"
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div onClick={e => e.stopPropagation()}>
         <PrepItemDetailPanel item={selectedPrepItem} onClose={() => setSelectedPrepItem(null)} />

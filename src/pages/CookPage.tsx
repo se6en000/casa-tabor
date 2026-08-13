@@ -4142,15 +4142,15 @@ export default function CookPage() {
       {cookRecipe && (
         <div
           className={cn(
-            'fixed inset-0 z-modal casa-scrim flex items-start justify-center overflow-y-auto p-4 sm:p-6',
-            aiDrawerOpen && 'lg:right-[440px]',
+            'fixed inset-0 z-modal casa-scrim flex items-start justify-center overflow-y-auto p-4 sm:p-6 transition-all duration-300',
+            aiDrawerOpen && 'lg:right-[var(--ai-sidecar-width,440px)]',
           )}
           onClick={closeCookRecipe}
         >
           <div
             className={cn(
-              'my-auto max-h-[calc(100vh-2rem)] rounded-modal border border-casa-border bg-casa-bg shadow-modal flex flex-col overflow-hidden',
-              aiDrawerOpen ? 'w-[min(54rem,calc(100vw-460px))]' : 'w-[min(64rem,calc(100vw-2rem))]',
+              'my-auto max-h-[calc(100vh-2rem)] rounded-modal border border-casa-border bg-casa-bg shadow-modal flex flex-col overflow-hidden transition-all duration-300',
+              aiDrawerOpen ? 'w-[min(54rem,calc(100vw-var(--ai-sidecar-width,440px)-2rem))]' : 'w-[min(64rem,calc(100vw-2rem))]',
             )}
             onClick={(event) => event.stopPropagation()}
             role="dialog"
