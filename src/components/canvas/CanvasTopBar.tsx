@@ -24,13 +24,13 @@ export default function CanvasTopBar() {
   const btnRef = useRef<HTMLButtonElement>(null)
 
   const isHome = location.pathname === '/'
-  const isCalmHome = isHome && canvasSubmode === 'calm'
+  const isCalm = canvasSubmode === 'calm'
 
   return (
     <header
       className={cn(
         'app-topbar w-full h-14 flex items-center justify-between flex-shrink-0 z-sticky backdrop-blur-md px-4 transition-colors duration-300 shadow-xs',
-        isCalmHome
+        isCalm
           ? 'bg-casa-bg/95 border-b border-casa-border/60 text-casa-navy'
           : 'bg-casa-navy/95 border-b border-white/10 text-white'
       )}
@@ -44,7 +44,7 @@ export default function CanvasTopBar() {
           <span
             className={cn(
               'font-display text-heading hidden sm:inline-block tracking-wide leading-none',
-              isCalmHome ? 'text-casa-navy' : 'text-white'
+              isCalm ? 'text-casa-navy' : 'text-white'
             )}
           >
             Casa Tabor
@@ -56,7 +56,7 @@ export default function CanvasTopBar() {
           <div
             className={cn(
               'inline-flex items-center p-0.5 rounded-xl border gap-0.5',
-              isCalmHome ? 'bg-casa-surface border-casa-border' : 'bg-white/10 border-white/10'
+              isCalm ? 'bg-casa-surface border-casa-border' : 'bg-white/10 border-white/10'
             )}
           >
             <Button
@@ -67,7 +67,7 @@ export default function CanvasTopBar() {
                 'px-3 min-h-[34px] rounded-lg text-caption font-semibold transition-all leading-none',
                 canvasSubmode === 'calm'
                   ? 'bg-casa-gold text-casa-navy shadow-sm font-bold'
-                  : isCalmHome
+                  : isCalm
                   ? 'text-casa-muted hover:text-casa-navy hover:bg-casa-border/30'
                   : 'text-white/60 hover:text-white hover:bg-white/5'
               )}
@@ -83,7 +83,7 @@ export default function CanvasTopBar() {
                 'px-3 min-h-[34px] rounded-lg text-caption font-semibold transition-all leading-none',
                 canvasSubmode === 'turbo'
                   ? 'bg-amber-400 text-casa-navy shadow-sm font-bold'
-                  : isCalmHome
+                  : isCalm
                   ? 'text-casa-muted hover:text-casa-navy hover:bg-casa-border/30'
                   : 'text-white/60 hover:text-white hover:bg-white/5'
               )}
@@ -99,7 +99,7 @@ export default function CanvasTopBar() {
       <nav
         className={cn(
           'hidden md:inline-flex items-center gap-1 p-1 rounded-2xl border',
-          isCalmHome ? 'bg-casa-surface/80 border-casa-border/60' : 'bg-white/5 border-white/10'
+          isCalm ? 'bg-casa-surface/80 border-casa-border/60' : 'bg-white/5 border-white/10'
         )}
       >
         <NavLink
@@ -109,10 +109,10 @@ export default function CanvasTopBar() {
             cn(
               'px-4 min-h-[34px] inline-flex items-center justify-center rounded-xl text-body-sm font-medium transition-all leading-none',
               isActive
-                ? isCalmHome
+                ? isCalm
                   ? 'bg-casa-navy text-white shadow-sm font-semibold'
                   : 'bg-white/15 text-white shadow-sm font-semibold'
-                : isCalmHome
+                : isCalm
                 ? 'text-casa-muted hover:text-casa-navy hover:bg-casa-border/30'
                 : 'text-white/60 hover:text-white hover:bg-white/5'
             )
@@ -126,10 +126,10 @@ export default function CanvasTopBar() {
             cn(
               'px-4 min-h-[34px] inline-flex items-center justify-center rounded-xl text-body-sm font-medium transition-all leading-none',
               isActive
-                ? isCalmHome
+                ? isCalm
                   ? 'bg-casa-navy text-white shadow-sm font-semibold'
                   : 'bg-white/15 text-white shadow-sm font-semibold'
-                : isCalmHome
+                : isCalm
                 ? 'text-casa-muted hover:text-casa-navy hover:bg-casa-border/30'
                 : 'text-white/60 hover:text-white hover:bg-white/5'
             )
@@ -143,10 +143,10 @@ export default function CanvasTopBar() {
             cn(
               'px-4 min-h-[34px] inline-flex items-center justify-center rounded-xl text-body-sm font-medium transition-all leading-none',
               isActive
-                ? isCalmHome
+                ? isCalm
                   ? 'bg-casa-navy text-white shadow-sm font-semibold'
                   : 'bg-white/15 text-white shadow-sm font-semibold'
-                : isCalmHome
+                : isCalm
                 ? 'text-casa-muted hover:text-casa-navy hover:bg-casa-border/30'
                 : 'text-white/60 hover:text-white hover:bg-white/5'
             )
@@ -160,10 +160,10 @@ export default function CanvasTopBar() {
             cn(
               'px-4 min-h-[34px] inline-flex items-center justify-center rounded-xl text-body-sm font-medium transition-all leading-none',
               isActive
-                ? isCalmHome
+                ? isCalm
                   ? 'bg-casa-navy text-white shadow-sm font-semibold'
                   : 'bg-white/15 text-white shadow-sm font-semibold'
-                : isCalmHome
+                : isCalm
                 ? 'text-casa-muted hover:text-casa-navy hover:bg-casa-border/30'
                 : 'text-white/60 hover:text-white hover:bg-white/5'
             )
@@ -179,14 +179,14 @@ export default function CanvasTopBar() {
           <div
             className={cn(
               'hidden lg:inline-flex items-center gap-1.5 text-caption px-2.5 min-h-[34px] rounded-xl border leading-none',
-              isCalmHome
+              isCalm
                 ? 'text-casa-navy bg-casa-surface border-casa-border'
                 : 'text-white/80 bg-white/5 border-white/10'
             )}
           >
             <Cloud size={13} className="text-casa-gold shrink-0" />
             <span className="font-semibold leading-none">{weather.temp}°</span>
-            <span className={cn('leading-none', isCalmHome ? 'text-casa-muted' : 'text-white/40')}>
+            <span className={cn('leading-none', isCalm ? 'text-casa-muted' : 'text-white/40')}>
               {weather.city}
             </span>
           </div>
@@ -196,14 +196,14 @@ export default function CanvasTopBar() {
         <div
           className={cn(
             'inline-flex items-center font-mono text-body-sm font-semibold tabular-nums px-2.5 min-h-[34px] rounded-xl border leading-none',
-            isCalmHome
+            isCalm
               ? 'text-casa-navy bg-casa-surface border-casa-border'
               : 'text-white bg-white/5 border-white/10'
           )}
         >
           <span className="leading-none">{format(now, 'h:mm')}</span>
           <span
-            className={cn('text-caption ml-1 leading-none', isCalmHome ? 'text-casa-muted' : 'text-white/50')}
+            className={cn('text-caption ml-1 leading-none', isCalm ? 'text-casa-muted' : 'text-white/50')}
           >
             {format(now, 'a')}
           </span>
@@ -218,7 +218,7 @@ export default function CanvasTopBar() {
           aria-label="Switch to Classic Mode"
           className={cn(
             'hidden xl:inline-flex items-center gap-1.5 px-3 min-h-[34px] rounded-xl text-caption font-medium border transition-colors leading-none',
-            isCalmHome
+            isCalm
               ? 'bg-casa-surface text-casa-muted hover:bg-casa-border/40 hover:text-casa-navy border-casa-border'
               : 'bg-white/10 text-white/70 hover:bg-white/20 hover:text-white border-white/10'
           )}
@@ -236,7 +236,7 @@ export default function CanvasTopBar() {
           size="sm"
           className={cn(
             'min-h-[34px] min-w-[34px]',
-            isCalmHome
+            isCalm
               ? 'bg-casa-surface text-casa-muted hover:bg-casa-border/40 hover:text-casa-navy border border-casa-border'
               : 'bg-white/10 text-white/70 hover:bg-white/20 hover:text-white'
           )}
@@ -251,7 +251,7 @@ export default function CanvasTopBar() {
           size="sm"
           className={cn(
             'min-h-[34px] min-w-[34px]',
-            isCalmHome
+            isCalm
               ? 'bg-casa-surface text-casa-muted hover:bg-casa-border/40 hover:text-casa-navy border border-casa-border'
               : 'bg-white/10 text-white/70 hover:bg-white/20 hover:text-white'
           )}
