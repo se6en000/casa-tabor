@@ -420,6 +420,13 @@ export function useTodayEvents(date: Date) {
   return useEventsForRange(['events', 'today', dayStart.toISOString()], dayStart, dayEnd)
 }
 
+export function useTomorrowEvents(date: Date) {
+  const tomorrowStart = startOfDay(addDays(date, 1))
+  const tomorrowEnd = addDays(tomorrowStart, 1)
+
+  return useEventsForRange(['events', 'tomorrow', tomorrowStart.toISOString()], tomorrowStart, tomorrowEnd)
+}
+
 export function useMonthEvents(selectedDate: Date) {
   const monthStart = startOfMonth(selectedDate)
   const monthEnd = addDays(endOfMonth(selectedDate), 1)

@@ -1,8 +1,8 @@
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { differenceInMinutes, parseISO } from 'date-fns'
+import { format, parseISO, differenceInMinutes } from 'date-fns'
 import { useLiveClock, greetingFor } from './useLiveClock'
-import { useTodayEvents, type EventWithDetails } from './useCalendarEvents'
+import { useTodayEvents, useTomorrowEvents, type EventWithDetails } from './useCalendarEvents'
 import { useWeekConflicts } from './useConflicts'
 import { usePrepItems } from './usePrepItems'
 import { useHomeWeather } from './useHomeWeather'
@@ -28,6 +28,7 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
   const { setCanvasSubmode } = useAppStore()
   const now = useLiveClock(10_000)
   const { data: todayEvents = [] } = useTodayEvents(now)
+  const { data: tomorrowEvents = [] } = useTomorrowEvents(now)
   const { data: conflicts = [] } = useWeekConflicts()
   const { data: prepItems = [] } = usePrepItems()
   const { data: weather } = useHomeWeather()
@@ -78,10 +79,32 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
 
   const dailyBriefing = useMemo(() => {
     if (isEvening) {
-      if (todayEvents.length > 0) {
-        return `Schedule complete for today · Rest & prepare for tomorrow · Dinner: Herb-Roasted Chicken`
+      const count = tomorrowEvents.length
+      if (count === 0) {
+        return `Tomorrow: Open schedule · No early appointments`
       }
-      return `Schedule complete for today · Rest & enjoy a quiet evening`
+
+      const timedEvents = tomorrowEvents.filter((e) => !e.all_day)
+      const firstEvent = timedEvents[0] || tomorrowEvents[0]
+
+      let startTimeStr = ''
+      if (!firstEvent.all_day) {
+        try {
+          startTimeStr = ` at ${format(parseISO(firstEvent.start_time), 'h:mm a')}`
+        } catch {}
+      }
+
+      const pickupEvt = tomorrowEvents.find((e) => {
+        const t = (e.title || '').toLowerCase()
+        return t.includes('pickup') || t.includes('picked up')
+      })
+      const pickupName = pickupEvt?.members?.[0]?.family_member?.name || (pickupEvt ? 'Giselle' : null)
+      const pickupPart = pickupName ? ` · ${pickupName} on pickup` : ''
+
+      const countLabel = `${count} event${count > 1 ? 's' : ''}`
+      const startPart = firstEvent ? ` · Starts${startTimeStr} with ${firstEvent.title}` : ''
+
+      return `Tomorrow: ${countLabel}${startPart}${pickupPart}`
     }
 
     const count = todayEvents.length
@@ -94,7 +117,7 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     const countPart = count > 0 ? `${count} appointment${count > 1 ? 's' : ''} today` : 'No appointments scheduled today'
 
     return `${countPart}${pickupPart} · Dinner: Herb-Roasted Chicken`
-  }, [isEvening, todayEvents])
+  }, [isEvening, todayEvents, tomorrowEvents])
 
   const minutesUntilNext = useMemo(() => {
     if (!nextEvent) return null
