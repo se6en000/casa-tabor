@@ -133,15 +133,19 @@ export default function CanvasTopBar() {
           </div>
         )}
 
-        {/* Ambient Info: Show weather & time on non-home pages to avoid duplicating home kiosk info */}
+        {/* Ambient Info: Show weather, date & time on non-home pages */}
         {!isHome && (
           <div className="hidden lg:flex items-center gap-2 text-caption font-mono text-casa-muted">
             {weather && (
-              <span className="inline-flex items-center gap-1">
-                <Cloud size={13} className="text-casa-gold" />
-                {weather.temp}° {weather.city}
-              </span>
+              <>
+                <span className="inline-flex items-center gap-1">
+                  <Cloud size={13} className="text-casa-gold" />
+                  {weather.temp}° {weather.city}
+                </span>
+                <span>·</span>
+              </>
             )}
+            <span>{format(now, 'EEEE, MMMM d')}</span>
             <span>·</span>
             <span>{format(now, 'h:mm a')}</span>
           </div>

@@ -241,22 +241,35 @@ function AmbientInfo({ isWarm, showEvents }: { isWarm: boolean; showEvents: bool
         </div>
       )}
 
-      {/* Clock */}
-      <div
-        className={cn(
-          'font-mono text-body font-semibold tabular-nums',
-          isWarm ? 'text-casa-navy' : 'text-white',
-        )}
-      >
-        {format(now, 'h:mm')}
+      {/* Date & Clock */}
+      <div className="flex items-center gap-2.5">
         <span
           className={cn(
-            'text-caption ml-0.5',
-            isWarm ? 'text-casa-text-tertiary' : 'text-white/50',
+            'hidden sm:inline font-mono text-body-sm font-medium tracking-[0.01em]',
+            isWarm ? 'text-casa-text-secondary' : 'text-white/80',
           )}
         >
-          {format(now, 'a')}
+          <span className="hidden md:inline">{format(now, 'EEEE, MMMM d')}</span>
+          <span className="md:hidden">{format(now, 'EEE, MMM d')}</span>
         </span>
+
+        {/* Clock */}
+        <div
+          className={cn(
+            'font-mono text-body font-semibold tabular-nums',
+            isWarm ? 'text-casa-navy' : 'text-white',
+          )}
+        >
+          {format(now, 'h:mm')}
+          <span
+            className={cn(
+              'text-caption ml-0.5',
+              isWarm ? 'text-casa-text-tertiary' : 'text-white/50',
+            )}
+          >
+            {format(now, 'a')}
+          </span>
+        </div>
       </div>
 
       {/* Event ticker — shown in Classic mode on wide screens */}

@@ -27,6 +27,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
     now,
     greeting,
     dailyBriefing,
+    timeHorizonLabel,
     weather,
     nextEvent,
     appointmentEvents,
@@ -41,7 +42,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
   return (
     <div className="w-full h-full flex flex-col justify-between p-6 lg:p-10 max-w-7xl mx-auto overflow-y-auto">
       {/* ── Top Section: Ambient Greeting & Clock ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-casa-border/40">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-casa-border/40">
         <div>
           <h1 className="font-display text-display-lg sm:text-display-xl text-casa-navy font-semibold tracking-tight leading-none">
             {greeting}, <span className="italic font-normal">Tabor Family</span>
@@ -50,16 +51,10 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
             {format(now, 'EEEE, MMMM d, yyyy')}
             {weather && ` · ${weather.condition || 'Clear'}, ${weather.temp}°F`}
           </p>
-          {dailyBriefing && (
-            <p className="text-body-sm text-casa-gold font-semibold mt-1.5 flex items-center gap-1.5">
-              <Sparkles size={14} className="shrink-0 text-casa-gold" />
-              <span>{dailyBriefing}</span>
-            </p>
-          )}
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Subtle Notification Bell Badge replacing high-anxiety banner */}
+          {/* Notification Bell Badge for quick triage jump */}
           {totalAttentionCount > 0 ? (
             <Button
               variant="secondary"
@@ -89,7 +84,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
       {/* ── Main Middle Grid: Hero "Next Up" + Tonight's Dinner + Daily Schedule ── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 my-6 items-start">
         {/* Hero Next Up Card (7 cols) */}
-        <div className="lg:col-span-7 flex flex-col justify-start">
+        <div className="lg:col-span-7 flex flex-col justify-start space-y-4">
           {nextEvent ? (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
@@ -230,6 +225,23 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                   <span>View Tomorrow's Schedule</span>
                   <ArrowRight size={14} className="ml-1" />
                 </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Stylized Ambient Daily Briefing Prose */}
+          {dailyBriefing && (
+            <div className="px-1 py-1 flex items-start gap-3">
+              <div className="p-1.5 rounded-xl bg-amber-500/15 text-casa-gold shrink-0 mt-0.5 border border-amber-500/20">
+                <Sparkles size={16} className="text-casa-gold animate-pulse" />
+              </div>
+              <div className="space-y-0.5 min-w-0">
+                <span className="text-2xs uppercase tracking-widest font-sans font-bold text-amber-700">
+                  {timeHorizonLabel}
+                </span>
+                <p className="font-display text-body-lg sm:text-heading text-casa-navy font-medium leading-relaxed">
+                  {dailyBriefing}
+                </p>
               </div>
             </div>
           )}

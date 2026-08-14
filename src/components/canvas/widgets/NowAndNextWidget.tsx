@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
-import { format, isBefore, addDays } from 'date-fns'
+import { format, isBefore } from 'date-fns'
 import {
   Calendar,
   CheckCircle2,
   Clock,
   Sun,
   Moon,
+  Plus,
 } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { EventWithDetails } from '../../../hooks/useCalendarEvents'
@@ -26,6 +27,7 @@ interface NowAndNextWidgetProps {
   highlightedEventId: string | null
   setHighlightedEventId: (id: string | null) => void
   onOpenEvent: (event: EventWithDetails) => void
+  onQuickCreate?: () => void
 }
 
 export default function NowAndNextWidget({
@@ -36,6 +38,7 @@ export default function NowAndNextWidget({
   highlightedEventId,
   setHighlightedEventId,
   onOpenEvent,
+  onQuickCreate,
 }: NowAndNextWidgetProps) {
   const hookNow = useLiveClock(15_000)
   const effectiveNow = now ?? hookNow
@@ -90,65 +93,56 @@ export default function NowAndNextWidget({
     return { pastEvents: past, currentAndUpcomingEvents: upcoming }
   }, [sortedTodayEvents, effectiveNow])
 
-  const tomorrowDate = useMemo(() => addDays(effectiveNow, 1), [effectiveNow])
-
   return (
     <div className="w-full h-full flex flex-col rounded-3xl bg-casa-surface border border-casa-border/70 shadow-sm p-3 sm:p-4 overflow-hidden min-h-0">
-      {/* ── Widget Header: 1-Line Sleek Strip (Max Timeline Height) ── */}
+      {/* ── Widget Header: Day Switcher & Quick Add Strip ── */}
       <div className="flex items-center justify-between gap-2 pb-2 mb-2 border-b border-casa-border/40 shrink-0">
-        {/* Day Switcher + Live Date */}
-        <div className="flex items-center gap-2.5 flex-wrap min-w-0">
-          <div className="inline-flex p-0.5 rounded-xl bg-casa-bg border border-casa-border/60">
-            <Button
-              size="sm"
-              variant={activeDayTab === 'today' ? 'primary' : 'ghost'}
-              onClick={() => setActiveDayTab('today')}
-              className={cn(
-                'flex items-center gap-1.5 px-3 py-1 rounded-lg text-caption font-bold transition-all min-h-[44px]',
-                activeDayTab === 'today'
-                  ? 'bg-casa-surface text-casa-navy shadow-xs border border-casa-border/60'
-                  : 'text-casa-muted hover:text-casa-navy'
-              )}
-            >
-              <Sun size={13} className="text-amber-500" />
-              <span>Today ({todayEvents.length})</span>
-            </Button>
+        {/* Day Switcher */}
+        <div className="inline-flex p-0.5 rounded-xl bg-casa-bg border border-casa-border/60">
+          <Button
+            size="sm"
+            variant={activeDayTab === 'today' ? 'primary' : 'ghost'}
+            onClick={() => setActiveDayTab('today')}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1 rounded-lg text-caption font-bold transition-all min-h-[44px]',
+              activeDayTab === 'today'
+                ? 'bg-casa-surface text-casa-navy shadow-xs border border-casa-border/60'
+                : 'text-casa-muted hover:text-casa-navy'
+            )}
+          >
+            <Sun size={13} className="text-amber-500" />
+            <span>Today ({todayEvents.length})</span>
+          </Button>
 
-            <Button
-              size="sm"
-              variant={activeDayTab === 'tomorrow' ? 'primary' : 'ghost'}
-              onClick={() => setActiveDayTab('tomorrow')}
-              className={cn(
-                'flex items-center gap-1.5 px-3 py-1 rounded-lg text-caption font-bold transition-all min-h-[44px]',
-                activeDayTab === 'tomorrow'
-                  ? 'bg-casa-surface text-casa-navy shadow-xs border border-casa-border/60'
-                  : 'text-casa-muted hover:text-casa-navy'
-              )}
-            >
-              <Moon size={13} className="text-indigo-500" />
-              <span>Tomorrow ({tomorrowEvents.length})</span>
-            </Button>
-          </div>
-
-          <span className="hidden sm:inline text-caption font-mono text-casa-muted font-medium">
-            {activeDayTab === 'today'
-              ? format(effectiveNow, 'EEEE, MMMM d')
-              : format(tomorrowDate, 'EEEE, MMMM d')}
-          </span>
+          <Button
+            size="sm"
+            variant={activeDayTab === 'tomorrow' ? 'primary' : 'ghost'}
+            onClick={() => setActiveDayTab('tomorrow')}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1 rounded-lg text-caption font-bold transition-all min-h-[44px]',
+              activeDayTab === 'tomorrow'
+                ? 'bg-casa-surface text-casa-navy shadow-xs border border-casa-border/60'
+                : 'text-casa-muted hover:text-casa-navy'
+            )}
+          >
+            <Moon size={13} className="text-indigo-500" />
+            <span>Tomorrow ({tomorrowEvents.length})</span>
+          </Button>
         </div>
 
-        {/* Live Indicator Badge */}
-        <div className="flex items-center gap-2 shrink-0">
-          {activeDayTab === 'today' ? (
-            <span className="text-2xs uppercase tracking-wider font-sans font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200/60 shadow-2xs">
-              Live Horizon
-            </span>
-          ) : (
-            <span className="text-2xs uppercase tracking-wider font-sans font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-200/60">
-              Next Day
-            </span>
-          )}
-        </div>
+        {/* Quick New Event Button */}
+        {onQuickCreate && (
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={onQuickCreate}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-casa-gold text-casa-navy hover:bg-amber-400 text-caption font-bold transition-all shadow-xs min-h-[44px]"
+            title="Create a new event"
+          >
+            <Plus size={14} strokeWidth={2.5} />
+            <span className="hidden xs:inline">New Event</span>
+          </Button>
+        )}
       </div>
 
       {/* ── Scrollable Schedule Stream ── */}

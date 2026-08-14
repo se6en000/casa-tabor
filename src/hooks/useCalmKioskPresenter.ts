@@ -12,9 +12,13 @@ export interface CalmKioskPresenterState {
   now: Date
   greeting: string
   dailyBriefing: string
+  timeHorizonLabel: string
   weather: ReturnType<typeof useHomeWeather>['data']
   nextEvent: EventWithDetails | null
   appointmentEvents: EventWithDetails[]
+  todayEvents: EventWithDetails[]
+  tomorrowEvents: EventWithDetails[]
+  pickupsCount: number
   isEvening: boolean
   isDinnerPast: boolean
   totalAttentionCount: number
@@ -74,14 +78,36 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
   const activePrep = useMemo(() => prepItems.filter((p) => !p.dismissed), [prepItems])
   const totalAttentionCount = activeConflicts.length + activePrep.length
 
-  const isEvening = now.getHours() >= 19
-  const isDinnerPast = now.getHours() >= 20
+  const hour = now.getHours()
+  const isEvening = hour >= 18
+  const isDinnerPast = hour >= 20
+
+  const timeHorizonLabel = useMemo(() => {
+    if (hour < 12) return 'Morning Briefing'
+    if (hour < 17) return 'Afternoon Dispatch'
+    return 'Evening Digest'
+  }, [hour])
+
+  const pickupsCount = useMemo(() => {
+    return todayEvents.filter((e) => {
+      const t = (e.title || '').toLowerCase()
+      return t.includes('pickup') || t.includes('picked up') || t.includes('drop-off') || t.includes('carpool')
+    }).length
+  }, [todayEvents])
 
   const dailyBriefing = useMemo(() => {
+    const weatherNote = weather
+      ? weather.temp >= 85
+        ? `Warm ${weather.temp}°F day ahead. Remember hydration & sun protection.`
+        : weather.temp <= 50
+        ? `Crisp ${weather.temp}°F conditions. Light jackets recommended.`
+        : `${weather.temp}°F with ${weather.condition.toLowerCase()} skies.`
+      : ''
+
     if (isEvening) {
       const count = tomorrowEvents.length
       if (count === 0) {
-        return `Tomorrow: Open schedule · No early appointments`
+        return `Schedule complete for today. Tomorrow is open with no early appointments.`
       }
 
       const timedEvents = tomorrowEvents.filter((e) => !e.all_day)
@@ -96,28 +122,30 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
 
       const pickupEvt = tomorrowEvents.find((e) => {
         const t = (e.title || '').toLowerCase()
-        return t.includes('pickup') || t.includes('picked up')
+        return t.includes('pickup') || t.includes('drop-off')
       })
       const pickupName = pickupEvt?.members?.[0]?.family_member?.name || (pickupEvt ? 'Giselle' : null)
-      const pickupPart = pickupName ? ` · ${pickupName} on pickup` : ''
+      const pickupPart = pickupName ? ` · ${pickupName} on pickup duty` : ''
 
-      const countLabel = `${count} event${count > 1 ? 's' : ''}`
-      const startPart = firstEvent ? ` · Starts${startTimeStr} with ${firstEvent.title}` : ''
-
-      return `Tomorrow: ${countLabel}${startPart}${pickupPart}`
+      return `Tomorrow: ${count} event${count > 1 ? 's' : ''} scheduled${firstEvent ? `, starting${startTimeStr} with ${firstEvent.title}` : ''}${pickupPart}.`
     }
 
-    const count = todayEvents.length
-    const pickupEvt = todayEvents.find((e) => {
-      const t = (e.title || '').toLowerCase()
-      return t.includes('pickup') || t.includes('picked up')
-    })
-    const pickupName = pickupEvt?.members?.[0]?.family_member?.name || (pickupEvt ? 'Giselle' : null)
-    const pickupPart = pickupName ? ` · ${pickupName} on pickup` : ''
-    const countPart = count > 0 ? `${count} appointment${count > 1 ? 's' : ''} today` : 'No appointments scheduled today'
+    if (hour < 12) {
+      const count = todayEvents.length
+      const scheduleSummary = count > 0 ? `${count} event${count > 1 ? 's' : ''} scheduled for today.` : 'Open morning with clear schedule.'
+      const nextSummary = nextEvent ? ` First up: ${nextEvent.title} at ${format(parseISO(nextEvent.start_time), 'h:mm a')}.` : ''
+      return `${weatherNote} ${scheduleSummary}${nextSummary}`
+    }
 
-    return `${countPart}${pickupPart} · Dinner: Herb-Roasted Chicken`
-  }, [isEvening, todayEvents, tomorrowEvents])
+    // Afternoon
+    const nextSummary = nextEvent
+      ? ` Next up: ${nextEvent.title}${nextEvent.members?.[0]?.family_member?.name ? ` (${nextEvent.members[0].family_member.name})` : ''}.`
+      : ' All afternoon appointments complete.'
+
+    const dinnerNote = isDinnerPast ? ' Dinner served.' : ' Dinner planned for 6:30 PM.'
+
+    return `${weatherNote}${nextSummary}${dinnerNote}`
+  }, [isEvening, hour, todayEvents, tomorrowEvents, nextEvent, weather, isDinnerPast, now])
 
   const minutesUntilNext = useMemo(() => {
     if (!nextEvent) return null
@@ -135,9 +163,13 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     now,
     greeting,
     dailyBriefing,
+    timeHorizonLabel,
     weather,
     nextEvent,
     appointmentEvents,
+    todayEvents,
+    tomorrowEvents,
+    pickupsCount,
     isEvening,
     isDinnerPast,
     totalAttentionCount,
