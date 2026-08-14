@@ -66,11 +66,10 @@ test('the loaded editor sheet has dialog accessibility attributes', () => {
   assert.match(sheetBlock, /aria-modal=\{inline \? undefined : true\}/)
 })
 
-test('date/time wheel commits schedule an autosave without requiring the Done button', () => {
-  assert.match(source, /const scheduleTimeAutosave = useCallback\(\(\) => \{/)
+test('date/time wheel commits mark the form dirty without prematurely closing the editor sheet', () => {
   assert.match(source, /const handleDateTimeInteraction = useCallback\(\(\) => \{/)
   assert.match(source, /onInteraction=\{handleDateTimeInteraction\}/)
-  assert.match(source, /scheduleTimeAutosave\(\)/)
+  assert.match(source, /markDirty\(\)/)
 })
 
 test('successful saves refresh the event caches immediately before the sheet closes', () => {
@@ -78,3 +77,15 @@ test('successful saves refresh the event caches immediately before the sheet clo
   assert.match(source, /members: buildOptimisticMembers\(\)/)
   assert.match(source, /qc\.invalidateQueries\(\{ queryKey: \['event-transportation-plans'\] \}\)/)
 })
+
+test('DateTimeDial supports direct option click selection and flushes preview values on collapse or unmount', () => {
+  const dialSource = readFileSync(resolve('src/components/ui/DateTimeDial.tsx'), 'utf8')
+  assert.match(dialSource, /const handleOptionClick = /)
+  assert.match(dialSource, /onClick=\{\(\) => handleOptionClick\(index, item\.value\)\}/)
+  assert.match(dialSource, /const handleToggleExpanded = useCallback\(/)
+  assert.match(dialSource, /if \(previewStart && previewStart !== startValue\)/)
+  assert.match(dialSource, /if \(previewEnd && previewEnd !== endValue\)/)
+  assert.match(dialSource, /onStartChange\(previewStart\)/)
+  assert.match(dialSource, /onEndChange\(previewEnd\)/)
+})
+

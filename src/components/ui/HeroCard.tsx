@@ -5,7 +5,7 @@ import { cn } from '../../utils/cn'
 import { StatusDot } from './StatusDot'
 
 export interface HeroCardProps extends Omit<HTMLMotionProps<'div'>, 'title' | 'children'> {
-  /** Text or element displayed in the top status badge (e.g. "Starts in 15m", "Happening Now"). */
+  /** Text or element displayed in the top status badge (e.g. "Starts in 15m", "Happening Now", "Leave in 18m"). */
   statusText?: string
   /** Variant of the status dot indicator. */
   statusVariant?: 'active' | 'warning' | 'gold' | 'neutral' | 'info'
@@ -15,9 +15,11 @@ export interface HeroCardProps extends Omit<HTMLMotionProps<'div'>, 'title' | 'c
   title: ReactNode
   /** Subtitle or location line. */
   subtitle?: ReactNode
+  /** Slot for progress / timeline bar (e.g. JourneyProgressBar). */
+  timeline?: ReactNode
   /** Slot for passenger/member avatars. */
   avatars?: ReactNode
-  /** Slot for action buttons (e.g. "Leave Now", "Navigate"). */
+  /** Slot for action buttons (e.g. "Leave Now", "Directions"). */
   actions?: ReactNode
   /** Whether the card shows the ambient gold blur reflection. */
   ambientGlow?: boolean
@@ -37,6 +39,7 @@ export const HeroCard = forwardRef<HTMLDivElement, HeroCardProps>(function HeroC
     timeBadge,
     title,
     subtitle,
+    timeline,
     avatars,
     actions,
     ambientGlow = true,
@@ -109,8 +112,15 @@ export const HeroCard = forwardRef<HTMLDivElement, HeroCardProps>(function HeroC
 
         {/* Subtitle / Location */}
         {subtitle && (
-          <div className="text-body-sm sm:text-body text-white/80 mb-5 font-normal flex items-center gap-2 flex-wrap">
+          <div className="text-body-sm sm:text-body text-white/80 mb-4 font-normal flex items-center gap-2 flex-wrap">
             {subtitle}
+          </div>
+        )}
+
+        {/* Journey / Ambient Timeline Progress Bar */}
+        {timeline && (
+          <div className="mb-5">
+            {timeline}
           </div>
         )}
 

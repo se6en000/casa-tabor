@@ -20,6 +20,7 @@ import {
   Navigation,
   Edit3,
   Bell,
+  ChevronRight,
   Check,
   Search,
   Maximize2,
@@ -75,6 +76,7 @@ import {
   Alert,
   StatusDot,
   HeroCard,
+  JourneyProgressBar,
   WidgetContainer,
   ScheduleStreamItem,
   ActionCard,
@@ -203,6 +205,7 @@ export default function DesignSystemGalleryPage() {
   const [dialEnd, setDialEnd] = useState('2026-08-14T16:30')
   const [disclosureOpen, setDisclosureOpen] = useState(false)
   const [highlightedStreamId, setHighlightedStreamId] = useState<string | null>('gymnastics')
+  const [heroJourneyPhase, setHeroJourneyPhase] = useState<'prep' | 'leave-now' | 'en-route' | 'in-session'>('prep')
 
   // ── Overlays & Dialogs ───────────────────────────────────────────────────
   const [modalOpen, setModalOpen] = useState(false)
@@ -1108,54 +1111,133 @@ export default function DesignSystemGalleryPage() {
 
           {/* Hero Focus Card Spotlight */}
           <div>
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-caption font-bold uppercase tracking-widest text-casa-gold">
-                HeroCard — The Flagship Centerpiece
-              </span>
-              <span className="text-caption text-casa-muted">Dark Luxury Navy + Gold Reflection</span>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+              <div>
+                <span className="text-caption font-bold uppercase tracking-widest text-casa-gold">
+                  HeroCard — The Flagship Centerpiece
+                </span>
+                <p className="text-caption text-casa-muted mt-0.5">
+                  Option A: Dual-Phase Journey & Departure Bar with At-Home Buffer and Transit Gate
+                </p>
+              </div>
+              <div className="w-full sm:w-auto">
+                <SegmentedControl
+                  aria-label="Journey phase selector"
+                  value={heroJourneyPhase}
+                  onChange={(val) => setHeroJourneyPhase(val as typeof heroJourneyPhase)}
+                  options={[
+                    { value: 'prep', label: '1. Prep (18m)' },
+                    { value: 'leave-now', label: '2. Leave Now' },
+                    { value: 'en-route', label: '3. En Route' },
+                    { value: 'in-session', label: '4. Happening' },
+                  ]}
+                />
+              </div>
             </div>
 
-            <HeroCard
-              statusText="Starts in 15 min · Pickup Transit"
-              statusVariant="active"
-              timeBadge="3:30 PM"
-              title="Pediatrician Checkup — Dr. Davis"
-              subtitle={
-                <>
-                  <MapPin size={15} className="text-casa-gold shrink-0" />
-                  <span>Valley Pediatrics · 1420 Main St, Suite 200</span>
-                </>
+            {(() => {
+              const mockStartTime = new Date(Date.now() + 35 * 60 * 1000)
+              const mockEndTime = new Date(Date.now() + 95 * 60 * 1000)
+              const mockDriveMins = 25
+              const mockLeaveTime = new Date(mockStartTime.getTime() - mockDriveMins * 60 * 1000)
+
+              // Dynamic mock values based on active phase
+              let mockNow = new Date()
+              let statusLabel = 'LEAVE IN 18 MIN (3:05 PM)'
+              let statusVar: 'active' | 'warning' | 'gold' | 'neutral' | 'info' = 'active'
+
+              if (heroJourneyPhase === 'prep') {
+                mockNow = new Date(mockLeaveTime.getTime() - 18 * 60 * 1000)
+                statusLabel = 'PREPARE TO LEAVE · 18M BUFFER'
+                statusVar = 'warning'
+              } else if (heroJourneyPhase === 'leave-now') {
+                mockNow = new Date(mockLeaveTime.getTime() + 1 * 60 * 1000)
+                statusLabel = '🚗 TIME TO LEAVE NOW'
+                statusVar = 'gold'
+              } else if (heroJourneyPhase === 'en-route') {
+                mockNow = new Date(mockLeaveTime.getTime() + 15 * 60 * 1000)
+                statusLabel = 'EN ROUTE · 25M DRIVE'
+                statusVar = 'gold'
+              } else if (heroJourneyPhase === 'in-session') {
+                mockNow = new Date(mockStartTime.getTime() + 20 * 60 * 1000)
+                statusLabel = 'HAPPENING NOW'
+                statusVar = 'active'
               }
-              avatars={
-                <div className="flex items-center gap-2.5">
-                  <PersonAvatarStack people={sampleFamilyMembers.slice(0, 3)} max={2} size="md" />
-                  <span className="text-caption text-white/80 font-medium">Jake driving Owen</span>
-                </div>
-              }
-              actions={
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    variant="primary"
-                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white text-caption font-bold shadow-sm transition-all min-h-control"
-                    onClick={() => { setToastMessage('Checked in with Dr. Davis office'); setToastOpen(true); }}
-                  >
-                    <CheckCircle2 size={15} />
-                    <span>Check In</span>
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/20 text-caption font-semibold transition-all min-h-control"
-                    onClick={() => { setToastMessage('Opening Live GPS Navigation (12m travel time)'); setToastOpen(true); }}
-                  >
-                    <Car size={15} />
-                    <span>Navigate (12m)</span>
-                  </Button>
-                </div>
-              }
-              onClick={() => { setToastMessage('Hero card details inspected'); setToastOpen(true); }}
-            />
+
+              return (
+                <HeroCard
+                  statusText={statusLabel}
+                  statusVariant={statusVar}
+                  timeBadge="3:30 PM – 4:30 PM"
+                  title="Owen Dentist"
+                  subtitle={
+                    <>
+                      <MapPin size={15} className="text-casa-gold shrink-0" />
+                      <span>Wanuck, Hier & Associates · 1232 W Indiantown Rd, Jupiter, FL</span>
+                    </>
+                  }
+                  timeline={
+                    <JourneyProgressBar
+                      now={mockNow}
+                      leaveAt={mockLeaveTime}
+                      startTime={mockStartTime}
+                      endTime={mockEndTime}
+                      driveTimeMins={mockDriveMins}
+                      showLabels={true}
+                    />
+                  }
+                  avatars={
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-caption font-semibold bg-white/10 text-white"
+                        style={{ borderLeft: '3px solid var(--color-family-owen)' }}
+                      >
+                        Owen
+                      </span>
+                      <span
+                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-caption font-semibold bg-white/10 text-white"
+                        style={{ borderLeft: '3px solid var(--color-family-kelly)' }}
+                      >
+                        Kelly
+                      </span>
+                      <span className="inline-flex items-center gap-1.5 text-caption text-white/80 bg-white/10 px-3 py-1 rounded-full border border-white/10">
+                        <Car size={13} className="text-casa-gold" />
+                        <span>25m drive</span>
+                        <span className="text-casa-gold font-bold">· Leave 3:05 PM</span>
+                      </span>
+                    </div>
+                  }
+                  actions={
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-casa-gold hover:bg-amber-400 text-slate-950 text-caption font-bold shadow-sm transition-all min-h-control"
+                        onClick={() => {
+                          window.open('https://www.google.com/maps/search/?api=1&query=Wanuck+Hier+Associates+Jupiter+FL', '_blank')
+                        }}
+                      >
+                        <Navigation size={14} />
+                        <span>Directions</span>
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/20 text-caption font-semibold transition-all min-h-control"
+                        onClick={() => {
+                          setToastMessage('Event inspection modal opened');
+                          setToastOpen(true);
+                        }}
+                      >
+                        <span>View Details</span>
+                        <ChevronRight size={14} />
+                      </Button>
+                    </div>
+                  }
+                  onClick={() => { setToastMessage('Hero card details inspected'); setToastOpen(true); }}
+                />
+              )
+            })()}
           </div>
 
           {/* Ambient & Stylish Card: Tonight's Kitchen */}

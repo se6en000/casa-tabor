@@ -3,6 +3,8 @@ import {
   MapPin,
   Car,
   Utensils,
+  ShoppingBag,
+  Clock,
   ChevronRight,
   Zap,
   Sparkles,
@@ -15,14 +17,16 @@ import {
 import { motion } from 'framer-motion'
 import { useCalmKioskPresenter } from '../../hooks/useCalmKioskPresenter'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
+import { useAppStore } from '../../stores/appStore'
 import { cn } from '../../utils/cn'
-import { Button, PersonAvatarStack } from '../ui'
+import { Button, PersonAvatarStack, JourneyProgressBar } from '../ui'
 
 interface CalmKioskViewProps {
   onOpenEvent: (event: EventWithDetails) => void
 }
 
 export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
+  const dinnerPlan = useAppStore((s) => s.dinnerPlan)
   const {
     now,
     greeting,
@@ -35,6 +39,10 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
     isDinnerPast,
     totalAttentionCount,
     minutesUntilNext,
+    driveTimeMins,
+    leaveAt,
+    minutesUntilLeave,
+    isTravelEvent,
     setCanvasSubmode,
     navigateTo,
   } = useCalmKioskPresenter()
@@ -97,18 +105,44 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
 
               <div>
                 <div className="flex items-center justify-between gap-2 mb-4">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                    <span className="text-caption font-bold uppercase tracking-widest text-casa-gold">
-                      {nextEvent.all_day
-                        ? 'All Day Event'
-                        : minutesUntilNext !== null && minutesUntilNext > 0
-                        ? `Starts in ${minutesUntilNext} min`
-                        : minutesUntilNext !== null && minutesUntilNext <= 0 && minutesUntilNext > -60
-                        ? 'Happening Now'
-                        : 'Next Up'}
-                    </span>
-                  </div>
+                  {(() => {
+                    let statusLabel = 'NEXT UP'
+                    let dotClass = 'bg-emerald-400'
+
+                    if (nextEvent.all_day) {
+                      statusLabel = 'ALL DAY EVENT'
+                      dotClass = 'bg-emerald-400'
+                    } else if (isTravelEvent) {
+                      if (minutesUntilNext !== null && minutesUntilNext <= 0 && minutesUntilNext > -60) {
+                        statusLabel = 'HAPPENING NOW'
+                        dotClass = 'bg-emerald-400 animate-pulse'
+                      } else if (minutesUntilLeave !== null && minutesUntilLeave <= 0) {
+                        statusLabel = minutesUntilLeave >= -5 ? 'TIME TO LEAVE NOW' : `EN ROUTE · ${driveTimeMins ? `${driveTimeMins}M DRIVE` : 'IN TRANSIT'}`
+                        dotClass = 'bg-amber-400 animate-pulse'
+                      } else if (minutesUntilLeave !== null && minutesUntilLeave <= 15) {
+                        statusLabel = `PREPARE TO LEAVE · ${minutesUntilLeave}M BUFFER`
+                        dotClass = 'bg-amber-400 animate-pulse'
+                      } else if (minutesUntilLeave !== null) {
+                        statusLabel = `LEAVE IN ${minutesUntilLeave} MIN`
+                        dotClass = 'bg-emerald-400'
+                      }
+                    } else if (minutesUntilNext !== null && minutesUntilNext <= 0 && minutesUntilNext > -60) {
+                      statusLabel = 'HAPPENING NOW'
+                      dotClass = 'bg-emerald-400 animate-pulse'
+                    } else if (minutesUntilNext !== null && minutesUntilNext > 0) {
+                      statusLabel = `STARTS IN ${minutesUntilNext} MIN`
+                      dotClass = 'bg-emerald-400'
+                    }
+
+                    return (
+                      <div className="flex items-center gap-2">
+                        <span className={cn('w-2.5 h-2.5 rounded-full', dotClass)} />
+                        <span className="text-caption font-bold uppercase tracking-widest text-casa-gold">
+                          {statusLabel}
+                        </span>
+                      </div>
+                    )
+                  })()}
 
                   <span className="text-caption text-white/80 font-mono bg-white/10 px-3 py-1 rounded-full border border-white/10">
                     {nextEvent.all_day
@@ -139,21 +173,16 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                   </div>
                 )}
 
-                {/* Ambient Micro-Timeline Progress Line */}
-                <div className="mt-4 w-full bg-white/10 h-1.5 rounded-full overflow-hidden flex items-center" title="Ambient Time Schedule Bar">
-                  <div
-                    className="bg-gradient-to-r from-casa-gold to-amber-400 h-full rounded-full transition-all duration-500"
-                    style={{
-                      width: `${
-                        nextEvent.all_day
-                          ? 100
-                          : minutesUntilNext !== null && minutesUntilNext <= 0
-                          ? 100
-                          : minutesUntilNext !== null && minutesUntilNext < 120
-                          ? Math.max(15, Math.min(90, Math.round(100 - (minutesUntilNext / 120) * 85)))
-                          : 15
-                      }%`,
-                    }}
+                {/* Dual-Phase Journey & Departure Bar (Option A) */}
+                <div className="mt-5">
+                  <JourneyProgressBar
+                    now={now}
+                    leaveAt={leaveAt}
+                    startTime={nextEvent.start_time}
+                    endTime={nextEvent.end_time}
+                    driveTimeMins={driveTimeMins}
+                    isAllDay={Boolean(nextEvent.all_day)}
+                    showLabels={true}
                   />
                 </div>
               </div>
@@ -172,10 +201,15 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                       {m.family_member?.name}
                     </span>
                   ))}
-                  {nextEvent.enrichment?.drive_time_mins && (
-                    <span className="inline-flex items-center gap-1 text-caption text-white/70 bg-white/5 px-2.5 py-1 rounded-full">
+                  {isTravelEvent && driveTimeMins && (
+                    <span className="inline-flex items-center gap-1.5 text-caption text-white/80 bg-white/10 px-3 py-1 rounded-full border border-white/10">
                       <Car size={13} className="text-casa-gold" />
-                      {nextEvent.enrichment.drive_time_mins}m drive
+                      <span>{driveTimeMins}m drive</span>
+                      {leaveAt && (
+                        <span className="text-casa-gold font-bold">
+                          · Leave {format(leaveAt, 'h:mm a')}
+                        </span>
+                      )}
                     </span>
                   )}
                   {(nextEvent.address || nextEvent.location_name) && (
@@ -254,25 +288,35 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-800 flex items-center justify-center font-bold">
-                  <Utensils size={16} />
+                  {dinnerPlan.mode === 'takeout' ? (
+                    <ShoppingBag size={16} />
+                  ) : dinnerPlan.mode === 'leftovers' ? (
+                    <Clock size={16} />
+                  ) : (
+                    <Utensils size={16} />
+                  )}
                 </div>
                 <span className="text-caption font-bold uppercase tracking-widest text-amber-800">
-                  Tonight's Kitchen
+                  {dinnerPlan.mode === 'takeout'
+                    ? "Tonight's Takeout"
+                    : dinnerPlan.mode === 'leftovers'
+                    ? "Tonight's Leftovers"
+                    : "Tonight's Kitchen"}
                 </span>
               </div>
               <span className="text-caption font-semibold text-casa-muted">
-                {isDinnerPast ? 'Dinner Completed' : '6:30 PM Target'}
+                {isDinnerPast ? 'Dinner Completed' : dinnerPlan.targetTime || '6:30 PM Target'}
               </span>
             </div>
 
             <div>
               <h3 className="font-display text-heading font-bold text-casa-navy">
-                Herb-Roasted Chicken & Warm Farro
+                {dinnerPlan.title}
               </h3>
               <p className="text-body-sm text-casa-text-secondary mt-1">
                 {isDinnerPast
-                  ? 'Dinner served · Pantry stock updated · Chef: Sarah & Luke'
-                  : '35m prep · Pantry stock confirmed · Chef: Sarah & Luke'}
+                  ? 'Dinner served · Kitchen closed'
+                  : dinnerPlan.subtitle}
               </p>
             </div>
 
@@ -281,17 +325,40 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                 "inline-flex items-center gap-1.5 text-caption font-semibold px-2.5 py-1 rounded-md",
                 isDinnerPast ? "text-slate-700 bg-slate-100" : "text-emerald-800 bg-emerald-100 border border-emerald-300"
               )}>
-                <CheckCircle2 size={13} /> {isDinnerPast ? 'Cleaned up' : 'Ingredients ready'}
+                <CheckCircle2 size={13} /> {isDinnerPast ? 'Cleaned up' : (dinnerPlan.statusBadge || 'Ingredients ready')}
               </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => navigateTo('/cook')}
-                className="text-body-sm font-bold text-casa-navy hover:text-casa-gold transition-colors flex items-center gap-1 min-h-[44px] px-3"
-              >
-                <span>Recipe</span>
-                <ArrowRight size={14} />
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    document.dispatchEvent(
+                      new CustomEvent('open-ai-chat', {
+                        detail: {
+                          agent: 'chef',
+                          source: 'tonights-kitchen',
+                          prompt: undefined,
+                          autoSend: false,
+                        },
+                      })
+                    )
+                  }}
+                  className="text-body-sm font-semibold text-casa-gold hover:text-amber-800 transition-colors flex items-center gap-1 min-h-[44px] px-2.5"
+                >
+                  <span>Change</span>
+                </Button>
+                {dinnerPlan.mode === 'cook' && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => navigateTo('/cook')}
+                    className="text-body-sm font-bold text-casa-navy hover:text-casa-gold transition-colors flex items-center gap-1 min-h-[44px] px-3"
+                  >
+                    <span>Recipe</span>
+                    <ArrowRight size={14} />
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
 

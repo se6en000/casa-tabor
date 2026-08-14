@@ -17,7 +17,8 @@ import { useProfileSession } from '../../contexts/ProfileSessionContext'
 import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
-import type { FamilyMember } from '../../types'
+import type { FamilyMember, DinnerPlan, DinnerMode } from '../../types'
+import { useAppStore } from '../../stores/appStore'
 import BounceScroll from '../shared/BounceScroll'
 import MarkdownContent from '../shared/MarkdownContent'
 import { Button, Card, Heading, IconButton, LiveTranscript, Modal, Text } from '../ui'
@@ -28,6 +29,7 @@ import { conversationStateAfterCalendarAction } from '../../lib/assistantConvers
 import { linkAssistantEventMentions, parseAssistantEventHref, parseAssistantHref } from '../../lib/assistantEntityLinks'
 import { openEventDetails } from '../../utils/openEventDetails'
 import { buildCreatePreviewCopy, buildDeleteManyPreviewCopy, buildDeletePreviewCopy, buildUpdatePreviewCopy } from '../../utils/aiConfirmPreview'
+import { matchDinnerPlanIntent, getDinnerPlanSuggestions } from '../../utils/dinnerPlanManager'
 
 const LOW_CONFIDENCE_CONFIRM_PHRASES = /\b(yes|yeah|yep|ok|okay|use it|that one|correct|right|go ahead)\b/i
 const LOW_CONFIDENCE_REJECT_PHRASES = /\b(no|nope|try again|wrong|not that|cancel)\b/i
@@ -211,9 +213,10 @@ export default function AIChatDrawer({
     }
   }, [open, isMobile])
 
+  const dinnerPlan = useAppStore((s) => s.dinnerPlan)
   const dynamicSuggestions = useMemo(
-    () => deriveDynamicFollowUpSuggestions(messages, page, events, new Date(), focusedEvent),
-    [messages, page, events, focusedEvent],
+    () => deriveDynamicFollowUpSuggestions(messages, page, events, new Date(), focusedEvent, launchContext?.source, dinnerPlan),
+    [messages, page, events, focusedEvent, launchContext?.source, dinnerPlan],
   )
   const eventById = useMemo(
     () => new Map(events.map((event) => [event.id, event])),
@@ -370,6 +373,25 @@ export default function AIChatDrawer({
     const trimmed = text.trim()
     if (!trimmed) return
     if (dispatchPendingConfirmation(trimmed)) {
+      setInput('')
+      interimRef.current = ''
+      clearVoiceTranscript()
+      if (textareaRef.current) textareaRef.current.value = ''
+      return
+    }
+    const dinnerIntent = matchDinnerPlanIntent(trimmed, useAppStore.getState().dinnerPlan)
+    if (dinnerIntent) {
+      appendSyntheticMessage({
+        id: crypto.randomUUID(),
+        role: 'user',
+        content: trimmed,
+      })
+      appendSyntheticMessage({
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: dinnerIntent.assistantReply,
+        toolAction: dinnerIntent.toolAction,
+      })
       setInput('')
       interimRef.current = ''
       clearVoiceTranscript()
@@ -749,12 +771,23 @@ export default function AIChatDrawer({
     if (messages.length > 0) return
     if (firedChefGreetRef.current === launchContext.launchId) return
     firedChefGreetRef.current = launchContext.launchId
+
+    if (launchContext?.source === 'tonights-kitchen') {
+      const plan = useAppStore.getState().dinnerPlan
+      primeMessages([{
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: `🍽️ **Tonight's Kitchen Planning**\n\nCurrently planned: **${plan.title}** (${plan.targetTime || '6:30 PM Target'}).\n\nWhat's the pivot for tonight? Tap a quick option below or tell me what you'd like to switch to!`,
+      }])
+      return
+    }
+
     primeMessages([{
       id: crypto.randomUUID(),
       role: 'assistant',
       content: "Chef Agent online 👨‍🍳\n\nI can help you plan weeknight meals, optimize for budget/speed, build overlap-friendly grocery lists, and adapt dinners based on what's in your pantry.\n\nTry: “Plan 4 quick dinners under 30 minutes” or “Use what we already have and keep cost low.”",
     }])
-  }, [open, focusedEvent, loading, launchContext?.agent, launchContext?.launchId, sessionLoading, messages.length, primeMessages])
+  }, [open, focusedEvent, loading, launchContext?.agent, launchContext?.launchId, launchContext?.source, sessionLoading, messages.length, primeMessages])
 
   // While AI is thinking, suppress new voice input (don't stop the mic — avoids fade/blue flicker)
   useEffect(() => {
@@ -1110,12 +1143,12 @@ export default function AIChatDrawer({
                       sendCurrentInput(prompt)
                     }}
                   />
-                  <div className="flex flex-wrap justify-center gap-2 mt-2">
+                    <div className="flex flex-wrap justify-center gap-2 mt-2">
                     {dynamicSuggestions.map(s => (
                       <Button variant="ghost"
                         key={s}
                         type="button"
-                        onClick={() => { markUserInteraction(); setInput(s); textareaRef.current?.focus() }}
+                        onClick={() => { markUserInteraction(); sendCurrentInput(s) }}
                         className="px-3 py-1.5 rounded-full border border-casa-border bg-casa-bg text-caption text-casa-muted hover:bg-casa-card hover:text-casa-navy hover:border-casa-gold/40 transition-all shadow-subtle"
                       >
                         {s}
@@ -1150,6 +1183,25 @@ export default function AIChatDrawer({
                             talkPlanIntentResolution: 'confirmed_action',
                           })
                           return true
+                        }
+                        if (tool === 'update_dinner_plan') {
+                          updateMessageToolStatus(messageId, 'loading')
+                          try {
+                            const plan: DinnerPlan = {
+                              mode: (args.mode as DinnerMode) || 'takeout',
+                              title: String(args.title || "Flanigan's Seafood Bar & Grill"),
+                              subtitle: String(args.subtitle || (args.mode === 'takeout' ? `Pickup: ${args.chefOrDriver || 'Luke'} · Order Window: 6:00–6:15 PM` : 'Quick dinner update')),
+                              targetTime: String(args.targetTime || '6:30 PM Target'),
+                              chefOrDriver: args.chefOrDriver ? String(args.chefOrDriver) : undefined,
+                              statusBadge: args.statusBadge ? String(args.statusBadge) : (args.mode === 'takeout' ? 'Order ready for pickup' : 'Ingredients ready'),
+                            }
+                            useAppStore.getState().setDinnerPlan(plan)
+                            updateMessageToolStatus(messageId, 'done')
+                            return true
+                          } catch (err) {
+                            updateMessageToolStatus(messageId, 'error', { errorMsg: (err as Error).message })
+                            return false
+                          }
                         }
                         updateMessageToolStatus(messageId, 'loading')
                         const actionTrace = activeTraceRef.current
@@ -1759,7 +1811,7 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
   const preferredEventId = msg.conversationState?.activeEntityType === 'event'
     ? msg.conversationState.activeEventId
     : ta?.resultEventId
-  const assistantContent = !isUser && !ta
+  const assistantContent = !isUser
     ? formatTextForMarkdown(linkAssistantEventMentions(
         stripEvidenceCitationMarkers(msg.content),
         events,
@@ -2014,6 +2066,7 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
                   <div className="flex items-center gap-1.5 text-emerald-600 text-caption font-semibold">
                     <Check size={13} />
                     {ta.tool === 'confirm_talk_plan_action_intent' ? 'Action intent confirmed'
+                      : ta.tool === 'update_dinner_plan' ? 'Tonight’s Kitchen updated on Dashboard ✓'
                       : ta.tool === 'create_event' ? 'Created & added to calendar ✓'
                       : ta.tool === 'create_recipe' ? 'Saved to recipe library ✓'
                       : ta.tool === 'update_event' ? 'Updated ✓'
@@ -2053,6 +2106,22 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
                     >
                       Open appointment details
                     </Button>
+                  </div>
+                )}
+                {ta.tool === 'update_dinner_plan' && ta.args && (
+                  <div className="mt-1.5 p-2.5 rounded-xl bg-casa-card border border-casa-border text-caption space-y-1">
+                    <p className="font-semibold text-casa-navy">
+                      {String(ta.args.title)} {ta.args.targetTime ? `· ${String(ta.args.targetTime)}` : ''}
+                    </p>
+                    {Boolean(ta.args.subtitle) && (
+                      <p className="text-casa-muted">{String(ta.args.subtitle)}</p>
+                    )}
+                    {Boolean(ta.args.statusBadge) && (
+                      <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 font-medium text-caption">
+                        <Check size={11} />
+                        {String(ta.args.statusBadge)}
+                      </div>
+                    )}
                   </div>
                 )}
                 {ta.tool === 'create_recipe' && (
@@ -2209,6 +2278,7 @@ function recurrenceScopeLabel(scope: unknown) {
 }
 
 function confirmActionLabel(tool: string) {
+  if (tool === 'update_dinner_plan') return 'Apply to Dashboard'
   if (tool === 'create_recipe') return 'Save recipe'
   if (tool === 'add_grocery_items') return 'Add items'
   if (tool === 'check_grocery_item') return 'Update item'
@@ -2237,7 +2307,7 @@ function ConfirmationHeading({ kind, icon, children }: { kind: 'calendar' | 'rem
       : kind === 'grocery'
         ? 'Grocery list'
         : kind === 'recipe'
-          ? 'Recipe library'
+          ? 'Kitchen & Dinner'
           : kind === 'directory'
             ? 'Household Directory'
             : 'Review carefully'
@@ -2430,6 +2500,40 @@ function findOverlappingEvent(
 
 function ToolActionPreview({ tool, args, events }: { tool: string; args: Record<string, unknown>; events: EventWithDetails[] }) {
   const [expanded, setExpanded] = useState(false)
+
+  if (tool === 'update_dinner_plan') {
+    const mode = String(args.mode ?? 'takeout')
+    const title = String(args.title ?? "Flanigan's Seafood Bar & Grill")
+    const targetTime = String(args.targetTime ?? '6:30 PM Target')
+    const chefOrDriver = args.chefOrDriver ? String(args.chefOrDriver) : undefined
+    const subtitle = args.subtitle ? String(args.subtitle) : undefined
+
+    return (
+      <div className="space-y-3">
+        <ConfirmationHeading kind="recipe">Update Tonight's Kitchen Plan?</ConfirmationHeading>
+        <div className="rounded-2xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-casa-surface to-casa-surface p-4 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-body font-bold text-casa-navy">{title}</span>
+            <span className="text-caption font-semibold px-2.5 py-0.5 rounded-full bg-casa-surface border border-casa-border text-casa-navy shadow-2xs">
+              {mode === 'takeout' ? '🥡 Takeout' : mode === 'leftovers' ? '🍲 Leftovers' : mode === 'dineout' ? '🍽️ Dining Out' : '🍳 Cooking'}
+            </span>
+          </div>
+          <div className="text-caption text-casa-text-secondary space-y-1">
+            <p><span className="font-semibold text-casa-navy">Time:</span> {targetTime}</p>
+            {chefOrDriver && (
+              <p><span className="font-semibold text-casa-navy">{mode === 'takeout' ? 'Pickup Driver:' : 'Chef:'}</span> {chefOrDriver}</p>
+            )}
+            {subtitle && (
+              <p className="text-casa-muted mt-1">{subtitle}</p>
+            )}
+          </div>
+        </div>
+        <p className="text-caption text-casa-muted">
+          Applying this will instantly update the Tonight's Kitchen card on the live dashboard.
+        </p>
+      </div>
+    )
+  }
 
   if (tool === 'confirm_talk_plan_action_intent') {
     return (
@@ -2800,6 +2904,7 @@ const SUGGESTIONS: Record<string, string[]> = {
   briefing: ["Summarize today for me", "What needs my attention?", "Walk me through today's timeline", "Any prep needed today?"],
   grocery: ["Add milk and eggs", "What's on the list?", "Clear checked items", "Suggest pantry staples"],
   cook: ["Plan 4 quick weeknight dinners", "Suggest a dinner with pantry items", "Optimize my meals for budget", "Build grocery list from the plan"],
+  kitchen: ["🥡 Takeout from Flanigan's", "🍕 Pizza Night", "🍲 Reheat Leftovers", "🍽️ Dining Out", "⏰ Push dinner to 7:00 PM"],
   settings: ["How do I connect Google Calendars?", "Check sync status", "Set up family member PINs"],
   app: ["What's next up today?", "Add an event tonight", "What's on the grocery list?"],
 }
@@ -2844,6 +2949,8 @@ function deriveDynamicFollowUpSuggestions(
   events: EventWithDetails[],
   now: Date,
   focusedEvent?: EventWithDetails,
+  source?: string,
+  currentDinnerPlan?: DinnerPlan,
 ): string[] {
   if (focusedEvent) {
     return [
@@ -2852,6 +2959,11 @@ function deriveDynamicFollowUpSuggestions(
       `Add location for ${focusedEvent.title}`,
       `Check for conflicts with ${focusedEvent.title}`,
     ]
+  }
+
+  if (source === 'tonights-kitchen') {
+    const plan = currentDinnerPlan || useAppStore.getState().dinnerPlan
+    return getDinnerPlanSuggestions(plan)
   }
 
   if (!messages || messages.length === 0) {
@@ -2866,6 +2978,21 @@ function deriveDynamicFollowUpSuggestions(
   const ta = lastAssistant.toolAction
   const content = (lastAssistant.content || '').toLowerCase()
   const state = lastAssistant.conversationState
+
+  // 0. If dinner / kitchen plan or takeout in context
+  if (
+    content.includes("tonight's kitchen") ||
+    content.includes('kitchen') ||
+    content.includes('dinner') ||
+    content.includes('flanigan') ||
+    content.includes('takeout') ||
+    content.includes('leftover') ||
+    content.includes('pizza') ||
+    ta?.tool === 'update_dinner_plan'
+  ) {
+    const plan = currentDinnerPlan || useAppStore.getState().dinnerPlan
+    return getDinnerPlanSuggestions(plan)
+  }
 
   // 1. If last action was creating / updating an event
   if (ta?.tool === 'create_event' || ta?.tool === 'update_event' || state?.activeEntityType === 'event') {

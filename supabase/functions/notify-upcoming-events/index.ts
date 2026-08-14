@@ -79,6 +79,10 @@ Deno.serve(async (req) => {
     let fired = 0
 
     if (events && events.length > 0) {
+      // 1. Cluster identical duplicate events by normalized title + start time
+      type EventRow = typeof events[0]
+      const clusters = new Map<string, EventRow[]>()
+
       for (const event of events) {
         const eventStart = new Date(event.start_time)
         const minsToStart = Math.round((eventStart.getTime() - now.getTime()) / 60000)
@@ -91,29 +95,57 @@ Deno.serve(async (req) => {
         if (!bucket) continue
         if (applyQuietToPush && quiet) continue
 
-        const isReminder = event.event_type === 'reminder'
+        const normTitle = (event.title || 'event')
+          .toLowerCase()
+          .replace(/^[^a-z0-9]+/i, '')
+          .replace(/\s+/g, ' ')
+          .trim()
+        const timeKey = `${eventStart.getUTCFullYear()}-${String(eventStart.getUTCMonth() + 1).padStart(2, '0')}-${String(eventStart.getUTCDate()).padStart(2, '0')}T${String(eventStart.getUTCHours()).padStart(2, '0')}:${String(eventStart.getUTCMinutes()).padStart(2, '0')}`
+        const clusterKey = `${event.event_type || 'event'}:${normTitle}:${timeKey}:${bucket}`
+
+        const list = clusters.get(clusterKey) ?? []
+        list.push(event)
+        clusters.set(clusterKey, list)
+      }
+
+      // 2. Dispatch exactly one notification per semantic event cluster
+      for (const [clusterKey, eventList] of clusters.entries()) {
+        const primaryEvent = eventList[0]
+        const eventStart = new Date(primaryEvent.start_time)
+        const minsToStart = Math.round((eventStart.getTime() - now.getTime()) / 60000)
+        const bucket = minsToStart >= 25 && minsToStart <= 35 ? 30 : 5
+        const isReminder = primaryEvent.event_type === 'reminder'
         const notifType = isReminder
           ? bucket === 30 ? 'push_reminder_30' : 'push_reminder_5'
           : bucket === 30 ? 'push_event_30' : 'push_event_5'
+
+        const clusterDedupeKey = `push_${isReminder ? 'reminder' : 'event'}_${bucket}:${clusterKey}`
+        const eventIds = eventList.map(e => e.id)
+
+        // Check if already notified by dedupe key or any event ID in the cluster
         const { data: existing } = await supabase
           .from('notifications')
           .select('id')
-          .eq('type', notifType)
-          .eq('event_id', event.id)
+          .or(`dedupe_key.eq.${clusterDedupeKey},and(type.eq.${notifType},event_id.in.(${eventIds.join(',')}))`)
           .limit(1)
+
         if ((existing?.length ?? 0) > 0) continue
 
-        const members = Array.isArray(event.members) ? event.members : []
-        const peopleNames = members
-          .map((m: { family_member: { name: string } }) => m.family_member?.name)
-          .filter(Boolean)
-          .join(', ')
+        // Combine member names across all duplicate copies in cluster
+        const allMembers = eventList.flatMap(e => Array.isArray(e.members) ? e.members : [])
+        const peopleNames = Array.from(new Set(
+          allMembers
+            .map((m: { family_member: { name: string } }) => m.family_member?.name)
+            .filter(Boolean)
+        )).join(', ')
 
         const startStr = formatEasternTime(eventStart)
-        const title = event.title
+        const title = primaryEvent.title
         let body = `${startStr}`
         if (peopleNames) body += ` · ${peopleNames}`
-        if (event.location_name) body += `\n📍 ${event.location_name}`
+        if (primaryEvent.location_name) body += `\n📍 ${primaryEvent.location_name}`
+
+        const pushTag = `event-${bucket}-${encodeURIComponent(clusterKey).slice(0, 60)}`
 
         const pushRes = await fetch(`${supabaseUrl}/functions/v1/send-push-notification`, {
           method: 'POST',
@@ -128,8 +160,8 @@ Deno.serve(async (req) => {
               : (bucket === 30 ? `⏰ ${title} in ~30 min` : `⏳ ${title} in ~5 min`),
             body,
             url: '/',
-            tag: `event-${bucket}-${event.id}`,
-            data: { eventId: event.id, eventType: event.event_type, url: '/' },
+            tag: pushTag,
+            data: { eventId: primaryEvent.id, eventType: primaryEvent.event_type, url: '/' },
             actions: [
               { action: 'done', title: isReminder ? 'Complete' : 'Mark Done' },
               { action: 'thumbs_down', title: 'Thumbs down' },
@@ -147,8 +179,9 @@ Deno.serve(async (req) => {
             ? (bucket === 30 ? `Reminder soon: ${title}` : `Reminder now: ${title}`)
             : (bucket === 30 ? `Upcoming: ${title}` : `Starting soon: ${title}`),
           body,
-          event_id: event.id,
+          event_id: primaryEvent.id,
           source: 'system',
+          dedupe_key: clusterDedupeKey,
         })
 
         fired++

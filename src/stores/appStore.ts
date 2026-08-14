@@ -1,5 +1,14 @@
 import { create } from 'zustand'
-import type { AppMode, ExperienceMode, CanvasSubmode } from '../types'
+import type { AppMode, ExperienceMode, CanvasSubmode, DinnerPlan } from '../types'
+
+export const DEFAULT_DINNER_PLAN: DinnerPlan = {
+  mode: 'cook',
+  title: 'Herb-Roasted Chicken & Warm Farro',
+  subtitle: '35m prep · Pantry stock confirmed · Chef: Sarah & Luke',
+  targetTime: '6:30 PM Target',
+  chefOrDriver: 'Sarah & Luke',
+  statusBadge: 'Ingredients ready',
+}
 
 interface AppStore {
   mode: AppMode
@@ -15,6 +24,11 @@ interface AppStore {
   canvasSubmode: CanvasSubmode
   setCanvasSubmode: (submode: CanvasSubmode) => void
   toggleCanvasSubmode: () => void
+
+  // Tonight's Kitchen state
+  dinnerPlan: DinnerPlan
+  setDinnerPlan: (plan: DinnerPlan) => void
+  resetDinnerPlan: () => void
 }
 
 const getInitialExperienceMode = (): ExperienceMode => {
@@ -31,6 +45,19 @@ const getInitialCanvasSubmode = (): CanvasSubmode => {
     if (saved === 'calm' || saved === 'turbo') return saved
   } catch {}
   return 'calm'
+}
+
+const getInitialDinnerPlan = (): DinnerPlan => {
+  try {
+    const saved = localStorage.getItem('casa-tonight-kitchen-plan')
+    if (saved) {
+      const parsed = JSON.parse(saved)
+      if (parsed && typeof parsed === 'object' && parsed.title) {
+        return parsed as DinnerPlan
+      }
+    }
+  } catch {}
+  return DEFAULT_DINNER_PLAN
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
@@ -63,5 +90,19 @@ export const useAppStore = create<AppStore>((set, get) => ({
       localStorage.setItem('casa-canvas-submode', next)
     } catch {}
     set({ canvasSubmode: next })
+  },
+
+  dinnerPlan: getInitialDinnerPlan(),
+  setDinnerPlan: (dinnerPlan) => {
+    try {
+      localStorage.setItem('casa-tonight-kitchen-plan', JSON.stringify(dinnerPlan))
+    } catch {}
+    set({ dinnerPlan })
+  },
+  resetDinnerPlan: () => {
+    try {
+      localStorage.removeItem('casa-tonight-kitchen-plan')
+    } catch {}
+    set({ dinnerPlan: DEFAULT_DINNER_PLAN })
   },
 }))

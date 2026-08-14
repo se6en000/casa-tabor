@@ -52,6 +52,18 @@ export const COMPONENT_MANIFEST = [
     example: '<HeroCard title="Pediatrician Checkup" statusText="Starts in 15m" timeBadge="3:30 PM" />',
   }),
   component({
+    name: 'JourneyProgressBar',
+    category: 'data-display',
+    purpose: 'Segmented dual-phase journey progress bar for departure countdowns and drive tracking.',
+    useWhen: 'Use for upcoming events requiring driving, departure buffers, or segmented timeline progress.',
+    avoid: 'Do not use for generic file uploads or indeterminate loading states (use Progress instead).',
+    variants: ['default', 'segmented', 'in-session', 'en-route', 'prep'],
+    states: ['default', 'prep', 'leave-now', 'en-route', 'in-session'],
+    accessibility: 'Provides accessible waypoint labels and semantic ARIA progress roles.',
+    responsive: 'Adapts fluidly from compact mobile viewports to wide kiosk headers.',
+    example: '<JourneyProgressBar startTime="2026-08-14T19:30:00Z" departureTime="2026-08-14T19:00:00Z" driveTimeMins={30} />',
+  }),
+  component({
     name: 'WidgetContainer',
     category: 'surface',
     purpose: 'Bento container for 3-pane Living Canvas dashboards and widgets.',

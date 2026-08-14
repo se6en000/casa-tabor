@@ -38,6 +38,10 @@
     ],
     "inlineStyleBlocks": [
       {
+        "path": "src/components/ui/JourneyProgressBar.tsx",
+        "reason": "Segmented dynamic journey progress bar widths are runtime-calculated."
+      },
+      {
         "path": "src/components/canvas/CalmKioskView.tsx",
         "reason": "Family-member avatar colors and indicators are selected from runtime household data."
       },

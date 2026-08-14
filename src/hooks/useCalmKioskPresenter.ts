@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { format, parseISO, differenceInMinutes } from 'date-fns'
+import { format, parseISO, differenceInMinutes, subMinutes } from 'date-fns'
 import { useLiveClock, greetingFor } from './useLiveClock'
 import { useTodayEvents, useTomorrowEvents, type EventWithDetails } from './useCalendarEvents'
 import { useWeekConflicts } from './useConflicts'
@@ -23,6 +23,10 @@ export interface CalmKioskPresenterState {
   isDinnerPast: boolean
   totalAttentionCount: number
   minutesUntilNext: number | null
+  driveTimeMins: number | null
+  leaveAt: Date | null
+  minutesUntilLeave: number | null
+  isTravelEvent: boolean
   setCanvasSubmode: (submode: 'calm' | 'turbo') => void
   navigateTo: (path: string) => void
 }
@@ -157,6 +161,45 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     }
   }, [nextEvent, now])
 
+  const driveTimeMins = useMemo(() => {
+    if (!nextEvent) return null
+    return nextEvent.enrichment?.drive_time_mins ?? null
+  }, [nextEvent])
+
+  const isTravelEvent = useMemo(() => {
+    if (!nextEvent) return false
+    if (nextEvent.all_day) return false
+    const cat = (nextEvent.enrichment?.category || (nextEvent as any).category || '').toLowerCase()
+    if (cat.includes('home') || cat.includes('hosted')) return false
+    return Boolean(
+      (driveTimeMins !== null && driveTimeMins > 0) ||
+      nextEvent.enrichment?.departure_time ||
+      nextEvent.address ||
+      nextEvent.location_name
+    )
+  }, [nextEvent, driveTimeMins])
+
+  const leaveAt = useMemo(() => {
+    if (!nextEvent || nextEvent.all_day) return null
+    try {
+      if (nextEvent.enrichment?.departure_time) {
+        return new Date(nextEvent.enrichment.departure_time)
+      }
+      const start = parseISO(nextEvent.start_time)
+      if (driveTimeMins && driveTimeMins > 0) {
+        return subMinutes(start, driveTimeMins)
+      }
+      return start
+    } catch {
+      return null
+    }
+  }, [nextEvent, driveTimeMins])
+
+  const minutesUntilLeave = useMemo(() => {
+    if (!leaveAt) return null
+    return differenceInMinutes(leaveAt, now)
+  }, [leaveAt, now])
+
   const greeting = greetingFor(now)
 
   return {
@@ -174,6 +217,10 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     isDinnerPast,
     totalAttentionCount,
     minutesUntilNext,
+    driveTimeMins,
+    leaveAt,
+    minutesUntilLeave,
+    isTravelEvent,
     setCanvasSubmode,
     navigateTo: navigate,
   }

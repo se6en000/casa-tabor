@@ -593,7 +593,6 @@ function EventEditSheetContent({
     }
     return out
   }
-
   const markDirty = () => { isDirtyRef.current = true }
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false)
   const set = (field: string, value: string) => {
@@ -603,7 +602,6 @@ function EventEditSheetContent({
 
   const handleClose = () => {
     if (isDirtyRef.current) {
-      clearTimeAutosaveTimer()
       setShowDiscardConfirm(true)
       return
     }
@@ -611,7 +609,6 @@ function EventEditSheetContent({
   }
 
   const confirmDiscard = () => {
-    clearTimeAutosaveTimer()
     isDirtyRef.current = false
     setShowDiscardConfirm(false)
     onClose()
@@ -619,7 +616,6 @@ function EventEditSheetContent({
 
   const cancelDiscard = () => {
     setShowDiscardConfirm(false)
-    scheduleTimeAutosave()
   }
 
   const handleReenrich = async () => {
@@ -688,18 +684,6 @@ function EventEditSheetContent({
   }
 
   const pendingTitleRef = useRef<string | null>(null)
-  const timeAutosaveTimerRef = useRef<number | null>(null)
-
-  const clearTimeAutosaveTimer = useCallback(() => {
-    if (timeAutosaveTimerRef.current !== null) {
-      window.clearTimeout(timeAutosaveTimerRef.current)
-      timeAutosaveTimerRef.current = null
-    }
-  }, [])
-
-  useEffect(() => () => {
-    clearTimeAutosaveTimer()
-  }, [clearTimeAutosaveTimer])
 
   const handleSave = async () => {
     // Flush DOM value — fixes iOS/Safari composition lag where the last
@@ -725,20 +709,9 @@ function EventEditSheetContent({
     await doSave('all')
   }
 
-  const scheduleTimeAutosave = useCallback(() => {
-    if (isSaving || isInstance || recurringEditorEnabled || isCanonicalOccurrence || recur.freq !== 'none') return
-    clearTimeAutosaveTimer()
-    timeAutosaveTimerRef.current = window.setTimeout(() => {
-      timeAutosaveTimerRef.current = null
-      if (!isDirtyRef.current || isSaving) return
-      void handleSave()
-    }, 300)
-  }, [clearTimeAutosaveTimer, handleSave, isCanonicalOccurrence, isInstance, isSaving, recur.freq, recurringEditorEnabled])
-
   const handleDateTimeInteraction = useCallback(() => {
     markDirty()
-    scheduleTimeAutosave()
-  }, [scheduleTimeAutosave])
+  }, [])
 
   const handleScopeChoice = async (
     scope: RecurScope,
@@ -760,7 +733,6 @@ function EventEditSheetContent({
     setIsSaving(true)
     setSaveStatus('saving')
     setSaveError(null)
-    clearTimeAutosaveTimer()
 
     // Supabase free tier cold-starts can take 15-20s — allow 35s before giving up
     const saveTimeout = new Promise<never>((_, reject) =>

@@ -352,3 +352,19 @@ export interface AIBugReport {
   updated_at: string
   resolved_at: string | null
 }
+
+// ── Kitchen & Dinner Plan ──────────────────────────────────
+
+export type DinnerMode = 'cook' | 'takeout' | 'leftovers' | 'dineout'
+
+export interface DinnerPlan {
+  [key: string]: unknown
+  mode: DinnerMode
+  title: string
+  subtitle: string
+  targetTime: string
+  chefOrDriver?: string
+  statusBadge?: string
+  isPast?: boolean
+  notes?: string
+}
