@@ -531,7 +531,6 @@ export default function CookPage() {
   const [checkedCookIngredients, setCheckedCookIngredients] = useState<Set<string>>(new Set())
   // Auto-scroll target for the currently-active direction step.
   const currentStepRef = useRef<HTMLElement | null>(null)
-  const [photoEditorName, setPhotoEditorName] = useState('')
   const [photoEditorUrl, setPhotoEditorUrl] = useState('')
   const [photoEditorPreviewUrl, setPhotoEditorPreviewUrl] = useState('')
   const [photoEditorPendingFile, setPhotoEditorPendingFile] = useState<File | null>(null)
@@ -2366,7 +2365,6 @@ export default function CookPage() {
   function initializePhotoEditorDraft(recipe: Recipe) {
     clearPhotoEditorPendingFile()
     const focus = parseRecipeImageFocus(recipe.image_url)
-    setPhotoEditorName(recipe.name)
     setPhotoEditorUrl(pickRecipeThumb(recipe) ?? '')
     setPhotoEditorPreviewUrl('')
     setPhotoEditorPendingFile(null)
@@ -3222,11 +3220,10 @@ export default function CookPage() {
                 ))}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-2">
-                <input
+                <Input
                   value={mealPlannerTemplateName}
                   onChange={(event) => setMealPlannerTemplateName(event.target.value)}
                   placeholder="Template name (optional)"
-                  className="rounded-button border border-casa-border bg-casa-bg px-3 py-2 text-body-sm text-casa-text placeholder:text-casa-muted outline-none"
                 />
                 <Button
                   variant="secondary"
@@ -3607,13 +3604,13 @@ export default function CookPage() {
               </p>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
-              <div className="flex items-center gap-2 rounded-[8px] border border-casa-control-border bg-casa-surface px-3 py-2 min-w-[15rem]">
-                <Search size={14} className="text-casa-text-tertiary" />
-                <input
+              <div className="relative min-w-[15rem]">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-casa-muted z-10" />
+                <Input
                   value={recipeSearch}
                   onChange={(event) => setRecipeSearch(event.target.value)}
                   placeholder="Search recipes..."
-                  className="w-full bg-transparent text-body-sm text-casa-text placeholder:text-casa-text-faint outline-none"
+                  className="pl-8"
                 />
               </div>
               <Button
@@ -3770,12 +3767,12 @@ export default function CookPage() {
                 <div className="rounded-2xl border border-casa-border bg-casa-bg p-3 space-y-2">
                   <p className="text-caption text-casa-muted">Add a URL and/or photos. Import will use whatever you provided.</p>
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                    <input
+                    <Input
                       type="url"
                       value={importUrlInput}
                       onChange={(event) => setImportUrlInput(event.target.value)}
                       placeholder="https://..."
-                      className="flex-1 rounded-button border border-casa-border bg-casa-surface px-3 py-2 text-body-sm text-casa-text outline-none"
+                      className="flex-1"
                     />
                     <Button
                       variant="secondary"
@@ -3909,12 +3906,12 @@ export default function CookPage() {
                     <p className="text-caption text-casa-muted mb-1">Recipe photos</p>
                     <p className="text-caption text-casa-muted mb-2">Tap a photo to mark as meal photo (cover), or choose none.</p>
                     <div className="flex items-center gap-2 mb-2">
-                      <input
+                      <Input
                         type="url"
                         value={importExtraImageUrl}
                         onChange={(event) => setImportExtraImageUrl(event.target.value)}
                         placeholder="https://.../another-photo.jpg"
-                        className="flex-1 rounded-button border border-casa-border bg-casa-bg px-2.5 py-1.5 text-caption text-casa-text outline-none"
+                        className="flex-1 text-caption"
                       />
                       <Button
                         variant="secondary"
@@ -4050,11 +4047,11 @@ export default function CookPage() {
                                 </Chip>
                               </div>
                             </div>
-                            <textarea
+                            <Textarea
                               value={step.instruction}
                               onChange={(event) => updateImportStepInstruction(stepIndex, event.target.value)}
                               rows={3}
-                              className="w-full rounded-button border border-casa-border bg-casa-surface px-2 py-1.5 text-caption text-casa-text outline-none resize-y"
+                              className="resize-y text-caption"
                             />
                           </div>
                         ))}
@@ -4248,11 +4245,11 @@ export default function CookPage() {
                   <div className="rounded-xl border border-casa-border bg-casa-bg p-3 space-y-2">
                     <label className="block">
                       <span className="text-body-sm text-casa-muted">Recipe name</span>
-                      <input
+                      <Input
                         type="text"
                         value={recipeEditorDraft.name}
                         onChange={(event) => setRecipeEditorDraft((current) => current ? { ...current, name: event.target.value } : current)}
-                        className="mt-1 w-full rounded-button border border-casa-border bg-casa-surface px-3 py-2 text-body-lg text-casa-text outline-none"
+                        className="mt-1 text-body-lg"
                       />
                     </label>
                     <div onPaste={photoEditorExpanded ? handlePhotoEditorPaste : undefined}>
@@ -4338,13 +4335,20 @@ export default function CookPage() {
                             <label htmlFor="recipe-photo-search" className="text-body-sm font-semibold text-casa-navy">
                               Find a recipe image
                             </label>
-                            <p className="mt-1 text-caption text-casa-muted">Searches Pexels and Unsplash.</p>
-                            <div className="mt-2 flex items-center gap-2">
+                            <div className="mt-1 flex gap-2">
                               <Input
                                 id="recipe-photo-search"
+                                type="text"
                                 value={photoSearchQuery}
                                 onChange={(event) => setPhotoSearchQuery(event.target.value)}
-                                placeholder="e.g., chicken alfredo"
+                                onKeyDown={(event) => {
+                                  if (event.key === 'Enter') {
+                                    event.preventDefault()
+                                    void searchWebImages(photoSearchQuery)
+                                  }
+                                }}
+                                placeholder="Search recipe images"
+                                className="flex-1"
                               />
                               <Button
                                 variant="secondary"
@@ -4352,71 +4356,82 @@ export default function CookPage() {
                                 onClick={() => void searchWebImages(photoSearchQuery)}
                                 disabled={photoSearchLoading}
                                 loading={photoSearchLoading}
+                                leadingIcon={<Search size={14} />}
                               >
                                 Search
                               </Button>
                             </div>
-                            {photoSearchError && <p role="alert" className="mt-2 text-caption text-casa-error">{photoSearchError}</p>}
+                            {photoSearchError && (
+                              <p role="alert" className="mt-2 text-caption text-casa-error">
+                                {photoSearchError}
+                              </p>
+                            )}
                             {photoSearchResults.length > 0 && (
-                              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                                {photoSearchResults.map((option) => (
-                                  <Button
-                                    key={option.id}
-                                    variant="ghost"
-                                    onClick={() => {
-                                      setPhotoEditorRemoteUrl(option.url.split('#')[0] ?? option.url)
-                                      setPhotoEditorFocalX(50)
-                                      setPhotoEditorFocalY(42)
-                                    }}
-                                    className={cn(
-                                      'h-auto min-h-0 overflow-hidden rounded-card border p-0 text-left',
-                                      photoEditorUrl.trim() === option.url ? 'border-casa-gold' : 'border-casa-border hover:border-casa-gold/40'
-                                    )}
-                                    contentClassName="block w-full"
-                                  >
-                                    <img
-                                      src={option.url}
-                                      alt={option.title || 'Recipe image option'}
-                                      className="h-20 w-full object-cover"
-                                      loading="lazy"
-                                      referrerPolicy="no-referrer"
-                                    />
-                                    {option.source && (
-                                      <span className="block truncate border-t border-casa-divider/60 px-2 py-1 text-caption text-casa-muted">
-                                        {option.source}
+                              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                                {photoSearchResults.map((result) => {
+                                  const selected = photoEditorUrl === result.url
+                                  return (
+                                    <Button
+                                      key={result.url}
+                                      variant="ghost"
+                                      onClick={() => setPhotoEditorRemoteUrl(result.url)}
+                                      className={cn(
+                                        'group h-auto min-h-0 overflow-hidden rounded-lg border p-0 text-left transition-colors',
+                                        selected ? 'border-casa-gold ring-2 ring-casa-gold/30' : 'border-casa-border hover:border-casa-gold/40'
+                                      )}
+                                      contentClassName="block w-full"
+                                    >
+                                      <img
+                                        src={result.url}
+                                        alt={result.title}
+                                        className="h-20 w-full object-cover"
+                                        loading="lazy"
+                                        referrerPolicy="no-referrer"
+                                        onError={(event) => {
+                                          const target = event.currentTarget
+                                          if (target.src !== recipeFallbackHero) target.src = recipeFallbackHero
+                                        }}
+                                      />
+                                      <span className="block truncate px-1.5 py-1 text-caption text-casa-muted group-hover:text-casa-navy">
+                                        {result.title || 'Choose photo'}
                                       </span>
-                                    )}
-                                  </Button>
-                                ))}
+                                    </Button>
+                                  )
+                                })}
                               </div>
                             )}
                           </div>
 
-                          <label className="block">
-                            <span className="text-body-sm font-semibold text-casa-navy">Image URL</span>
+                          <div>
+                            <label htmlFor="recipe-photo-url" className="text-body-sm font-semibold text-casa-navy">
+                              Image URL
+                            </label>
                             <Input
+                              id="recipe-photo-url"
+                              type="url"
                               value={photoEditorUrl}
                               onChange={(event) => setPhotoEditorRemoteUrl(event.target.value)}
                               placeholder="https://.../recipe-photo.jpg"
-                              className="mt-2"
+                              className="mt-1"
                             />
-                          </label>
+                          </div>
 
-                          <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-[minmax(0,1fr)_14rem]">
-                            <div className="rounded-card border border-casa-border bg-casa-bg p-2">
-                              <img
-                                src={photoEditorPreviewUrl || photoEditorUrl.trim() || recipeFallbackHero}
-                                alt={`Preview for ${photoEditorName}`}
-                                className="h-56 w-full rounded-card border border-casa-border object-cover"
-                                style={{ objectPosition: `${photoEditorFocalX}% ${photoEditorFocalY}%` }}
-                                referrerPolicy="no-referrer"
-                                onError={(event) => {
-                                  const target = event.currentTarget
-                                  if (target.src !== recipeFallbackHero) target.src = recipeFallbackHero
-                                }}
-                              />
+                          <div className="space-y-3">
+                            <p className="text-body-sm font-semibold text-casa-navy">Adjust photo crop (hero)</p>
+                            <p className="text-caption text-casa-muted">
+                              Pan focus for widescreen display. 0% is left/top, 100% is right/bottom.
+                            </p>
+                            <div className="overflow-hidden rounded-xl border border-casa-border bg-casa-surface">
+                              <div className="relative aspect-[16/9] w-full bg-casa-surface">
+                                <img
+                                  src={photoEditorPreviewUrl || recipeFallbackHero}
+                                  alt="Crop preview"
+                                  className="h-full w-full object-cover"
+                                  style={{ objectPosition: `${photoEditorFocalX}% ${photoEditorFocalY}%` }}
+                                />
+                              </div>
                             </div>
-                            <div className="space-y-4">
+                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
                               <label className="block text-body-sm font-semibold text-casa-navy">
                                 Horizontal crop focus
                                 <input
@@ -4485,12 +4500,12 @@ export default function CookPage() {
                         ))}
                       </div>
                       <div className="grid grid-cols-[1fr_auto] gap-2 items-start">
-                        <textarea
+                        <Textarea
                           value={recipeAiInstruction}
                           onChange={(event) => setRecipeAiInstruction(event.target.value)}
                           rows={2}
                           placeholder='AI edit instruction (e.g. "split quantities using left side of | for 2 people").'
-                          className="rounded-button border border-casa-border bg-casa-bg px-2.5 py-2 text-body-sm text-casa-text outline-none resize-y"
+                          className="resize-y text-body-sm"
                         />
                         <Button
                           variant="secondary"
@@ -4540,26 +4555,26 @@ export default function CookPage() {
                         {recipeEditorDraft.ingredients.map((ingredient, index) => (
                           <div key={`edit-ingredient-${index}`} className="rounded-lg border border-casa-border bg-casa-surface p-2 space-y-1">
                             <div className="flex items-center gap-1.5">
-                              <input
+                              <Input
                                 type="text"
                                 value={ingredient.quantity ?? ''}
                                 onChange={(event) => updateRecipeDraftIngredient(index, { quantity: event.target.value || null })}
                                 placeholder="Qty"
-                                className="w-16 rounded-button border border-casa-border bg-casa-bg px-2 py-1.5 text-body text-casa-text outline-none"
+                                className="w-16"
                               />
-                              <input
+                              <Input
                                 type="text"
                                 value={ingredient.unit ?? ''}
                                 onChange={(event) => updateRecipeDraftIngredient(index, { unit: event.target.value || null })}
                                 placeholder="Unit"
-                                className="w-16 rounded-button border border-casa-border bg-casa-bg px-2 py-1.5 text-body text-casa-text outline-none"
+                                className="w-16"
                               />
-                              <input
+                              <Input
                                 type="text"
                                 value={ingredient.name ?? ''}
                                 onChange={(event) => updateRecipeDraftIngredient(index, { name: event.target.value || null })}
                                 placeholder="Ingredient name"
-                                className="flex-1 rounded-button border border-casa-border bg-casa-bg px-2 py-1.5 text-body text-casa-text outline-none"
+                                className="flex-1"
                               />
                               <Button
                                 variant="danger"
@@ -4569,12 +4584,12 @@ export default function CookPage() {
                                 Remove
                               </Button>
                             </div>
-                            <input
+                            <Input
                               type="text"
                               value={ingredient.raw_text}
                               onChange={(event) => updateRecipeDraftIngredient(index, { raw_text: event.target.value })}
                               placeholder="Raw ingredient text"
-                              className="w-full rounded-button border border-casa-border bg-casa-bg px-2 py-1.5 text-body-sm text-casa-muted outline-none"
+                              className="text-body-sm text-casa-muted"
                             />
                           </div>
                         ))}
@@ -4625,11 +4640,11 @@ export default function CookPage() {
                                 </Chip>
                               </div>
                             </div>
-                            <textarea
+                            <Textarea
                               value={step.instruction}
                               onChange={(event) => updateRecipeDraftStep(index, event.target.value)}
                               rows={3}
-                              className="w-full rounded-button border border-casa-border bg-casa-bg px-2.5 py-2 text-body text-casa-text outline-none resize-y leading-relaxed"
+                              className="resize-y leading-relaxed text-body"
                             />
                           </div>
                         ))}

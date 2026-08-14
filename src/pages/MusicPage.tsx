@@ -17,7 +17,7 @@ import {
   ChevronLeft, RefreshCw, LogOut
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Button, Heading, IconButton, Progress } from '../components/ui'
+import { Button, Heading, IconButton, Progress, Input } from '../components/ui'
 import { useSpotify } from '../hooks/useSpotify'
 import {
   getClientId, setClientId, startAuthFlow, handleOAuthCallback,
@@ -101,7 +101,7 @@ function SetupScreen() {
   return (
     <div className="min-h-screen bg-casa-bg flex flex-col px-6 pt-12 pb-24 max-w-md mx-auto">
       <div className="flex items-center gap-3 mb-10">
-        <div className="w-12 h-12 rounded-2xl bg-[#1DB954] flex items-center justify-center shadow-md">
+        <div className="w-12 h-12 rounded-2xl bg-emerald-500 flex items-center justify-center shadow-md">
           <Music size={24} className="text-white" />
         </div>
         <div>
@@ -119,7 +119,7 @@ function SetupScreen() {
               href="https://developer.spotify.com/dashboard"
               target="_blank"
               rel="noreferrer"
-              className="text-[#1DB954] underline"
+              className="text-emerald-600 underline font-medium"
             >
               developer.spotify.com/dashboard
             </a>
@@ -141,20 +141,22 @@ function SetupScreen() {
 
         <div>
           <p className="text-body font-semibold text-casa-navy mb-1">Step 2 — Paste your Client ID</p>
-          <input
+          <Input
             value={clientId}
             onChange={e => setLocalClientId(e.target.value)}
             placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-            className="w-full bg-casa-bg border border-casa-border rounded-lg px-3 py-2.5 text-body-sm text-casa-navy placeholder:text-casa-muted focus:outline-none focus:ring-2 focus:ring-casa-gold/40"
           />
           {error && <p className="text-caption text-red-500 mt-1">{error}</p>}
         </div>
 
         <Button
           type="button"
+          variant="primary"
+          fullWidth
           onClick={connect}
           disabled={connecting}
-          className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-lg bg-[#1DB954] text-white font-semibold text-body-sm hover:bg-[#1aa34a] active:scale-[0.98] transition-all disabled:opacity-60"
+          loading={connecting}
+          className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold"
         >
           {connecting ? 'Redirecting to Spotify…' : 'Connect Spotify →'}
         </Button>

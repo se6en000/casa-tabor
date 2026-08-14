@@ -13,7 +13,7 @@ import {
   type VoiceRuntimeConfig,
 } from '../lib/voiceRuntimeConfig'
 import { VOICE_AUDIT_LOG_KEY } from '../lib/voiceAudit'
-import { Button, Chip, DisclosureSection, IconButton, SegmentedControl, SkeletonRow, Switch } from '../components/ui'
+import { Button, Chip, DisclosureSection, IconButton, SegmentedControl, SkeletonRow, Switch, Input, Textarea } from '../components/ui'
 import { SettingsPageHeader } from '../components/settings'
 
 interface LLMConfig {
@@ -885,12 +885,12 @@ export default function AISettingsPage() {
           <label className="block text-body-sm font-semibold text-casa-navy">
             API Key <span className="text-casa-muted font-normal">({vendor?.label})</span>
           </label>
-          <input
+          <Input
             type="password"
             value={config.api_key}
             onChange={e => { setConfig(c => ({ ...c, api_key: e.target.value })); setSaveStatus('idle'); setTestStatus('idle') }}
             placeholder="Paste your API key here"
-            className="w-full px-3 py-2 rounded-button border border-casa-border text-body-sm text-casa-navy bg-white focus:outline-none focus:ring-2 focus:ring-casa-navy/20 font-mono"
+            className="font-mono"
           />
           <p className="text-caption text-casa-muted">Stored securely server-side. Never sent to the browser.</p>
         </div>
@@ -903,12 +903,12 @@ export default function AISettingsPage() {
           <p className="text-caption text-casa-muted">
             Plain-English rules the AI applies to every chat. Examples: "Default to mornings before 11am", "Never schedule during 5–7pm dinner", "Soccer is always at Phipps Park".
           </p>
-          <textarea
+          <Textarea
             value={customInstructions}
             onChange={(e) => { setCustomInstructions(e.target.value); setSaveStatus('idle') }}
             rows={6}
             placeholder="One rule per line, in your own words. Saved instantly to every conversation."
-            className="w-full rounded-button border border-casa-border bg-white px-3 py-2 text-body-sm text-casa-navy focus:outline-none focus:border-casa-gold resize-y font-mono"
+            className="resize-y font-mono"
           />
         </div>
 
@@ -932,11 +932,10 @@ export default function AISettingsPage() {
             <label className="block text-caption font-semibold uppercase tracking-wide text-casa-muted">
               Shortcut token label
             </label>
-            <input
+            <Input
               value={newCaptureLabel}
               onChange={(e) => setNewCaptureLabel(e.target.value)}
               placeholder="Jake iPhone Action Button"
-              className="w-full px-3 py-2 rounded-button border border-casa-border text-body-sm text-casa-navy bg-white focus:outline-none focus:ring-2 focus:ring-casa-navy/20"
             />
             <div className="flex flex-wrap items-center gap-2">
               <Button variant="strong" size="sm" disabled={captureLoading || !newCaptureLabel.trim()} onClick={() => void generateCaptureToken()}>

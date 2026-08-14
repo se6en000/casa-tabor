@@ -144,7 +144,7 @@ export function segmentedControlItemClassName(options = {}) {
 }
 
 export const CARD_PADDINGS = ['none', 'sm', 'md', 'lg']
-export const CARD_TONES = ['surface', 'subtle', 'accent', 'ambient']
+export const CARD_TONES = ['surface', 'subtle', 'accent', 'ambient', 'stylish']
 
 const CARD_PADDING_CLASSES = {
   none: '',
@@ -157,7 +157,8 @@ const CARD_TONE_CLASSES = {
   surface: 'bg-casa-surface border-casa-border',
   subtle: 'bg-casa-bg border-casa-border/70',
   accent: 'bg-casa-accent-subtle border-casa-accent-subtle-border',
-  ambient: 'bg-gradient-to-br from-casa-navy/5 via-casa-surface to-casa-gold/5 border-casa-gold/20',
+  ambient: 'bg-gradient-to-br from-casa-surface via-casa-surface to-casa-accent-subtle/30 border-casa-accent-soft-border/60 shadow-widget',
+  stylish: 'bg-gradient-to-br from-casa-surface via-casa-surface to-casa-accent-subtle/40 border-casa-gold/30 shadow-widget',
 }
 
 /**

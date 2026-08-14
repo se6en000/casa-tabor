@@ -54,8 +54,16 @@
         "reason": "Family-member avatar colors and indicators are selected from runtime household data."
       },
       {
+        "path": "src/components/canvas/widgets/AttentionHubWidget.tsx",
+        "reason": "Family-member avatar colors and indicators are selected from runtime household data."
+      },
+      {
         "path": "src/components/shared/PinGate.tsx",
         "reason": "Family-member avatar colors and indicators are selected from runtime household data."
+      },
+      {
+        "path": "src/components/calendar/DayEventCard.tsx",
+        "reason": "Family-member avatar colors and event accent borders are selected from runtime household data."
       },
       {
         "path": "src/components/calendar/DayView.tsx",

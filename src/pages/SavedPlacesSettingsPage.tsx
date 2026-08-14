@@ -13,7 +13,7 @@ import type { ContactPlaceRelationship, FamilyContactRelationship, SavedContact,
 import { savedPlaceAddress } from '../hooks/useSavedPlaces'
 import { useFamilyMembers } from '../hooks/useFamilyMembers'
 import { rankDirectorySuggestions, resolveDirectoryPlaceSave, type DirectoryPlaceSelection } from '../utils/directorySuggestions'
-import { Button, Checkbox, Combobox, IconButton, SegmentedControl } from '../components/ui'
+import { Button, Checkbox, Combobox, IconButton, SegmentedControl, Input, Textarea, Radio } from '../components/ui'
 import { SettingsPageHeader } from '../components/settings'
 import DirectoryPlaceInput from '../components/shared/DirectoryPlaceInput'
 import GoogleAddressSearchInput from '../components/shared/GoogleAddressSearchInput'
@@ -95,8 +95,7 @@ function PlaceForm({ initial, places, onSave, onCancel, onEditExisting, saving }
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
         <label className="block text-caption font-semibold text-casa-muted mb-1">Name *</label>
-        <input required value={form.name ?? ''} onChange={e => set('name', e.target.value)} placeholder="e.g. Springmeyer's House"
-          className="w-full border border-casa-border rounded-lg px-3 py-2 text-body text-casa-navy bg-casa-bg focus:outline-none focus:ring-2 focus:ring-casa-gold" />
+        <Input required value={form.name ?? ''} onChange={e => set('name', e.target.value)} placeholder="e.g. Springmeyer's House" />
         {possibleDuplicates.length > 0 && (
           <div className="mt-2 rounded-lg border border-casa-gold/40 bg-casa-gold/5 p-3">
             <p className="text-caption font-semibold text-casa-muted mb-1.5">This might already exist:</p>
@@ -119,8 +118,7 @@ function PlaceForm({ initial, places, onSave, onCancel, onEditExisting, saving }
         <label className="block text-caption font-semibold text-casa-muted mb-1">
           Aliases / Nicknames <span className="font-normal ml-1">(comma-separated — the AI will match these)</span>
         </label>
-        <input value={form._aliasText} onChange={e => set('_aliasText', e.target.value)} placeholder='"the Springmeyers", "Springmeyer house"'
-          className="w-full border border-casa-border rounded-lg px-3 py-2 text-body text-casa-navy bg-casa-bg focus:outline-none focus:ring-2 focus:ring-casa-gold" />
+        <Input value={form._aliasText} onChange={e => set('_aliasText', e.target.value)} placeholder='"the Springmeyers", "Springmeyer house"' />
       </div>
       <div>
         <label className="block text-caption font-semibold text-casa-muted mb-1">Category</label>
@@ -153,31 +151,26 @@ function PlaceForm({ initial, places, onSave, onCancel, onEditExisting, saving }
         </div>
         <div>
           <label className="block text-caption font-semibold text-casa-muted mb-1">City *</label>
-          <input required value={form.city ?? ''} onChange={e => set('city', e.target.value)} placeholder="West Palm Beach"
-            className="w-full border border-casa-border rounded-lg px-3 py-2 text-body text-casa-navy bg-casa-bg focus:outline-none focus:ring-2 focus:ring-casa-gold" />
+          <Input required value={form.city ?? ''} onChange={e => set('city', e.target.value)} placeholder="West Palm Beach" />
         </div>
         <div className="grid grid-cols-2 gap-2">
           <div>
             <label className="block text-caption font-semibold text-casa-muted mb-1">State *</label>
-            <input required value={form.state ?? ''} onChange={e => set('state', e.target.value)} placeholder="FL" maxLength={2}
-              className="w-full border border-casa-border rounded-lg px-3 py-2 text-body text-casa-navy bg-casa-bg focus:outline-none focus:ring-2 focus:ring-casa-gold uppercase" />
+            <Input required value={form.state ?? ''} onChange={e => set('state', e.target.value)} placeholder="FL" maxLength={2} className="uppercase" />
           </div>
           <div>
             <label className="block text-caption font-semibold text-casa-muted mb-1">ZIP *</label>
-            <input required value={form.zip ?? ''} onChange={e => set('zip', e.target.value)} placeholder="33401"
-              className="w-full border border-casa-border rounded-lg px-3 py-2 text-body text-casa-navy bg-casa-bg focus:outline-none focus:ring-2 focus:ring-casa-gold" />
+            <Input required value={form.zip ?? ''} onChange={e => set('zip', e.target.value)} placeholder="33401" />
           </div>
         </div>
       </div>
       <div>
         <label className="block text-caption font-semibold text-casa-muted mb-1">Phone</label>
-        <input type="tel" value={form.phone ?? ''} onChange={e => set('phone', e.target.value)} placeholder="(561) 555-1234"
-          className="w-full border border-casa-border rounded-lg px-3 py-2 text-body text-casa-navy bg-casa-bg focus:outline-none focus:ring-2 focus:ring-casa-gold" />
+        <Input type="tel" value={form.phone ?? ''} onChange={e => set('phone', e.target.value)} placeholder="(561) 555-1234" />
       </div>
       <div>
         <label className="block text-caption font-semibold text-casa-muted mb-1">Notes <span className="font-normal ml-1">(context the AI can use)</span></label>
-        <textarea rows={2} value={form.notes ?? ''} onChange={e => set('notes', e.target.value)} placeholder='"Jake and Ayla are best friends. Dogs in yard."'
-          className="w-full border border-casa-border rounded-lg px-3 py-2 text-body text-casa-navy bg-casa-bg focus:outline-none focus:ring-2 focus:ring-casa-gold resize-none" />
+        <Textarea rows={2} value={form.notes ?? ''} onChange={e => set('notes', e.target.value)} placeholder='"Jake and Ayla are best friends. Dogs in yard."' className="resize-none" />
       </div>
       <div className="flex gap-2 justify-end pt-1">
         <Button type="button" onClick={onCancel} className="px-4 py-2 rounded-lg border border-casa-border text-body text-casa-muted hover:bg-casa-divider transition-colors">Cancel</Button>
@@ -323,8 +316,7 @@ function ContactForm({ initial, places, contacts, onSave, onCancel, onEditExisti
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
         <label className="block text-caption font-semibold text-casa-muted mb-1">Name *</label>
-        <input required value={form.name ?? ''} onChange={e => set('name', e.target.value)} placeholder='e.g. The Springmeyers'
-          className="w-full border border-casa-border rounded-lg px-3 py-2 text-body text-casa-navy bg-casa-bg focus:outline-none focus:ring-2 focus:ring-casa-gold" />
+        <Input required value={form.name ?? ''} onChange={e => set('name', e.target.value)} placeholder='e.g. The Springmeyers' />
         {possibleDuplicates.length > 0 && (
           <div className="mt-2 rounded-lg border border-casa-gold/40 bg-casa-gold/5 p-3">
             <p className="text-caption font-semibold text-casa-muted mb-1.5">This might already exist:</p>
@@ -347,24 +339,20 @@ function ContactForm({ initial, places, contacts, onSave, onCancel, onEditExisti
         <label className="block text-caption font-semibold text-casa-muted mb-1">
           Aliases / Nicknames <span className="font-normal ml-1">(comma-separated — the AI will match these)</span>
         </label>
-        <input value={form._aliasText} onChange={e => set('_aliasText', e.target.value)} placeholder='"Springmeyers", "Jake&apos;s friend Ayla"'
-          className="w-full border border-casa-border rounded-lg px-3 py-2 text-body text-casa-navy bg-casa-bg focus:outline-none focus:ring-2 focus:ring-casa-gold" />
+        <Input value={form._aliasText} onChange={e => set('_aliasText', e.target.value)} placeholder='"Springmeyers", "Jake&apos;s friend Ayla"' />
       </div>
       <div>
         <label className="block text-caption font-semibold text-casa-muted mb-1">Relationship</label>
-        <input value={form.relationship ?? ''} onChange={e => set('relationship', e.target.value)} placeholder='e.g. Family friend, Doctor, Coach'
-          className="w-full border border-casa-border rounded-lg px-3 py-2 text-body text-casa-navy bg-casa-bg focus:outline-none focus:ring-2 focus:ring-casa-gold" />
+        <Input value={form.relationship ?? ''} onChange={e => set('relationship', e.target.value)} placeholder='e.g. Family friend, Doctor, Coach' />
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className="block text-caption font-semibold text-casa-muted mb-1">Phone</label>
-          <input type="tel" value={form.phone ?? ''} onChange={e => set('phone', e.target.value)} placeholder="(561) 555-1234"
-            className="w-full border border-casa-border rounded-lg px-3 py-2 text-body text-casa-navy bg-casa-bg focus:outline-none focus:ring-2 focus:ring-casa-gold" />
+          <Input type="tel" value={form.phone ?? ''} onChange={e => set('phone', e.target.value)} placeholder="(561) 555-1234" />
         </div>
         <div>
           <label className="block text-caption font-semibold text-casa-muted mb-1">Email</label>
-          <input type="email" value={form.email ?? ''} onChange={e => set('email', e.target.value)} placeholder="jane@example.com"
-            className="w-full border border-casa-border rounded-lg px-3 py-2 text-body text-casa-navy bg-casa-bg focus:outline-none focus:ring-2 focus:ring-casa-gold" />
+          <Input type="email" value={form.email ?? ''} onChange={e => set('email', e.target.value)} placeholder="jane@example.com" />
         </div>
       </div>
       <div>
@@ -380,8 +368,7 @@ function ContactForm({ initial, places, contacts, onSave, onCancel, onEditExisti
       </div>
       <div>
         <label className="block text-caption font-semibold text-casa-muted mb-1">Notes <span className="font-normal ml-1">(context the AI can use)</span></label>
-        <textarea rows={2} value={form.notes ?? ''} onChange={e => set('notes', e.target.value)} placeholder='"Kids are Ayla (8) and Ben (5). Birthday in March."'
-          className="w-full border border-casa-border rounded-lg px-3 py-2 text-body text-casa-navy bg-casa-bg focus:outline-none focus:ring-2 focus:ring-casa-gold resize-none" />
+        <Textarea rows={2} value={form.notes ?? ''} onChange={e => set('notes', e.target.value)} placeholder='"Kids are Ayla (8) and Ben (5). Birthday in March."' className="resize-none" />
       </div>
       <div className="flex gap-2 justify-end pt-1">
         <Button type="button" onClick={onCancel} className="px-4 py-2 rounded-lg border border-casa-border text-body text-casa-muted hover:bg-casa-divider transition-colors">Cancel</Button>
@@ -568,17 +555,18 @@ function PossibleDuplicatePlacesPanel({ places, onMerge, onNotDuplicate, merging
             <div key={groupKey} className="bg-casa-error/5 border border-dashed border-casa-error/30 rounded-card p-4">
               <div className="flex flex-wrap gap-2 mb-3">
                 {group.map(p => (
-                  <label key={p.id} className={cn(
-                    'flex items-center gap-2 rounded-lg border px-3 py-2 cursor-pointer text-body-sm',
+                  <div key={p.id} className={cn(
+                    'rounded-lg border px-3 py-1.5',
                     keepId === p.id ? 'border-casa-gold bg-casa-gold/10' : 'border-casa-border bg-casa-surface',
                   )}>
-                    <input type="radio" name={`keep-place-${groupKey}`} checked={keepId === p.id}
-                      onChange={() => setSelected(s => ({ ...s, [groupKey]: p.id }))} />
-                    <span>
-                      <span className="font-semibold text-casa-navy">{p.name}</span>
-                      {savedPlaceAddress(p) && <span className="block text-caption text-casa-muted">{savedPlaceAddress(p)}</span>}
-                    </span>
-                  </label>
+                    <Radio
+                      name={`keep-place-${groupKey}`}
+                      checked={keepId === p.id}
+                      onChange={() => setSelected(s => ({ ...s, [groupKey]: p.id }))}
+                      label={p.name}
+                      description={savedPlaceAddress(p) || undefined}
+                    />
+                  </div>
                 ))}
               </div>
               <div className="flex flex-wrap items-center justify-end gap-2">
@@ -636,17 +624,18 @@ function PossibleDuplicateContactsPanel({ contacts, onMerge, onNotDuplicate, mer
             <div key={groupKey} className="bg-casa-error/5 border border-dashed border-casa-error/30 rounded-card p-4">
               <div className="flex flex-wrap gap-2 mb-3">
                 {group.map(c => (
-                  <label key={c.id} className={cn(
-                    'flex items-center gap-2 rounded-lg border px-3 py-2 cursor-pointer text-body-sm',
+                  <div key={c.id} className={cn(
+                    'rounded-lg border px-3 py-1.5',
                     keepId === c.id ? 'border-casa-gold bg-casa-gold/10' : 'border-casa-border bg-casa-surface',
                   )}>
-                    <input type="radio" name={`keep-contact-${groupKey}`} checked={keepId === c.id}
-                      onChange={() => setSelected(s => ({ ...s, [groupKey]: c.id }))} />
-                    <span>
-                      <span className="font-semibold text-casa-navy">{c.name}</span>
-                      {c.phone && <span className="block text-caption text-casa-muted">{c.phone}</span>}
-                    </span>
-                  </label>
+                    <Radio
+                      name={`keep-contact-${groupKey}`}
+                      checked={keepId === c.id}
+                      onChange={() => setSelected(s => ({ ...s, [groupKey]: c.id }))}
+                      label={c.name}
+                      description={c.phone || undefined}
+                    />
+                  </div>
                 ))}
               </div>
               <div className="flex flex-wrap items-center justify-end gap-2">
@@ -706,14 +695,17 @@ function PossibleDuplicateFamilyLinksPanel({ familyMembers, contacts, onKeep, on
               </p>
               <div className="flex flex-wrap gap-2 mb-3">
                 {group.relationship_ids.map((id, index) => (
-                  <label key={id} className={cn(
-                    'flex items-center gap-2 rounded-lg border px-3 py-2 cursor-pointer text-body-sm',
+                  <div key={id} className={cn(
+                    'rounded-lg border px-3 py-1.5',
                     keepId === id ? 'border-casa-gold bg-casa-gold/10' : 'border-casa-border bg-casa-surface',
                   )}>
-                    <input type="radio" name={`keep-familylink-${groupKey}`} checked={keepId === id}
-                      onChange={() => setSelected(s => ({ ...s, [groupKey]: id }))} />
-                    <span>{group.relationships[index]}</span>
-                  </label>
+                    <Radio
+                      name={`keep-familylink-${groupKey}`}
+                      checked={keepId === id}
+                      onChange={() => setSelected(s => ({ ...s, [groupKey]: id }))}
+                      label={group.relationships[index]}
+                    />
+                  </div>
                 ))}
               </div>
               <div className="flex flex-wrap items-center justify-end gap-2">
@@ -770,14 +762,17 @@ function PossibleDuplicateConnectionsPanel({ contacts, places, onKeep, onNotDupl
               </p>
               <div className="flex flex-wrap gap-2 mb-3">
                 {group.relationship_ids.map((id, index) => (
-                  <label key={id} className={cn(
-                    'flex items-center gap-2 rounded-lg border px-3 py-2 cursor-pointer text-body-sm',
+                  <div key={id} className={cn(
+                    'rounded-lg border px-3 py-1.5',
                     keepId === id ? 'border-casa-gold bg-casa-gold/10' : 'border-casa-border bg-casa-surface',
                   )}>
-                    <input type="radio" name={`keep-connection-${groupKey}`} checked={keepId === id}
-                      onChange={() => setSelected(s => ({ ...s, [groupKey]: id }))} />
-                    <span>{group.relationships[index]}</span>
-                  </label>
+                    <Radio
+                      name={`keep-connection-${groupKey}`}
+                      checked={keepId === id}
+                      onChange={() => setSelected(s => ({ ...s, [groupKey]: id }))}
+                      label={group.relationships[index]}
+                    />
+                  </div>
                 ))}
               </div>
               <div className="flex flex-wrap items-center justify-end gap-2">
@@ -1433,9 +1428,8 @@ export default function SavedPlacesSettingsPage() {
                 )}
                 <div className="flex flex-col sm:flex-row gap-3 mb-4">
                   <div className="relative flex-1">
-                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-casa-muted" />
-                    <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name, alias, address…"
-                      className="w-full border border-casa-border rounded-lg pl-8 pr-3 py-2 text-body text-casa-navy bg-casa-bg focus:outline-none focus:ring-2 focus:ring-casa-gold" />
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-casa-muted z-10" />
+                    <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name, alias, address…" className="pl-8" />
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2 mb-5">
@@ -1544,11 +1538,10 @@ export default function SavedPlacesSettingsPage() {
                       />
                       <div>
                         <label className="block text-caption font-semibold text-casa-muted mb-1">Connection type</label>
-                        <input
+                        <Input
                           value={connectionLabel}
                           onChange={event => setConnectionLabel(event.target.value)}
                           placeholder="provider_location, works_at, lives_at…"
-                          className="w-full border border-casa-border rounded-lg px-3 py-2 text-body text-casa-navy bg-casa-bg focus:outline-none focus:ring-2 focus:ring-casa-gold"
                         />
                       </div>
                       <Checkbox
@@ -1612,9 +1605,8 @@ export default function SavedPlacesSettingsPage() {
                       </div>
                     )}
                     <div className="relative mb-5">
-                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-casa-muted" />
-                      <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search people, places, or connection type…"
-                        className="w-full border border-casa-border rounded-lg pl-8 pr-3 py-2 text-body text-casa-navy bg-casa-bg focus:outline-none focus:ring-2 focus:ring-casa-gold" />
+                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-casa-muted z-10" />
+                      <Input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search people, places, or connection type…" className="pl-8" />
                     </div>
                     {connectionsLoading && <p className="text-body text-casa-muted text-center py-12">Loading…</p>}
                     {!connectionsLoading && filteredConnections.length === 0 && (
@@ -1688,11 +1680,10 @@ export default function SavedPlacesSettingsPage() {
                       />
                       <div className="sm:col-span-2">
                         <label className="block text-caption font-semibold text-casa-muted mb-1">Relationship</label>
-                        <input
+                        <Input
                           value={familyLinkLabel}
                           onChange={event => setFamilyLinkLabel(event.target.value)}
                           placeholder="dermatologist, coach, orthodontist…"
-                          className="w-full border border-casa-border rounded-lg px-3 py-2 text-body text-casa-navy bg-casa-bg focus:outline-none focus:ring-2 focus:ring-casa-gold"
                         />
                       </div>
                     </div>
@@ -1749,9 +1740,8 @@ export default function SavedPlacesSettingsPage() {
                       </div>
                     )}
                     <div className="relative mb-5">
-                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-casa-muted" />
-                      <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search family members, people, or relationship…"
-                        className="w-full border border-casa-border rounded-lg pl-8 pr-3 py-2 text-body text-casa-navy bg-casa-bg focus:outline-none focus:ring-2 focus:ring-casa-gold" />
+                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-casa-muted z-10" />
+                      <Input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search family members, people, or relationship…" className="pl-8" />
                     </div>
                     {familyLinksLoading && <p className="text-body text-casa-muted text-center py-12">Loading…</p>}
                     {!familyLinksLoading && filteredFamilyLinks.length === 0 && (
@@ -1826,9 +1816,8 @@ export default function SavedPlacesSettingsPage() {
                   </div>
                 )}
                 <div className="relative mb-5">
-                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-casa-muted" />
-                  <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name, alias, relationship…"
-                    className="w-full border border-casa-border rounded-lg pl-8 pr-3 py-2 text-body text-casa-navy bg-casa-bg focus:outline-none focus:ring-2 focus:ring-casa-gold" />
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-casa-muted z-10" />
+                  <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name, alias, relationship…" className="pl-8" />
                 </div>
                 {contactsLoading && <p className="text-body text-casa-muted text-center py-12">Loading…</p>}
                 {!contactsLoading && filteredContacts.length === 0 && (

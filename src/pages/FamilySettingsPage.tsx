@@ -469,22 +469,20 @@ export default function FamilySettingsPage() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-caption font-semibold text-casa-muted uppercase tracking-wide mb-1">Display Name</label>
-                      <input
+                      <Input
                         type="text"
                         value={m.name ?? ''}
                         onChange={e => isNew ? patchNew(m._tempId!, { name: e.target.value }) : patch(m.id!, { name: e.target.value })}
                         placeholder="Jake"
-                        className="w-full px-3 py-2 rounded-button border border-casa-border text-body-sm text-casa-navy bg-white focus:outline-none focus:ring-2 focus:ring-casa-navy/20"
                       />
                     </div>
                     <div>
                       <label className="block text-caption font-semibold text-casa-muted uppercase tracking-wide mb-1">Full Name</label>
-                      <input
+                      <Input
                         type="text"
                         value={m.full_name ?? ''}
                         onChange={e => isNew ? patchNew(m._tempId!, { full_name: e.target.value }) : patch(m.id!, { full_name: e.target.value })}
                         placeholder="Jacob Tabor"
-                        className="w-full px-3 py-2 rounded-button border border-casa-border text-body-sm text-casa-navy bg-white focus:outline-none focus:ring-2 focus:ring-casa-navy/20"
                       />
                     </div>
                   </div>
@@ -537,22 +535,20 @@ export default function FamilySettingsPage() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-caption font-semibold text-casa-muted uppercase tracking-wide mb-1">Phone</label>
-                      <input
+                      <Input
                         type="tel"
                         value={m.phone ?? ''}
                         onChange={e => isNew ? patchNew(m._tempId!, { phone: e.target.value }) : patch(m.id!, { phone: e.target.value })}
                         placeholder="+1 555 000 0000"
-                        className="w-full px-3 py-2 rounded-button border border-casa-border text-body-sm text-casa-navy bg-white focus:outline-none focus:ring-2 focus:ring-casa-navy/20"
                       />
                     </div>
                     <div>
                       <label className="block text-caption font-semibold text-casa-muted uppercase tracking-wide mb-1">Email</label>
-                      <input
+                      <Input
                         type="email"
                         value={m.email ?? ''}
                         onChange={e => isNew ? patchNew(m._tempId!, { email: e.target.value }) : patch(m.id!, { email: e.target.value })}
                         placeholder="jake@example.com"
-                        className="w-full px-3 py-2 rounded-button border border-casa-border text-body-sm text-casa-navy bg-white focus:outline-none focus:ring-2 focus:ring-casa-navy/20"
                       />
                     </div>
                   </div>
@@ -698,7 +694,7 @@ export default function FamilySettingsPage() {
                                       >
                                         {label}
                                       </Button>
-                                      <input
+                                      <Input
                                         type="time"
                                         value={startLocal}
                                         disabled={!enabled}
@@ -706,9 +702,9 @@ export default function FamilySettingsPage() {
                                           const nextStart = event.target.value
                                           void upsertWorkRule(m.id!, day, true, nextStart, endLocal)
                                         }}
-                                        className="h-9 rounded-button border border-casa-border px-2 text-body-sm text-casa-navy disabled:opacity-50"
+                                        className="h-9 px-2 text-body-sm text-casa-navy disabled:opacity-50"
                                       />
-                                      <input
+                                      <Input
                                         type="time"
                                         value={endLocal}
                                         disabled={!enabled}
@@ -716,7 +712,7 @@ export default function FamilySettingsPage() {
                                           const nextEnd = event.target.value
                                           void upsertWorkRule(m.id!, day, true, startLocal, nextEnd)
                                         }}
-                                        className="h-9 rounded-button border border-casa-border px-2 text-body-sm text-casa-navy disabled:opacity-50"
+                                        className="h-9 px-2 text-body-sm text-casa-navy disabled:opacity-50"
                                       />
                                     </div>
                                   )
@@ -727,11 +723,11 @@ export default function FamilySettingsPage() {
                             <div>
                               <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-2">Day-off overrides</p>
                               <div className="flex items-center gap-2">
-                                <input
+                                <Input
                                   type="date"
                                   value={dayOffDraft}
                                   onChange={(event) => setDayOffDraftByMember((prev) => ({ ...prev, [id]: event.target.value }))}
-                                  className="h-9 rounded-button border border-casa-border px-2 text-body-sm text-casa-navy"
+                                  className="h-9 px-2 text-body-sm text-casa-navy"
                                 />
                                 <Button
                                   type="button"

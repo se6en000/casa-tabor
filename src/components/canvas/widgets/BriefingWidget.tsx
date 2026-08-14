@@ -1,11 +1,19 @@
 import { format, parseISO } from 'date-fns'
-import { Sparkles } from 'lucide-react'
+import { Sparkles, CloudSun } from 'lucide-react'
 import { cn } from '../../../utils/cn'
 import type { EventWithDetails } from '../../../hooks/useCalendarEvents'
 
 interface BriefingWidgetProps {
   now: Date
   todayEvents: EventWithDetails[]
+  householdNarrative: string
+  copilotTip: string
+  weather?: {
+    temp: number
+    condition: string
+    precipProbability?: number
+    city?: string
+  } | null
   highlightedEventId: string | null
   setHighlightedEventId: (id: string | null) => void
   onOpenEvent: (event: EventWithDetails) => void
@@ -14,6 +22,9 @@ interface BriefingWidgetProps {
 export default function BriefingWidget({
   now,
   todayEvents,
+  householdNarrative,
+  copilotTip,
+  weather,
   highlightedEventId,
   setHighlightedEventId,
   onOpenEvent,
@@ -39,9 +50,7 @@ export default function BriefingWidget({
             Household Status
           </p>
           <p className="text-body-sm text-casa-navy font-medium leading-relaxed">
-            {todayEvents.length > 0
-              ? `Today features ${todayEvents.length} events across the family. Sarah handles morning gymnastics run, while Luke covers soccer pickup at 5:15 PM.`
-              : 'No scheduled appointments today. Great time for meal prep or family downtime.'}
+            {householdNarrative}
           </p>
         </div>
 
@@ -101,12 +110,20 @@ export default function BriefingWidget({
 
         {/* AI Assistant Quick Suggestions */}
         <div className="p-3.5 rounded-2xl bg-casa-gold/10 border border-casa-gold/30">
-          <div className="flex items-center gap-2 mb-1.5">
-            <Sparkles size={14} className="text-casa-gold" />
-            <span className="text-caption font-bold text-casa-navy">Copilot Tip</span>
+          <div className="flex items-center justify-between gap-2 mb-1.5">
+            <div className="flex items-center gap-2">
+              <Sparkles size={14} className="text-casa-gold" />
+              <span className="text-caption font-bold text-casa-navy">Copilot Insight</span>
+            </div>
+            {weather && (
+              <span className="inline-flex items-center gap-1 text-caption text-casa-muted font-mono bg-casa-surface/60 px-2 py-0.5 rounded-full border border-casa-border/40">
+                <CloudSun size={11} className="text-casa-gold" />
+                {weather.temp}° {weather.condition}
+              </span>
+            )}
           </div>
-          <p className="text-caption text-casa-text-secondary">
-            Rain expected starting around 4:00 PM. Recommend umbrellas for soccer pickup.
+          <p className="text-caption text-casa-text-secondary leading-relaxed">
+            {copilotTip}
           </p>
         </div>
       </div>

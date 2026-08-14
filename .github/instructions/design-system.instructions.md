@@ -54,3 +54,10 @@ Before considering UX work complete:
 - Cover interaction, keyboard/accessibility, loading, success, empty, disabled, and failure states where relevant.
 - Verify the real rendered path in addition to tests/build.
 - For frontend changes, deploy through the repository workflow, refresh the Pi kiosk, and verify Chromium is running.
+
+## Mandatory Deployment Gate
+
+**Agents must never deploy an unverified or non-compliant UX:**
+- Every change must pass `npm run tokens:check`, `npm run style:check`, `npm run certify:experience`, and `npm test`.
+- Run `npm run design-system:audit` to measure primitive coverage and inspect `reports/design-system-migration-todo.md`.
+- Any PR, build, or deploy script will automatically reject unapproved raw controls, hardcoded hex colors, or sub-44px touch targets.

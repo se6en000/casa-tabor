@@ -82,7 +82,7 @@ function WarmthPreview({ filter }: { filter: string }) {
       style={{ filter, transition: 'filter 0.3s ease-out' }}
     >
       {/* Simulated screen content */}
-      <div className="bg-[#FAF8F5] p-4">
+      <div className="bg-casa-surface p-4">
         <div className="flex items-center justify-between mb-3">
           <div>
             <div className="font-display text-casa-navy text-heading font-semibold">Thursday</div>
@@ -94,11 +94,11 @@ function WarmthPreview({ filter }: { filter: string }) {
         </div>
         <div className="space-y-1.5">
           {[
-            { color: '#C4693A', label: 'Kelly | Dinner with parents', time: '7:30 PM' },
-            { color: '#6A9E7F', label: 'Liv | Soccer practice', time: '8:00 PM' },
-            { color: '#D4A44C', label: 'Owen | Bedtime', time: '9:00 PM' },
+            { color: 'var(--color-member-kelly)', label: 'Kelly | Dinner with parents', time: '7:30 PM' },
+            { color: 'var(--color-member-liv)', label: 'Liv | Soccer practice', time: '8:00 PM' },
+            { color: 'var(--color-member-owen)', label: 'Owen | Bedtime', time: '9:00 PM' },
           ].map(e => (
-            <div key={e.label} className="flex items-center gap-2 py-1 px-2.5 rounded-lg bg-white border border-[#E8E2D9]">
+            <div key={e.label} className="flex items-center gap-2 py-1 px-2.5 rounded-lg bg-casa-bg border border-casa-border">
               <div className="w-2 h-2 rounded-full shrink-0" style={{ background: e.color }} />
               <span className="text-casa-text text-caption flex-1 truncate">{e.label}</span>
               <span className="text-casa-muted text-caption">{e.time}</span>
@@ -705,7 +705,7 @@ export default function DisplaySettingsPage() {
                     value={config.manual_warmth}
                     onChange={e => set('manual_warmth', Number(e.target.value))}
                     className="w-full accent-casa-gold"
-                    style={{ background: `linear-gradient(to right, #FAF8F5, #D4845A ${config.manual_warmth * 200}%, #E8E2D9 ${config.manual_warmth * 200}%)` }}
+                    style={{ background: `linear-gradient(to right, var(--color-casa-surface), var(--color-casa-gold) ${config.manual_warmth * 200}%, var(--color-casa-border) ${config.manual_warmth * 200}%)` }}
                   />
                   <div className="flex justify-between text-caption text-casa-muted mt-1">
                     <span>Cool (daylight)</span><span>Warm (candlelight)</span>
@@ -793,7 +793,7 @@ export default function DisplaySettingsPage() {
                     <div className="flex gap-2 mt-1">
                       {(['R', 'G', 'B'] as const).map((ch, i) => {
                         const val = sensorData.rgb![i]
-                        const color = ch === 'R' ? '#E05050' : ch === 'G' ? '#4CAF72' : '#5080E0'
+                        const color = ch === 'R' ? 'var(--color-casa-error)' : ch === 'G' ? 'var(--color-casa-success)' : 'var(--color-casa-info)'
                         return (
                           <div key={ch} className="flex-1 text-center">
                             <div className="text-caption font-bold mb-0.5" style={{ color }}>{ch}</div>

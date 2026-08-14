@@ -101,7 +101,7 @@ export const ScheduleStreamItem = forwardRef<HTMLDivElement, ScheduleStreamItemP
         <h3
           className={cn(
             'text-body-sm font-semibold leading-tight line-clamp-2',
-            isHighlighted ? 'text-white' : 'text-casa-navy',
+            isHighlighted ? 'text-white casa-heading-on-dark' : 'text-casa-navy',
           )}
         >
           {title}

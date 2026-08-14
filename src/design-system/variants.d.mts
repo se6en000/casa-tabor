@@ -40,7 +40,7 @@ export function segmentedControlThumbClassName(options?: { dragging?: boolean })
 export function segmentedControlItemClassName(options?: { selected?: boolean }): string
 
 export type CardPadding = 'none' | 'sm' | 'md' | 'lg'
-export type CardTone = 'surface' | 'subtle' | 'accent' | 'ambient'
+export type CardTone = 'surface' | 'subtle' | 'accent' | 'ambient' | 'stylish'
 
 export const CARD_PADDINGS: CardPadding[]
 export const CARD_TONES: CardTone[]

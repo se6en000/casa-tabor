@@ -4,6 +4,18 @@ description: Deployment rules for Casa Tabor
 
 # Deployment Rules
 
+## Mandatory Design System & Quality Gate (No Bypassing)
+
+**CRITICAL: No Agent may deploy any change that does not strictly pass the Casa Tabor Design System and automated test suite.**
+
+Before committing or pushing to any deployment target:
+1. `npm run tokens:check` — zero token desyncs.
+2. `npm run style:check` — zero style regressions (no raw hex colors, no sub-44px buttons, no arbitrary font sizes, no raw button recreations).
+3. `npm run certify:experience` — experience certification must pass (primitive adoption >= 90%).
+4. `npm test` — all 1,345+ test invariants must pass.
+
+The unified deploy script (`npm run deploy` / `bash scripts/deploy.sh`) automatically enforces these gates and halts immediately if any check fails.
+
 ## Always deploy to BOTH targets
 
 Whenever deploying, **always run both commands** — never just one:

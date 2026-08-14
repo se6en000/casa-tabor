@@ -34,35 +34,45 @@ import { deriveCalendarCardResponsibility } from '../../lib/calendarResponsibili
 import { useCalendarQuickCreateGesture } from '../../hooks/useCalendarQuickCreateGesture'
 import QuickCreateSheet from '../shared/QuickCreateSheet'
 
-const SHARED_GOLD = 'var(--color-casa-gold)'
+export const SHARED_GOLD = 'var(--color-casa-gold)'
 
-function eventColor(ev: EventWithDetails): string {
+export function eventColor(ev: EventWithDetails): string {
   if (!ev.members || ev.members.length === 0) return SHARED_GOLD
   if (ev.members.length >= 4) return SHARED_GOLD
   return ev.members[0].family_member?.color_hex ?? SHARED_GOLD
 }
 
-// ── Day event card (matched to Home timeline cards) ─────────────────
-
-function DayEventCard({
-  event,
-  now,
-  index,
-  household,
-  onOpen,
-  onComplete,
-  onSnooze,
-  onSendToNeedsYou,
-}: {
+export interface DayEventCardProps {
   event: EventWithDetails
   now: Date
-  index: number
+  index?: number
   household: FamilyMember[]
   onOpen: () => void
   onComplete?: (id: string) => void
   onSnooze?: (event: EventWithDetails, duration: SnoozeDuration) => void | Promise<void>
   onSendToNeedsYou?: (event: EventWithDetails) => void | Promise<void>
-}) {
+  isHighlighted?: boolean
+  onMouseEnter?: () => void
+  onMouseLeave?: () => void
+  className?: string
+}
+
+// ── Day event card (matched to Home timeline cards & Turbo Canvas) ────
+
+export function DayEventCard({
+  event,
+  now,
+  index = 0,
+  household,
+  onOpen,
+  onComplete,
+  onSnooze,
+  onSendToNeedsYou,
+  isHighlighted = false,
+  onMouseEnter,
+  onMouseLeave,
+  className,
+}: DayEventCardProps) {
   const start = getEventStartDate(event)
   const end = getEventEndDate(event)
   const past = isBefore(end, now)
@@ -85,8 +95,18 @@ function DayEventCard({
         setOverrideVersion((v) => v + 1)
       }
     }
+    function handleEventUpdated(e: Event) {
+      const detail = (e as CustomEvent<{ eventId?: string }>).detail
+      if (!detail?.eventId || detail.eventId === event.id) {
+        setOverrideVersion((v) => v + 1)
+      }
+    }
+    window.addEventListener('casa:event-updated', handleEventUpdated)
     window.addEventListener('casa:overrides-updated', handleOverridesUpdated)
-    return () => window.removeEventListener('casa:overrides-updated', handleOverridesUpdated)
+    return () => {
+      window.removeEventListener('casa:event-updated', handleEventUpdated)
+      window.removeEventListener('casa:overrides-updated', handleOverridesUpdated)
+    }
   }, [event.id])
 
   const responsibility = useMemo(
@@ -133,9 +153,15 @@ function DayEventCard({
         transition={{ duration: 0.3, delay: index * 0.04 }}
         className="cursor-pointer list-none"
         data-calendar-event
+        onMouseEnter={onMouseEnter}
+        onMouseLeave={onMouseLeave}
         onClick={(e) => { e.stopPropagation(); onOpen() }}
       >
-        <div className="relative w-full overflow-hidden rounded-widget border border-casa-gold/30 bg-amber-50/40 shadow-card grid grid-cols-1 sm:grid-cols-[130px_1fr] md:grid-cols-[140px_1fr]">
+        <div className={cn(
+          'relative w-full overflow-hidden rounded-widget border bg-amber-50/40 shadow-card grid grid-cols-1 sm:grid-cols-[125px_1fr] md:grid-cols-[135px_1fr] transition-all',
+          isHighlighted ? 'border-amber-400 ring-2 ring-casa-gold shadow-card-hover' : 'border-casa-gold/30',
+          className
+        )}>
           {/* Left Pillar: Sand/Amber Time Block */}
           <div className="bg-amber-200/60 text-amber-950 p-3.5 sm:p-4 flex flex-row sm:flex-col justify-between items-center sm:items-start border-b sm:border-b-0 sm:border-r border-amber-300/40">
             <div>
@@ -221,12 +247,16 @@ function DayEventCard({
       transition={{ duration: 0.3, delay: index * 0.04 }}
       className="cursor-pointer list-none"
       data-calendar-event
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       onClick={(e) => { e.stopPropagation(); onOpen() }}
     >
       <div className={cn(
-        'relative w-full min-w-0 overflow-hidden rounded-widget border border-casa-border/60 shadow-card hover:shadow-card-hover transition-all duration-200',
-        'grid grid-cols-1 sm:grid-cols-[130px_1fr] md:grid-cols-[140px_1fr]',
+        'relative w-full min-w-0 overflow-hidden rounded-widget border shadow-card hover:shadow-card-hover transition-all duration-200',
+        'grid grid-cols-1 sm:grid-cols-[125px_1fr] md:grid-cols-[135px_1fr] xl:grid-cols-[140px_1fr]',
         isBirthday ? 'bg-gradient-to-br from-casa-accent-subtle via-casa-surface to-casa-bg' : 'bg-casa-surface',
+        isHighlighted ? 'border-casa-navy ring-2 ring-casa-gold shadow-card-hover' : 'border-casa-border/60 hover:border-casa-navy/60',
+        className
       )}>
         {isBirthday && <BirthdayCardDecoration />}
 
@@ -378,7 +408,7 @@ function DayEventCard({
   )
 }
 
-function DrivingBadgeIcon() {
+export function DrivingBadgeIcon() {
   return (
     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden>
       <circle cx="12" cy="12" r="8.5" stroke="white" strokeWidth="2" strokeLinecap="round" />
@@ -388,7 +418,7 @@ function DrivingBadgeIcon() {
   )
 }
 
-function SupervisingBadgeIcon() {
+export function SupervisingBadgeIcon() {
   return (
     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden>
       <path d="M12 3l7 2.6v5.2c0 4.3-3 7.3-7 8.4-4-1.1-7-4.1-7-8.4V5.6z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />

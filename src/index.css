@@ -267,15 +267,17 @@ html.midnight-gallery .topbar-gold-divider {
   }
 }
 
-/* Headings default to display font */
-h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-display);
-  color: var(--color-content-heading);
-  font-weight: 700;
-}
+@layer base {
+  /* Headings default to display font */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    color: var(--color-content-heading);
+    font-weight: 700;
+  }
 
-.casa-heading-on-dark {
-  color: var(--color-casa-on-dark);
+  .casa-heading-on-dark {
+    color: var(--color-casa-on-dark);
+  }
 }
 
 /* ── Room Tone CSS Layer ─────────────────────────────────────── */

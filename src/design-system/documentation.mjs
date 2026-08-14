@@ -117,7 +117,7 @@ export const COMPONENT_MANIFEST = [
     purpose: 'Groups related content on a semantic elevated surface.',
     useWhen: 'Use for bounded content groups, summaries, and tappable list cards.',
     avoid: 'Do not wrap every section in a card or use interactive mode without an action.',
-    variants: ['surface', 'subtle', 'accent', 'hero', 'widget', 'ambient', 'triage', 'interactive'],
+    variants: ['surface', 'subtle', 'accent', 'hero', 'widget', 'ambient', 'stylish', 'triage', 'interactive'],
     states: ['default', 'hover', 'focus-visible'],
     accessibility: 'Interactive cards provide keyboard activation; use a native link when the card only navigates.',
     responsive: 'Padding follows shared density and card-spacing tokens.',

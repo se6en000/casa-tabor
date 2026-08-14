@@ -18,7 +18,7 @@ import { normalizeRecipeIngredientFields } from '../utils/recipeIngredientParsin
 import { supabase } from '../lib/supabase'
 import { formatSupabaseError } from '../lib/formatSupabaseError'
 import { usePageVisibility } from '../hooks/usePageVisibility'
-import { Alert, Button, Checkbox, IconButton, Card, Chip, Input, Heading, Modal, Progress, SegmentedControl, Sheet, Text, Toast } from '../components/ui'
+import { Alert, Button, Checkbox, IconButton, Card, Chip, Input, Heading, Modal, Progress, SegmentedControl, Sheet, Text, Toast, Textarea } from '../components/ui'
 import {
   appendPantryInventoryAudit,
   normalizePackageUnit,
@@ -2765,14 +2765,14 @@ export default function GroceryPage() {
             <>
           <div className="flex items-center gap-2 bg-casa-bg rounded-2xl border border-casa-border px-4 py-3 min-h-14 shadow-sm">
             <Plus size={18} className="text-casa-muted flex-shrink-0" />
-            <input
+            <Input
               ref={inputRef}
               type="text"
               value={inputValue}
               onChange={e => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Add an item…"
-              className="flex-1 bg-transparent text-body text-casa-text placeholder:text-casa-muted outline-none"
+              className="flex-1 border-0 bg-transparent shadow-none"
             />
             <Button
               onClick={handleAddItem}
@@ -2842,14 +2842,14 @@ export default function GroceryPage() {
                 </p>
                 <p className="text-caption text-casa-muted mb-1">Paste a public recipe URL</p>
                 <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-2 flex-1 bg-casa-surface rounded-button border border-casa-border px-3 py-2">
-                    <Link2 size={14} className="text-casa-muted" />
-                    <input
+                  <div className="relative flex-1">
+                    <Link2 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-casa-muted z-10" />
+                    <Input
                       type="url"
                       value={recipeUrlInput}
                       onChange={(event) => setRecipeUrlInput(event.target.value)}
                       placeholder="https://..."
-                      className="flex-1 bg-transparent text-body-sm text-casa-text placeholder:text-casa-muted outline-none"
+                      className="pl-8"
                     />
                   </div>
                 </div>
@@ -3010,12 +3010,12 @@ export default function GroceryPage() {
                   <div className="rounded-xl border border-casa-border bg-casa-bg p-2">
                     <p className="text-caption text-casa-muted mb-2">Recipe photos (cover image optional)</p>
                     <div className="flex items-center gap-2 mb-2">
-                      <input
+                      <Input
                         type="url"
                         value={recipeExtraImageUrl}
                         onChange={(event) => setRecipeExtraImageUrl(event.target.value)}
                         placeholder="https://.../another-photo.jpg"
-                        className="flex-1 rounded-button border border-casa-border bg-casa-surface px-2.5 py-1.5 text-caption text-casa-text outline-none"
+                        className="flex-1 text-caption"
                       />
                       <Button
                         variant="secondary"
@@ -3097,47 +3097,52 @@ export default function GroceryPage() {
                           const scaledQuantity = scaleQuantityValue(ingredient.quantity, recipeScale)
                           return (
                             <div key={`${ingredient.raw_text}-${index}`} className="rounded-lg border border-casa-border bg-casa-surface px-2 py-1.5">
-                              <label className="flex items-start gap-2 text-body-sm text-casa-text">
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={() => {
-                                  setSelectedRecipeIngredientIndexes((current) => {
-                                    const next = new Set(current)
-                                    if (next.has(index)) next.delete(index)
-                                    else next.add(index)
-                                    return next
-                                  })
-                                }}
-                              />
-                                <span>{displayName}</span>
-                                {(scaledQuantity || ingredient.unit) && (
-                                  <span className="text-caption text-casa-muted">
-                                    {scaledQuantity ? `${scaledQuantity} ` : ''}{ingredient.unit ?? ''}
-                                  </span>
-                                )}
-                              </label>
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-start gap-2 text-body-sm text-casa-text">
+                                  <Checkbox
+                                    checked={checked}
+                                    onChange={() => {
+                                      setSelectedRecipeIngredientIndexes((current) => {
+                                        const next = new Set(current)
+                                        if (next.has(index)) next.delete(index)
+                                        else next.add(index)
+                                        return next
+                                      })
+                                    }}
+                                    label={
+                                      <div className="flex items-center gap-1.5">
+                                        <span>{displayName}</span>
+                                        {(scaledQuantity || ingredient.unit) && (
+                                          <span className="text-caption text-casa-muted">
+                                            {scaledQuantity ? `${scaledQuantity} ` : ''}{ingredient.unit ?? ''}
+                                          </span>
+                                        )}
+                                      </div>
+                                    }
+                                  />
+                                </div>
+                              </div>
                               <div className="mt-1 flex items-center gap-1.5">
-                                <input
+                                <Input
                                   type="text"
                                   value={ingredient.quantity ?? ''}
                                   onChange={(event) => updateParsedIngredient(index, { quantity: event.target.value || null })}
                                   placeholder="Qty"
-                                  className="w-16 rounded-button border border-casa-border bg-casa-bg px-2 py-1 text-caption text-casa-text outline-none"
+                                  className="w-16 text-caption"
                                 />
-                                <input
+                                <Input
                                   type="text"
                                   value={ingredient.unit ?? ''}
                                   onChange={(event) => updateParsedIngredient(index, { unit: event.target.value || null })}
                                   placeholder="Unit"
-                                  className="w-16 rounded-button border border-casa-border bg-casa-bg px-2 py-1 text-caption text-casa-text outline-none"
+                                  className="w-16 text-caption"
                                 />
-                                <input
+                                <Input
                                   type="text"
                                   value={ingredient.name ?? ingredient.raw_text}
                                   onChange={(event) => updateParsedIngredient(index, { name: event.target.value || null })}
                                   placeholder="Ingredient"
-                                  className="flex-1 rounded-button border border-casa-border bg-casa-bg px-2 py-1 text-caption text-casa-text outline-none"
+                                  className="flex-1 text-caption"
                                 />
                               </div>
                             </div>
@@ -3198,11 +3203,11 @@ export default function GroceryPage() {
                                 </Chip>
                               </div>
                             </div>
-                            <textarea
+                            <Textarea
                               value={step.instruction}
                               onChange={(event) => updateParsedStep(stepIndex, event.target.value)}
                               rows={3}
-                              className="w-full rounded-button border border-casa-border bg-casa-bg px-2 py-1 text-caption text-casa-text outline-none resize-y"
+                              className="resize-y text-caption"
                             />
                           </div>
                         ))}

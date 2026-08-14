@@ -103,7 +103,7 @@ export const HeroCard = forwardRef<HTMLDivElement, HeroCardProps>(function HeroC
         )}
 
         {/* Title */}
-        <h2 className="font-display text-display-md sm:text-display-lg font-bold tracking-tight text-white mb-2 leading-tight">
+        <h2 className="font-display text-display-md sm:text-display-lg font-bold tracking-tight text-white casa-heading-on-dark mb-2 leading-tight">
           {title}
         </h2>
 

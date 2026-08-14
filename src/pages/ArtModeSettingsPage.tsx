@@ -6,7 +6,7 @@ import { usePersonalArtMode, type PersonalArtwork } from '../hooks/usePersonalAr
 import type { ArtSourceMode } from '../lib/artModeLibrary'
 import { cn } from '../utils/cn'
 import { SettingsPageHeader, SettingsToggle as Toggle } from '../components/settings'
-import { Alert, Button, Checkbox, EmptyState, IconButton, Modal, SegmentedControl, SectionHeader as SharedSectionHeader } from '../components/ui'
+import { Alert, Button, Checkbox, EmptyState, IconButton, Modal, SegmentedControl, SectionHeader as SharedSectionHeader, Input } from '../components/ui'
 
 const ART_FEED_MODE_OPTIONS = [
   { value: 'auto', label: 'Auto Gallery' },
@@ -136,7 +136,7 @@ function TagInput({
       </div>
       {tags.length < maxTags && (
         <div className="flex gap-2">
-          <input
+          <Input
             ref={inputRef}
             type="text"
             value={input}
@@ -148,7 +148,7 @@ function TagInput({
               }
             }}
             placeholder={placeholder}
-            className="flex-1 text-body-sm bg-casa-bg border border-casa-border rounded-xl px-3 py-2 text-casa-navy placeholder:text-casa-muted focus:outline-none focus:border-casa-navy/40"
+            className="flex-1"
           />
           <IconButton
             type="button"
@@ -567,7 +567,7 @@ export default function ArtModeSettingsPage() {
                     <div className="flex items-center gap-3">
                       <div className="flex-1">
                         <label className="text-caption text-casa-muted block mb-1">From year</label>
-                        <input
+                        <Input
                           type="text"
                           inputMode="numeric"
                           placeholder="e.g. 1900"
@@ -580,13 +580,12 @@ export default function ArtModeSettingsPage() {
                               ;(e.currentTarget as HTMLInputElement).blur()
                             }
                           }}
-                          className="w-full text-body-sm bg-casa-bg border border-casa-border rounded-xl px-3 py-2 text-casa-navy placeholder:text-casa-muted focus:outline-none focus:border-casa-navy/40"
                         />
                       </div>
                       <span className="text-casa-muted text-body-sm mt-5">→</span>
                       <div className="flex-1">
                         <label className="text-caption text-casa-muted block mb-1">To year</label>
-                        <input
+                        <Input
                           type="text"
                           inputMode="numeric"
                           placeholder="e.g. 2020"
@@ -599,7 +598,6 @@ export default function ArtModeSettingsPage() {
                               ;(e.currentTarget as HTMLInputElement).blur()
                             }
                           }}
-                          className="w-full text-body-sm bg-casa-bg border border-casa-border rounded-xl px-3 py-2 text-casa-navy placeholder:text-casa-muted focus:outline-none focus:border-casa-navy/40"
                         />
                       </div>
                     </div>

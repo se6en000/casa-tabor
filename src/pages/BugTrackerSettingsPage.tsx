@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Bug, RefreshCw } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { AIBugReport } from '../types'
-import { Button, Chip, SegmentedControl, SkeletonRow, Switch } from '../components/ui'
+import { Button, Chip, SegmentedControl, SkeletonRow, Switch, Input, Textarea } from '../components/ui'
 import { SettingsPageHeader } from '../components/settings'
 
 interface AIMemoryCaptureConfig {
@@ -142,18 +142,17 @@ export default function BugTrackerSettingsPage() {
               Refresh
             </Button>
           </div>
-          <input
+          <Input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Example: Reminder card closes but linked actions remain open"
-            className="w-full px-3 py-2 rounded-button border border-casa-border text-body-sm text-casa-navy bg-white focus:outline-none focus:ring-2 focus:ring-casa-navy/20"
           />
-          <textarea
+          <Textarea
             value={details}
             onChange={(e) => setDetails(e.target.value)}
             rows={4}
             placeholder="Repro steps, expected result, and actual result"
-            className="w-full rounded-button border border-casa-border bg-white px-3 py-2 text-body-sm text-casa-navy focus:outline-none focus:border-casa-gold resize-y"
+            className="resize-y"
           />
           <SegmentedControl
             aria-label="Bug severity"

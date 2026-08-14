@@ -9,15 +9,24 @@ echo "========================================="
 echo "🚀 Casa Tabor Unified Deploy Pipeline"
 echo "========================================="
 
+# 0. Design System & Test Verification Gate
+echo ""
+echo "🛡️  [1/5] Enforcing Design System & Quality Gates..."
+npm run tokens:check
+npm run style:check
+npm run certify:experience
+npm test
+echo "✓ All Design System & Quality Gates passed."
+
 # 1. Build Verification
 echo ""
-echo "📦 [1/4] Verifying and building project..."
+echo "📦 [2/5] Verifying and building production bundle..."
 npm run build
 echo "✓ Build verified successfully."
 
 # 2. Git Commit (if working tree has changes)
 echo ""
-echo "📝 [2/4] Checking Git working tree..."
+echo "📝 [3/5] Checking Git working tree..."
 if ! git diff-index --quiet HEAD -- 2>/dev/null || [ -n "$(git status --porcelain)" ]; then
   if [ -z "$COMMIT_MSG" ]; then
     COMMIT_MSG="Deploy update $(date -u +'%Y-%m-%d %H:%M:%SZ')"
@@ -32,7 +41,7 @@ fi
 
 # 3. Push to GitHub
 echo ""
-echo "🐙 [3/4] Pushing to GitHub (origin/main)..."
+echo "🐙 [4/5] Pushing to GitHub (origin/main)..."
 if git push origin HEAD:main 2>&1; then
   echo "✓ Pushed to GitHub successfully."
 else
@@ -43,7 +52,7 @@ fi
 
 # 4. Deploy to Vercel Production
 echo ""
-echo "▲ [4/4] Deploying to Vercel production (${SCOPE}/${PROJECT})..."
+echo "▲ [5/5] Deploying to Vercel production (${SCOPE}/${PROJECT})..."
 npx vercel link --yes --scope "$SCOPE" --project "$PROJECT" >/dev/null 2>&1 || true
 npx vercel --prod --yes --scope "$SCOPE"
 
