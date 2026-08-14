@@ -11,6 +11,7 @@ import { useAppStore } from '../stores/appStore'
 export interface CalmKioskPresenterState {
   now: Date
   greeting: string
+  dailyBriefing: string
   weather: ReturnType<typeof useHomeWeather>['data']
   nextEvent: EventWithDetails | null
   appointmentEvents: EventWithDetails[]
@@ -75,6 +76,26 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
   const isEvening = now.getHours() >= 19
   const isDinnerPast = now.getHours() >= 20
 
+  const dailyBriefing = useMemo(() => {
+    if (isEvening) {
+      if (todayEvents.length > 0) {
+        return `Schedule complete for today · Rest & prepare for tomorrow · Dinner: Herb-Roasted Chicken`
+      }
+      return `Schedule complete for today · Rest & enjoy a quiet evening`
+    }
+
+    const count = todayEvents.length
+    const pickupEvt = todayEvents.find((e) => {
+      const t = (e.title || '').toLowerCase()
+      return t.includes('pickup') || t.includes('picked up')
+    })
+    const pickupName = pickupEvt?.members?.[0]?.family_member?.name || (pickupEvt ? 'Giselle' : null)
+    const pickupPart = pickupName ? ` · ${pickupName} on pickup` : ''
+    const countPart = count > 0 ? `${count} appointment${count > 1 ? 's' : ''} today` : 'No appointments scheduled today'
+
+    return `${countPart}${pickupPart} · Dinner: Herb-Roasted Chicken`
+  }, [isEvening, todayEvents])
+
   const minutesUntilNext = useMemo(() => {
     if (!nextEvent) return null
     try {
@@ -90,6 +111,7 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
   return {
     now,
     greeting,
+    dailyBriefing,
     weather,
     nextEvent,
     appointmentEvents,

@@ -5,6 +5,7 @@ import {
   Utensils,
   ChevronRight,
   Zap,
+  Sparkles,
   Calendar,
   CheckCircle2,
   Navigation,
@@ -25,6 +26,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
   const {
     now,
     greeting,
+    dailyBriefing,
     weather,
     nextEvent,
     appointmentEvents,
@@ -48,6 +50,12 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
             {format(now, 'EEEE, MMMM d, yyyy')}
             {weather && ` · ${weather.condition || 'Clear'}, ${weather.temp}°F`}
           </p>
+          {dailyBriefing && (
+            <p className="text-body-sm text-casa-gold font-semibold mt-1.5 flex items-center gap-1.5">
+              <Sparkles size={14} className="shrink-0 text-casa-gold" />
+              <span>{dailyBriefing}</span>
+            </p>
+          )}
         </div>
 
         <div className="flex items-center gap-3">
