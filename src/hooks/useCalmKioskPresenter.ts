@@ -1,5 +1,6 @@
-import { useMemo } from 'react'
+import { useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { format, parseISO, differenceInMinutes, subMinutes } from 'date-fns'
 import { useLiveClock, greetingFor } from './useLiveClock'
 import { useTodayEvents, useTomorrowEvents, type EventWithDetails } from './useCalendarEvents'
@@ -7,7 +8,10 @@ import { useWeekConflicts } from './useConflicts'
 import { usePrepItems } from './usePrepItems'
 import { useHomeWeather } from './useHomeWeather'
 import { useAppStore } from '../stores/appStore'
+import { supabase } from '../lib/supabase'
+import { publishEventAggregatePatch } from '../lib/eventAggregateCache'
 import type { EventTransportationPlan, TransportationLeg } from '../lib/eventTransportation'
+import type { EventChecklistItem } from '../types'
 
 export interface CalmKioskPresenterState {
   now: Date
@@ -33,12 +37,16 @@ export interface CalmKioskPresenterState {
   destinationName: string
   returnDestinationName: string
   driverName: string | null
+  driverFamilyMemberId: string | null
+  checklistItems: EventChecklistItem[]
+  toggleEventChecklistItem: (itemId: string, currentChecked: boolean) => Promise<void>
   setCanvasSubmode: (submode: 'calm' | 'turbo') => void
   navigateTo: (path: string) => void
 }
 
 export function useCalmKioskPresenter(): CalmKioskPresenterState {
   const navigate = useNavigate()
+  const qc = useQueryClient()
   const { setCanvasSubmode } = useAppStore()
   const now = useLiveClock(10_000)
   const { data: todayEvents = [] } = useTodayEvents(now)
@@ -209,6 +217,43 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     return outboundLeg?.driverName || null
   }, [outboundLeg])
 
+  const driverFamilyMemberId = useMemo(() => {
+    if (!outboundLeg?.driverName && !outboundLeg?.driverId) return null
+    if (outboundLeg.driverId) return outboundLeg.driverId
+    const match = nextEvent?.members?.find(
+      (m) => m.family_member?.name?.toLowerCase() === outboundLeg.driverName?.toLowerCase(),
+    )
+    return match?.family_member?.id || null
+  }, [outboundLeg, nextEvent])
+
+  const checklistItems = useMemo(() => {
+    return nextEvent?.checklist ?? []
+  }, [nextEvent])
+
+  const toggleEventChecklistItem = useCallback(
+    async (itemId: string, currentChecked: boolean) => {
+      if (!nextEvent) return
+      const newVal = !currentChecked
+      const previousItems = nextEvent.checklist || []
+      const nextItems = previousItems.map((entry) =>
+        entry.id === itemId ? { ...entry, checked: newVal } : entry,
+      )
+      publishEventAggregatePatch(qc, nextEvent.id, { checklist: nextItems })
+      const { error } = await supabase
+        .from('event_checklist_items')
+        .update({ checked: newVal })
+        .eq('id', itemId)
+      if (error) {
+        publishEventAggregatePatch(qc, nextEvent.id, { checklist: previousItems })
+        console.error('Failed to toggle checklist item', error)
+      } else {
+        qc.invalidateQueries({ queryKey: ['events'] })
+        qc.invalidateQueries({ queryKey: ['event-details', nextEvent.id] })
+      }
+    },
+    [nextEvent, qc],
+  )
+
   const isTravelEvent = useMemo(() => {
     if (!nextEvent) return false
     if (nextEvent.all_day) return false
@@ -276,6 +321,9 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     destinationName,
     returnDestinationName,
     driverName,
+    driverFamilyMemberId,
+    checklistItems,
+    toggleEventChecklistItem,
     setCanvasSubmode,
     navigateTo: navigate,
   }

@@ -373,12 +373,21 @@ export function JourneyProgressBar({
 
       {/* Sub-bar Milestone Labels */}
       {showLabels && (
-        <div className="flex items-center justify-between text-3xs font-sans uppercase tracking-wider text-white/50 px-1 pt-0.5">
-          <span className="w-[45%] text-left truncate">{originName || 'Prep to Leave'}</span>
-          <span className="w-[35%] text-center font-semibold text-white/70 truncate">
-            {driveTimeMins}m Drive
-          </span>
-          <span className="w-[20%] text-right truncate">{destinationName || 'Destination'}</span>
+        <div className="flex items-center justify-between gap-2 text-3xs font-sans uppercase tracking-wider text-white/60 px-0.5 pt-0.5">
+          <div className="flex items-center gap-1.5 shrink-0 max-w-[40%]">
+            <span className="w-1.5 h-1.5 rounded-full bg-casa-gold/60 shrink-0" />
+            <span className="text-white/80 font-semibold truncate">{originName || 'Prep to Leave'}</span>
+          </div>
+          {driveTimeMins && driveTimeMins > 0 && (
+            <div className="flex items-center gap-1 text-casa-gold/90 font-mono text-3xs bg-white/5 px-2 py-0.5 rounded-md border border-white/5 shrink-0">
+              <Car size={10} className="shrink-0" />
+              <span>{driveTimeMins}m Drive</span>
+            </div>
+          )}
+          <div className="flex items-center gap-1.5 justify-end shrink-0 max-w-[45%] text-right">
+            <span className="text-white/80 font-semibold truncate">{destinationName || 'Destination'}</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/80 shrink-0" />
+          </div>
         </div>
       )}
     </div>

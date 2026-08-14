@@ -13,6 +13,7 @@ import {
   Navigation,
   ArrowRight,
   Bell,
+  CheckSquare,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useCalmKioskPresenter } from '../../hooks/useCalmKioskPresenter'
@@ -20,7 +21,7 @@ import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { useAppStore } from '../../stores/appStore'
 import { cn } from '../../utils/cn'
 import { formatDurationLong } from '../../utils/eventTime'
-import { Button, PersonAvatarStack, JourneyProgressBar } from '../ui'
+import { Button, PersonAvatarStack, JourneyProgressBar, Chip } from '../ui'
 
 interface CalmKioskViewProps {
   onOpenEvent: (event: EventWithDetails) => void
@@ -48,9 +49,26 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
     destinationName,
     returnDestinationName,
     driverName,
+    driverFamilyMemberId,
+    checklistItems,
+    toggleEventChecklistItem,
     setCanvasSubmode,
     navigateTo,
   } = useCalmKioskPresenter()
+
+  const isLeaveNow = Boolean(
+    isTravelEvent &&
+      minutesUntilLeave !== null &&
+      minutesUntilLeave <= 0 &&
+      minutesUntilNext !== null &&
+      minutesUntilNext > 0,
+  )
+  const isPrepUrgent = Boolean(
+    isTravelEvent &&
+      minutesUntilLeave !== null &&
+      minutesUntilLeave > 0 &&
+      minutesUntilLeave <= 15,
+  )
 
   return (
     <div className="w-full h-full flex flex-col justify-between p-6 lg:p-10 max-w-7xl mx-auto overflow-y-auto">
@@ -79,7 +97,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                 <Bell size={16} className="text-amber-600" />
                 <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
               </div>
-              <span>{totalAttentionCount} Triage Alerts</span>
+              <span>{totalAttentionCount} Triage Items</span>
             </Button>
           ) : (
             <Button
@@ -102,7 +120,14 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="w-full rounded-3xl p-6 sm:p-7 bg-gradient-to-br from-casa-navy via-slate-900 to-slate-950 text-white border border-white/10 shadow-xl relative overflow-hidden group cursor-pointer"
+              className={cn(
+                'w-full rounded-3xl p-6 sm:p-7 bg-gradient-to-br from-casa-navy via-slate-900 to-slate-950 text-white border border-white/10 shadow-xl relative overflow-hidden group cursor-pointer transition-all duration-300',
+                isLeaveNow
+                  ? 'ring-2 ring-amber-400/60 shadow-glow-gold'
+                  : isPrepUrgent
+                  ? 'ring-1 ring-amber-400/30'
+                  : '',
+              )}
               onClick={() => onOpenEvent(nextEvent)}
             >
               {/* Background ambient glow */}
@@ -204,22 +229,82 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                     returnDestinationName={returnDestinationName}
                   />
                 </div>
+
+                {/* Pack & Prep Checklist Chips */}
+                {checklistItems && checklistItems.length > 0 && (
+                  <div className="mt-4 pt-3 border-t border-white/5 flex items-center gap-2 flex-wrap">
+                    <span className="text-3xs uppercase font-bold tracking-wider text-white/50 flex items-center gap-1 mr-0.5">
+                      <CheckSquare size={11} className="text-casa-gold" />
+                      Pack & Prep:
+                    </span>
+                    {checklistItems.map((item) => (
+                      <Chip
+                        key={item.id}
+                        tone={item.checked ? 'neutral' : 'success'}
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          toggleEventChecklistItem(item.id, Boolean(item.checked))
+                        }}
+                        className={cn(
+                          'transition-all text-caption font-medium',
+                          item.checked
+                            ? 'line-through opacity-60 bg-white/5 border-white/10'
+                            : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30 hover:border-emerald-400',
+                        )}
+                        icon={
+                          <span
+                            className={cn(
+                              'w-3 h-3 rounded flex items-center justify-center text-3xs font-bold border mr-1',
+                              item.checked
+                                ? 'bg-white/20 text-white/60 border-white/30'
+                                : 'bg-emerald-500 text-slate-950 border-emerald-400',
+                            )}
+                          >
+                            {item.checked ? '✓' : ''}
+                          </span>
+                        }
+                      >
+                        {item.label}
+                      </Chip>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Members and Logistics Footer */}
               <div className="pt-5 mt-5 border-t border-white/10 flex flex-wrap items-center justify-between gap-4">
                 <div className="flex items-center gap-2 flex-wrap">
-                  {nextEvent.members.map((m) => (
-                    <span
-                      key={m.id}
-                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-caption font-semibold bg-white/10 text-white"
-                      style={{
-                        borderLeft: `3px solid ${m.family_member?.color_hex ?? 'var(--color-casa-gold)'}`,
-                      }}
-                    >
-                      {m.family_member?.name}
-                    </span>
-                  ))}
+                  {nextEvent.members.map((m) => {
+                    const isDriver =
+                      (driverFamilyMemberId && m.family_member?.id === driverFamilyMemberId) ||
+                      (driverName && m.family_member?.name?.toLowerCase() === driverName.toLowerCase())
+
+                    return (
+                      <span
+                        key={m.id}
+                        className={cn(
+                          'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-caption font-semibold transition-all',
+                          isDriver
+                            ? 'bg-casa-gold/25 text-casa-gold border border-casa-gold/50 shadow-sm ring-1 ring-casa-gold/30'
+                            : 'bg-white/10 text-white',
+                        )}
+                        style={{
+                          borderLeft: isDriver
+                            ? undefined
+                            : `3px solid ${m.family_member?.color_hex ?? 'var(--color-casa-gold)'}`,
+                        }}
+                      >
+                        {isDriver && <Car size={12} className="text-casa-gold shrink-0 animate-pulse" />}
+                        <span>{m.family_member?.name}</span>
+                        {isDriver && (
+                          <span className="text-2xs uppercase tracking-wider font-bold opacity-80">
+                            (Driver)
+                          </span>
+                        )}
+                      </span>
+                    )
+                  })}
                   {isTravelEvent && driveTimeMins && (
                     <span className="inline-flex items-center gap-1.5 text-caption text-white/80 bg-white/10 px-3 py-1 rounded-full border border-white/10">
                       <Car size={13} className="text-casa-gold shrink-0" />

@@ -1198,16 +1198,18 @@ export default function DesignSystemGalleryPage() {
                         Owen
                       </span>
                       <span
-                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-caption font-semibold bg-white/10 text-white"
-                        style={{ borderLeft: '3px solid var(--color-family-kelly)' }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-caption font-semibold bg-casa-gold/25 text-casa-gold border border-casa-gold/50 shadow-sm ring-1 ring-casa-gold/30"
                       >
-                        Kelly
+                        <Car size={12} className="text-casa-gold shrink-0 animate-pulse" />
+                        <span>Kelly</span>
+                        <span className="text-2xs uppercase tracking-wider font-bold opacity-80">(Driver)</span>
                       </span>
                       <span className="inline-flex items-center gap-1.5 text-caption text-white/80 bg-white/10 px-3 py-1 rounded-full border border-white/10">
-                        <Car size={13} className="text-casa-gold" />
+                        <Car size={13} className="text-casa-gold shrink-0" />
+                        <span>Kelly driving · </span>
                         {heroJourneyPhase === 'in-session' ? (
                           <>
-                            <span>25m drive home</span>
+                            <span>25m drive to Home</span>
                             <span className="text-casa-gold font-bold">· Home ~4:55 PM</span>
                           </>
                         ) : (
