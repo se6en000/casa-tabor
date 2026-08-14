@@ -4,6 +4,7 @@ import { format, isAfter, isBefore } from 'date-fns'
 import {
   Sparkles,
   ImageIcon,
+  RefreshCw,
   Zap,
   Leaf,
 } from 'lucide-react'
@@ -346,12 +347,23 @@ function UtilityTrack({
   return (
     <div
       className={cn(
-        'hidden lg:inline-flex items-center p-0.5 rounded-full border gap-0.5',
+        'inline-flex items-center p-0.5 rounded-full border gap-0.5',
         isWarm
           ? 'bg-casa-surface/40 border-casa-border/40'
           : 'bg-white/5 border-white/10',
       )}
     >
+      {/* Refresh Screen */}
+      <IconButton
+        icon={<RefreshCw size={14} strokeWidth={1.8} />}
+        aria-label="Refresh Screen"
+        onClick={() => window.location.reload()}
+        title="Refresh Screen"
+        size="sm"
+        variant="ghost"
+        className={iconCn}
+      />
+
       {/* Art Mode / Screensaver */}
       <IconButton
         icon={<ImageIcon size={14} strokeWidth={1.8} />}
