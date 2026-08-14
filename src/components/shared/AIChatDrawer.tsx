@@ -253,30 +253,51 @@ export default function AIChatDrawer({
 
   const handleOpenEventDetails = useCallback((eventId: string) => {
     const event = eventById.get(eventId)
-    if (!event) return
-    onClose()
-    onOpenEventDetails?.(event)
-  }, [eventById, onClose, onOpenEventDetails])
+    if (embedded) {
+      if (event && onOpenEventDetails) {
+        onOpenEventDetails(event)
+      } else {
+        openEventDetails(eventId)
+      }
+    } else {
+      onClose()
+      if (event && onOpenEventDetails) {
+        onOpenEventDetails(event)
+      } else {
+        openEventDetails(eventId)
+      }
+    }
+  }, [embedded, eventById, onClose, onOpenEventDetails])
 
   const handleLinkClick = useCallback((href: string) => {
     const parsed = parseAssistantHref(href)
     if (parsed.type === 'event') {
       const event = eventById.get(parsed.idOrPath)
-      if (event) {
-        onClose()
-        onOpenEventDetails?.(event)
+      if (embedded) {
+        if (event && onOpenEventDetails) {
+          onOpenEventDetails(event)
+        } else {
+          openEventDetails(parsed.idOrPath)
+        }
       } else {
         onClose()
-        openEventDetails(parsed.idOrPath)
+        if (event && onOpenEventDetails) {
+          onOpenEventDetails(event)
+        } else {
+          openEventDetails(parsed.idOrPath)
+        }
       }
     } else if (parsed.type === 'recipe') {
+      if (!embedded) onClose()
       navigate(`/cook?search=${encodeURIComponent(parsed.idOrPath)}`)
     } else if (parsed.type === 'grocery') {
+      if (!embedded) onClose()
       navigate('/grocery')
     } else if (parsed.type === 'navigate') {
+      if (!embedded) onClose()
       navigate(`/${parsed.idOrPath}`)
     }
-  }, [eventById, onClose, onOpenEventDetails, navigate])
+  }, [embedded, eventById, onClose, onOpenEventDetails, navigate])
 
   const markUserInteraction = useCallback(() => {
     hadUserInteractionRef.current = true
@@ -1072,7 +1093,7 @@ export default function AIChatDrawer({
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => onOpenEventDetails?.(focusedEvent)}
+                      onClick={() => handleOpenEventDetails(focusedEvent.id)}
                       className="px-2.5 py-1 text-caption font-semibold rounded-lg bg-white border border-casa-border hover:bg-casa-surface text-casa-navy shadow-xs flex items-center gap-1"
                     >
                       <span>Full Details</span>

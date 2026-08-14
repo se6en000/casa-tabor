@@ -240,7 +240,7 @@ async function seedGroceryFixtures(listId, created = []) {
       category: 'other',
       notes: 'QA seed item',
       checked: false,
-      last_modified_source: 'casa',
+      last_modified_source: 'qa',
     }]
     const inserted = await fetchJson(url, {
       method: 'POST',
@@ -324,7 +324,7 @@ async function cleanupGroceryItems(ids) {
   await fetchJson(url, {
     method: 'PATCH',
     headers: { ...headers, prefer: 'return=minimal' },
-    body: JSON.stringify({ deleted_at: new Date().toISOString(), last_modified_source: 'casa' }),
+    body: JSON.stringify({ deleted_at: new Date().toISOString(), last_modified_source: 'qa' }),
   })
   return ids.length
 }

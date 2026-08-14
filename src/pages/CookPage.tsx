@@ -3,11 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   Camera,
-  Check,
   ChevronLeft,
   ChevronRight,
   Clock3,
-  ExternalLink,
   Layers,
   RotateCcw,
   Search,
@@ -51,10 +49,9 @@ import {
   Text,
   Textarea,
 } from '../components/ui'
+import ActiveKitchenWorkbench from '../components/kitchen/ActiveKitchenWorkbench'
 import { useAppStore } from '../stores/appStore'
 
-
-type RecipeScale = '0.5' | '1' | '2'
 
 type Recipe = {
   id: string
@@ -308,39 +305,7 @@ function isCookMood(value: string | null): value is CookMood {
   return value === 'quick' || value === 'family' || value === 'new' || value === 'fancy' || value === 'pantry'
 }
 
-function scaleQuantityValue(value: string | null, scale: number): string | null {
-  if (!value) return value
-  const trimmed = value.trim()
-  if (!trimmed) return value
-  if (Math.abs(scale - 1) < 0.0001) return trimmed
-  const replacedFractions = trimmed
-    .replace(/\b½\b/g, ' 1/2 ')
-    .replace(/\b¼\b/g, ' 1/4 ')
-    .replace(/\b¾\b/g, ' 3/4 ')
-  const mixed = replacedFractions.match(/^\s*(\d+)\s+(\d+)\/(\d+)\s*$/)
-  const fractionOnly = replacedFractions.match(/^\s*(\d+)\/(\d+)\s*$/)
-  const decimalOrInt = replacedFractions.match(/^\s*(\d+(?:\.\d+)?)\s*$/)
-  let base = Number.NaN
-  if (mixed) {
-    const whole = Number(mixed[1] ?? 0)
-    const fracNum = Number(mixed[2] ?? 0)
-    const fracDen = Number(mixed[3] ?? 1)
-    base = whole + (fracDen > 0 ? fracNum / fracDen : 0)
-  } else if (fractionOnly) {
-    const fracNum = Number(fractionOnly[1] ?? 0)
-    const fracDen = Number(fractionOnly[2] ?? 1)
-    base = fracDen > 0 ? fracNum / fracDen : Number.NaN
-  } else if (decimalOrInt) {
-    base = Number(decimalOrInt[1] ?? Number.NaN)
-  }
-  if (!Number.isFinite(base)) return trimmed
-  const scaled = base * scale
-  if (scaled === 0) return '0'
-  if (scaled >= 1 && Math.abs(Math.round(scaled) - scaled) < 0.05) {
-    return String(Math.max(1, Math.round(scaled)))
-  }
-  return Number(scaled.toFixed(scaled < 1 ? 2 : 1)).toString()
-}
+
 
 function pickRecipeThumb(recipe: Recipe): string | null {
   if (recipe.image_url) return recipe.image_url.split('#')[0] ?? recipe.image_url
@@ -541,14 +506,7 @@ export default function CookPage() {
   })
   const [recipeBrowseFilter, setRecipeBrowseFilter] = useState<RecipeBrowseFilter>('all')
   const [stepIndex, setStepIndex] = useState(0)
-  const [recipeScale, setRecipeScale] = useState<RecipeScale>('1')
-  const [showCupsConversion, setShowCupsConversion] = useState(false)
   const [directionsViewMode, setDirectionsViewMode] = useState<'step' | 'all'>('step')
-  // Session-local mise-en-place check-off (keyed by cookIngredientRows id).
-  // Does NOT mutate the recipe or grocery list — cleared when the recipe changes.
-  const [checkedCookIngredients, setCheckedCookIngredients] = useState<Set<string>>(new Set())
-  // Auto-scroll target for the currently-active direction step.
-  const currentStepRef = useRef<HTMLElement | null>(null)
   const [photoEditorUrl, setPhotoEditorUrl] = useState('')
   const [photoEditorPreviewUrl, setPhotoEditorPreviewUrl] = useState('')
   const [photoEditorPendingFile, setPhotoEditorPendingFile] = useState<File | null>(null)
@@ -1000,7 +958,6 @@ export default function CookPage() {
   const cookRecipe = cookRecipeId ? recipeById.get(cookRecipeId) ?? null : null
   const cookSteps = cookRecipeId ? stepsByRecipe.get(cookRecipeId) ?? [] : []
   const cookIngredients = cookRecipeId ? ingredientsByRecipe.get(cookRecipeId) ?? [] : []
-  const currentStep = cookSteps[stepIndex] ?? null
 
   useEffect(() => {
     localStorage.setItem(COOK_LANDING_MODE_STORAGE_KEY, cookLandingMode)
@@ -1045,17 +1002,16 @@ export default function CookPage() {
     })
   }, [cookRecipeId, cookSteps.length, stepIndex])
 
-  // Clear the session check-off whenever the open recipe changes.
-  useEffect(() => {
-    setCheckedCookIngredients(new Set())
-  }, [cookRecipeId])
-
   // Keyboard nav for the Cook panel: ← / → move steps, Esc closes.
   // Only active while cooking (not editing) and no nested dialog is open.
   useEffect(() => {
     if (!cookRecipeId || isRecipeEditMode) return
     if (importDialogOpen || deleteConfirmRecipe) return
     function onKeyDown(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return
+      }
       if (event.key === 'Escape') {
         setCookRecipeId(null)
         return
@@ -1073,17 +1029,6 @@ export default function CookPage() {
   useEffect(() => () => {
     if (photoEditorObjectUrlRef.current) URL.revokeObjectURL(photoEditorObjectUrlRef.current)
   }, [])
-
-  // Keep the active step in view as it changes (esp. in the all-steps list).
-  useEffect(() => {
-    if (!cookRecipeId || isRecipeEditMode) return
-    const el = currentStepRef.current
-    if (!el) return
-    const id = window.setTimeout(() => {
-      el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-    }, 0)
-    return () => window.clearTimeout(id)
-  }, [cookRecipeId, isRecipeEditMode, directionsViewMode, stepIndex])
 
   useEffect(() => {
     if (!mealPlannerPlan) {
@@ -1275,7 +1220,6 @@ export default function CookPage() {
   function openRecipeForCookMode(recipeId: string) {
     setCookRecipeId(recipeId)
     setStepIndex(0)
-    setRecipeScale('1')
     setDirectionsViewMode('step')
     setLibraryActionError(null)
   }
@@ -1504,51 +1448,7 @@ export default function CookPage() {
     }
   }
 
-  const densityForIngredient = (ingredientName: string): number => {
-    const name = ingredientName.toLowerCase()
-    if (name.includes('rice')) return 195
-    if (name.includes('corn')) return 165
-    if (name.includes('pea')) return 145
-    if (name.includes('carrot')) return 128
-    if (name.includes('shrimp')) return 145
-    if (name.includes('soy sauce')) return 255
-    return 236.588
-  }
 
-  const gramsToCupsLabel = (grams: number, ingredientName: string): string => {
-    const cups = grams / densityForIngredient(ingredientName)
-    const rounded = cups < 1 ? Number(cups.toFixed(2)) : Number(cups.toFixed(1))
-    return `${rounded} cup${rounded === 1 ? '' : 's'}`
-  }
-
-  const quantityLabel = (ingredient: RecipeIngredient): string => {
-    const normalized = normalizeRecipeIngredientFields({
-      rawText: ingredient.raw_text,
-      name: ingredient.name,
-      quantity: ingredient.quantity,
-      unit: ingredient.unit,
-    })
-    const scaledQuantity = scaleQuantityValue(normalized.quantity, Number(recipeScale))
-    const unit = (normalized.unit ?? '').toLowerCase().trim()
-    if (!scaledQuantity) return normalized.unit ?? ''
-    if (!showCupsConversion) {
-      return `${scaledQuantity}${normalized.unit ? ` ${normalized.unit}` : ''}`.trim()
-    }
-    if (unit === 'g' || unit === 'gram' || unit === 'grams') {
-      const numeric = Number(scaledQuantity)
-      if (Number.isFinite(numeric)) {
-        return gramsToCupsLabel(numeric, normalized.name || ingredient.raw_text)
-      }
-    }
-    if (unit === 'oz' || unit === 'ounce' || unit === 'ounces') {
-      const numeric = Number(scaledQuantity)
-      if (Number.isFinite(numeric)) {
-        const grams = Math.round(numeric * 28.35)
-        return `${grams} g`
-      }
-    }
-    return `${scaledQuantity}${normalized.unit ? ` ${normalized.unit}` : ''}`.trim()
-  }
 
   async function getOrCreateShoppingListId(): Promise<string> {
     const { data: listRows, error: listError } = await supabase
@@ -2875,7 +2775,6 @@ export default function CookPage() {
       if (options?.openCookMode) {
         setCookRecipeId(recipeId)
         setStepIndex(0)
-        setRecipeScale('1')
         setDirectionsViewMode('step')
       }
     } catch (error) {
@@ -2909,38 +2808,6 @@ export default function CookPage() {
     setImportStep(1)
   }
 
-  const cookIngredientRows = cookIngredients.map((ingredient, index) => {
-    const normalized = normalizeRecipeIngredientFields({
-      rawText: ingredient.raw_text,
-      name: ingredient.name,
-      quantity: ingredient.quantity,
-      unit: ingredient.unit,
-    })
-    const name = normalized.name || ingredient.raw_text
-    const qty = quantityLabel(ingredient)
-    const searchableName = name.toLowerCase()
-    const searchTokens = searchableName
-      .split(/[^a-z0-9]+/i)
-      .map((token) => token.trim())
-      .filter((token) => token.length >= 4)
-    return {
-      id: `${ingredient.recipe_id}-${index}`,
-      name,
-      qty,
-      searchableName,
-      searchTokens,
-    }
-  })
-  const currentStepInstruction = currentStep?.instruction?.toLowerCase() ?? ''
-  const neededNowIngredientRows = (() => {
-    if (cookIngredientRows.length === 0) return []
-    if (!currentStepInstruction) return cookIngredientRows.slice(0, 4)
-    const matched = cookIngredientRows.filter((row) =>
-      currentStepInstruction.includes(row.searchableName)
-      || row.searchTokens.some((token) => currentStepInstruction.includes(token))
-    )
-    return (matched.length > 0 ? matched : cookIngredientRows).slice(0, 4)
-  })()
   const landingMetaLabel = `${new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).format(new Date())} · ${plannedRecipes.length} planned this week`
   const buildMoodReason = (insight: RecipeMoodInsight): string => {
     if (cookMood === 'quick') {
@@ -2968,6 +2835,29 @@ export default function CookPage() {
     if (cookMood === 'pantry') return 'Pantry-first'
     if (typeof insight.minutes === 'number' && insight.minutes <= 20) return 'Fast favorite'
     return null
+  }
+
+  if (cookRecipe && !isRecipeEditMode) {
+    return (
+      <ActiveKitchenWorkbench
+        recipe={cookRecipe}
+        ingredients={cookIngredients.map((ingredient, index) => ({
+          id: `${cookRecipe.id}-${ingredient.sort_order ?? index}`,
+          name: ingredient.name,
+          quantity: ingredient.quantity,
+          unit: ingredient.unit,
+          raw_text: ingredient.raw_text,
+          sort_order: ingredient.sort_order ?? index,
+        }))}
+        steps={cookSteps}
+        initialStepIndex={stepIndex}
+        onExit={closeCookRecipe}
+        onEditRecipe={startRecipeEditing}
+        onCompleteMeal={() => {
+          closeCookRecipe()
+        }}
+      />
+    )
   }
 
   return (
@@ -4205,698 +4095,405 @@ export default function CookPage() {
         </div>
       </Modal>
 
-      {/* Interactive Step-by-Step Cooking View Overlay */}
-      {cookRecipe && (
-        <div
-          className="fixed inset-0 z-modal bg-casa-navy/60 backdrop-blur-sm flex items-start justify-center overflow-y-auto p-3 sm:p-6 transition-all duration-300"
-          onClick={closeCookRecipe}
+      {/* Recipe Editing Mode Modal */}
+      {cookRecipe && isRecipeEditMode && recipeEditorDraft && (
+        <Modal
+          open={true}
+          onClose={cancelRecipeEditing}
+          title="Edit Recipe"
+          size="xl"
         >
-          <div
-            className={cn(
-              'my-auto max-h-[calc(100vh-2rem)] rounded-3xl border border-casa-border/80 bg-casa-surface shadow-2xl flex flex-col overflow-hidden transition-all duration-300 w-full',
-              aiDrawerOpen ? 'max-w-4xl' : 'max-w-5xl',
-            )}
-            onClick={(event) => event.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-label={cookRecipe.name}
-          >
-            {isRecipeEditMode && recipeEditorDraft ? (
-              /* Recipe Editing Mode */
-              <>
-                <div className="px-5 py-4 border-b border-casa-border bg-casa-surface flex items-center justify-between gap-3">
-                  <div>
-                    <span className="text-caption font-bold uppercase tracking-wider text-casa-gold">Recipe Editor</span>
-                    <Heading role="heading" className="font-display font-bold text-casa-navy text-heading">
-                      Edit Recipe
-                    </Heading>
-                  </div>
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    onClick={() => requestDeleteRecipe(cookRecipe)}
-                    disabled={deletingRecipeId === cookRecipe.id}
-                    loading={deletingRecipeId === cookRecipe.id}
-                    leadingIcon={<Trash2 size={14} />}
-                    className="min-h-control"
-                  >
-                    Delete
-                  </Button>
-                </div>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-casa-border">
+              <div>
+                <span className="text-caption font-bold uppercase tracking-wider text-casa-gold">Recipe Editor</span>
+                <Heading role="heading" className="font-display font-bold text-casa-navy text-heading">
+                  Edit Recipe
+                </Heading>
+              </div>
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={() => requestDeleteRecipe(cookRecipe)}
+                disabled={deletingRecipeId === cookRecipe.id}
+                loading={deletingRecipeId === cookRecipe.id}
+                leadingIcon={<Trash2 size={14} />}
+                className="min-h-control"
+              >
+                Delete
+              </Button>
+            </div>
 
-                <div className="p-4 sm:p-6 space-y-4 overflow-y-auto max-h-[70vh] bg-casa-bg">
-                  {recipeEditorError && (
-                    <Alert tone="danger" title="Recipe edit error">
-                      {recipeEditorError}
-                    </Alert>
-                  )}
-                  {recipeEditorStatus && (
-                    <Alert tone="success" title="Recipe updated">
-                      {recipeEditorStatus}
-                    </Alert>
-                  )}
-                  {recipeAiError && (
-                    <Alert tone="danger" title="AI edit failed">
-                      {recipeAiError}
-                    </Alert>
-                  )}
-                  {/* Name field */}
-                  <div>
-                    <label className="block text-body-sm font-semibold text-casa-navy mb-1">Recipe Name</label>
-                    <Input
-                      type="text"
-                      value={recipeEditorDraft.name}
-                      onChange={(event) =>
-                        setRecipeEditorDraft((curr) => (curr ? { ...curr, name: event.target.value } : curr))
-                      }
-                      className="text-body-lg min-h-control"
-                    />
-                  </div>
+            <div className="p-4 sm:p-6 space-y-4 overflow-y-auto max-h-[70vh] bg-casa-bg rounded-2xl">
+              {recipeEditorError && (
+                <Alert tone="danger" title="Recipe edit error">
+                  {recipeEditorError}
+                </Alert>
+              )}
+              {recipeEditorStatus && (
+                <Alert tone="success" title="Recipe updated">
+                  {recipeEditorStatus}
+                </Alert>
+              )}
+              {recipeAiError && (
+                <Alert tone="danger" title="AI edit failed">
+                  {recipeAiError}
+                </Alert>
+              )}
+              {/* Name field */}
+              <div>
+                <label className="block text-body-sm font-semibold text-casa-navy mb-1">Recipe Name</label>
+                <Input
+                  type="text"
+                  value={recipeEditorDraft.name}
+                  onChange={(event) =>
+                    setRecipeEditorDraft((curr) => (curr ? { ...curr, name: event.target.value } : curr))
+                  }
+                  className="text-body-lg min-h-control"
+                />
+              </div>
 
-                  {/* Photo Editor Disclosure */}
-                  <DisclosureSection
-                    title="Photo"
-                    summary={photoEditorPendingFile ? 'New image ready to save' : 'Search, upload, take, paste, or crop'}
-                    icon={<Camera size={18} />}
-                    open={photoEditorExpanded}
-                    onOpenChange={(open) => {
-                      setPhotoEditorExpanded(open)
-                      if (open && photoSearchResults.length === 0 && !photoSearchLoading) {
-                        void searchWebImages(photoSearchQuery)
-                      }
+              {/* Photo Editor Disclosure */}
+              <DisclosureSection
+                title="Photo"
+                summary={photoEditorPendingFile ? 'New image ready to save' : 'Search, upload, take, paste, or crop'}
+                icon={<Camera size={18} />}
+                open={photoEditorExpanded}
+                onOpenChange={(open) => {
+                  setPhotoEditorExpanded(open)
+                  if (open && photoSearchResults.length === 0 && !photoSearchLoading) {
+                    void searchWebImages(photoSearchQuery)
+                  }
+                }}
+              >
+                <div className="space-y-4 p-3 bg-casa-surface rounded-2xl border border-casa-border" onPaste={photoEditorExpanded ? handlePhotoEditorPaste : undefined}>
+                  <p className="text-caption text-casa-muted">
+                    Paste a screenshot anywhere in this section, upload an image, or take a photo.
+                  </p>
+                  {(photoEditorPreviewUrl || photoEditorUrl) && (
+                    <div className="rounded-xl overflow-hidden border border-casa-border max-h-48">
+                      <img src={photoEditorPreviewUrl || photoEditorUrl} alt="Preview" className="w-full h-48 object-cover" />
+                    </div>
+                  )}
+                  {photoEditorError && <p role="alert" className="text-caption text-casa-error font-medium">{photoEditorError}</p>}
+                  {photoSearchError && <p className="text-caption text-casa-error font-medium">{photoSearchError}</p>}
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => triggerFileInput(photoEditorUploadInputRef)}
+                      disabled={recipeEditorSaving || photoEditorUploading}
+                      leadingIcon={<Upload size={14} />}
+                      className="min-h-control"
+                    >
+                      Choose image
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => triggerFileInput(photoEditorCameraInputRef)}
+                      disabled={recipeEditorSaving || photoEditorUploading}
+                      leadingIcon={<Camera size={14} />}
+                      className="min-h-control"
+                    >
+                      Take photo
+                    </Button>
+                  </div>
+                  <input
+                    ref={photoEditorUploadInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(event) => {
+                      const files = event.target.files ? Array.from(event.target.files) : []
+                      event.currentTarget.value = ''
+                      handlePhotoEditorFileSelection(files, 'upload')
                     }}
-                  >
-                    <div className="space-y-4 p-3 bg-casa-surface rounded-2xl border border-casa-border" onPaste={photoEditorExpanded ? handlePhotoEditorPaste : undefined}>
-                      <p className="text-caption text-casa-muted">
-                        Paste a screenshot anywhere in this section, upload an image, or take a photo.
-                      </p>
-                      {(photoEditorPreviewUrl || photoEditorUrl) && (
-                        <div className="rounded-xl overflow-hidden border border-casa-border max-h-48">
-                          <img src={photoEditorPreviewUrl || photoEditorUrl} alt="Preview" className="w-full h-48 object-cover" />
-                        </div>
-                      )}
-                      {photoEditorError && <p role="alert" className="text-caption text-casa-error font-medium">{photoEditorError}</p>}
-                      {photoSearchError && <p className="text-caption text-casa-error font-medium">{photoSearchError}</p>}
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => triggerFileInput(photoEditorUploadInputRef)}
-                          disabled={recipeEditorSaving || photoEditorUploading}
-                          leadingIcon={<Upload size={14} />}
-                          className="min-h-control"
-                        >
-                          Choose image
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => triggerFileInput(photoEditorCameraInputRef)}
-                          disabled={recipeEditorSaving || photoEditorUploading}
-                          leadingIcon={<Camera size={14} />}
-                          className="min-h-control"
-                        >
-                          Take photo
-                        </Button>
-                      </div>
-                      <input
-                        ref={photoEditorUploadInputRef}
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(event) => {
-                          const files = event.target.files ? Array.from(event.target.files) : []
-                          event.currentTarget.value = ''
-                          handlePhotoEditorFileSelection(files, 'upload')
+                  />
+                  <input
+                    ref={photoEditorCameraInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={(event) => {
+                      const files = event.target.files ? Array.from(event.target.files) : []
+                      event.currentTarget.value = ''
+                      handlePhotoEditorFileSelection(files, 'camera')
+                    }}
+                  />
+
+                  {/* Photo Search */}
+                  <div className="space-y-2">
+                    <label htmlFor="recipe-photo-search" className="text-body-sm font-semibold text-casa-navy">Find a recipe image</label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="recipe-photo-search"
+                        type="text"
+                        value={photoSearchQuery}
+                        onChange={(event) => setPhotoSearchQuery(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault()
+                            void searchWebImages(photoSearchQuery)
+                          }
                         }}
-                      />
-                      <input
-                        ref={photoEditorCameraInputRef}
-                        type="file"
-                        accept="image/*"
-                        capture="environment"
-                        className="hidden"
-                        onChange={(event) => {
-                          const files = event.target.files ? Array.from(event.target.files) : []
-                          event.currentTarget.value = ''
-                          handlePhotoEditorFileSelection(files, 'camera')
-                        }}
-                      />
-
-                      {/* Photo Search */}
-                      <div className="space-y-2">
-                        <label htmlFor="recipe-photo-search" className="text-body-sm font-semibold text-casa-navy">Find a recipe image</label>
-                        <div className="flex gap-2">
-                          <Input
-                            id="recipe-photo-search"
-                            type="text"
-                            value={photoSearchQuery}
-                            onChange={(event) => setPhotoSearchQuery(event.target.value)}
-                            onKeyDown={(event) => {
-                              if (event.key === 'Enter') {
-                                event.preventDefault()
-                                void searchWebImages(photoSearchQuery)
-                              }
-                            }}
-                            placeholder="Search recipe photos..."
-                            className="flex-1 min-h-control"
-                          />
-                          <Button
-                            variant="secondary"
-                            size="md"
-                            onClick={() => void searchWebImages(photoSearchQuery)}
-                            disabled={photoSearchLoading}
-                            loading={photoSearchLoading}
-                            leadingIcon={<Search size={14} />}
-                            className="min-h-control"
-                          >
-                            Search
-                          </Button>
-                        </div>
-                        {photoSearchResults.length > 0 && (
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2">
-                            {photoSearchResults.map((res) => (
-                              <div
-                                key={res.url}
-                                onClick={() => setPhotoEditorRemoteUrl(res.url)}
-                                className={cn(
-                                  'rounded-xl border overflow-hidden cursor-pointer',
-                                  photoEditorUrl === res.url ? 'border-casa-gold ring-2 ring-casa-gold/40' : 'border-casa-border',
-                                )}
-                              >
-                                <img src={res.url} alt={res.title} className="h-20 w-full object-cover" />
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="space-y-2">
-                        <label htmlFor="recipe-photo-url" className="text-body-sm font-semibold text-casa-navy">
-                          Image URL
-                        </label>
-                        <Input
-                          id="recipe-photo-url"
-                          type="url"
-                          value={photoEditorUrl}
-                          onChange={(event) => setPhotoEditorRemoteUrl(event.target.value)}
-                          placeholder="https://.../recipe-photo.jpg"
-                        />
-                      </div>
-
-                      <div className="space-y-3">
-                        <p className="text-body-sm font-semibold text-casa-navy">Adjust photo crop (hero)</p>
-                        <p className="text-caption text-casa-muted">
-                          Pan focus for widescreen display. 0% is left/top, 100% is right/bottom.
-                        </p>
-                        <div className="overflow-hidden rounded-xl border border-casa-border bg-casa-surface">
-                          <div className="relative aspect-[16/9] w-full bg-casa-surface">
-                            <img
-                              src={photoEditorPreviewUrl || recipeFallbackHero}
-                              alt="Crop preview"
-                              className="h-full w-full object-cover"
-                              style={{ objectPosition: `${photoEditorFocalX}% ${photoEditorFocalY}%` }}
-                            />
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-                          <label className="block text-body-sm font-semibold text-casa-navy">
-                            Horizontal crop focus
-                            <input
-                              className="mt-2 w-full"
-                              type="range"
-                              min={0}
-                              max={100}
-                              value={photoEditorFocalX}
-                              onChange={(event) => {
-                                setPhotoEditorFocalX(Number(event.target.value))
-                                setPhotoEditorDirty(true)
-                              }}
-                            />
-                          </label>
-                          <label className="block text-body-sm font-semibold text-casa-navy">
-                            Vertical crop focus
-                            <input
-                              className="mt-2 w-full"
-                              type="range"
-                              min={0}
-                              max={100}
-                              value={photoEditorFocalY}
-                              onChange={(event) => {
-                                setPhotoEditorFocalY(Number(event.target.value))
-                                setPhotoEditorDirty(true)
-                              }}
-                            />
-                          </label>
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => {
-                              setPhotoEditorFocalX(50)
-                              setPhotoEditorFocalY(42)
-                              setPhotoEditorDirty(true)
-                            }}
-                          >
-                            Auto-crop
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  </DisclosureSection>
-
-                  {/* AI Quick Actions */}
-                  <Card tone="subtle" padding="md" className="space-y-3">
-                    <p className="text-caption font-bold uppercase tracking-wider text-casa-navy">Quick Recipe AI Adjustments</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      <Chip onClick={() => applyPipeChoiceToRecipeDraft('left')}>Left side of |</Chip>
-                      <Chip onClick={() => applyPipeChoiceToRecipeDraft('right')}>Right side of |</Chip>
-                      {recipeQuickActions.map((act) => (
-                        <Chip key={act.id} onClick={() => applyRegexQuickAction(act)}>
-                          {act.name}
-                        </Chip>
-                      ))}
-                    </div>
-                    <div className="flex gap-2 items-start">
-                      <Textarea
-                        value={recipeAiInstruction}
-                        onChange={(event) => setRecipeAiInstruction(event.target.value)}
-                        rows={2}
-                        placeholder='AI edit instruction (e.g. "scale ingredients for 2 people")'
-                        className="flex-1 text-body-sm"
+                        placeholder="Search recipe photos..."
+                        className="flex-1 min-h-control"
                       />
                       <Button
                         variant="secondary"
                         size="md"
-                        onClick={() => void applyAiRecipeEdit()}
-                        disabled={recipeAiEditing}
-                        loading={recipeAiEditing}
+                        onClick={() => void searchWebImages(photoSearchQuery)}
+                        disabled={photoSearchLoading}
+                        loading={photoSearchLoading}
+                        leadingIcon={<Search size={14} />}
                         className="min-h-control"
                       >
-                        Apply AI edit
+                        Search
                       </Button>
                     </div>
-                    {recipeSuggestedQuickAction && (
-                      <div className="p-2.5 rounded-xl bg-casa-gold/15 border border-casa-gold/30 flex items-center justify-between gap-2">
-                        <span className="text-body-sm font-semibold text-casa-navy">
-                          Suggested Action: {recipeSuggestedQuickAction.name}
-                        </span>
-                        <Button variant="secondary" size="sm" onClick={saveSuggestedQuickAction}>
-                          Save Action
-                        </Button>
+                    {photoSearchResults.length > 0 && (
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2">
+                        {photoSearchResults.map((res) => (
+                          <div
+                            key={res.url}
+                            onClick={() => setPhotoEditorRemoteUrl(res.url)}
+                            className={cn(
+                              'rounded-xl border overflow-hidden cursor-pointer',
+                              photoEditorUrl === res.url ? 'border-casa-gold ring-2 ring-casa-gold/40' : 'border-casa-border',
+                            )}
+                          >
+                            <img src={res.url} alt={res.title} className="h-20 w-full object-cover" />
+                          </div>
+                        ))}
                       </div>
                     )}
-                  </Card>
-
-                  {/* Ingredients & Steps Edit Grid */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    {/* Ingredients Edit Column */}
-                    <Card tone="surface" padding="md" className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <p className="font-display text-body-lg font-bold text-casa-navy">
-                          Ingredients ({recipeEditorDraft.ingredients.length})
-                        </p>
-                        <Button variant="secondary" size="sm" onClick={addRecipeDraftIngredient}>
-                          Add ingredient
-                        </Button>
-                      </div>
-                      <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
-                        {recipeEditorDraft.ingredients.map((ing, i) => (
-                          <div key={i} className="p-2.5 rounded-xl border border-casa-border bg-casa-bg space-y-1">
-                            <div className="flex items-center gap-1.5">
-                              <Input
-                                value={ing.quantity ?? ''}
-                                onChange={(e) => updateRecipeDraftIngredient(i, { quantity: e.target.value || null })}
-                                placeholder="Qty"
-                                className="w-16"
-                              />
-                              <Input
-                                value={ing.unit ?? ''}
-                                onChange={(e) => updateRecipeDraftIngredient(i, { unit: e.target.value || null })}
-                                placeholder="Unit"
-                                className="w-16"
-                              />
-                              <Input
-                                value={ing.name ?? ''}
-                                onChange={(e) => updateRecipeDraftIngredient(i, { name: e.target.value || null })}
-                                placeholder="Name"
-                                className="flex-1"
-                              />
-                              <IconButton
-                                icon={<Trash2 size={13} />}
-                                variant="danger"
-                                size="sm"
-                                onClick={() => removeRecipeDraftIngredient(i)}
-                                aria-label="Remove ingredient"
-                              />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </Card>
-
-                    {/* Directions Edit Column */}
-                    <Card tone="surface" padding="md" className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <p className="font-display text-body-lg font-bold text-casa-navy">
-                          Directions ({recipeEditorDraft.steps.length})
-                        </p>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => addRecipeDraftStepAfter(recipeEditorDraft.steps.length - 1)}
-                        >
-                          Add step
-                        </Button>
-                      </div>
-                      <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
-                        {recipeEditorDraft.steps.map((st, i) => (
-                          <div key={i} className="p-2.5 rounded-xl border border-casa-border bg-casa-bg space-y-1.5">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-caption font-bold text-casa-navy">Step {i + 1}</span>
-                              <div className="flex items-center gap-1">
-                                <Chip size="sm" onClick={() => moveRecipeDraftStep(i, -1)} disabled={i === 0}>
-                                  ↑
-                                </Chip>
-                                <Chip size="sm" onClick={() => moveRecipeDraftStep(i, 1)} disabled={i >= recipeEditorDraft.steps.length - 1}>
-                                  ↓
-                                </Chip>
-                                <Chip size="sm" tone="danger" onClick={() => removeRecipeDraftStep(i)} disabled={recipeEditorDraft.steps.length <= 1}>
-                                  Remove
-                                </Chip>
-                              </div>
-                            </div>
-                            <Textarea
-                              value={st.instruction}
-                              onChange={(e) => updateRecipeDraftStep(i, e.target.value)}
-                              rows={2}
-                              className="text-body-sm"
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    </Card>
                   </div>
-                </div>
 
-                <div className="p-4 border-t border-casa-border bg-casa-surface flex items-center justify-end gap-3">
-                  <Button variant="secondary" onClick={cancelRecipeEditing} disabled={recipeEditorSaving} className="min-h-control">
-                    Cancel edit
-                  </Button>
-                  <Button
-                    variant="primary"
-                    onClick={() => void saveRecipeEdits()}
-                    disabled={recipeEditorSaving}
-                    loading={recipeEditorSaving}
-                    className="font-bold min-h-control px-6"
-                  >
-                    Save changes
-                  </Button>
-                </div>
-              </>
-            ) : (
-              /* Active Step-by-Step Cooking Mode */
-              <>
-                {/* Header Hero Banner */}
-                <div className="relative h-44 sm:h-52 flex-shrink-0 overflow-hidden bg-casa-navy">
-                  <RecipeImage
-                    src={getRecipeImage(cookRecipe)}
-                    alt=""
-                    focalX={parseRecipeImageFocus(cookRecipe.image_url).focalX}
-                    focalY={parseRecipeImageFocus(cookRecipe.image_url).focalY}
-                    loading="eager"
-                    className="absolute inset-0 w-full h-full object-cover scale-110 blur-xl opacity-60"
-                  />
-                  <div
-                    className="absolute inset-0 bg-gradient-to-t from-casa-navy via-casa-navy/70 to-casa-navy/40"
-                    aria-hidden
-                  />
-                  <div className="absolute inset-0 p-5 sm:p-6 flex items-end gap-4">
-                    <RecipeImage
-                      src={getRecipeImage(cookRecipe)}
-                      alt={cookRecipe.name}
-                      focalX={parseRecipeImageFocus(cookRecipe.image_url).focalX}
-                      focalY={parseRecipeImageFocus(cookRecipe.image_url).focalY}
-                      loading="eager"
-                      className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover border border-white/30 shadow-lg flex-shrink-0 bg-casa-navy"
+                  <div className="space-y-2">
+                    <label htmlFor="recipe-photo-url" className="text-body-sm font-semibold text-casa-navy">
+                      Image URL
+                    </label>
+                    <Input
+                      id="recipe-photo-url"
+                      type="url"
+                      value={photoEditorUrl}
+                      onChange={(event) => setPhotoEditorRemoteUrl(event.target.value)}
+                      placeholder="https://.../recipe-photo.jpg"
                     />
-                    <div className="min-w-0 pb-1">
-                      <span className="text-caption font-bold uppercase tracking-widest text-casa-gold">
-                        Active Kitchen Mode
-                      </span>
-                      <h2 className="text-display-xs sm:text-display-sm font-display font-bold text-white leading-tight drop-shadow truncate">
-                        {cookRecipe.name}
-                      </h2>
-                      <p className="text-white/80 text-caption mt-1">
-                        {cookRecipe.cook_time ? `${cookRecipe.cook_time} · ` : ''}
-                        {cookIngredients.length} ingredients · {cookSteps.length} steps
-                      </p>
+                  </div>
+
+                  <div className="space-y-3">
+                    <p className="text-body-sm font-semibold text-casa-navy">Adjust photo crop (hero)</p>
+                    <p className="text-caption text-casa-muted">
+                      Pan focus for widescreen display. 0% is left/top, 100% is right/bottom.
+                    </p>
+                    <div className="overflow-hidden rounded-xl border border-casa-border bg-casa-surface">
+                      <div className="relative aspect-[16/9] w-full bg-casa-surface">
+                        <img
+                          src={photoEditorPreviewUrl || recipeFallbackHero}
+                          alt="Crop preview"
+                          className="h-full w-full object-cover"
+                          style={{ objectPosition: `${photoEditorFocalX}% ${photoEditorFocalY}%` }}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+                      <label className="block text-body-sm font-semibold text-casa-navy">
+                        Horizontal crop focus
+                        <input
+                          className="mt-2 w-full"
+                          type="range"
+                          min={0}
+                          max={100}
+                          value={photoEditorFocalX}
+                          onChange={(event) => {
+                            setPhotoEditorFocalX(Number(event.target.value))
+                            setPhotoEditorDirty(true)
+                          }}
+                        />
+                      </label>
+                      <label className="block text-body-sm font-semibold text-casa-navy">
+                        Vertical crop focus
+                        <input
+                          className="mt-2 w-full"
+                          type="range"
+                          min={0}
+                          max={100}
+                          value={photoEditorFocalY}
+                          onChange={(event) => {
+                            setPhotoEditorFocalY(Number(event.target.value))
+                            setPhotoEditorDirty(true)
+                          }}
+                        />
+                      </label>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => {
+                          setPhotoEditorFocalX(50)
+                          setPhotoEditorFocalY(42)
+                          setPhotoEditorDirty(true)
+                        }}
+                      >
+                        Auto-crop
+                      </Button>
                     </div>
                   </div>
-                  <div className="absolute top-4 right-4 flex items-center gap-2">
-                    {cookRecipe.source_url && (
-                      <a
-                        href={cookRecipe.source_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="px-3 py-1.5 rounded-full bg-casa-surface/90 backdrop-blur border border-casa-border text-caption font-bold text-casa-navy hover:bg-white inline-flex items-center gap-1"
-                      >
-                        <ExternalLink size={12} />
-                        Original
-                      </a>
-                    )}
+                </div>
+              </DisclosureSection>
+
+              {/* AI Quick Actions */}
+              <Card tone="subtle" padding="md" className="space-y-3">
+                <p className="text-caption font-bold uppercase tracking-wider text-casa-navy">Quick Recipe AI Adjustments</p>
+                <div className="flex flex-wrap gap-1.5">
+                  <Chip onClick={() => applyPipeChoiceToRecipeDraft('left')}>Left side of |</Chip>
+                  <Chip onClick={() => applyPipeChoiceToRecipeDraft('right')}>Right side of |</Chip>
+                  {recipeQuickActions.map((act) => (
+                    <Chip key={act.id} onClick={() => applyRegexQuickAction(act)}>
+                      {act.name}
+                    </Chip>
+                  ))}
+                </div>
+                <div className="flex gap-2 items-start">
+                  <Textarea
+                    value={recipeAiInstruction}
+                    onChange={(event) => setRecipeAiInstruction(event.target.value)}
+                    rows={2}
+                    placeholder='AI edit instruction (e.g. "scale ingredients for 2 people")'
+                    className="flex-1 text-body-sm"
+                  />
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    onClick={() => void applyAiRecipeEdit()}
+                    disabled={recipeAiEditing}
+                    loading={recipeAiEditing}
+                    className="min-h-control"
+                  >
+                    Apply AI edit
+                  </Button>
+                </div>
+                {recipeSuggestedQuickAction && (
+                  <div className="p-2.5 rounded-xl bg-casa-gold/15 border border-casa-gold/30 flex items-center justify-between gap-2">
+                    <span className="text-body-sm font-semibold text-casa-navy">
+                      Suggested Action: {recipeSuggestedQuickAction.name}
+                    </span>
+                    <Button variant="secondary" size="sm" onClick={saveSuggestedQuickAction}>
+                      Save Action
+                    </Button>
+                  </div>
+                )}
+              </Card>
+
+              {/* Ingredients & Steps Edit Grid */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Ingredients Edit Column */}
+                <Card tone="surface" padding="md" className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="font-display text-body-lg font-bold text-casa-navy">
+                      Ingredients ({recipeEditorDraft.ingredients.length})
+                    </p>
+                    <Button variant="secondary" size="sm" onClick={addRecipeDraftIngredient}>
+                      Add ingredient
+                    </Button>
+                  </div>
+                  <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
+                    {recipeEditorDraft.ingredients.map((ing, i) => (
+                      <div key={i} className="p-2.5 rounded-xl border border-casa-border bg-casa-bg space-y-1">
+                        <div className="flex items-center gap-1.5">
+                          <Input
+                            value={ing.quantity ?? ''}
+                            onChange={(e) => updateRecipeDraftIngredient(i, { quantity: e.target.value || null })}
+                            placeholder="Qty"
+                            className="w-16"
+                          />
+                          <Input
+                            value={ing.unit ?? ''}
+                            onChange={(e) => updateRecipeDraftIngredient(i, { unit: e.target.value || null })}
+                            placeholder="Unit"
+                            className="w-16"
+                          />
+                          <Input
+                            value={ing.name ?? ''}
+                            onChange={(e) => updateRecipeDraftIngredient(i, { name: e.target.value || null })}
+                            placeholder="Name"
+                            className="flex-1"
+                          />
+                          <IconButton
+                            icon={<Trash2 size={13} />}
+                            variant="danger"
+                            size="sm"
+                            onClick={() => removeRecipeDraftIngredient(i)}
+                            aria-label="Remove ingredient"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+
+                {/* Directions Edit Column */}
+                <Card tone="surface" padding="md" className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="font-display text-body-lg font-bold text-casa-navy">
+                      Directions ({recipeEditorDraft.steps.length})
+                    </p>
                     <Button
                       variant="secondary"
                       size="sm"
-                      onClick={startRecipeEditing}
-                      className="bg-casa-surface/90 backdrop-blur font-bold min-h-control"
+                      onClick={() => addRecipeDraftStepAfter(recipeEditorDraft.steps.length - 1)}
                     >
-                      Edit recipe
+                      Add step
                     </Button>
                   </div>
-                </div>
-
-                {/* Main Interactive Cooking View Body */}
-                <div className="flex-1 min-h-0 p-4 sm:p-6 flex flex-col gap-4 overflow-y-auto bg-casa-bg">
-                  <div className="flex flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] gap-6">
-                    {/* Left Column: Directions & Step-by-Step */}
-                    <div className="order-1 lg:min-w-0 space-y-4">
-                      <div className="flex items-center justify-between gap-3 pb-2 border-b border-casa-border/60">
-                        <p className="text-body font-bold text-casa-navy">
-                          {directionsViewMode === 'step'
-                            ? `Step ${stepIndex + 1} of ${Math.max(1, cookSteps.length)}`
-                            : `${cookSteps.length} Total Steps`}
-                        </p>
-                        <SegmentedControl
-                          aria-label="Directions view"
-                          value={directionsViewMode}
-                          onChange={setDirectionsViewMode}
-                          options={[
-                            { value: 'step', label: 'Step-by-step' },
-                            { value: 'all', label: 'All steps' },
-                          ]}
+                  <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
+                    {recipeEditorDraft.steps.map((st, i) => (
+                      <div key={i} className="p-2.5 rounded-xl border border-casa-border bg-casa-bg space-y-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-caption font-bold text-casa-navy">Step {i + 1}</span>
+                          <div className="flex items-center gap-1">
+                            <Chip size="sm" onClick={() => moveRecipeDraftStep(i, -1)} disabled={i === 0}>
+                              ↑
+                            </Chip>
+                            <Chip size="sm" onClick={() => moveRecipeDraftStep(i, 1)} disabled={i >= recipeEditorDraft.steps.length - 1}>
+                              ↓
+                            </Chip>
+                            <Chip size="sm" tone="danger" onClick={() => removeRecipeDraftStep(i)} disabled={recipeEditorDraft.steps.length <= 1}>
+                              Remove
+                            </Chip>
+                          </div>
+                        </div>
+                        <Textarea
+                          value={st.instruction}
+                          onChange={(e) => updateRecipeDraftStep(i, e.target.value)}
+                          rows={2}
+                          className="text-body-sm"
                         />
                       </div>
-
-                      {/* Needed Now Highlighted Ingredients for Step */}
-                      {directionsViewMode === 'step' && neededNowIngredientRows.length > 0 && (
-                        <Card tone="ambient" padding="sm" className="space-y-2">
-                          <p className="text-caption font-bold uppercase tracking-widest text-amber-800">
-                            Needed for this step
-                          </p>
-                          <div className="flex flex-wrap gap-2">
-                            {neededNowIngredientRows.map((row) => (
-                              <Chip key={`needed-now-${row.id}`} size="sm" tone="accent">
-                                <span className="font-bold">{row.name}</span>
-                                {row.qty && <span className="text-casa-muted ml-1">({row.qty})</span>}
-                              </Chip>
-                            ))}
-                          </div>
-                        </Card>
-                      )}
-
-                      {/* Progress Indicator */}
-                      {cookSteps.length > 1 && (
-                        <Progress
-                          value={stepIndex + 1}
-                          max={Math.max(1, cookSteps.length)}
-                          aria-label="Cooking step progress"
-                          className="[&_.casa-progress]:h-2.5"
-                        />
-                      )}
-
-                      {/* Step Directions Content */}
-                      <div className="pt-2">
-                        {directionsViewMode === 'step' ? (
-                          <div ref={(el) => { currentStepRef.current = el }} className="space-y-3">
-                            <div className="flex items-start gap-4">
-                              <span className="text-display-md sm:text-display-lg font-display font-extrabold text-casa-gold shrink-0 tabular-nums">
-                                {stepIndex + 1}
-                              </span>
-                              <p className="text-display-xs sm:text-display-sm font-body font-medium text-casa-navy leading-relaxed pt-1">
-                                {currentStep?.instruction ?? 'No directions saved for this recipe yet.'}
-                              </p>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="space-y-3">
-                            {cookSteps.map((step, index) => {
-                              const isCurrent = index === stepIndex
-                              const isDone = index < stepIndex
-                              return (
-                                <div
-                                  key={`${step.step_number}-${index}`}
-                                  ref={isCurrent ? (el) => { currentStepRef.current = el } : undefined}
-                                  onClick={() => setStepIndex(index)}
-                                  className={cn(
-                                    'p-4 rounded-2xl border transition-all cursor-pointer flex items-start gap-3',
-                                    isCurrent
-                                      ? 'bg-casa-gold/15 border-casa-gold ring-1 ring-casa-gold/30 shadow-sm'
-                                      : isDone
-                                      ? 'bg-casa-surface border-casa-border opacity-70'
-                                      : 'bg-casa-surface border-casa-border hover:border-casa-gold/50',
-                                  )}
-                                >
-                                  <span
-                                    className={cn(
-                                      'w-8 h-8 rounded-full flex items-center justify-center font-bold text-caption shrink-0 mt-0.5',
-                                      isDone
-                                        ? 'bg-emerald-500 text-white'
-                                        : isCurrent
-                                        ? 'bg-casa-gold text-slate-950'
-                                        : 'bg-casa-surface border border-casa-border text-casa-navy',
-                                    )}
-                                  >
-                                    {isDone ? <Check size={14} strokeWidth={3} /> : step.step_number}
-                                  </span>
-                                  <div className="min-w-0 flex-1">
-                                    {isCurrent && (
-                                      <span className="text-caption font-bold uppercase tracking-wider text-amber-800 block mb-1">
-                                        Current step
-                                      </span>
-                                    )}
-                                    <p className={cn('text-body font-medium', isDone ? 'text-casa-muted' : 'text-casa-navy')}>
-                                      {step.instruction}
-                                    </p>
-                                  </div>
-                                </div>
-                              )
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Right Column: Ingredients Shelf & Scaler */}
-                    <div className="order-2">
-                      <Card tone="surface" padding="md" className="space-y-3 lg:sticky lg:top-0 shadow-sm">
-                        <div className="flex items-center justify-between gap-2 pb-2 border-b border-casa-border/60">
-                          <p className="font-display text-body-lg font-bold text-casa-navy">Ingredients Shelf</p>
-                          <SegmentedControl
-                            aria-label="Ingredient units"
-                            value={showCupsConversion ? 'cups' : 'grams'}
-                            onChange={(value) => setShowCupsConversion(value === 'cups')}
-                            options={[
-                              { value: 'grams', label: 'Grams' },
-                              { value: 'cups', label: 'Cups' },
-                            ]}
-                          />
-                        </div>
-
-                        {/* Scale Selector */}
-                        <div className="space-y-1">
-                          <span className="text-caption font-bold uppercase tracking-wider text-casa-muted">Portion Scale:</span>
-                          <SegmentedControl
-                            aria-label="Recipe quantity scale"
-                            value={recipeScale}
-                            onChange={setRecipeScale}
-                            fullWidth
-                            options={[
-                              { value: '0.5', label: '0.5×' },
-                              { value: '1', label: '1×' },
-                              { value: '2', label: '2×' },
-                            ]}
-                          />
-                        </div>
-
-                        {/* Ingredients Checklist */}
-                        <div className="max-h-60 lg:max-h-[50vh] overflow-y-auto space-y-2 pt-2 pr-1">
-                          {cookIngredientRows.map((row) => {
-                            const checked = checkedCookIngredients.has(row.id)
-                            return (
-                              <div
-                                key={row.id}
-                                className="p-2.5 rounded-xl border border-casa-border bg-casa-surface flex items-center justify-between gap-2"
-                              >
-                                <Checkbox
-                                  checked={checked}
-                                  onChange={() =>
-                                    setCheckedCookIngredients((current) => {
-                                      const next = new Set(current)
-                                      if (next.has(row.id)) next.delete(row.id)
-                                      else next.add(row.id)
-                                      return next
-                                    })
-                                  }
-                                  label={
-                                    <span className={cn('text-body-sm font-semibold', checked ? 'line-through text-casa-muted' : 'text-casa-navy')}>
-                                      {row.name}
-                                    </span>
-                                  }
-                                />
-                                {row.qty && (
-                                  <span className="font-mono text-caption font-bold text-casa-text-secondary shrink-0">
-                                    {row.qty}
-                                  </span>
-                                )}
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </Card>
-                    </div>
+                    ))}
                   </div>
-                </div>
+                </Card>
+              </div>
+            </div>
 
-                {/* Footer Cooking Controls */}
-                <div className="p-4 sm:p-5 border-t border-casa-border/80 bg-casa-surface flex items-center justify-between gap-3">
-                  <Button
-                    variant="secondary"
-                    size="lg"
-                    onClick={() => setStepIndex((curr) => Math.max(0, curr - 1))}
-                    disabled={stepIndex <= 0}
-                    leadingIcon={<ChevronLeft size={18} />}
-                    className="font-bold min-h-control px-6"
-                  >
-                    Previous
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="lg"
-                    onClick={closeCookRecipe}
-                    className="font-semibold min-h-control px-4 text-casa-muted hover:text-casa-navy"
-                  >
-                    Close recipe
-                  </Button>
-                  <Button
-                    variant="primary"
-                    size="lg"
-                    onClick={() => {
-                      if (stepIndex >= cookSteps.length - 1) {
-                        closeCookRecipe()
-                        return
-                      }
-                      setStepIndex((curr) => Math.min(Math.max(0, cookSteps.length - 1), curr + 1))
-                    }}
-                    trailingIcon={<ChevronRight size={18} />}
-                    className="font-bold min-h-control px-8 shadow-sm"
-                  >
-                    {stepIndex >= cookSteps.length - 1 ? 'Finish Cooking 🎉' : 'Next Step →'}
-                  </Button>
-                </div>
-              </>
-            )}
+            <div className="p-4 border-t border-casa-border bg-casa-surface flex items-center justify-end gap-3">
+              <Button variant="secondary" onClick={cancelRecipeEditing} disabled={recipeEditorSaving} className="min-h-control">
+                Cancel edit
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => void saveRecipeEdits()}
+                disabled={recipeEditorSaving}
+                loading={recipeEditorSaving}
+                className="font-bold min-h-control px-6"
+              >
+                Save changes
+              </Button>
+            </div>
           </div>
-        </div>
+        </Modal>
       )}
       </PageShell>
     </div>

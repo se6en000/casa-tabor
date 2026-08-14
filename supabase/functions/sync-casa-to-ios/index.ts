@@ -38,14 +38,23 @@ Deno.serve(async (req) => {
         ? since
         : null
 
+    // Load legitimate household lists, strictly excluding any QA or ephemeral test lists
+    const { data: lists, error: listsError } = await sb
+      .from('grocery_lists')
+      .select('id, name')
+      .not('name', 'ilike', '[QA]%')
+      .not('name', 'ilike', '[TEST]%')
+    if (listsError) throw new Error(listsError.message)
+    const validListIds = new Set((lists ?? []).map((l: { id: string }) => l.id))
+
     let query = sb
       .from('grocery_items')
       .select(
         'id, list_id, name, quantity, unit, category, checked, notes, updated_at, deleted_at, ios_reminder_id, sync_version, last_modified_source'
       )
-      // Prevent iOS-origin echoes from boomeranging back into Reminders.
+      // Prevent iOS-origin echoes and test fixtures from syncing into Reminders.
       // Casa→iOS should publish only Casa-origin (or legacy null-source) changes.
-      .or('last_modified_source.is.null,last_modified_source.neq.ios')
+      .or('last_modified_source.is.null,last_modified_source.eq.casa')
       .order('updated_at', { ascending: true })
       .limit(effectiveLimit)
 
@@ -54,8 +63,16 @@ Deno.serve(async (req) => {
     const { data, error } = await query
     if (error) throw new Error(error.message)
 
-    const rows = (data ?? []) as GroceryDeltaRow[]
-    const nextCursor = rows.length > 0 ? rows[rows.length - 1].updated_at : parsedSince
+    const rawRows = (data ?? []) as GroceryDeltaRow[]
+    const nextCursor = rawRows.length > 0 ? rawRows[rawRows.length - 1].updated_at : parsedSince
+
+    // Filter out any QA test items, items from test lists, or non-casa modifications
+    const rows = rawRows.filter((row) => {
+      if (row.last_modified_source === 'qa' || row.last_modified_source === 'ios') return false
+      if (row.notes && (row.notes.includes('QA') || row.notes.includes('seed item'))) return false
+      if (validListIds.size > 0 && !validListIds.has(row.list_id)) return false
+      return true
+    })
 
     return new Response(
       JSON.stringify({

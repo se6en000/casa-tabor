@@ -474,6 +474,7 @@ export default function LuxuryTopBar() {
   const isCanvas = experienceMode === 'living_canvas'
   const isCalm = isCanvas && canvasSubmode === 'calm'
   const isHome = location.pathname === '/'
+  const isCook = location.pathname.startsWith('/cook')
   const isWarm = isCalm // Warm material when in calm mode
 
   return (
@@ -513,9 +514,12 @@ export default function LuxuryTopBar() {
 
         <UtilityTrack isWarm={isWarm} isCanvas={isCanvas} />
 
-        <span className="topbar-gold-divider hidden sm:block" />
-
-        <CopilotAction />
+        {!isCook && (
+          <>
+            <span className="topbar-gold-divider hidden sm:block" />
+            <CopilotAction />
+          </>
+        )}
       </div>
     </header>
   )

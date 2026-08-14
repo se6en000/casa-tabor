@@ -53,8 +53,10 @@ export default function SidecarCompanion({
     return Math.min(840, Math.max(400, Math.round(windowWidth * 0.35)))
   }, [isMobile, windowWidth])
 
+  const isCook = routePath.startsWith('/cook')
+
   useEffect(() => {
-    if (aiDrawerOpen && !isMobile) {
+    if (aiDrawerOpen && !isMobile && !isCook) {
       document.documentElement.style.setProperty('--ai-sidecar-width', `${sidecarWidth}px`)
     } else {
       document.documentElement.style.setProperty('--ai-sidecar-width', '0px')
@@ -62,9 +64,9 @@ export default function SidecarCompanion({
     return () => {
       document.documentElement.style.setProperty('--ai-sidecar-width', '0px')
     }
-  }, [aiDrawerOpen, isMobile, sidecarWidth])
+  }, [aiDrawerOpen, isMobile, isCook, sidecarWidth])
 
-  if (!aiDrawerOpen) return null
+  if (!aiDrawerOpen || isCook) return null
 
   const handleAskAiAboutEvent = (promptText?: string) => {
     setSidecarTab('ai')

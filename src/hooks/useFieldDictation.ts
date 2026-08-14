@@ -38,20 +38,41 @@ function joinWords(...parts: string[]): string {
   return parts.map((p) => p.trim()).filter(Boolean).join(' ')
 }
 
-export function useFieldDictation({ onText }: { onText: (fullText: string) => void }) {
+export function useFieldDictation({
+  onText,
+  onComplete,
+  autoSubmitOnSilence = false,
+  silenceTimeoutMs = 1500,
+}: {
+  onText: (fullText: string) => void
+  onComplete?: (fullText: string) => void
+  autoSubmitOnSilence?: boolean
+  silenceTimeoutMs?: number
+}) {
   const [listening, setListening] = useState(false)
   const activeRef = useRef(false)
   const modeRef = useRef<DictationMode>('unknown')
   const baseRef = useRef('')
   const committedRef = useRef('')
+  const lastInterimRef = useRef('')
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null)
 
   const onTextRef = useRef(onText)
+  const onCompleteRef = useRef(onComplete)
   useEffect(() => {
     onTextRef.current = onText
-  }, [onText])
+    onCompleteRef.current = onComplete
+  }, [onText, onComplete])
+
+  const clearSilenceTimer = useCallback(() => {
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current)
+      silenceTimerRef.current = null
+    }
+  }, [])
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const WebSpeech = useRef<any>(
@@ -63,16 +84,39 @@ export function useFieldDictation({ onText }: { onText: (fullText: string) => vo
 
   const supported = !IS_SAFE_MODE
 
+  const triggerAutoSubmitIfReady = useCallback(() => {
+    if (!autoSubmitOnSilence || !activeRef.current) return
+    clearSilenceTimer()
+    silenceTimerRef.current = setTimeout(() => {
+      if (!activeRef.current) return
+      const fullText = joinWords(baseRef.current, committedRef.current, lastInterimRef.current).trim()
+      if (fullText) {
+        stopWebSpeech()
+        stopWS()
+        activeRef.current = false
+        setListening(false)
+        emit('')
+        onCompleteRef.current?.(fullText)
+      }
+    }, silenceTimeoutMs)
+  }, [autoSubmitOnSilence, clearSilenceTimer, silenceTimeoutMs])
+
   const emit = useCallback((interim = '') => {
+    lastInterimRef.current = interim
     onTextRef.current(joinWords(baseRef.current, committedRef.current, interim))
-  }, [])
+    if (interim.trim()) {
+      triggerAutoSubmitIfReady()
+    }
+  }, [triggerAutoSubmitIfReady])
 
   const commitFinal = useCallback((text: string) => {
     const clean = text.trim()
     if (!clean) return
     committedRef.current = joinWords(committedRef.current, clean)
+    lastInterimRef.current = ''
     emit('')
-  }, [emit])
+    triggerAutoSubmitIfReady()
+  }, [emit, triggerAutoSubmitIfReady])
 
   // ── Web Speech API path (mobile / desktop) ──────────────────────────────
   const startWebSpeech = useCallback(() => {
@@ -102,20 +146,29 @@ export function useFieldDictation({ onText }: { onText: (fullText: string) => vo
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     recognition.onerror = (e: any) => {
+      clearSilenceTimer()
+      activeRef.current = false
+      setListening(false)
       if (e.error === 'no-speech' || e.error === 'aborted') return
       console.warn('[FieldDictation] webspeech error', e.error)
     }
 
     recognition.onend = () => {
-      // continuous can still end on silence — restart while the user is holding
-      // the mic open so a paused speaker can keep going.
-      if (activeRef.current) {
-        try { recognition.start() } catch { /* ignore */ }
+      clearSilenceTimer()
+      const wasActive = activeRef.current
+      activeRef.current = false
+      setListening(false)
+      emit('')
+      if (autoSubmitOnSilence && wasActive) {
+        const fullText = joinWords(baseRef.current, committedRef.current).trim()
+        if (fullText) {
+          onCompleteRef.current?.(fullText)
+        }
       }
     }
 
     try { recognition.start() } catch { /* ignore */ }
-  }, [WebSpeech, commitFinal, emit])
+  }, [WebSpeech, autoSubmitOnSilence, clearSilenceTimer, commitFinal, emit])
 
   const stopWebSpeech = useCallback(() => {
     if (recognitionRef.current) {
@@ -171,18 +224,21 @@ export function useFieldDictation({ onText }: { onText: (fullText: string) => vo
 
   // ── Unified control ──────────────────────────────────────────────────────
   const stop = useCallback(() => {
+    clearSilenceTimer()
     if (!activeRef.current) return
     activeRef.current = false
     setListening(false)
     if (modeRef.current === 'webspeech') stopWebSpeech()
     else stopWS()
     emit('') // settle field to base + committed, drop trailing interim
-  }, [stopWebSpeech, stopWS, emit])
+  }, [clearSilenceTimer, stopWebSpeech, stopWS, emit])
 
   const start = useCallback(async (seed: string) => {
     if (activeRef.current || IS_SAFE_MODE) return
+    clearSilenceTimer()
     baseRef.current = seed.trim()
     committedRef.current = ''
+    lastInterimRef.current = ''
     activeRef.current = true
     setListening(true)
 
@@ -195,7 +251,7 @@ export function useFieldDictation({ onText }: { onText: (fullText: string) => vo
 
     if (modeRef.current === 'webspeech') startWebSpeech()
     else startBridge()
-  }, [WebSpeech, startWebSpeech, startBridge])
+  }, [WebSpeech, clearSilenceTimer, startWebSpeech, startBridge])
 
   const toggle = useCallback((seed: string) => {
     if (activeRef.current) stop()
@@ -206,17 +262,20 @@ export function useFieldDictation({ onText }: { onText: (fullText: string) => vo
   // empty field — WITHOUT stopping the mic. Used after an item is added so the
   // user can keep speaking the next item hands-free.
   const resetBuffer = useCallback((seed = '') => {
+    clearSilenceTimer()
     baseRef.current = seed.trim()
     committedRef.current = ''
-  }, [])
+    lastInterimRef.current = ''
+  }, [clearSilenceTimer])
 
   useEffect(() => {
     return () => {
+      clearSilenceTimer()
       activeRef.current = false
       stopWebSpeech()
       stopWS()
     }
-  }, [stopWebSpeech, stopWS])
+  }, [clearSilenceTimer, stopWebSpeech, stopWS])
 
   return { supported, listening, start, stop, toggle, resetBuffer }
 }

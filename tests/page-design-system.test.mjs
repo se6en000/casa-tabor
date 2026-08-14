@@ -449,13 +449,19 @@ test('Cook preserves its landing hierarchy through shared design-system roles', 
 
 test('Cooking uses shared controls while preserving its interaction contracts', () => {
   const source = readFileSync(resolve('src/pages/CookPage.tsx'), 'utf8')
-  for (const component of ['Alert', 'Button', 'Checkbox', 'Chip', 'IconButton', 'Progress', 'SegmentedControl', 'Switch']) {
-    assert.match(source, new RegExp(`<${component}\\b`))
+  const workbench = readFileSync(resolve('src/components/kitchen/ActiveKitchenWorkbench.tsx'), 'utf8')
+  const hud = readFileSync(resolve('src/components/kitchen/KitchenStepFocusHUD.tsx'), 'utf8')
+  const mise = readFileSync(resolve('src/components/kitchen/KitchenMiseEnPlaceShelf.tsx'), 'utf8')
+  const sidecar = readFileSync(resolve('src/components/kitchen/KitchenSousChefSidecar.tsx'), 'utf8')
+  const header = readFileSync(resolve('src/components/kitchen/KitchenHeaderHUD.tsx'), 'utf8')
+  const combined = [source, workbench, hud, mise, sidecar, header].join('\n')
+
+  for (const component of ['Alert', 'Button', 'Chip', 'IconButton', 'Progress', 'SegmentedControl', 'Switch']) {
+    assert.match(combined, new RegExp(`<${component}\\b`))
   }
   assert.doesNotMatch(source, /<button\b/)
   assert.doesNotMatch(source, /\bz-\[\d+\]/)
-  assert.match(source, /className="fixed inset-0 z-modal/)
-  assert.match(source, /aria-label="Cooking step progress"/)
+  assert.match(source, /<ActiveKitchenWorkbench/)
   assert.match(source, /aria-label="Saved cooking progress"/)
   assert.match(source, /style=\{\{ objectPosition: `\$\{focalX\}% \$\{focalY\}%` \}\}/)
 })
@@ -489,11 +495,12 @@ test('Appearance owns persistent theme controls while the Design System referenc
 
 test('Cook mode, unit, and quantity selectors use shared toggle controls', () => {
   const cook = readFileSync(resolve('src/pages/CookPage.tsx'), 'utf8')
+  const hud = readFileSync(resolve('src/components/kitchen/KitchenStepFocusHUD.tsx'), 'utf8')
+  const mise = readFileSync(resolve('src/components/kitchen/KitchenMiseEnPlaceShelf.tsx'), 'utf8')
 
-  assert.match(cook, /aria-label="Directions view"/)
-  assert.match(cook, /aria-label="Ingredient units"/)
-  assert.match(cook, /aria-label="Recipe quantity scale"/)
-  assert.match(cook, /type RecipeScale = '0\.5' \| '1' \| '2'/)
+  assert.match(hud, /aria-label="Steps view mode"/)
+  assert.match(mise, /aria-label="Recipe portion multiplier"/)
+  assert.match(cook, /aria-label="Cook view"/)
 })
 
 test('Home and its right rail use shared touch-first design contracts', () => {
