@@ -3,11 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import { format, parseISO, differenceInMinutes, subMinutes } from 'date-fns'
 import { useLiveClock, greetingFor } from './useLiveClock'
 import { useTodayEvents, useTomorrowEvents, type EventWithDetails } from './useCalendarEvents'
-import { useWeekConflicts } from './useConflicts'
-import { usePrepItems } from './usePrepItems'
+import { useWeekConflicts, useResolveConflict } from './useConflicts'
+import { usePrepItems, useCompletePrepItem } from './usePrepItems'
+import { useFamilyMembers } from './useFamilyMembers'
 import { useHomeWeather } from './useHomeWeather'
 import { useAppStore } from '../stores/appStore'
 import type { EventTransportationPlan, TransportationLeg } from '../lib/eventTransportation'
+import type { Conflict, PrepItem, FamilyMember } from '../types'
 
 export interface CalmKioskPresenterState {
   now: Date
@@ -21,6 +23,11 @@ export interface CalmKioskPresenterState {
   upcomingAppointments: EventWithDetails[]
   todayEvents: EventWithDetails[]
   tomorrowEvents: EventWithDetails[]
+  activeConflicts: Conflict[]
+  activePrep: PrepItem[]
+  familyMembers: FamilyMember[]
+  handleResolveConflict: (conflict: Conflict, resolution: string) => void
+  handleCompletePrep: (item: PrepItem) => void
   pickupsCount: number
   isEvening: boolean
   isDinnerPast: boolean
@@ -48,7 +55,31 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
   const { data: tomorrowEvents = [] } = useTomorrowEvents(now)
   const { data: conflicts = [] } = useWeekConflicts()
   const { data: prepItems = [] } = usePrepItems()
+  const { data: familyMembers = [] } = useFamilyMembers()
   const { data: weather } = useHomeWeather()
+
+  const resolveConflict = useResolveConflict()
+  const completePrep = useCompletePrepItem()
+
+  const activeConflicts = useMemo(
+    () => conflicts.filter((c) => !c.resolved),
+    [conflicts]
+  )
+
+  const activePrep = useMemo(
+    () => prepItems.filter((p) => !p.dismissed),
+    [prepItems]
+  )
+
+  const handleResolveConflict = (conflict: Conflict, resolution: string) => {
+    void resolveConflict(conflict.id, resolution)
+  }
+
+  const handleCompletePrep = (item: PrepItem) => {
+    void completePrep(item.id)
+  }
+
+  const totalAttentionCount = activeConflicts.length + activePrep.length
 
   // Helper to test if an event is a meal (which is featured in Tonight's Kitchen)
   const isMealEvent = (e: EventWithDetails) => {
@@ -138,10 +169,6 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
       return true
     })
   }, [todayEvents, nextEvent, now])
-
-  const activeConflicts = useMemo(() => conflicts.filter((c) => !c.resolved), [conflicts])
-  const activePrep = useMemo(() => prepItems.filter((p) => !p.dismissed), [prepItems])
-  const totalAttentionCount = activeConflicts.length + activePrep.length
 
   const hour = now.getHours()
   const isEvening = hour >= 18
@@ -328,6 +355,11 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     upcomingAppointments,
     todayEvents,
     tomorrowEvents,
+    activeConflicts,
+    activePrep,
+    familyMembers,
+    handleResolveConflict,
+    handleCompletePrep,
     pickupsCount,
     isEvening,
     isDinnerPast,

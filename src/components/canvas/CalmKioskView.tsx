@@ -34,6 +34,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
   const dinnerPlan = useAppStore((s) => s.dinnerPlan)
   const [showPastEvents, setShowPastEvents] = useState(false)
   const [completedItems, setCompletedItems] = useState<Record<string, boolean>>({})
+  const [mobileSubTab, setMobileSubTab] = useState<'schedule' | 'triage' | 'kitchen'>('schedule')
 
   const {
     now,
@@ -57,6 +58,11 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
     returnDestinationName,
     driverName,
     driverFamilyMemberId,
+    activeConflicts,
+    activePrep,
+    familyMembers,
+    handleResolveConflict,
+    handleCompletePrep,
     setCanvasSubmode,
     navigateTo,
   } = useCalmKioskPresenter()
@@ -76,7 +82,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
   )
 
   return (
-    <div className="w-full h-full flex flex-col justify-start p-6 lg:p-8 xl:p-10 overflow-y-auto scrollbar-hide">
+    <div className="w-full h-full flex flex-col justify-start p-4 sm:p-6 lg:p-8 xl:p-10 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-8 overflow-y-auto scrollbar-hide">
       {/* ── Top Section: Ambient Greeting & Clock ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-casa-border/40 shrink-0">
         <div>
@@ -117,10 +123,73 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
         </div>
       </div>
 
+      {/* ── Mobile View Switcher (Only visible on small screens < lg) ── */}
+      <div className="lg:hidden flex items-center justify-between pb-3 mb-1 border-b border-casa-border/40 shrink-0">
+        <div className="inline-flex p-1 rounded-2xl bg-casa-surface border border-casa-border/60 w-full justify-center gap-1 shadow-2xs">
+          <Button
+            size="sm"
+            variant={mobileSubTab === 'schedule' ? 'primary' : 'ghost'}
+            onClick={() => setMobileSubTab('schedule')}
+            className={cn(
+              'flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-caption font-bold transition-all min-h-[42px]',
+              mobileSubTab === 'schedule'
+                ? 'bg-casa-navy text-white shadow-2xs'
+                : 'text-casa-muted hover:text-casa-navy'
+            )}
+          >
+            <Calendar size={14} />
+            <span>Schedule ({upcomingAppointments.length})</span>
+          </Button>
+
+          <Button
+            size="sm"
+            variant={mobileSubTab === 'triage' ? 'primary' : 'ghost'}
+            onClick={() => setMobileSubTab('triage')}
+            className={cn(
+              'flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-caption font-bold transition-all min-h-[42px]',
+              mobileSubTab === 'triage'
+                ? 'bg-amber-500 text-white shadow-2xs'
+                : 'text-casa-muted hover:text-casa-navy'
+            )}
+          >
+            <Zap size={14} className={mobileSubTab === 'triage' ? 'text-white' : 'text-amber-600'} />
+            <span>Actions</span>
+            {totalAttentionCount > 0 && (
+              <span
+                className={cn(
+                  'px-1.5 py-0.5 rounded-full text-3xs font-bold leading-none',
+                  mobileSubTab === 'triage' ? 'bg-white text-amber-600' : 'bg-amber-500 text-white'
+                )}
+              >
+                {totalAttentionCount}
+              </span>
+            )}
+          </Button>
+
+          <Button
+            size="sm"
+            variant={mobileSubTab === 'kitchen' ? 'primary' : 'ghost'}
+            onClick={() => setMobileSubTab('kitchen')}
+            className={cn(
+              'flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-caption font-bold transition-all min-h-[42px]',
+              mobileSubTab === 'kitchen'
+                ? 'bg-casa-gold text-casa-navy shadow-2xs'
+                : 'text-casa-muted hover:text-casa-navy'
+            )}
+          >
+            <Utensils size={14} />
+            <span>Dinner</span>
+          </Button>
+        </div>
+      </div>
+
       {/* ── Main Middle Grid: Hero "Next Up" + Tonight's Dinner + Daily Schedule ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-6 pb-6 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-4 pb-6 items-start">
         {/* Hero Next Up Card (7 cols) */}
-        <div className="lg:col-span-7 flex flex-col justify-start space-y-4">
+        <div className={cn(
+          'lg:col-span-7 flex-col justify-start space-y-4',
+          mobileSubTab === 'triage' ? 'hidden lg:flex' : 'flex'
+        )}>
           {nextEvent ? (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
@@ -363,8 +432,118 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
 
         {/* Right Side (5 cols): Today's Schedule Stream (Top) + Tonight's Kitchen (Bottom) */}
         <div className="lg:col-span-5 flex flex-col gap-6">
+          {/* Mobile Triage Card (Visible on mobile when triage tab is active) */}
+          {mobileSubTab === 'triage' && (
+            <div className="lg:hidden flex flex-col gap-3">
+              {/* Header card */}
+              <div className="rounded-3xl p-5 bg-casa-surface border border-amber-500/30 shadow-sm flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-800 flex items-center justify-center font-bold">
+                    <Zap size={18} className="text-amber-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-display text-body-lg font-bold text-casa-navy">
+                      Household Actions ({totalAttentionCount})
+                    </h3>
+                    <p className="text-2xs text-casa-muted">1-tap resolution for urgent items</p>
+                  </div>
+                </div>
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => navigateTo('/actions')}
+                  className="text-caption font-bold text-casa-gold hover:underline min-h-[44px] px-2.5"
+                >
+                  <span>Full Hub</span>
+                  <ArrowRight size={13} className="ml-1" />
+                </Button>
+              </div>
+
+              {/* Active Conflicts List */}
+              {activeConflicts.map((conflict) => (
+                <div
+                  key={conflict.id}
+                  className="rounded-3xl p-4 bg-casa-surface border border-amber-500/30 shadow-sm flex flex-col gap-2.5"
+                >
+                  <div className="flex items-center gap-1.5 text-amber-700 text-caption font-bold uppercase tracking-wider">
+                    <Zap size={13} className="text-amber-600 shrink-0" />
+                    <span>{conflict.conflict_type || 'Driver Needed'}</span>
+                  </div>
+                  <div>
+                    <h4 className="text-body-sm font-bold text-casa-navy">
+                      {conflict.event_a?.title || 'Upcoming Event'}
+                    </h4>
+                    <p className="text-caption text-casa-muted mt-0.5">{conflict.description}</p>
+                  </div>
+                  <div className="pt-2 border-t border-casa-border/50 flex flex-wrap items-center gap-1.5">
+                    <span className="text-2xs font-semibold text-casa-muted mr-1">Assign:</span>
+                    {familyMembers
+                      .filter((m) => m.can_drive || m.role === 'parent' || m.role === 'caregiver')
+                      .slice(0, 3)
+                      .map((member) => (
+                        <Button
+                          key={member.id}
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => handleResolveConflict(conflict, `${member.name} assigned as driver`)}
+                          className="min-h-[36px] px-3 py-1 rounded-xl text-caption font-bold bg-casa-bg hover:bg-casa-surface-subtle border-casa-border"
+                        >
+                          <span>{member.name}</span>
+                        </Button>
+                      ))}
+                  </div>
+                </div>
+              ))}
+
+              {/* Active Prep Items List */}
+              {activePrep.map((prep) => (
+                <div
+                  key={prep.id}
+                  className="rounded-3xl p-4 bg-casa-surface border border-emerald-500/30 shadow-sm flex items-center justify-between gap-3"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 text-emerald-700 text-caption font-bold uppercase tracking-wider">
+                      <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
+                      <span>{prep.type || 'Prep Item'}</span>
+                    </div>
+                    <p className="text-body-sm font-semibold text-casa-navy truncate mt-0.5">
+                      {prep.description}
+                    </p>
+                    {prep.event_title && (
+                      <p className="text-2xs text-casa-muted truncate">For {prep.event_title}</p>
+                    )}
+                  </div>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => handleCompletePrep(prep)}
+                    className="min-h-[38px] px-3.5 rounded-xl text-caption font-bold bg-emerald-600 hover:bg-emerald-700 text-white shrink-0"
+                  >
+                    <span>Done</span>
+                  </Button>
+                </div>
+              ))}
+
+              {totalAttentionCount === 0 && (
+                <div className="rounded-3xl p-6 bg-casa-surface border border-casa-border/50 text-center flex flex-col items-center justify-center gap-2">
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-500/15 text-emerald-600 flex items-center justify-center">
+                    <CheckCircle2 size={22} />
+                  </div>
+                  <h4 className="text-body-sm font-bold text-casa-navy">All Actions Up to Date!</h4>
+                  <p className="text-caption text-casa-muted">
+                    No urgent driver conflicts or prep tasks pending.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* 1. Today's Appointments & Reminders (Top) */}
-          <div className="rounded-3xl p-6 bg-casa-surface border border-casa-border/60 shadow-sm flex flex-col justify-start">
+          <div className={cn(
+            'rounded-3xl p-6 bg-casa-surface border border-casa-border/60 shadow-sm flex-col justify-start',
+            mobileSubTab === 'schedule' ? 'flex' : 'hidden lg:flex'
+          )}>
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-xl bg-casa-gold/20 text-casa-navy flex items-center justify-center font-bold">
@@ -622,7 +801,10 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
           </div>
 
           {/* 2. Tonight's Kitchen (Bottom) */}
-          <div className="rounded-3xl p-6 bg-gradient-to-br from-amber-500/10 via-casa-surface to-casa-surface border border-amber-500/20 shadow-sm flex flex-col justify-start">
+          <div className={cn(
+            'rounded-3xl p-6 bg-gradient-to-br from-amber-500/10 via-casa-surface to-casa-surface border border-amber-500/20 shadow-sm flex-col justify-start',
+            mobileSubTab === 'kitchen' ? 'flex' : 'hidden lg:flex'
+          )}>
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-800 flex items-center justify-center font-bold">

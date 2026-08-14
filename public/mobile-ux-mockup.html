@@ -1,0 +1,2075 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Casa Tabor — Mobile UX Architecture Mockup</title>
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --color-navy: #1B2A4A;
+      --color-navy-dark: #0D172B;
+      --color-navy-surface: #142038;
+      --color-gold: #C9A96E;
+      --color-gold-dark: #A6874E;
+      --color-gold-light: #F4E8D3;
+      --color-gold-bg: rgba(201, 169, 110, 0.12);
+      
+      --color-bg-warm: #FAF8F5;
+      --color-surface-warm: #FFFFFF;
+      --color-border-warm: #EAE5DD;
+      --color-text-warm: #1B2A4A;
+      --color-muted-warm: #6B7280;
+      
+      --color-bg-midnight: #090C11;
+      --color-surface-midnight: #121824;
+      --color-border-midnight: #222C3D;
+      --color-text-midnight: #F3F4F6;
+      --color-muted-midnight: #9CA3AF;
+      
+      --color-emerald: #10B981;
+      --color-amber: #F59E0B;
+      --color-red: #EF4444;
+      --color-blue: #3B82F6;
+      --color-purple: #8B5CF6;
+      
+      --font-display: 'Cormorant Garamond', Georgia, serif;
+      --font-body: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+      
+      --radius-sm: 8px;
+      --radius-md: 14px;
+      --radius-lg: 20px;
+      --radius-xl: 28px;
+      --radius-full: 9999px;
+      
+      --shadow-subtle: 0 2px 8px rgba(27, 42, 74, 0.04);
+      --shadow-card: 0 4px 20px -2px rgba(27, 42, 74, 0.08);
+      --shadow-elevated: 0 12px 36px -4px rgba(27, 42, 74, 0.16);
+      --shadow-nav: 0 -4px 24px rgba(27, 42, 74, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      font-family: var(--font-body);
+      background-color: #12151D;
+      color: #E2E8F0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px 48px;
+      overflow-x: hidden;
+    }
+
+    /* ── Desktop Control Suite ── */
+    .controls-header {
+      width: 100%;
+      max-width: 1080px;
+      margin-bottom: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .meta-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 14px 20px;
+      border-radius: var(--radius-lg);
+      backdrop-filter: blur(12px);
+    }
+
+    .app-branding {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-badge {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-md);
+      background: linear-gradient(135deg, rgba(201, 169, 110, 0.25), rgba(201, 169, 110, 0.08));
+      border: 1px solid rgba(201, 169, 110, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--color-gold);
+      font-weight: 700;
+      font-size: 14px;
+    }
+
+    .brand-title {
+      font-family: var(--font-display);
+      font-size: 22px;
+      font-weight: 600;
+      color: #FFFFFF;
+      letter-spacing: 0.02em;
+    }
+
+    .brand-subtitle {
+      font-size: 12px;
+      color: #94A3B8;
+    }
+
+    .concept-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 4px;
+      border-radius: var(--radius-full);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .concept-btn {
+      background: transparent;
+      border: none;
+      color: #94A3B8;
+      font-family: var(--font-body);
+      font-size: 13px;
+      font-weight: 600;
+      padding: 8px 18px;
+      border-radius: var(--radius-full);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .concept-btn:hover {
+      color: #FFFFFF;
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .concept-btn.active {
+      background: var(--color-gold);
+      color: var(--color-navy-dark);
+      box-shadow: 0 2px 12px rgba(201, 169, 110, 0.35);
+    }
+
+    .toggle-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .sub-btn {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #E2E8F0;
+      font-family: var(--font-body);
+      font-size: 12px;
+      font-weight: 500;
+      padding: 6px 14px;
+      border-radius: var(--radius-full);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+
+    .sub-btn:hover {
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    /* ── Main Stage ── */
+    .mockup-stage {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 40px;
+      width: 100%;
+      max-width: 1160px;
+    }
+
+    /* ── Phone Chassis Simulation ── */
+    .phone-wrapper {
+      position: relative;
+      width: 393px;
+      height: 852px;
+      border-radius: 54px;
+      background: #181B22;
+      padding: 12px;
+      box-shadow: 
+        0 0 0 1px rgba(255, 255, 255, 0.12),
+        0 24px 64px -12px rgba(0, 0, 0, 0.75),
+        0 0 100px -20px rgba(201, 169, 110, 0.15);
+      flex-shrink: 0;
+      transition: transform 0.3s ease;
+    }
+
+    .phone-screen {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      border-radius: 44px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      background: var(--color-bg-warm);
+      color: var(--color-text-warm);
+      transition: background-color 0.3s ease, color 0.3s ease;
+    }
+
+    /* Theme Variations */
+    .theme-midnight .phone-screen {
+      background: var(--color-bg-midnight);
+      color: var(--color-text-midnight);
+    }
+
+    /* Dynamic Island */
+    .dynamic-island {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 124px;
+      height: 34px;
+      background: #000000;
+      border-radius: 20px;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+    }
+
+    .camera-lens {
+      width: 11px;
+      height: 11px;
+      background: #111C24;
+      border-radius: 50%;
+      border: 1.5px solid #1C2B36;
+    }
+
+    .sensor {
+      width: 9px;
+      height: 9px;
+      background: #09131C;
+      border-radius: 50%;
+    }
+
+    /* Phone Status Bar */
+    .mobile-status-bar {
+      height: 48px;
+      padding: 12px 24px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--color-text-warm);
+      z-index: 90;
+      flex-shrink: 0;
+    }
+
+    .theme-midnight .mobile-status-bar {
+      color: var(--color-text-midnight);
+    }
+
+    .status-icons {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* ── Phone Content Area ── */
+    .mobile-app-header {
+      padding: 6px 18px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+      border-bottom: 1px solid var(--color-border-warm);
+      background: var(--color-surface-warm);
+    }
+
+    .theme-midnight .mobile-app-header {
+      background: var(--color-surface-midnight);
+      border-bottom-color: var(--color-border-midnight);
+    }
+
+    .header-user {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .avatar-monogram {
+      width: 32px;
+      height: 32px;
+      border-radius: 9px;
+      background: var(--color-gold-bg);
+      border: 1px solid var(--color-gold);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--color-gold-dark);
+    }
+
+    .greeting-text h2 {
+      font-family: var(--font-display);
+      font-size: 18px;
+      font-weight: 600;
+      line-height: 1.1;
+      color: var(--color-navy);
+    }
+
+    .theme-midnight .greeting-text h2 {
+      color: #FFFFFF;
+    }
+
+    .greeting-text p {
+      font-size: 11px;
+      color: var(--color-muted-warm);
+    }
+
+    .theme-midnight .greeting-text p {
+      color: var(--color-muted-midnight);
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .icon-pill-btn {
+      width: 34px;
+      height: 34px;
+      border-radius: var(--radius-full);
+      background: rgba(27, 42, 74, 0.05);
+      border: 1px solid rgba(27, 42, 74, 0.08);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--color-navy);
+      transition: all 0.15s ease;
+    }
+
+    .theme-midnight .icon-pill-btn {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: rgba(255, 255, 255, 0.1);
+      color: #FFFFFF;
+    }
+
+    .icon-pill-btn:hover {
+      background: var(--color-gold-bg);
+      color: var(--color-gold-dark);
+    }
+
+    .icon-pill-btn.sparkle {
+      background: linear-gradient(135deg, rgba(201, 169, 110, 0.25), rgba(201, 169, 110, 0.1));
+      border-color: rgba(201, 169, 110, 0.4);
+      color: var(--color-gold-dark);
+    }
+
+    /* ── Mobile Scroll Container ── */
+    .mobile-scroll-body {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 14px 16px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      scroll-behavior: smooth;
+      scrollbar-width: none;
+    }
+
+    .mobile-scroll-body::-webkit-scrollbar {
+      display: none;
+    }
+
+    /* ── Hero Focus Card ── */
+    .hero-departure-card {
+      background: linear-gradient(145deg, #1B2A4A 0%, #0F1A30 100%);
+      color: #FFFFFF;
+      border-radius: var(--radius-xl);
+      padding: 18px 16px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 8px 24px -4px rgba(27, 42, 74, 0.25);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    .hero-departure-card::before {
+      content: '';
+      position: absolute;
+      top: -40px;
+      right: -40px;
+      width: 140px;
+      height: 140px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(201, 169, 110, 0.25) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .hero-status-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    .hero-status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--color-gold);
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--color-emerald);
+      box-shadow: 0 0 6px var(--color-emerald);
+      animation: pulse-dot 2s infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.3); opacity: 0.6; }
+    }
+
+    .hero-time-tag {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      background: rgba(255, 255, 255, 0.1);
+      padding: 3px 8px;
+      border-radius: var(--radius-full);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .hero-title {
+      font-family: var(--font-display);
+      font-size: 24px;
+      font-weight: 700;
+      line-height: 1.15;
+      margin-bottom: 6px;
+      color: #FFFFFF;
+    }
+
+    .hero-location {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.8);
+      margin-bottom: 12px;
+    }
+
+    .hero-journey-bar {
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius-md);
+      padding: 8px 10px;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+    }
+
+    .journey-stat {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      color: var(--color-gold);
+      font-weight: 600;
+    }
+
+    .journey-dest {
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    .hero-actions-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-action-primary {
+      flex: 1;
+      background: var(--color-gold);
+      color: var(--color-navy-dark);
+      border: none;
+      padding: 10px 14px;
+      border-radius: var(--radius-md);
+      font-family: var(--font-body);
+      font-size: 12px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      box-shadow: 0 2px 8px rgba(201, 169, 110, 0.3);
+    }
+
+    .btn-action-primary:active {
+      transform: scale(0.98);
+    }
+
+    .btn-action-secondary {
+      background: rgba(255, 255, 255, 0.12);
+      color: #FFFFFF;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      padding: 10px 14px;
+      border-radius: var(--radius-md);
+      font-family: var(--font-body);
+      font-size: 12px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+
+    /* ── Segmented Control Bar ── */
+    .segmented-tabs-bar {
+      display: flex;
+      background: var(--color-surface-warm);
+      border: 1px solid var(--color-border-warm);
+      padding: 4px;
+      border-radius: var(--radius-lg);
+      gap: 4px;
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      box-shadow: var(--shadow-subtle);
+    }
+
+    .theme-midnight .segmented-tabs-bar {
+      background: var(--color-surface-midnight);
+      border-color: var(--color-border-midnight);
+    }
+
+    .seg-tab-btn {
+      flex: 1;
+      border: none;
+      background: transparent;
+      padding: 8px 6px;
+      border-radius: var(--radius-md);
+      font-family: var(--font-body);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--color-muted-warm);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .theme-midnight .seg-tab-btn {
+      color: var(--color-muted-midnight);
+    }
+
+    .seg-tab-btn.active {
+      background: var(--color-navy);
+      color: #FFFFFF;
+      box-shadow: 0 2px 8px rgba(27, 42, 74, 0.15);
+    }
+
+    .theme-midnight .seg-tab-btn.active {
+      background: var(--color-gold);
+      color: var(--color-navy-dark);
+    }
+
+    .seg-badge {
+      background: var(--color-amber);
+      color: #FFFFFF;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: var(--radius-full);
+      line-height: 1.2;
+    }
+
+    .seg-tab-btn.active .seg-badge {
+      background: #FFFFFF;
+      color: var(--color-navy);
+    }
+
+    /* ── Section Views Container ── */
+    .view-panel {
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+      animation: fadeIn 0.2s ease;
+    }
+
+    .view-panel.active-panel {
+      display: flex;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Collapsible Banner ── */
+    .collapsible-header {
+      background: var(--color-surface-warm);
+      border: 1px solid var(--color-border-warm);
+      border-radius: var(--radius-md);
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--color-muted-warm);
+      cursor: pointer;
+    }
+
+    .theme-midnight .collapsible-header {
+      background: var(--color-surface-midnight);
+      border-color: var(--color-border-midnight);
+      color: var(--color-muted-midnight);
+    }
+
+    .collapsible-body {
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+      padding-left: 8px;
+    }
+
+    .collapsible-body.open {
+      display: flex;
+    }
+
+    /* ── Timeline Now Marker ── */
+    .now-indicator-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 4px 0;
+    }
+
+    .now-badge {
+      background: var(--color-red);
+      color: #FFFFFF;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      padding: 2px 8px;
+      border-radius: var(--radius-full);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+    }
+
+    .now-line {
+      flex: 1;
+      height: 1.5px;
+      background: rgba(239, 68, 68, 0.4);
+    }
+
+    /* ── Event & Reminder Cards ── */
+    .event-card {
+      background: var(--color-surface-warm);
+      border: 1px solid var(--color-border-warm);
+      border-radius: var(--radius-lg);
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      box-shadow: var(--shadow-subtle);
+      position: relative;
+      overflow: hidden;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .theme-midnight .event-card {
+      background: var(--color-surface-midnight);
+      border-color: var(--color-border-midnight);
+    }
+
+    .event-card::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 5px;
+      background: var(--color-gold);
+    }
+
+    .event-card.reminder::before {
+      background: var(--color-amber);
+    }
+
+    .event-card.soccer::before {
+      background: var(--color-emerald);
+    }
+
+    .event-card-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .event-time-title {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .event-time-tag {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--color-gold-dark);
+      letter-spacing: 0.02em;
+    }
+
+    .event-card-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--color-navy);
+      line-height: 1.2;
+    }
+
+    .theme-midnight .event-card-title {
+      color: #FFFFFF;
+    }
+
+    .event-driver-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: var(--color-gold-bg);
+      border: 1px solid rgba(201, 169, 110, 0.3);
+      padding: 3px 8px;
+      border-radius: var(--radius-full);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--color-gold-dark);
+    }
+
+    .avatar-stack {
+      display: flex;
+      align-items: center;
+    }
+
+    .avatar-circle {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: var(--color-navy);
+      color: #FFFFFF;
+      font-size: 10px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 2px solid var(--color-surface-warm);
+      margin-left: -6px;
+    }
+
+    .avatar-circle:first-child {
+      margin-left: 0;
+    }
+
+    .avatar-circle.liv { background: #E11D48; }
+    .avatar-circle.kelly { background: #7C3AED; }
+    .avatar-circle.owen { background: #0284C7; }
+    .avatar-circle.emme { background: #D97706; }
+
+    /* ── Action Triage Cards ── */
+    .triage-card {
+      background: var(--color-surface-warm);
+      border: 1px solid var(--color-border-warm);
+      border-radius: var(--radius-lg);
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      box-shadow: var(--shadow-subtle);
+    }
+
+    .theme-midnight .triage-card {
+      background: var(--color-surface-midnight);
+      border-color: var(--color-border-midnight);
+    }
+
+    .triage-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--color-amber);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .triage-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--color-navy);
+    }
+
+    .theme-midnight .triage-title {
+      color: #FFFFFF;
+    }
+
+    .triage-subtitle {
+      font-size: 12px;
+      color: var(--color-muted-warm);
+      margin-top: -4px;
+    }
+
+    .triage-action-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .btn-triage-pick {
+      flex: 1;
+      padding: 8px 12px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--color-border-warm);
+      background: var(--color-bg-warm);
+      color: var(--color-navy);
+      font-family: var(--font-body);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+
+    .theme-midnight .btn-triage-pick {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: rgba(255, 255, 255, 0.1);
+      color: #FFFFFF;
+    }
+
+    .btn-triage-pick:hover, .btn-triage-pick.selected {
+      background: var(--color-gold);
+      color: var(--color-navy-dark);
+      border-color: var(--color-gold);
+      font-weight: 700;
+    }
+
+    /* ── Persistent Bottom Navigation Bar (Concept 1) ── */
+    .mobile-bottom-nav {
+      position: relative;
+      height: 72px;
+      background: var(--color-surface-warm);
+      border-top: 1px solid var(--color-border-warm);
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      padding: 0 8px 10px;
+      box-shadow: var(--shadow-nav);
+      z-index: 50;
+      flex-shrink: 0;
+    }
+
+    .theme-midnight .mobile-bottom-nav {
+      background: var(--color-surface-midnight);
+      border-top-color: var(--color-border-midnight);
+    }
+
+    .nav-tab-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      flex: 1;
+      height: 100%;
+      background: transparent;
+      border: none;
+      color: var(--color-muted-warm);
+      cursor: pointer;
+      position: relative;
+      transition: color 0.15s ease;
+    }
+
+    .theme-midnight .nav-tab-item {
+      color: var(--color-muted-midnight);
+    }
+
+    .nav-tab-item:hover, .nav-tab-item.active {
+      color: var(--color-gold-dark);
+    }
+
+    .theme-midnight .nav-tab-item.active {
+      color: var(--color-gold);
+    }
+
+    .nav-tab-label {
+      font-size: 10px;
+      font-weight: 600;
+    }
+
+    .nav-badge-bubble {
+      position: absolute;
+      top: 6px;
+      right: 18px;
+      background: var(--color-amber);
+      color: #FFFFFF;
+      font-size: 9px;
+      font-weight: 700;
+      min-width: 16px;
+      height: 16px;
+      border-radius: var(--radius-full);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 4px;
+      border: 1.5px solid var(--color-surface-warm);
+    }
+
+    /* ── Floating Speed-Dial Action Button ── */
+    .center-fab-btn {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--color-gold) 0%, var(--color-gold-dark) 100%);
+      color: var(--color-navy-dark);
+      border: 3px solid var(--color-surface-warm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 16px rgba(201, 169, 110, 0.5);
+      cursor: pointer;
+      margin-top: -24px;
+      transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+      z-index: 60;
+    }
+
+    .theme-midnight .center-fab-btn {
+      border-color: var(--color-surface-midnight);
+    }
+
+    .center-fab-btn:active {
+      transform: scale(0.92) rotate(45deg);
+    }
+
+    /* ── Speed Dial Modal Sheet ── */
+    .speed-dial-sheet {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(8px);
+      z-index: 150;
+      display: none;
+      flex-direction: column;
+      justify-content: flex-end;
+      animation: sheetFadeIn 0.25s ease;
+    }
+
+    .speed-dial-sheet.open {
+      display: flex;
+    }
+
+    @keyframes sheetFadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .speed-dial-card {
+      background: var(--color-surface-warm);
+      border-radius: 32px 32px 0 0;
+      padding: 16px 20px 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      transform: translateY(0);
+      animation: sheetSlideUp 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    .theme-midnight .speed-dial-card {
+      background: var(--color-surface-midnight);
+    }
+
+    @keyframes sheetSlideUp {
+      from { transform: translateY(100%); }
+      to { transform: translateY(0); }
+    }
+
+    .sheet-handle {
+      width: 40px;
+      height: 4px;
+      background: rgba(0, 0, 0, 0.15);
+      border-radius: var(--radius-full);
+      margin: 0 auto 8px;
+    }
+
+    .sheet-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--color-navy);
+    }
+
+    .theme-midnight .sheet-title {
+      color: #FFFFFF;
+    }
+
+    .sheet-actions-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+
+    .sheet-action-tile {
+      background: var(--color-bg-warm);
+      border: 1px solid var(--color-border-warm);
+      border-radius: var(--radius-lg);
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .theme-midnight .sheet-action-tile {
+      background: rgba(255, 255, 255, 0.04);
+      border-color: rgba(255, 255, 255, 0.08);
+    }
+
+    .sheet-action-tile:hover {
+      background: var(--color-gold-bg);
+      border-color: var(--color-gold);
+    }
+
+    .tile-icon-box {
+      width: 32px;
+      height: 32px;
+      border-radius: var(--radius-md);
+      background: rgba(27, 42, 74, 0.08);
+      color: var(--color-navy);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .theme-midnight .tile-icon-box {
+      background: rgba(255, 255, 255, 0.1);
+      color: #FFFFFF;
+    }
+
+    .tile-label {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--color-navy);
+    }
+
+    .theme-midnight .tile-label {
+      color: #FFFFFF;
+    }
+
+    .tile-desc {
+      font-size: 10px;
+      color: var(--color-muted-warm);
+    }
+
+    /* ── CONCEPT 2: Draggable Bottom Sheet Layout ── */
+    .concept-2-container {
+      position: relative;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .fixed-journey-viewport {
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+
+    .c2-draggable-sheet {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      top: 260px;
+      background: var(--color-surface-warm);
+      border-radius: 32px 32px 0 0;
+      box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.18);
+      border: 1px solid var(--color-border-warm);
+      display: flex;
+      flex-direction: column;
+      transition: top 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+      z-index: 40;
+    }
+
+    .theme-midnight .c2-draggable-sheet {
+      background: var(--color-surface-midnight);
+      border-color: var(--color-border-midnight);
+    }
+
+    .c2-draggable-sheet.snap-peek { top: 620px; }
+    .c2-draggable-sheet.snap-half { top: 280px; }
+    .c2-draggable-sheet.snap-full { top: 60px; }
+
+    .c2-sheet-header {
+      padding: 12px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      cursor: grab;
+      border-bottom: 1px solid var(--color-border-warm);
+    }
+
+    .theme-midnight .c2-sheet-header {
+      border-bottom-color: var(--color-border-midnight);
+    }
+
+    .c2-snap-controls {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--color-muted-warm);
+    }
+
+    .snap-btn-pill {
+      background: var(--color-bg-warm);
+      border: 1px solid var(--color-border-warm);
+      padding: 4px 10px;
+      border-radius: var(--radius-full);
+      font-size: 10px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .theme-midnight .snap-btn-pill {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: rgba(255, 255, 255, 0.1);
+      color: #FFFFFF;
+    }
+
+    /* ── CONCEPT 3: Floating Dynamic Capsule Dock ── */
+    .c3-floating-dock {
+      position: absolute;
+      bottom: 24px;
+      left: 16px;
+      right: 16px;
+      background: rgba(27, 42, 74, 0.88);
+      backdrop-filter: blur(20px) saturate(1.8);
+      border: 1px solid rgba(201, 169, 110, 0.35);
+      border-radius: var(--radius-full);
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      padding: 0 14px;
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.4);
+      z-index: 60;
+    }
+
+    .c3-dock-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      border: none;
+      color: rgba(255, 255, 255, 0.6);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      position: relative;
+    }
+
+    .c3-dock-item.active, .c3-dock-item:hover {
+      color: var(--color-gold);
+    }
+
+    .c3-dock-item.fab-center {
+      background: var(--color-gold);
+      color: var(--color-navy-dark);
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      box-shadow: 0 2px 12px rgba(201, 169, 110, 0.6);
+    }
+
+    /* ── Interactive Toast Notification ── */
+    .toast-overlay {
+      position: absolute;
+      top: 60px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-20px);
+      background: var(--color-navy);
+      color: #FFFFFF;
+      border: 1px solid var(--color-gold);
+      padding: 8px 16px;
+      border-radius: var(--radius-full);
+      font-size: 12px;
+      font-weight: 600;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+      z-index: 200;
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .toast-overlay.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* ── Explanatory Strategy Panel (Right side) ── */
+    .strategy-sidebar {
+      flex: 1;
+      min-width: 320px;
+      max-width: 580px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .info-card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius-xl);
+      padding: 24px;
+      backdrop-filter: blur(12px);
+    }
+
+    .info-card h3 {
+      font-family: var(--font-display);
+      font-size: 24px;
+      font-weight: 600;
+      color: var(--color-gold);
+      margin-bottom: 12px;
+      letter-spacing: 0.01em;
+    }
+
+    .info-card p {
+      font-size: 14px;
+      line-height: 1.6;
+      color: #CBD5E1;
+      margin-bottom: 14px;
+    }
+
+    .feature-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .feature-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      font-size: 13px;
+      color: #E2E8F0;
+    }
+
+    .check-icon {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: rgba(201, 169, 110, 0.2);
+      color: var(--color-gold);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .comparison-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      font-size: 12px;
+    }
+
+    .comparison-table th {
+      text-align: left;
+      padding: 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      color: var(--color-gold);
+    }
+
+    .comparison-table td {
+      padding: 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      color: #CBD5E1;
+    }
+
+    /* SVG Icon Helpers */
+    .icon {
+      display: inline-block;
+      width: 18px;
+      height: 18px;
+      stroke-width: 2;
+      stroke: currentColor;
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      vertical-align: middle;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Controls & Meta Header -->
+  <header class="controls-header">
+    <div class="meta-bar">
+      <div class="app-branding">
+        <div class="brand-badge">CT</div>
+        <div>
+          <h1 class="brand-title">Casa Tabor — Mobile UX Mockup</h1>
+          <p class="brand-subtitle">Interactive Concept Prototype · Multi-Device Navigation Suite</p>
+        </div>
+      </div>
+
+      <!-- Concept Switcher Tabs -->
+      <div class="concept-pills">
+        <button class="concept-btn active" id="btn-concept-1" onclick="switchConcept(1)">
+          <span>📱</span> Concept 1: Native App Shell
+        </button>
+        <button class="concept-btn" id="btn-concept-2" onclick="switchConcept(2)">
+          <span>🗺️</span> Concept 2: Bottom Sheet
+        </button>
+        <button class="concept-btn" id="btn-concept-3" onclick="switchConcept(3)">
+          <span>💊</span> Concept 3: Floating Dock
+        </button>
+      </div>
+
+      <!-- Viewport & Theme Toggles -->
+      <div class="toggle-group">
+        <button class="sub-btn" id="btn-theme" onclick="toggleTheme()">
+          <span>🌙</span> <span id="theme-label">Midnight Mode</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Stage -->
+  <main class="mockup-stage">
+
+    <!-- Phone Simulator (iPhone 16 Pro Frame) -->
+    <div class="phone-wrapper" id="phone-frame">
+      <div class="phone-screen" id="phone-screen-container">
+        
+        <!-- Dynamic Island -->
+        <div class="dynamic-island">
+          <div class="sensor"></div>
+          <div class="camera-lens"></div>
+        </div>
+
+        <!-- Phone Status Bar -->
+        <div class="mobile-status-bar">
+          <span>5:36</span>
+          <div class="status-icons">
+            <svg class="icon" style="width: 14px; height: 14px;" viewBox="0 0 24 24"><path d="M5 12.55a11 11 0 0 1 14.08 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01"/></svg>
+            <svg class="icon" style="width: 14px; height: 14px;" viewBox="0 0 24 24"><rect width="18" height="11" x="2" y="7" rx="2" ry="2"/><line x1="22" x2="22" y1="11" y2="13"/></svg>
+          </div>
+        </div>
+
+        <!-- App Mobile Header -->
+        <header class="mobile-app-header">
+          <div class="header-user">
+            <div class="avatar-monogram">CT</div>
+            <div class="greeting-text">
+              <h2>Good evening, <span style="font-style: italic;">Tabor</span></h2>
+              <p>Fri, Aug 14 · Clear, 87°F</p>
+            </div>
+          </div>
+          <div class="header-actions">
+            <button class="icon-pill-btn" onclick="showToast('Refreshed data')">
+              <svg class="icon" style="width: 15px; height: 15px;" viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
+            </button>
+            <button class="icon-pill-btn sparkle" onclick="showToast('AI Household Copilot ready')">
+              <svg class="icon" style="width: 15px; height: 15px;" viewBox="0 0 24 24"><path d="M12 3a9 9 0 0 0 9 9 9 9 0 0 0-9 9 9 9 0 0 0-9-9 9 9 0 0 0 9-9Z"/></svg>
+            </button>
+          </div>
+        </header>
+
+        <!-- ══════════════════════════════════════════════════════
+             CONCEPT 1: Native App Shell with Persistent Bottom Nav
+             ══════════════════════════════════════════════════════ -->
+        <div id="concept-1-view" style="display: flex; flex-direction: column; flex: 1; min-height: 0;">
+          
+          <div class="mobile-scroll-body">
+            
+            <!-- Hero Departure Card -->
+            <section class="hero-departure-card" onclick="showToast('Opening Coopers Party details...')">
+              <div class="hero-status-row">
+                <span class="hero-status-pill">
+                  <span class="status-dot"></span>
+                  Leave in 43 min
+                </span>
+                <span class="hero-time-tag">6:30 – 8:30 PM</span>
+              </div>
+
+              <h3 class="hero-title">Party at Coopers</h3>
+              <div class="hero-location">
+                <svg class="icon" style="width: 14px; height: 14px; color: var(--color-gold);" viewBox="0 0 24 24"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+                <span>Katherine Cooper's House</span>
+              </div>
+
+              <!-- Journey Status Bar -->
+              <div class="hero-journey-bar">
+                <div class="journey-stat">
+                  <svg class="icon" style="width: 13px; height: 13px;" viewBox="0 0 24 24"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.5 2.8C2.1 11.2 2 11.6 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>
+                  <span>10m drive · Leave 6:20 PM</span>
+                </div>
+                <span class="journey-dest">Driver: Kelly</span>
+              </div>
+
+              <!-- Action Buttons -->
+              <div class="hero-actions-row" onclick="event.stopPropagation()">
+                <button class="btn-action-primary" onclick="showToast('Opening Google Maps navigation...')">
+                  <svg class="icon" style="width: 14px; height: 14px;" viewBox="0 0 24 24"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+                  Directions
+                </button>
+                <button class="btn-action-secondary" onclick="showToast('Opening event details sidecar')">
+                  View Details
+                </button>
+              </div>
+            </section>
+
+            <!-- Sticky In-Page Segmented Tab Switcher -->
+            <nav class="segmented-tabs-bar">
+              <button class="seg-tab-btn active" id="tab-btn-schedule" onclick="switchMobileSubTab('schedule')">
+                <svg class="icon" style="width: 13px; height: 13px;" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+                <span>Schedule (7)</span>
+              </button>
+              <button class="seg-tab-btn" id="tab-btn-triage" onclick="switchMobileSubTab('triage')">
+                <svg class="icon" style="width: 13px; height: 13px;" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                <span>Actions</span>
+                <span class="seg-badge" id="triage-badge-count">2</span>
+              </button>
+              <button class="seg-tab-btn" id="tab-btn-kitchen" onclick="switchMobileSubTab('kitchen')">
+                <svg class="icon" style="width: 13px; height: 13px;" viewBox="0 0 24 24"><path d="M18 2v20M6 2v20M6 7h12"/></svg>
+                <span>Dinner</span>
+              </button>
+            </nav>
+
+            <!-- SUB-PANEL 1: Schedule Flow -->
+            <div class="view-panel active-panel" id="panel-schedule">
+              
+              <!-- Collapsible Earlier Events -->
+              <div class="collapsible-header" onclick="togglePastEvents()">
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <svg class="icon" style="width: 14px; height: 14px;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  <span>5 earlier events concluded</span>
+                </div>
+                <span id="past-toggle-text" style="font-weight: 700; color: var(--color-gold-dark);">SHOW ▾</span>
+              </div>
+              <div class="collapsible-body" id="past-events-body">
+                <div class="event-card" style="opacity: 0.5;">
+                  <span style="font-size: 11px; text-decoration: line-through;">8:30 AM · Morning School Dropoff (Done)</span>
+                </div>
+                <div class="event-card" style="opacity: 0.5;">
+                  <span style="font-size: 11px; text-decoration: line-through;">1:15 PM · Grocery Restock at Trader Joe's</span>
+                </div>
+              </div>
+
+              <!-- Live Timeline Now Line -->
+              <div class="now-indicator-row">
+                <span class="now-badge">
+                  <span style="width: 5px; height: 5px; border-radius: 50%; background: #FFF;"></span>
+                  NOW · 5:36 PM
+                </span>
+                <div class="now-line"></div>
+              </div>
+
+              <!-- Upcoming Event Card 1 -->
+              <div class="event-card" onclick="showToast('Event: Party at Coopers')">
+                <div class="event-card-header">
+                  <div class="event-time-title">
+                    <span class="event-time-tag">6:30 PM · LEAVE BY 6:18 PM</span>
+                    <h4 class="event-card-title">Party at Coopers</h4>
+                  </div>
+                  <div class="avatar-stack">
+                    <div class="avatar-circle liv">L</div>
+                    <div class="avatar-circle kelly">K</div>
+                    <div class="avatar-circle owen">O</div>
+                    <div class="avatar-circle emme">E</div>
+                  </div>
+                </div>
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 4px;">
+                  <span style="font-size: 11px; color: var(--color-muted-warm);">📍 Katherine Cooper's House</span>
+                  <span class="event-driver-badge">🚗 Kelly Assigned</span>
+                </div>
+              </div>
+
+              <!-- Upcoming Reminder Card 2 -->
+              <div class="event-card reminder" id="reminder-card-1">
+                <div class="event-card-header">
+                  <div class="event-time-title">
+                    <span class="event-time-tag" style="color: var(--color-amber);">7:06 PM · REMINDER</span>
+                    <h4 class="event-card-title" id="reminder-title-1">Liv: Take allergy medicine & pack bag</h4>
+                  </div>
+                  <button class="sub-btn" style="padding: 4px 10px; font-size: 11px;" onclick="resolveReminder(event)">
+                    ✓ Mark Done
+                  </button>
+                </div>
+              </div>
+
+              <!-- Upcoming Event Card 3 -->
+              <div class="event-card soccer" onclick="showToast('Event: Owen Soccer')">
+                <div class="event-card-header">
+                  <div class="event-time-title">
+                    <span class="event-time-tag" style="color: var(--color-emerald);">TOMORROW · 9:00 AM</span>
+                    <h4 class="event-card-title">Owen Soccer Match vs Tigers</h4>
+                  </div>
+                  <div class="avatar-stack">
+                    <div class="avatar-circle owen">O</div>
+                  </div>
+                </div>
+                <span style="font-size: 11px; color: var(--color-muted-warm);">📍 North Field · 🚗 Sarah Driving</span>
+              </div>
+
+            </div>
+
+            <!-- SUB-PANEL 2: Action Triage Hub -->
+            <div class="view-panel" id="panel-triage">
+              <div style="font-size: 12px; font-weight: 700; color: var(--color-gold-dark); text-transform: uppercase; letter-spacing: 0.05em;">
+                ⚡ Needs Attention Today
+              </div>
+
+              <!-- Triage Item 1: Driver Conflict -->
+              <div class="triage-card" id="triage-card-driver">
+                <div class="triage-badge">
+                  <svg class="icon" style="width: 13px; height: 13px;" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                  <span>Driver Unassigned</span>
+                </div>
+                <div class="triage-title">Tomorrow 4:30 PM — Emme Dance Class</div>
+                <div class="triage-subtitle">Pickup needed from West End Studio (15 min drive)</div>
+                <div class="triage-action-row">
+                  <button class="btn-triage-pick" onclick="assignDriver('Kelly')">
+                    <span>(K) Kelly</span>
+                  </button>
+                  <button class="btn-triage-pick" onclick="assignDriver('Sarah')">
+                    <span>(S) Sarah</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Triage Item 2: Prep Task -->
+              <div class="triage-card" id="triage-card-prep">
+                <div class="triage-badge" style="color: var(--color-emerald);">
+                  <svg class="icon" style="width: 13px; height: 13px;" viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+                  <span>Prep Item</span>
+                </div>
+                <div class="triage-title">Bring dessert to Katherine Cooper's</div>
+                <div class="triage-subtitle">Due before departure at 6:20 PM</div>
+                <div class="triage-action-row">
+                  <button class="btn-triage-pick" onclick="resolvePrep()">
+                    <span>✓ Ready & Packed</span>
+                  </button>
+                  <button class="btn-triage-pick" onclick="showToast('Snoozed 30 mins')">
+                    <span>⏱ Snooze 30m</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- SUB-PANEL 3: Kitchen & Tonight's Dinner -->
+            <div class="view-panel" id="panel-kitchen">
+              <div class="hero-departure-card" style="background: linear-gradient(145deg, #2D1A10 0%, #1A1008 100%);">
+                <span class="hero-status-pill" style="color: #F97316;">
+                  <span class="status-dot" style="background: #F97316; box-shadow: 0 0 6px #F97316;"></span>
+                  Tonight's Kitchen · 6:30 PM Target
+                </span>
+                <h3 class="hero-title" style="font-size: 20px; margin-top: 6px;">Herb-Roasted Chicken & Farro</h3>
+                <p style="font-size: 11px; color: rgba(255,255,255,0.7); margin-bottom: 10px;">
+                  35m prep · Pantry confirmed · Chefs: Sarah & Luke
+                </p>
+                <div class="hero-actions-row">
+                  <button class="btn-action-primary" style="background: #F97316; color: #FFF;" onclick="showToast('Opening interactive recipe guide...')">
+                    View Recipe & Timers
+                  </button>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Bottom Navigation Bar -->
+          <nav class="mobile-bottom-nav">
+            <button class="nav-tab-item active" onclick="switchBottomNav(this, 'schedule')">
+              <svg class="icon" viewBox="0 0 24 24"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+              <span class="nav-tab-label">Today</span>
+            </button>
+
+            <button class="nav-tab-item" onclick="switchBottomNav(this, 'calendar')">
+              <svg class="icon" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+              <span class="nav-tab-label">Calendar</span>
+            </button>
+
+            <!-- Center Speed-Dial Floating Button -->
+            <button class="center-fab-btn" onclick="openSpeedDial()" title="Quick Create (+)">
+              <svg class="icon" style="width: 24px; height: 24px; stroke-width: 2.5;" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
+
+            <button class="nav-tab-item" onclick="switchBottomNav(this, 'triage')">
+              <svg class="icon" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+              <span class="nav-tab-label">Actions</span>
+              <span class="nav-badge-bubble" id="bottom-nav-badge">2</span>
+            </button>
+
+            <button class="nav-tab-item" onclick="switchBottomNav(this, 'kitchen')">
+              <svg class="icon" viewBox="0 0 24 24"><path d="M18 2v20M6 2v20M6 7h12"/></svg>
+              <span class="nav-tab-label">Kitchen</span>
+            </button>
+          </nav>
+
+        </div>
+
+        <!-- ══════════════════════════════════════════════════════
+             CONCEPT 2: Interactive Draggable Bottom Sheet View
+             ══════════════════════════════════════════════════════ -->
+        <div id="concept-2-view" style="display: none; height: 100%; position: relative;">
+          
+          <div class="fixed-journey-viewport">
+            <div class="hero-departure-card" style="padding: 14px;">
+              <span class="hero-status-pill">
+                <span class="status-dot"></span>
+                Fixed Departure Radar
+              </span>
+              <h3 class="hero-title" style="font-size: 20px;">Party at Coopers</h3>
+              <p style="font-size: 11px; color: rgba(255,255,255,0.7); margin-bottom: 8px;">
+                Leave 6:20 PM · 10m Drive · Katherine Cooper's
+              </p>
+              <div class="hero-actions-row">
+                <button class="btn-action-primary" onclick="showToast('GPS Navigation Active')">
+                  🧭 Start Directions
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Draggable Sheet -->
+          <div class="c2-draggable-sheet snap-half" id="c2-sheet">
+            <div class="c2-sheet-header" onclick="cycleSheetSnap()">
+              <div class="sheet-handle"></div>
+              <div class="c2-snap-controls">
+                <span style="font-weight: 700; color: var(--color-navy);">Today's Schedule & Tasks</span>
+                <span class="snap-btn-pill" id="sheet-snap-label">Tap to Expand ▴</span>
+              </div>
+            </div>
+            
+            <div class="mobile-scroll-body" style="padding: 12px 16px;">
+              <div class="event-card">
+                <span class="event-time-tag">6:30 PM</span>
+                <h4 class="event-card-title">Party at Coopers</h4>
+                <span style="font-size: 11px; color: var(--color-muted-warm);">🚗 Kelly driving Liv, Owen, Emme</span>
+              </div>
+              <div class="event-card reminder">
+                <span class="event-time-tag" style="color: var(--color-amber);">7:06 PM</span>
+                <h4 class="event-card-title">Liv: Take allergy medicine</h4>
+              </div>
+              <div class="triage-card">
+                <span class="triage-badge">Driver Unassigned</span>
+                <div class="triage-title">Tomorrow 4:30 PM Dance Pickup</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- ══════════════════════════════════════════════════════
+             CONCEPT 3: Floating Dynamic Capsule Dock View
+             ══════════════════════════════════════════════════════ -->
+        <div id="concept-3-view" style="display: none; height: 100%; position: relative;">
+          <div class="mobile-scroll-body" style="padding-bottom: 90px;">
+            <div class="hero-departure-card">
+              <span class="hero-status-pill">Next Up · 6:30 PM</span>
+              <h3 class="hero-title">Party at Coopers</h3>
+              <p style="font-size: 12px; color: rgba(255,255,255,0.8); margin: 6px 0 12px;">
+                Leave in 43m · Katherine Cooper's
+              </p>
+              <button class="btn-action-primary" onclick="showToast('Launching GPS...')">
+                Directions (10m)
+              </button>
+            </div>
+
+            <div class="triage-card">
+              <span class="triage-badge">⚡ 2 Action Items Pending</span>
+              <div class="triage-title">Assign Driver & Pack Party Dessert</div>
+            </div>
+
+            <div class="event-card">
+              <span class="event-time-tag">7:06 PM</span>
+              <h4 class="event-card-title">Liv Medication Reminder</h4>
+            </div>
+          </div>
+
+          <!-- Floating Capsule Dock -->
+          <div class="c3-floating-dock">
+            <button class="c3-dock-item active" onclick="showToast('Switched to Home')">
+              <svg class="icon" viewBox="0 0 24 24"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+            </button>
+            <button class="c3-dock-item" onclick="showToast('Switched to Calendar')">
+              <svg class="icon" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/></svg>
+            </button>
+            <button class="c3-dock-item fab-center" onclick="openSpeedDial()">
+              <svg class="icon" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
+            <button class="c3-dock-item" onclick="showToast('Switched to Actions')">
+              <svg class="icon" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            </button>
+            <button class="c3-dock-item" onclick="showToast('Switched to Kitchen')">
+              <svg class="icon" viewBox="0 0 24 24"><path d="M18 2v20M6 2v20M6 7h12"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- ── Speed Dial Bottom Sheet Modal ── -->
+        <div class="speed-dial-sheet" id="speed-dial-modal" onclick="closeSpeedDial(event)">
+          <div class="speed-dial-card" onclick="event.stopPropagation()">
+            <div class="sheet-handle"></div>
+            <div class="sheet-title">⚡ Quick Capture</div>
+
+            <div class="sheet-actions-grid">
+              <div class="sheet-action-tile" onclick="executeQuickAction('Calendar Event')">
+                <div class="tile-icon-box" style="color: var(--color-gold);">
+                  <svg class="icon" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+                </div>
+                <div class="tile-label">Add Event</div>
+                <div class="tile-desc">Schedule appointment</div>
+              </div>
+
+              <div class="sheet-action-tile" onclick="executeQuickAction('Timed Reminder')">
+                <div class="tile-icon-box" style="color: var(--color-amber);">
+                  <svg class="icon" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                </div>
+                <div class="tile-label">Reminder / Chore</div>
+                <div class="tile-desc">Timed task for member</div>
+              </div>
+
+              <div class="sheet-action-tile" onclick="executeQuickAction('Grocery Item')">
+                <div class="tile-icon-box" style="color: var(--color-emerald);">
+                  <svg class="icon" viewBox="0 0 24 24"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>
+                </div>
+                <div class="tile-label">Grocery Item</div>
+                <div class="tile-desc">Milk, produce, pantry</div>
+              </div>
+
+              <div class="sheet-action-tile" onclick="executeQuickAction('AI Copilot Query')">
+                <div class="tile-icon-box" style="color: var(--color-purple);">
+                  <svg class="icon" viewBox="0 0 24 24"><path d="M12 3a9 9 0 0 0 9 9 9 9 0 0 0-9 9 9 9 0 0 0-9-9 9 9 0 0 0 9-9Z"/></svg>
+                </div>
+                <div class="tile-label">Ask Copilot</div>
+                <div class="tile-desc">AI schedule assistance</div>
+              </div>
+            </div>
+
+            <button class="sub-btn" style="width: 100%; justify-content: center; padding: 10px; margin-top: 6px;" onclick="closeSpeedDialDirect()">
+              Cancel
+            </button>
+          </div>
+        </div>
+
+        <!-- Toast Feedback Overlay -->
+        <div class="toast-overlay" id="toast-message">
+          <svg class="icon" style="width: 14px; height: 14px; color: var(--color-gold);" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+          <span id="toast-text">Action Completed</span>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Explanatory Strategy Sidebar -->
+    <aside class="strategy-sidebar">
+      
+      <div class="info-card">
+        <h3 id="strategy-heading">Concept 1: Native App Shell</h3>
+        <p id="strategy-desc">
+          Resolves the <strong>"one long scroll"</strong> problem by introducing a persistent 5-tab thumb-zone navigation bar, a rapid-capture <strong>(+) FAB</strong>, and in-page segmented views (`Schedule`, `Triage`, `Kitchen`).
+        </p>
+
+        <ul class="feature-list" id="strategy-features">
+          <li class="feature-item">
+            <span class="check-icon">✓</span>
+            <div><strong>Persistent Thumb Nav:</strong> Instantly switch between Today, Calendar, Action Hub, and Kitchen without scrolling.</div>
+          </li>
+          <li class="feature-item">
+            <span class="check-icon">✓</span>
+            <div><strong>Segmented Switcher:</strong> Replaces 2,500px endless vertical clutter with crisp, focused sub-tabs.</div>
+          </li>
+          <li class="feature-item">
+            <span class="check-icon">✓</span>
+            <div><strong>1-Tap Triage Action:</strong> Assign drivers and resolve reminders directly in 1 click.</div>
+          </li>
+          <li class="feature-item">
+            <span class="check-icon">✓</span>
+            <div><strong>Center Elevated FAB (+):</strong> 2-click rapid capture for events, chores, and grocery items.</div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="info-card">
+        <h3>Multi-Device Ergonomics Comparison</h3>
+        <table class="comparison-table">
+          <thead>
+            <tr>
+              <th>Device Form</th>
+              <th>Primary Navigation</th>
+              <th>Information Model</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>📱 Mobile (375-430px)</strong></td>
+              <td>Bottom 5-Tab Bar + FAB</td>
+              <td>Segmented views & bottom sheets</td>
+            </tr>
+            <tr>
+              <td><strong>📟 Tablet (768-1024px)</strong></td>
+              <td>Left Sidebar Rail</td>
+              <td>2-Column Split (Schedule + Triage)</td>
+            </tr>
+            <tr>
+              <td><strong>🖥️ Desktop (1280-1440px)</strong></td>
+              <td>Top Luxury Bar + Sidebar</td>
+              <td>3-Column Expanded Workbench</td>
+            </tr>
+            <tr>
+              <td><strong>📺 Wall Kiosk (1920x1080)</strong></td>
+              <td>Zero-click Ambient Glance</td>
+              <td>3.5-4.5 Glanceable Columns (8ft away)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+    </aside>
+
+  </main>
+
+  <!-- Interactive Mockup Logic -->
+  <script>
+    let currentConcept = 1;
+    let isDarkTheme = false;
+    let pendingTriageCount = 2;
+    let sheetSnapState = 'half'; // 'peek', 'half', 'full'
+
+    function switchConcept(conceptId) {
+      currentConcept = conceptId;
+      
+      // Update Tab Button styles
+      document.querySelectorAll('.concept-btn').forEach((btn, idx) => {
+        btn.classList.toggle('active', idx + 1 === conceptId);
+      });
+
+      // Update Views
+      document.getElementById('concept-1-view').style.display = conceptId === 1 ? 'flex' : 'none';
+      document.getElementById('concept-2-view').style.display = conceptId === 2 ? 'flex' : 'none';
+      document.getElementById('concept-3-view').style.display = conceptId === 3 ? 'flex' : 'none';
+
+      // Update Sidebar Strategy Copy
+      const heading = document.getElementById('strategy-heading');
+      const desc = document.getElementById('strategy-desc');
+      const features = document.getElementById('strategy-features');
+
+      if (conceptId === 1) {
+        heading.innerText = 'Concept 1: Native App Shell (Recommended)';
+        desc.innerHTML = 'Resolves the <strong>"one long scroll"</strong> problem by introducing a persistent 5-tab thumb-zone navigation bar, a rapid-capture <strong>(+) FAB</strong>, and in-page segmented views (<code>Schedule</code>, <code>Triage</code>, <code>Kitchen</code>).';
+        features.innerHTML = `
+          <li class="feature-item"><span class="check-icon">✓</span><div><strong>Persistent Thumb Nav:</strong> Direct 1-tap switching between Today, Calendar, Action Hub, and Kitchen.</div></li>
+          <li class="feature-item"><span class="check-icon">✓</span><div><strong>Segmented Switcher:</strong> Eliminates endless vertical scroll with clean tab partitions.</div></li>
+          <li class="feature-item"><span class="check-icon">✓</span><div><strong>1-Tap Triage Action:</strong> Assign drivers and complete reminders in 1 click.</div></li>
+          <li class="feature-item"><span class="check-icon">✓</span><div><strong>Elevated Center FAB:</strong> Rapid multi-item creation modal sheet.</div></li>
+        `;
+      } else if (conceptId === 2) {
+        heading.innerText = 'Concept 2: Dynamic Draggable Bottom Sheet';
+        desc.innerHTML = 'Inspired by <strong>Apple Maps & Citymapper</strong>. Keeps the departure countdown and GPS radar permanently anchored in the top viewport while the daily timeline slides in a draggable sheet with 3 snap states (Peek, Half, Full).';
+        features.innerHTML = `
+          <li class="feature-item"><span class="check-icon">✓</span><div><strong>Fixed Departure Radar:</strong> Hero time-to-leave countdown never scrolls out of view.</div></li>
+          <li class="feature-item"><span class="check-icon">✓</span><div><strong>Draggable Sheet:</strong> Swipe up for full calendar; swipe down for pure ambient dashboard.</div></li>
+          <li class="feature-item"><span class="check-icon">✓</span><div><strong>Thumb Snapping:</strong> Quick access to triage and today events with single swipe.</div></li>
+        `;
+      } else if (conceptId === 3) {
+        heading.innerText = 'Concept 3: Floating Dynamic Capsule Dock';
+        desc.innerHTML = 'A modern <strong>floating glassmorphism dock</strong> that hovers above the viewport edge, maximizing vertical reading space while keeping essential quick-jump actions within thumb range.';
+        features.innerHTML = `
+          <li class="feature-item"><span class="check-icon">✓</span><div><strong>Maximized Viewport:</strong> Edge-to-edge ambient timeline presentation.</div></li>
+          <li class="feature-item"><span class="check-icon">✓</span><div><strong>Dynamic Island Pill:</strong> Frosted capsule with haptic button responses.</div></li>
+          <li class="feature-item"><span class="check-icon">✓</span><div><strong>Quick Jump:</strong> Center (+) button pops rapid capture sheet.</div></li>
+        `;
+      }
+
+      showToast(`Switched to Concept ${conceptId}`);
+    }
+
+    function toggleTheme() {
+      isDarkTheme = !isDarkTheme;
+      document.body.classList.toggle('theme-midnight', isDarkTheme);
+      document.getElementById('phone-frame').classList.toggle('theme-midnight', isDarkTheme);
+      document.getElementById('theme-label').innerText = isDarkTheme ? 'Warm Cream Mode' : 'Midnight Mode';
+      showToast(isDarkTheme ? 'Theme: Midnight Gallery' : 'Theme: Warm Cream');
+    }
+
+    function switchMobileSubTab(tabName) {
+      document.querySelectorAll('.seg-tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.view-panel').forEach(p => p.classList.remove('active-panel'));
+
+      document.getElementById(`tab-btn-${tabName}`).classList.add('active');
+      document.getElementById(`panel-${tabName}`).classList.add('active-panel');
+    }
+
+    function switchBottomNav(el, tabTarget) {
+      document.querySelectorAll('.nav-tab-item').forEach(item => item.classList.remove('active'));
+      el.classList.add('active');
+
+      if (tabTarget === 'schedule' || tabTarget === 'triage' || tabTarget === 'kitchen') {
+        switchMobileSubTab(tabTarget);
+      } else if (tabTarget === 'calendar') {
+        showToast('Switched to Calendar View');
+      }
+    }
+
+    function togglePastEvents() {
+      const body = document.getElementById('past-events-body');
+      const label = document.getElementById('past-toggle-text');
+      const isOpen = body.classList.toggle('open');
+      label.innerText = isOpen ? 'HIDE ▴' : 'SHOW ▾';
+    }
+
+    function openSpeedDial() {
+      document.getElementById('speed-dial-modal').classList.add('open');
+    }
+
+    function closeSpeedDial(e) {
+      document.getElementById('speed-dial-modal').classList.remove('open');
+    }
+
+    function closeSpeedDialDirect() {
+      document.getElementById('speed-dial-modal').classList.remove('open');
+    }
+
+    function executeQuickAction(actionName) {
+      closeSpeedDialDirect();
+      showToast(`Created: ${actionName}`);
+    }
+
+    function assignDriver(driverName) {
+      const card = document.getElementById('triage-card-driver');
+      card.style.transition = 'all 0.3s ease';
+      card.style.opacity = '0.4';
+      card.style.transform = 'scale(0.96)';
+      
+      setTimeout(() => {
+        card.style.display = 'none';
+        decrementTriageCount();
+        showToast(`✓ Driver assigned to ${driverName}!`);
+      }, 300);
+    }
+
+    function resolvePrep() {
+      const card = document.getElementById('triage-card-prep');
+      card.style.transition = 'all 0.3s ease';
+      card.style.opacity = '0.4';
+      card.style.transform = 'scale(0.96)';
+
+      setTimeout(() => {
+        card.style.display = 'none';
+        decrementTriageCount();
+        showToast('✓ Dessert marked ready & packed!');
+      }, 300);
+    }
+
+    function resolveReminder(e) {
+      e.stopPropagation();
+      const title = document.getElementById('reminder-title-1');
+      title.style.textDecoration = 'line-through';
+      title.style.opacity = '0.5';
+      showToast('✓ Liv medication reminder completed');
+    }
+
+    function decrementTriageCount() {
+      pendingTriageCount = Math.max(0, pendingTriageCount - 1);
+      document.getElementById('triage-badge-count').innerText = pendingTriageCount;
+      document.getElementById('bottom-nav-badge').innerText = pendingTriageCount;
+      if (pendingTriageCount === 0) {
+        document.getElementById('bottom-nav-badge').style.display = 'none';
+      }
+    }
+
+    function cycleSheetSnap() {
+      const sheet = document.getElementById('c2-sheet');
+      const label = document.getElementById('sheet-snap-label');
+
+      if (sheetSnapState === 'half') {
+        sheet.className = 'c2-draggable-sheet snap-full';
+        sheetSnapState = 'full';
+        label.innerText = 'Tap to Collapse ▾';
+      } else if (sheetSnapState === 'full') {
+        sheet.className = 'c2-draggable-sheet snap-peek';
+        sheetSnapState = 'peek';
+        label.innerText = 'Tap to Expand ▴';
+      } else {
+        sheet.className = 'c2-draggable-sheet snap-half';
+        sheetSnapState = 'half';
+        label.innerText = 'Tap to Expand ▴';
+      }
+    }
+
+    let toastTimer = null;
+    function showToast(message) {
+      const toast = document.getElementById('toast-message');
+      const text = document.getElementById('toast-text');
+      text.innerText = message;
+      toast.classList.add('show');
+
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        toast.classList.remove('show');
+      }, 2400);
+    }
+  </script>
+</body>
+</html>

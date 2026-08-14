@@ -1,9 +1,9 @@
 import { useState, useEffect, Component, type ReactNode } from 'react'
 import { BrowserRouter, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import NavBar from './components/shared/NavBar'
 import AnimatedRoutes from './components/shared/AnimatedRoutes'
 import TabletSidebar from './components/layout/TabletSidebar'
+import MobileFloatingDock from './components/layout/MobileFloatingDock'
 import { useRoomTone } from './hooks/useRoomTone'
 import { usePushNotifications } from './hooks/usePushNotifications'
 import { useAppUpdater } from './hooks/useAppUpdater'
@@ -12,7 +12,6 @@ import LuxuryTopBar from './components/shared/LuxuryTopBar'
 import PinGate from './components/shared/PinGate'
 import ArtScreensaver from './components/shared/ArtScreensaver'
 import QuickCreateSheet from './components/shared/QuickCreateSheet'
-import AddEventFab from './components/shared/AddEventFab'
 import TouchKeyboard from './components/shared/TouchKeyboard'
 import { Button } from './components/ui'
 import { useIdleTimer } from './hooks/useIdleTimer'
@@ -83,8 +82,6 @@ function AppShell() {
   } = useAppStore()
   const [quickCreateOpen, setQuickCreateOpen] = useState(false)
   const location = useLocation()
-  // Grocery page has its own dedicated FAB for adding items.
-  const hideFab = location.pathname.startsWith('/settings') || location.pathname.startsWith('/grocery') || screensaverActive
 
   useEffect(() => {
     setRoomToneZone(currentZone)
@@ -154,11 +151,9 @@ function AppShell() {
         />
       </div>
 
-      {/* Bottom nav only visible on mobile in classic mode */}
-      {experienceMode === 'classic' && <NavBar />}
-
-      {!hideFab && !aiDrawerOpen && experienceMode === 'classic' && (
-        <AddEventFab onClick={() => setQuickCreateOpen(true)} visible={!quickCreateOpen} />
+      {/* Dynamic Floating Navigation Capsule on mobile viewports (< lg) */}
+      {!screensaverActive && (
+        <MobileFloatingDock onOpenQuickCreate={() => setQuickCreateOpen(true)} />
       )}
 
       <QuickCreateSheet

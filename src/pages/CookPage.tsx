@@ -2943,7 +2943,7 @@ export default function CookPage() {
   }
 
   return (
-    <div className="h-full space-y-4 overflow-y-auto bg-casa-bg p-4 lg:p-6">
+    <div className="h-full space-y-4 overflow-y-auto bg-casa-bg p-4 pb-28 lg:p-6 lg:pb-6">
       <Card padding="lg">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <SegmentedControl
