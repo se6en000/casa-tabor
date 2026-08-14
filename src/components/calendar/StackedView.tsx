@@ -195,7 +195,7 @@ export default function StackedView() {
             return (
               <div
                 key={format(day, 'yyyy-MM-dd')}
-                className="flex flex-col flex-shrink-0 w-[290px] sm:w-[320px] md:w-[340px] h-full touch-pan-y"
+                className="flex flex-col flex-shrink-0 w-[20rem] sm:w-[22rem] md:w-[23rem] lg:w-[24rem] xl:w-[25rem] h-full touch-pan-y"
                 onPointerDown={(event) => quickCreateGesture.onPointerDown(event, day)}
                 onPointerMove={quickCreateGesture.onPointerMove}
                 onPointerUp={quickCreateGesture.onPointerUp}
@@ -305,7 +305,7 @@ export default function StackedView() {
           })}
 
           {/* ── 8-Day Horizon Endcap Card ── */}
-          <div className="flex flex-col flex-shrink-0 w-[240px] sm:w-[260px] h-full justify-center items-center rounded-widget border-2 border-dashed border-casa-border/80 bg-casa-surface/40 p-6 text-center text-casa-muted space-y-4 select-none">
+          <div className="flex flex-col flex-shrink-0 w-[16rem] sm:w-[18rem] h-full justify-center items-center rounded-widget border-2 border-dashed border-casa-border/80 bg-casa-surface/40 p-6 text-center text-casa-muted space-y-4 select-none">
             <div className="w-12 h-12 rounded-full bg-casa-gold/15 text-casa-gold flex items-center justify-center shadow-2xs">
               <CalendarDays size={22} />
             </div>
