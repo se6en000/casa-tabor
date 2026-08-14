@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, Component, type ReactNode } from 'react'
+import { useState, useEffect, Component, type ReactNode } from 'react'
 import { BrowserRouter, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import NavBar from './components/shared/NavBar'
@@ -10,23 +10,17 @@ import { useAppUpdater } from './hooks/useAppUpdater'
 import { ThemeProvider, useTheme } from './contexts/ThemeContext'
 import LuxuryTopBar from './components/shared/LuxuryTopBar'
 import PinGate from './components/shared/PinGate'
-import AIChatDrawer from './components/shared/AIChatDrawer'
 import ArtScreensaver from './components/shared/ArtScreensaver'
 import QuickCreateSheet from './components/shared/QuickCreateSheet'
 import AddEventFab from './components/shared/AddEventFab'
 import TouchKeyboard from './components/shared/TouchKeyboard'
-import { useRollingEvents } from './hooks/useCalendarEvents'
-import type { EventWithDetails } from './hooks/useCalendarEvents'
-import { useFamilyMembers } from './hooks/useFamilyMembers'
 import { Button } from './components/ui'
-import { useHomeWeather } from './hooks/useHomeWeather'
-import { useLiveClock } from './hooks/useLiveClock'
-import { useWakeWord } from './hooks/useWakeWord'
 import { useIdleTimer } from './hooks/useIdleTimer'
 import { useScreensaverSettings } from './hooks/useScreensaverSettings'
-import EventDetailPanel from './components/calendar/EventDetailPanel'
+import { useLiveClock } from './hooks/useLiveClock'
+import { useRollingEvents } from './hooks/useCalendarEvents'
 import { useAppStore } from './stores/appStore'
-
+import SidecarCompanion from './components/shared/SidecarCompanion'
 import CanvasUndoToast from './components/canvas/CanvasUndoToast'
 
 const SAFE_MODE = String(import.meta.env.VITE_SAFE_MODE ?? '').toLowerCase()
@@ -64,124 +58,6 @@ const queryClient = new QueryClient({
   },
 })
 
-type LaunchAgent = 'general' | 'chef'
-
-interface AIDrawerLaunchContext {
-  launchId: string
-  prompt?: string
-  autoSend?: boolean
-  source?: string
-  page?: string
-  agent?: LaunchAgent
-  traceId?: string
-  wakeAt?: number
-}
-
-type OpenAIChatDetail = {
-  toggle?: boolean
-  right?: number
-  top?: number
-  anchor?: { right: number; top: number }
-  prompt?: string
-  autoSend?: boolean
-  source?: string
-  page?: string
-  agent?: LaunchAgent
-  traceId?: string
-  wakeAt?: number
-}
-
-function GlobalAIDrawer({
-  screensaverActive,
-  open,
-  setOpen,
-  safeMode,
-  routePath,
-  wakeWordEnabled,
-  onOpenEventDetails,
-  focusedEventId,
-}: {
-  screensaverActive: boolean
-  open: boolean
-  setOpen: (open: boolean) => void
-  safeMode: boolean
-  routePath: string
-  wakeWordEnabled: boolean
-  onOpenEventDetails: (event: EventWithDetails) => void
-  focusedEventId?: string | null
-}) {
-  const [anchor, setAnchor] = useState<{ right: number; top: number } | undefined>()
-  const [launchContext, setLaunchContext] = useState<AIDrawerLaunchContext | undefined>()
-  const now = useLiveClock(60_000)
-  const { data: events = [] } = useRollingEvents(now)
-  const { data: family = [] } = useFamilyMembers()
-  const { data: weather } = useHomeWeather()
-  useWakeWord(open, screensaverActive, !safeMode && wakeWordEnabled)
-
-  const focusedEvent = useMemo(
-    () => (focusedEventId ? events.find((e) => e.id === focusedEventId) || null : null),
-    [events, focusedEventId]
-  )
-
-  const routePage = routePath.startsWith('/calendar')
-    ? 'calendar'
-    : routePath.startsWith('/grocery')
-      ? 'grocery'
-      : routePath.startsWith('/cook')
-        ? 'cook'
-        : routePath.startsWith('/briefing')
-          ? 'briefing'
-          : routePath === '/'
-            ? 'home'
-            : 'app'
-
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = ((e as CustomEvent<OpenAIChatDetail>).detail ?? {}) as OpenAIChatDetail
-      if (detail.toggle) {
-        setOpen(!open)
-        return
-      }
-      const anchorFromEvent = detail.anchor ?? (
-        typeof detail.right === 'number' && typeof detail.top === 'number'
-          ? { right: detail.right, top: detail.top }
-          : undefined
-      )
-      if (anchorFromEvent) setAnchor(anchorFromEvent)
-      const inferredAgent: LaunchAgent = detail.agent ?? (routePage === 'cook' ? 'chef' : 'general')
-      setLaunchContext({
-        launchId: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-        prompt: detail.prompt,
-        autoSend: detail.autoSend,
-        source: detail.source,
-        page: detail.page ?? routePage,
-        agent: inferredAgent,
-        traceId: detail.traceId,
-        wakeAt: detail.wakeAt,
-      })
-      setOpen(true)
-    }
-    document.addEventListener('open-ai-chat', handler)
-    return () => document.removeEventListener('open-ai-chat', handler)
-  }, [open, routePage, setOpen])
-
-  return (
-    <AIChatDrawer
-      open={open}
-      onClose={() => setOpen(false)}
-      anchor={anchor}
-      page={launchContext?.page ?? routePage}
-      events={events}
-      family={family}
-      homeCity={weather?.city}
-      onSleepCommand={() => document.dispatchEvent(new CustomEvent('screensaver-on'))}
-      launchContext={launchContext}
-      focusedEvent={focusedEvent || undefined}
-      onOpenEventDetails={onOpenEventDetails}
-    />
-  )
-}
-
 function AppShell() {
   const { currentZone } = useRoomTone()
   const { setRoomToneZone } = useTheme()
@@ -193,20 +69,20 @@ function AppShell() {
   const dispMs = settings.displaySleepEnabled && !IS_SAFE_MODE ? settings.displayOffMins * 60_000 : Infinity
   useIdleTimer(ssMs, dispMs)
 
+  const now = useLiveClock(60_000)
+  useRollingEvents(now)
+
   const [screensaverActive, setScreensaverActive] = useState(false)
-  const { aiDrawerOpen, setAiDrawerOpen, experienceMode } = useAppStore()
+  const {
+    aiDrawerOpen,
+    openEventInSidecar,
+    openAiInSidecar,
+    experienceMode,
+  } = useAppStore()
   const [quickCreateOpen, setQuickCreateOpen] = useState(false)
-  const [selectedDrawerEvent, setSelectedDrawerEvent] = useState<EventWithDetails | null>(null)
-  const [focusedCopilotEventId, setFocusedCopilotEventId] = useState<string | null>(null)
   const location = useLocation()
   // Grocery page has its own dedicated FAB for adding items.
   const hideFab = location.pathname.startsWith('/settings') || location.pathname.startsWith('/grocery') || screensaverActive
-
-  useEffect(() => {
-    if (!aiDrawerOpen) {
-      setFocusedCopilotEventId(null)
-    }
-  }, [aiDrawerOpen])
 
   useEffect(() => {
     setRoomToneZone(currentZone)
@@ -237,32 +113,25 @@ function AppShell() {
     }).catch(() => {})
   }, [settings.wakeWordSensitivity])
 
-  // Global "open this event's details" primitive — any surface in the app (not just the
-  // AI chat drawer) can dispatch this with just an event id.
-  // If AI Copilot is currently open, we perform a Focus Swap to load the event in Copilot
-  // rather than opening a competing EventDetailPanel drawer.
+  // Global "open this event's details" primitive — opens non-blocking sidecar companion
   useEffect(() => {
     const onOpenEventById = (e: Event) => {
       const eventId = (e as CustomEvent<{ eventId?: string }>).detail?.eventId
       if (!eventId) return
-      if (aiDrawerOpen) {
-        setFocusedCopilotEventId(eventId)
-      } else {
-        document.dispatchEvent(new CustomEvent('casa:close-event-details'))
-        setFocusedCopilotEventId(null)
-        setSelectedDrawerEvent({ id: eventId } as EventWithDetails)
-      }
+      openEventInSidecar(eventId)
     }
     document.addEventListener('casa:open-event-details', onOpenEventById)
     return () => document.removeEventListener('casa:open-event-details', onOpenEventById)
-  }, [aiDrawerOpen])
+  }, [openEventInSidecar])
 
-  const openEventDetailsFromAssistant = (event: EventWithDetails) => {
-    document.dispatchEvent(new CustomEvent('casa:close-event-details'))
-    setAiDrawerOpen(false)
-    setFocusedCopilotEventId(null)
-    setSelectedDrawerEvent(event)
-  }
+  // Global AI chat dispatcher — opens Copilot tab in sidecar companion
+  useEffect(() => {
+    const onOpenAi = () => {
+      openAiInSidecar()
+    }
+    document.addEventListener('open-ai-chat', onOpenAi)
+    return () => document.removeEventListener('open-ai-chat', onOpenAi)
+  }, [openAiInSidecar])
 
   return (
     <div className="app-shell flex flex-col overflow-hidden bg-casa-bg">
@@ -274,16 +143,12 @@ function AppShell() {
         <div className="flex-1 min-w-0 overflow-hidden h-full">
           <AnimatedRoutes />
         </div>
-        {/* Global AI drawer / sidecar */}
-        <GlobalAIDrawer
+        {/* Unified non-blocking Sidecar Companion for Events & AI */}
+        <SidecarCompanion
           screensaverActive={screensaverActive}
-          open={aiDrawerOpen}
-          setOpen={setAiDrawerOpen}
           safeMode={IS_SAFE_MODE}
           routePath={location.pathname}
           wakeWordEnabled={settings.wakeWordEnabled}
-          onOpenEventDetails={openEventDetailsFromAssistant}
-          focusedEventId={focusedCopilotEventId}
         />
       </div>
 
@@ -300,11 +165,6 @@ function AppShell() {
       />
 
       <TouchKeyboard />
-
-      <EventDetailPanel
-        event={selectedDrawerEvent}
-        onClose={() => setSelectedDrawerEvent(null)}
-      />
 
       {/* Global Living Canvas Undo Toast */}
       {experienceMode === 'living_canvas' && <CanvasUndoToast />}
@@ -339,3 +199,4 @@ export default function App() {
     </AppErrorBoundary>
   )
 }
+

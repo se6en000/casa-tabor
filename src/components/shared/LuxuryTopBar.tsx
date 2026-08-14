@@ -395,28 +395,24 @@ function UtilityTrack({
 
 // ── Zone F: AI Copilot Action ────────────────────────────────────
 function CopilotAction() {
-  const { aiDrawerOpen, setAiDrawerOpen } = useAppStore()
+  const { aiDrawerOpen, sidecarTab, setSidecarTab, openAiInSidecar, closeSidecar } = useAppStore()
   const btnRef = useRef<HTMLButtonElement>(null)
+  const isAiActive = aiDrawerOpen && sidecarTab === 'ai'
 
   return (
     <motion.button
       ref={btnRef}
       onClick={() => {
-        if (aiDrawerOpen) {
-          setAiDrawerOpen(false)
+        if (aiDrawerOpen && sidecarTab === 'ai') {
+          closeSidecar()
+        } else if (aiDrawerOpen && sidecarTab === 'event') {
+          setSidecarTab('ai')
         } else {
-          const rect = btnRef.current?.getBoundingClientRect()
-          document.dispatchEvent(
-            new CustomEvent('open-ai-chat', {
-              detail: rect
-                ? { right: window.innerWidth - rect.right, top: rect.bottom }
-                : undefined,
-            }),
-          )
+          openAiInSidecar()
         }
       }}
       animate={{
-        boxShadow: aiDrawerOpen
+        boxShadow: isAiActive
           ? '0 0 16px rgba(201,169,110,0.6)'
           : [
               '0 0 5px rgba(201,169,110,0.18)',
@@ -426,22 +422,22 @@ function CopilotAction() {
       }}
       transition={{
         duration: 3.4,
-        repeat: aiDrawerOpen ? 0 : Infinity,
+        repeat: isAiActive ? 0 : Infinity,
         ease: 'easeInOut',
       }}
       className={cn(
         'inline-flex items-center justify-center gap-1.5 px-4 min-h-[44px] rounded-full transition-all font-bold text-caption leading-none tracking-[0.03em]',
-        aiDrawerOpen
+        isAiActive
           ? 'bg-casa-gold text-casa-navy ring-2 ring-casa-gold/80 shadow-xs'
           : 'bg-casa-gold text-casa-navy hover:bg-amber-400 shadow-2xs',
       )}
-      title={aiDrawerOpen ? 'Close Copilot' : 'Open AI Copilot'}
-      aria-label={aiDrawerOpen ? 'Close Copilot' : 'Open AI Copilot'}
-      aria-expanded={aiDrawerOpen}
+      title={isAiActive ? 'Close Copilot' : 'Open AI Copilot'}
+      aria-label={isAiActive ? 'Close Copilot' : 'Open AI Copilot'}
+      aria-expanded={isAiActive}
     >
       <Sparkles size={14} strokeWidth={2.2} className="shrink-0" />
       <span className="hidden sm:inline leading-none">
-        {aiDrawerOpen ? 'Close' : 'Copilot'}
+        {isAiActive ? 'Close' : 'Copilot'}
       </span>
     </motion.button>
   )

@@ -18,6 +18,15 @@ interface AppStore {
   aiDrawerOpen: boolean
   setAiDrawerOpen: (open: boolean) => void
 
+  // Unified Sidecar Companion state
+  sidecarTab: 'event' | 'ai'
+  setSidecarTab: (tab: 'event' | 'ai') => void
+  selectedSidecarEventId: string | null
+  setSelectedSidecarEventId: (id: string | null) => void
+  openEventInSidecar: (eventId: string) => void
+  openAiInSidecar: () => void
+  closeSidecar: () => void
+
   // Dual-Engine & Living Canvas state
   experienceMode: ExperienceMode
   setExperienceMode: (mode: ExperienceMode) => void
@@ -67,6 +76,31 @@ export const useAppStore = create<AppStore>((set, get) => ({
   touchActivity: () => set({ lastInteraction: Date.now(), mode: 'interactive' }),
   aiDrawerOpen: false,
   setAiDrawerOpen: (aiDrawerOpen) => set({ aiDrawerOpen }),
+
+  sidecarTab: 'event',
+  setSidecarTab: (sidecarTab) => set({ sidecarTab }),
+  selectedSidecarEventId: null,
+  setSelectedSidecarEventId: (selectedSidecarEventId) => set({ selectedSidecarEventId }),
+
+  openEventInSidecar: (eventId: string) => {
+    set({
+      selectedSidecarEventId: eventId,
+      sidecarTab: 'event',
+      aiDrawerOpen: true,
+    })
+  },
+  openAiInSidecar: () => {
+    set({
+      sidecarTab: 'ai',
+      aiDrawerOpen: true,
+    })
+  },
+  closeSidecar: () => {
+    set({
+      aiDrawerOpen: false,
+      selectedSidecarEventId: null,
+    })
+  },
 
   experienceMode: getInitialExperienceMode(),
   setExperienceMode: (experienceMode) => {

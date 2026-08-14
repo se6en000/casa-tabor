@@ -98,6 +98,8 @@ const ALL_CATEGORIES_FOR_PICKER = Object.keys(CATEGORY_LABEL) as string[]
 interface EventDetailPanelProps {
   event: EventWithDetails | null
   onClose: () => void
+  embedded?: boolean
+  onAskAi?: (prompt?: string) => void
 }
 
 const stopTouch = (e: React.TouchEvent | React.PointerEvent) => e.stopPropagation()
@@ -109,7 +111,7 @@ function nextPlanOverride(event: EventWithDetails, transportationPlan: EventTran
   } as EventWithDetails['plan_override']
 }
 
-export default function EventDetailPanel({ event: eventSummary, onClose }: EventDetailPanelProps) {
+export default function EventDetailPanel({ event: eventSummary, onClose, embedded = false, onAskAi }: EventDetailPanelProps) {
   const detailQuery = useEventDetails(eventSummary)
   const [displayEvent, setDisplayEvent] = useState<EventWithDetails | null>(eventSummary)
   const event = displayEvent ?? detailQuery.data ?? eventSummary
@@ -453,24 +455,26 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
       <AnimatePresence initial={false}>
         {event && (
           <>
-            <motion.div
-              key="backdrop"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1, transition: { duration: 0.22, ease: 'easeOut' } }}
-              exit={{ opacity: 0, transition: { duration: 0.18, ease: 'easeIn' } }}
-              className="fixed inset-0 z-scrim bg-casa-navy/5 backdrop-blur-[1px]"
-              data-panel-overlay
-              onClick={handlePanelClose}
-              onTouchStart={stopTouch}
-              onTouchMove={stopTouch}
-              onTouchEnd={stopTouch}
-              onPointerDown={stopTouch}
-            />
+            {!embedded && (
+              <motion.div
+                key="backdrop"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1, transition: { duration: 0.22, ease: 'easeOut' } }}
+                exit={{ opacity: 0, transition: { duration: 0.18, ease: 'easeIn' } }}
+                className="fixed inset-0 z-scrim bg-casa-navy/5 backdrop-blur-[1px]"
+                data-panel-overlay
+                onClick={handlePanelClose}
+                onTouchStart={stopTouch}
+                onTouchMove={stopTouch}
+                onTouchEnd={stopTouch}
+                onPointerDown={stopTouch}
+              />
+            )}
 
             <motion.div
               key="event-panel-shell"
-              initial={{ x: '100%', opacity: 0.95 }}
-              animate={{
+              initial={embedded ? false : { x: '100%', opacity: 0.95 }}
+              animate={embedded ? { opacity: 1 } : {
                 x: 0,
                 opacity: 1,
                 transition: {
@@ -480,7 +484,7 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
                   mass: 0.8,
                 },
               }}
-              exit={{
+              exit={embedded ? { opacity: 0 } : {
                 x: '100%',
                 opacity: 0,
                 transition: {
@@ -488,7 +492,7 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
                   ease: 'easeIn',
                 },
               }}
-              drag="x"
+              drag={embedded ? false : "x"}
               dragControls={panelDragControls}
               dragListener={false}
               dragConstraints={{ left: 0 }}
@@ -497,12 +501,12 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
               onDragEnd={(_e, info) => {
                 if (!showEdit && (info.velocity.x > 500 || info.offset.x > 150)) onClose()
               }}
-              style={{
+              style={embedded ? {} : {
                 willChange: 'transform',
                 backfaceVisibility: 'hidden',
                 boxShadow: '-8px 0 36px rgba(0, 0, 0, 0.18), 0 0 12px rgba(0, 0, 0, 0.08)',
               }}
-              className="event-command-center fixed inset-y-0 right-0 z-modal flex flex-col overflow-hidden bg-casa-surface shadow-2xl border-l border-casa-border/80 w-full sm:w-[480px] lg:w-[520px] transform-gpu"
+              className={embedded ? "event-command-center flex-1 w-full h-full flex flex-col overflow-hidden bg-casa-surface" : "event-command-center fixed inset-y-0 right-0 z-modal flex flex-col overflow-hidden bg-casa-surface shadow-2xl border-l border-casa-border/80 w-full sm:w-[480px] lg:w-[520px] transform-gpu"}
               data-panel-overlay
               data-native-drag
               data-ptr-ignore
@@ -518,29 +522,31 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
                 if (e.currentTarget.scrollTop !== 0) e.currentTarget.scrollTop = 0
               }}
             >
-              <div
-                className="relative h-control-sm flex-shrink-0 border-b border-casa-border bg-casa-bg px-3"
-              >
-                <button
-                  type="button"
-                  className="absolute inset-x-0 top-0 z-10 mx-auto block h-control w-[86px] cursor-grab disabled:cursor-default active:cursor-grabbing"
-                  aria-label={showEdit ? 'Panel dismissal disabled while editing' : 'Drag right to dismiss panel'}
-                  disabled={showEdit}
-                  style={{ touchAction: 'none' }}
-                  data-native-drag
-                  data-ptr-ignore
-                  onPointerDown={e => {
-                    if (!showEdit) panelDragControls.start(e)
-                  }}
+              {!embedded && (
+                <div
+                  className="relative h-control-sm flex-shrink-0 border-b border-casa-border bg-casa-bg px-3"
                 >
-                  <span
-                    className="mx-auto mt-1.5 block h-[5px] w-control-sm rounded-full"
-                    style={{
-                      background: 'color-mix(in srgb, var(--color-casa-navy) 38%, transparent)',
+                  <button
+                    type="button"
+                    className="absolute inset-x-0 top-0 z-10 mx-auto block h-control w-[86px] cursor-grab disabled:cursor-default active:cursor-grabbing"
+                    aria-label={showEdit ? 'Panel dismissal disabled while editing' : 'Drag right to dismiss panel'}
+                    disabled={showEdit}
+                    style={{ touchAction: 'none' }}
+                    data-native-drag
+                    data-ptr-ignore
+                    onPointerDown={e => {
+                      if (!showEdit) panelDragControls.start(e)
                     }}
-                  />
-                </button>
+                  >
+                    <span
+                      className="mx-auto mt-1.5 block h-[5px] w-control-sm rounded-full"
+                      style={{
+                        background: 'color-mix(in srgb, var(--color-casa-navy) 38%, transparent)',
+                      }}
+                    />
+                  </button>
                 </div>
+              )}
               {showEdit ? (
                 <div className="min-h-0 flex-1">
                   <EventEditSheet
@@ -643,6 +649,52 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
                           onQuickTransportationPlanChange={persistQuickTransportationPlan}
                           onSaveTransportationPlan={persistFullTransportationPlan}
                         />
+                        {onAskAi && (
+                          <div className="mx-4 my-4 p-4 rounded-2xl bg-casa-surface border border-casa-border shadow-2xs">
+                            <div className="flex items-center justify-between gap-2 mb-3">
+                              <div className="flex items-center gap-2">
+                                <div className="w-6 h-6 rounded-full bg-casa-gold/15 flex items-center justify-center text-casa-gold">
+                                  <Sparkles size={14} />
+                                </div>
+                                <span className="font-semibold text-body-sm text-casa-navy">Ask Casa Copilot</span>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => onAskAi(`Help me with ${event.title}`)}
+                                className="text-caption font-bold text-casa-gold hover:text-amber-600 px-2 min-h-[32px]"
+                              >
+                                Open Chat →
+                              </Button>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => onAskAi(`Who is driving or attending ${event.title}?`)}
+                                className="text-caption font-semibold rounded-full border border-casa-border/80 hover:border-casa-navy text-casa-navy bg-casa-bg hover:bg-casa-surface min-h-[36px] px-3 shadow-2xs"
+                              >
+                                🚗 Who is driving?
+                              </Button>
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => onAskAi(`What are the directions, travel time, and address for ${event.title}?`)}
+                                className="text-caption font-semibold rounded-full border border-casa-border/80 hover:border-casa-navy text-casa-navy bg-casa-bg hover:bg-casa-surface min-h-[36px] px-3 shadow-2xs"
+                              >
+                                📍 Directions & ETA
+                              </Button>
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => onAskAi(`Help me prepare notes and checklist for ${event.title}`)}
+                                className="text-caption font-semibold rounded-full border border-casa-border/80 hover:border-casa-navy text-casa-navy bg-casa-bg hover:bg-casa-surface min-h-[36px] px-3 shadow-2xs"
+                              >
+                                ✏️ Prep & checklist
+                              </Button>
+                            </div>
+                          </div>
+                        )}
                       </>
                     )}
                   </div>

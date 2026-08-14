@@ -11,10 +11,9 @@ const homeRightPanel = readFileSync(new URL('../src/components/home/HomeRightPan
 const assigneeChip = readFileSync(new URL('../src/components/shared/PrepItemAssigneeChip.tsx', import.meta.url), 'utf8')
 const useNotifications = readFileSync(new URL('../src/hooks/useNotifications.ts', import.meta.url), 'utf8')
 
-test('App listens for a global casa:open-event-details event and opens the Event Details sheet', () => {
+test('App listens for a global casa:open-event-details event and opens the Event Details in the sidecar companion', () => {
   assert.match(appTsx, /casa:open-event-details/)
-  assert.match(appTsx, /setAiDrawerOpen\(false\)/)
-  assert.match(appTsx, /setSelectedDrawerEvent\(\{ id: eventId \}/)
+  assert.match(appTsx, /openEventInSidecar\(eventId\)/)
 })
 
 test('openEventDetails helper dispatches the global custom event', () => {

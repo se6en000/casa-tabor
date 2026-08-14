@@ -65,6 +65,7 @@ interface Props {
   onSleepCommand?: () => void
   focusedEvent?: EventWithDetails
   onOpenEventDetails?: (event: EventWithDetails) => void
+  embedded?: boolean
 }
 
 const SLEEP_PHRASES = /\b(sleep|goodnight|good night|art mode|screen saver|screensaver|night mode)\b/i
@@ -81,6 +82,7 @@ export default function AIChatDrawer({
   onSleepCommand,
   focusedEvent,
   onOpenEventDetails,
+  embedded = false,
 }: Props) {
   const [input, setInput] = useState('')
   const [voiceTranscript, setVoiceTranscript] = useState<VoiceTranscriptRevision>({
@@ -692,10 +694,9 @@ export default function AIChatDrawer({
       latestVoiceConfidenceRef.current = null
       setAttachedImage(null)
       setAttachmentMenuOpen(false)
-      freshStartedRef.current = null  // allow fresh start next time this event is opened
       firedChefGreetRef.current = null
     }
-  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open])
 
   useEffect(() => {
     if (!open || !launchContext?.launchId) return
@@ -717,24 +718,13 @@ export default function AIChatDrawer({
     return `${sessionPart}:${suffix}:${Date.now().toString(36)}`
   }, [session?.id])
 
-  // When in event-edit mode, always start a fresh session so old conversations don't bleed in.
+  // Only prime an event greeting if there are no active messages, preserving ongoing chat
   const firedEventGreetRef = useRef<string | null>(null)
-  const freshStartedRef = useRef<string | null>(null)
-  useEffect(() => {
-    if (!open || !focusedEvent) return
-    if (freshStartedRef.current === focusedEvent.id) return
-    freshStartedRef.current = focusedEvent.id
-    firedEventGreetRef.current = null  // reset so greet fires after fresh start
-    startFresh()
-  }, [open, focusedEvent?.id]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Once session is fresh (no messages), inject a deterministic event summary greeting
-  // so the user immediately sees what event the AI has loaded — no API round-trip needed.
   useEffect(() => {
     if (!open || !focusedEvent || loading) return
     if (firedEventGreetRef.current === focusedEvent.id) return
     if (sessionLoading) return
-    if (messages.length > 0) { firedEventGreetRef.current = focusedEvent.id; return }
+    if (messages.length > 0) return // Keep existing conversation intact!
     firedEventGreetRef.current = focusedEvent.id
 
     const ev = focusedEvent
@@ -749,7 +739,7 @@ export default function AIChatDrawer({
     if (!ev.enrichment?.category) missing.push('Category')
     if (!ev.description && !ev.enrichment?.prep_notes) missing.push('Notes')
 
-    let content = `I'm ready to edit **${ev.title}** ✏️\n\n`
+    let content = `I'm ready to help with **${ev.title}** ✏️\n\n`
     content += `📅 ${dateStr} at ${timeStr}\n`
     if (ev.location_name) content += `📍 ${ev.location_name}\n`
     if (memberNames) content += `👥 ${memberNames}\n`
@@ -759,10 +749,10 @@ export default function AIChatDrawer({
     } else {
       content += `\nEverything looks filled in!`
     }
-    content += `\n\nWhat would you like to change or add?`
+    content += `\n\nWhat would you like to change or ask about this event?`
 
     primeMessages([{ id: crypto.randomUUID(), role: 'assistant', content }])
-  }, [open, focusedEvent?.id, sessionLoading, messages.length]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, focusedEvent?.id, sessionLoading, messages.length, loading, primeMessages])
 
   useEffect(() => {
     if (!open || focusedEvent || loading) return
@@ -1706,6 +1696,23 @@ export default function AIChatDrawer({
             </Modal>
     </>
   )
+
+  if (embedded) {
+    return (
+      <div
+        className={cn(
+          'flex flex-col flex-1 h-full w-full overflow-hidden bg-casa-surface relative',
+          loading && 'ai-thinking'
+        )}
+        data-panel-overlay
+        data-touch-keyboard="ignore"
+        onClick={e => e.stopPropagation()}
+        onPaste={handlePaste}
+      >
+        {drawerBody}
+      </div>
+    )
+  }
 
   return (
     <AnimatePresence>

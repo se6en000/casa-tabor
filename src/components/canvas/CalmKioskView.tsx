@@ -68,7 +68,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
   )
 
   return (
-    <div className="w-full h-full flex flex-col justify-between p-6 lg:p-10 max-w-7xl mx-auto overflow-y-auto">
+    <div className="w-full h-full flex flex-col justify-between p-6 lg:p-8 xl:p-10 overflow-y-auto scrollbar-hide">
       {/* ── Top Section: Ambient Greeting & Clock ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-casa-border/40">
         <div>
