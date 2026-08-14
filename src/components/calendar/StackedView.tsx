@@ -1,9 +1,10 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { format, addDays, isToday, startOfDay, isBefore, isAfter, differenceInMinutes } from 'date-fns'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, useMotionValue, useSpring } from 'framer-motion'
 import {
   MapPin, AlertTriangle,
-  Navigation, Bell, ChevronRight,
+  Navigation, Bell, ChevronRight, ChevronLeft,
+  CalendarDays, ArrowRight,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { cleanEventTitle, isBirthdayEvent } from '../../utils/eventTitle'
@@ -18,7 +19,7 @@ import EventContextMenu from '../shared/EventContextMenu'
 import { WeatherIcon } from '../shared/WeatherIcon'
 import { BirthdayCardDecoration } from '../shared/BirthdayCardDecoration'
 import { eventOverlapsDay, getEventDisplayStartDay, getEventEndDate, getEventStartDate } from '../../utils/eventTime'
-import { PersonAvatarStack, CalendarPill } from '../ui'
+import { PersonAvatarStack, CalendarPill, IconButton, Button } from '../ui'
 import type { FamilyMember } from '../../types'
 import { deriveCalendarCardResponsibility } from '../../lib/calendarResponsibility'
 import { resolveEventMode } from '../../lib/eventPlanOverrides'
@@ -28,6 +29,7 @@ import { useReminderNeedsYouActions } from '../../hooks/useReminderNeedsYouActio
 
 const SHARED_COLOR = 'var(--color-casa-gold)'
 const IDLE_RESET_TIMEOUT_MS = 30_000 // 30 seconds idle before returning to Today
+const MAX_BOUNCE_PX = 80
 
 function formatCompactDuration(minutes: number): string {
   if (minutes <= 0 || minutes >= 1440) return ''
@@ -90,7 +92,7 @@ export function deriveResponsibilityChip(event: EventWithDetails, household: Fam
 }
 
 export default function StackedView() {
-  const { visibleMembers, selectedDate } = useCalendarStore()
+  const { visibleMembers, selectedDate, setActiveView } = useCalendarStore()
   const { data: householdData } = useFamilyMembers()
   // Anchor the 8-day window to the shared calendar selectedDate
   const anchor = startOfDay(selectedDate)
@@ -105,11 +107,18 @@ export default function StackedView() {
   const [deleteIntentEventId, setDeleteIntentEventId] = useState<string | null>(null)
   const [contextMenu, setContextMenu] = useState<{ event: EventWithDetails; x: number; y: number } | null>(null)
   const [quickCreate, setQuickCreate] = useState<{ open: boolean; start?: Date }>({ open: false })
+  const [canScrollLeft, setCanScrollLeft] = useState(false)
   const [canScrollRight, setCanScrollRight] = useState(true)
 
   const ribbonRef = useRef<HTMLDivElement>(null)
   const columnScrollRefs = useRef<(HTMLDivElement | null)[]>([])
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Spring Elastic Rubber-Band Motion Values
+  const bounceX = useMotionValue(0)
+  const springX = useSpring(bounceX, { stiffness: 380, damping: 38, mass: 0.5 })
+  const lastTouchX = useRef(0)
+  const isDraggingHorizontal = useRef(false)
 
   // Reset ribbon & column vertical scrolls back to Today/Anchor
   const resetToToday = useCallback(() => {
@@ -119,7 +128,8 @@ export default function StackedView() {
     columnScrollRefs.current.forEach(colEl => {
       colEl?.scrollTo({ top: 0, behavior: 'smooth' })
     })
-  }, [])
+    bounceX.set(0)
+  }, [bounceX])
 
   // Inactivity / Idle reset logic
   const handleUserActivity = useCallback(() => {
@@ -139,19 +149,70 @@ export default function StackedView() {
     columnScrollRefs.current.forEach(colEl => {
       colEl?.scrollTo({ top: 0, behavior: 'instant' })
     })
+    bounceX.set(0)
     handleUserActivity()
     return () => {
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current)
     }
-  }, [anchor, handleUserActivity])
+  }, [anchor, bounceX, handleUserActivity])
 
-  // Track horizontal scroll state for overflow indicator cue
+  // Track horizontal scroll state for edge cues
   const handleRibbonScroll = useCallback(() => {
     handleUserActivity()
     if (!ribbonRef.current) return
     const { scrollLeft, scrollWidth, clientWidth } = ribbonRef.current
-    setCanScrollRight(scrollLeft + clientWidth < scrollWidth - 10)
+    setCanScrollLeft(scrollLeft > 15)
+    setCanScrollRight(scrollLeft + clientWidth < scrollWidth - 15)
   }, [handleUserActivity])
+
+  // Rubber-band touch physics overscroll listeners
+  useEffect(() => {
+    const el = ribbonRef.current
+    if (!el) return
+
+    const onTouchStart = (e: TouchEvent) => {
+      lastTouchX.current = e.touches[0]?.clientX ?? 0
+      isDraggingHorizontal.current = true
+    }
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!isDraggingHorizontal.current || e.touches.length === 0) return
+      const currentX = e.touches[0].clientX
+      const deltaX = currentX - lastTouchX.current
+      lastTouchX.current = currentX
+
+      const atLeft = el.scrollLeft <= 0
+      const atRight = el.scrollLeft + el.clientWidth >= el.scrollHeight - 1 || el.scrollLeft + el.clientWidth >= el.scrollWidth - 1
+      const hitBoundary = (deltaX > 0 && atLeft) || (deltaX < 0 && atRight)
+
+      if (hitBoundary) {
+        const sign = Math.sign(deltaX)
+        const currentVal = bounceX.get()
+        const newVal = currentVal + deltaX * 0.4
+        const clamped = sign * Math.min(Math.abs(newVal), MAX_BOUNCE_PX)
+        bounceX.set(clamped)
+      } else if (bounceX.get() !== 0) {
+        bounceX.set(0)
+      }
+    }
+
+    const onTouchEnd = () => {
+      isDraggingHorizontal.current = false
+      bounceX.set(0)
+    }
+
+    el.addEventListener('touchstart', onTouchStart, { passive: true })
+    el.addEventListener('touchmove', onTouchMove, { passive: true })
+    el.addEventListener('touchend', onTouchEnd, { passive: true })
+    el.addEventListener('touchcancel', onTouchEnd, { passive: true })
+
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart)
+      el.removeEventListener('touchmove', onTouchMove)
+      el.removeEventListener('touchend', onTouchEnd)
+      el.removeEventListener('touchcancel', onTouchEnd)
+    }
+  }, [bounceX])
 
   const quickCreateGesture = useCalendarQuickCreateGesture<Date>({
     resolveStart: (day) => {
@@ -183,146 +244,199 @@ export default function StackedView() {
       onPointerDown={handleUserActivity}
       onTouchStart={handleUserActivity}
     >
-      {/* ── Single-Row 8-Day Horizontal Ribbon ── */}
+      {/* Left Edge Indicator / Back to Today Cue */}
+      {canScrollLeft && (
+        <div
+          className="pointer-events-none absolute left-0 top-0 bottom-0 w-16 bg-gradient-to-r from-casa-bg via-casa-bg/80 to-transparent z-10 flex items-center justify-start pl-3"
+          aria-hidden="true"
+        >
+          <IconButton
+            icon={<ChevronLeft size={16} />}
+            aria-label="Return to Today"
+            title="Return to Today"
+            onClick={resetToToday}
+            size="sm"
+            variant="ghost"
+            className="pointer-events-auto rounded-full bg-casa-surface/90 shadow-card border border-casa-border/70 text-casa-gold hover:scale-105 active:scale-95 transition-all"
+          />
+        </div>
+      )}
+
+      {/* Right Edge Overflow Hint (Fade + Subtle Arrow Cue) */}
+      {canScrollRight && (
+        <div
+          className="pointer-events-none absolute right-0 top-0 bottom-0 w-16 bg-gradient-to-l from-casa-bg via-casa-bg/80 to-transparent z-10 flex items-center justify-end pr-3"
+          aria-hidden="true"
+        >
+          <span className="p-2 rounded-full bg-casa-surface/90 shadow-card border border-casa-border/70 text-casa-gold">
+            <ChevronRight size={16} />
+          </span>
+        </div>
+      )}
+
+      {/* ── Single-Row 8-Day Horizontal Ribbon with Spring Bounce ── */}
       <div
         ref={ribbonRef}
         onScroll={handleRibbonScroll}
-        className="flex-1 flex flex-row overflow-x-auto overflow-y-hidden gap-3.5 px-3 py-3 snap-x snap-proximity overscroll-x-contain touch-pan-x scrollbar-none"
+        className="flex-1 flex flex-row overflow-x-auto overflow-y-hidden snap-x snap-proximity overscroll-x-contain touch-pan-x scrollbar-none"
       >
-        {days.map((day, idx) => {
-          const dayEvents = events
-            .filter(e => eventOverlapsDay(e, day))
-            .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+        <motion.div
+          style={{ x: springX }}
+          className="flex flex-row gap-4 px-6 sm:px-8 py-3 min-w-full items-stretch"
+        >
+          {days.map((day, idx) => {
+            const dayEvents = events
+              .filter(e => eventOverlapsDay(e, day))
+              .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
 
-          const dayAllDay = dayEvents.filter(e => e.all_day || isAllDayReminder(e))
-          const dayTimed  = dayEvents.filter(isTimedReminder)
-          const dayNormal = dayEvents.filter(e => !isReminder(e) && !e.all_day)
-          const today_ = isToday(day)
+            const dayAllDay = dayEvents.filter(e => e.all_day || isAllDayReminder(e))
+            const dayTimed  = dayEvents.filter(isTimedReminder)
+            const dayNormal = dayEvents.filter(e => !isReminder(e) && !e.all_day)
+            const today_ = isToday(day)
 
-          return (
-            <div
-              key={format(day, 'yyyy-MM-dd')}
-              className="flex flex-col flex-shrink-0 w-[290px] sm:w-[320px] md:w-[340px] h-full snap-start touch-pan-y"
-              onPointerDown={(event) => quickCreateGesture.onPointerDown(event, day)}
-              onPointerMove={quickCreateGesture.onPointerMove}
-              onPointerUp={quickCreateGesture.onPointerUp}
-              onPointerCancel={quickCreateGesture.onPointerCancel}
-              onDoubleClick={(event) => quickCreateGesture.onDoubleClick(event, day)}
-            >
-              {/* Day Header (Sticky at top of each column) */}
-              <div className={cn(
-                'flex items-baseline justify-between pb-1.5 mb-1.5 border-b shrink-0',
-                today_ ? 'border-casa-gold' : 'border-casa-divider'
-              )}>
-                <div className="flex items-baseline gap-1.5">
-                  <span className={cn(
-                    'text-caption font-bold uppercase tracking-wider',
-                    today_ ? 'text-casa-gold' : 'text-casa-muted'
-                  )}>
-                    {format(day, 'EEE')}
-                  </span>
-                  <span className={cn(
-                    'text-body font-bold leading-none',
-                    today_ ? 'text-casa-gold' : 'text-casa-text'
-                  )}>
-                    {format(day, 'd')}
-                  </span>
-                </div>
-                {today_ && (
-                  <span className="text-caption font-bold px-2 py-0.5 rounded-full bg-casa-gold/15 text-casa-gold uppercase tracking-wider leading-none">
-                    Today
-                  </span>
-                )}
-              </div>
-
-              {/* Scrollable Events container for busy days (Vertical Scroll) */}
+            return (
               <div
-                ref={el => { columnScrollRefs.current[idx] = el }}
-                onScroll={handleUserActivity}
-                className="flex-1 overflow-y-auto overscroll-y-contain space-y-2 pr-0.5 pb-8 scrollbar-none"
+                key={format(day, 'yyyy-MM-dd')}
+                className="flex flex-col flex-shrink-0 w-[290px] sm:w-[320px] md:w-[340px] h-full snap-start touch-pan-y"
+                onPointerDown={(event) => quickCreateGesture.onPointerDown(event, day)}
+                onPointerMove={quickCreateGesture.onPointerMove}
+                onPointerUp={quickCreateGesture.onPointerUp}
+                onPointerCancel={quickCreateGesture.onPointerCancel}
+                onDoubleClick={(event) => quickCreateGesture.onDoubleClick(event, day)}
               >
-                {/* All-day reminders & all-day events */}
-                {dayAllDay.map(r => (
-                  isReminder(r) ? (
-                    <div key={r.id} data-calendar-event>
-                      <CompactReminderCard
-                        event={r}
-                        now={new Date()}
-                        onClick={() => setSelectedEventId(r.id)}
-                        onDoubleClick={() => { setSelectedEventId(null); setEditEventId(r.id) }}
-                        onLongPress={(ev, x, y) => setContextMenu({ event: ev, x, y })}
-                      />
-                    </div>
-                  ) : (
-                    <div key={r.id} data-calendar-event>
-                      <EventCard
-                        event={r}
-                        household={household}
-                        now={new Date()}
-                        onClick={() => setSelectedEventId(r.id)}
-                        onDoubleClick={() => { setSelectedEventId(null); setEditEventId(r.id) }}
-                        onLongPress={(ev, x, y) => setContextMenu({ event: ev, x, y })}
-                      />
-                    </div>
-                  )
-                ))}
+                {/* Day Header (Sticky at top of each column) */}
+                <div className={cn(
+                  'flex items-baseline justify-between pb-1.5 mb-1.5 border-b shrink-0',
+                  today_ ? 'border-casa-gold' : 'border-casa-divider'
+                )}>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className={cn(
+                      'text-caption font-bold uppercase tracking-wider',
+                      today_ ? 'text-casa-gold' : 'text-casa-muted'
+                    )}>
+                      {format(day, 'EEE')}
+                    </span>
+                    <span className={cn(
+                      'text-body font-bold leading-none',
+                      today_ ? 'text-casa-gold' : 'text-casa-text'
+                    )}>
+                      {format(day, 'd')}
+                    </span>
+                  </div>
+                  {today_ && (
+                    <span className="text-caption font-bold px-2 py-0.5 rounded-full bg-casa-gold/15 text-casa-gold uppercase tracking-wider leading-none">
+                      Today
+                    </span>
+                  )}
+                </div>
 
-                {/* Timed reminders + normal events merged by time */}
-                <AnimatePresence initial={false}>
-                  {[...dayNormal, ...dayTimed]
-                    .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
-                    .map(event => isTimedReminder(event) ? (
-                      <motion.div
-                        key={event.id}
-                        data-calendar-event
-                        layout
-                        initial={{ opacity: 0, y: 4 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -4 }}
-                        transition={{ duration: 0.15 }}
-                      >
+                {/* Scrollable Events container for busy days (Vertical Scroll) */}
+                <div
+                  ref={el => { columnScrollRefs.current[idx] = el }}
+                  onScroll={handleUserActivity}
+                  className="flex-1 overflow-y-auto overscroll-y-contain space-y-2 pr-0.5 pb-8 scrollbar-none"
+                >
+                  {/* All-day reminders & all-day events */}
+                  {dayAllDay.map(r => (
+                    isReminder(r) ? (
+                      <div key={r.id} data-calendar-event>
                         <CompactReminderCard
+                          event={r}
+                          now={new Date()}
+                          onClick={() => setSelectedEventId(r.id)}
+                          onDoubleClick={() => { setSelectedEventId(null); setEditEventId(r.id) }}
+                          onLongPress={(ev, x, y) => setContextMenu({ event: ev, x, y })}
+                        />
+                      </div>
+                    ) : (
+                      <div key={r.id} data-calendar-event>
+                        <EventCard
+                          event={r}
+                          household={household}
+                          now={new Date()}
+                          onClick={() => setSelectedEventId(r.id)}
+                          onDoubleClick={() => { setSelectedEventId(null); setEditEventId(r.id) }}
+                          onLongPress={(ev, x, y) => setContextMenu({ event: ev, x, y })}
+                        />
+                      </div>
+                    )
+                  ))}
+
+                  {/* Timed reminders + normal events merged by time */}
+                  <AnimatePresence initial={false}>
+                    {[...dayNormal, ...dayTimed]
+                      .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+                      .map(event => isTimedReminder(event) ? (
+                        <motion.div
+                          key={event.id}
+                          data-calendar-event
+                          layout
+                          initial={{ opacity: 0, y: 4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -4 }}
+                          transition={{ duration: 0.15 }}
+                        >
+                          <CompactReminderCard
+                            event={event}
+                            now={new Date()}
+                            onClick={() => setSelectedEventId(event.id)}
+                            onDoubleClick={() => { setSelectedEventId(null); setEditEventId(event.id) }}
+                            onLongPress={(ev, x, y) => setContextMenu({ event: ev, x, y })}
+                          />
+                        </motion.div>
+                      ) : (
+                        <EventCard
+                          key={event.id}
                           event={event}
+                          household={household}
                           now={new Date()}
                           onClick={() => setSelectedEventId(event.id)}
                           onDoubleClick={() => { setSelectedEventId(null); setEditEventId(event.id) }}
                           onLongPress={(ev, x, y) => setContextMenu({ event: ev, x, y })}
                         />
-                      </motion.div>
-                    ) : (
-                      <EventCard
-                        key={event.id}
-                        event={event}
-                        household={household}
-                        now={new Date()}
-                        onClick={() => setSelectedEventId(event.id)}
-                        onDoubleClick={() => { setSelectedEventId(null); setEditEventId(event.id) }}
-                        onLongPress={(ev, x, y) => setContextMenu({ event: ev, x, y })}
-                      />
-                    ))
-                  }
-                </AnimatePresence>
+                      ))
+                    }
+                  </AnimatePresence>
 
-                {dayEvents.length === 0 && (
-                  <p className="text-caption text-casa-muted/50 text-center pt-4">—</p>
-                )}
+                  {dayEvents.length === 0 && (
+                    <p className="text-caption text-casa-muted/50 text-center pt-4">—</p>
+                  )}
+                </div>
               </div>
-            </div>
-          )
-        })}
-      </div>
+            )
+          })}
 
-      {/* Right Edge Overflow Hint (Fade + Subtle Arrow Cue) */}
-      {canScrollRight && (
-        <div
-          className="pointer-events-none absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-casa-bg via-casa-bg/60 to-transparent z-10 flex items-center justify-end pr-1"
-          aria-hidden="true"
-        >
-          <span className="p-1 rounded-full bg-casa-surface/80 shadow-xs text-casa-gold">
-            <ChevronRight size={14} />
-          </span>
-        </div>
-      )}
+          {/* ── 8-Day Horizon Endcap Card ── */}
+          <div className="flex flex-col flex-shrink-0 w-[240px] sm:w-[260px] h-full justify-center items-center rounded-widget border-2 border-dashed border-casa-border/80 bg-casa-surface/40 p-6 text-center text-casa-muted space-y-4 snap-start select-none">
+            <div className="w-12 h-12 rounded-full bg-casa-gold/15 text-casa-gold flex items-center justify-center shadow-2xs">
+              <CalendarDays size={22} />
+            </div>
+            <div className="space-y-1">
+              <p className="text-body font-bold text-casa-navy">8-Day Horizon</p>
+              <p className="text-caption text-casa-muted leading-relaxed">
+                You're caught up for the next 8 days.
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setActiveView('month')}
+              className="mt-1 font-bold text-casa-navy hover:text-casa-gold"
+              trailingIcon={<ArrowRight size={13} />}
+            >
+              View Month
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={resetToToday}
+              className="text-caption font-semibold text-casa-muted hover:text-casa-navy"
+            >
+              ← Back to Today
+            </Button>
+          </div>
+        </motion.div>
+      </div>
 
       {/* Detail panel */}
       <EventDetailPanel event={selectedEvent} onClose={() => setSelectedEventId(null)} />
