@@ -128,14 +128,14 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
       </div>
 
       {/* ── Main Middle Grid: Hero "Next Up" + Tonight's Dinner + Daily Schedule ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 my-6 flex-1 items-stretch">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 my-6 items-start">
         {/* Hero Next Up Card (7 cols) */}
-        <div className="lg:col-span-7 flex flex-col">
+        <div className="lg:col-span-7 flex flex-col justify-start">
           {nextEvent ? (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex-1 flex flex-col justify-between rounded-3xl p-6 sm:p-8 bg-gradient-to-br from-casa-navy via-slate-900 to-slate-950 text-white border border-white/10 shadow-xl relative overflow-hidden group cursor-pointer"
+              className="w-full rounded-3xl p-6 sm:p-7 bg-gradient-to-br from-casa-navy via-slate-900 to-slate-950 text-white border border-white/10 shadow-xl relative overflow-hidden group cursor-pointer"
               onClick={() => onOpenEvent(nextEvent)}
             >
               {/* Background ambient glow */}
@@ -146,7 +146,9 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                   <div className="flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
                     <span className="text-caption font-bold uppercase tracking-widest text-casa-gold">
-                      {minutesUntilNext !== null && minutesUntilNext > 0
+                      {nextEvent.all_day
+                        ? 'All Day Event'
+                        : minutesUntilNext !== null && minutesUntilNext > 0
                         ? `Starts in ${minutesUntilNext} min`
                         : minutesUntilNext !== null && minutesUntilNext <= 0 && minutesUntilNext > -60
                         ? 'Happening Now'
@@ -155,14 +157,21 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                   </div>
 
                   <span className="text-caption text-white/80 font-mono bg-white/10 px-3 py-1 rounded-full border border-white/10">
-                    {format(parseISO(nextEvent.start_time), 'h:mm a')} –{' '}
-                    {format(parseISO(nextEvent.end_time), 'h:mm a')}
+                    {nextEvent.all_day
+                      ? 'All Day'
+                      : `${format(parseISO(nextEvent.start_time), 'h:mm a')} – ${format(parseISO(nextEvent.end_time), 'h:mm a')}`}
                   </span>
                 </div>
 
                 <h2 className="font-display text-display-sm sm:text-display-md font-bold !text-white tracking-tight leading-tight group-hover:text-casa-gold transition-colors">
                   {nextEvent.title}
                 </h2>
+
+                {nextEvent.description && (
+                  <p className="text-white/70 text-body-sm mt-2.5 line-clamp-2 leading-relaxed">
+                    {nextEvent.description}
+                  </p>
+                )}
 
                 {nextEvent.location_name && (
                   <div className="flex items-center gap-2 text-white/80 mt-3 text-body-sm">
@@ -177,12 +186,14 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                 )}
 
                 {/* Ambient Micro-Timeline Progress Line */}
-                <div className="mt-5 w-full bg-white/10 h-1.5 rounded-full overflow-hidden flex items-center" title="Ambient Time Schedule Bar">
+                <div className="mt-4 w-full bg-white/10 h-1.5 rounded-full overflow-hidden flex items-center" title="Ambient Time Schedule Bar">
                   <div
                     className="bg-gradient-to-r from-casa-gold to-amber-400 h-full rounded-full transition-all duration-500"
                     style={{
                       width: `${
-                        minutesUntilNext !== null && minutesUntilNext <= 0
+                        nextEvent.all_day
+                          ? 100
+                          : minutesUntilNext !== null && minutesUntilNext <= 0
                           ? 100
                           : minutesUntilNext !== null && minutesUntilNext < 120
                           ? Math.max(15, Math.min(90, Math.round(100 - (minutesUntilNext / 120) * 85)))
