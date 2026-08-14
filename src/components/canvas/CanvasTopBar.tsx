@@ -29,34 +29,74 @@ export default function CanvasTopBar() {
   return (
     <header
       className={cn(
-        'app-topbar w-full h-14 flex items-center justify-between flex-shrink-0 z-sticky backdrop-blur-md px-4 transition-colors duration-300 shadow-xs',
+        'app-topbar w-full h-14 flex items-center justify-between flex-shrink-0 z-sticky backdrop-blur-md px-4 sm:px-6 transition-colors duration-300',
         isCalm
-          ? 'bg-casa-bg/95 border-b border-casa-border/60 text-casa-navy'
+          ? 'bg-casa-bg/90 border-b border-casa-border/40 text-casa-navy'
           : 'bg-casa-navy/95 border-b border-white/10 text-white'
       )}
     >
-      {/* ── Left: Brand & Ambient / Turbo Pill ── */}
+      {/* ── Left: Refined Luxury Brand Monogram ── */}
       <div className="flex items-center gap-3 flex-shrink-0">
         <NavLink to="/" className="inline-flex items-center gap-2.5 group h-9">
-          <span className="w-8 h-8 rounded-xl bg-casa-gold inline-flex items-center justify-center text-caption font-bold text-casa-navy flex-shrink-0 shadow-sm group-hover:scale-105 transition-transform leading-none">
+          <span className="w-8 h-8 rounded-full bg-casa-gold/15 text-casa-gold border border-casa-gold/30 inline-flex items-center justify-center text-caption font-bold flex-shrink-0 shadow-2xs group-hover:scale-105 transition-transform leading-none">
             CT
           </span>
           <span
             className={cn(
-              'font-display text-heading hidden sm:inline-block tracking-wide leading-none',
+              'font-display text-heading hidden sm:inline-block tracking-tight font-semibold leading-none',
               isCalm ? 'text-casa-navy' : 'text-white'
             )}
           >
             Casa Tabor
           </span>
         </NavLink>
+      </div>
 
-        {/* Calm / Turbo Mode Segmented Pill (only visible on Home) */}
+      {/* ── Center: Workspace Navigation Track (Unified Glass Track) ── */}
+      <nav
+        className={cn(
+          'hidden md:inline-flex items-center gap-1 p-1 rounded-full border',
+          isCalm
+            ? 'bg-casa-surface/60 border-casa-border/50 shadow-2xs'
+            : 'bg-white/5 border-white/10'
+        )}
+      >
+        {[
+          { path: '/', label: 'Living Canvas' },
+          { path: '/calendar', label: 'Calendar' },
+          { path: '/cook', label: 'Meals & Kitchen' },
+          { path: '/settings', label: 'Settings' },
+        ].map((tab) => (
+          <NavLink
+            key={tab.path}
+            to={tab.path}
+            end={tab.path === '/'}
+            className={({ isActive }) =>
+              cn(
+                'px-4 min-h-[32px] inline-flex items-center justify-center rounded-full text-body-sm font-medium transition-all leading-none',
+                isActive
+                  ? isCalm
+                    ? 'bg-casa-navy text-white shadow-xs font-semibold'
+                    : 'bg-white/20 text-white shadow-xs font-semibold'
+                  : isCalm
+                  ? 'text-casa-muted hover:text-casa-navy hover:bg-black/5'
+                  : 'text-white/60 hover:text-white hover:bg-white/10'
+              )
+            }
+          >
+            {tab.label}
+          </NavLink>
+        ))}
+      </nav>
+
+      {/* ── Right: Mode Switcher · Weather/Clock · Actions · Copilot ── */}
+      <div className="flex items-center gap-2.5 flex-shrink-0">
+        {/* Calm / Turbo Mode Switcher (Sleek single container on Home view) */}
         {isHome && (
           <div
             className={cn(
-              'inline-flex items-center p-0.5 rounded-xl border gap-0.5',
-              isCalm ? 'bg-casa-surface border-casa-border' : 'bg-white/10 border-white/10'
+              'inline-flex items-center p-0.5 rounded-full border gap-0.5',
+              isCalm ? 'bg-casa-surface/60 border-casa-border/50' : 'bg-white/5 border-white/10'
             )}
           >
             <Button
@@ -64,15 +104,15 @@ export default function CanvasTopBar() {
               size="sm"
               onClick={() => setCanvasSubmode('calm')}
               className={cn(
-                'px-3 min-h-[34px] rounded-lg text-caption font-semibold transition-all leading-none',
+                'px-3 min-h-[30px] rounded-full text-caption font-semibold transition-all leading-none',
                 canvasSubmode === 'calm'
-                  ? 'bg-casa-gold text-casa-navy shadow-sm font-bold'
+                  ? 'bg-casa-gold text-casa-navy shadow-2xs font-bold'
                   : isCalm
-                  ? 'text-casa-muted hover:text-casa-navy hover:bg-casa-border/30'
-                  : 'text-white/60 hover:text-white hover:bg-white/5'
+                  ? 'text-casa-muted hover:text-casa-navy'
+                  : 'text-white/60 hover:text-white'
               )}
             >
-              <Leaf size={13} strokeWidth={2.2} />
+              <Leaf size={12} strokeWidth={2.2} />
               <span>Calm</span>
             </Button>
             <Button
@@ -80,184 +120,91 @@ export default function CanvasTopBar() {
               size="sm"
               onClick={() => setCanvasSubmode('turbo')}
               className={cn(
-                'px-3 min-h-[34px] rounded-lg text-caption font-semibold transition-all leading-none',
+                'px-3 min-h-[30px] rounded-full text-caption font-semibold transition-all leading-none',
                 canvasSubmode === 'turbo'
-                  ? 'bg-amber-400 text-casa-navy shadow-sm font-bold'
+                  ? 'bg-amber-400 text-casa-navy shadow-2xs font-bold'
                   : isCalm
-                  ? 'text-casa-muted hover:text-casa-navy hover:bg-casa-border/30'
-                  : 'text-white/60 hover:text-white hover:bg-white/5'
+                  ? 'text-casa-muted hover:text-casa-navy'
+                  : 'text-white/60 hover:text-white'
               )}
             >
-              <Zap size={13} strokeWidth={2.2} />
+              <Zap size={12} strokeWidth={2.2} />
               <span>Turbo</span>
             </Button>
           </div>
         )}
-      </div>
 
-      {/* ── Center: Workspace Tabs ── */}
-      <nav
-        className={cn(
-          'hidden md:inline-flex items-center gap-1 p-1 rounded-2xl border',
-          isCalm ? 'bg-casa-surface/80 border-casa-border/60' : 'bg-white/5 border-white/10'
-        )}
-      >
-        <NavLink
-          to="/"
-          end
-          className={({ isActive }) =>
-            cn(
-              'px-4 min-h-[34px] inline-flex items-center justify-center rounded-xl text-body-sm font-medium transition-all leading-none',
-              isActive
-                ? isCalm
-                  ? 'bg-casa-navy text-white shadow-sm font-semibold'
-                  : 'bg-white/15 text-white shadow-sm font-semibold'
-                : isCalm
-                ? 'text-casa-muted hover:text-casa-navy hover:bg-casa-border/30'
-                : 'text-white/60 hover:text-white hover:bg-white/5'
-            )
-          }
-        >
-          Living Canvas
-        </NavLink>
-        <NavLink
-          to="/calendar"
-          className={({ isActive }) =>
-            cn(
-              'px-4 min-h-[34px] inline-flex items-center justify-center rounded-xl text-body-sm font-medium transition-all leading-none',
-              isActive
-                ? isCalm
-                  ? 'bg-casa-navy text-white shadow-sm font-semibold'
-                  : 'bg-white/15 text-white shadow-sm font-semibold'
-                : isCalm
-                ? 'text-casa-muted hover:text-casa-navy hover:bg-casa-border/30'
-                : 'text-white/60 hover:text-white hover:bg-white/5'
-            )
-          }
-        >
-          Calendar
-        </NavLink>
-        <NavLink
-          to="/cook"
-          className={({ isActive }) =>
-            cn(
-              'px-4 min-h-[34px] inline-flex items-center justify-center rounded-xl text-body-sm font-medium transition-all leading-none',
-              isActive
-                ? isCalm
-                  ? 'bg-casa-navy text-white shadow-sm font-semibold'
-                  : 'bg-white/15 text-white shadow-sm font-semibold'
-                : isCalm
-                ? 'text-casa-muted hover:text-casa-navy hover:bg-casa-border/30'
-                : 'text-white/60 hover:text-white hover:bg-white/5'
-            )
-          }
-        >
-          Meals & Kitchen
-        </NavLink>
-        <NavLink
-          to="/settings"
-          className={({ isActive }) =>
-            cn(
-              'px-4 min-h-[34px] inline-flex items-center justify-center rounded-xl text-body-sm font-medium transition-all leading-none',
-              isActive
-                ? isCalm
-                  ? 'bg-casa-navy text-white shadow-sm font-semibold'
-                  : 'bg-white/15 text-white shadow-sm font-semibold'
-                : isCalm
-                ? 'text-casa-muted hover:text-casa-navy hover:bg-casa-border/30'
-                : 'text-white/60 hover:text-white hover:bg-white/5'
-            )
-          }
-        >
-          Settings
-        </NavLink>
-      </nav>
-
-      {/* ── Right: Weather · Clock · Dev Switcher · Art · AI Sidecar ── */}
-      <div className="flex items-center gap-2.5 flex-shrink-0">
-        {weather && (
-          <div
-            className={cn(
-              'hidden lg:inline-flex items-center gap-1.5 text-caption px-2.5 min-h-[34px] rounded-xl border leading-none',
-              isCalm
-                ? 'text-casa-navy bg-casa-surface border-casa-border'
-                : 'text-white/80 bg-white/5 border-white/10'
+        {/* Ambient Info: Show weather & time on non-home pages to avoid duplicating home kiosk info */}
+        {!isHome && (
+          <div className="hidden lg:flex items-center gap-2 text-caption font-mono text-casa-muted">
+            {weather && (
+              <span className="inline-flex items-center gap-1">
+                <Cloud size={13} className="text-casa-gold" />
+                {weather.temp}° {weather.city}
+              </span>
             )}
-          >
-            <Cloud size={13} className="text-casa-gold shrink-0" />
-            <span className="font-semibold leading-none">{weather.temp}°</span>
-            <span className={cn('leading-none', isCalm ? 'text-casa-muted' : 'text-white/40')}>
-              {weather.city}
-            </span>
+            <span>·</span>
+            <span>{format(now, 'h:mm a')}</span>
           </div>
         )}
 
-        {/* Ambient Clock */}
+        {/* Unified Utility Action Track */}
         <div
           className={cn(
-            'inline-flex items-center font-mono text-body-sm font-semibold tabular-nums px-2.5 min-h-[34px] rounded-xl border leading-none',
-            isCalm
-              ? 'text-casa-navy bg-casa-surface border-casa-border'
-              : 'text-white bg-white/5 border-white/10'
+            'inline-flex items-center p-0.5 rounded-full border gap-0.5',
+            isCalm ? 'bg-casa-surface/40 border-casa-border/40' : 'bg-white/5 border-white/10'
           )}
         >
-          <span className="leading-none">{format(now, 'h:mm')}</span>
-          <span
-            className={cn('text-caption ml-1 leading-none', isCalm ? 'text-casa-muted' : 'text-white/50')}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setExperienceMode('classic')}
+            aria-label="Switch to Classic Mode"
+            title="Switch to Classic Mode"
+            className={cn(
+              'hidden xl:inline-flex items-center gap-1 px-2.5 min-h-[30px] rounded-full text-caption font-medium transition-colors leading-none',
+              isCalm
+                ? 'text-casa-muted hover:text-casa-navy hover:bg-black/5'
+                : 'text-white/70 hover:text-white hover:bg-white/10'
+            )}
           >
-            {format(now, 'a')}
-          </span>
+            <LayoutGrid size={12} />
+            <span>Classic</span>
+          </Button>
+
+          <IconButton
+            icon={<RefreshCw size={13} strokeWidth={1.8} />}
+            aria-label="Refresh screen"
+            onClick={() => window.location.reload()}
+            title="Refresh screen"
+            size="sm"
+            variant="ghost"
+            className={cn(
+              'rounded-full',
+              isCalm
+                ? 'text-casa-muted hover:text-casa-navy hover:bg-black/5'
+                : 'text-white/70 hover:text-white hover:bg-white/10'
+            )}
+          />
+
+          <IconButton
+            icon={<ImageIcon size={13} strokeWidth={1.8} />}
+            aria-label="Open Art Mode"
+            onClick={() => document.dispatchEvent(new CustomEvent('screensaver-on'))}
+            title="Art Mode"
+            size="sm"
+            variant="ghost"
+            className={cn(
+              'rounded-full',
+              isCalm
+                ? 'text-casa-muted hover:text-casa-navy hover:bg-black/5'
+                : 'text-white/70 hover:text-white hover:bg-white/10'
+            )}
+          />
         </div>
 
-        {/* Quick Dev Switcher to Classic Mode */}
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => setExperienceMode('classic')}
-          aria-label="Switch to Classic Mode"
-          className={cn(
-            'hidden xl:inline-flex items-center gap-1.5 px-3 min-h-[34px] rounded-xl text-caption font-medium border transition-colors leading-none',
-            isCalm
-              ? 'bg-casa-surface text-casa-muted hover:bg-casa-border/40 hover:text-casa-navy border-casa-border'
-              : 'bg-white/10 text-white/70 hover:bg-white/20 hover:text-white border-white/10'
-          )}
-        >
-          <LayoutGrid size={13} className="shrink-0" />
-          <span>Classic</span>
-        </Button>
-
-        {/* Refresh button */}
-        <IconButton
-          icon={<RefreshCw size={15} strokeWidth={1.8} />}
-          aria-label="Refresh screen"
-          onClick={() => window.location.reload()}
-          title="Refresh screen"
-          size="sm"
-          className={cn(
-            'min-h-[34px] min-w-[34px]',
-            isCalm
-              ? 'bg-casa-surface text-casa-muted hover:bg-casa-border/40 hover:text-casa-navy border border-casa-border'
-              : 'bg-white/10 text-white/70 hover:bg-white/20 hover:text-white'
-          )}
-        />
-
-        {/* Art Mode button */}
-        <IconButton
-          icon={<ImageIcon size={15} strokeWidth={1.8} />}
-          aria-label="Open Art Mode"
-          onClick={() => document.dispatchEvent(new CustomEvent('screensaver-on'))}
-          title="Art Mode"
-          size="sm"
-          className={cn(
-            'min-h-[34px] min-w-[34px]',
-            isCalm
-              ? 'bg-casa-surface text-casa-muted hover:bg-casa-border/40 hover:text-casa-navy border border-casa-border'
-              : 'bg-white/10 text-white/70 hover:bg-white/20 hover:text-white'
-          )}
-        />
-
-        {/* AI Copilot Sidecar Button */}
+        {/* AI Copilot Primary Action */}
         <motion.button
           ref={btnRef}
           onClick={() => {
@@ -283,19 +230,18 @@ export default function CanvasTopBar() {
           }}
           transition={{ duration: 3.4, repeat: aiDrawerOpen ? 0 : Infinity, ease: 'easeInOut' }}
           className={cn(
-            'inline-flex items-center justify-center gap-2 px-3.5 min-h-[34px] rounded-xl transition-all font-semibold text-caption leading-none',
+            'inline-flex items-center justify-center gap-1.5 px-3.5 min-h-[32px] rounded-full transition-all font-semibold text-caption leading-none',
             aiDrawerOpen
-              ? 'bg-casa-gold text-casa-navy ring-2 ring-casa-gold/80 shadow-md'
-              : 'bg-casa-gold/20 hover:bg-casa-gold/30 text-casa-gold border border-casa-gold/30'
+              ? 'bg-casa-gold text-casa-navy ring-2 ring-casa-gold/80 shadow-xs'
+              : 'bg-casa-gold text-casa-navy hover:bg-amber-400 shadow-2xs'
           )}
           title={aiDrawerOpen ? 'Close Copilot' : 'Open AI Copilot'}
           aria-label={aiDrawerOpen ? 'Close Copilot' : 'Open AI Copilot'}
         >
-          <Sparkles size={15} strokeWidth={2.2} className="shrink-0" />
+          <Sparkles size={14} strokeWidth={2.2} className="shrink-0" />
           <span className="hidden sm:inline leading-none">Copilot</span>
         </motion.button>
       </div>
     </header>
   )
 }
-
