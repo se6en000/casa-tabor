@@ -13,7 +13,6 @@ import {
   Navigation,
   ArrowRight,
   Bell,
-  CheckSquare,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useCalmKioskPresenter } from '../../hooks/useCalmKioskPresenter'
@@ -21,7 +20,7 @@ import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { useAppStore } from '../../stores/appStore'
 import { cn } from '../../utils/cn'
 import { formatDurationLong } from '../../utils/eventTime'
-import { Button, PersonAvatarStack, JourneyProgressBar, Chip } from '../ui'
+import { Button, PersonAvatarStack, JourneyProgressBar } from '../ui'
 
 interface CalmKioskViewProps {
   onOpenEvent: (event: EventWithDetails) => void
@@ -50,8 +49,6 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
     returnDestinationName,
     driverName,
     driverFamilyMemberId,
-    checklistItems,
-    toggleEventChecklistItem,
     setCanvasSubmode,
     navigateTo,
   } = useCalmKioskPresenter()
@@ -229,47 +226,6 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                     returnDestinationName={returnDestinationName}
                   />
                 </div>
-
-                {/* Pack & Prep Checklist Chips */}
-                {checklistItems && checklistItems.length > 0 && (
-                  <div className="mt-4 pt-3 border-t border-white/5 flex items-center gap-2 flex-wrap">
-                    <span className="text-3xs uppercase font-bold tracking-wider text-white/50 flex items-center gap-1 mr-0.5">
-                      <CheckSquare size={11} className="text-casa-gold" />
-                      Pack & Prep:
-                    </span>
-                    {checklistItems.map((item) => (
-                      <Chip
-                        key={item.id}
-                        tone={item.checked ? 'neutral' : 'success'}
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          toggleEventChecklistItem(item.id, Boolean(item.checked))
-                        }}
-                        className={cn(
-                          'transition-all text-caption font-medium',
-                          item.checked
-                            ? 'line-through opacity-60 bg-white/5 border-white/10'
-                            : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30 hover:border-emerald-400',
-                        )}
-                        icon={
-                          <span
-                            className={cn(
-                              'w-3 h-3 rounded flex items-center justify-center text-3xs font-bold border mr-1',
-                              item.checked
-                                ? 'bg-white/20 text-white/60 border-white/30'
-                                : 'bg-emerald-500 text-slate-950 border-emerald-400',
-                            )}
-                          >
-                            {item.checked ? '✓' : ''}
-                          </span>
-                        }
-                      >
-                        {item.label}
-                      </Chip>
-                    ))}
-                  </div>
-                )}
               </div>
 
               {/* Members and Logistics Footer */}
