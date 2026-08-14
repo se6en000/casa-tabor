@@ -9,6 +9,7 @@ import { useCalendarStore } from '../../stores/calendarStore'
 import { useNotifications } from '../../hooks/useNotifications'
 import { useTodayEvents } from '../../hooks/useCalendarEvents'
 import { useMemberAvailability } from '../../hooks/useMemberAvailability'
+import { useAppStore } from '../../stores/appStore'
 import {
   evaluateMemberAvailabilityForWindow,
   indexAvailabilityExceptionsByMember,
@@ -38,6 +39,7 @@ export default function TabletSidebar({ aiDrawerOpen = false }: TabletSidebarPro
   const now = useLiveClock(15_000)
   const { data: family } = useFamilyMembers()
   const { visibleMembers, toggleMember, setActiveView } = useCalendarStore()
+  const { setCanvasSubmode } = useAppStore()
   useNotifications()
   const [notifOpen, setNotifOpen] = useState(false)
   const [familyOpen, setFamilyOpen] = useState(true)
@@ -121,7 +123,13 @@ export default function TabletSidebar({ aiDrawerOpen = false }: TabletSidebarPro
                 key={to}
                 to={to}
                 end={to === '/'}
-                onClick={to === '/calendar' ? () => setActiveView('stacked') : undefined}
+                onClick={
+                  to === '/calendar'
+                    ? () => setActiveView('stacked')
+                    : to === '/'
+                    ? () => setCanvasSubmode('calm')
+                    : undefined
+                }
                 title={isEffectivelyCollapsed ? label : undefined}
                 className={({ isActive }) =>
                   cn(

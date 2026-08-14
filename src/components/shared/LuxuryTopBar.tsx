@@ -42,8 +42,14 @@ const NAV_TABS = [
 
 // ── Zone A: Brand Monogram ───────────────────────────────────────
 function BrandZone({ isWarm }: { isWarm: boolean }) {
+  const { setCanvasSubmode } = useAppStore()
+
   return (
-    <NavLink to="/" className="inline-flex items-center gap-2.5 group h-9 flex-shrink-0">
+    <NavLink
+      to="/"
+      onClick={() => setCanvasSubmode('calm')}
+      className="inline-flex items-center gap-2.5 group h-9 flex-shrink-0"
+    >
       <span
         className="topbar-monogram w-9 h-9 rounded-[10px] inline-flex items-center justify-center text-caption font-bold text-casa-gold flex-shrink-0 transition-transform duration-200 ease-[var(--transition-ease-emphasized)] group-hover:scale-[1.04] leading-none"
       >
@@ -125,6 +131,7 @@ function NavRail({
   isCanvas: boolean
 }) {
   const location = useLocation()
+  const { setCanvasSubmode } = useAppStore()
 
   return (
     <nav
@@ -143,6 +150,11 @@ function NavRail({
             key={tab.path}
             to={tab.path}
             end={tab.path === '/'}
+            onClick={() => {
+              if (tab.path === '/') {
+                setCanvasSubmode('calm')
+              }
+            }}
             className={cn(
               'relative px-3.5 min-h-[44px] inline-flex items-center justify-center text-body-sm font-medium transition-colors leading-none tracking-[0.01em]',
               isActive

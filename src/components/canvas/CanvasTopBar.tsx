@@ -37,7 +37,11 @@ export default function CanvasTopBar() {
     >
       {/* ── Left: Refined Luxury Brand Monogram ── */}
       <div className="flex items-center gap-3 flex-shrink-0">
-        <NavLink to="/" className="inline-flex items-center gap-2.5 group h-9">
+        <NavLink
+          to="/"
+          onClick={() => setCanvasSubmode('calm')}
+          className="inline-flex items-center gap-2.5 group h-9"
+        >
           <span className="w-8 h-8 rounded-full bg-casa-gold/15 text-casa-gold border border-casa-gold/30 inline-flex items-center justify-center text-caption font-bold flex-shrink-0 shadow-2xs group-hover:scale-105 transition-transform leading-none">
             CT
           </span>
@@ -71,6 +75,11 @@ export default function CanvasTopBar() {
             key={tab.path}
             to={tab.path}
             end={tab.path === '/'}
+            onClick={() => {
+              if (tab.path === '/') {
+                setCanvasSubmode('calm')
+              }
+            }}
             className={({ isActive }) =>
               cn(
                 'px-4 min-h-[32px] inline-flex items-center justify-center rounded-full text-body-sm font-medium transition-all leading-none',

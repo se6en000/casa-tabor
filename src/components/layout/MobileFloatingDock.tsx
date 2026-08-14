@@ -19,6 +19,7 @@ import { useNotifications } from '../../hooks/useNotifications'
 import { useWeekConflicts } from '../../hooks/useConflicts'
 import { usePrepItems } from '../../hooks/usePrepItems'
 import { useCalendarStore } from '../../stores/calendarStore'
+import { useAppStore } from '../../stores/appStore'
 import NotificationDrawer from '../shared/NotificationDrawer'
 import { Button } from '../ui'
 
@@ -33,6 +34,7 @@ export default function MobileFloatingDock({ onOpenQuickCreate }: MobileFloating
   const location = useLocation()
   const { unreadCount } = useNotifications()
   const { setActiveView } = useCalendarStore()
+  const { setCanvasSubmode } = useAppStore()
 
   const { data: conflicts = [] } = useWeekConflicts()
   const { data: prepItems = [] } = usePrepItems()
@@ -52,7 +54,10 @@ export default function MobileFloatingDock({ onOpenQuickCreate }: MobileFloating
       icon: Home,
       label: 'Today',
       badge: 0,
-      onClick: () => triggerHaptic(),
+      onClick: () => {
+        triggerHaptic()
+        setCanvasSubmode('calm')
+      },
     },
     {
       to: '/calendar',
