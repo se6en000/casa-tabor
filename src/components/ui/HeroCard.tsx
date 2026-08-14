@@ -15,6 +15,8 @@ export interface HeroCardProps extends Omit<HTMLMotionProps<'div'>, 'title' | 'c
   title: ReactNode
   /** Subtitle or location line. */
   subtitle?: ReactNode
+  /** Contextual bring/prep summary line (Option A). */
+  prepSummary?: ReactNode
   /** Slot for progress / timeline bar (e.g. JourneyProgressBar). */
   timeline?: ReactNode
   /** Slot for passenger/member avatars. */
@@ -39,6 +41,7 @@ export const HeroCard = forwardRef<HTMLDivElement, HeroCardProps>(function HeroC
     timeBadge,
     title,
     subtitle,
+    prepSummary,
     timeline,
     avatars,
     actions,
@@ -112,8 +115,15 @@ export const HeroCard = forwardRef<HTMLDivElement, HeroCardProps>(function HeroC
 
         {/* Subtitle / Location */}
         {subtitle && (
-          <div className="text-body-sm sm:text-body text-white/80 mb-4 font-normal flex items-center gap-2 flex-wrap">
+          <div className="text-body-sm sm:text-body text-white/80 mb-2 font-normal flex items-center gap-2 flex-wrap">
             {subtitle}
+          </div>
+        )}
+
+        {/* Bring / Prep Summary */}
+        {prepSummary && (
+          <div className="text-caption text-slate-300/90 mb-4 font-normal flex items-center gap-2 flex-wrap">
+            {prepSummary}
           </div>
         )}
 

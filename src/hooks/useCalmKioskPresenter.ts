@@ -43,6 +43,8 @@ export interface CalmKioskPresenterState {
   returnDestinationName: string
   driverName: string | null
   driverFamilyMemberId: string | null
+  prepSummaryText: string | null
+  locationDisplayText: string | null
   setCanvasSubmode: (submode: 'calm' | 'turbo') => void
   navigateTo: (path: string) => void
 }
@@ -341,6 +343,69 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     return differenceInMinutes(leaveAt, now)
   }, [leaveAt, now])
 
+  const prepSummaryText = useMemo(() => {
+    if (!nextEvent) return null
+
+    // 1. Explicit checklist items
+    if (nextEvent.checklist && nextEvent.checklist.length > 0) {
+      const pending = nextEvent.checklist.filter((item) => !item.checked)
+      const list = pending.length > 0 ? pending : nextEvent.checklist
+      const labels = list.map((item) => item.label?.trim()).filter(Boolean)
+      if (labels.length > 0) {
+        return labels.join(' · ')
+      }
+    }
+
+    // 2. AI enrichment what_to_bring (array or string)
+    if (nextEvent.enrichment?.what_to_bring) {
+      const raw = nextEvent.enrichment.what_to_bring as unknown
+      if (Array.isArray(raw) && raw.length > 0) {
+        return raw.map((s) => String(s).trim()).filter(Boolean).join(' · ')
+      }
+      if (typeof raw === 'string' && raw.trim()) {
+        const parts = raw
+          .split(/[,;\n]/)
+          .map((s) => s.trim())
+          .filter(Boolean)
+        if (parts.length > 0) {
+          return parts.join(' · ')
+        }
+      }
+    }
+
+    // 3. Prep notes fallback
+    if (nextEvent.enrichment?.prep_notes) {
+      return nextEvent.enrichment.prep_notes.trim()
+    }
+
+    return null
+  }, [nextEvent])
+
+  const locationDisplayText = useMemo(() => {
+    if (!nextEvent) return null
+    const locName = nextEvent.location_name?.trim() || null
+    const addr = nextEvent.address?.trim() || null
+
+    if (!locName && !addr) return null
+    if (!addr) return locName
+    if (!locName) return addr
+
+    // If title already mentions the location name (e.g. "Party at Coopers" vs "Katherine Cooper's House"),
+    // don't repeat the location name; show the street address cleanly.
+    const titleLower = (nextEvent.title || '').toLowerCase()
+    const locLower = locName.toLowerCase()
+
+    // Check partial token overlap (e.g. "Cooper" in "Party at Coopers")
+    const locTokens = locLower.split(/[\s,.'’\-]+/).filter((t) => t.length > 3)
+    const titleHasOverlap = locTokens.some((t) => titleLower.includes(t))
+
+    if (titleHasOverlap || titleLower.includes(locLower) || locLower.includes(titleLower)) {
+      return addr
+    }
+
+    return `${locName} · ${addr}`
+  }, [nextEvent])
+
   const greeting = greetingFor(now)
 
   return {
@@ -375,6 +440,8 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     returnDestinationName,
     driverName,
     driverFamilyMemberId,
+    prepSummaryText,
+    locationDisplayText,
     setCanvasSubmode,
     navigateTo: navigate,
   }

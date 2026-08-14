@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { format, parseISO, differenceInMinutes, addMinutes } from 'date-fns'
+import { format, parseISO, differenceInMinutes } from 'date-fns'
 import {
   MapPin,
   Car,
@@ -58,6 +58,8 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
     returnDestinationName,
     driverName,
     driverFamilyMemberId,
+    prepSummaryText,
+    locationDisplayText,
     activeConflicts,
     activePrep,
     familyMembers,
@@ -276,15 +278,18 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                   </p>
                 )}
 
-                {nextEvent.location_name && (
-                  <div className="flex items-center gap-2 text-white/80 mt-3 text-body-sm">
-                    <MapPin size={16} className="text-casa-gold shrink-0" />
-                    <span className="truncate">{nextEvent.location_name}</span>
-                    {nextEvent.address && (
-                      <span className="text-white/40 truncate hidden sm:inline">
-                        · {nextEvent.address}
-                      </span>
-                    )}
+                {locationDisplayText && (
+                  <div className="flex items-center gap-2 text-white/80 mt-2.5 text-body-sm">
+                    <MapPin size={15} className="text-casa-gold shrink-0" />
+                    <span className="truncate">{locationDisplayText}</span>
+                  </div>
+                )}
+
+                {prepSummaryText && (
+                  <div className="flex items-center gap-2 text-slate-300/90 mt-2 text-caption">
+                    <span className="text-sm shrink-0">🎁</span>
+                    <span className="font-semibold text-white/90 shrink-0">Bring:</span>
+                    <span className="text-white/75 truncate">{prepSummaryText}</span>
                   </div>
                 )}
 
@@ -343,12 +348,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                       <Car size={13} className="text-casa-gold shrink-0" />
                       {driverName && <span>{driverName} driving · </span>}
                       {minutesUntilNext !== null && minutesUntilNext <= 0 ? (
-                        <>
-                          <span>{driveTimeMins}m drive to {returnDestinationName}</span>
-                          <span className="text-casa-gold font-bold">
-                            · {returnDestinationName} ~{format(addMinutes(parseISO(nextEvent.end_time), driveTimeMins), 'h:mm a')}
-                          </span>
-                        </>
+                        <span>{driveTimeMins}m return drive</span>
                       ) : (
                         <>
                           <span>{driveTimeMins}m drive</span>

@@ -173,27 +173,21 @@ export function JourneyProgressBar({
           <div className="flex items-center justify-between text-caption font-medium">
             <div className="flex items-center gap-1.5 text-casa-gold font-semibold truncate">
               <Clock size={13} className="shrink-0" />
-              <span className="truncate">{destinationName ? `At ${destinationName}` : 'At Event'}</span>
-              <span className="text-white/60 font-normal shrink-0">
-                · Ends {parsedEnd ? format(parsedEnd, 'h:mm a') : ''}
-              </span>
-              <span
-                className={cn(
-                  'px-1.5 py-0.5 rounded text-2xs font-bold font-sans shrink-0',
-                  minutesUntilEnd !== null && minutesUntilEnd <= 10
-                    ? 'bg-amber-400 text-slate-950 animate-pulse'
-                    : 'bg-white/10 text-white/80',
-                )}
-              >
+              <span>
                 {minutesUntilEnd !== null && minutesUntilEnd > 0
-                  ? `${formatDurationHuman(minutesUntilEnd)} left`
+                  ? `Ends in ${formatDurationHuman(minutesUntilEnd)}`
                   : 'Wrapping up'}
               </span>
+              {parsedEnd && (
+                <span className="text-white/60 font-normal shrink-0">
+                  ({format(parsedEnd, 'h:mm a')})
+                </span>
+              )}
             </div>
             {homeEta && (
               <div className="flex items-center gap-1.5 text-white/80 font-mono text-caption shrink-0">
                 <Home size={12} className="text-casa-gold/80" />
-                <span>{returnDestinationName} ~{format(homeEta, 'h:mm a')}</span>
+                <span>{returnDestinationName} ETA ~{format(homeEta, 'h:mm a')}</span>
               </div>
             )}
           </div>
@@ -237,10 +231,10 @@ export function JourneyProgressBar({
         {showLabels && (
           <div className="flex items-center justify-between text-3xs font-sans uppercase tracking-wider text-white/50 px-1 pt-0.5">
             <span className="w-[60%] text-left truncate">
-              {destinationName ? `At ${destinationName}` : 'In Session'} ({formatDurationHuman(elapsedMins)} of {formatDurationHuman(totalEventDurationMins)})
+              {formatDurationHuman(elapsedMins)} elapsed ({formatDurationHuman(totalEventDurationMins)} total)
             </span>
             <span className="w-[40%] text-right font-semibold text-white/70 truncate">
-              {driveTimeMins}m Drive to {returnDestinationName}
+              {driveTimeMins}m drive back {returnDestinationName.toLowerCase() === 'home' ? 'home' : `to ${returnDestinationName}`}
             </span>
           </div>
         )}

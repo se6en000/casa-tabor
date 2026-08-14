@@ -1176,6 +1176,13 @@ export default function DesignSystemGalleryPage() {
                       <span>Wanuck, Hier & Associates · 1232 W Indiantown Rd, Jupiter, FL</span>
                     </>
                   }
+                  prepSummary={
+                    <div className="flex items-center gap-2 text-slate-300/90 text-caption">
+                      <span className="text-sm shrink-0">🎁</span>
+                      <span className="font-semibold text-white/90 shrink-0">Bring:</span>
+                      <span className="text-white/75 truncate">New patient forms · Dental retainer case</span>
+                    </div>
+                  }
                   timeline={
                     <JourneyProgressBar
                       now={mockNow}
@@ -1208,10 +1215,7 @@ export default function DesignSystemGalleryPage() {
                         <Car size={13} className="text-casa-gold shrink-0" />
                         <span>Kelly driving · </span>
                         {heroJourneyPhase === 'in-session' ? (
-                          <>
-                            <span>25m drive to Home</span>
-                            <span className="text-casa-gold font-bold">· Home ~4:55 PM</span>
-                          </>
+                          <span>25m return drive</span>
                         ) : (
                           <>
                             <span>25m drive</span>
