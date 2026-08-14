@@ -57,13 +57,15 @@ export default function CalendarPage() {
     ? `${format(selectedDate, 'MMM d')} – ${format(stackedEnd, stackedEnd.getMonth() === selectedDate.getMonth() ? 'd, yyyy' : 'MMM d, yyyy')}`
     : `${format(weekStart, 'MMMM d')} – ${format(endOfWeek(selectedDate, { weekStartsOn: 0 }), 'd, yyyy')}`
 
-  // Touch swipe detection — skip if a modal/panel is open (z-index overlay)
+  // Touch swipe detection — skip if a modal/panel is open, or if in stacked view (which has its own 8-day horizontal ribbon)
   const touchStartX = useRef<number | null>(null)
   const onTouchStart = (e: React.TouchEvent) => {
+    if (isStacked) return
     if ((e.target as HTMLElement).closest('[data-panel-overlay]')) return
     touchStartX.current = e.touches[0].clientX
   }
   const onTouchEnd = (e: React.TouchEvent) => {
+    if (isStacked) return
     if (touchStartX.current === null) return
     const delta = e.changedTouches[0].clientX - touchStartX.current
     touchStartX.current = null
@@ -80,13 +82,14 @@ export default function CalendarPage() {
     const el = swipeRef.current
     if (!el) return
     const handler = (e: Event) => {
+      if (isStacked) return
       const dir = (e as CustomEvent<{ dir: 'next' | 'prev' }>).detail?.dir
       if (dir === 'next') goNext()
       else if (dir === 'prev') goPrev()
     }
     el.addEventListener('casa:swipe', handler)
     return () => el.removeEventListener('casa:swipe', handler)
-  }, [goNext, goPrev])
+  }, [goNext, goPrev, isStacked])
 
   // Slide animation variants
   const variants = {

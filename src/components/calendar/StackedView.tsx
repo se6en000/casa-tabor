@@ -1,9 +1,9 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { format, addDays, isToday, startOfDay, isBefore, isAfter, differenceInMinutes } from 'date-fns'
-import { motion, AnimatePresence, useMotionValue, useSpring } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   MapPin, AlertTriangle,
-  Navigation, Bell, ChevronRight, ChevronLeft,
+  Navigation, Bell,
   CalendarDays, ArrowRight,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
@@ -19,7 +19,7 @@ import EventContextMenu from '../shared/EventContextMenu'
 import { WeatherIcon } from '../shared/WeatherIcon'
 import { BirthdayCardDecoration } from '../shared/BirthdayCardDecoration'
 import { eventOverlapsDay, getEventDisplayStartDay, getEventEndDate, getEventStartDate } from '../../utils/eventTime'
-import { PersonAvatarStack, CalendarPill, IconButton, Button } from '../ui'
+import { PersonAvatarStack, CalendarPill, Button } from '../ui'
 import type { FamilyMember } from '../../types'
 import { deriveCalendarCardResponsibility } from '../../lib/calendarResponsibility'
 import { resolveEventMode } from '../../lib/eventPlanOverrides'
@@ -29,7 +29,6 @@ import { useReminderNeedsYouActions } from '../../hooks/useReminderNeedsYouActio
 
 const SHARED_COLOR = 'var(--color-casa-gold)'
 const IDLE_RESET_TIMEOUT_MS = 30_000 // 30 seconds idle before returning to Today
-const MAX_BOUNCE_PX = 80
 
 function formatCompactDuration(minutes: number): string {
   if (minutes <= 0 || minutes >= 1440) return ''
@@ -107,18 +106,10 @@ export default function StackedView() {
   const [deleteIntentEventId, setDeleteIntentEventId] = useState<string | null>(null)
   const [contextMenu, setContextMenu] = useState<{ event: EventWithDetails; x: number; y: number } | null>(null)
   const [quickCreate, setQuickCreate] = useState<{ open: boolean; start?: Date }>({ open: false })
-  const [canScrollLeft, setCanScrollLeft] = useState(false)
-  const [canScrollRight, setCanScrollRight] = useState(true)
 
   const ribbonRef = useRef<HTMLDivElement>(null)
   const columnScrollRefs = useRef<(HTMLDivElement | null)[]>([])
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  // Spring Elastic Rubber-Band Motion Values
-  const bounceX = useMotionValue(0)
-  const springX = useSpring(bounceX, { stiffness: 380, damping: 38, mass: 0.5 })
-  const lastTouchX = useRef(0)
-  const isDraggingHorizontal = useRef(false)
 
   // Reset ribbon & column vertical scrolls back to Today/Anchor
   const resetToToday = useCallback(() => {
@@ -128,8 +119,7 @@ export default function StackedView() {
     columnScrollRefs.current.forEach(colEl => {
       colEl?.scrollTo({ top: 0, behavior: 'smooth' })
     })
-    bounceX.set(0)
-  }, [bounceX])
+  }, [])
 
   // Inactivity / Idle reset logic
   const handleUserActivity = useCallback(() => {
@@ -149,70 +139,11 @@ export default function StackedView() {
     columnScrollRefs.current.forEach(colEl => {
       colEl?.scrollTo({ top: 0, behavior: 'instant' })
     })
-    bounceX.set(0)
     handleUserActivity()
     return () => {
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current)
     }
-  }, [anchor, bounceX, handleUserActivity])
-
-  // Track horizontal scroll state for edge cues
-  const handleRibbonScroll = useCallback(() => {
-    handleUserActivity()
-    if (!ribbonRef.current) return
-    const { scrollLeft, scrollWidth, clientWidth } = ribbonRef.current
-    setCanScrollLeft(scrollLeft > 15)
-    setCanScrollRight(scrollLeft + clientWidth < scrollWidth - 15)
-  }, [handleUserActivity])
-
-  // Rubber-band touch physics overscroll listeners
-  useEffect(() => {
-    const el = ribbonRef.current
-    if (!el) return
-
-    const onTouchStart = (e: TouchEvent) => {
-      lastTouchX.current = e.touches[0]?.clientX ?? 0
-      isDraggingHorizontal.current = true
-    }
-
-    const onTouchMove = (e: TouchEvent) => {
-      if (!isDraggingHorizontal.current || e.touches.length === 0) return
-      const currentX = e.touches[0].clientX
-      const deltaX = currentX - lastTouchX.current
-      lastTouchX.current = currentX
-
-      const atLeft = el.scrollLeft <= 0
-      const atRight = el.scrollLeft + el.clientWidth >= el.scrollHeight - 1 || el.scrollLeft + el.clientWidth >= el.scrollWidth - 1
-      const hitBoundary = (deltaX > 0 && atLeft) || (deltaX < 0 && atRight)
-
-      if (hitBoundary) {
-        const sign = Math.sign(deltaX)
-        const currentVal = bounceX.get()
-        const newVal = currentVal + deltaX * 0.4
-        const clamped = sign * Math.min(Math.abs(newVal), MAX_BOUNCE_PX)
-        bounceX.set(clamped)
-      } else if (bounceX.get() !== 0) {
-        bounceX.set(0)
-      }
-    }
-
-    const onTouchEnd = () => {
-      isDraggingHorizontal.current = false
-      bounceX.set(0)
-    }
-
-    el.addEventListener('touchstart', onTouchStart, { passive: true })
-    el.addEventListener('touchmove', onTouchMove, { passive: true })
-    el.addEventListener('touchend', onTouchEnd, { passive: true })
-    el.addEventListener('touchcancel', onTouchEnd, { passive: true })
-
-    return () => {
-      el.removeEventListener('touchstart', onTouchStart)
-      el.removeEventListener('touchmove', onTouchMove)
-      el.removeEventListener('touchend', onTouchEnd)
-      el.removeEventListener('touchcancel', onTouchEnd)
-    }
-  }, [bounceX])
+  }, [anchor, handleUserActivity])
 
   const quickCreateGesture = useCalendarQuickCreateGesture<Date>({
     resolveStart: (day) => {
@@ -244,46 +175,13 @@ export default function StackedView() {
       onPointerDown={handleUserActivity}
       onTouchStart={handleUserActivity}
     >
-      {/* Left Edge Indicator / Back to Today Cue */}
-      {canScrollLeft && (
-        <div
-          className="pointer-events-none absolute left-0 top-0 bottom-0 w-16 bg-gradient-to-r from-casa-bg via-casa-bg/80 to-transparent z-10 flex items-center justify-start pl-3"
-          aria-hidden="true"
-        >
-          <IconButton
-            icon={<ChevronLeft size={16} />}
-            aria-label="Return to Today"
-            title="Return to Today"
-            onClick={resetToToday}
-            size="sm"
-            variant="ghost"
-            className="pointer-events-auto rounded-full bg-casa-surface/90 shadow-card border border-casa-border/70 text-casa-gold hover:scale-105 active:scale-95 transition-all"
-          />
-        </div>
-      )}
-
-      {/* Right Edge Overflow Hint (Fade + Subtle Arrow Cue) */}
-      {canScrollRight && (
-        <div
-          className="pointer-events-none absolute right-0 top-0 bottom-0 w-16 bg-gradient-to-l from-casa-bg via-casa-bg/80 to-transparent z-10 flex items-center justify-end pr-3"
-          aria-hidden="true"
-        >
-          <span className="p-2 rounded-full bg-casa-surface/90 shadow-card border border-casa-border/70 text-casa-gold">
-            <ChevronRight size={16} />
-          </span>
-        </div>
-      )}
-
-      {/* ── Single-Row 8-Day Horizontal Ribbon with Spring Bounce ── */}
+      {/* ── Single-Row 8-Day Horizontal Ribbon with Crisp Outer Padding ── */}
       <div
         ref={ribbonRef}
-        onScroll={handleRibbonScroll}
-        className="flex-1 flex flex-row overflow-x-auto overflow-y-hidden snap-x snap-proximity overscroll-x-contain touch-pan-x scrollbar-none"
+        onScroll={handleUserActivity}
+        className="flex-1 overflow-x-auto overflow-y-hidden overscroll-x-contain touch-pan-x scrollbar-none"
       >
-        <motion.div
-          style={{ x: springX }}
-          className="flex flex-row gap-4 px-6 sm:px-8 py-3 min-w-full items-stretch"
-        >
+        <div className="flex flex-row gap-4 px-6 py-2 w-max min-w-full h-full items-stretch">
           {days.map((day, idx) => {
             const dayEvents = events
               .filter(e => eventOverlapsDay(e, day))
@@ -297,7 +195,7 @@ export default function StackedView() {
             return (
               <div
                 key={format(day, 'yyyy-MM-dd')}
-                className="flex flex-col flex-shrink-0 w-[290px] sm:w-[320px] md:w-[340px] h-full snap-start touch-pan-y"
+                className="flex flex-col flex-shrink-0 w-[290px] sm:w-[320px] md:w-[340px] h-full touch-pan-y"
                 onPointerDown={(event) => quickCreateGesture.onPointerDown(event, day)}
                 onPointerMove={quickCreateGesture.onPointerMove}
                 onPointerUp={quickCreateGesture.onPointerUp}
@@ -407,7 +305,7 @@ export default function StackedView() {
           })}
 
           {/* ── 8-Day Horizon Endcap Card ── */}
-          <div className="flex flex-col flex-shrink-0 w-[240px] sm:w-[260px] h-full justify-center items-center rounded-widget border-2 border-dashed border-casa-border/80 bg-casa-surface/40 p-6 text-center text-casa-muted space-y-4 snap-start select-none">
+          <div className="flex flex-col flex-shrink-0 w-[240px] sm:w-[260px] h-full justify-center items-center rounded-widget border-2 border-dashed border-casa-border/80 bg-casa-surface/40 p-6 text-center text-casa-muted space-y-4 select-none">
             <div className="w-12 h-12 rounded-full bg-casa-gold/15 text-casa-gold flex items-center justify-center shadow-2xs">
               <CalendarDays size={22} />
             </div>
@@ -435,7 +333,7 @@ export default function StackedView() {
               ← Back to Today
             </Button>
           </div>
-        </motion.div>
+        </div>
       </div>
 
       {/* Detail panel */}
