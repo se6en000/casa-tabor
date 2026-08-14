@@ -39,7 +39,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
   // Filter out meal events from general appointments stream (handled by Tonight's Kitchen)
   const appointmentEvents = useMemo(() => {
     return todayEvents.filter((e) => {
-      const cat = (e.category || '').toLowerCase()
+      const cat = (e.enrichment?.category || (e as any).category || '').toLowerCase()
       const title = (e.title || '').toLowerCase()
       return !cat.includes('meal') && !cat.includes('prep') && !cat.includes('cook') && !title.includes('dinner') && !title.includes('lunch')
     })
