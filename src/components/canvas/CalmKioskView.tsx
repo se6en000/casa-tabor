@@ -124,7 +124,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex-1 flex flex-col justify-between rounded-3xl p-6 sm:p-8 bg-gradient-to-br from-casa-navy to-slate-900 text-white shadow-xl relative overflow-hidden group cursor-pointer"
+              className="flex-1 flex flex-col justify-between rounded-3xl p-6 sm:p-8 bg-gradient-to-br from-casa-navy via-slate-900 to-slate-950 text-white border border-white/10 shadow-xl relative overflow-hidden group cursor-pointer"
               onClick={() => onOpenEvent(nextEvent)}
             >
               {/* Background ambient glow */}
@@ -143,13 +143,13 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                     </span>
                   </div>
 
-                  <span className="text-caption text-white/60 font-mono bg-white/10 px-3 py-1 rounded-full">
+                  <span className="text-caption text-white/80 font-mono bg-white/10 px-3 py-1 rounded-full border border-white/10">
                     {format(parseISO(nextEvent.start_time), 'h:mm a')} –{' '}
                     {format(parseISO(nextEvent.end_time), 'h:mm a')}
                   </span>
                 </div>
 
-                <h2 className="font-display text-display-sm sm:text-display-md font-bold text-white tracking-tight leading-tight group-hover:text-casa-gold transition-colors">
+                <h2 className="font-display text-display-sm sm:text-display-md font-bold !text-white tracking-tight leading-tight group-hover:text-casa-gold transition-colors">
                   {nextEvent.title}
                 </h2>
 

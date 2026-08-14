@@ -246,7 +246,7 @@ test('event detail header uses a light semantic surface with compact event ident
 
 test('event detail shell uses semantic light header, tinted workspace, and surface footer', () => {
   assert.doesNotMatch(detail, /eventCrownStyle/)
-  assert.match(detail, /bg-casa-navy\/30 backdrop-blur-sm/)
+  assert.match(detail, /bg-casa-navy\/10 backdrop-blur-\[2px\]/)
   assert.match(detail, /boxShadow: '-8px 0 36px rgba\(0, 0, 0, 0\.18\), 0 0 12px rgba\(0, 0, 0, 0\.08\)'/)
   assert.match(detail, /className="relative h-control-sm flex-shrink-0 border-b border-casa-border bg-casa-bg px-3"/)
   assert.match(detail, /className="absolute inset-x-0 top-0 z-10 mx-auto block h-control w-\[86px\]/)
