@@ -17,6 +17,8 @@ export interface CalmKioskPresenterState {
   weather: ReturnType<typeof useHomeWeather>['data']
   nextEvent: EventWithDetails | null
   appointmentEvents: EventWithDetails[]
+  pastEvents: EventWithDetails[]
+  upcomingAppointments: EventWithDetails[]
   todayEvents: EventWithDetails[]
   tomorrowEvents: EventWithDetails[]
   pickupsCount: number
@@ -48,10 +50,24 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
   const { data: prepItems = [] } = usePrepItems()
   const { data: weather } = useHomeWeather()
 
+  // Helper to test if an event is a meal (which is featured in Tonight's Kitchen)
+  const isMealEvent = (e: EventWithDetails) => {
+    const cat = (e.enrichment?.category || (e as any).category || '').toLowerCase()
+    const title = (e.title || '').toLowerCase()
+    return (
+      cat.includes('meal') ||
+      cat.includes('prep') ||
+      cat.includes('cook') ||
+      title.includes('dinner') ||
+      title.includes('lunch')
+    )
+  }
+
   // Find next upcoming event today (that hasn't ended yet)
   const nextEvent = useMemo(() => {
     const upcoming = todayEvents.filter((e) => {
       if (e.all_day) return false
+      if (isMealEvent(e)) return false
       try {
         const start = parseISO(e.start_time)
         const end = parseISO(e.end_time)
@@ -63,18 +79,56 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     return upcoming[0] || null
   }, [todayEvents, now])
 
+  // Past events today (already ended, excluding hero and meals)
+  const pastEvents = useMemo(() => {
+    return todayEvents
+      .filter((e) => {
+        if (isMealEvent(e)) return false
+        if (nextEvent && e.id === nextEvent.id) return false
+        if (e.all_day) return false
+        try {
+          const end = parseISO(e.end_time)
+          return end.getTime() <= now.getTime()
+        } catch {
+          return false
+        }
+      })
+      .sort((a, b) => {
+        try {
+          return parseISO(a.start_time).getTime() - parseISO(b.start_time).getTime()
+        } catch {
+          return 0
+        }
+      })
+  }, [todayEvents, nextEvent, now])
+
+  // Upcoming / active appointment stream (happening now or later today, excluding hero and meals)
+  const upcomingAppointments = useMemo(() => {
+    return todayEvents
+      .filter((e) => {
+        if (isMealEvent(e)) return false
+        if (nextEvent && e.id === nextEvent.id) return false
+        if (e.all_day) return true
+        try {
+          const end = parseISO(e.end_time)
+          return end.getTime() > now.getTime()
+        } catch {
+          return true
+        }
+      })
+      .sort((a, b) => {
+        try {
+          return parseISO(a.start_time).getTime() - parseISO(b.start_time).getTime()
+        } catch {
+          return 0
+        }
+      })
+  }, [todayEvents, nextEvent, now])
+
   // Filter appointment stream (exclude meals, hero item, stale ended items)
   const appointmentEvents = useMemo(() => {
     return todayEvents.filter((e) => {
-      const cat = (e.enrichment?.category || (e as any).category || '').toLowerCase()
-      const title = (e.title || '').toLowerCase()
-      const isMeal =
-        cat.includes('meal') ||
-        cat.includes('prep') ||
-        cat.includes('cook') ||
-        title.includes('dinner') ||
-        title.includes('lunch')
-      if (isMeal) return false
+      if (isMealEvent(e)) return false
       if (nextEvent && e.id === nextEvent.id) return false
       try {
         if (!e.all_day && parseISO(e.end_time).getTime() < now.getTime() - 30 * 60 * 1000) {
@@ -270,6 +324,8 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     weather,
     nextEvent,
     appointmentEvents,
+    pastEvents,
+    upcomingAppointments,
     todayEvents,
     tomorrowEvents,
     pickupsCount,

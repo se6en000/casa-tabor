@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { format, parseISO, differenceInMinutes, addMinutes } from 'date-fns'
 import {
   MapPin,
@@ -6,6 +7,9 @@ import {
   ShoppingBag,
   Clock,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  Check,
   Zap,
   Sparkles,
   Calendar,
@@ -14,7 +18,7 @@ import {
   ArrowRight,
   Bell,
 } from 'lucide-react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useCalmKioskPresenter } from '../../hooks/useCalmKioskPresenter'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { useAppStore } from '../../stores/appStore'
@@ -28,6 +32,9 @@ interface CalmKioskViewProps {
 
 export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
   const dinnerPlan = useAppStore((s) => s.dinnerPlan)
+  const [showPastEvents, setShowPastEvents] = useState(false)
+  const [completedItems, setCompletedItems] = useState<Record<string, boolean>>({})
+
   const {
     now,
     greeting,
@@ -35,7 +42,8 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
     timeHorizonLabel,
     weather,
     nextEvent,
-    appointmentEvents,
+    pastEvents,
+    upcomingAppointments,
     isEvening,
     isDinnerPast,
     totalAttentionCount,
@@ -353,9 +361,267 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
           )}
         </div>
 
-        {/* Right Side (5 cols): Tonight's Kitchen + Upcoming Schedule Stream */}
+        {/* Right Side (5 cols): Today's Schedule Stream (Top) + Tonight's Kitchen (Bottom) */}
         <div className="lg:col-span-5 flex flex-col gap-6">
-          {/* Dinner Card */}
+          {/* 1. Today's Appointments & Reminders (Top) */}
+          <div className="rounded-3xl p-6 bg-casa-surface border border-casa-border/60 shadow-sm flex flex-col justify-between">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-casa-gold/20 text-casa-navy flex items-center justify-center font-bold">
+                  <Calendar size={18} className="text-casa-gold" />
+                </div>
+                <h3 className="font-display text-body-lg font-bold text-casa-navy">
+                  Today's Appointments ({upcomingAppointments.length})
+                </h3>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setCanvasSubmode('turbo')}
+                className="text-caption font-bold text-casa-gold hover:underline min-h-[44px] px-3"
+              >
+                Expand All
+              </Button>
+            </div>
+
+            {/* Collapsible Past Events (Ghost rows) */}
+            {pastEvents.length > 0 && (
+              <div className="mb-3">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  fullWidth
+                  align="between"
+                  onClick={() => setShowPastEvents(!showPastEvents)}
+                  className="min-h-[36px] py-1.5 px-3 rounded-xl bg-casa-surface-subtle/80 hover:bg-casa-surface-subtle text-caption text-casa-muted hover:text-casa-navy border border-casa-border/30 transition-colors"
+                >
+                  <span className="inline-flex items-center gap-2 font-medium">
+                    <CheckCircle2 size={13} className="text-casa-muted/80" />
+                    <span>{pastEvents.length} completed earlier today</span>
+                  </span>
+                  {showPastEvents ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                </Button>
+
+                <AnimatePresence>
+                  {showPastEvents && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="space-y-1.5 pt-1.5 overflow-hidden"
+                    >
+                      {pastEvents.map((evt) => (
+                        <div
+                          key={evt.id}
+                          onClick={() => onOpenEvent(evt)}
+                          className="flex items-center justify-between px-3 py-2 rounded-xl opacity-45 hover:opacity-85 transition-all cursor-pointer bg-casa-bg/30 text-caption border border-casa-border/20 group"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="font-mono text-xs font-semibold text-casa-muted shrink-0">
+                              {evt.all_day ? 'All Day' : format(parseISO(evt.start_time), 'h:mm a')}
+                            </span>
+                            <span className="truncate line-through text-casa-muted group-hover:text-casa-navy">
+                              {evt.title}
+                            </span>
+                            {evt.location_name && (
+                              <span className="text-2xs text-casa-muted truncate hidden sm:inline">
+                                · {evt.location_name}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            {evt.members.map((m) => (
+                              <span
+                                key={m.id}
+                                className="w-2 h-2 rounded-full"
+                                style={{
+                                  backgroundColor: m.family_member?.color_hex || 'var(--color-casa-muted)',
+                                }}
+                                title={m.family_member?.name}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
+
+            {/* Active & Upcoming Appointments Stream */}
+            <div className="space-y-2 overflow-y-auto max-h-80 pr-1">
+              {upcomingAppointments.length > 0 ? (
+                upcomingAppointments.map((evt) => {
+                  let isNow = false
+                  try {
+                    const start = parseISO(evt.start_time).getTime()
+                    const end = parseISO(evt.end_time).getTime()
+                    const currentTime = now.getTime()
+                    isNow = !evt.all_day && currentTime >= start && currentTime <= end
+                  } catch {
+                    // Ignore parse errors
+                  }
+
+                  const cat = (evt.enrichment?.category || (evt as any).category || '').toLowerCase()
+                  const titleLower = (evt.title || '').toLowerCase()
+                  const isReminder =
+                    cat.includes('reminder') ||
+                    cat.includes('med') ||
+                    titleLower.includes('reminder') ||
+                    titleLower.includes('meds') ||
+                    titleLower.includes('routine') ||
+                    titleLower.includes('pill')
+                  const isDone = Boolean(completedItems[evt.id])
+
+                  // Detect driver
+                  const driverMember = evt.members.find(
+                    (m) =>
+                      m.family_member?.name &&
+                      (evt.title.toLowerCase().includes(m.family_member.name.toLowerCase() + ' drives') ||
+                        evt.title.toLowerCase().includes('picked up by ' + m.family_member.name.toLowerCase()) ||
+                        m.role?.toLowerCase() === 'driver')
+                  )
+
+                  const avatarPeople = evt.members.map((m) => ({
+                    id: m.family_member?.id || m.id,
+                    name: m.family_member?.name || 'Member',
+                    color: m.family_member?.color_hex || 'var(--color-casa-navy)',
+                  }))
+
+                  if (isReminder) {
+                    return (
+                      <div
+                        key={evt.id}
+                        onClick={() => onOpenEvent(evt)}
+                        className={cn(
+                          'flex items-center justify-between px-4 py-3 rounded-2xl border transition-all cursor-pointer group gap-3',
+                          isDone
+                            ? 'bg-casa-surface-subtle/50 border-casa-border/30 opacity-60'
+                            : 'bg-amber-500/8 hover:bg-amber-500/12 border-amber-500/25 shadow-2xs'
+                        )}
+                      >
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <Bell size={13} className="text-amber-700 shrink-0" />
+                            <span className="font-mono text-body-sm font-bold text-amber-900">
+                              {evt.all_day ? 'All Day' : format(parseISO(evt.start_time), 'h:mm a')}
+                            </span>
+                          </div>
+
+                          <span
+                            className={cn(
+                              'text-body-sm font-semibold truncate group-hover:text-amber-900 transition-colors',
+                              isDone ? 'line-through text-casa-muted' : 'text-casa-navy'
+                            )}
+                          >
+                            {evt.title}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2.5 shrink-0">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            leadingIcon={
+                              isDone ? (
+                                <CheckCircle2 size={13} className="text-emerald-700" />
+                              ) : (
+                                <Check size={13} className="text-casa-navy" />
+                              )
+                            }
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setCompletedItems((prev) => ({
+                                ...prev,
+                                [evt.id]: !prev[evt.id],
+                              }))
+                            }}
+                            className={cn(
+                              'min-h-[34px] px-3 py-1 rounded-xl text-caption font-semibold transition-all',
+                              isDone
+                                ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                                : 'bg-casa-surface hover:bg-white text-casa-navy border-casa-border shadow-2xs'
+                            )}
+                          >
+                            <span>Done</span>
+                          </Button>
+                          <PersonAvatarStack people={avatarPeople} size="sm" max={2} />
+                          <ChevronRight
+                            size={14}
+                            className="text-casa-muted group-hover:text-casa-navy transition-transform group-hover:translate-x-0.5"
+                          />
+                        </div>
+                      </div>
+                    )
+                  }
+
+                  // Standard appointment / event row
+                  return (
+                    <div
+                      key={evt.id}
+                      onClick={() => onOpenEvent(evt)}
+                      className={cn(
+                        'flex items-center justify-between px-4 py-3 rounded-2xl border transition-all cursor-pointer group gap-3',
+                        isNow
+                          ? 'bg-emerald-500/8 hover:bg-emerald-500/12 border-emerald-500/30 ring-1 ring-emerald-500/20'
+                          : 'bg-casa-bg/40 hover:bg-casa-surface border-casa-border/35 hover:border-casa-gold/40'
+                      )}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        <span className="font-mono text-body-sm font-semibold text-casa-navy shrink-0">
+                          {evt.all_day ? 'All Day' : format(parseISO(evt.start_time), 'h:mm a')}
+                        </span>
+
+                        <span className="text-casa-muted/60 text-caption hidden sm:inline shrink-0">
+                          ·
+                        </span>
+
+                        <span className="text-body-sm font-semibold text-casa-navy truncate group-hover:text-casa-gold transition-colors">
+                          {evt.title}
+                        </span>
+
+                        {evt.location_name && (
+                          <span className="text-caption text-casa-text-secondary truncate hidden md:inline">
+                            · {evt.location_name}
+                          </span>
+                        )}
+
+                        {isNow && (
+                          <span className="inline-flex items-center gap-1 text-3xs font-bold uppercase tracking-wider text-emerald-800 bg-emerald-500/20 px-2 py-0.5 rounded-full shrink-0">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                            Now
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2.5 shrink-0">
+                        {driverMember?.family_member?.name && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-3xs font-semibold bg-amber-500/10 text-amber-900 border border-amber-500/20 hidden sm:inline-flex">
+                            <Car size={10} className="text-amber-800" />
+                            <span>{driverMember.family_member.name} drives</span>
+                          </span>
+                        )}
+                        <PersonAvatarStack people={avatarPeople} size="sm" max={2} />
+                        <ChevronRight
+                          size={14}
+                          className="text-casa-muted group-hover:text-casa-navy transition-transform group-hover:translate-x-0.5"
+                        />
+                      </div>
+                    </div>
+                  )
+                })
+              ) : (
+                <p className="text-caption text-casa-muted py-6 text-center">
+                  {pastEvents.length > 0
+                    ? 'All scheduled appointments for today are completed.'
+                    : 'No appointments scheduled for today.'}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* 2. Tonight's Kitchen (Bottom) */}
           <div className="rounded-3xl p-6 bg-gradient-to-br from-amber-500/10 via-casa-surface to-casa-surface border border-amber-500/20 shadow-sm flex flex-col justify-between">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
@@ -386,18 +652,21 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                 {dinnerPlan.title}
               </h3>
               <p className="text-body-sm text-casa-text-secondary mt-1">
-                {isDinnerPast
-                  ? 'Dinner served · Kitchen closed'
-                  : dinnerPlan.subtitle}
+                {isDinnerPast ? 'Dinner served · Kitchen closed' : dinnerPlan.subtitle}
               </p>
             </div>
 
             <div className="pt-4 mt-4 border-t border-casa-border/50 flex items-center justify-between">
-              <span className={cn(
-                "inline-flex items-center gap-1.5 text-caption font-semibold px-2.5 py-1 rounded-md",
-                isDinnerPast ? "text-slate-700 bg-slate-100" : "text-emerald-800 bg-emerald-100 border border-emerald-300"
-              )}>
-                <CheckCircle2 size={13} /> {isDinnerPast ? 'Cleaned up' : (dinnerPlan.statusBadge || 'Ingredients ready')}
+              <span
+                className={cn(
+                  'inline-flex items-center gap-1.5 text-caption font-semibold px-2.5 py-1 rounded-md',
+                  isDinnerPast
+                    ? 'text-slate-700 bg-slate-100'
+                    : 'text-emerald-800 bg-emerald-100 border border-emerald-300'
+                )}
+              >
+                <CheckCircle2 size={13} />{' '}
+                {isDinnerPast ? 'Cleaned up' : dinnerPlan.statusBadge || 'Ingredients ready'}
               </span>
               <div className="flex items-center gap-1">
                 <Button
@@ -431,120 +700,6 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                   </Button>
                 )}
               </div>
-            </div>
-          </div>
-
-          {/* Today's Schedule Stream */}
-          <div className="flex-1 rounded-3xl p-6 bg-casa-surface border border-casa-border/60 shadow-sm flex flex-col">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-display text-body-lg font-bold text-casa-navy flex items-center gap-2">
-                <Calendar size={18} className="text-casa-gold" />
-                Today's Appointments ({appointmentEvents.length})
-              </h3>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setCanvasSubmode('turbo')}
-                className="text-caption font-bold text-casa-gold hover:underline min-h-[44px] px-3"
-              >
-                Expand All
-              </Button>
-            </div>
-
-            <div className="space-y-2.5 overflow-y-auto max-h-72 pr-1">
-              {appointmentEvents.length > 0 ? (
-                appointmentEvents.map((evt) => {
-                  let isNow = false
-                  try {
-                    const start = parseISO(evt.start_time).getTime()
-                    const end = parseISO(evt.end_time).getTime()
-                    const currentTime = now.getTime()
-                    isNow = !evt.all_day && currentTime >= start && currentTime <= end
-                  } catch {
-                    // Ignore parse errors
-                  }
-
-                  const avatarPeople = evt.members.map((m) => ({
-                    id: m.family_member?.id || m.id,
-                    name: m.family_member?.name || 'Member',
-                    color: m.family_member?.color_hex || 'var(--color-casa-navy)',
-                  }))
-
-                  return (
-                    <div
-                      key={evt.id}
-                      onClick={() => onOpenEvent(evt)}
-                      className={cn(
-                        'flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer group',
-                        isNow
-                          ? 'bg-amber-500/10 border-amber-500/30 shadow-xs'
-                          : 'bg-casa-bg/50 hover:bg-casa-gold/10 border-casa-border/30'
-                      )}
-                    >
-                      <div className="min-w-0 flex-1 pr-2">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-mono text-caption font-semibold text-casa-navy">
-                            {evt.all_day
-                              ? 'All Day'
-                              : format(parseISO(evt.start_time), 'h:mm a')}
-                          </span>
-
-                          {isNow && (
-                            <span className="inline-flex items-center gap-1 text-caption font-bold uppercase tracking-wider text-amber-800 bg-amber-500/20 px-2 py-0.5 rounded-full">
-                              <span className="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse" />
-                              Now
-                            </span>
-                          )}
-
-                          <span className="text-body-sm font-bold text-casa-navy truncate group-hover:text-casa-gold transition-colors">
-                            {evt.title}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-3 mt-0.5 flex-wrap">
-                          {evt.location_name && (
-                            <p className="text-caption text-casa-text-secondary truncate flex items-center gap-1">
-                              <MapPin size={11} className="text-casa-muted shrink-0" />
-                              <span className="truncate">{evt.location_name}</span>
-                            </p>
-                          )}
-                          {evt.enrichment?.drive_time_mins && (
-                            <span className="inline-flex items-center gap-1 text-caption text-casa-text-secondary">
-                              <Car size={11} className="text-casa-gold shrink-0" />
-                              {evt.enrichment.drive_time_mins}m drive
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2 shrink-0">
-                        {(evt.address || evt.location_name) && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              const dest = encodeURIComponent(evt.address || evt.location_name || '')
-                              window.open(`https://www.google.com/maps/search/?api=1&query=${dest}`, '_blank')
-                            }}
-                            title="Open navigation directions"
-                            className="h-8 px-2 rounded-xl bg-casa-gold/15 hover:bg-casa-gold/25 text-casa-navy text-caption font-bold flex items-center gap-1 shrink-0 border border-casa-gold/30"
-                          >
-                            <Navigation size={12} className="text-casa-gold" />
-                            <span>Directions</span>
-                          </Button>
-                        )}
-                        <PersonAvatarStack people={avatarPeople} size="sm" max={2} />
-                        <ChevronRight size={14} className="text-casa-muted group-hover:text-casa-navy ml-1 transition-transform group-hover:translate-x-0.5" />
-                      </div>
-                    </div>
-                  )
-                })
-              ) : (
-                <p className="text-caption text-casa-muted py-6 text-center">
-                  No appointments scheduled for today.
-                </p>
-              )}
             </div>
           </div>
         </div>
