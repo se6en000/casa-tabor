@@ -568,16 +568,22 @@ export function useAIAssistant(ctx: AssistantContext) {
       undoStatus?: NonNullable<AIMessage['toolAction']>['undoStatus']
       undoErrorMsg?: string
       conversationState?: AIMessage['conversationState']
+      args?: Record<string, unknown>
     }
   ) => {
-    const { conversationState, ...toolActionExtra } = extra ?? {}
+    const { conversationState, args, ...toolActionExtra } = extra ?? {}
     setMessages(prev => {
       const updated = prev.map(m =>
         m.id === messageId && m.toolAction
           ? {
               ...m,
               conversationState: conversationState ?? m.conversationState,
-              toolAction: { ...m.toolAction, status, ...toolActionExtra },
+              toolAction: {
+                ...m.toolAction,
+                status,
+                ...(args ? { args: { ...m.toolAction.args, ...args } } : {}),
+                ...toolActionExtra,
+              },
             }
           : m
       )

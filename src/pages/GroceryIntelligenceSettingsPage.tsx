@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Brain, Layers3, RefreshCw, ScanSearch, ShieldCheck, Sparkles, Store } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
-import { Alert, IconButton, Progress, SkeletonRow } from '../components/ui'
+import { Alert, Card, Heading, IconButton, PageShell, Progress, SkeletonRow } from '../components/ui'
 import { SettingsPageHeader } from '../components/settings'
 
 type GroceryItemLite = {
@@ -31,12 +31,6 @@ type DryRunRecategorize = {
   recategorized_count?: number
 }
 
-type DryRunLearning = {
-  scanned_count?: number
-  candidate_rules?: number
-  applied_count?: number
-}
-
 function normalizeName(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, ' ')
 }
@@ -51,11 +45,11 @@ function fmtNumber(value: number): string {
 
 function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="bg-casa-surface rounded-card border border-casa-border p-4 shadow-card">
-      <p className="text-caption text-casa-muted">{label}</p>
-      <p className="font-display text-heading text-casa-navy mt-1">{value}</p>
-      {sub && <p className="text-caption text-casa-muted mt-1">{sub}</p>}
-    </div>
+    <Card tone="surface" padding="md" className="space-y-1">
+      <p className="text-caption text-casa-muted font-medium">{label}</p>
+      <p className="font-display text-heading font-bold text-casa-navy leading-none">{value}</p>
+      {sub && <p className="text-caption text-casa-muted">{sub}</p>}
+    </Card>
   )
 }
 
@@ -71,16 +65,27 @@ function KpiCard({
   passed: boolean
 }) {
   return (
-    <div className={cn(
-      'rounded-card border p-4 shadow-card',
-      passed ? 'border-emerald-200 bg-emerald-50/60' : 'border-amber-200 bg-amber-50/70',
-    )}>
-      <p className="text-caption text-casa-muted">{label}</p>
-      <p className="font-display text-heading text-casa-navy mt-1">{value}</p>
-      <p className={cn('text-caption mt-1', passed ? 'text-emerald-700' : 'text-amber-700')}>
+    <Card
+      tone={passed ? 'surface' : 'ambient'}
+      padding="md"
+      className={cn(
+        'transition-all',
+        passed
+          ? 'border-emerald-500/20 bg-emerald-500/5'
+          : 'border-amber-500/30 bg-amber-500/10 ring-1 ring-amber-500/20',
+      )}
+    >
+      <p className="text-caption text-casa-muted font-medium">{label}</p>
+      <p className="font-display text-heading font-bold text-casa-navy mt-1 leading-none">{value}</p>
+      <p
+        className={cn(
+          'text-caption font-semibold mt-1.5',
+          passed ? 'text-emerald-700' : 'text-amber-800',
+        )}
+      >
         Target: {target} · {passed ? 'On track' : 'Needs attention'}
       </p>
-    </div>
+    </Card>
   )
 }
 
@@ -94,7 +99,6 @@ export default function GroceryIntelligenceSettingsPage() {
   const [aisleMapCount, setAisleMapCount] = useState(0)
   const [dryRunDedupe, setDryRunDedupe] = useState<DryRunDedupe>({})
   const [dryRunRecategorize, setDryRunRecategorize] = useState<DryRunRecategorize>({})
-  const [dryRunLearning, setDryRunLearning] = useState<DryRunLearning>({})
 
   async function load() {
     setRefreshing(true)
@@ -127,7 +131,6 @@ export default function GroceryIntelligenceSettingsPage() {
       setAisleMapCount(aisleRes.count ?? 0)
       setDryRunDedupe((dedupeRes.data ?? {}) as DryRunDedupe)
       setDryRunRecategorize((recategorizeRes.data ?? {}) as DryRunRecategorize)
-      setDryRunLearning((learningRes.data ?? {}) as DryRunLearning)
       setLastRefreshedAt(new Date().toISOString())
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load grocery intelligence')
@@ -138,7 +141,9 @@ export default function GroceryIntelligenceSettingsPage() {
   }
 
   useEffect(() => {
-    const raf = window.requestAnimationFrame(() => { void load() })
+    const raf = window.requestAnimationFrame(() => {
+      void load()
+    })
     return () => window.cancelAnimationFrame(raf)
   }, [])
 
@@ -153,25 +158,30 @@ export default function GroceryIntelligenceSettingsPage() {
     const avgConfidenceValues = all
       .map((item) => item.enhancement_confidence)
       .filter((value): value is number => typeof value === 'number')
-    const avgConfidence = avgConfidenceValues.length > 0
-      ? avgConfidenceValues.reduce((sum, value) => sum + value, 0) / avgConfidenceValues.length
-      : 0
+    const avgConfidence =
+      avgConfidenceValues.length > 0
+        ? avgConfidenceValues.reduce((sum, value) => sum + value, 0) / avgConfidenceValues.length
+        : 0
     const otherCount = active.filter((item) => item.category === 'other').length
-    const newestEnhancedAt = all
-      .map((item) => item.enhanced_at)
-      .filter((value): value is string => Boolean(value))
-      .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0] ?? null
-    const lastIosTouchAt = all
-      .map((item) => item.ios_updated_at)
-      .filter((value): value is string => Boolean(value))
-      .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0] ?? null
+    const newestEnhancedAt =
+      all
+        .map((item) => item.enhanced_at)
+        .filter((value): value is string => Boolean(value))
+        .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0] ?? null
+    const lastIosTouchAt =
+      all
+        .map((item) => item.ios_updated_at)
+        .filter((value): value is string => Boolean(value))
+        .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0] ?? null
 
     const duplicateGroupsLocal = new Map<string, number>()
     active.forEach((item) => {
       const key = normalizeName(item.name)
       duplicateGroupsLocal.set(key, (duplicateGroupsLocal.get(key) ?? 0) + 1)
     })
-    const duplicateGroupsDetected = Array.from(duplicateGroupsLocal.values()).filter((count) => count > 1).length
+    const duplicateGroupsDetected = Array.from(duplicateGroupsLocal.values()).filter(
+      (count) => count > 1,
+    ).length
 
     const categoryCounts = active.reduce<Record<string, number>>((acc, item) => {
       acc[item.category] = (acc[item.category] ?? 0) + 1
@@ -219,7 +229,7 @@ export default function GroceryIntelligenceSettingsPage() {
         label: 'Canonical coverage',
         value: metrics.totalItems > 0 ? fmtPercent(metrics.canonical / metrics.totalItems) : '0%',
         target: '>= 70%',
-        passed: metrics.totalItems > 0 && (metrics.canonical / metrics.totalItems) >= 0.7,
+        passed: metrics.totalItems > 0 && metrics.canonical / metrics.totalItems >= 0.7,
       },
       {
         label: 'Average confidence',
@@ -234,119 +244,164 @@ export default function GroceryIntelligenceSettingsPage() {
         passed: duplicateGroups === 0,
       },
     ]
-  }, [dryRunDedupe.duplicate_groups, metrics.avgConfidence, metrics.canonical, metrics.duplicateGroupsDetected, metrics.otherRate, metrics.totalItems])
+  }, [
+    dryRunDedupe.duplicate_groups,
+    metrics.avgConfidence,
+    metrics.canonical,
+    metrics.duplicateGroupsDetected,
+    metrics.otherRate,
+    metrics.totalItems,
+  ])
 
-  if (loading) return <div className="space-y-4"><SkeletonRow /><SkeletonRow /><SkeletonRow /></div>
+  if (loading) {
+    return (
+      <div className="space-y-4 p-4 lg:p-6">
+        <SkeletonRow />
+        <SkeletonRow />
+        <SkeletonRow />
+      </div>
+    )
+  }
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <SettingsPageHeader title="Grocery Intelligence" description="Learning quality, cleanup health, and automation signals" />
+    <PageShell width="default" className="space-y-6">
+      <div className="flex items-center justify-between gap-4">
+        <SettingsPageHeader
+          icon={Brain}
+          title="Grocery Intelligence"
+          description="Learning quality, catalog matching health, automated cleanup signals, and taxonomy precision."
+        />
         <IconButton
           icon={<RefreshCw size={18} className={cn(refreshing && 'animate-spin')} />}
           aria-label="Refresh grocery intelligence"
           onClick={load}
           disabled={refreshing}
           variant="ghost"
+          className="min-h-control min-w-[44px]"
         />
       </div>
 
       {error && (
-        <Alert tone="danger" title="Could not load grocery intelligence">{error}</Alert>
+        <Alert tone="danger" title="Could not load grocery intelligence">
+          {error}
+        </Alert>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {/* Coverage Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard label="Active Items" value={fmtNumber(metrics.activeItems)} sub={`${fmtNumber(metrics.totalItems)} total`} />
-        <StatCard label="Enhanced Coverage" value={metrics.totalItems > 0 ? fmtPercent(metrics.enhanced / metrics.totalItems) : '0%'} sub={`${fmtNumber(metrics.enhanced)} with enhanced metadata`} />
-        <StatCard label="Canonical Matches" value={metrics.totalItems > 0 ? fmtPercent(metrics.canonical / metrics.totalItems) : '0%'} sub={`${fmtNumber(metrics.canonical)} linked to catalog`} />
+        <StatCard label="Enhanced Coverage" value={metrics.totalItems > 0 ? fmtPercent(metrics.enhanced / metrics.totalItems) : '0%'} sub={`${fmtNumber(metrics.enhanced)} enhanced`} />
+        <StatCard label="Canonical Matches" value={metrics.totalItems > 0 ? fmtPercent(metrics.canonical / metrics.totalItems) : '0%'} sub={`${fmtNumber(metrics.canonical)} catalog items`} />
         <StatCard label="Avg Confidence" value={fmtPercent(metrics.avgConfidence)} sub="Across enhanced items" />
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard label="Store Section Tags" value={fmtNumber(metrics.sectionTagged)} sub="Items mapped to aisle section" />
-        <StatCard label="Subcategory Tags" value={fmtNumber(metrics.subcategoryTagged)} sub="Fruit, beef, canned goods, etc." />
+      {/* Tagging Breakdown */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <StatCard label="Store Section Tags" value={fmtNumber(metrics.sectionTagged)} sub="Mapped to aisle section" />
+        <StatCard label="Subcategory Tags" value={fmtNumber(metrics.subcategoryTagged)} sub="Granular subcategories" />
         <StatCard label="Brand Tags" value={fmtNumber(metrics.brandTagged)} sub="Brand detection coverage" />
         <StatCard label="Still in Other" value={fmtNumber(metrics.otherCount)} sub="Active items left in Other" />
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard label="Catalog Vocabulary" value={fmtNumber(catalogCount)} sub="Canonical grocery entries" />
-        <StatCard label="Aisle Mappings" value={fmtNumber(aisleMapCount)} sub="Store/category aisle rules" />
+      {/* Vocabulary & Dry Run Signals */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <StatCard label="Catalog Vocabulary" value={fmtNumber(catalogCount)} sub="Canonical entries" />
+        <StatCard label="Aisle Mappings" value={fmtNumber(aisleMapCount)} sub="Aisle rules configured" />
         <StatCard label="Dupes (dry run)" value={fmtNumber(dryRunDedupe.duplicate_groups ?? metrics.duplicateGroupsDetected)} sub={`${fmtNumber(dryRunDedupe.duplicate_rows ?? 0)} duplicate rows`} />
-        <StatCard label="Needs Recategorize" value={fmtNumber(dryRunRecategorize.scanned_count ?? 0)} sub={`${fmtNumber(dryRunRecategorize.recategorized_count ?? 0)} would be changed`} />
+        <StatCard label="Needs Recategorize" value={fmtNumber(dryRunRecategorize.scanned_count ?? 0)} sub={`${fmtNumber(dryRunRecategorize.recategorized_count ?? 0)} to update`} />
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard
-          label="Learning Queue (dry run)"
-          value={fmtNumber(dryRunLearning.candidate_rules ?? 0)}
-          sub={`${fmtNumber(dryRunLearning.scanned_count ?? 0)} correction signals scanned`}
-        />
-        <StatCard
-          label="Learning Apply Estimate"
-          value={fmtNumber(dryRunLearning.applied_count ?? 0)}
-          sub="Catalog rules ready to apply"
-        />
-      </div>
-
-      <div className="space-y-2">
-        <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide">KPI Targets</p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      {/* KPI Targets */}
+      <div className="space-y-3">
+        <Heading role="heading" className="font-display text-heading font-bold text-casa-navy">
+          Intelligence KPI Targets
+        </Heading>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {kpis.map((kpi) => (
             <KpiCard key={kpi.label} label={kpi.label} value={kpi.value} target={kpi.target} passed={kpi.passed} />
           ))}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div className="bg-casa-surface rounded-card border border-casa-border p-4 shadow-card">
-          <p className="text-caption text-casa-muted mb-1">Last enhancement pass</p>
-          <p className="font-display text-heading text-casa-navy">
+      {/* Sync Freshness */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card tone="surface" padding="md">
+          <p className="text-caption text-casa-muted font-medium mb-1">Last enhancement pass</p>
+          <p className="font-display text-heading font-bold text-casa-navy">
             {metrics.newestEnhancedAt ? new Date(metrics.newestEnhancedAt).toLocaleString() : 'No enhancement run yet'}
           </p>
-        </div>
-        <div className="bg-casa-surface rounded-card border border-casa-border p-4 shadow-card">
-          <p className="text-caption text-casa-muted mb-1">Last iOS sync touch</p>
-          <p className="font-display text-heading text-casa-navy">
+        </Card>
+        <Card tone="surface" padding="md">
+          <p className="text-caption text-casa-muted font-medium mb-1">Last iOS sync touch</p>
+          <p className="font-display text-heading font-bold text-casa-navy">
             {metrics.lastIosTouchAt ? new Date(metrics.lastIosTouchAt).toLocaleString() : 'No iOS sync timestamp yet'}
           </p>
-        </div>
+        </Card>
       </div>
 
-      <div className="bg-casa-surface rounded-card border border-casa-border p-4 shadow-card">
-        <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-3">Active Items by Category</p>
+      {/* Active Items by Category Progress */}
+      <Card tone="surface" padding="lg" className="space-y-4">
+        <Heading role="heading" className="font-display text-heading font-bold text-casa-navy">
+          Active Items by Category
+        </Heading>
         {categoryBars.length > 0 ? (
-          <div className="space-y-2">
+          <div className="space-y-3">
             {categoryBars.map(({ category, count, widthPct }) => (
-              <div key={category}>
-                <div className="flex items-center justify-between text-caption text-casa-muted mb-1">
+              <div key={category} className="space-y-1">
+                <div className="flex items-center justify-between text-body-sm text-casa-navy font-semibold">
                   <span className="capitalize">{category}</span>
-                  <span>{fmtNumber(count)}</span>
+                  <span className="font-mono text-caption text-casa-muted">{fmtNumber(count)}</span>
                 </div>
-                <Progress value={widthPct} aria-label={`${category} share of active grocery items`} className="[&_.casa-progress]:h-2" />
+                <Progress
+                  value={widthPct}
+                  aria-label={`${category} share of active grocery items`}
+                  className="[&_.casa-progress]:h-2.5"
+                />
               </div>
             ))}
           </div>
         ) : (
           <p className="text-body-sm text-casa-muted">No active grocery items yet.</p>
         )}
-      </div>
+      </Card>
 
-      <div className="bg-casa-bg/60 rounded-card border border-casa-border/50 p-4">
-        <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-3">What this proves</p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-body-sm text-casa-muted">
-          <p className="flex items-center gap-2"><Brain size={14} className="text-casa-gold" />Catalog matching quality and confidence</p>
-          <p className="flex items-center gap-2"><Store size={14} className="text-casa-gold" />Store section/aisle metadata coverage</p>
-          <p className="flex items-center gap-2"><ShieldCheck size={14} className="text-casa-gold" />Duplicate-prevention health via dry-run check</p>
-          <p className="flex items-center gap-2"><ScanSearch size={14} className="text-casa-gold" />Recategorization backlog visibility</p>
-          <p className="flex items-center gap-2"><Layers3 size={14} className="text-casa-gold" />Catalog + aisle rule base size tracking</p>
-          <p className="flex items-center gap-2"><Sparkles size={14} className="text-casa-gold" />Freshness via last enhancement/sync timestamps</p>
+      {/* What This Proves Section */}
+      <Card tone="subtle" padding="lg" className="space-y-3">
+        <Heading role="heading" className="font-display text-body-lg font-bold text-casa-navy">
+          Intelligence Capabilities Verified
+        </Heading>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-body-sm text-casa-text-secondary">
+          <p className="flex items-center gap-2">
+            <Brain size={16} className="text-casa-gold shrink-0" />
+            <span>Catalog matching quality and confidence</span>
+          </p>
+          <p className="flex items-center gap-2">
+            <Store size={16} className="text-casa-gold shrink-0" />
+            <span>Store section/aisle metadata coverage</span>
+          </p>
+          <p className="flex items-center gap-2">
+            <ShieldCheck size={16} className="text-casa-gold shrink-0" />
+            <span>Duplicate-prevention health via dry-run check</span>
+          </p>
+          <p className="flex items-center gap-2">
+            <ScanSearch size={16} className="text-casa-gold shrink-0" />
+            <span>Recategorization backlog visibility</span>
+          </p>
+          <p className="flex items-center gap-2">
+            <Layers3 size={16} className="text-casa-gold shrink-0" />
+            <span>Catalog + aisle rule base size tracking</span>
+          </p>
+          <p className="flex items-center gap-2">
+            <Sparkles size={16} className="text-casa-gold shrink-0" />
+            <span>Freshness via last enhancement & sync timestamps</span>
+          </p>
         </div>
-      </div>
+      </Card>
 
-      <p className="text-caption text-casa-muted text-center">
+      <p className="text-caption text-casa-muted text-center font-mono">
         Last refreshed {lastRefreshedAt ? new Date(lastRefreshedAt).toLocaleTimeString() : '—'}
       </p>
-    </div>
+    </PageShell>
   )
 }
+

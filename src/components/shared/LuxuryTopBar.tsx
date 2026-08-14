@@ -1,5 +1,5 @@
 import { useMemo, useRef } from 'react'
-import { NavLink, useLocation } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { format, isAfter, isBefore } from 'date-fns'
 import {
   Sparkles,
@@ -7,6 +7,7 @@ import {
   RefreshCw,
   Zap,
   Leaf,
+  Settings,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useLiveClock } from '../../hooks/useLiveClock'
@@ -36,7 +37,7 @@ const NAV_TABS = [
   { path: '/', label: 'Living Canvas', classicLabel: 'Home' },
   { path: '/calendar', label: 'Calendar', classicLabel: 'Calendar' },
   { path: '/cook', label: 'Meals & Kitchen', classicLabel: 'Meals & Kitchen' },
-  { path: '/settings', label: 'Settings', classicLabel: 'Settings' },
+  { path: '/grocery', label: 'Grocery List', classicLabel: 'Grocery List' },
 ] as const
 
 // ── Zone A: Brand Monogram ───────────────────────────────────────
@@ -350,12 +351,21 @@ function UtilityTrack({
   isWarm: boolean
   isCanvas: boolean
 }) {
-  const iconCn = cn(
-    'rounded-full',
-    isWarm
-      ? 'text-casa-text-tertiary hover:text-casa-navy hover:bg-black/5'
-      : 'text-white/60 hover:text-white hover:bg-white/10',
-  )
+  const navigate = useNavigate()
+  const location = useLocation()
+  const isSettings = location.pathname.startsWith('/settings')
+
+  const iconCn = (isActive = false) =>
+    cn(
+      'rounded-full transition-colors',
+      isActive
+        ? isWarm
+          ? 'bg-casa-navy/15 text-casa-navy ring-1 ring-casa-gold/60 font-semibold'
+          : 'bg-white/25 text-white ring-1 ring-white/40 font-semibold'
+        : isWarm
+        ? 'text-casa-text-tertiary hover:text-casa-navy hover:bg-black/5'
+        : 'text-white/60 hover:text-white hover:bg-white/10',
+    )
 
   return (
     <div
@@ -374,7 +384,7 @@ function UtilityTrack({
         title="Refresh Screen"
         size="sm"
         variant="ghost"
-        className={iconCn}
+        className={iconCn(false)}
       />
 
       {/* Art Mode / Screensaver */}
@@ -387,7 +397,18 @@ function UtilityTrack({
         title="Art Mode Screensaver"
         size="sm"
         variant="ghost"
-        className={iconCn}
+        className={iconCn(false)}
+      />
+
+      {/* Settings */}
+      <IconButton
+        icon={<Settings size={14} strokeWidth={1.8} />}
+        aria-label="Settings"
+        onClick={() => navigate('/settings')}
+        title="Settings"
+        size="sm"
+        variant="ghost"
+        className={iconCn(isSettings)}
       />
     </div>
   )

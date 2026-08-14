@@ -1,7 +1,7 @@
 import { useRef } from 'react'
-import { NavLink, useLocation } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
-import { Cloud, Sparkles, ImageIcon, RefreshCw, Zap, Leaf } from 'lucide-react'
+import { Cloud, Sparkles, ImageIcon, RefreshCw, Zap, Leaf, Settings } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useLiveClock } from '../../hooks/useLiveClock'
 import { useHomeWeather } from '../../hooks/useHomeWeather'
@@ -10,6 +10,7 @@ import { IconButton, Button } from '../ui'
 import { useAppStore } from '../../stores/appStore'
 
 export default function CanvasTopBar() {
+  const navigate = useNavigate()
   const {
     aiDrawerOpen,
     setAiDrawerOpen,
@@ -64,7 +65,7 @@ export default function CanvasTopBar() {
           { path: '/', label: 'Living Canvas' },
           { path: '/calendar', label: 'Calendar' },
           { path: '/cook', label: 'Meals & Kitchen' },
-          { path: '/settings', label: 'Settings' },
+          { path: '/grocery', label: 'Grocery List' },
         ].map((tab) => (
           <NavLink
             key={tab.path}
@@ -183,6 +184,25 @@ export default function CanvasTopBar() {
             className={cn(
               'rounded-full w-8 h-8 flex items-center justify-center',
               isCalm
+                ? 'text-casa-muted hover:text-casa-navy hover:bg-black/5'
+                : 'text-white/70 hover:text-white hover:bg-white/10'
+            )}
+          />
+
+          <IconButton
+            icon={<Settings size={14} strokeWidth={2} />}
+            aria-label="Settings"
+            onClick={() => navigate('/settings')}
+            title="Settings"
+            size="sm"
+            variant="ghost"
+            className={cn(
+              'rounded-full w-8 h-8 flex items-center justify-center',
+              location.pathname.startsWith('/settings')
+                ? isCalm
+                  ? 'bg-casa-navy/15 text-casa-navy'
+                  : 'bg-white/25 text-white'
+                : isCalm
                 ? 'text-casa-muted hover:text-casa-navy hover:bg-black/5'
                 : 'text-white/70 hover:text-white hover:bg-white/10'
             )}

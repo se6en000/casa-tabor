@@ -1212,7 +1212,7 @@ export default function AIChatDrawer({
                             : undefined
                           const requestArgs = tool === 'update_event' && matchedEvent
                             ? { ...args, expected_updated_at: matchedEvent.updated_at }
-                            : tool === 'create_event' && args.calendar_preflight
+                            : tool === 'create_event' && (args.calendar_preflight || args.allow_calendar_conflicts)
                               ? { ...args, allow_calendar_conflicts: true }
                               : args
                           const { data, error } = await supabase.functions.invoke('execute-ai-action', {
@@ -1232,20 +1232,60 @@ export default function AIChatDrawer({
                               confirmed_by_user: true,
                             },
                           })
-                          if (error) throw error
-                          if (data?.success === false) throw new Error(data.error ?? 'Action failed')
+
+                          let responseData = data
+                          if (error && typeof error === 'object' && 'context' in error) {
+                            const resp = (error as { context?: unknown }).context
+                            if (resp && typeof resp === 'object' && 'json' in resp) {
+                              try {
+                                const readable = 'clone' in resp && typeof (resp as any).clone === 'function'
+                                  ? (resp as any).clone()
+                                  : resp
+                                const parsed = await (readable as { json: () => Promise<any> }).json()
+                                if (parsed && typeof parsed === 'object') {
+                                  responseData = parsed
+                                }
+                              } catch {
+                                // Fallback to raw error
+                              }
+                            }
+                          }
+
+                          // If the backend detected a conflict/duplicate requiring confirmation, transition to pending with preflight attached
+                          if (responseData?.code === 'calendar_conflict_confirmation_required' && responseData?.calendar_preflight) {
+                            updateMessageToolStatus(messageId, 'pending', {
+                              args: {
+                                ...requestArgs,
+                                calendar_preflight: responseData.calendar_preflight,
+                                allow_calendar_conflicts: true,
+                              },
+                            })
+                            if (actionTrace) {
+                              emitAssistantTrace('calendar_conflict_detected', actionTrace, {
+                                detail: 'Calendar conflict requires user confirmation',
+                                payload: { message_id: messageId, tool, preflight: responseData.calendar_preflight },
+                              })
+                            }
+                            return false
+                          }
+
+                          if (error && !responseData?.success) {
+                            const serverMsg = typeof responseData?.error === 'string' ? responseData.error : error.message
+                            throw new Error(serverMsg || 'Action failed')
+                          }
+                          if (responseData?.success === false) throw new Error(responseData.error ?? 'Action failed')
                           updateMessageToolStatus(messageId, 'done', {
-                            actionId: data?.action_id,
-                            resultEventId: data?.event_id,
+                            actionId: responseData?.action_id,
+                            resultEventId: responseData?.event_id,
                             conversationState: conversationStateAfterCalendarAction(
                               tool,
                               requestArgs,
-                              data,
+                              responseData,
                               new Date(),
                               msg.conversationState,
                             ),
-                            syncWarning: data?.duplicate ? data?.message : data?.sync_warning,
-                            syncStatus: data?.sync_status === 'queued' ? 'queued' : data?.sync_status === 'failed' ? 'failed' : 'synced',
+                            syncWarning: data?.duplicate ? data?.message : (responseData?.duplicate ? responseData?.message : responseData?.sync_warning),
+                            syncStatus: responseData?.sync_status === 'queued' ? 'queued' : responseData?.sync_status === 'failed' ? 'failed' : 'synced',
                             undoStatus: 'idle',
                             undoErrorMsg: undefined,
                           })
@@ -1838,20 +1878,32 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
   const doConfirm = useCallback(async () => {
     if (!ta || actionTransitionRef.current) return false
     actionTransitionRef.current = true
-    return onConfirmToolAction(msg.id, ta.tool, ta.args)
+    try {
+      return await onConfirmToolAction(msg.id, ta.tool, ta.args)
+    } finally {
+      actionTransitionRef.current = false
+    }
   }, [msg.id, ta, onConfirmToolAction])
 
   const doConfirmCandidate = useCallback(async (candidateArgs: Record<string, unknown>) => {
     if (!ta || actionTransitionRef.current) return false
     actionTransitionRef.current = true
-    return onConfirmToolAction(msg.id, ta.tool, candidateArgs)
+    try {
+      return await onConfirmToolAction(msg.id, ta.tool, candidateArgs)
+    } finally {
+      actionTransitionRef.current = false
+    }
   }, [msg.id, ta, onConfirmToolAction])
 
   const doCancel = useCallback(async () => {
     if (actionTransitionRef.current) return false
     actionTransitionRef.current = true
-    onCancelToolAction(msg.id)
-    return true
+    try {
+      onCancelToolAction(msg.id)
+      return true
+    } finally {
+      actionTransitionRef.current = false
+    }
   }, [msg.id, onCancelToolAction])
 
   useEffect(() => {
@@ -2207,36 +2259,51 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
               <>
                 <ToolActionPreview tool={ta.tool} args={ta.args} events={events} />
                 <div className="flex flex-wrap gap-2 mt-3">
-                  <Button variant="ghost"
-                    type="button"
-                    disabled={ta.status === 'loading'}
-                    onClick={doConfirm}
-                    className={cn(
-                      'min-h-control flex items-center gap-2 px-4 rounded-button text-body-sm font-semibold transition-colors disabled:opacity-50',
-                      isDestructiveAction
-                        ? 'bg-red-600 text-white hover:brightness-110'
-                        : 'bg-casa-gold text-white hover:brightness-110',
-                    )}
-                  >
-                    {ta.status === 'loading' ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
-                    {ta.status === 'loading'
-                      ? 'Working…'
-                      : isDestructiveAction
-                        ? ta.tool === 'delete_event'
-                          ? 'Delete event'
-                          : ta.tool === 'delete_events_by_title'
-                            ? 'Delete matching events'
-                          : 'Clear checked items'
-                        : ta.tool === 'confirm_talk_plan_action_intent'
-                          ? 'Yes, prepare it'
-                        : ta.tool === 'update_event'
-                          ? 'Apply change'
-                          : ta.tool === 'create_event'
-                            ? (ta.args as { event_type?: string })?.event_type === 'reminder'
-                              ? 'Create reminder'
-                              : 'Create event'
-                            : confirmActionLabel(ta.tool)}
-                  </Button>
+                  {(() => {
+                    const hasConflictOrDuplicate = Boolean(
+                      ta.tool === 'create_event' && (
+                        ta.args.calendar_preflight ||
+                        ta.args.allow_calendar_conflicts ||
+                        findOverlappingEvent(events, ta.args.start ?? ta.args.start_time, ta.args.end ?? ta.args.end_time)
+                      )
+                    )
+                    return (
+                      <Button variant="ghost"
+                        type="button"
+                        disabled={ta.status === 'loading'}
+                        onClick={doConfirm}
+                        className={cn(
+                          'min-h-control flex items-center gap-2 px-4 rounded-button text-body-sm font-semibold transition-colors disabled:opacity-50',
+                          isDestructiveAction
+                            ? 'bg-red-600 text-white hover:brightness-110'
+                            : hasConflictOrDuplicate
+                              ? 'bg-amber-600 text-white hover:brightness-110'
+                              : 'bg-casa-gold text-white hover:brightness-110',
+                        )}
+                      >
+                        {ta.status === 'loading' ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                        {ta.status === 'loading'
+                          ? 'Working…'
+                          : isDestructiveAction
+                            ? ta.tool === 'delete_event'
+                              ? 'Delete event'
+                              : ta.tool === 'delete_events_by_title'
+                                ? 'Delete matching events'
+                              : 'Clear checked items'
+                            : ta.tool === 'confirm_talk_plan_action_intent'
+                              ? 'Yes, prepare it'
+                            : ta.tool === 'update_event'
+                              ? 'Apply change'
+                            : ta.tool === 'create_event'
+                              ? (ta.args as { event_type?: string })?.event_type === 'reminder'
+                                ? 'Create reminder'
+                                : hasConflictOrDuplicate
+                                  ? 'Create anyway (keep both)'
+                                  : 'Create event'
+                              : confirmActionLabel(ta.tool)}
+                      </Button>
+                    )
+                  })()}
                   {ta.tool !== 'confirm_talk_plan_action_intent' && !isDestructiveAction && onEditMessage && editSeed?.trim() && (
                     <Button
                       variant="secondary"
@@ -2559,18 +2626,80 @@ function ToolActionPreview({ tool, args, events }: { tool: string; args: Record<
   if (tool === 'create_event') {
     const preview = buildCreatePreviewCopy(args, { now: new Date() })
     const isReminder = args.event_type === 'reminder'
-    const conflict = !isReminder ? findOverlappingEvent(events, args.start_time, args.end_time) : null
+    const startStr = (args.start ?? args.start_time) as string | undefined
+    const endStr = (args.end ?? args.end_time) as string | undefined
+    const titleStr = String(args.title ?? '').trim()
+    const conflict = !isReminder ? findOverlappingEvent(events, startStr, endStr) : null
+    const duplicate = !isReminder && startStr && titleStr ? events.find((e) => {
+      if (e.all_day || !e.start_time) return false
+      const sameDay = new Date(e.start_time).toDateString() === new Date(startStr).toDateString()
+      const sameTitle = e.title.trim().toLowerCase() === titleStr.toLowerCase()
+      return sameDay && sameTitle
+    }) : null
+
+    const preflight = args.calendar_preflight as {
+      status?: string
+      conflicts?: Array<{ id?: string; title?: string; start_time?: string; end_time?: string }>
+      probableDuplicates?: Array<{ id?: string; title?: string; start_time?: string; end_time?: string }>
+      exactDuplicate?: { id?: string; title?: string; start_time?: string; end_time?: string } | null
+    } | undefined
+
+    const preflightConflict = preflight?.conflicts?.[0]
+    const preflightDuplicate = preflight?.probableDuplicates?.[0] ?? preflight?.exactDuplicate
+
+    const activeConflict = preflightConflict ?? conflict
+    const activeDuplicate = preflightDuplicate ?? duplicate
 
     return (
       <div className="space-y-3">
-        <ConfirmationHeading kind={isReminder ? 'reminder' : 'calendar'}>{preview.heading}</ConfirmationHeading>
+        <ConfirmationHeading kind={isReminder ? 'reminder' : 'calendar'}>
+          {activeDuplicate
+            ? 'Duplicate Event Detected'
+            : activeConflict
+              ? 'Calendar Conflict Detected'
+              : preview.heading}
+        </ConfirmationHeading>
         {preview.when && <p className="text-body-sm font-semibold text-casa-navy">{preview.when}</p>}
-        {conflict && (
-          <div className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-caption text-amber-900 font-medium">
-            <AlertTriangle size={14} className="text-amber-600 shrink-0" />
-            <span>Overlaps with "{conflict.title}" ({format(new Date(conflict.start_time), 'h:mm a')})</span>
+
+        {activeDuplicate ? (
+          <div className="rounded-xl border border-amber-300/80 bg-amber-500/10 p-3 text-caption text-amber-900 dark:text-amber-200 space-y-1.5 shadow-2xs">
+            <div className="flex items-center gap-1.5 font-semibold text-amber-800 dark:text-amber-300">
+              <AlertTriangle size={14} className="shrink-0 text-amber-600" />
+              <span>An event with this name already exists</span>
+            </div>
+            <p className="text-body-sm font-bold text-casa-navy">
+              "{activeDuplicate.title}"
+            </p>
+            {activeDuplicate.start_time && (
+              <p className="text-caption text-casa-text-secondary">
+                Scheduled at {format(new Date(activeDuplicate.start_time), 'h:mm a · EEEE, MMM d')}
+              </p>
+            )}
+            <p className="pt-1 text-caption font-medium text-amber-900 dark:text-amber-100">
+              Do you still want to create this event and keep both?
+            </p>
           </div>
-        )}
+        ) : activeConflict ? (
+          <div className="rounded-xl border border-amber-300/80 bg-amber-500/10 p-3 text-caption text-amber-900 dark:text-amber-200 space-y-1.5 shadow-2xs">
+            <div className="flex items-center gap-1.5 font-semibold text-amber-800 dark:text-amber-300">
+              <AlertTriangle size={14} className="shrink-0 text-amber-600" />
+              <span>Time overlap on your calendar</span>
+            </div>
+            <p className="text-body-sm font-bold text-casa-navy">
+              "{activeConflict.title}"
+            </p>
+            {activeConflict.start_time && (
+              <p className="text-caption text-casa-text-secondary">
+                Scheduled for {format(new Date(activeConflict.start_time), 'h:mm a')}
+                {activeConflict.end_time ? ` – ${format(new Date(activeConflict.end_time), 'h:mm a')}` : ''}
+              </p>
+            )}
+            <p className="pt-1 text-caption font-medium text-amber-900 dark:text-amber-100">
+              There is something else already scheduled at this time. Do you still want to create this event?
+            </p>
+          </div>
+        ) : null}
+
         {preview.details.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {preview.details.map((detail) => (
