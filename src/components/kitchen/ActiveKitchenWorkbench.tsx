@@ -9,8 +9,6 @@ import KitchenMiseEnPlaceShelf, { type KitchenIngredientRow } from './KitchenMis
 import KitchenStepFocusHUD, { type NeededIngredientChip } from './KitchenStepFocusHUD'
 import KitchenSousChefSidecar from './KitchenSousChefSidecar'
 import { Button, Card, IconButton, SegmentedControl } from '../ui'
-import { useKitchenVoiceAssistant } from '../../hooks/useKitchenVoiceAssistant'
-import { type RecipeCookingContext } from '../../lib/culinaryKnowledge'
 import { cn } from '../../utils/cn'
 
 export interface ActiveKitchenRecipe {
@@ -190,34 +188,7 @@ export default function ActiveKitchenWorkbench({
       }))
   }, [formattedIngredients])
 
-  // Cooking context object for the culinary knowledge engine & voice assistant
-  const cookingContext = useMemo<RecipeCookingContext>(() => ({
-    recipeName: recipe.name,
-    currentStepIndex: stepIndex,
-    totalSteps: steps.length,
-    currentStepInstruction: currentStep?.instruction,
-    allSteps: steps.map((s) => ({ stepNumber: s.step_number, instruction: s.instruction })),
-    ingredients: formattedIngredients,
-    recipeScale,
-  }), [recipe.name, stepIndex, steps, currentStep, formattedIngredients, recipeScale])
 
-  // Voice Assistant Hook: handles wake-word ("Alexa", "Hey Chef") & text-to-speech
-  const voiceAssistant = useKitchenVoiceAssistant({
-    enabled: isSousChefOpen,
-    context: cookingContext,
-    onAddTimer: handleAddTimer,
-    onStepChange: setStepIndex,
-    onChangeScale: (scale) => {
-      if (scale === '0.5' || scale === '1' || scale === '2') {
-        setRecipeScale(scale)
-      }
-    },
-    onQuerySubmit: () => {
-      if (mobileActiveTab !== 'chef') {
-        setMobileActiveTab('chef')
-      }
-    },
-  })
 
   const handleToggleIngredient = useCallback((id: string) => {
     setCheckedIngredientIds((prev) => {
@@ -348,9 +319,6 @@ export default function ActiveKitchenWorkbench({
         onExit={onExit}
         onToggleSousChef={() => setIsSousChefOpen((prev) => !prev)}
         isSousChefOpen={isSousChefOpen}
-        isVoiceActive={voiceAssistant.isListening}
-        wakeDetected={voiceAssistant.wakeDetected}
-        isSpeaking={voiceAssistant.isSpeaking}
         onEditRecipe={onEditRecipe}
       />
 
@@ -364,7 +332,7 @@ export default function ActiveKitchenWorkbench({
           options={[
             { value: 'step', label: `Step ${stepIndex + 1}/${steps.length}` },
             { value: 'mise', label: `Ingredients (${ingredients.length})` },
-            { value: 'chef', label: voiceAssistant.isListening ? '🎙️ AI Chef' : 'AI Chef' },
+            { value: 'chef', label: 'AI Chef' },
           ]}
         />
       </div>
@@ -425,14 +393,6 @@ export default function ActiveKitchenWorkbench({
                   }
                 }}
                 onClose={() => setIsSousChefOpen(false)}
-                isVoiceActive={voiceAssistant.isListening}
-                liveTranscript={voiceAssistant.liveTranscript}
-                wakeDetected={voiceAssistant.wakeDetected}
-                isSpeaking={voiceAssistant.isSpeaking}
-                ttsEnabled={voiceAssistant.ttsEnabled}
-                onToggleTts={() => voiceAssistant.setTtsEnabled((v) => !v)}
-                onStopSpeaking={voiceAssistant.stopSpeaking}
-                speakText={voiceAssistant.speakText}
               />
             </aside>
           )}
@@ -481,14 +441,6 @@ export default function ActiveKitchenWorkbench({
                 }
               }}
               onClose={() => setIsSousChefOpen(false)}
-              isVoiceActive={voiceAssistant.isListening}
-              liveTranscript={voiceAssistant.liveTranscript}
-              wakeDetected={voiceAssistant.wakeDetected}
-              isSpeaking={voiceAssistant.isSpeaking}
-              ttsEnabled={voiceAssistant.ttsEnabled}
-              onToggleTts={() => voiceAssistant.setTtsEnabled((v) => !v)}
-              onStopSpeaking={voiceAssistant.stopSpeaking}
-              speakText={voiceAssistant.speakText}
             />
           )}
         </div>

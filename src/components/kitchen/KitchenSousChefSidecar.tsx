@@ -3,10 +3,7 @@ import {
   Mic,
   Send,
   Sparkles,
-  Volume2,
-  VolumeX,
   X,
-  Radio,
   ChefHat,
 } from 'lucide-react'
 import { Button, Card, Chip, IconButton } from '../ui'
@@ -39,14 +36,6 @@ interface KitchenSousChefSidecarProps {
   onStepChange?: (stepIndex: number) => void
   onChangeScale?: (scale: string) => void
   onClose?: () => void
-  isVoiceActive?: boolean
-  liveTranscript?: string
-  wakeDetected?: boolean
-  isSpeaking?: boolean
-  ttsEnabled?: boolean
-  onToggleTts?: () => void
-  onStopSpeaking?: () => void
-  speakText?: (text: string) => void
   className?: string
 }
 
@@ -62,14 +51,6 @@ export default function KitchenSousChefSidecar({
   onStepChange: _onStepChange,
   onChangeScale: _onChangeScale,
   onClose,
-  isVoiceActive = false,
-  liveTranscript = '',
-  wakeDetected = false,
-  isSpeaking = false,
-  ttsEnabled = true,
-  onToggleTts,
-  onStopSpeaking,
-  speakText,
   className,
 }: KitchenSousChefSidecarProps) {
   const [input, setInput] = useState('')
@@ -77,7 +58,7 @@ export default function KitchenSousChefSidecar({
     {
       id: 'init-1',
       sender: 'chef',
-      text: `👋 Chef Casa here! I'm loaded with all ${totalSteps} steps and full ingredients for ${recipeName}.\n\nAsk me anything hands-free: substitutions, pan temps, meat doneness, or say *"Alexa, set a 5m timer"*!`,
+      text: `👋 Chef Casa here! I'm loaded with all ${totalSteps} steps and full ingredients for ${recipeName}.\n\nTap the mic or ask below about substitutions, pan temperatures, meat doneness, or timers!`,
       timestamp: 'Just now',
     },
   ])
@@ -159,7 +140,7 @@ export default function KitchenSousChefSidecar({
     recipeScale,
   }), [recipeName, currentStepIndex, totalSteps, currentStepInstruction, allSteps, ingredients, recipeScale])
 
-  const handleSendMessage = useCallback(async (textToSend?: string, isVoice = false): Promise<string> => {
+  const handleSendMessage = useCallback(async (textToSend?: string): Promise<string> => {
     const query = (textToSend || input).trim()
     if (!query) return ''
 
@@ -200,7 +181,7 @@ Steps:
 ${stepsList}
 Current active step: "${currentStepInstruction}".
 
-Provide clear, concise, practical culinary advice. If they ask about substitutions, doneness, temperatures, fixing mistakes, or timing, answer directly and warmly. Keep answers concise and easy to read/listen to while actively cooking.`,
+Provide clear, concise, practical culinary advice. If they ask about substitutions, doneness, temperatures, fixing mistakes, or timing, answer directly and warmly. Keep answers concise and easy to read while actively cooking.`,
             },
             ...messages.slice(-4).map((m) => ({
               role: m.sender === 'user' ? 'user' : 'assistant',
@@ -242,18 +223,13 @@ Provide clear, concise, practical culinary advice. If they ask about substitutio
     setMessages((prev) => [...prev, chefMsg])
     setIsTyping(false)
 
-    // If triggered from voice or TTS is active, speak response
-    if (isVoice && speakText) {
-      speakText(finalResponse)
-    }
-
     return finalResponse
-  }, [input, cookingContext, ingredients, allSteps, recipeName, currentStepIndex, totalSteps, recipeScale, currentStepInstruction, messages, speakText])
+  }, [input, cookingContext, ingredients, allSteps, recipeName, currentStepIndex, totalSteps, recipeScale, currentStepInstruction, messages])
 
   const dictation = useFieldDictation({
     onText: (text) => setInput(text),
     onComplete: (fullText) => {
-      handleSendMessage(fullText, true)
+      handleSendMessage(fullText)
     },
     autoSubmitOnSilence: true,
     silenceTimeoutMs: 1400,
@@ -268,7 +244,7 @@ Provide clear, concise, practical culinary advice. If they ask about substitutio
     if (chip.action?.type === 'timer') {
       onAddTimer(chip.action.label, chip.action.seconds)
     }
-    handleSendMessage(chip.prompt, false)
+    handleSendMessage(chip.prompt)
   }
 
   return (
@@ -291,14 +267,7 @@ Provide clear, concise, practical culinary advice. If they ask about substitutio
               <h2 className="font-display text-body-lg font-bold text-casa-navy leading-tight truncate">
                 AI Sous Chef
               </h2>
-              {isVoiceActive ? (
-                <span className="flex items-center gap-1 bg-emerald-500/20 text-emerald-700 text-3xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border border-emerald-500/30 shrink-0">
-                  <Radio size={10} className="animate-pulse text-emerald-600" />
-                  <span>Alexa Listening</span>
-                </span>
-              ) : (
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-              )}
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
             </div>
             <p className="text-2xs uppercase tracking-wider text-amber-800 font-bold truncate">
               Step {currentStepIndex + 1} of {totalSteps} · {recipeName}
@@ -306,69 +275,16 @@ Provide clear, concise, practical culinary advice. If they ask about substitutio
           </div>
         </div>
 
-        <div className="flex items-center gap-1 shrink-0">
-          {onToggleTts && (
-            <IconButton
-              icon={ttsEnabled ? <Volume2 size={16} className={isSpeaking ? 'text-amber-600 animate-pulse' : 'text-casa-navy'} /> : <VolumeX size={16} className="text-casa-muted" />}
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                if (isSpeaking && onStopSpeaking) {
-                  onStopSpeaking()
-                }
-                onToggleTts()
-              }}
-              aria-label={ttsEnabled ? 'Mute spoken audio' : 'Enable spoken voice answers'}
-              title={ttsEnabled ? 'Spoken voice answers ON (Click to mute)' : 'Spoken voice answers OFF (Click to unmute)'}
-            />
-          )}
-
-          {onClose && (
-            <IconButton
-              icon={<X size={16} />}
-              variant="ghost"
-              size="sm"
-              onClick={onClose}
-              aria-label="Close Sous Chef sidecar"
-            />
-          )}
-        </div>
+        {onClose && (
+          <IconButton
+            icon={<X size={16} />}
+            variant="ghost"
+            size="sm"
+            onClick={onClose}
+            aria-label="Close Sous Chef sidecar"
+          />
+        )}
       </div>
-
-      {/* Voice Transcribing Banner (Live from across the room) */}
-      {(wakeDetected || (isVoiceActive && liveTranscript)) && (
-        <div className="px-3.5 py-2 bg-gradient-to-r from-amber-500/20 via-amber-500/10 to-transparent border-b border-amber-500/30 flex items-center justify-between gap-2 text-2xs font-bold text-amber-950 animate-pulse">
-          <div className="flex items-center gap-2 truncate">
-            <Radio size={12} className="text-amber-700 shrink-0 animate-spin" />
-            <span className="truncate">
-              {wakeDetected ? '🎙️ "Alexa" detected...' : `Heard: "${liveTranscript}"`}
-            </span>
-          </div>
-          <span className="text-3xs uppercase tracking-widest bg-amber-500/30 text-amber-900 px-1.5 py-0.5 rounded shrink-0">
-            Voice Mode
-          </span>
-        </div>
-      )}
-
-      {/* Speaking Indicator */}
-      {isSpeaking && (
-        <div className="px-3.5 py-1.5 bg-emerald-500/15 border-b border-emerald-500/30 flex items-center justify-between text-2xs font-bold text-emerald-900">
-          <div className="flex items-center gap-1.5">
-            <Volume2 size={13} className="text-emerald-700 animate-bounce" />
-            <span>Sous Chef is speaking aloud...</span>
-          </div>
-          {onStopSpeaking && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onStopSpeaking}
-              className="text-3xs text-emerald-800 underline uppercase tracking-wider font-semibold hover:text-emerald-950 min-h-0 h-auto p-0"
-            >
-              Stop Audio
-            </Button>
-          )}
-        </div>
-      )}
 
       {/* Quick Assist Chips */}
       <div className="p-3 bg-casa-bg/60 border-b border-casa-border/60 shrink-0 space-y-1.5">
@@ -460,13 +376,7 @@ Provide clear, concise, practical culinary advice. If they ask about substitutio
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={
-              isVoiceActive
-                ? 'Say "Alexa..." or ask anything...'
-                : dictation.listening
-                ? 'Listening...'
-                : 'Ask Chef: substitutions, pan temp, meat temp...'
-            }
+            placeholder={dictation.listening ? 'Listening... speak now' : 'Ask Chef: substitutions, pan temp, meat temp...'}
             className="flex-1 text-body-sm px-3.5 py-2.5 rounded-xl border border-casa-border bg-casa-bg text-casa-navy placeholder:text-casa-muted focus:outline-none focus:ring-2 focus:ring-casa-gold/50 min-h-[44px]"
           />
 

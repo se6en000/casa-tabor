@@ -2,11 +2,9 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   ArrowLeft,
   Clock,
-  Mic,
   Pause,
   Play,
   Plus,
-  Radio,
   RotateCcw,
   Sparkles,
   Timer as TimerIcon,
@@ -38,9 +36,6 @@ interface KitchenHeaderHUDProps {
   onExit: () => void
   onToggleSousChef: () => void
   isSousChefOpen: boolean
-  isVoiceActive?: boolean
-  wakeDetected?: boolean
-  isSpeaking?: boolean
   onEditRecipe?: () => void
   className?: string
 }
@@ -85,9 +80,6 @@ export default function KitchenHeaderHUD({
   onExit,
   onToggleSousChef,
   isSousChefOpen,
-  isVoiceActive = false,
-  wakeDetected = false,
-  isSpeaking = false,
   onEditRecipe,
   className,
 }: KitchenHeaderHUDProps) {
@@ -334,7 +326,7 @@ export default function KitchenHeaderHUD({
           </div>
         </div>
 
-        {/* AI Sous Chef Toggle Button with Hands-Free Wake-Word Indicator */}
+        {/* AI Sous Chef Toggle Button */}
         <Button
           variant={isSousChefOpen ? 'primary' : 'secondary'}
           size="md"
@@ -342,36 +334,13 @@ export default function KitchenHeaderHUD({
           className={cn(
             'font-bold min-h-control px-3.5 flex items-center gap-2 transition-all shadow-sm',
             isSousChefOpen
-              ? 'bg-gradient-to-r from-amber-500 via-amber-400 to-casa-gold text-slate-950 shadow-md ring-2 ring-amber-400/40'
-              : 'text-casa-navy hover:text-amber-900'
+              ? 'bg-gradient-to-r from-amber-500 to-casa-gold text-slate-950 shadow-md'
+              : 'text-casa-navy'
           )}
-          aria-label={isSousChefOpen ? 'Turn off Sous Chef voice assistant' : 'Turn on Sous Chef voice assistant'}
-          title={isSousChefOpen ? 'Sous Chef Voice Listening ON (Click to turn off)' : 'Sous Chef Voice Listening OFF (Click to turn on)'}
+          aria-label={isSousChefOpen ? 'Hide AI Sous Chef' : 'Show AI Sous Chef'}
         >
-          {isSousChefOpen ? (
-            <>
-              {wakeDetected ? (
-                <Radio size={16} className="text-slate-950 animate-ping" />
-              ) : isSpeaking ? (
-                <Radio size={16} className="text-slate-950 animate-bounce" />
-              ) : isVoiceActive ? (
-                <Mic size={16} className="text-slate-950 animate-pulse" />
-              ) : (
-                <Sparkles size={16} className="text-slate-950 animate-pulse" />
-              )}
-              <span className="font-extrabold text-body-sm">
-                Sous Chef AI
-              </span>
-              <span className="hidden md:inline-flex items-center gap-1 bg-slate-950/15 text-slate-950 text-3xs uppercase tracking-wider font-extrabold px-1.5 py-0.5 rounded-md border border-slate-950/20">
-                {isVoiceActive ? '🎙️ Alexa Listening' : 'Active'}
-              </span>
-            </>
-          ) : (
-            <>
-              <Sparkles size={16} className="text-casa-gold" />
-              <span className="hidden sm:inline">Sous Chef AI</span>
-            </>
-          )}
+          <Sparkles size={16} className={isSousChefOpen ? 'text-slate-950 animate-pulse' : 'text-casa-gold'} />
+          <span className="hidden sm:inline">Sous Chef AI</span>
         </Button>
       </div>
     </header>
