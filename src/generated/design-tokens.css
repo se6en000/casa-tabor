@@ -77,10 +77,17 @@
   --ds-font-scale: 1;
   --radius-button: 0.5rem;
   --radius-card: 0.75rem;
+  --radius-widget: 1.25rem;
+  --radius-container: 1.5rem;
   --radius-modal: 1rem;
   --radius-pill: 9999px;
   --shadow-card: 0 1px 3px rgba(27,42,74,0.06), 0 1px 2px rgba(27,42,74,0.04);
   --shadow-card-hover: 0 4px 12px rgba(27,42,74,0.08);
+  --shadow-widget: 0 2px 8px rgba(27,42,74,0.04), 0 1px 2px rgba(27,42,74,0.02);
+  --shadow-glow-gold: 0 0 20px rgba(201,169,110,0.25);
+  --shadow-glow-amber: 0 0 18px rgba(245,158,11,0.25);
+  --shadow-glow-emerald: 0 0 18px rgba(16,185,129,0.25);
+  --shadow-hero-dark: 0 20px 40px -15px rgba(15,23,42,0.4), 0 0 0 1px rgba(255,255,255,0.08);
   --shadow-modal: 0 8px 30px rgba(27,42,74,0.12);
   --shadow-fab: 0 4px 14px rgba(201,169,110,0.3);
   --spacing-nav-height: 4.5rem;
@@ -215,6 +222,11 @@ html.midnight-gallery {
   --color-casa-divider: var(--color-casa-divider-strong);
   --shadow-card: 0 1px 3px rgba(0,0,0,0.45), 0 1px 2px rgba(0,0,0,0.35);
   --shadow-card-hover: 0 6px 18px rgba(0,0,0,0.55);
+  --shadow-widget: 0 4px 16px rgba(0,0,0,0.45);
+  --shadow-glow-gold: 0 0 24px rgba(159,134,88,0.35);
+  --shadow-glow-amber: 0 0 20px rgba(210,164,101,0.30);
+  --shadow-glow-emerald: 0 0 20px rgba(74,165,106,0.30);
+  --shadow-hero-dark: 0 24px 48px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.12);
   --shadow-modal: 0 12px 36px rgba(0,0,0,0.65);
   --shadow-fab: 0 6px 18px rgba(159,134,88,0.40);
 }

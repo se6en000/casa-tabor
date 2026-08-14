@@ -1,71 +1,86 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
-import { format, addDays, isToday, startOfDay } from 'date-fns'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
+import { format, addDays, isToday, startOfDay, isBefore, isAfter, differenceInMinutes } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  MapPin, Clock, DollarSign, Phone, AlertTriangle,
-  Pencil, Navigation, Share2, ChevronRight,
+  MapPin, AlertTriangle,
+  Navigation, Bell,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
-import { cleanEventTitle } from '../../utils/eventTitle'
+import { cleanEventTitle, isBirthdayEvent } from '../../utils/eventTitle'
 import { useCalendarStore } from '../../stores/calendarStore'
 import { useRollingEvents } from '../../hooks/useCalendarEvents'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
-import { CATEGORY_LABEL } from './categoryFields'
 import EventDetailPanel from './EventDetailPanel'
 import EventEditSheet from './EventEditSheet'
 import { isReminder, isAllDayReminder, isTimedReminder } from '../../utils/holidays'
-import SwipeableReminderPill from '../shared/SwipeableReminderPill'
 import EventContextMenu from '../shared/EventContextMenu'
 import { WeatherIcon } from '../shared/WeatherIcon'
+import { BirthdayCardDecoration } from '../shared/BirthdayCardDecoration'
 import BounceScroll from '../shared/BounceScroll'
-import { eventOverlapsDay, getEventDisplayStartDay } from '../../utils/eventTime'
-import { PersonAvatarStack } from '../ui'
+import { eventOverlapsDay, getEventDisplayStartDay, getEventEndDate, getEventStartDate } from '../../utils/eventTime'
+import { PersonAvatarStack, CalendarPill } from '../ui'
 import type { FamilyMember } from '../../types'
 import { deriveCalendarCardResponsibility } from '../../lib/calendarResponsibility'
+import { resolveEventMode } from '../../lib/eventPlanOverrides'
 import { useCalendarQuickCreateGesture } from '../../hooks/useCalendarQuickCreateGesture'
 import QuickCreateSheet from '../shared/QuickCreateSheet'
-import { Button, CalendarPill, Chip } from '../ui'
 import { useReminderNeedsYouActions } from '../../hooks/useReminderNeedsYouActions'
 
 const SHARED_COLOR = 'var(--color-casa-gold)'
+
+function formatCompactDuration(minutes: number): string {
+  if (minutes <= 0 || minutes >= 1440) return ''
+  if (minutes < 60) return `${minutes}m`
+  if (minutes % 60 === 0) return `${minutes / 60}h`
+  const hours = (minutes / 60).toFixed(1).replace('.0', '')
+  return `${hours}h`
+}
+
+function DrivingBadgeIcon() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="12" cy="12" r="8.5" stroke="white" strokeWidth="2" strokeLinecap="round" />
+      <circle cx="12" cy="2" stroke="white" strokeWidth="2" />
+      <path d="M12 3.5v6M5.8 16.6l4.1-2.7M18.2 16.6l-4.1-2.7" stroke="white" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function SupervisingBadgeIcon() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M12 3l7 2.6v5.2c0 4.3-3 7.3-7 8.4-4-1.1-7-4.1-7-8.4V5.6z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
 
 function getPrimaryColor(event: EventWithDetails): string {
   if (!event.members || event.members.length === 0) return SHARED_COLOR
   if (event.members.length >= 5) return SHARED_COLOR
   const primary = event.members.find(m => m.role === 'primary') ?? event.members[0]
-  return primary.family_member?.color_hex || SHARED_COLOR
+  return primary?.family_member?.color_hex || SHARED_COLOR
 }
 
-function getSnippet(event: EventWithDetails): { icon: React.ReactNode; text: string } | null {
-  const enr = event.enrichment
-  if (!enr) return null
-  if (enr.departure_time) return { icon: <Clock size={12} />, text: `Leave by ${format(new Date(enr.departure_time), 'h:mm a')}` }
-  if (enr.cost_estimate) return { icon: <DollarSign size={12} />, text: String(enr.cost_estimate) }
-  if (enr.contact_name || enr.contact_phone) return { icon: <Phone size={12} />, text: enr.contact_name ?? enr.contact_phone ?? '' }
-  if (enr.prep_notes) return { icon: <ChevronRight size={12} />, text: enr.prep_notes.slice(0, 80) + (enr.prep_notes.length > 80 ? '…' : '') }
-  return null
-}
-
-function getGoingMembers(event: EventWithDetails): FamilyMember[] {
+export function getGoingMembers(event: EventWithDetails): FamilyMember[] {
   // Every member row in event.members represents someone attending the event -
   // there's no separate "not going" role, and the attendee editor always saves
   // new/edited members with role 'attendee' (there's no "primary" distinction
   // for attendees anymore). Keep 'assignee'/'primary' for older/legacy rows so
   // nothing regresses for events written before this change.
-  const selected = event.members
+  const selected = (event.members ?? [])
     .filter((member) => {
-      const role = member.role.toLowerCase()
+      const role = member?.role?.toLowerCase() ?? ''
       return role === 'attendee' || role === 'assignee' || role === 'primary'
     })
-    .map((member) => member.family_member)
+    .map((member) => member?.family_member)
     .filter((member): member is FamilyMember => Boolean(member))
 
   const deduped = new Map(selected.map((member) => [member.id, member]))
-  return Array.from(deduped.values()).sort((a, b) => a.name.localeCompare(b.name))
+  return Array.from(deduped.values()).sort((a, b) => (a?.name ?? '').localeCompare(b?.name ?? ''))
 }
 
-function deriveResponsibilityChip(event: EventWithDetails, household: FamilyMember[]) {
+export function deriveResponsibilityChip(event: EventWithDetails, household: FamilyMember[]) {
   const responsibility = deriveCalendarCardResponsibility(event, household, new Date())
   if (!responsibility.responsible) return null
   return {
@@ -166,39 +181,33 @@ export default function StackedView() {
 
                 {/* Events */}
                 <div className="space-y-1.5">
-                  {/* All-day reminders */}
+                  {/* All-day reminders & all-day events */}
                   {dayAllDay.map(r => (
                     isReminder(r) ? (
                       <div key={r.id} data-calendar-event>
-                        <SwipeableReminderPill
-                          id={r.id}
-                          title={r.title}
-                          members={r.members}
+                        <CompactReminderCard
+                          event={r}
+                          now={new Date()}
                           onClick={() => setSelectedEventId(r.id)}
-                          onComplete={completeReminder}
-                          onDismiss={completeReminder}
+                          onDoubleClick={() => { setSelectedEventId(null); setEditEventId(r.id) }}
+                          onLongPress={(ev, x, y) => setContextMenu({ event: ev, x, y })}
                         />
                       </div>
                     ) : (
                       <div key={r.id} data-calendar-event>
-                        <Chip
-                          onClick={(e) => { e.stopPropagation(); setSelectedEventId(r.id) }}
-                          tone="accent"
-                          size="sm"
-                          className="w-full justify-between"
-                        >
-                          <span className="truncate text-caption font-semibold text-casa-navy">
-                            {r.title}
-                          </span>
-                          <span className="shrink-0 text-caption font-semibold text-casa-gold">
-                            All day
-                          </span>
-                        </Chip>
+                        <EventCard
+                          event={r}
+                          household={household}
+                          now={new Date()}
+                          onClick={() => setSelectedEventId(r.id)}
+                          onDoubleClick={() => { setSelectedEventId(null); setEditEventId(r.id) }}
+                          onLongPress={(ev, x, y) => setContextMenu({ event: ev, x, y })}
+                        />
                       </div>
                     )
                   ))}
 
-                  {/* Timed reminders + events merged by time */}
+                  {/* Timed reminders + normal events merged by time */}
                   <AnimatePresence initial={false}>
                     {[...dayNormal, ...dayTimed]
                       .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
@@ -212,13 +221,12 @@ export default function StackedView() {
                           exit={{ opacity: 0, y: -4 }}
                           transition={{ duration: 0.15 }}
                         >
-                          <SwipeableReminderPill
-                            id={event.id}
-                            title={`${event.title} · ${format(new Date(event.start_time), 'h:mm a')}`}
-                            members={event.members}
+                          <CompactReminderCard
+                            event={event}
+                            now={new Date()}
                             onClick={() => setSelectedEventId(event.id)}
-                            onComplete={completeReminder}
-                            onDismiss={completeReminder}
+                            onDoubleClick={() => { setSelectedEventId(null); setEditEventId(event.id) }}
+                            onLongPress={(ev, x, y) => setContextMenu({ event: ev, x, y })}
                           />
                         </motion.div>
                       ) : (
@@ -226,7 +234,7 @@ export default function StackedView() {
                           key={event.id}
                           event={event}
                           household={household}
-                          isSelected={selectedEventId === event.id}
+                          now={new Date()}
                           onClick={() => setSelectedEventId(event.id)}
                           onDoubleClick={() => { setSelectedEventId(null); setEditEventId(event.id) }}
                           onLongPress={(ev, x, y) => setContextMenu({ event: ev, x, y })}
@@ -278,41 +286,143 @@ export default function StackedView() {
   )
 }
 
-/* ── Event Card ─────────────────────────────────────────────── */
+/* ── Compact Reminder Card (Path 2 Proportional Pillar System) ─────── */
+
+interface CompactReminderCardProps {
+  event: EventWithDetails
+  now?: Date
+  onClick: () => void
+  onDoubleClick?: () => void
+  onLongPress?: (event: EventWithDetails, x: number, y: number) => void
+}
+
+function CompactReminderCard({ event, now = new Date(), onClick, onDoubleClick, onLongPress }: CompactReminderCardProps) {
+  const start = getEventStartDate(event)
+  const end = getEventEndDate(event)
+  const past = isBefore(end, now)
+  const isTimed = isTimedReminder(event)
+  const cleanTitle = cleanEventTitle(event.title)
+  const members = event.members ?? []
+
+  // Long-press detection
+  const lpTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lpOrigin = useRef<{ x: number; y: number } | null>(null)
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (!onLongPress) return
+    const t = e.touches[0]
+    lpOrigin.current = { x: t.clientX, y: t.clientY }
+    lpTimer.current = setTimeout(() => {
+      lpTimer.current = null
+      if (!lpOrigin.current) return
+      navigator.vibrate?.(30)
+      onLongPress(event, lpOrigin.current.x, lpOrigin.current.y)
+      lpOrigin.current = null
+    }, 500)
+  }
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!lpTimer.current || !lpOrigin.current) return
+    const t = e.touches[0]
+    if (Math.hypot(t.clientX - lpOrigin.current.x, t.clientY - lpOrigin.current.y) > 10) {
+      clearTimeout(lpTimer.current); lpTimer.current = null; lpOrigin.current = null
+    }
+  }
+  const handleTouchEnd = () => {
+    if (lpTimer.current) { clearTimeout(lpTimer.current); lpTimer.current = null }
+    lpOrigin.current = null
+  }
+
+  return (
+    <div
+      onClick={(e) => { e.stopPropagation(); onClick() }}
+      onDoubleClick={(e) => { e.stopPropagation(); onDoubleClick?.() }}
+      onKeyDown={(e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return
+        e.preventDefault()
+        onClick()
+      }}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      role="button"
+      tabIndex={0}
+      className={cn(
+        'relative w-full rounded-widget border border-amber-300/60 bg-amber-50/40 shadow-card cursor-pointer touch-pan-y overflow-hidden',
+        'hover:shadow-card-hover hover:border-amber-400/80 transition-all duration-200 min-h-control',
+        'grid grid-cols-[92px_1fr]',
+        past && 'opacity-45'
+      )}
+      data-calendar-event
+    >
+      {/* Straight Amber Left Pillar */}
+      <div className="p-2.5 bg-amber-100/70 text-amber-950 flex flex-col justify-between items-start border-r border-amber-200/60 border-l-4 border-l-amber-400">
+        <div className="w-full min-w-0">
+          <span className="font-mono text-body font-bold text-amber-950 tabular-nums leading-none block">
+            {isTimed ? format(start, 'h:mm') : 'ALL DAY'}
+          </span>
+          <span className="font-mono text-caption uppercase text-amber-900/70 font-semibold leading-none mt-1 block">
+            {isTimed ? format(start, 'a') : 'REMIND'}
+          </span>
+        </div>
+        <Bell size={11} className="text-amber-800 shrink-0 mt-1" />
+      </div>
+
+      {/* Content Deck */}
+      <div className="p-2.5 flex flex-col justify-between gap-1.5 bg-casa-surface/50 min-w-0">
+        <p className="text-body font-bold text-casa-navy line-clamp-2 leading-snug">
+          {cleanTitle}
+        </p>
+        {members.length > 0 && (
+          <div className="flex items-center gap-1 flex-wrap pt-0.5">
+            {members.slice(0, 2).map((m) => (
+              <CalendarPill
+                key={m.id}
+                color={m.family_member?.color_hex ?? 'var(--color-casa-gold)'}
+              >
+                {m.family_member?.name}
+              </CalendarPill>
+            ))}
+            {members.length > 2 && (
+              <span className="text-caption text-casa-muted font-bold">
+                +{members.length - 2}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* ── Compact Event Card (Path 2 Proportional Pillar System) ─────────── */
 
 interface EventCardProps {
   event: EventWithDetails
   household: FamilyMember[]
-  isSelected: boolean
+  now?: Date
   onClick: () => void
   onDoubleClick: () => void
   onLongPress: (event: EventWithDetails, x: number, y: number) => void
 }
 
-function EventCard({ event, household, isSelected, onClick, onDoubleClick, onLongPress }: EventCardProps) {
+function EventCard({ event, household, now = new Date(), onClick, onDoubleClick, onLongPress }: EventCardProps) {
   const color = getPrimaryColor(event)
   const enr = event.enrichment
-  const snippet = getSnippet(event)
   const urgentAction = event.actions?.find(a => a.is_urgent && !a.completed)
-  const category = enr?.category ? (CATEGORY_LABEL[enr.category] ?? enr.category) : null
-  const hasMaps = event.location_name || event.address
-  const mapsQuery = event.address
-    ? (event.location_name ? `${event.location_name}, ${event.address}` : event.address)
-    : (event.location_name ?? '')
-  const mapsUrl = hasMaps
-    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`
-    : null
-
-  const start = new Date(event.start_time)
-  const end = new Date(event.end_time)
+  const start = getEventStartDate(event)
+  const end = getEventEndDate(event)
+  const past = isBefore(end, now)
+  const happening = isBefore(start, now) && isAfter(end, now)
+  const isHeroState = happening || Boolean(urgentAction)
   const isAllDayEvent = event.all_day
   const displayStartDay = isAllDayEvent ? getEventDisplayStartDay(event) : null
-  const goingMembers = getGoingMembers(event)
+  const mode = resolveEventMode(event)
+  const isHosted = mode === 'hosted'
+  const isBirthday = isBirthdayEvent(event)
+  const cleanTitle = cleanEventTitle(event.title)
 
-  // Re-derive driver/attendee responsibility whenever the event detail panel writes a new
-  // driver override or transportation plan, so stacked-view cards update immediately
-  // instead of only after a full page reload.
-  const [, setOverrideVersion] = useState(0)
+  // Re-derive driver/attendee responsibility whenever overrides change
+  const [overrideVersion, setOverrideVersion] = useState(0)
   useEffect(() => {
     function handleOverridesUpdated(e: Event) {
       const detail = (e as CustomEvent<{ eventId?: string }>).detail
@@ -323,7 +433,15 @@ function EventCard({ event, household, isSelected, onClick, onDoubleClick, onLon
     window.addEventListener('casa:overrides-updated', handleOverridesUpdated)
     return () => window.removeEventListener('casa:overrides-updated', handleOverridesUpdated)
   }, [event.id])
-  const responsibilityChip = deriveResponsibilityChip(event, household)
+
+  const responsibility = useMemo(
+    () => deriveCalendarCardResponsibility(event, household, new Date()),
+    [event, household, now, overrideVersion]
+  )
+
+  const departureTime = enr?.departure_time ? new Date(enr.departure_time) : null
+  const durationMins = differenceInMinutes(end, start)
+  const durationStr = formatCompactDuration(durationMins)
 
   // Long-press detection
   const lpTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -356,7 +474,7 @@ function EventCard({ event, household, isSelected, onClick, onDoubleClick, onLon
     <motion.div
       layout
       initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
+      animate={{ opacity: past ? 0.45 : 1, y: 0 }}
       exit={{ opacity: 0, y: -4 }}
       transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
       onClick={(e) => { e.stopPropagation(); onClick() }}
@@ -372,144 +490,185 @@ function EventCard({ event, household, isSelected, onClick, onDoubleClick, onLon
       role="button"
       tabIndex={0}
       className={cn(
-        'relative rounded-lg border bg-casa-surface cursor-pointer touch-pan-y',
-        'hover:shadow-card-hover transition-all duration-200',
-        isSelected ? 'border-casa-gold shadow-card' : 'border-casa-border'
+        'relative rounded-widget border cursor-pointer touch-pan-y shadow-card overflow-hidden transition-all duration-200 min-h-control',
+        'grid grid-cols-[92px_1fr]',
+        isHeroState
+          ? 'bg-casa-navy text-white border-casa-navy ring-1 ring-casa-gold/60 shadow-card-hover'
+          : isBirthday
+            ? 'bg-gradient-to-br from-casa-accent-subtle via-casa-surface to-casa-bg border-casa-border/80 hover:shadow-card-hover hover:border-casa-gold/50'
+            : 'bg-casa-surface text-casa-navy border-casa-border/70 hover:shadow-card-hover hover:border-casa-gold/50'
       )}
       data-calendar-event
     >
-      {/* Left color bar */}
-      <div
-        className="absolute left-0 top-0 bottom-0 w-1 rounded-l-lg"
-        style={{ backgroundColor: color }}
-      />
+      {isBirthday && <BirthdayCardDecoration />}
 
-      {/* ── Compact default view ── */}
-      <div className="pl-3 pr-2 py-1.5">
-        {/* Time + weather + urgent dot */}
-        <div className="flex items-center justify-between gap-1 mb-0.5">
-          <div className="flex items-center gap-1">
-            <p className="text-caption font-semibold text-casa-muted tabular-nums leading-none">
-              {isAllDayEvent ? format(displayStartDay!, 'MMM d') : `${format(start, 'h:mm')}–${format(end, 'h:mma')}`}
-            </p>
-            {event.location_name && (
-              <WeatherIcon condition={event.enrichment?.weather_at_event} size={12} />
+      {/* ── Straight Left Pillar: Architectural Time Anchor (92px Wide, Zero Truncation) ── */}
+      <div
+        className={cn(
+          'p-2.5 flex flex-col justify-between items-start border-r relative border-l-4',
+          isHeroState
+            ? 'bg-white/5 border-r-white/15 text-white'
+            : 'bg-casa-bg/80 border-r-casa-divider text-casa-navy'
+        )}
+        style={{ borderLeftColor: color }}
+      >
+        <div className="w-full min-w-0">
+          <div
+            className={cn(
+              'font-mono text-body font-bold tabular-nums leading-none',
+              isHeroState ? 'text-casa-gold' : 'text-casa-navy'
             )}
+          >
+            {isAllDayEvent
+              ? (displayStartDay ? format(displayStartDay, 'MMM d') : 'ALL DAY')
+              : format(start, 'h:mm')}
           </div>
-          {urgentAction && <AlertTriangle size={11} className="text-amber-500 shrink-0" />}
+          {!isAllDayEvent && (
+            <div
+              className={cn(
+                'font-mono text-caption uppercase font-semibold mt-1 leading-none whitespace-nowrap',
+                isHeroState ? 'text-white/70' : 'text-casa-muted'
+              )}
+            >
+              {format(start, 'a')}
+              {durationStr && ` · ${durationStr}`}
+            </div>
+          )}
         </div>
 
-        {/* Title — wraps freely (up to 2 lines); role/going info moves to footer below */}
-        {(() => {
-          const cleanTitle = cleanEventTitle(event.title)
-          const showGoingRow = goingMembers.length > 0
-          const showResponsibilityRow = Boolean(responsibilityChip)
-          const showFooter = showGoingRow || showResponsibilityRow
-          return (
-            <>
-              <p
-                className="stacked-event-title text-body-sm font-semibold text-casa-text leading-snug line-clamp-2"
-                style={{ color: 'var(--color-casa-text)' }}
-              >
-                {cleanTitle}
-              </p>
-              {showFooter && (
-                <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-casa-divider pt-1.5">
-                  {showResponsibilityRow && responsibilityChip && (() => {
-                    const label = responsibilityChip.label === 'SUPERVISOR' ? 'Supervising' : 'Drives'
-                    return (
-                      <span
-                        className={cn(
-                          'flex min-w-0 max-w-full items-center gap-1 text-caption font-bold leading-none',
-                          responsibilityChip.label === 'SUPERVISOR' ? 'text-casa-success' : 'text-casa-gold',
-                        )}
-                        title={`${responsibilityChip.person.name} ${label.toLowerCase()}`}
-                      >
-                        <span
-                          className="flex size-5 shrink-0 items-center justify-center rounded-full text-caption font-extrabold leading-none text-white"
-                          style={{ backgroundColor: responsibilityChip.person.color ?? 'var(--color-casa-muted)' }}
-                        >
-                          {responsibilityChip.person.name[0]?.toUpperCase() || '?'}
-                        </span>
-                        <span className="truncate">{label}</span>
-                      </span>
-                    )
-                  })()}
-                  {goingMembers.length > 0 && (
-                    <PersonAvatarStack
-                      people={goingMembers.map((member) => ({
-                        id: member.id,
-                        name: member.name,
-                        color: member.color_hex,
-                      }))}
-                      max={3}
-                      size="sm"
-                    />
-                  )}
-                </div>
+        {/* Pillar bottom indicators: Leave-by / Weather / Alert (Pure SVG) */}
+        <div className="w-full pt-1.5 flex flex-col gap-1 min-w-0">
+          {departureTime && !happening && !isHosted && (
+            <span
+              className={cn(
+                'flex items-center gap-0.5 text-caption font-bold leading-none whitespace-nowrap',
+                isHeroState ? 'text-casa-gold' : 'text-casa-gold'
               )}
-            </>
-          )
-        })()}
+              title={`Leave by ${format(departureTime, 'h:mm a')}`}
+            >
+              <Navigation size={9} className="shrink-0 text-casa-gold" />
+              <span className="text-caption font-semibold">{format(departureTime, 'h:mm')}</span>
+            </span>
+          )}
+          <div className="flex items-center justify-between w-full">
+            {event.location_name && (
+              <WeatherIcon condition={event.enrichment?.weather_at_event} size={11} />
+            )}
+            {urgentAction && <AlertTriangle size={11} className="text-amber-400 shrink-0 ml-auto" />}
+          </div>
+        </div>
       </div>
 
-      {/* ── Expanded details (tap to reveal) ── */}
-      <AnimatePresence>
-        {isSelected && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.18 }}
-            className="overflow-hidden"
+      {/* ── Right Content Deck ── */}
+      <div
+        className={cn(
+          'p-3 flex flex-col justify-between gap-2 min-w-0',
+          isHeroState ? 'bg-casa-navy' : 'bg-casa-surface'
+        )}
+      >
+        <div className="space-y-1 min-w-0">
+          {/* Title — Same crisp font as reminder titles */}
+          <p
+            className={cn(
+              'stacked-event-title font-bold text-body leading-snug line-clamp-2',
+              isHeroState ? 'text-white' : 'text-casa-navy'
+            )}
           >
-            <div className="pl-3 pr-2 pb-2 space-y-1.5 border-t border-casa-divider pt-2">
-              {event.location_name && (
-                <span className="flex items-center gap-1 text-caption text-casa-muted">
-                  <MapPin size={10} className="text-casa-error shrink-0" />
+            {cleanTitle}
+          </p>
+
+          {/* Location / Mode (Pure SVG icon) */}
+          {(event.location_name || isHosted) && (
+            <div
+              className={cn(
+                'flex items-center gap-1 text-caption min-w-0',
+                isHeroState ? 'text-white/70' : 'text-casa-muted'
+              )}
+            >
+              {isHosted ? (
+                <span className="text-caption font-semibold uppercase tracking-wide">At home</span>
+              ) : (
+                <span className="flex items-center gap-1 truncate text-caption">
+                  <MapPin size={10} className="shrink-0 text-casa-gold" />
                   <span className="truncate">{event.location_name}</span>
                 </span>
               )}
-              {category && (
-                <CalendarPill>
-                  {category}
-                </CalendarPill>
-              )}
-              {snippet && (
-                <div className="flex items-center gap-1 text-caption text-casa-muted">
-                  <span className="text-casa-gold">{snippet.icon}</span>
-                  <span className="line-clamp-2">{snippet.text}</span>
-                </div>
-              )}
-              <div className="flex gap-1.5 pt-1">
-                <Button
-                  onClick={(e) => { e.stopPropagation(); onDoubleClick() }}
-                  variant="secondary"
-                  size="sm"
-                  leadingIcon={<Pencil size={14} />}
-                >
-                  Edit
-                </Button>
-                {mapsUrl && (
-                  <a
-                    href={mapsUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    onClick={e => e.stopPropagation()}
-                    className="inline-flex min-h-control items-center gap-2 rounded-button border border-casa-border bg-casa-surface px-3 text-body-sm font-medium text-casa-navy transition-colors hover:bg-casa-bg"
-                  >
-                    <Navigation size={14} />
-                    Directions
-                  </a>
-                )}
-                <Button className="ml-auto" size="sm" leadingIcon={<Share2 size={14} />}>
-                  Share
-                </Button>
-              </div>
             </div>
-          </motion.div>
+          )}
+        </div>
+
+        {/* Footer: Driver / Supervisor Capsule + Attendee Stack (Pure SVG) */}
+        {(responsibility.responsible || responsibility.attendees.length > 0) && (
+          <div
+            className={cn(
+              'pt-1.5 border-t flex items-center justify-between gap-1',
+              isHeroState ? 'border-white/15' : 'border-casa-divider'
+            )}
+          >
+            {responsibility.responsible ? (
+              <div
+                className={cn(
+                  'inline-flex min-w-0 max-w-[70%] items-center gap-1 px-1.5 py-0.5 rounded-full border text-caption font-semibold',
+                  isHeroState
+                    ? 'bg-white/10 border-white/20 text-white'
+                    : 'bg-casa-bg border-casa-border/80 text-casa-navy'
+                )}
+                title={`${responsibility.responsible.name} ${responsibility.roleBadge === 'drive' ? 'driver assigned' : isHosted ? 'hosting' : 'supervising'}`}
+              >
+                <span
+                  className="flex size-4 shrink-0 items-center justify-center rounded-full text-caption font-extrabold leading-none text-white"
+                  style={{ backgroundColor: responsibility.responsible.color ?? 'var(--color-casa-gold)' }}
+                >
+                  {responsibility.responsible.initial ?? responsibility.responsible.name?.[0]?.toUpperCase() ?? '?'}
+                </span>
+                <span className="truncate font-medium max-w-[50px]">
+                  {responsibility.responsible.name ? responsibility.responsible.name.split(' ')[0] : ''}
+                </span>
+                <span className={cn(
+                  'text-caption font-bold px-1 rounded flex items-center gap-0.5',
+                  responsibility.roleBadge === 'drive'
+                    ? isHeroState ? 'bg-casa-gold/25 text-casa-gold' : 'bg-casa-gold/15 text-casa-gold'
+                    : isHeroState ? 'bg-emerald-400/25 text-emerald-300' : 'bg-casa-success/15 text-casa-success-strong'
+                )}>
+                  {responsibility.roleBadge === 'drive' ? (
+                    <>
+                      <span className="w-2.5 h-2.5 bg-casa-navy rounded-full inline-flex items-center justify-center shrink-0">
+                        <DrivingBadgeIcon />
+                      </span>
+                      <span className="text-caption font-bold">Drives</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="w-2.5 h-2.5 bg-casa-success-strong rounded-full inline-flex items-center justify-center shrink-0">
+                        <SupervisingBadgeIcon />
+                      </span>
+                      <span className="text-caption font-bold">{isHosted ? 'Hosting' : 'Supervising'}</span>
+                    </>
+                  )}
+                </span>
+              </div>
+            ) : (
+              <span className={cn('text-caption font-semibold truncate', isHeroState ? 'text-casa-gold' : isHosted ? 'text-casa-success-strong' : 'text-casa-gold')}>
+                {responsibility.summary}
+              </span>
+            )}
+
+            {responsibility.attendees.length > 0 && (
+              <div className="ml-auto shrink-0">
+                <PersonAvatarStack
+                  people={responsibility.attendees.map((m) => ({
+                    id: m.id,
+                    name: m.family_member?.name ?? '?',
+                    color: m.family_member?.color_hex ?? SHARED_COLOR,
+                  }))}
+                  max={3}
+                  size="sm"
+                />
+              </div>
+            )}
+          </div>
         )}
-      </AnimatePresence>
+      </div>
     </motion.div>
   )
 }

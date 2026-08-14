@@ -144,7 +144,7 @@ export function segmentedControlItemClassName(options = {}) {
 }
 
 export const CARD_PADDINGS = ['none', 'sm', 'md', 'lg']
-export const CARD_TONES = ['surface', 'subtle', 'accent']
+export const CARD_TONES = ['surface', 'subtle', 'accent', 'ambient']
 
 const CARD_PADDING_CLASSES = {
   none: '',
@@ -157,6 +157,7 @@ const CARD_TONE_CLASSES = {
   surface: 'bg-casa-surface border-casa-border',
   subtle: 'bg-casa-bg border-casa-border/70',
   accent: 'bg-casa-accent-subtle border-casa-accent-subtle-border',
+  ambient: 'bg-gradient-to-br from-casa-navy/5 via-casa-surface to-casa-gold/5 border-casa-gold/20',
 }
 
 /**
@@ -171,8 +172,40 @@ export function cardClassName(options = {}) {
     CARD_TONE_CLASSES[tone],
     CARD_PADDING_CLASSES[padding],
     options.interactive
-      ? 'transition-shadow duration-150 cursor-pointer hover:shadow-card-hover outline-none focus-visible:ring-2 focus-visible:ring-casa-gold focus-visible:ring-offset-2'
+      ? 'transition-all duration-150 cursor-pointer hover:shadow-card-hover outline-none focus-visible:ring-2 focus-visible:ring-casa-gold focus-visible:ring-offset-2'
       : '',
+  ].filter(Boolean).join(' ')
+}
+
+export const STATUS_DOT_VARIANTS = ['active', 'warning', 'gold', 'neutral', 'info']
+export const STATUS_DOT_SIZES = ['sm', 'md', 'lg']
+
+const STATUS_DOT_VARIANT_CLASSES = {
+  active: 'bg-emerald-400',
+  warning: 'bg-amber-500',
+  gold: 'bg-casa-gold',
+  neutral: 'bg-casa-muted',
+  info: 'bg-casa-info',
+}
+
+const STATUS_DOT_SIZE_CLASSES = {
+  sm: 'size-2',
+  md: 'size-2.5',
+  lg: 'size-3',
+}
+
+/**
+ * @param {{variant?: string, size?: string, pulse?: boolean}} [options]
+ * @returns {string}
+ */
+export function statusDotClassName(options = {}) {
+  const variant = STATUS_DOT_VARIANTS.includes(options.variant) ? options.variant : 'active'
+  const size = STATUS_DOT_SIZES.includes(options.size) ? options.size : 'md'
+  return [
+    'inline-block rounded-full flex-shrink-0',
+    STATUS_DOT_VARIANT_CLASSES[variant],
+    STATUS_DOT_SIZE_CLASSES[size],
+    options.pulse !== false ? 'animate-pulse' : '',
   ].filter(Boolean).join(' ')
 }
 

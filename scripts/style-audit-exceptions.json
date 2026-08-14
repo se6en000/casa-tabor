@@ -153,6 +153,14 @@
         "reason": "The shared calendar pill accepts runtime event and member colors as part of its public contract."
       },
       {
+        "path": "src/components/ui/ScheduleStreamItem.tsx",
+        "reason": "Member indicator dots accept runtime family-member colors as part of its public contract."
+      },
+      {
+        "path": "src/components/shared/LuxuryTopBar.tsx",
+        "reason": "Event ticker indicators bind runtime family-member colors."
+      },
+      {
         "path": "src/components/ui/DateTimeDial.tsx",
         "reason": "Wheel height, padding, and active scroll position are derived from dial geometry."
       },

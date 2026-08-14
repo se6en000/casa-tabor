@@ -153,7 +153,7 @@ function ProfileUnlockGate({ children }: { children: ReactNode }) {
                 className="mt-6 text-white/60 hover:text-white hover:bg-white/10 min-h-control rounded-xl gap-2"
               >
                 <ShieldCheck size={16} />
-                <span>Manage Family PINs</span>
+                <span>Manage family PINs</span>
               </Button>
             </motion.div>
           ) : (

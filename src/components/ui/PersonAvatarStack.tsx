@@ -53,7 +53,7 @@ export function PersonAvatarStack({
   const visible = people.slice(0, Math.max(1, max))
   const overflow = Math.max(0, people.length - visible.length)
   const label = people.length > 0
-    ? people.map((person) => person.name).join(', ')
+    ? people.map((person) => person?.name ?? '').filter(Boolean).join(', ')
     : emptyLabel
   const showBadge = !!badgeClassName && people.length === 1
 
@@ -75,7 +75,7 @@ export function PersonAvatarStack({
           )}
           style={{ backgroundColor: person.color || 'var(--color-casa-navy)' }}
         >
-          {person.name[0]?.toUpperCase() || '?'}
+          {person?.name?.[0]?.toUpperCase() || '?'}
           {showBadge && (
             <span
               className={cn(

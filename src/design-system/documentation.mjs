@@ -1,5 +1,5 @@
-export const DESIGN_SYSTEM_VERSION = '1.8.0'
-export const DESIGN_SYSTEM_RELEASE_DATE = '2026-07-16'
+export const DESIGN_SYSTEM_VERSION = '2.0.0'
+export const DESIGN_SYSTEM_RELEASE_DATE = '2026-08-14'
 export const DESIGN_SYSTEM_SCHEMA_VERSION = 1
 
 const component = ({
@@ -27,6 +27,66 @@ const component = ({
 })
 
 export const COMPONENT_MANIFEST = [
+  component({
+    name: 'StatusDot',
+    category: 'data-display',
+    purpose: 'Displays live animated pulse status and presence states.',
+    useWhen: 'Use for active/live events, warnings, AI Copilot status, or general indicators.',
+    avoid: 'Do not use as an interactive button on its own without accessible text.',
+    variants: ['active', 'warning', 'gold', 'neutral', 'info', 'size:sm', 'size:md', 'size:lg'],
+    states: ['default', 'pulse', 'static'],
+    accessibility: 'Exposes aria-label and role="status" when label is provided.',
+    responsive: 'Dot sizes are proportional and density-aware.',
+    example: '<StatusDot variant="active" label="Happening now" />',
+  }),
+  component({
+    name: 'HeroCard',
+    category: 'surface',
+    purpose: 'Dark luxury navy hero focus card with ambient gold glow reflection.',
+    useWhen: 'Use for high-priority next-up appointments, hero spotlights, or kiosk centerpiece view.',
+    avoid: 'Do not use for dense multi-item lists or minor non-hero content.',
+    variants: ['default', 'ambientGlow'],
+    states: ['default', 'hover', 'focus-visible'],
+    accessibility: 'Keyboard accessible with role="button" when onClick is provided.',
+    responsive: 'Paddings and typography fluidly scale from phone to 1080p kiosk.',
+    example: '<HeroCard title="Pediatrician Checkup" statusText="Starts in 15m" timeBadge="3:30 PM" />',
+  }),
+  component({
+    name: 'WidgetContainer',
+    category: 'surface',
+    purpose: 'Bento container for 3-pane Living Canvas dashboards and widgets.',
+    useWhen: 'Use for distinct functional panes (Daily Briefing, Schedule Stream, Attention Hub).',
+    avoid: 'Do not nest widget containers within widget containers.',
+    variants: ['default'],
+    states: ['default'],
+    accessibility: 'Semantic header tag and accessible badge slot.',
+    responsive: 'Rounded-container geometry scales cleanly with flexbox/grid containers.',
+    example: '<WidgetContainer title="Today\'s Schedule" badge={<Chip>3 Events</Chip>}>...</WidgetContainer>',
+  }),
+  component({
+    name: 'ScheduleStreamItem',
+    category: 'data-display',
+    purpose: 'Timeline row for real-time agenda streams with cross-pane highlight sync.',
+    useWhen: 'Use in schedule stream panes and daily event lists.',
+    avoid: 'Do not use for static unlinked plain text.',
+    variants: ['default', 'highlighted'],
+    states: ['default', 'highlighted', 'hover', 'focus-visible'],
+    accessibility: 'Interactive item with full keyboard click handling and 44px+ touch target.',
+    responsive: 'Responsive mono timestamps, member color dots, and location chips.',
+    example: '<ScheduleStreamItem timeText="3:30 PM – 4:30 PM" title="Gymnastics" isHighlighted={true} />',
+  }),
+  component({
+    name: 'ActionCard',
+    category: 'action',
+    purpose: 'Triage card for schedule conflicts, tasks, and 1-click resolvers.',
+    useWhen: 'Use in Attention Hub and triage drawers to resolve household logistics rapidly.',
+    avoid: 'Do not use for read-only static information.',
+    variants: ['warning', 'danger', 'accent', 'neutral', 'success'],
+    states: ['default', 'hover', 'animating-out'],
+    accessibility: '1-click action buttons strictly meet density-aware 44px touch targets.',
+    responsive: 'Flex-wrap button layout prevents clipping on mobile and narrow widths.',
+    example: '<ActionCard category="RIDE NEEDED" description="Simultaneous events need driver" actions={<Button size="sm">Assign Luke</Button>} />',
+  }),
   component({
     name: 'Button',
     category: 'action',
@@ -57,7 +117,7 @@ export const COMPONENT_MANIFEST = [
     purpose: 'Groups related content on a semantic elevated surface.',
     useWhen: 'Use for bounded content groups, summaries, and tappable list cards.',
     avoid: 'Do not wrap every section in a card or use interactive mode without an action.',
-    variants: ['surface', 'subtle', 'accent', 'interactive'],
+    variants: ['surface', 'subtle', 'accent', 'hero', 'widget', 'ambient', 'triage', 'interactive'],
     states: ['default', 'hover', 'focus-visible'],
     accessibility: 'Interactive cards provide keyboard activation; use a native link when the card only navigates.',
     responsive: 'Padding follows shared density and card-spacing tokens.',
@@ -510,6 +570,15 @@ export const COMPONENT_MANIFEST = [
 ]
 
 export const DESIGN_SYSTEM_CHANGELOG = [
+  {
+    version: '2.0.0',
+    date: '2026-08-14',
+    changes: [
+      'Added Living Canvas primitives: HeroCard with dark luxury gradient and ambient glow reflection, WidgetContainer for bento grid layouts, ScheduleStreamItem for cross-pane synchronized agenda rows, and ActionCard for 1-click triage resolvers.',
+      'Added StatusDot live indicator primitive with animated pulse states across active, warning, gold, and info variants.',
+      'Formalized widget and container radius tokens, glow shadows, and circadian Room Tone palette integrations.',
+    ],
+  },
   {
     version: '1.8.0',
     date: '2026-07-16',

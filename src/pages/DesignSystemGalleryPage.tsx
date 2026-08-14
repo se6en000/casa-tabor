@@ -1,8 +1,34 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Type, Palette, Ruler, Layers, Smartphone, Tablet, Monitor, CheckCircle2, Inbox, WifiOff, Lock } from 'lucide-react'
+import {
+  Type,
+  Palette,
+  Ruler,
+  Layers,
+  Smartphone,
+  Tablet,
+  Monitor,
+  CheckCircle2,
+  Inbox,
+  WifiOff,
+  Lock,
+  Sparkles,
+  Zap,
+  Calendar,
+  MapPin,
+  Car,
+  Utensils,
+  Sun,
+  AlertTriangle,
+  Navigation,
+  Edit3,
+  Bell,
+  Check,
+  Layers as LayersIcon,
+} from 'lucide-react'
 import { cn } from '../utils/cn'
 import { DEVICE_MATRIX, closestDeviceProfile } from '../lib/deviceMatrix.mjs'
 import { COMPONENT_MANIFEST, DESIGN_SYSTEM_VERSION } from '../design-system/documentation.mjs'
+import { ROOM_TONE_COLORS } from '../design-system/tokens.mjs'
 import {
   Button,
   Checkbox,
@@ -41,16 +67,22 @@ import {
   ThreeRailLayout,
   WorkflowActions,
   Alert,
+  StatusDot,
+  HeroCard,
+  WidgetContainer,
+  ScheduleStreamItem,
+  ActionCard,
 } from '../components/ui'
 
-// ── Design System Gallery ───────────────────────────────────────────────────
-// Renders the canonical Casa Tabor tokens (typography, color,
-// radius/shadow, spacing/touch-target guidance) plus a few representative
-// component states, purely by referencing current theme classes/vars from
-// src/index.css. This intentionally does NOT introduce new shared primitives
-// (buttons/cards/etc.) — that consolidation is Phase 2 scope. It also encodes
-// the required viewport/input validation matrix as data (src/lib/deviceMatrix.mjs)
-// so QA has one place to check acceptance criteria per breakpoint.
+// ── Design System Gallery (v2.0 Living Canvas Edition) ───────────────────────
+// Renders the complete Casa Tabor living canvas design system:
+// 1. Interactive Calendar Card Design Options (A: Editorial Luxury, B: Modern Architectural, C: Bento Ambient)
+// 2. Multi-Day Stacked View and Ambient Reminder Mocks
+// 3. Hero Focus Cards (luxury dark gradients with ambient gold reflection)
+// 4. Living Canvas Bento Widgets & 3-Pane synchronized stream components
+// 5. StatusDot live indicators & micro-caps metadata typography
+// 6. Room Tone & Theme matrix previews
+// 7. Shared UI primitives, accessible dialogs, and validation device matrix.
 //
 // Access: Settings → System → Design System, or /settings/design-system.
 
@@ -67,9 +99,9 @@ const TYPE_ROLES: { className: string; role: string; token: string }[] = [
 ]
 
 const FONT_FAMILIES: { className: string; label: string; token: string; sample: string }[] = [
-  { className: 'font-display', label: 'Display', token: '--font-display', sample: 'Cormorant Garamond, Georgia, serif' },
-  { className: 'font-body', label: 'Body', token: '--font-body', sample: 'DM Sans, system-ui, sans-serif' },
-  { className: 'font-mono', label: 'Mono', token: '--font-mono', sample: 'JetBrains Mono, monospace' },
+  { className: 'font-display', label: 'Display (Cormorant)', token: '--font-display', sample: 'Cormorant Garamond, Georgia, serif' },
+  { className: 'font-body', label: 'Body (DM Sans)', token: '--font-body', sample: 'DM Sans, system-ui, sans-serif' },
+  { className: 'font-mono', label: 'Mono (JetBrains)', token: '--font-mono', sample: 'JetBrains Mono, monospace' },
 ]
 
 const CORE_COLORS: { className: string; label: string; token: string }[] = [
@@ -101,6 +133,8 @@ const FAMILY_COLORS: { className: string; label: string; token: string }[] = [
 const RADII: { className: string; label: string; token: string }[] = [
   { className: 'rounded-button', label: 'Button', token: '--radius-button (0.5rem)' },
   { className: 'rounded-card', label: 'Card', token: '--radius-card (0.75rem)' },
+  { className: 'rounded-widget', label: 'Widget / Item', token: '--radius-widget (1.25rem)' },
+  { className: 'rounded-container', label: 'Container / Hero', token: '--radius-container (1.5rem)' },
   { className: 'rounded-modal', label: 'Modal', token: '--radius-modal (1rem)' },
   { className: 'rounded-pill', label: 'Pill', token: '--radius-pill (9999px)' },
 ]
@@ -108,6 +142,8 @@ const RADII: { className: string; label: string; token: string }[] = [
 const SHADOWS: { className: string; label: string; token: string }[] = [
   { className: 'shadow-card', label: 'Card', token: '--shadow-card' },
   { className: 'shadow-card-hover', label: 'Card hover', token: '--shadow-card-hover' },
+  { className: 'shadow-widget', label: 'Widget Bento', token: '--shadow-widget' },
+  { className: 'shadow-hero-dark', label: 'Hero Dark', token: '--shadow-hero-dark' },
   { className: 'shadow-modal', label: 'Modal', token: '--shadow-modal' },
   { className: 'shadow-fab', label: 'FAB', token: '--shadow-fab' },
 ]
@@ -144,27 +180,55 @@ export default function DesignSystemGalleryPage() {
   const [confirmationOpen, setConfirmationOpen] = useState(false)
   const [dialStart, setDialStart] = useState('2026-07-10T15:00')
   const [dialEnd, setDialEnd] = useState('2026-07-10T16:00')
+  const [highlightedStreamId, setHighlightedStreamId] = useState<string | null>('gymnastics')
+  const [selectedRoomTone, setSelectedRoomTone] = useState<keyof typeof ROOM_TONE_COLORS>('day')
+  const [activeCardOption, setActiveCardOption] = useState<'optionA' | 'optionB' | 'optionC'>('optionA')
+  const [reminderCompleted, setReminderCompleted] = useState(false)
+
   const density = document.documentElement.dataset.density ?? 'touch'
   const closest = useMemo(
     () => closestDeviceProfile(width, height, isFinePointer ? 'fine-pointer' : 'touch'),
     [width, height, isFinePointer],
   )
 
+  const samplePeople = useMemo(
+    () => [
+      { id: 'jake', name: 'Jake', color: 'var(--color-family-jake)' },
+      { id: 'kelly', name: 'Kelly', color: 'var(--color-family-kelly)' },
+      { id: 'liv', name: 'Liv', color: 'var(--color-family-liv)' },
+    ],
+    [],
+  )
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 pb-12">
       {/* ── Header ── */}
-      <div className="rounded-card border border-casa-border bg-casa-surface p-4">
+      <div className="rounded-container border border-casa-border bg-casa-surface p-5 shadow-widget">
         <SectionHeader
           icon={Palette}
           title="Design System Gallery"
           description="Casa’s token contract, reusable components, and live capability-based density."
-          action={<Chip size="sm" tone="accent">v{DESIGN_SYSTEM_VERSION} · {COMPONENT_MANIFEST.length} components</Chip>}
+          action={
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-casa-gold/20 text-casa-navy text-caption font-bold border border-casa-gold/30">
+                <Sparkles size={13} className="text-casa-gold" />
+                v{DESIGN_SYSTEM_VERSION} Living Canvas
+              </span>
+              <Chip size="sm" tone="accent">{COMPONENT_MANIFEST.length} components</Chip>
+            </div>
+          }
         />
-        <div className="mt-3 rounded-button border border-casa-border bg-casa-bg px-3 py-2 text-body-sm text-casa-text-secondary">
-          Live viewport: <span className="font-semibold text-casa-navy">{width}×{height}</span>{' '}
-          ({isFinePointer ? 'fine-pointer' : 'touch'}, <span className="font-semibold text-casa-navy">{density}</span> density)
-          {' '}— nearest validation-matrix profile:{' '}
-          <span className="font-semibold text-casa-navy">{closest.label}</span>
+        <div className="mt-3.5 rounded-button border border-casa-border bg-casa-bg px-3.5 py-2.5 text-body-sm text-casa-text-secondary flex items-center justify-between flex-wrap gap-2">
+          <div>
+            Live viewport: <span className="font-semibold text-casa-navy">{width}×{height}</span>{' '}
+            ({isFinePointer ? 'fine-pointer' : 'touch'}, <span className="font-semibold text-casa-navy">{density}</span> density)
+            {' '}— nearest validation-matrix profile:{' '}
+            <span className="font-semibold text-casa-navy">{closest.label}</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-caption font-bold text-casa-gold">
+            <StatusDot variant="gold" size="sm" />
+            <span>Fluid Kiosk Scaling (1.75× @ 1920px)</span>
+          </div>
         </div>
       </div>
 
@@ -176,67 +240,762 @@ export default function DesignSystemGalleryPage() {
         />
       </Card>
 
-      {/* ── Typography ── */}
-      <div className="rounded-card border border-casa-border bg-casa-surface p-4 space-y-4">
+      {/* ════════════════════════════════════════════════════════════════════════
+          ✨ NEW SECTION: CALENDAR CARD POLISH OPTIONS (INTERACTIVE LAB)
+         ════════════════════════════════════════════════════════════════════════ */}
+      <div className="rounded-container border-2 border-casa-gold/40 bg-gradient-to-b from-casa-surface to-casa-accent-subtle/20 p-6 shadow-widget space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-casa-border/60">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-0.5 rounded-full bg-casa-gold text-casa-navy text-caption font-bold uppercase tracking-wider">
+                Live Prototype
+              </span>
+              <h2 className="font-display text-display-sm font-bold text-casa-navy">
+                Calendar Card Polish Options
+              </h2>
+            </div>
+            <p className="text-body-sm text-casa-text-secondary mt-1">
+              Select an option below to preview how Day View cards look when elevated to the new design system.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant={activeCardOption === 'optionA' ? 'primary' : 'secondary'}
+              onClick={() => setActiveCardOption('optionA')}
+              className="min-h-control"
+            >
+              Option A · Editorial Luxury
+            </Button>
+            <Button
+              size="sm"
+              variant={activeCardOption === 'optionB' ? 'primary' : 'secondary'}
+              onClick={() => setActiveCardOption('optionB')}
+              className="min-h-control"
+            >
+              Option B · Architectural
+            </Button>
+            <Button
+              size="sm"
+              variant={activeCardOption === 'optionC' ? 'primary' : 'secondary'}
+              onClick={() => setActiveCardOption('optionC')}
+              className="min-h-control"
+            >
+              Option C · Bento Ambient
+            </Button>
+          </div>
+        </div>
+
+        {/* ── OPTION A: Editorial Luxury (Recommended) ── */}
+        {activeCardOption === 'optionA' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-caption font-bold uppercase tracking-widest text-casa-gold">
+                Option A: Editorial Luxury (Cormorant Garamond + Top Metadata Band + Responsibility Rail)
+              </span>
+              <span className="text-caption text-casa-muted font-medium">Recommended for Calm consistency</span>
+            </div>
+
+            {/* Event Card 1 (Now / School Pickup) */}
+            <div className="rounded-widget border border-casa-border/80 bg-casa-surface p-5 shadow-sm hover:shadow-card-hover hover:border-casa-gold/60 transition-all space-y-4">
+              {/* Top Metadata Band */}
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <StatusDot variant="active" size="md" />
+                  <span className="text-caption font-bold uppercase tracking-widest text-casa-navy">
+                    Happening Soon · School Transit
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-caption font-mono font-semibold px-3 py-1 rounded-full bg-casa-bg border border-casa-border text-casa-navy">
+                    2:00 PM – 2:15 PM
+                  </span>
+                  <span className="text-caption font-semibold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-800 border border-emerald-500/20 flex items-center gap-1">
+                    <Car size={13} />
+                    <span>Leave by 1:43 PM</span>
+                  </span>
+                </div>
+              </div>
+
+              {/* Title & Location */}
+              <div>
+                <h3 className="font-display text-display-xs sm:text-display-sm font-bold text-casa-navy leading-snug">
+                  Owen & Emme Picked up by Giselle
+                </h3>
+                <div className="mt-2 flex items-center gap-2 text-body-sm text-casa-text-secondary">
+                  <MapPin size={15} className="text-casa-gold shrink-0" />
+                  <span className="font-medium">Palm Beach Public Elementary School</span>
+                  <span className="text-casa-muted">· 239 Cocoanut Row</span>
+                </div>
+                <p className="mt-1.5 text-caption text-casa-muted leading-relaxed">
+                  Giselle will pick up Owen and Emme from school. Ensure children have their school materials ready.
+                </p>
+              </div>
+
+              {/* Bottom Responsibility & Actions Rail */}
+              <div className="pt-3.5 border-t border-casa-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-casa-navy text-white text-caption font-semibold">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                    <span>Giselle · Driver & Stay</span>
+                  </div>
+                  <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-casa-bg border border-casa-border text-caption font-medium text-casa-text-secondary">
+                    <span>Passengers:</span>
+                    <span className="font-semibold text-casa-navy">Owen, Emme</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-caption font-semibold min-h-control"
+                  >
+                    <Navigation size={13} />
+                    <span>Directions</span>
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-caption font-medium min-h-control"
+                  >
+                    <Edit3 size={13} />
+                    <span>Edit</span>
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* Event Card 2 (Gym / Personal) */}
+            <div className="rounded-widget border border-casa-border/80 bg-casa-surface p-5 shadow-sm hover:shadow-card-hover transition-all space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-caption font-bold uppercase tracking-widest text-casa-muted">
+                    Personal Wellness · Fitness
+                  </span>
+                </div>
+                <span className="text-caption font-mono font-semibold px-3 py-1 rounded-full bg-casa-bg border border-casa-border text-casa-navy">
+                  6:00 AM – 7:00 AM
+                </span>
+              </div>
+
+              <div>
+                <h3 className="font-display text-display-xs sm:text-display-sm font-bold text-casa-navy leading-snug">
+                  Hit the Gym
+                </h3>
+                <div className="mt-2 flex items-center gap-2 text-body-sm text-casa-text-secondary">
+                  <MapPin size={15} className="text-casa-gold shrink-0" />
+                  <span className="font-medium">Home Gym · Garage Studio</span>
+                </div>
+              </div>
+
+              <div className="pt-3.5 border-t border-casa-border/50 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-casa-accent-subtle border border-casa-accent-soft-border text-caption font-semibold text-casa-navy">
+                    <span>Jake · Solo</span>
+                  </div>
+                </div>
+                <Button size="sm" variant="ghost" className="min-h-control text-caption font-medium">
+                  Edit Details
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── OPTION B: Modern Architectural (High-Contrast Time Column) ── */}
+        {activeCardOption === 'optionB' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-caption font-bold uppercase tracking-widest text-casa-navy">
+                Option B: Modern Architectural (Two-Column Time Anchor + Bold Sans Geometry)
+              </span>
+              <span className="text-caption text-casa-muted font-medium">High structural scannability</span>
+            </div>
+
+            <div className="rounded-widget border border-casa-border/80 bg-casa-surface p-5 shadow-sm hover:shadow-card-hover transition-all flex flex-col md:flex-row gap-5 items-start">
+              {/* Left Column: Big Time Anchor */}
+              <div className="md:w-36 flex-shrink-0 flex md:flex-col justify-between items-baseline md:items-start border-b md:border-b-0 md:border-r border-casa-border/60 pb-3 md:pb-0 md:pr-4">
+                <div>
+                  <span className="font-mono text-display-sm font-bold text-casa-navy leading-none">2:00</span>
+                  <span className="text-caption font-mono text-casa-muted ml-1 uppercase">PM</span>
+                </div>
+                <span className="text-caption font-mono text-casa-muted mt-1">15 min duration</span>
+                <span className="mt-3 px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-800 text-caption font-bold flex items-center gap-1">
+                  <Car size={12} />
+                  <span>Leave 1:43</span>
+                </span>
+              </div>
+
+              {/* Right Column: Content & Actions */}
+              <div className="flex-1 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-caption font-bold uppercase tracking-wider text-casa-gold">
+                    School Transit
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-family-jake" title="Jake" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-family-liv" title="Liv" />
+                  </div>
+                </div>
+
+                <h3 className="text-heading font-bold text-casa-navy leading-snug">
+                  Owen & Emme Picked up by Giselle
+                </h3>
+
+                <div className="flex items-center gap-2 text-body-sm text-casa-text-secondary">
+                  <MapPin size={14} className="text-casa-gold" />
+                  <span>Palm Beach Public Elementary School</span>
+                </div>
+
+                <div className="pt-3 border-t border-casa-border/40 flex items-center justify-between">
+                  <span className="text-caption font-semibold text-casa-navy">Driver: Giselle (Vehicle 1)</span>
+                  <Button size="sm" variant="secondary" className="min-h-control text-caption">View Route</Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── OPTION C: Bento Ambient (Living Canvas Warm Gradient) ── */}
+        {activeCardOption === 'optionC' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-caption font-bold uppercase tracking-widest text-casa-gold">
+                Option C: Bento Ambient (Warm Living Canvas Card with Halos)
+              </span>
+              <span className="text-caption text-casa-muted font-medium">Softest touch aesthetic</span>
+            </div>
+
+            <div className="rounded-container bg-gradient-to-br from-casa-surface via-casa-surface to-casa-accent-subtle/30 border border-casa-accent-soft-border/50 p-6 shadow-sm space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <StatusDot variant="gold" size="md" />
+                  <span className="text-caption font-bold uppercase tracking-widest text-casa-gold">
+                    Household Logistics
+                  </span>
+                </div>
+                <span className="text-caption font-mono font-bold px-3 py-1 rounded-full bg-casa-surface border border-casa-accent-soft-border text-casa-navy">
+                  2:00 PM – 2:15 PM
+                </span>
+              </div>
+
+              <div>
+                <h3 className="font-display text-display-xs font-bold text-casa-navy">
+                  Owen & Emme Picked up by Giselle
+                </h3>
+                <p className="text-body-sm text-casa-text-secondary mt-1">
+                  Palm Beach Public Elementary School · Palm Beach, FL
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between pt-3 border-t border-casa-accent-soft-border/40">
+                <div className="flex items-center gap-2">
+                  <span className="px-3 py-1 rounded-full bg-casa-surface border border-casa-border text-caption font-semibold text-casa-navy shadow-2xs">
+                    🚗 Giselle Driving
+                  </span>
+                  <span className="text-caption text-casa-muted">Owen, Emme</span>
+                </div>
+                <Button size="sm" variant="primary" className="bg-casa-gold text-casa-navy font-bold min-h-control">
+                  Start Navigation
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Multi-Day Stacked View Mocks (Stream) ── */}
+        <div className="pt-4 border-t border-casa-border/60 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="font-display text-body-lg font-bold text-casa-navy flex items-center gap-2">
+              <LayersIcon size={18} className="text-casa-gold" />
+              <span>Multi-Day Stacked & Column Card Mocks</span>
+            </h3>
+            <span className="text-caption text-casa-muted">Compact multi-column tiles</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Day 1 Tile */}
+            <div className="rounded-widget border border-casa-border/80 bg-casa-surface p-4 shadow-sm space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-caption font-bold text-casa-navy">11:30 AM – 12:30 PM</span>
+                <span className="w-2.5 h-2.5 rounded-full bg-family-jake" />
+              </div>
+              <h4 className="text-body-sm font-semibold text-casa-navy leading-tight line-clamp-2">
+                Pick up a coffee & team sync
+              </h4>
+              <div className="flex items-center justify-between pt-2 border-t border-casa-border/40 text-caption text-casa-muted">
+                <span>At Home</span>
+                <span className="font-semibold text-casa-navy">Jake</span>
+              </div>
+            </div>
+
+            {/* Day 2 Tile */}
+            <div className="rounded-widget border border-casa-navy bg-casa-navy text-white p-4 shadow-md space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-caption font-bold text-casa-gold">2:00 PM – 2:15 PM</span>
+                <div className="flex gap-1">
+                  <span className="w-2 h-2 rounded-full bg-family-liv" />
+                  <span className="w-2 h-2 rounded-full bg-family-emme" />
+                </div>
+              </div>
+              <h4 className="text-body-sm font-semibold text-white leading-tight line-clamp-2">
+                Owen & Emme School Pickup
+              </h4>
+              <div className="flex items-center justify-between pt-2 border-t border-white/10 text-caption text-white/70">
+                <span>Palm Beach Public</span>
+                <span className="font-bold text-casa-gold">Giselle Drives</span>
+              </div>
+            </div>
+
+            {/* Day 3 Tile */}
+            <div className="rounded-widget border border-casa-border/80 bg-casa-surface p-4 shadow-sm space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-caption font-bold text-casa-navy">7:00 PM – 7:30 PM</span>
+                <span className="w-2.5 h-2.5 rounded-full bg-family-owen" />
+              </div>
+              <h4 className="text-body-sm font-semibold text-casa-navy leading-tight line-clamp-2">
+                Take out the Trash & Recycling
+              </h4>
+              <div className="flex items-center justify-between pt-2 border-t border-casa-border/40 text-caption text-casa-muted">
+                <span>Household</span>
+                <span className="font-semibold text-casa-navy">Owen</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Ambient Reminder & Task Pill Mock ── */}
+        <div className="pt-4 border-t border-casa-border/60 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="font-display text-body-lg font-bold text-casa-navy flex items-center gap-2">
+              <Bell size={18} className="text-amber-600" />
+              <span>Ambient Reminder & Task Pill Mocks</span>
+            </h3>
+            <span className="text-caption text-casa-muted">Low-anxiety warm task banner</span>
+          </div>
+
+          <div className="p-3.5 rounded-widget bg-amber-50/70 border border-amber-300/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <IconButton
+                size="sm"
+                variant={reminderCompleted ? 'primary' : 'secondary'}
+                icon={<Check size={14} strokeWidth={3} />}
+                onClick={() => setReminderCompleted(!reminderCompleted)}
+                aria-label="Toggle task completion"
+                className={cn(
+                  'rounded-full min-h-control min-w-control',
+                  reminderCompleted
+                    ? 'bg-amber-500 text-white border-amber-500'
+                    : 'border-amber-400 bg-white hover:border-amber-600',
+                )}
+              />
+
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-caption font-mono font-bold text-amber-900">9:00 AM</span>
+                  <span className={cn('text-body-sm font-semibold text-casa-navy', reminderCompleted && 'line-through text-casa-muted')}>
+                    Ask Dr. Hanna for a full blood panel test
+                  </span>
+                </div>
+                <p className="text-caption text-amber-900/80 mt-0.5">
+                  Fasting required 12 hours prior. Call office before arrival.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-caption font-bold px-2.5 py-1 rounded-full bg-casa-surface border border-amber-200 text-casa-navy">
+                Jake
+              </span>
+              <Button size="sm" variant="ghost" className="text-amber-900 hover:bg-amber-100 min-h-control text-caption font-semibold">
+                Snooze 1h
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── SECTION 1: Living Canvas & Hero Focus ── */}
+      <div className="rounded-container border border-casa-border/80 bg-casa-surface p-6 shadow-widget space-y-6">
+        <SectionHeader
+          icon={Sparkles}
+          title="Living Canvas & Hero Focus Primitives"
+          description="High-priority hero cards with dark luxury navy gradients, ambient gold glows, and warm dinner cards."
+        />
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+          {/* Hero Next Up Card (7 cols) */}
+          <div className="lg:col-span-7 flex flex-col justify-start">
+            <Text role="caption" muted className="font-bold uppercase tracking-widest mb-2.5">
+              HeroCard (Next Up Spotlight)
+            </Text>
+            <HeroCard
+              statusText="Starts in 15 min"
+              statusVariant="active"
+              timeBadge="3:30 PM"
+              title="Pediatrician Checkup — Dr. Davis"
+              subtitle={
+                <>
+                  <MapPin size={15} className="text-casa-gold shrink-0" />
+                  <span>Valley Pediatrics · 1420 Main St, Suite 200</span>
+                </>
+              }
+              avatars={
+                <div className="flex items-center gap-2.5">
+                  <PersonAvatarStack people={samplePeople} max={2} size="md" />
+                  <span className="text-caption text-white/70 font-medium">Jake driving Owen</span>
+                </div>
+              }
+              actions={
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white text-caption font-bold shadow-sm transition-all min-h-control"
+                    aria-label="Mark completed"
+                  >
+                    <CheckCircle2 size={15} />
+                    <span>Check In</span>
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/20 text-caption font-semibold transition-all min-h-control"
+                  >
+                    <Car size={15} />
+                    <span>Navigate (12m)</span>
+                  </Button>
+                </div>
+              }
+              onClick={() => setToastOpen(true)}
+            />
+          </div>
+
+          {/* Ambient Dinner & Bento Summary Card (5 cols) */}
+          <div className="lg:col-span-5 flex flex-col justify-between space-y-4">
+            <div>
+              <Text role="caption" muted className="font-bold uppercase tracking-widest mb-2.5">
+                Card tone="ambient" (Tonight's Dinner)
+              </Text>
+              <Card tone="ambient" padding="md" className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-casa-gold/20 flex items-center justify-center text-casa-navy">
+                      <Utensils size={16} />
+                    </div>
+                    <div>
+                      <span className="text-caption font-bold uppercase tracking-widest text-casa-gold">
+                        Tonight's Dinner
+                      </span>
+                      <h3 className="font-display text-heading font-bold text-casa-navy leading-none mt-0.5">
+                        Lemon Herb Roast Chicken
+                      </h3>
+                    </div>
+                  </div>
+                  <span className="text-caption font-mono font-semibold px-2.5 py-1 rounded-full bg-casa-surface border border-casa-border">
+                    6:30 PM
+                  </span>
+                </div>
+                <p className="text-body-sm text-casa-text-secondary leading-relaxed">
+                  Served with roasted asparagus and garlic baby potatoes. Kelly prep covers seasoning at 5:00 PM.
+                </p>
+                <div className="flex items-center gap-2 pt-2 border-t border-casa-gold/20">
+                  <Chip size="sm" tone="accent">Recipe saved</Chip>
+                  <Chip size="sm" tone="neutral">Cook time: 45m</Chip>
+                </div>
+              </Card>
+            </div>
+
+            {/* Micro-Caps & Status Badge Row */}
+            <div className="rounded-widget border border-casa-border bg-casa-bg p-4 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <StatusDot variant="gold" size="md" />
+                <span className="text-caption font-bold uppercase tracking-widest text-casa-navy">
+                  Ambient Intelligence Active
+                </span>
+              </div>
+              <span className="text-caption font-mono text-casa-muted">Living Canvas Sync</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── SECTION 2: 3-Pane Synchronized Widgets & Triage ── */}
+      <div className="rounded-container border border-casa-border/80 bg-casa-surface p-6 shadow-widget space-y-6">
+        <SectionHeader
+          icon={Zap}
+          title="Synchronized 3-Pane Living Canvas Stream"
+          description="Timeline stream items with real-time cross-pane highlight sync and 1-click triage action cards."
+        />
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* Schedule Stream Widget (6 cols) */}
+          <div className="lg:col-span-6 space-y-3">
+            <WidgetContainer
+              icon={<Calendar size={18} className="text-casa-navy" />}
+              title="Today's Timeline Stream"
+              badge={<span className="text-caption font-semibold px-2.5 py-0.5 rounded-full bg-casa-bg text-casa-navy">3 Events</span>}
+            >
+              <div className="space-y-2.5 mt-1">
+                <ScheduleStreamItem
+                  timeText="3:30 PM – 4:30 PM"
+                  title="Gymnastics Practice — Emme"
+                  location="North Star Athletic Center"
+                  members={[
+                    { id: 'kelly', name: 'Kelly', color: 'var(--color-family-kelly)' },
+                    { id: 'emme', name: 'Emme', color: 'var(--color-family-emme)' },
+                  ]}
+                  isHighlighted={highlightedStreamId === 'gymnastics'}
+                  onMouseEnter={() => setHighlightedStreamId('gymnastics')}
+                  onClick={() => setHighlightedStreamId('gymnastics')}
+                />
+                <ScheduleStreamItem
+                  timeText="5:15 PM – 6:30 PM"
+                  title="Soccer Pickup & Practice — Owen"
+                  location="Community Soccer Complex (Field 3)"
+                  members={[
+                    { id: 'jake', name: 'Jake', color: 'var(--color-family-jake)' },
+                    { id: 'owen', name: 'Owen', color: 'var(--color-family-owen)' },
+                  ]}
+                  isHighlighted={highlightedStreamId === 'soccer'}
+                  onMouseEnter={() => setHighlightedStreamId('soccer')}
+                  onClick={() => setHighlightedStreamId('soccer')}
+                />
+                <ScheduleStreamItem
+                  timeText="7:00 PM – 8:00 PM"
+                  title="Family Dinner & Homework Sync"
+                  location="Kitchen / Dining Room"
+                  members={samplePeople}
+                  isHighlighted={highlightedStreamId === 'dinner'}
+                  onMouseEnter={() => setHighlightedStreamId('dinner')}
+                  onClick={() => setHighlightedStreamId('dinner')}
+                />
+              </div>
+            </WidgetContainer>
+          </div>
+
+          {/* Attention Hub & Action Cards (6 cols) */}
+          <div className="lg:col-span-6 space-y-3">
+            <WidgetContainer
+              icon={<Zap size={18} className="text-amber-500" />}
+              title="Attention Hub (1-Click Triage)"
+              badge={<span className="text-caption font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900">2 Actionable</span>}
+            >
+              <div className="space-y-3 mt-1">
+                <ActionCard
+                  category="RIDE NEEDED · 5:15 PM"
+                  icon={<AlertTriangle size={15} className="text-amber-600 shrink-0" />}
+                  description="Owen's soccer pickup overlaps with Liv's robotics meet. Driver coordination required."
+                  actions={
+                    <>
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        onClick={() => setToastOpen(true)}
+                        className="px-3.5 py-2 rounded-xl bg-amber-500 text-white hover:bg-amber-600 text-caption font-bold shadow-sm transition-all min-h-control"
+                      >
+                        Assign Jake (Driver)
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => setToastOpen(true)}
+                        className="px-3.5 py-2 rounded-xl bg-casa-navy text-white hover:bg-slate-800 text-caption font-bold shadow-sm transition-all min-h-control"
+                      >
+                        Assign Kelly (Driver)
+                      </Button>
+                    </>
+                  }
+                />
+
+                <ActionCard
+                  category="PREP ALERT"
+                  tone="accent"
+                  icon={<Sparkles size={15} className="text-casa-gold shrink-0" />}
+                  description="Pre-heat oven to 375°F for chicken marinade handoff at 5:00 PM."
+                  actions={
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => setToastOpen(true)}
+                      className="px-3.5 py-2 rounded-xl bg-casa-surface border border-casa-border hover:border-casa-gold text-casa-navy text-caption font-bold shadow-sm transition-all min-h-control"
+                    >
+                      Mark Done
+                    </Button>
+                  }
+                />
+              </div>
+            </WidgetContainer>
+          </div>
+        </div>
+      </div>
+
+      {/* ── SECTION 3: Status Indicators & Micro-Caps Typography ── */}
+      <div className="rounded-container border border-casa-border/80 bg-casa-surface p-6 shadow-widget space-y-6">
+        <SectionHeader
+          icon={CheckCircle2}
+          title="Status Indicators & Micro-Caps Typography"
+          description="Live animated pulse dots, presence states, and uppercase tracking-widest editorial metadata."
+        />
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="rounded-widget border border-casa-border bg-casa-bg p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <StatusDot variant="active" size="lg" />
+              <span className="text-caption font-bold uppercase tracking-widest text-casa-navy">
+                active (Happening Now)
+              </span>
+            </div>
+            <p className="text-caption text-casa-text-secondary">
+              Emerald pulsing dot for ongoing appointments, live transit, and active status.
+            </p>
+          </div>
+
+          <div className="rounded-widget border border-casa-border bg-casa-bg p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <StatusDot variant="warning" size="lg" />
+              <span className="text-caption font-bold uppercase tracking-widest text-amber-900">
+                warning (Triage Needed)
+              </span>
+            </div>
+            <p className="text-caption text-casa-text-secondary">
+              Amber pulsing dot for schedule conflicts, unassigned rides, and pending prep items.
+            </p>
+          </div>
+
+          <div className="rounded-widget border border-casa-border bg-casa-bg p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <StatusDot variant="gold" size="lg" />
+              <span className="text-caption font-bold uppercase tracking-widest text-casa-gold">
+                gold (AI Copilot / Sync)
+              </span>
+            </div>
+            <p className="text-caption text-casa-text-secondary">
+              Warm gold indicator for Copilot reasoning, daily briefings, and ambient sync.
+            </p>
+          </div>
+
+          <div className="rounded-widget border border-casa-border bg-casa-bg p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <StatusDot variant="info" size="lg" />
+              <span className="text-caption font-bold uppercase tracking-widest text-casa-info-strong">
+                info (Suggestions)
+              </span>
+            </div>
+            <p className="text-caption text-casa-text-secondary">
+              Teal indicator for directory recommendations, grocery suggestions, and weather.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* ── SECTION 4: Room Tone Dynamic Palette Simulation ── */}
+      <div className="rounded-container border border-casa-border/80 bg-casa-surface p-6 shadow-widget space-y-6">
+        <SectionHeader
+          icon={Sun}
+          title="Dynamic Room Tone System"
+          description="Circadian background shifting tailored for kitchen and wall-mounted kiosks."
+        />
+
+        <div className="flex flex-wrap gap-2.5 mb-4">
+          {(Object.keys(ROOM_TONE_COLORS) as (keyof typeof ROOM_TONE_COLORS)[]).map((tone) => (
+            <Chip
+              key={tone}
+              selected={selectedRoomTone === tone}
+              onClick={() => setSelectedRoomTone(tone)}
+              className="capitalize"
+            >
+              {tone.replace('-', ' ')}
+            </Chip>
+          ))}
+        </div>
+
+        <div
+          className="rounded-widget p-6 border border-casa-border/80 transition-colors duration-700 space-y-4"
+          style={{ backgroundColor: ROOM_TONE_COLORS[selectedRoomTone] }}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-caption font-bold uppercase tracking-widest text-casa-gold">
+                Circadian Shift Preview
+              </span>
+              <h3 className="font-display text-display-sm font-bold text-casa-navy capitalize mt-0.5">
+                {selectedRoomTone} Room Tone
+              </h3>
+            </div>
+            <span className="text-caption font-mono font-bold px-3 py-1.5 rounded-full bg-casa-surface border border-casa-border shadow-xs">
+              {ROOM_TONE_COLORS[selectedRoomTone]}
+            </span>
+          </div>
+          <p className="text-body text-casa-navy max-w-xl">
+            Room Tone subtly adjusts screen temperature to avoid harsh blue light during early morning breakfast and late evening family routines.
+          </p>
+        </div>
+      </div>
+
+      {/* ── SECTION 5: Canonical Typography ── */}
+      <div className="rounded-container border border-casa-border/80 bg-casa-surface p-6 shadow-widget space-y-4">
         <SectionHeader icon={Type} title="Typography" description="Fluid semantic roles generated from src/design-system/tokens.mjs." />
         <div className="space-y-2">
           {TYPE_ROLES.map((t) => (
             <div key={t.role} className="flex items-baseline justify-between gap-4 border-b border-casa-border/60 pb-2 last:border-0">
-              <p className={cn(t.className, 'text-casa-navy truncate')}>The quick brown fox</p>
+              <p className={cn(t.className, 'text-casa-navy truncate')}>
+                {t.role === 'Display XL' ? (
+                  <>Good evening, <span className="italic font-normal">Tabor Family</span></>
+                ) : (
+                  'The quick brown fox jumps over the lazy dog'
+                )}
+              </p>
               <p className="text-caption text-casa-muted whitespace-nowrap flex-shrink-0">{t.role} · {t.token}</p>
             </div>
           ))}
         </div>
-        <div className="rounded-card bg-casa-navy p-4">
-          <Heading role="display-sm" tone="on-dark">On-dark editorial heading</Heading>
-          <Text role="body-sm" className="mt-1 text-casa-on-dark/75">
-            Use the on-dark tone when a heading sits on a navy or dark branded surface.
-          </Text>
-        </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
           {FONT_FAMILIES.map((f) => (
-            <div key={f.label} className="rounded-button border border-casa-border bg-casa-bg p-3">
-              <p className={cn(f.className, 'text-body text-casa-navy')}>Aa Bb Cc 123</p>
-              <p className="text-caption text-casa-muted mt-1">{f.label} · {f.token}</p>
+            <div key={f.label} className="rounded-widget border border-casa-border bg-casa-bg p-3.5">
+              <p className={cn(f.className, 'text-body text-casa-navy font-semibold')}>Aa Bb Cc 123</p>
+              <p className="text-caption text-casa-muted mt-1">{f.label}</p>
               <p className="text-caption text-casa-text-faint">{f.sample}</p>
             </div>
           ))}
         </div>
       </div>
 
-      {/* ── Color ── */}
-      <div className="rounded-card border border-casa-border bg-casa-surface p-4 space-y-4">
+      {/* ── SECTION 6: Color Palette ── */}
+      <div className="rounded-container border border-casa-border/80 bg-casa-surface p-6 shadow-widget space-y-4">
         <SectionHeader icon={Palette} title="Color" description="Core palette, semantic accents, and per-member colors from @theme." />
         <ColorSwatchGrid title="Core palette" swatches={CORE_COLORS} />
         <ColorSwatchGrid title="Semantic accents" swatches={SEMANTIC_COLORS} />
         <ColorSwatchGrid title="Family member colors" swatches={FAMILY_COLORS} />
       </div>
 
-      {/* ── Radius & Shadow ── */}
-      <div className="rounded-card border border-casa-border bg-casa-surface p-4 space-y-4">
+      {/* ── SECTION 7: Radius & Elevation ── */}
+      <div className="rounded-container border border-casa-border/80 bg-casa-surface p-6 shadow-widget space-y-4">
         <SectionHeader icon={Layers} title="Radius & Shadow" description="Corner radii and elevation tokens." />
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           {RADII.map((r) => (
             <div key={r.label} className="text-center">
-              <div className={cn('h-16 w-full bg-casa-bg-2 border border-casa-border mx-auto', r.className)} />
-              <p className="text-caption text-casa-muted mt-1.5">{r.label}</p>
+              <div className={cn('h-16 w-full bg-casa-bg-2 border border-casa-border mx-auto shadow-xs', r.className)} />
+              <p className="text-caption text-casa-navy font-semibold mt-1.5">{r.label}</p>
               <p className="text-caption text-casa-text-faint">{r.token}</p>
             </div>
           ))}
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-2">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 pt-2">
           {SHADOWS.map((s) => (
             <div key={s.label} className="text-center">
-              <div className={cn('h-16 rounded-card bg-casa-surface mx-auto', s.className)} />
-              <p className="text-caption text-casa-muted mt-1.5">{s.label}</p>
+              <div className={cn('h-16 rounded-card bg-casa-surface border border-casa-border/30 mx-auto', s.className)} />
+              <p className="text-caption text-casa-navy font-semibold mt-1.5">{s.label}</p>
               <p className="text-caption text-casa-text-faint">{s.token}</p>
             </div>
           ))}
         </div>
       </div>
 
-      {/* ── Spacing / touch targets ── */}
-      <div className="rounded-card border border-casa-border bg-casa-surface p-4 space-y-4">
+      {/* ── SECTION 8: Spacing & Touch Targets ── */}
+      <div className="rounded-container border border-casa-border/80 bg-casa-surface p-6 shadow-widget space-y-4">
         <SectionHeader icon={Ruler} title="Spacing & touch targets" description="Minimum recommended control size for a touch-first kiosk/phone/tablet UI." />
         <div className="flex flex-wrap items-end gap-6">
           <div className="text-center">
@@ -252,19 +1011,17 @@ export default function DesignSystemGalleryPage() {
             <p className="text-caption text-casa-muted mt-1.5">Minimum target · 44px / 48px kiosk</p>
           </div>
         </div>
-        <p className="text-body-sm text-casa-text-secondary">
-          Use <code className="text-caption bg-casa-bg px-1.5 py-0.5 rounded">min-h-control</code>/<code className="text-caption bg-casa-bg px-1.5 py-0.5 rounded">min-w-control</code> or
-          <code className="text-caption bg-casa-bg px-1.5 py-0.5 rounded ml-1">size-control</code> on tappable controls. The token resolves to 44px on handheld/desktop
-          and 48px on the Pi kiosk. The audit script (<code className="text-caption bg-casa-bg px-1.5 py-0.5 rounded">npm run style:audit</code>) flags
-          new square controls below this size as a heuristic (not a hard guarantee — see its printed caveats).
-        </p>
       </div>
 
-      {/* ── Shared primitives ── */}
-      <div className="rounded-card border border-casa-border bg-casa-surface p-4 space-y-4">
+      {/* ── SECTION 9: Shared Interactive Primitives ── */}
+      <div className="rounded-container border border-casa-border/80 bg-casa-surface p-6 shadow-widget space-y-6">
         <SectionHeader icon={CheckCircle2} title="Shared primitives" description="Production components from src/components/ui with density-aware sizing and accessible states." />
+
+        {/* Buttons */}
         <div>
-          <Text role="caption" muted className="font-bold uppercase tracking-widest mb-2">Buttons</Text>
+          <Text role="caption" muted className="font-bold uppercase tracking-widest mb-2.5">
+            Buttons
+          </Text>
           <div className="flex flex-wrap gap-3">
             <Button>Primary</Button>
             <Button variant="strong">Strong</Button>
@@ -276,48 +1033,52 @@ export default function DesignSystemGalleryPage() {
             <Button disabled>Disabled</Button>
             <IconButton icon={<CheckCircle2 size={18} />} aria-label="Confirm example" variant="secondary" />
           </div>
-          <div className="mt-3 max-w-sm space-y-2">
-            <Button variant="secondary" fullWidth align="start">Start-aligned list action</Button>
-            <Button variant="secondary" fullWidth align="between" trailingIcon={<CheckCircle2 size={18} />}>
-              Between-aligned sidebar action
-            </Button>
-          </div>
-          <Card padding="sm">
-            <Heading role="heading">Progressive event editing</Heading>
-            <Text role="body-sm" muted className="mb-3">Use compact summaries for scanning, then reveal touch dials or optional fields only when needed.</Text>
-            <DateTimeDial
-              startValue={dialStart}
-              endValue={dialEnd}
-              onStartChange={setDialStart}
-              onEndChange={setDialEnd}
-            />
-            <DisclosureSection
-              title="Additional details"
-              summary="Pickup · 2 completed"
-              open={disclosureOpen}
-              onOpenChange={setDisclosureOpen}
-              className="mt-3 rounded-card border border-casa-border"
-            >
-              <Field label="Notes">
-                <Textarea rows={2} placeholder="Optional details" />
-              </Field>
-            </DisclosureSection>
-          </Card>
-          <div>
-            <Text role="caption" muted className="font-bold uppercase tracking-widest mb-2">Sliding segmented control</Text>
-            <SegmentedControl
-              aria-label="Gallery view"
-              value={segment}
-              onChange={setSegment}
-              options={[
-                { value: 'first', label: 'First view' },
-                { value: 'second', label: 'Second view', icon: <CheckCircle2 size={15} /> },
-                { value: 'third', label: 'Third view' },
-              ]}
-            />
-            <Text role="caption" muted className="mt-2">Tap an option or drag the thumb across two or more choices.</Text>
-          </div>
         </div>
+
+        {/* Progressive Event Editing & DateTimeDial */}
+        <Card padding="md" tone="subtle" className="space-y-3">
+          <Heading role="heading">Progressive event editing</Heading>
+          <Text role="body-sm" muted className="mb-3">
+            Use compact summaries for scanning, then reveal touch dials or optional fields only when needed.
+          </Text>
+          <DateTimeDial
+            startValue={dialStart}
+            endValue={dialEnd}
+            onStartChange={setDialStart}
+            onEndChange={setDialEnd}
+          />
+          <DisclosureSection
+            title="Additional details"
+            summary="Pickup · 2 completed"
+            open={disclosureOpen}
+            onOpenChange={setDisclosureOpen}
+            className="mt-3 rounded-card border border-casa-border"
+          >
+            <Field label="Notes">
+              <Textarea rows={2} placeholder="Optional details" />
+            </Field>
+          </DisclosureSection>
+        </Card>
+
+        {/* Sliding Segmented Control */}
+        <div>
+          <Text role="caption" muted className="font-bold uppercase tracking-widest mb-2">
+            Sliding segmented control
+          </Text>
+          <SegmentedControl
+            aria-label="Gallery view"
+            value={segment}
+            onChange={setSegment}
+            options={[
+              { value: 'first', label: 'First view' },
+              { value: 'second', label: 'Second view', icon: <CheckCircle2 size={15} /> },
+              { value: 'third', label: 'Third view' },
+            ]}
+          />
+          <Text role="caption" muted className="mt-2">Tap an option or drag the thumb across two or more choices.</Text>
+        </div>
+
+        {/* Chips & Badges */}
         <div className="space-y-3">
           <div>
             <Text role="caption" muted className="font-bold uppercase tracking-widest">Pills / Chips</Text>
@@ -347,17 +1108,14 @@ export default function DesignSystemGalleryPage() {
                   <CalendarPill color="var(--color-casa-navy)">Jake</CalendarPill>
                   <CalendarPill>+2</CalendarPill>
                   <PersonAvatarStack
-                    people={[
-                      { id: 'giselle', name: 'Giselle', color: 'var(--color-person-giselle)' },
-                      { id: 'jake', name: 'Jake', color: 'var(--color-casa-navy)' },
-                      { id: 'kelly', name: 'Kelly', color: 'var(--color-casa-gold)' },
-                    ]}
+                    people={samplePeople}
                     max={2}
                     size="sm"
                   />
                 </div>
               </div>
             </Card>
+
             <Card tone="surface" padding="sm">
               <Heading role="heading">Interactive action pills</Heading>
               <Text role="body-sm" muted className="mt-1">
@@ -373,6 +1131,8 @@ export default function DesignSystemGalleryPage() {
             </Card>
           </div>
         </div>
+
+        {/* Card Tones */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <Card>
             <Heading role="heading">Surface card</Heading>
@@ -387,6 +1147,8 @@ export default function DesignSystemGalleryPage() {
             <Text role="body-sm" muted>Keyboard and pointer activation.</Text>
           </Card>
         </div>
+
+        {/* Form Inputs & Live Voice Transcript */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl">
           <Field label="Household item" hint="Hint and label wiring are automatic.">
             <Input placeholder="Type an item" />
@@ -399,7 +1161,7 @@ export default function DesignSystemGalleryPage() {
           </Field>
           <div className="md:col-span-2">
             <Text role="body-sm" className="mb-1.5 font-medium">Live voice transcript</Text>
-            <div className="rounded-control border border-casa-border bg-casa-bg p-4">
+            <div className="rounded-widget border border-casa-border bg-casa-bg p-4">
               <LiveTranscript
                 committed="Add milk and eggs"
                 interim="for tomorrow morning"
@@ -414,10 +1176,13 @@ export default function DesignSystemGalleryPage() {
             </div>
           </div>
         </div>
+
+        {/* Modal & Sheet Triggers */}
         <div className="flex flex-wrap gap-3">
           <Button variant="secondary" onClick={() => setModalOpen(true)}>Open modal</Button>
           <Button variant="secondary" onClick={() => setSheetOpen(true)}>Open sheet</Button>
         </div>
+
         <PageShell
           title="Page shell example"
           subtitle="Consistent page gutters and section rhythm."
@@ -425,6 +1190,8 @@ export default function DesignSystemGalleryPage() {
         >
           <Text role="body-sm">Page content aligns to the shared responsive grid.</Text>
         </PageShell>
+
+        {/* Composition Patterns */}
         <div className="space-y-4 border-t border-casa-divider pt-4">
           <PageHeader
             eyebrow="Composition patterns"
@@ -456,6 +1223,8 @@ export default function DesignSystemGalleryPage() {
             <PageFeedback state="success" title="Settings saved" description="Your changes are active on this device." />
           </div>
         </div>
+
+        {/* P0 Touch Contracts */}
         <div className="space-y-4 border-t border-casa-divider pt-4">
           <div>
             <Heading role="display-sm">P0 touch contracts</Heading>
@@ -547,10 +1316,12 @@ export default function DesignSystemGalleryPage() {
         </div>
       </div>
 
+      {/* ── Dialogs & Overlays ── */}
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Accessible modal" size="xl">
         <Text role="body-sm" muted>Focus is trapped, Escape closes, and focus returns to the trigger.</Text>
         <Button className="mt-4" fullWidth onClick={() => setModalOpen(false)}>Done</Button>
       </Modal>
+
       <Sheet open={sheetOpen} onClose={() => setSheetOpen(false)} title="Accessible sheet">
         <Text role="body-sm" muted>The sheet shares the same focus, dismissal, and layering contract. Sequential overlays wait for its exit to complete.</Text>
         <WorkflowActions className="mt-4">
@@ -558,6 +1329,7 @@ export default function DesignSystemGalleryPage() {
           <Button onClick={() => setSheetOpen(false)}>Save changes</Button>
         </WorkflowActions>
       </Sheet>
+
       <ConfirmationDialog
         open={confirmationOpen}
         onClose={() => setConfirmationOpen(false)}
@@ -567,6 +1339,7 @@ export default function DesignSystemGalleryPage() {
         confirmLabel="Remove item"
         destructive
       />
+
       <Toast
         open={toastOpen}
         tone="success"
@@ -629,8 +1402,8 @@ function ColorSwatchGrid({ title, swatches }: { title: string; swatches: { class
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {swatches.map((s) => (
           <div key={s.label} className="text-center">
-            <div className={cn('h-12 rounded-button border border-casa-border/60 mx-auto', s.className)} />
-            <p className="text-caption text-casa-navy mt-1.5 font-medium">{s.label}</p>
+            <div className={cn('h-12 rounded-button border border-casa-border/60 mx-auto shadow-2xs', s.className)} />
+            <p className="text-caption text-casa-navy mt-1.5 font-semibold">{s.label}</p>
             <p className="text-caption text-casa-text-faint">{s.token}</p>
           </div>
         ))}

@@ -40,7 +40,7 @@ export function segmentedControlThumbClassName(options?: { dragging?: boolean })
 export function segmentedControlItemClassName(options?: { selected?: boolean }): string
 
 export type CardPadding = 'none' | 'sm' | 'md' | 'lg'
-export type CardTone = 'surface' | 'subtle' | 'accent'
+export type CardTone = 'surface' | 'subtle' | 'accent' | 'ambient'
 
 export const CARD_PADDINGS: CardPadding[]
 export const CARD_TONES: CardTone[]
@@ -49,6 +49,18 @@ export function cardClassName(options?: {
   padding?: CardPadding
   tone?: CardTone
   interactive?: boolean
+}): string
+
+export type StatusDotVariant = 'active' | 'warning' | 'gold' | 'neutral' | 'info'
+export type StatusDotSize = 'sm' | 'md' | 'lg'
+
+export const STATUS_DOT_VARIANTS: StatusDotVariant[]
+export const STATUS_DOT_SIZES: StatusDotSize[]
+
+export function statusDotClassName(options?: {
+  variant?: StatusDotVariant
+  size?: StatusDotSize
+  pulse?: boolean
 }): string
 
 export function fieldControlClassName(options?: { invalid?: boolean }): string
