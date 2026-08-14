@@ -3,7 +3,7 @@ import { ChefHat, Save, Users } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { DEFAULT_FOOD_PROFILE, normalizeFoodProfile, type FoodProfile } from '../lib/foodProfile'
 import { formatSupabaseError } from '../lib/formatSupabaseError'
-import { Alert, Button, Card, Field, Heading, Input, PageShell, SkeletonRow, Textarea } from '../components/ui'
+import { Alert, Button, Card, Field, Heading, Input, SkeletonRow, Textarea } from '../components/ui'
 import { SettingsPageHeader } from '../components/settings'
 
 export default function FoodProfileSettingsPage() {
@@ -68,7 +68,7 @@ export default function FoodProfileSettingsPage() {
   }
 
   return (
-    <PageShell width="default" className="space-y-6">
+    <div className="space-y-6">
       <SettingsPageHeader
         icon={ChefHat}
         title="Food Profile & Dietary Memory"
@@ -222,6 +222,6 @@ export default function FoodProfileSettingsPage() {
           Save food profile
         </Button>
       </div>
-    </PageShell>
+    </div>
   )
 }

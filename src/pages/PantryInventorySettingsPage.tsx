@@ -9,7 +9,7 @@ import {
   sanitizePantryInventoryAudit,
   type PantryInventoryAuditEntry,
 } from '../lib/pantryInventoryUtils'
-import { Alert, Button, Card, Chip, EmptyState, Field, Heading, IconButton, Input, PageShell, Select, SkeletonRow } from '../components/ui'
+import { Alert, Button, Card, Chip, EmptyState, Field, Heading, IconButton, Input, Select, SkeletonRow } from '../components/ui'
 import { SettingsPageHeader } from '../components/settings'
 import { cn } from '../utils/cn'
 
@@ -251,7 +251,7 @@ export default function PantryInventorySettingsPage() {
   }
 
   return (
-    <PageShell width="default" className="space-y-6">
+    <div className="space-y-6">
       <SettingsPageHeader
         icon={Layers}
         title="Kitchen Pantry Inventory"
@@ -482,9 +482,10 @@ export default function PantryInventorySettingsPage() {
           Add pantry item
         </Button>
         <Button
+          onClick={() => void saveInventory()}
           variant="primary"
           size="lg"
-          onClick={() => void saveInventory()}
+          disabled={saving}
           loading={saving}
           leadingIcon={<Save size={18} />}
           className="font-bold shadow-sm px-6 min-h-control"
@@ -492,7 +493,6 @@ export default function PantryInventorySettingsPage() {
           Save pantry inventory
         </Button>
       </div>
-    </PageShell>
+    </div>
   )
 }
-

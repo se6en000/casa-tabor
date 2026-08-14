@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Brain, Layers3, RefreshCw, ScanSearch, ShieldCheck, Sparkles, Store } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
-import { Alert, Card, Heading, IconButton, PageShell, Progress, SkeletonRow } from '../components/ui'
+import { Alert, Card, Heading, IconButton, Progress, SkeletonRow } from '../components/ui'
 import { SettingsPageHeader } from '../components/settings'
 
 type GroceryItemLite = {
@@ -264,7 +264,7 @@ export default function GroceryIntelligenceSettingsPage() {
   }
 
   return (
-    <PageShell width="default" className="space-y-6">
+    <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
         <SettingsPageHeader
           icon={Brain}
@@ -401,7 +401,8 @@ export default function GroceryIntelligenceSettingsPage() {
       <p className="text-caption text-casa-muted text-center font-mono">
         Last refreshed {lastRefreshedAt ? new Date(lastRefreshedAt).toLocaleTimeString() : '—'}
       </p>
-    </PageShell>
+    </div>
   )
 }
+
 

@@ -2971,8 +2971,9 @@ export default function CookPage() {
   }
 
   return (
-    <PageShell width="full" className="min-h-full space-y-6 p-4 sm:p-6 lg:p-8 pb-32 lg:pb-12 bg-casa-bg text-casa-text">
-      {/* Top Navigation & Mode Switcher */}
+    <div className="h-full min-h-0 flex-1 overflow-y-auto overscroll-contain touch-pan-y bg-casa-bg">
+      <PageShell width="full" className="space-y-6 p-4 sm:p-6 lg:p-8 pb-36 lg:pb-16 text-casa-text">
+        {/* Top Navigation & Mode Switcher */}
       <Card tone="surface" padding="lg" className="space-y-4 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <SegmentedControl
@@ -4897,7 +4898,9 @@ export default function CookPage() {
           </div>
         </div>
       )}
-    </PageShell>
+      </PageShell>
+    </div>
   )
 }
+
 
