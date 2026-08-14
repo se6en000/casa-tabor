@@ -1184,6 +1184,9 @@ export default function DesignSystemGalleryPage() {
                       endTime={mockEndTime}
                       driveTimeMins={mockDriveMins}
                       showLabels={true}
+                      originName="Prep to Leave"
+                      destinationName="Dentist"
+                      returnDestinationName="Home"
                     />
                   }
                   avatars={

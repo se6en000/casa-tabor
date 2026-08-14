@@ -7,6 +7,7 @@ import { useWeekConflicts } from './useConflicts'
 import { usePrepItems } from './usePrepItems'
 import { useHomeWeather } from './useHomeWeather'
 import { useAppStore } from '../stores/appStore'
+import type { EventTransportationPlan, TransportationLeg } from '../lib/eventTransportation'
 
 export interface CalmKioskPresenterState {
   now: Date
@@ -27,6 +28,11 @@ export interface CalmKioskPresenterState {
   leaveAt: Date | null
   minutesUntilLeave: number | null
   isTravelEvent: boolean
+  transportationPlan: EventTransportationPlan | null
+  originName: string
+  destinationName: string
+  returnDestinationName: string
+  driverName: string | null
   setCanvasSubmode: (submode: 'calm' | 'turbo') => void
   navigateTo: (path: string) => void
 }
@@ -166,9 +172,47 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     return nextEvent.enrichment?.drive_time_mins ?? null
   }, [nextEvent])
 
+  const transportationPlan = useMemo<EventTransportationPlan | null>(() => {
+    return nextEvent?.plan_override?.transportation_plan ?? (nextEvent as any)?.transportation_plan ?? null
+  }, [nextEvent])
+
+  const outboundLeg = useMemo<TransportationLeg | null>(() => {
+    if (!transportationPlan?.legs?.length) return null
+    return transportationPlan.legs.find((l: TransportationLeg) => l.purpose !== 'return') ?? transportationPlan.legs[0]
+  }, [transportationPlan])
+
+  const returnLeg = useMemo<TransportationLeg | null>(() => {
+    if (!transportationPlan?.legs?.length) return null
+    return (
+      transportationPlan.legs.find((l: TransportationLeg) => l.purpose === 'return') ??
+      (transportationPlan.legs.length > 1 ? transportationPlan.legs[1] : null)
+    )
+  }, [transportationPlan])
+
+  const originName = useMemo(() => {
+    if (outboundLeg?.origin?.name) return outboundLeg.origin.name
+    return 'Prep to Leave'
+  }, [outboundLeg])
+
+  const destinationName = useMemo(() => {
+    if (outboundLeg?.destination?.name) return outboundLeg.destination.name
+    if (nextEvent?.location_name) return nextEvent.location_name
+    return 'Destination'
+  }, [outboundLeg, nextEvent])
+
+  const returnDestinationName = useMemo(() => {
+    if (returnLeg?.destination?.name) return returnLeg.destination.name
+    return 'Home'
+  }, [returnLeg])
+
+  const driverName = useMemo(() => {
+    return outboundLeg?.driverName || null
+  }, [outboundLeg])
+
   const isTravelEvent = useMemo(() => {
     if (!nextEvent) return false
     if (nextEvent.all_day) return false
+    if (transportationPlan && transportationPlan.legs.length > 0) return true
     const cat = (nextEvent.enrichment?.category || (nextEvent as any).category || '').toLowerCase()
     if (cat.includes('home') || cat.includes('hosted')) return false
     return Boolean(
@@ -177,13 +221,19 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
       nextEvent.address ||
       nextEvent.location_name
     )
-  }, [nextEvent, driveTimeMins])
+  }, [nextEvent, driveTimeMins, transportationPlan])
 
   const leaveAt = useMemo(() => {
     if (!nextEvent || nextEvent.all_day) return null
     try {
       if (nextEvent.enrichment?.departure_time) {
         return new Date(nextEvent.enrichment.departure_time)
+      }
+      if (outboundLeg?.time && outboundLeg.timing === 'depart_at') {
+        const [hh, mm] = outboundLeg.time.split(':').map(Number)
+        const d = parseISO(nextEvent.start_time)
+        d.setHours(hh, mm, 0, 0)
+        return d
       }
       const start = parseISO(nextEvent.start_time)
       if (driveTimeMins && driveTimeMins > 0) {
@@ -193,7 +243,7 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     } catch {
       return null
     }
-  }, [nextEvent, driveTimeMins])
+  }, [nextEvent, driveTimeMins, outboundLeg])
 
   const minutesUntilLeave = useMemo(() => {
     if (!leaveAt) return null
@@ -221,6 +271,11 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     leaveAt,
     minutesUntilLeave,
     isTravelEvent,
+    transportationPlan,
+    originName,
+    destinationName,
+    returnDestinationName,
+    driverName,
     setCanvasSubmode,
     navigateTo: navigate,
   }

@@ -19,6 +19,7 @@ import { useCalmKioskPresenter } from '../../hooks/useCalmKioskPresenter'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { useAppStore } from '../../stores/appStore'
 import { cn } from '../../utils/cn'
+import { formatDurationLong } from '../../utils/eventTime'
 import { Button, PersonAvatarStack, JourneyProgressBar } from '../ui'
 
 interface CalmKioskViewProps {
@@ -43,6 +44,10 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
     leaveAt,
     minutesUntilLeave,
     isTravelEvent,
+    originName,
+    destinationName,
+    returnDestinationName,
+    driverName,
     setCanvasSubmode,
     navigateTo,
   } = useCalmKioskPresenter()
@@ -119,7 +124,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                         const end = parseISO(nextEvent.end_time)
                         const minsToEnd = differenceInMinutes(end, now)
                         if (minsToEnd <= 10 && minsToEnd > 0) {
-                          statusLabel = `WRAPPING UP · ENDS IN ${minsToEnd} MIN`
+                          statusLabel = `WRAPPING UP · ENDS IN ${formatDurationLong(minsToEnd)}`
                           dotClass = 'bg-amber-400 animate-pulse'
                         } else {
                           statusLabel = 'HAPPENING NOW'
@@ -134,14 +139,14 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                         statusLabel = minutesUntilLeave >= -5 ? 'TIME TO LEAVE NOW' : `EN ROUTE · ${driveTimeMins ? `${driveTimeMins}M DRIVE` : 'IN TRANSIT'}`
                         dotClass = 'bg-amber-400 animate-pulse'
                       } else if (minutesUntilLeave !== null && minutesUntilLeave <= 15) {
-                        statusLabel = `PREPARE TO LEAVE · ${minutesUntilLeave}M BUFFER`
+                        statusLabel = `PREPARE TO LEAVE · ${formatDurationLong(minutesUntilLeave)} BUFFER`
                         dotClass = 'bg-amber-400 animate-pulse'
                       } else if (minutesUntilLeave !== null) {
-                        statusLabel = `LEAVE IN ${minutesUntilLeave} MIN`
+                        statusLabel = `LEAVE IN ${formatDurationLong(minutesUntilLeave)}`
                         dotClass = 'bg-emerald-400'
                       }
                     } else if (minutesUntilNext !== null && minutesUntilNext > 0) {
-                      statusLabel = `STARTS IN ${minutesUntilNext} MIN`
+                      statusLabel = `STARTS IN ${formatDurationLong(minutesUntilNext)}`
                       dotClass = 'bg-emerald-400'
                     }
 
@@ -194,6 +199,9 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                     driveTimeMins={driveTimeMins}
                     isAllDay={Boolean(nextEvent.all_day)}
                     showLabels={true}
+                    originName={originName}
+                    destinationName={destinationName}
+                    returnDestinationName={returnDestinationName}
                   />
                 </div>
               </div>
@@ -214,12 +222,13 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                   ))}
                   {isTravelEvent && driveTimeMins && (
                     <span className="inline-flex items-center gap-1.5 text-caption text-white/80 bg-white/10 px-3 py-1 rounded-full border border-white/10">
-                      <Car size={13} className="text-casa-gold" />
+                      <Car size={13} className="text-casa-gold shrink-0" />
+                      {driverName && <span>{driverName} driving · </span>}
                       {minutesUntilNext !== null && minutesUntilNext <= 0 ? (
                         <>
-                          <span>{driveTimeMins}m drive home</span>
+                          <span>{driveTimeMins}m drive to {returnDestinationName}</span>
                           <span className="text-casa-gold font-bold">
-                            · Home ~{format(addMinutes(parseISO(nextEvent.end_time), driveTimeMins), 'h:mm a')}
+                            · {returnDestinationName} ~{format(addMinutes(parseISO(nextEvent.end_time), driveTimeMins), 'h:mm a')}
                           </span>
                         </>
                       ) : (

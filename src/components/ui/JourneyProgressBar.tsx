@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { format, parseISO, differenceInMinutes, addMinutes } from 'date-fns'
 import { Car, MapPin, Clock, Home } from 'lucide-react'
 import { cn } from '../../utils/cn'
+import { formatDurationHuman } from '../../utils/eventTime'
 
 export interface JourneyProgressBarProps {
   /** Current time for live tracking. */
@@ -20,11 +21,15 @@ export interface JourneyProgressBarProps {
   showLabels?: boolean
   /** Optional custom class name. */
   className?: string
+  /** Dynamic waypoint names from event or transportation plan */
+  originName?: string
+  destinationName?: string
+  returnDestinationName?: string
 }
 
 /**
  * Dual-Phase Journey & Departure Progress Bar (Option A)
- * Visualizes At-Home Prep Buffer -> Departure Gate -> Drive In-Transit -> Event Session.
+ * Visualizes Origin (e.g. School/Home) -> Departure Gate -> Drive In-Transit -> Destination (e.g. Dentist/Party).
  */
 export function JourneyProgressBar({
   now = new Date(),
@@ -35,6 +40,9 @@ export function JourneyProgressBar({
   isAllDay = false,
   showLabels = true,
   className,
+  originName = 'Prep to Leave',
+  destinationName = 'Destination',
+  returnDestinationName = 'Home',
 }: JourneyProgressBarProps) {
   const parsedStart = useMemo(() => {
     if (!startTime) return null
@@ -133,7 +141,7 @@ export function JourneyProgressBar({
             <span className="flex items-center gap-1.5 text-casa-gold">
               <Clock size={13} />
               {minutesUntilStart !== null && minutesUntilStart > 0
-                ? `Starts in ${minutesUntilStart} min`
+                ? `Starts in ${formatDurationHuman(minutesUntilStart)}`
                 : phase === 'in-session'
                 ? 'Underway'
                 : 'Scheduled'}
@@ -163,24 +171,29 @@ export function JourneyProgressBar({
       <div className={cn('w-full space-y-2', className)}>
         {showLabels && (
           <div className="flex items-center justify-between text-caption font-medium">
-            <div className="flex items-center gap-1.5 text-casa-gold font-semibold">
-              <Clock size={13} />
-              <span>At Event · Ends {parsedEnd ? format(parsedEnd, 'h:mm a') : ''}</span>
+            <div className="flex items-center gap-1.5 text-casa-gold font-semibold truncate">
+              <Clock size={13} className="shrink-0" />
+              <span className="truncate">{destinationName ? `At ${destinationName}` : 'At Event'}</span>
+              <span className="text-white/60 font-normal shrink-0">
+                · Ends {parsedEnd ? format(parsedEnd, 'h:mm a') : ''}
+              </span>
               <span
                 className={cn(
-                  'px-1.5 py-0.5 rounded text-2xs font-bold font-sans',
+                  'px-1.5 py-0.5 rounded text-2xs font-bold font-sans shrink-0',
                   minutesUntilEnd !== null && minutesUntilEnd <= 10
                     ? 'bg-amber-400 text-slate-950 animate-pulse'
                     : 'bg-white/10 text-white/80',
                 )}
               >
-                {minutesUntilEnd !== null && minutesUntilEnd > 0 ? `${minutesUntilEnd}m left` : 'Wrapping up'}
+                {minutesUntilEnd !== null && minutesUntilEnd > 0
+                  ? `${formatDurationHuman(minutesUntilEnd)} left`
+                  : 'Wrapping up'}
               </span>
             </div>
             {homeEta && (
-              <div className="flex items-center gap-1.5 text-white/80 font-mono text-caption">
+              <div className="flex items-center gap-1.5 text-white/80 font-mono text-caption shrink-0">
                 <Home size={12} className="text-casa-gold/80" />
-                <span>Home ~{format(homeEta, 'h:mm a')}</span>
+                <span>{returnDestinationName} ~{format(homeEta, 'h:mm a')}</span>
               </div>
             )}
           </div>
@@ -223,11 +236,11 @@ export function JourneyProgressBar({
 
         {showLabels && (
           <div className="flex items-center justify-between text-3xs font-sans uppercase tracking-wider text-white/50 px-1 pt-0.5">
-            <span className="w-[65%] text-left">
-              1. In Session ({elapsedMins}m of {totalEventDurationMins}m)
+            <span className="w-[60%] text-left truncate">
+              {destinationName ? `At ${destinationName}` : 'In Session'} ({formatDurationHuman(elapsedMins)} of {formatDurationHuman(totalEventDurationMins)})
             </span>
-            <span className="w-[35%] text-right font-semibold text-white/70">
-              2. {driveTimeMins}m Drive Home
+            <span className="w-[40%] text-right font-semibold text-white/70 truncate">
+              {driveTimeMins}m Drive to {returnDestinationName}
             </span>
           </div>
         )}
@@ -261,7 +274,7 @@ export function JourneyProgressBar({
               <Car size={13} className="shrink-0" />
               {minutesUntilLeave !== null && minutesUntilLeave > 0 ? (
                 <>
-                  <span>Leave in {minutesUntilLeave}m</span>
+                  <span>Leave in {formatDurationHuman(minutesUntilLeave)}</span>
                   <span className="text-white/60 font-normal hidden sm:inline">
                     ({parsedLeave ? format(parsedLeave, 'h:mm a') : ''})
                   </span>
@@ -361,11 +374,11 @@ export function JourneyProgressBar({
       {/* Sub-bar Milestone Labels */}
       {showLabels && (
         <div className="flex items-center justify-between text-3xs font-sans uppercase tracking-wider text-white/50 px-1 pt-0.5">
-          <span className="w-[45%] text-left">1. At Home Buffer</span>
-          <span className="w-[35%] text-center font-semibold text-white/70">
-            2. {driveTimeMins}m Drive
+          <span className="w-[45%] text-left truncate">{originName || 'Prep to Leave'}</span>
+          <span className="w-[35%] text-center font-semibold text-white/70 truncate">
+            {driveTimeMins}m Drive
           </span>
-          <span className="w-[20%] text-right">3. Event</span>
+          <span className="w-[20%] text-right truncate">{destinationName || 'Destination'}</span>
         </div>
       )}
     </div>

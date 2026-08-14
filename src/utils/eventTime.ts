@@ -141,3 +141,30 @@ export function buildAiDraftPrompt(params: {
   if (bodyContext) lines.push(`Context:\n${bodyContext}`)
   return lines.join('\n')
 }
+
+/**
+ * Format minutes into a compact human-friendly string (e.g. 109m -> "1h 49m", 60m -> "1h", 25m -> "25m").
+ */
+export function formatDurationHuman(minutes: number | null | undefined): string {
+  if (minutes === null || minutes === undefined) return ''
+  const clamped = Math.max(0, Math.round(minutes))
+  const hours = Math.floor(clamped / 60)
+  const mins = clamped % 60
+  if (hours === 0) return `${mins}m`
+  if (mins === 0) return `${hours}h`
+  return `${hours}h ${mins}m`
+}
+
+/**
+ * Format minutes into an uppercase tracked string (e.g. 109m -> "1H 49M", 45m -> "45 MIN", 60m -> "1 HR").
+ */
+export function formatDurationLong(minutes: number | null | undefined): string {
+  if (minutes === null || minutes === undefined) return ''
+  const clamped = Math.max(0, Math.round(minutes))
+  const hours = Math.floor(clamped / 60)
+  const mins = clamped % 60
+  if (hours === 0) return `${mins} MIN`
+  if (mins === 0) return `${hours} HR`
+  return `${hours}H ${mins}M`
+}
+
