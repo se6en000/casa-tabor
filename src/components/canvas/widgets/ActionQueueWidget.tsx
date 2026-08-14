@@ -14,11 +14,12 @@ import {
   ArrowRight,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Button, IconButton, Checkbox, StatusDot } from '../../ui'
+import { Button, IconButton, StatusDot } from '../../ui'
 import { cn } from '../../../utils/cn'
 import type { PrepItem, Conflict, FamilyMember } from '../../../types'
 import type { SnoozeDuration } from '../../../utils/snoozeDuration'
 import type { DriverAvailability } from '../../../hooks/useTurboCanvasPresenter'
+import { sourceBadge } from '../../../utils/prepSourceBadge'
 
 interface ActionQueueWidgetProps {
   activeConflicts: Conflict[]
@@ -63,15 +64,15 @@ export default function ActionQueueWidget({
   const totalActionable = totalUrgent + totalTasks
 
   return (
-    <div className="lg:col-span-7 xl:col-span-7 flex flex-col rounded-3xl bg-casa-surface border border-casa-border/70 shadow-sm p-4 sm:p-5 overflow-hidden min-h-0">
+    <div className="w-full h-full flex flex-col rounded-3xl bg-casa-surface border border-casa-border/70 shadow-sm p-3 sm:p-4 overflow-hidden min-h-0">
       {/* ── Widget Header ── */}
-      <div className="flex items-center justify-between pb-3 mb-3 border-b border-casa-border/40 shrink-0">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2 rounded-xl bg-amber-500/15 text-amber-600">
-            <Zap size={18} className="text-amber-600" />
+      <div className="flex items-center justify-between pb-2 mb-2 border-b border-casa-border/40 shrink-0">
+        <div className="flex items-center gap-2">
+          <div className="p-1.5 rounded-xl bg-amber-500/15 text-amber-600">
+            <Zap size={16} className="text-amber-600" />
           </div>
           <div>
-            <h2 className="font-display text-body-lg font-bold text-casa-navy leading-tight">
+            <h2 className="font-display text-body font-bold text-casa-navy leading-tight">
               Action Queue & Operations
             </h2>
             <p className="text-caption text-casa-muted">
@@ -88,17 +89,17 @@ export default function ActionQueueWidget({
               variant="secondary"
               size="sm"
               onClick={handleBatchAutoTriage}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-casa-gold/15 hover:bg-casa-gold/25 text-casa-navy text-caption font-bold border border-casa-gold/30 transition-all shadow-xs min-h-[44px]"
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-xl bg-casa-gold/15 hover:bg-casa-gold/25 text-casa-navy text-caption font-bold border border-casa-gold/30 transition-all shadow-xs min-h-[44px]"
               title="Automatically assign available drivers and optimize logistics"
             >
-              <Sparkles size={14} className="text-casa-gold" />
+              <Sparkles size={13} className="text-casa-gold" />
               <span>Auto-Triage</span>
             </Button>
           )}
 
           <span
             className={cn(
-              'text-caption font-bold px-2.5 py-1 rounded-full border',
+              'text-caption font-bold px-2.5 py-0.5 rounded-full border shadow-2xs',
               totalActionable > 0
                 ? 'bg-amber-100/80 text-amber-900 border-amber-300/60'
                 : 'bg-emerald-100/80 text-emerald-900 border-emerald-300/60'
@@ -110,7 +111,7 @@ export default function ActionQueueWidget({
       </div>
 
       {/* ── Scrollable Action Container ── */}
-      <div className="flex-1 overflow-y-auto pr-1 space-y-4 min-h-0">
+      <div className="flex-1 overflow-y-auto pr-1 space-y-3.5 min-h-0 touch-pan-y overscroll-contain">
         {/* ── SECTION 1: URGENT LOGISTICS & CONFLICTS ── */}
         {activeConflicts.length > 0 && (
           <div className="space-y-3">
@@ -321,110 +322,110 @@ export default function ActionQueueWidget({
             </div>
           </div>
 
-          {activePrep.map((item) => (
-            <motion.div
-              key={item.id}
-              layout
-              initial={{ opacity: 0, y: 5 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="p-3.5 sm:p-4 rounded-2xl bg-casa-bg/70 border border-casa-border/80 hover:border-casa-gold/60 transition-all shadow-xs"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  {/* Interactive Checkbox with full task content */}
-                  <Checkbox
-                    checked={false}
-                    onChange={() => handleCompletePrep(item)}
-                    label={
-                      <div className="min-w-0 flex-1 ml-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-caption font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-casa-gold/15 text-casa-navy">
-                            {item.source_type || 'Household Task'}
-                          </span>
-                          {item.due_by && (
-                            <span className="text-caption text-casa-muted font-mono flex items-center gap-1">
-                              <Clock size={11} />
-                              Due today
-                            </span>
-                          )}
-                        </div>
-                        <h4 className="text-body-sm font-bold text-casa-navy leading-snug">
-                          {item.description || item.event_title || 'Prep Item'}
-                        </h4>
-                      </div>
-                    }
-                  />
+          {activePrep.map((item) => {
+            const badge = sourceBadge(item)
+            const BadgeIcon = badge.icon
+
+            return (
+              <motion.div
+                key={item.id}
+                layout
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="p-3.5 sm:p-4 rounded-2xl bg-casa-surface border border-casa-border/80 hover:border-casa-gold/60 transition-all shadow-xs"
+              >
+                {/* ── Slot 1 & 2: Header Context & Due Time ── */}
+                <div className="flex items-center justify-between gap-2 mb-2.5">
+                  <span className="inline-flex items-center gap-1.5 text-caption font-semibold px-2.5 py-0.5 rounded-full bg-casa-gold/15 text-casa-navy border border-casa-gold/25">
+                    <BadgeIcon size={12} className="text-casa-gold shrink-0" />
+                    <span>{badge.label}</span>
+                  </span>
+
+                  {item.due_by && (
+                    <span className="text-caption text-casa-muted font-medium flex items-center gap-1">
+                      <Clock size={12} className="text-casa-muted shrink-0" />
+                      <span>Due today</span>
+                    </span>
+                  )}
                 </div>
 
-                {/* Quick Done Button */}
-                <Button
-                  size="sm"
-                  variant="primary"
-                  onClick={() => handleCompletePrep(item)}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 text-caption font-bold transition-all shadow-sm min-h-[44px] shrink-0"
-                >
-                  <Check size={14} strokeWidth={2.5} />
-                  <span>Done</span>
-                </Button>
-              </div>
-
-              {/* Snooze / Push Actions */}
-              <div className="mt-3 pt-2.5 border-t border-casa-border/40 flex items-center justify-between gap-2 flex-wrap">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-caption text-casa-muted font-medium">Snooze:</span>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => handleSnoozePrep(item.id, '1h')}
-                    className="text-caption font-semibold px-2.5 py-1.5 rounded-xl bg-casa-surface border border-casa-border/60 hover:border-casa-navy text-casa-navy transition-colors min-h-[44px]"
-                  >
-                    +1h
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => handleSnoozePrep(item.id, '3h')}
-                    className="text-caption font-semibold px-2.5 py-1.5 rounded-xl bg-casa-surface border border-casa-border/60 hover:border-casa-navy text-casa-navy transition-colors min-h-[44px]"
-                  >
-                    +3h
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => handleSnoozePrep(item.id, 'tomorrow')}
-                    className="text-caption font-semibold px-2.5 py-1.5 rounded-xl bg-casa-surface border border-casa-border/60 hover:border-casa-navy text-casa-navy transition-colors min-h-[44px]"
-                  >
-                    Tomorrow
-                  </Button>
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  {/* Push to Backlog */}
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handlePushPrep(item, 'weekend')}
-                    title="Push task out of today to this weekend"
-                    className="text-caption font-semibold px-3 py-1.5 rounded-xl bg-casa-surface hover:bg-casa-gold/15 text-casa-muted hover:text-casa-navy border border-casa-border/60 transition-colors min-h-[44px] flex items-center gap-1"
-                  >
-                    <span>Push to Weekend</span>
-                    <ArrowRight size={12} />
-                  </Button>
-
+                {/* ── Slot 3: Primary Action & Task Body ── */}
+                <div className="flex items-start gap-3">
                   <IconButton
-                    variant="ghost"
+                    variant="secondary"
                     size="sm"
-                    aria-label="Mark not relevant"
-                    title="Mark not relevant"
-                    onClick={() => handleDownvotePrep(item)}
-                    className="p-2 rounded-xl text-casa-muted hover:text-rose-600 hover:bg-rose-50 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-                    icon={<ThumbsDown size={14} />}
+                    onClick={() => handleCompletePrep(item)}
+                    aria-label={`Complete task: ${item.description || item.event_title || 'Prep Item'}`}
+                    title="Mark as complete"
+                    className="mt-0.5 rounded-xl hover:border-emerald-600 hover:bg-emerald-50 text-casa-muted hover:text-emerald-700 transition-all min-h-[44px] min-w-[44px] shrink-0 flex items-center justify-center"
+                    icon={<Check size={18} strokeWidth={2.5} />}
                   />
+
+                  <div className="min-w-0 flex-1 pt-1.5">
+                    <h4 className="text-body-sm font-medium text-casa-navy leading-snug">
+                      {item.description || item.event_title || 'Prep Item'}
+                    </h4>
+                  </div>
                 </div>
-              </div>
-            </motion.div>
-          ))}
+
+                {/* ── Slot 4: Snooze / Defer Actions ── */}
+                <div className="mt-3 pt-2.5 border-t border-casa-border/40 flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-caption text-casa-muted font-medium">Snooze:</span>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => handleSnoozePrep(item.id, '1h')}
+                      className="text-caption font-semibold px-2.5 py-1 rounded-xl bg-casa-surface border border-casa-border/60 hover:border-casa-navy text-casa-navy transition-colors min-h-[44px]"
+                    >
+                      +1h
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => handleSnoozePrep(item.id, '3h')}
+                      className="text-caption font-semibold px-2.5 py-1 rounded-xl bg-casa-surface border border-casa-border/60 hover:border-casa-navy text-casa-navy transition-colors min-h-[44px]"
+                    >
+                      +3h
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => handleSnoozePrep(item.id, 'tomorrow')}
+                      className="text-caption font-semibold px-2.5 py-1 rounded-xl bg-casa-surface border border-casa-border/60 hover:border-casa-navy text-casa-navy transition-colors min-h-[44px]"
+                    >
+                      Tomorrow
+                    </Button>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    {/* Push to Backlog */}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handlePushPrep(item, 'weekend')}
+                      title="Push task out of today to this weekend"
+                      className="text-caption font-semibold px-3 py-1.5 rounded-xl bg-casa-surface hover:bg-casa-gold/15 text-casa-muted hover:text-casa-navy border border-casa-border/60 transition-colors min-h-[44px] flex items-center gap-1"
+                    >
+                      <span>Push to Weekend</span>
+                      <ArrowRight size={12} />
+                    </Button>
+
+                    <IconButton
+                      variant="ghost"
+                      size="sm"
+                      aria-label="Mark not relevant"
+                      title="Mark not relevant"
+                      onClick={() => handleDownvotePrep(item)}
+                      className="p-2 rounded-xl text-casa-muted hover:text-rose-600 hover:bg-rose-50 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                      icon={<ThumbsDown size={14} />}
+                    />
+                  </div>
+                </div>
+              </motion.div>
+            )
+          })}
 
           {activePrep.length === 0 && activeConflicts.length === 0 && (
             <div className="flex flex-col items-center justify-center h-48 text-center p-6 bg-emerald-50/50 rounded-2xl border border-emerald-200">

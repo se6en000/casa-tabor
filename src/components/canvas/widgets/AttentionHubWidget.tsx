@@ -1,9 +1,10 @@
-import { Zap, AlertTriangle, CheckCircle2, Check, ThumbsDown, ShieldCheck } from 'lucide-react'
+import { Zap, AlertTriangle, CheckCircle2, Check, ThumbsDown, ShieldCheck, Clock } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { Button, IconButton } from '../../ui'
 import { cn } from '../../../utils/cn'
 import type { PrepItem, Conflict, FamilyMember } from '../../../types'
 import type { SnoozeDuration } from '../../../utils/snoozeDuration'
+import { sourceBadge } from '../../../utils/prepSourceBadge'
 
 interface AttentionHubWidgetProps {
   activeConflicts: Conflict[]
@@ -150,59 +151,75 @@ export default function AttentionHubWidget({
         })}
 
         {/* 2. Prep & Action Items */}
-        {activePrep.map((item) => (
-          <motion.div
-            key={item.id}
-            initial={{ opacity: 0, y: 5 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            className="p-4 rounded-2xl bg-casa-bg/60 border border-casa-border/70 hover:border-casa-gold/60 transition-all shadow-sm"
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <span className="text-caption font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-casa-gold/15 text-casa-navy">
-                  {item.source_type || 'Prep Task'}
+        {activePrep.map((item) => {
+          const badge = sourceBadge(item)
+          const BadgeIcon = badge.icon
+
+          return (
+            <motion.div
+              key={item.id}
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="p-3.5 sm:p-4 rounded-2xl bg-casa-surface border border-casa-border/70 hover:border-casa-gold/60 transition-all shadow-sm"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between gap-2 mb-2.5">
+                <span className="inline-flex items-center gap-1.5 text-caption font-semibold px-2.5 py-0.5 rounded-full bg-casa-gold/15 text-casa-navy border border-casa-gold/25">
+                  <BadgeIcon size={12} className="text-casa-gold shrink-0" />
+                  <span>{badge.label}</span>
                 </span>
-                <h4 className="text-body-sm font-bold text-casa-navy mt-1.5 leading-snug">
-                  {item.description || item.event_title || 'Prep Item'}
-                </h4>
+                {item.due_by && (
+                  <span className="text-caption text-casa-muted font-medium flex items-center gap-1">
+                    <Clock size={12} className="text-casa-muted shrink-0" />
+                    <span>Due today</span>
+                  </span>
+                )}
               </div>
-            </div>
 
-            {/* 1-Click Action Buttons (44px Touch Targets) */}
-            <div className="mt-3 pt-3 border-t border-casa-border/40 flex items-center justify-between gap-2">
-              <Button
-                size="sm"
-                variant="primary"
-                onClick={() => handleCompletePrep(item)}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 text-caption font-bold transition-all shadow-sm min-h-[44px]"
-              >
-                <Check size={14} strokeWidth={2.5} />
-                <span>Done</span>
-              </Button>
-
-              <div className="flex items-center gap-1.5">
+              {/* Task Body + Check Trigger */}
+              <div className="flex items-start gap-3">
                 <IconButton
-                  variant="ghost"
+                  variant="secondary"
                   size="sm"
-                  aria-label="Mark not relevant"
-                  onClick={() => handleDownvotePrep(item)}
-                  className="p-2.5 rounded-xl text-casa-muted hover:text-rose-600 hover:bg-rose-50 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-                  icon={<ThumbsDown size={15} />}
+                  onClick={() => handleCompletePrep(item)}
+                  aria-label={`Complete task: ${item.description || item.event_title || 'Prep Item'}`}
+                  title="Mark as complete"
+                  className="mt-0.5 rounded-xl hover:border-emerald-600 hover:bg-emerald-50 text-casa-muted hover:text-emerald-700 transition-all min-h-[44px] min-w-[44px] shrink-0 flex items-center justify-center"
+                  icon={<Check size={18} strokeWidth={2.5} />}
                 />
+
+                <div className="min-w-0 flex-1 pt-1.5">
+                  <h4 className="text-body-sm font-medium text-casa-navy leading-snug">
+                    {item.description || item.event_title || 'Prep Item'}
+                  </h4>
+                </div>
+              </div>
+
+              {/* 1-Click Action Buttons */}
+              <div className="mt-3 pt-2.5 border-t border-casa-border/40 flex items-center justify-between gap-2">
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => handleSnoozePrep(item.id, 'tomorrow')}
                   aria-label="Snooze 1 day"
-                  className="text-caption font-semibold px-3 py-2 rounded-xl text-casa-muted hover:text-casa-navy hover:bg-casa-surface transition-colors min-h-[44px]"
+                  className="text-caption font-semibold px-3 py-1.5 rounded-xl text-casa-muted hover:text-casa-navy hover:bg-casa-surface border border-casa-border/60 transition-colors min-h-[44px]"
                 >
                   Snooze 1d
                 </Button>
+
+                <IconButton
+                  variant="ghost"
+                  size="sm"
+                  aria-label="Mark not relevant"
+                  onClick={() => handleDownvotePrep(item)}
+                  className="p-2 rounded-xl text-casa-muted hover:text-rose-600 hover:bg-rose-50 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                  icon={<ThumbsDown size={14} />}
+                />
               </div>
-            </div>
-          </motion.div>
-        ))}
+            </motion.div>
+          )
+        })}
 
         {/* Zero State */}
         {activeConflicts.length === 0 && activePrep.length === 0 && (

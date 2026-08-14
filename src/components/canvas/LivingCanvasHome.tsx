@@ -25,7 +25,7 @@ export default function LivingCanvasHome() {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.98 }}
             transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-            className="w-full h-full flex-1 overflow-hidden"
+            className="w-full h-full flex-1 min-h-0 flex flex-col overflow-hidden"
           >
             <CalmKioskView onOpenEvent={handleOpenEvent} />
           </motion.div>
@@ -36,7 +36,7 @@ export default function LivingCanvasHome() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -15 }}
             transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-            className="w-full h-full flex-1 overflow-hidden"
+            className="w-full h-full flex-1 min-h-0 flex flex-col overflow-hidden"
           >
             <TurboCanvasView
               onOpenEvent={handleOpenEvent}

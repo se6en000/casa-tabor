@@ -2,11 +2,7 @@ import { useMemo, useState } from 'react'
 import { format, isBefore, addDays } from 'date-fns'
 import {
   Calendar,
-  Sparkles,
-  CloudSun,
   CheckCircle2,
-  ChevronDown,
-  ChevronUp,
   Clock,
   Sun,
   Moon,
@@ -19,21 +15,13 @@ import { useLiveClock } from '../../../hooks/useLiveClock'
 import { useReminderNeedsYouActions } from '../../../hooks/useReminderNeedsYouActions'
 import { getEventStartDate, getEventEndDate } from '../../../utils/eventTime'
 import { DayEventCard } from '../../calendar/DayEventCard'
-import { Button, IconButton } from '../../ui'
+import { Button } from '../../ui'
 import { cn } from '../../../utils/cn'
 
 interface NowAndNextWidgetProps {
   now: Date
   todayEvents: EventWithDetails[]
   tomorrowEvents: EventWithDetails[]
-  householdNarrative: string
-  copilotTip: string
-  weather?: {
-    temp: number
-    condition: string
-    precipProbability?: number
-    city?: string
-  } | null
   familyMembers?: FamilyMember[]
   highlightedEventId: string | null
   setHighlightedEventId: (id: string | null) => void
@@ -44,9 +32,6 @@ export default function NowAndNextWidget({
   now,
   todayEvents,
   tomorrowEvents,
-  householdNarrative,
-  copilotTip,
-  weather,
   familyMembers,
   highlightedEventId,
   setHighlightedEventId,
@@ -61,7 +46,6 @@ export default function NowAndNextWidget({
 
   const [activeDayTab, setActiveDayTab] = useState<'today' | 'tomorrow'>('today')
   const [showPastEvents, setShowPastEvents] = useState(false)
-  const [isBriefingExpanded, setIsBriefingExpanded] = useState(true)
 
   // Sort Today Events
   const sortedTodayEvents = useMemo(() => {
@@ -109,24 +93,24 @@ export default function NowAndNextWidget({
   const tomorrowDate = useMemo(() => addDays(effectiveNow, 1), [effectiveNow])
 
   return (
-    <div className="lg:col-span-5 xl:col-span-5 flex flex-col rounded-3xl bg-casa-surface border border-casa-border/70 shadow-sm p-4 sm:p-5 overflow-hidden min-h-0">
-      {/* ── Header: Tab Switcher & Ambient Info ── */}
-      <div className="pb-3 mb-3 border-b border-casa-border/40 shrink-0 space-y-2.5">
-        <div className="flex items-center justify-between gap-2">
-          {/* Segmented Day Switcher */}
-          <div className="inline-flex p-1 rounded-2xl bg-casa-bg border border-casa-border/60">
+    <div className="w-full h-full flex flex-col rounded-3xl bg-casa-surface border border-casa-border/70 shadow-sm p-3 sm:p-4 overflow-hidden min-h-0">
+      {/* ── Widget Header: 1-Line Sleek Strip (Max Timeline Height) ── */}
+      <div className="flex items-center justify-between gap-2 pb-2 mb-2 border-b border-casa-border/40 shrink-0">
+        {/* Day Switcher + Live Date */}
+        <div className="flex items-center gap-2.5 flex-wrap min-w-0">
+          <div className="inline-flex p-0.5 rounded-xl bg-casa-bg border border-casa-border/60">
             <Button
               size="sm"
               variant={activeDayTab === 'today' ? 'primary' : 'ghost'}
               onClick={() => setActiveDayTab('today')}
               className={cn(
-                'flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-caption font-bold transition-all min-h-[44px]',
+                'flex items-center gap-1.5 px-3 py-1 rounded-lg text-caption font-bold transition-all min-h-[44px]',
                 activeDayTab === 'today'
                   ? 'bg-casa-surface text-casa-navy shadow-xs border border-casa-border/60'
                   : 'text-casa-muted hover:text-casa-navy'
               )}
             >
-              <Sun size={14} className="text-amber-500" />
+              <Sun size={13} className="text-amber-500" />
               <span>Today ({todayEvents.length})</span>
             </Button>
 
@@ -135,90 +119,40 @@ export default function NowAndNextWidget({
               variant={activeDayTab === 'tomorrow' ? 'primary' : 'ghost'}
               onClick={() => setActiveDayTab('tomorrow')}
               className={cn(
-                'flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-caption font-bold transition-all min-h-[44px]',
+                'flex items-center gap-1.5 px-3 py-1 rounded-lg text-caption font-bold transition-all min-h-[44px]',
                 activeDayTab === 'tomorrow'
                   ? 'bg-casa-surface text-casa-navy shadow-xs border border-casa-border/60'
                   : 'text-casa-muted hover:text-casa-navy'
               )}
             >
-              <Moon size={14} className="text-indigo-500" />
+              <Moon size={13} className="text-indigo-500" />
               <span>Tomorrow ({tomorrowEvents.length})</span>
             </Button>
           </div>
 
-          <div className="flex items-center gap-1.5">
-            {weather && (
-              <span className="hidden sm:inline-flex items-center gap-1 text-caption text-casa-navy font-mono bg-casa-bg px-2.5 py-1 rounded-xl border border-casa-border/50">
-                <CloudSun size={13} className="text-casa-gold" />
-                <span className="font-bold">{weather.temp}°F</span>
-              </span>
-            )}
-
-            <IconButton
-              variant="ghost"
-              size="sm"
-              aria-label={isBriefingExpanded ? 'Collapse briefing banner' : 'Expand briefing banner'}
-              title={isBriefingExpanded ? 'Hide briefing' : 'Show briefing'}
-              onClick={() => setIsBriefingExpanded((prev) => !prev)}
-              className="min-h-[44px] min-w-[44px] text-casa-muted hover:text-casa-navy"
-              icon={isBriefingExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-            />
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between text-caption text-casa-muted font-mono px-1">
-          <span>
+          <span className="hidden sm:inline text-caption font-mono text-casa-muted font-medium">
             {activeDayTab === 'today'
               ? format(effectiveNow, 'EEEE, MMMM d')
               : format(tomorrowDate, 'EEEE, MMMM d')}
           </span>
-          {activeDayTab === 'today' && (
-            <span className="text-2xs uppercase tracking-wider font-sans font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200/60">
+        </div>
+
+        {/* Live Indicator Badge */}
+        <div className="flex items-center gap-2 shrink-0">
+          {activeDayTab === 'today' ? (
+            <span className="text-2xs uppercase tracking-wider font-sans font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200/60 shadow-2xs">
               Live Horizon
+            </span>
+          ) : (
+            <span className="text-2xs uppercase tracking-wider font-sans font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-200/60">
+              Next Day
             </span>
           )}
         </div>
       </div>
 
-      {/* ── Collapsible Ambient Briefing & Copilot Banner ── */}
-      <AnimatePresence initial={false}>
-        {isBriefingExpanded && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.2 }}
-            className="overflow-hidden shrink-0 mb-3 space-y-2"
-          >
-            {/* Household Status Narrative */}
-            <div className="rounded-2xl p-3 bg-gradient-to-br from-casa-navy/5 via-casa-surface to-casa-gold/5 border border-casa-gold/25">
-              <div className="flex items-center gap-1.5 mb-1">
-                <Sparkles size={13} className="text-casa-gold shrink-0" />
-                <span className="text-2xs uppercase font-bold tracking-wider text-casa-gold">
-                  Household Briefing
-                </span>
-              </div>
-              <p className="text-caption text-casa-navy font-medium leading-relaxed">
-                {householdNarrative}
-              </p>
-            </div>
-
-            {/* Proactive Copilot Insight */}
-            {copilotTip && (
-              <div className="p-2.5 rounded-2xl bg-casa-gold/10 border border-casa-gold/30 flex items-start gap-2">
-                <Sparkles size={13} className="text-casa-gold shrink-0 mt-0.5" />
-                <p className="text-2xs text-casa-navy leading-relaxed font-medium">
-                  <span className="font-bold text-casa-navy mr-1">Copilot Insight:</span>
-                  {copilotTip}
-                </p>
-              </div>
-            )}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* ── Scrollable Schedule Stream ── */}
-      <div className="flex-1 overflow-y-auto pr-1 space-y-3 min-h-0">
+      <div className="flex-1 overflow-y-auto pr-1 space-y-2.5 min-h-0 touch-pan-y overscroll-contain">
         {activeDayTab === 'today' ? (
           <>
             {/* Collapsed Past Events Toggle */}
