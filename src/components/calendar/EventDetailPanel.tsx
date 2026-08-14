@@ -93,24 +93,11 @@ const MODE_OVERRIDE_OPTIONS: Array<{ value: 'auto' | EventMode; label: string; h
   { value: 'hosted', label: 'Hosted' },
   { value: 'trip', label: 'Trip' },
 ]
-const PANEL_ENTER_EASE: [number, number, number, number] = [0.22, 1, 0.36, 1]
-const PANEL_EXIT_EASE: [number, number, number, number] = [0.4, 0, 1, 1]
 const ALL_CATEGORIES_FOR_PICKER = Object.keys(CATEGORY_LABEL) as string[]
 
 interface EventDetailPanelProps {
   event: EventWithDetails | null
   onClose: () => void
-}
-
-function useIsMobile() {
-  const [mobile, setMobile] = useState(() => window.innerWidth < 1024)
-  useEffect(() => {
-    const mq = window.matchMedia('(max-width: 1023px)')
-    const handler = (e: MediaQueryListEvent) => setMobile(e.matches)
-    mq.addEventListener('change', handler)
-    return () => mq.removeEventListener('change', handler)
-  }, [])
-  return mobile
 }
 
 const stopTouch = (e: React.TouchEvent | React.PointerEvent) => e.stopPropagation()
@@ -143,10 +130,7 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
   const [overrideSaveError, setOverrideSaveError] = useState<string | null>(null)
   const [overrideSaveRevision, setOverrideSaveRevision] = useState(0)
   const queryClient = useQueryClient()
-  const isMobile = useIsMobile()
   const panelDragControls = useDragControls()
-  const dragDismissOffset = isMobile ? 150 : 180
-  const dragDismissVelocity = isMobile ? 550 : 700
   const { data: savedPlaces = [], isPending: savedPlacesPending } = useSavedPlaces()
   const addressReviewed = verifiedOverride === true
     || Boolean(findSavedPlaceByAddress(savedPlaces, event?.address))
@@ -472,12 +456,9 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
             <motion.div
               key="backdrop"
               initial={{ opacity: 0 }}
-              animate={{ opacity: 1, transition: { duration: 0.26, ease: PANEL_ENTER_EASE } }}
-              exit={{ opacity: 0, transition: { duration: 0.18, ease: PANEL_EXIT_EASE } }}
-              className="fixed inset-0 z-scrim"
-              style={{
-                background: 'linear-gradient(color-mix(in srgb, var(--color-casa-navy) 8%, transparent), color-mix(in srgb, var(--color-casa-navy) 8%, transparent)), var(--casa-scrim)',
-              }}
+              animate={{ opacity: 1, transition: { duration: 0.22, ease: 'easeOut' } }}
+              exit={{ opacity: 0, transition: { duration: 0.18, ease: 'easeIn' } }}
+              className="fixed inset-0 z-scrim bg-casa-navy/30 backdrop-blur-sm"
               data-panel-overlay
               onClick={handlePanelClose}
               onTouchStart={stopTouch}
@@ -488,38 +469,40 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
 
             <motion.div
               key="event-panel-shell"
-              initial={{ y: '106%', opacity: 0.985 }}
+              initial={{ x: '100%', opacity: 0.95 }}
               animate={{
-                y: 0,
+                x: 0,
                 opacity: 1,
                 transition: {
-                  y: { duration: 0.34, ease: PANEL_ENTER_EASE },
-                  opacity: { duration: 0.22, ease: 'easeOut' },
+                  type: 'spring',
+                  damping: 30,
+                  stiffness: 350,
+                  mass: 0.8,
                 },
               }}
               exit={{
-                y: '104%',
-                opacity: 0.985,
+                x: '100%',
+                opacity: 0,
                 transition: {
-                  y: { duration: 0.26, ease: PANEL_EXIT_EASE },
-                  opacity: { duration: 0.16, ease: 'easeIn' },
+                  duration: 0.2,
+                  ease: 'easeIn',
                 },
               }}
-              drag="y"
+              drag="x"
               dragControls={panelDragControls}
               dragListener={false}
-              dragConstraints={{ top: 0 }}
-              dragElastic={{ top: 0, bottom: 0.18 }}
+              dragConstraints={{ left: 0 }}
+              dragElastic={{ left: 0, right: 0.2 }}
               dragMomentum={false}
               onDragEnd={(_e, info) => {
-                if (!showEdit && (info.velocity.y > dragDismissVelocity || info.offset.y > dragDismissOffset)) onClose()
+                if (!showEdit && (info.velocity.x > 500 || info.offset.x > 150)) onClose()
               }}
               style={{
                 willChange: 'transform',
                 backfaceVisibility: 'hidden',
-                boxShadow: 'var(--shadow-modal), 0 20px 56px color-mix(in srgb, var(--color-casa-navy) 20%, transparent)',
+                boxShadow: '-8px 0 36px rgba(0, 0, 0, 0.18), 0 0 12px rgba(0, 0, 0, 0.08)',
               }}
-              className="event-command-center fixed inset-x-2 bottom-2 top-[5vh] z-modal flex flex-col overflow-hidden rounded-modal bg-casa-surface shadow-modal transform-gpu lg:bottom-4 lg:left-auto lg:right-4 lg:top-[6vh] lg:w-[40vw]"
+              className="event-command-center fixed inset-y-0 right-0 z-modal flex flex-col overflow-hidden bg-casa-surface shadow-2xl border-l border-casa-border/80 w-full sm:w-[480px] lg:w-[520px] transform-gpu"
               data-panel-overlay
               data-native-drag
               data-ptr-ignore
@@ -532,13 +515,6 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
               onTouchMove={stopTouch}
               onTouchEnd={stopTouch}
               onScroll={e => {
-                // This outer shell is `overflow: hidden` and must never scroll itself -
-                // only the inner `.overflow-y-auto` content div should. Focusing a
-                // checkbox (e.g. checking off a checklist item) triggers the browser's
-                // native scroll-into-view behavior on every scrollable ancestor,
-                // including this one, which can silently set a nonzero scrollTop here
-                // and shift the whole header/content/footer column up, leaving a
-                // permanent blank gap at the bottom of the card. Reset it immediately.
                 if (e.currentTarget.scrollTop !== 0) e.currentTarget.scrollTop = 0
               }}
             >
@@ -548,7 +524,7 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
                 <button
                   type="button"
                   className="absolute inset-x-0 top-0 z-10 mx-auto block h-control w-[86px] cursor-grab disabled:cursor-default active:cursor-grabbing"
-                  aria-label={showEdit ? 'Panel dismissal disabled while editing' : 'Drag down to dismiss panel'}
+                  aria-label={showEdit ? 'Panel dismissal disabled while editing' : 'Drag right to dismiss panel'}
                   disabled={showEdit}
                   style={{ touchAction: 'none' }}
                   data-native-drag

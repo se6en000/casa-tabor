@@ -246,12 +246,12 @@ test('event detail header uses a light semantic surface with compact event ident
 
 test('event detail shell uses semantic light header, tinted workspace, and surface footer', () => {
   assert.doesNotMatch(detail, /eventCrownStyle/)
-  assert.match(detail, /var\(--color-casa-navy\) 8%, transparent\)[\s\S]*var\(--casa-scrim\)/)
-  assert.match(detail, /boxShadow: 'var\(--shadow-modal\), 0 20px 56px color-mix\(in srgb, var\(--color-casa-navy\) 20%, transparent\)'/)
+  assert.match(detail, /bg-casa-navy\/30 backdrop-blur-sm/)
+  assert.match(detail, /boxShadow: '-8px 0 36px rgba\(0, 0, 0, 0\.18\), 0 0 12px rgba\(0, 0, 0, 0\.08\)'/)
   assert.match(detail, /className="relative h-control-sm flex-shrink-0 border-b border-casa-border bg-casa-bg px-3"/)
   assert.match(detail, /className="absolute inset-x-0 top-0 z-10 mx-auto block h-control w-\[86px\]/)
   assert.match(detail, /h-\[5px\] w-control-sm rounded-full/)
-  assert.match(detail, /aria-label=\{showEdit \? 'Panel dismissal disabled while editing' : 'Drag down to dismiss panel'\}/)
+  assert.match(detail, /aria-label=\{showEdit \? 'Panel dismissal disabled while editing' : 'Drag right to dismiss panel'\}/)
   assert.match(detail, /var\(--color-casa-navy\) 38%, transparent/)
   assert.match(detail, /overflow-y-auto overflow-x-hidden overscroll-contain bg-casa-bg-2/)
   assert.match(detail, /event-command-center-content space-y-5 bg-casa-bg-2 p-6/)

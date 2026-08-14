@@ -34,6 +34,6 @@ test('read mode exposes a labeled Edit action and edit mode owns Save and Cancel
 test('outer panel dismissal cannot bypass inline editor dirty-state protection', () => {
   assert.match(detailSource, /const handlePanelClose = useCallback\(\(\) => \{\s*if \(!showEdit\) onClose\(\)\s*\}/)
   assert.match(detailSource, /onClick=\{handlePanelClose\}/)
-  assert.match(detailSource, /if \(!showEdit && \(info\.velocity\.y/)
+  assert.match(detailSource, /if \(!showEdit && \(info\.velocity\.x/)
   assert.match(detailSource, /disabled=\{showEdit\}/)
 })
