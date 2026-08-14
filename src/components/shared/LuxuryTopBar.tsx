@@ -4,12 +4,8 @@ import { format, isAfter, isBefore } from 'date-fns'
 import {
   Sparkles,
   ImageIcon,
-  RefreshCw,
-  LayoutGrid,
   Zap,
   Leaf,
-  LogOut,
-  UserRound,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useLiveClock } from '../../hooks/useLiveClock'
@@ -17,7 +13,6 @@ import { useHomeWeather } from '../../hooks/useHomeWeather'
 import { useTodayEvents } from '../../hooks/useCalendarEvents'
 import { cn } from '../../utils/cn'
 import { IconButton, Button } from '../ui'
-import { useProfileSession } from '../../contexts/ProfileSessionContext'
 import { useAppStore } from '../../stores/appStore'
 import { WeatherIcon } from './WeatherIcon'
 
@@ -86,7 +81,9 @@ function ModeSwitch({ isWarm }: { isWarm: boolean }) {
         className={cn(
           'px-3 min-h-[32px] rounded-full text-caption font-semibold transition-all leading-none',
           canvasSubmode === 'calm'
-            ? 'bg-casa-gold text-casa-navy shadow-2xs font-bold'
+            ? isWarm
+              ? 'bg-casa-navy/10 text-casa-navy border border-casa-gold/40 shadow-2xs font-bold'
+              : 'bg-white/20 text-white border border-white/30 shadow-2xs font-bold'
             : isWarm
             ? 'text-casa-text-tertiary hover:text-casa-navy'
             : 'text-white/60 hover:text-white',
@@ -104,7 +101,7 @@ function ModeSwitch({ isWarm }: { isWarm: boolean }) {
         className={cn(
           'px-3 min-h-[32px] rounded-full text-caption font-semibold transition-all leading-none',
           canvasSubmode === 'turbo'
-            ? 'bg-amber-400 text-casa-navy shadow-2xs font-bold'
+            ? 'bg-amber-500/20 text-amber-900 border border-amber-500/40 shadow-2xs font-bold'
             : isWarm
             ? 'text-casa-text-tertiary hover:text-casa-navy'
             : 'text-white/60 hover:text-white',
@@ -145,7 +142,7 @@ function NavRail({
             to={tab.path}
             end={tab.path === '/'}
             className={cn(
-              'relative px-3.5 min-h-[36px] inline-flex items-center justify-center text-body-sm font-medium transition-colors leading-none tracking-[0.01em]',
+              'relative px-3.5 min-h-[44px] inline-flex items-center justify-center text-body-sm font-medium transition-colors leading-none tracking-[0.01em]',
               isActive
                 ? isWarm
                   ? 'text-casa-navy font-semibold'
@@ -335,14 +332,10 @@ function AmbientInfo({ isWarm, showEvents }: { isWarm: boolean; showEvents: bool
 // ── Zone E: Utility Actions Track ────────────────────────────────
 function UtilityTrack({
   isWarm,
-  isCanvas,
 }: {
   isWarm: boolean
   isCanvas: boolean
 }) {
-  const { setExperienceMode } = useAppStore()
-  const { profile, signOut } = useProfileSession()
-
   const iconCn = cn(
     'rounded-full',
     isWarm
@@ -359,68 +352,14 @@ function UtilityTrack({
           : 'bg-white/5 border-white/10',
       )}
     >
-      {/* Classic mode switch (only in Living Canvas on xl+) */}
-      {isCanvas && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => setExperienceMode('classic')}
-          aria-label="Switch to Classic Mode"
-          title="Switch to Classic Mode"
-          className={cn(
-            'hidden xl:inline-flex items-center gap-1 px-2.5 min-h-[32px] rounded-full text-caption font-medium transition-colors leading-none',
-            iconCn,
-          )}
-        >
-          <LayoutGrid size={12} />
-          <span>Classic</span>
-        </Button>
-      )}
-
-      {/* Profile + sign-out (Classic mode) */}
-      {!isCanvas && profile && (
-        <>
-          <div
-            className={cn(
-              'hidden xl:flex items-center gap-1.5 px-2 text-caption',
-              isWarm ? 'text-casa-text-secondary' : 'text-white/70',
-            )}
-          >
-            <UserRound size={13} aria-hidden="true" />
-            <span className="leading-none">{profile.memberName}</span>
-          </div>
-          <IconButton
-            icon={<LogOut size={13} strokeWidth={1.8} />}
-            aria-label={`Sign out ${profile.memberName}`}
-            onClick={signOut}
-            title={`Sign out ${profile.memberName}`}
-            size="sm"
-            variant="ghost"
-            className={iconCn}
-          />
-        </>
-      )}
-
-      {/* Refresh */}
+      {/* Art Mode / Screensaver */}
       <IconButton
-        icon={<RefreshCw size={13} strokeWidth={1.8} />}
-        aria-label="Refresh screen"
-        onClick={() => window.location.reload()}
-        title="Refresh screen"
-        size="sm"
-        variant="ghost"
-        className={iconCn}
-      />
-
-      {/* Art Mode */}
-      <IconButton
-        icon={<ImageIcon size={13} strokeWidth={1.8} />}
+        icon={<ImageIcon size={14} strokeWidth={1.8} />}
         aria-label="Open Art Mode"
         onClick={() =>
           document.dispatchEvent(new CustomEvent('screensaver-on'))
         }
-        title="Art Mode"
+        title="Art Mode Screensaver"
         size="sm"
         variant="ghost"
         className={iconCn}
@@ -466,7 +405,7 @@ function CopilotAction() {
         ease: 'easeInOut',
       }}
       className={cn(
-        'inline-flex items-center justify-center gap-1.5 px-4 min-h-[36px] rounded-full transition-all font-bold text-caption leading-none tracking-[0.03em]',
+        'inline-flex items-center justify-center gap-1.5 px-4 min-h-[44px] rounded-full transition-all font-bold text-caption leading-none tracking-[0.03em]',
         aiDrawerOpen
           ? 'bg-casa-gold text-casa-navy ring-2 ring-casa-gold/80 shadow-xs'
           : 'bg-casa-gold text-casa-navy hover:bg-amber-400 shadow-2xs',
@@ -505,18 +444,23 @@ export default function LuxuryTopBar() {
       role="banner"
       aria-label="Casa Tabor main navigation"
     >
-      {/* ── Left cluster: Brand + Mode + Nav ────────────── */}
+      {/* ── Left cluster: Brand + Nav + Mode ────────────── */}
       <div className="flex items-center gap-3 min-w-0">
         <BrandZone isWarm={isWarm} />
 
-        {/* Gold divider between brand and mode/nav */}
+        {/* Gold divider between brand and nav */}
         <span className="topbar-gold-divider hidden md:block" />
 
-        {/* Mode Switcher — only on Living Canvas home */}
-        {isCanvas && isHome && <ModeSwitch isWarm={isWarm} />}
-
-        {/* Navigation Rail */}
+        {/* Navigation Rail — ALWAYS FIRST so nav buttons NEVER shift position */}
         <NavRail isWarm={isWarm} isCanvas={isCanvas} />
+
+        {/* Mode Switcher — renders AFTER nav rail */}
+        {isCanvas && isHome && (
+          <>
+            <span className="topbar-gold-divider hidden lg:block" />
+            <ModeSwitch isWarm={isWarm} />
+          </>
+        )}
       </div>
 
       {/* ── Right cluster: Info + Utility + AI ──────────── */}
@@ -534,3 +478,4 @@ export default function LuxuryTopBar() {
     </header>
   )
 }
+

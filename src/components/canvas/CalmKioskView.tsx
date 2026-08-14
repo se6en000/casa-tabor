@@ -1,25 +1,19 @@
-import { useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { format, differenceInMinutes, parseISO } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 import {
   MapPin,
   Car,
   Utensils,
   ChevronRight,
   Zap,
-  Sparkles,
   Calendar,
   CheckCircle2,
   Navigation,
   ArrowRight,
+  Bell,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
-import { useLiveClock, greetingFor } from '../../hooks/useLiveClock'
-import { useTodayEvents, type EventWithDetails } from '../../hooks/useCalendarEvents'
-import { useWeekConflicts } from '../../hooks/useConflicts'
-import { usePrepItems } from '../../hooks/usePrepItems'
-import { useHomeWeather } from '../../hooks/useHomeWeather'
-import { useAppStore } from '../../stores/appStore'
+import { useCalmKioskPresenter } from '../../hooks/useCalmKioskPresenter'
+import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { cn } from '../../utils/cn'
 import { Button, PersonAvatarStack } from '../ui'
 
@@ -28,100 +22,57 @@ interface CalmKioskViewProps {
 }
 
 export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
-  const navigate = useNavigate()
-  const { setCanvasSubmode } = useAppStore()
-  const now = useLiveClock(10_000)
-  const { data: todayEvents = [] } = useTodayEvents(now)
-  const { data: conflicts = [] } = useWeekConflicts()
-  const { data: prepItems = [] } = usePrepItems()
-  const { data: weather } = useHomeWeather()
-
-  // Filter out meal events from general appointments stream (handled by Tonight's Kitchen)
-  const appointmentEvents = useMemo(() => {
-    return todayEvents.filter((e) => {
-      const cat = (e.enrichment?.category || (e as any).category || '').toLowerCase()
-      const title = (e.title || '').toLowerCase()
-      return !cat.includes('meal') && !cat.includes('prep') && !cat.includes('cook') && !title.includes('dinner') && !title.includes('lunch')
-    })
-  }, [todayEvents])
-
-  // Filter out dismissed items
-  const activeConflicts = useMemo(() => conflicts.filter((c) => !c.resolved), [conflicts])
-  const activePrep = useMemo(() => prepItems.filter((p) => !p.dismissed), [prepItems])
-  const totalAttentionCount = activeConflicts.length + activePrep.length
-
-  // Find next upcoming event today
-  const nextEvent = useMemo(() => {
-    const upcoming = todayEvents.filter((e) => {
-      if (e.all_day) return false
-      try {
-        const start = parseISO(e.start_time)
-        return start.getTime() > now.getTime() - 15 * 60 * 1000 // up to 15m after start
-      } catch {
-        return false
-      }
-    })
-    return upcoming[0] || todayEvents[0] || null
-  }, [todayEvents, now])
-
-  // Minutes until next event
-  const minutesUntilNext = useMemo(() => {
-    if (!nextEvent) return null
-    try {
-      const start = parseISO(nextEvent.start_time)
-      return differenceInMinutes(start, now)
-    } catch {
-      return null
-    }
-  }, [nextEvent, now])
-
-  const greeting = greetingFor(now)
+  const {
+    now,
+    greeting,
+    weather,
+    nextEvent,
+    appointmentEvents,
+    isEvening,
+    isDinnerPast,
+    totalAttentionCount,
+    minutesUntilNext,
+    setCanvasSubmode,
+    navigateTo,
+  } = useCalmKioskPresenter()
 
   return (
     <div className="w-full h-full flex flex-col justify-between p-6 lg:p-10 max-w-7xl mx-auto overflow-y-auto">
       {/* ── Top Section: Ambient Greeting & Clock ── */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-6 border-b border-casa-border/40">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-casa-border/40">
         <div>
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-casa-gold/15 text-casa-gold text-caption font-bold tracking-wider uppercase mb-2">
-            <Sparkles size={12} /> Ambient Living Kiosk
-          </span>
           <h1 className="font-display text-display-lg sm:text-display-xl text-casa-navy font-semibold tracking-tight leading-none">
             {greeting}, <span className="italic font-normal">Tabor Family</span>
           </h1>
-          <p className="text-body text-casa-text-secondary mt-1.5 font-medium">
+          <p className="text-body text-casa-text-secondary mt-2 font-medium">
             {format(now, 'EEEE, MMMM d, yyyy')}
             {weather && ` · ${weather.condition || 'Clear'}, ${weather.temp}°F`}
           </p>
         </div>
 
-        <div className="flex items-center gap-4">
-          {/* Glowing Turbo Mode CTA Banner if attention items exist */}
+        <div className="flex items-center gap-3">
+          {/* Subtle Notification Bell Badge replacing high-anxiety banner */}
           {totalAttentionCount > 0 ? (
             <Button
               variant="secondary"
               onClick={() => setCanvasSubmode('turbo')}
-              className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-amber-500/15 border-2 border-amber-500/40 text-amber-900 shadow-sm hover:bg-amber-500/25 transition-all text-left h-auto min-h-control"
+              className="flex items-center gap-2.5 px-4 py-2.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-900 hover:bg-amber-500/20 transition-all text-body-sm font-semibold shadow-2xs min-h-control"
+              aria-label={`View ${totalAttentionCount} triage items in Turbo Canvas`}
             >
-              <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold shrink-0 shadow-sm">
-                <Zap size={18} />
+              <div className="relative flex items-center justify-center">
+                <Bell size={16} className="text-amber-600" />
+                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
               </div>
-              <div className="min-w-0 pr-1">
-                <div className="flex items-center gap-1.5 font-bold text-body-sm text-casa-navy">
-                  <span>{totalAttentionCount} Items Need Attention</span>
-                </div>
-                <p className="text-caption text-casa-text-secondary">
-                  Tap to launch Turbo triage canvas ➔
-                </p>
-              </div>
+              <span>{totalAttentionCount} Triage Alerts</span>
             </Button>
           ) : (
             <Button
               variant="secondary"
               onClick={() => setCanvasSubmode('turbo')}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-casa-surface border border-casa-border hover:border-casa-navy text-casa-navy text-body-sm font-semibold transition-all shadow-sm h-auto min-h-control"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-casa-surface border border-casa-border hover:border-casa-navy text-casa-navy text-body-sm font-semibold transition-all shadow-2xs min-h-control"
             >
-              <Zap size={16} className="text-amber-500" />
-              <span>Enter Turbo Canvas</span>
+              <Zap size={15} className="text-amber-500" />
+              <span>Turbo Canvas</span>
             </Button>
           )}
         </div>
@@ -249,19 +200,34 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
               </div>
             </motion.div>
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center rounded-3xl p-8 bg-casa-surface border border-casa-border/60 text-center">
-              <CheckCircle2 size={48} className="text-emerald-500 mb-3 opacity-80" />
-              <h3 className="font-display text-heading font-semibold text-casa-navy">
-                Schedule is Clear Today
+            <div className="flex-1 flex flex-col items-center justify-center rounded-3xl p-8 bg-gradient-to-br from-slate-900 to-casa-navy text-white border border-white/10 shadow-xl text-center min-h-[260px]">
+              <div className="w-14 h-14 rounded-2xl bg-casa-gold/20 text-casa-gold flex items-center justify-center mb-4 border border-casa-gold/30">
+                <CheckCircle2 size={32} />
+              </div>
+              <h3 className="font-display text-heading font-bold text-white tracking-tight">
+                {isEvening ? 'Evening Wind-Down · Schedule Complete' : 'Schedule is Clear Today'}
               </h3>
-              <p className="text-body-sm text-casa-text-secondary max-w-sm mt-1">
-                No more scheduled events for today. Relax and enjoy your evening!
+              <p className="text-body-sm text-white/70 max-w-md mt-2 leading-relaxed">
+                {isEvening
+                  ? 'All scheduled events for today are finished. Rest well & check tomorrow’s preview.'
+                  : 'No upcoming events scheduled for today. Relax and enjoy your day!'}
               </p>
+              <div className="mt-5 flex items-center gap-3">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => navigateTo('/calendar')}
+                  className="bg-white/10 hover:bg-white/20 text-white font-semibold rounded-xl min-h-[44px] px-4 border border-white/15"
+                >
+                  <span>View Tomorrow's Schedule</span>
+                  <ArrowRight size={14} className="ml-1" />
+                </Button>
+              </div>
             </div>
           )}
         </div>
 
-        {/* Right Side (5 cols): Tonight's Dinner + Upcoming Schedule Stream */}
+        {/* Right Side (5 cols): Tonight's Kitchen + Upcoming Schedule Stream */}
         <div className="lg:col-span-5 flex flex-col gap-6">
           {/* Dinner Card */}
           <div className="rounded-3xl p-6 bg-gradient-to-br from-amber-500/10 via-casa-surface to-casa-surface border border-amber-500/20 shadow-sm flex flex-col justify-between">
@@ -274,7 +240,9 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                   Tonight's Kitchen
                 </span>
               </div>
-              <span className="text-caption font-semibold text-casa-muted">6:30 PM Target</span>
+              <span className="text-caption font-semibold text-casa-muted">
+                {isDinnerPast ? 'Dinner Completed' : '6:30 PM Target'}
+              </span>
             </div>
 
             <div>
@@ -282,19 +250,24 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                 Herb-Roasted Chicken & Warm Farro
               </h3>
               <p className="text-body-sm text-casa-text-secondary mt-1">
-                35m prep · Pantry stock confirmed · Chef: Sarah & Luke
+                {isDinnerPast
+                  ? 'Dinner served · Pantry stock updated · Chef: Sarah & Luke'
+                  : '35m prep · Pantry stock confirmed · Chef: Sarah & Luke'}
               </p>
             </div>
 
             <div className="pt-4 mt-4 border-t border-casa-border/50 flex items-center justify-between">
-              <span className="inline-flex items-center gap-1.5 text-caption font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-md">
-                <CheckCircle2 size={13} /> Ingredients ready
+              <span className={cn(
+                "inline-flex items-center gap-1.5 text-caption font-semibold px-2.5 py-1 rounded-md",
+                isDinnerPast ? "text-slate-700 bg-slate-100" : "text-emerald-800 bg-emerald-100 border border-emerald-300"
+              )}>
+                <CheckCircle2 size={13} /> {isDinnerPast ? 'Cleaned up' : 'Ingredients ready'}
               </span>
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => navigate('/cook')}
-                className="text-body-sm font-bold text-casa-navy hover:text-casa-gold transition-colors flex items-center gap-1 min-h-[36px] px-2"
+                onClick={() => navigateTo('/cook')}
+                className="text-body-sm font-bold text-casa-navy hover:text-casa-gold transition-colors flex items-center gap-1 min-h-[44px] px-3"
               >
                 <span>Recipe</span>
                 <ArrowRight size={14} />
@@ -313,7 +286,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                 variant="ghost"
                 size="sm"
                 onClick={() => setCanvasSubmode('turbo')}
-                className="text-caption font-bold text-casa-gold hover:underline min-h-[36px] px-2"
+                className="text-caption font-bold text-casa-gold hover:underline min-h-[44px] px-3"
               >
                 Expand All
               </Button>
@@ -416,25 +389,6 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
             </div>
           </div>
         </div>
-      </div>
-
-      {/* ── Bottom Expand Bar ── */}
-      <div className="pt-4 flex items-center justify-between border-t border-casa-border/40">
-        <div className="flex items-center gap-3 text-caption text-casa-muted">
-          <span className="font-semibold text-casa-navy">Living Canvas OS</span>
-          <span>·</span>
-          <span>Tap any event for quick slide-out details</span>
-        </div>
-
-        <Button
-          variant="primary"
-          onClick={() => setCanvasSubmode('turbo')}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-casa-navy text-white hover:bg-slate-800 text-body-sm font-bold shadow-md hover:shadow-lg transition-all h-auto min-h-control"
-        >
-          <Zap size={16} className="text-casa-gold" />
-          <span>Launch Turbo Mode (3-Pane)</span>
-          <ChevronRight size={16} />
-        </Button>
       </div>
     </div>
   )

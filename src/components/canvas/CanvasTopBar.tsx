@@ -1,7 +1,7 @@
 import { useRef } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { format } from 'date-fns'
-import { Cloud, Sparkles, ImageIcon, RefreshCw, LayoutGrid, Zap, Leaf } from 'lucide-react'
+import { Cloud, Sparkles, ImageIcon, RefreshCw, Zap, Leaf } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useLiveClock } from '../../hooks/useLiveClock'
 import { useHomeWeather } from '../../hooks/useHomeWeather'
@@ -15,7 +15,6 @@ export default function CanvasTopBar() {
     setAiDrawerOpen,
     canvasSubmode,
     setCanvasSubmode,
-    setExperienceMode,
   } = useAppStore()
 
   const location = useLocation()
@@ -151,37 +150,19 @@ export default function CanvasTopBar() {
         {/* Unified Utility Action Track */}
         <div
           className={cn(
-            'inline-flex items-center p-0.5 rounded-full border gap-0.5',
+            'inline-flex items-center p-0.5 rounded-full border gap-1',
             isCalm ? 'bg-casa-surface/40 border-casa-border/40' : 'bg-white/5 border-white/10'
           )}
         >
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => setExperienceMode('classic')}
-            aria-label="Switch to Classic Mode"
-            title="Switch to Classic Mode"
-            className={cn(
-              'hidden xl:inline-flex items-center gap-1 px-2.5 min-h-[30px] rounded-full text-caption font-medium transition-colors leading-none',
-              isCalm
-                ? 'text-casa-muted hover:text-casa-navy hover:bg-black/5'
-                : 'text-white/70 hover:text-white hover:bg-white/10'
-            )}
-          >
-            <LayoutGrid size={12} />
-            <span>Classic</span>
-          </Button>
-
           <IconButton
-            icon={<RefreshCw size={13} strokeWidth={1.8} />}
+            icon={<RefreshCw size={14} strokeWidth={2} />}
             aria-label="Refresh screen"
             onClick={() => window.location.reload()}
             title="Refresh screen"
             size="sm"
             variant="ghost"
             className={cn(
-              'rounded-full',
+              'rounded-full w-8 h-8 flex items-center justify-center',
               isCalm
                 ? 'text-casa-muted hover:text-casa-navy hover:bg-black/5'
                 : 'text-white/70 hover:text-white hover:bg-white/10'
@@ -189,14 +170,14 @@ export default function CanvasTopBar() {
           />
 
           <IconButton
-            icon={<ImageIcon size={13} strokeWidth={1.8} />}
+            icon={<ImageIcon size={14} strokeWidth={2} />}
             aria-label="Open Art Mode"
             onClick={() => document.dispatchEvent(new CustomEvent('screensaver-on'))}
             title="Art Mode"
             size="sm"
             variant="ghost"
             className={cn(
-              'rounded-full',
+              'rounded-full w-8 h-8 flex items-center justify-center',
               isCalm
                 ? 'text-casa-muted hover:text-casa-navy hover:bg-black/5'
                 : 'text-white/70 hover:text-white hover:bg-white/10'
