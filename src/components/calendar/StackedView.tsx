@@ -349,13 +349,13 @@ function CompactReminderCard({ event, now = new Date(), onClick, onDoubleClick, 
       className={cn(
         'relative w-full rounded-widget border border-amber-300/60 bg-amber-50/40 shadow-card cursor-pointer touch-pan-y overflow-hidden',
         'hover:shadow-card-hover hover:border-amber-400/80 transition-all duration-200 min-h-control',
-        'grid grid-cols-[92px_1fr]',
+        'grid grid-cols-[5.75rem_1fr]',
         past && 'opacity-45'
       )}
       data-calendar-event
     >
       {/* Straight Amber Left Pillar */}
-      <div className="p-2.5 bg-amber-100/70 text-amber-950 flex flex-col justify-between items-start border-r border-amber-200/60 border-l-4 border-l-amber-400">
+      <div className="p-2.5 bg-amber-100/70 text-amber-950 flex flex-col justify-between items-start border-r border-amber-200/60 border-l-4 border-l-amber-400 min-w-0 overflow-hidden">
         <div className="w-full min-w-0">
           <span className="font-mono text-body font-bold text-amber-950 tabular-nums leading-none block">
             {isTimed ? format(start, 'h:mm') : 'ALL DAY'}
@@ -491,7 +491,7 @@ function EventCard({ event, household, now = new Date(), onClick, onDoubleClick,
       tabIndex={0}
       className={cn(
         'relative rounded-widget border cursor-pointer touch-pan-y shadow-card overflow-hidden transition-all duration-200 min-h-control',
-        'grid grid-cols-[92px_1fr]',
+        'grid grid-cols-[5.75rem_1fr]',
         isHeroState
           ? 'bg-casa-navy text-white border-casa-navy ring-1 ring-casa-gold/60 shadow-card-hover'
           : isBirthday
@@ -502,10 +502,10 @@ function EventCard({ event, household, now = new Date(), onClick, onDoubleClick,
     >
       {isBirthday && <BirthdayCardDecoration />}
 
-      {/* ── Straight Left Pillar: Architectural Time Anchor (92px Wide, Zero Truncation) ── */}
+      {/* ── Straight Left Pillar: Architectural Time Anchor ── */}
       <div
         className={cn(
-          'p-2.5 flex flex-col justify-between items-start border-r relative border-l-4',
+          'p-2.5 flex flex-col justify-between items-start border-r relative border-l-4 min-w-0 overflow-hidden',
           isHeroState
             ? 'bg-white/5 border-r-white/15 text-white'
             : 'bg-casa-bg/80 border-r-casa-divider text-casa-navy'
@@ -526,12 +526,12 @@ function EventCard({ event, household, now = new Date(), onClick, onDoubleClick,
           {!isAllDayEvent && (
             <div
               className={cn(
-                'font-mono text-caption uppercase font-semibold mt-1 leading-none whitespace-nowrap',
+                'font-mono text-caption uppercase font-semibold mt-1 leading-tight flex flex-wrap items-baseline gap-x-1',
                 isHeroState ? 'text-white/70' : 'text-casa-muted'
               )}
             >
-              {format(start, 'a')}
-              {durationStr && ` · ${durationStr}`}
+              <span>{format(start, 'a')}</span>
+              {durationStr && <span>· {durationStr}</span>}
             </div>
           )}
         </div>
@@ -541,13 +541,13 @@ function EventCard({ event, household, now = new Date(), onClick, onDoubleClick,
           {departureTime && !happening && !isHosted && (
             <span
               className={cn(
-                'flex items-center gap-0.5 text-caption font-bold leading-none whitespace-nowrap',
+                'flex items-center gap-0.5 text-caption font-bold leading-none truncate max-w-full',
                 isHeroState ? 'text-casa-gold' : 'text-casa-gold'
               )}
               title={`Leave by ${format(departureTime, 'h:mm a')}`}
             >
               <Navigation size={9} className="shrink-0 text-casa-gold" />
-              <span className="text-caption font-semibold">{format(departureTime, 'h:mm')}</span>
+              <span className="text-caption font-semibold truncate">{format(departureTime, 'h:mm')}</span>
             </span>
           )}
           <div className="flex items-center justify-between w-full">
