@@ -458,7 +458,7 @@ export default function EventDetailPanel({ event: eventSummary, onClose }: Event
               initial={{ opacity: 0 }}
               animate={{ opacity: 1, transition: { duration: 0.22, ease: 'easeOut' } }}
               exit={{ opacity: 0, transition: { duration: 0.18, ease: 'easeIn' } }}
-              className="fixed inset-0 z-scrim bg-casa-navy/10 backdrop-blur-[2px]"
+              className="fixed inset-0 z-scrim bg-casa-navy/5 backdrop-blur-[1px]"
               data-panel-overlay
               onClick={handlePanelClose}
               onTouchStart={stopTouch}

@@ -175,11 +175,27 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                     )}
                   </div>
                 )}
+
+                {/* Ambient Micro-Timeline Progress Line */}
+                <div className="mt-5 w-full bg-white/10 h-1.5 rounded-full overflow-hidden flex items-center" title="Ambient Time Schedule Bar">
+                  <div
+                    className="bg-gradient-to-r from-casa-gold to-amber-400 h-full rounded-full transition-all duration-500"
+                    style={{
+                      width: `${
+                        minutesUntilNext !== null && minutesUntilNext <= 0
+                          ? 100
+                          : minutesUntilNext !== null && minutesUntilNext < 120
+                          ? Math.max(15, Math.min(90, Math.round(100 - (minutesUntilNext / 120) * 85)))
+                          : 15
+                      }%`,
+                    }}
+                  />
+                </div>
               </div>
 
               {/* Members and Logistics Footer */}
-              <div className="pt-6 mt-6 border-t border-white/10 flex flex-wrap items-center justify-between gap-4">
-                <div className="flex items-center gap-2">
+              <div className="pt-5 mt-5 border-t border-white/10 flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-2 flex-wrap">
                   {nextEvent.members.map((m) => (
                     <span
                       key={m.id}
@@ -196,6 +212,22 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                       <Car size={13} className="text-casa-gold" />
                       {nextEvent.enrichment.drive_time_mins}m drive
                     </span>
+                  )}
+                  {(nextEvent.address || nextEvent.location_name) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        const dest = encodeURIComponent(nextEvent.address || nextEvent.location_name || '')
+                        window.open(`https://www.google.com/maps/search/?api=1&query=${dest}`, '_blank')
+                      }}
+                      title="Open navigation directions"
+                      className="h-8 px-3 rounded-xl bg-casa-gold/20 hover:bg-casa-gold/30 text-casa-gold text-caption font-bold flex items-center gap-1.5 shrink-0 border border-casa-gold/40"
+                    >
+                      <Navigation size={13} className="text-casa-gold" />
+                      <span>Directions</span>
+                    </Button>
                   )}
                 </div>
 
