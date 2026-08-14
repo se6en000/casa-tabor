@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
-import { format, parseISO, differenceInMinutes } from 'date-fns'
-import { Car, MapPin, Clock } from 'lucide-react'
+import { format, parseISO, differenceInMinutes, addMinutes } from 'date-fns'
+import { Car, MapPin, Clock, Home } from 'lucide-react'
 import { cn } from '../../utils/cn'
 
 export interface JourneyProgressBarProps {
@@ -59,6 +59,8 @@ export function JourneyProgressBar({
   const {
     minutesUntilLeave,
     minutesUntilStart,
+    minutesUntilEnd,
+    totalEventDurationMins,
     hasDrive,
     phase,
     progressPercent,
@@ -120,6 +122,8 @@ export function JourneyProgressBar({
     }
   }, [isAllDay, parsedStart, parsedEnd, parsedLeave, driveTimeMins, now])
 
+  const isInSession = phase === 'in-session'
+
   // Non-travel event fallback (standard session bar)
   if (!hasDrive) {
     return (
@@ -150,12 +154,92 @@ export function JourneyProgressBar({
     )
   }
 
-  // Segmented Dual-Phase Layout for Driving Events
-  // Prep Zone (38%) | Departure Gate (Tick) | Transit Zone (34%) | Event Zone (28%)
+  // Active Event Session Timeline (when appointment is already underway / happening now)
+  if (isInSession) {
+    const elapsedMins = Math.max(0, totalEventDurationMins - (minutesUntilEnd ?? 0))
+    const homeEta = parsedEnd && driveTimeMins ? addMinutes(parsedEnd, driveTimeMins) : null
+
+    return (
+      <div className={cn('w-full space-y-2', className)}>
+        {showLabels && (
+          <div className="flex items-center justify-between text-caption font-medium">
+            <div className="flex items-center gap-1.5 text-casa-gold font-semibold">
+              <Clock size={13} />
+              <span>At Event · Ends {parsedEnd ? format(parsedEnd, 'h:mm a') : ''}</span>
+              <span
+                className={cn(
+                  'px-1.5 py-0.5 rounded text-2xs font-bold font-sans',
+                  minutesUntilEnd !== null && minutesUntilEnd <= 10
+                    ? 'bg-amber-400 text-slate-950 animate-pulse'
+                    : 'bg-white/10 text-white/80',
+                )}
+              >
+                {minutesUntilEnd !== null && minutesUntilEnd > 0 ? `${minutesUntilEnd}m left` : 'Wrapping up'}
+              </span>
+            </div>
+            {homeEta && (
+              <div className="flex items-center gap-1.5 text-white/80 font-mono text-caption">
+                <Home size={12} className="text-casa-gold/80" />
+                <span>Home ~{format(homeEta, 'h:mm a')}</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Dual-Phase In-Session + Return Drive Progress Bar */}
+        <div className="relative w-full">
+          <div className="relative w-full h-2.5 rounded-full bg-white/10 overflow-hidden flex items-stretch p-0.5 border border-white/5">
+            {/* Zone 1: Appointment Session Progress (65% width) */}
+            <div className="relative w-[65%] h-full rounded-l-full bg-white/5 flex items-center overflow-hidden mr-0.5">
+              <div
+                className="h-full rounded-l-full bg-gradient-to-r from-casa-gold via-amber-400 to-emerald-400 transition-all duration-500 shadow-sm"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+
+            {/* Zone 2: Return Drive Home (35% width) */}
+            <div className="relative w-[35%] h-full rounded-r-full bg-white/5 flex items-center overflow-hidden border-l border-white/10">
+              <div className="w-full h-full bg-amber-500/20" />
+            </div>
+          </div>
+
+          {/* Departure Marker Pin at 65% */}
+          <div
+            className="absolute top-1/2 -translate-y-1/2 left-[65%] -translate-x-1/2 flex flex-col items-center pointer-events-none"
+            title={`Leave: ${parsedEnd ? format(parsedEnd, 'h:mm a') : ''}`}
+          >
+            <div
+              className={cn(
+                'w-4 h-4 rounded-full flex items-center justify-center text-3xs font-bold border shadow-md transition-transform',
+                minutesUntilEnd !== null && minutesUntilEnd <= 10
+                  ? 'bg-amber-400 text-slate-950 border-white scale-110 animate-pulse ring-2 ring-amber-400/50'
+                  : 'bg-slate-900 text-casa-gold border-casa-gold/60',
+              )}
+            >
+              <Car size={9} />
+            </div>
+          </div>
+        </div>
+
+        {showLabels && (
+          <div className="flex items-center justify-between text-3xs font-sans uppercase tracking-wider text-white/50 px-1 pt-0.5">
+            <span className="w-[65%] text-left">
+              1. In Session ({elapsedMins}m of {totalEventDurationMins}m)
+            </span>
+            <span className="w-[35%] text-right font-semibold text-white/70">
+              2. {driveTimeMins}m Drive Home
+            </span>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // Segmented Dual-Phase Layout for Driving Events (Before Event Starts)
+  // Prep Zone (45%) | Departure Gate (Tick) | Transit Zone (35%) | Event Zone (20%)
   const isPrepPhase = phase === 'prep'
   const isLeaveNow = phase === 'leave-now'
   const isEnRoute = phase === 'en-route'
-  const isInSession = phase === 'in-session'
 
   return (
     <div className={cn('w-full space-y-2', className)}>

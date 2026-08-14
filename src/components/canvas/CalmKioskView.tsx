@@ -1,4 +1,4 @@
-import { format, parseISO } from 'date-fns'
+import { format, parseISO, differenceInMinutes, addMinutes } from 'date-fns'
 import {
   MapPin,
   Car,
@@ -109,14 +109,28 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                     let statusLabel = 'NEXT UP'
                     let dotClass = 'bg-emerald-400'
 
+                    const isUnderway = minutesUntilNext !== null && minutesUntilNext <= 0 && minutesUntilNext > -60
+
                     if (nextEvent.all_day) {
                       statusLabel = 'ALL DAY EVENT'
                       dotClass = 'bg-emerald-400'
-                    } else if (isTravelEvent) {
-                      if (minutesUntilNext !== null && minutesUntilNext <= 0 && minutesUntilNext > -60) {
+                    } else if (isUnderway) {
+                      try {
+                        const end = parseISO(nextEvent.end_time)
+                        const minsToEnd = differenceInMinutes(end, now)
+                        if (minsToEnd <= 10 && minsToEnd > 0) {
+                          statusLabel = `WRAPPING UP · ENDS IN ${minsToEnd} MIN`
+                          dotClass = 'bg-amber-400 animate-pulse'
+                        } else {
+                          statusLabel = 'HAPPENING NOW'
+                          dotClass = 'bg-emerald-400 animate-pulse'
+                        }
+                      } catch {
                         statusLabel = 'HAPPENING NOW'
                         dotClass = 'bg-emerald-400 animate-pulse'
-                      } else if (minutesUntilLeave !== null && minutesUntilLeave <= 0) {
+                      }
+                    } else if (isTravelEvent) {
+                      if (minutesUntilLeave !== null && minutesUntilLeave <= 0) {
                         statusLabel = minutesUntilLeave >= -5 ? 'TIME TO LEAVE NOW' : `EN ROUTE · ${driveTimeMins ? `${driveTimeMins}M DRIVE` : 'IN TRANSIT'}`
                         dotClass = 'bg-amber-400 animate-pulse'
                       } else if (minutesUntilLeave !== null && minutesUntilLeave <= 15) {
@@ -126,9 +140,6 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                         statusLabel = `LEAVE IN ${minutesUntilLeave} MIN`
                         dotClass = 'bg-emerald-400'
                       }
-                    } else if (minutesUntilNext !== null && minutesUntilNext <= 0 && minutesUntilNext > -60) {
-                      statusLabel = 'HAPPENING NOW'
-                      dotClass = 'bg-emerald-400 animate-pulse'
                     } else if (minutesUntilNext !== null && minutesUntilNext > 0) {
                       statusLabel = `STARTS IN ${minutesUntilNext} MIN`
                       dotClass = 'bg-emerald-400'
@@ -204,11 +215,22 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                   {isTravelEvent && driveTimeMins && (
                     <span className="inline-flex items-center gap-1.5 text-caption text-white/80 bg-white/10 px-3 py-1 rounded-full border border-white/10">
                       <Car size={13} className="text-casa-gold" />
-                      <span>{driveTimeMins}m drive</span>
-                      {leaveAt && (
-                        <span className="text-casa-gold font-bold">
-                          · Leave {format(leaveAt, 'h:mm a')}
-                        </span>
+                      {minutesUntilNext !== null && minutesUntilNext <= 0 ? (
+                        <>
+                          <span>{driveTimeMins}m drive home</span>
+                          <span className="text-casa-gold font-bold">
+                            · Home ~{format(addMinutes(parseISO(nextEvent.end_time), driveTimeMins), 'h:mm a')}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span>{driveTimeMins}m drive</span>
+                          {leaveAt && (
+                            <span className="text-casa-gold font-bold">
+                              · Leave {format(leaveAt, 'h:mm a')}
+                            </span>
+                          )}
+                        </>
                       )}
                     </span>
                   )}

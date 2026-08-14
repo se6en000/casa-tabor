@@ -1202,8 +1202,17 @@ export default function DesignSystemGalleryPage() {
                       </span>
                       <span className="inline-flex items-center gap-1.5 text-caption text-white/80 bg-white/10 px-3 py-1 rounded-full border border-white/10">
                         <Car size={13} className="text-casa-gold" />
-                        <span>25m drive</span>
-                        <span className="text-casa-gold font-bold">· Leave 3:05 PM</span>
+                        {heroJourneyPhase === 'in-session' ? (
+                          <>
+                            <span>25m drive home</span>
+                            <span className="text-casa-gold font-bold">· Home ~4:55 PM</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>25m drive</span>
+                            <span className="text-casa-gold font-bold">· Leave 3:05 PM</span>
+                          </>
+                        )}
                       </span>
                     </div>
                   }
