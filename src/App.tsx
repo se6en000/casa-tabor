@@ -8,7 +8,7 @@ import { useRoomTone } from './hooks/useRoomTone'
 import { usePushNotifications } from './hooks/usePushNotifications'
 import { useAppUpdater } from './hooks/useAppUpdater'
 import { ThemeProvider, useTheme } from './contexts/ThemeContext'
-import { TopBarC } from './components/shared/TopBar'
+import LuxuryTopBar from './components/shared/LuxuryTopBar'
 import PinGate from './components/shared/PinGate'
 import AIChatDrawer from './components/shared/AIChatDrawer'
 import ArtScreensaver from './components/shared/ArtScreensaver'
@@ -26,7 +26,7 @@ import { useIdleTimer } from './hooks/useIdleTimer'
 import { useScreensaverSettings } from './hooks/useScreensaverSettings'
 import EventDetailPanel from './components/calendar/EventDetailPanel'
 import { useAppStore } from './stores/appStore'
-import CanvasTopBar from './components/canvas/CanvasTopBar'
+
 import CanvasUndoToast from './components/canvas/CanvasUndoToast'
 
 const SAFE_MODE = String(import.meta.env.VITE_SAFE_MODE ?? '').toLowerCase()
@@ -266,8 +266,8 @@ function AppShell() {
 
   return (
     <div className="app-shell flex flex-col overflow-hidden bg-casa-bg">
-      {/* Full-width top bar — sticky, never scrolls */}
-      {experienceMode === 'living_canvas' ? <CanvasTopBar /> : <TopBarC />}
+      {/* Full-width luxury top bar — adapts to experience mode */}
+      <LuxuryTopBar />
 
       <div className="app-shell-main flex flex-1 min-h-0 relative overflow-hidden">
         {experienceMode === 'classic' && <TabletSidebar aiDrawerOpen={aiDrawerOpen} />}

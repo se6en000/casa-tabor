@@ -137,7 +137,7 @@ export const DESIGN_TOKENS = {
   },
   spacing: {
     'nav-height': '4.5rem',
-    'topbar-height': '3rem',
+    'topbar-height': '3.5rem',
     'page-gutter': 'var(--ds-page-gutter)',
     'section-gap': 'clamp(1rem, 2vw, 1.5rem)',
     'card-padding': 'clamp(0.875rem, 1.5vw, 1.25rem)',

@@ -84,7 +84,7 @@
   --shadow-modal: 0 8px 30px rgba(27,42,74,0.12);
   --shadow-fab: 0 4px 14px rgba(201,169,110,0.3);
   --spacing-nav-height: 4.5rem;
-  --spacing-topbar-height: 3rem;
+  --spacing-topbar-height: 3.5rem;
   --spacing-page-gutter: var(--ds-page-gutter);
   --spacing-section-gap: clamp(1rem, 2vw, 1.5rem);
   --spacing-card-padding: clamp(0.875rem, 1.5vw, 1.25rem);
