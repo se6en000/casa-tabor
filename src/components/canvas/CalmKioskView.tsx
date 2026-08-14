@@ -76,9 +76,9 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
   )
 
   return (
-    <div className="w-full h-full flex flex-col justify-between p-6 lg:p-8 xl:p-10 overflow-y-auto scrollbar-hide">
+    <div className="w-full h-full flex flex-col justify-start p-6 lg:p-8 xl:p-10 overflow-y-auto scrollbar-hide">
       {/* ── Top Section: Ambient Greeting & Clock ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-casa-border/40">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-casa-border/40 shrink-0">
         <div>
           <h1 className="font-display text-display-lg sm:text-display-xl text-casa-navy font-semibold tracking-tight leading-none">
             {greeting}, <span className="italic font-normal">Tabor Family</span>
@@ -118,7 +118,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
       </div>
 
       {/* ── Main Middle Grid: Hero "Next Up" + Tonight's Dinner + Daily Schedule ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 my-6 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-6 pb-6 items-start">
         {/* Hero Next Up Card (7 cols) */}
         <div className="lg:col-span-7 flex flex-col justify-start space-y-4">
           {nextEvent ? (
@@ -364,7 +364,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
         {/* Right Side (5 cols): Today's Schedule Stream (Top) + Tonight's Kitchen (Bottom) */}
         <div className="lg:col-span-5 flex flex-col gap-6">
           {/* 1. Today's Appointments & Reminders (Top) */}
-          <div className="rounded-3xl p-6 bg-casa-surface border border-casa-border/60 shadow-sm flex flex-col justify-between">
+          <div className="rounded-3xl p-6 bg-casa-surface border border-casa-border/60 shadow-sm flex flex-col justify-start">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-xl bg-casa-gold/20 text-casa-navy flex items-center justify-center font-bold">
@@ -622,7 +622,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
           </div>
 
           {/* 2. Tonight's Kitchen (Bottom) */}
-          <div className="rounded-3xl p-6 bg-gradient-to-br from-amber-500/10 via-casa-surface to-casa-surface border border-amber-500/20 shadow-sm flex flex-col justify-between">
+          <div className="rounded-3xl p-6 bg-gradient-to-br from-amber-500/10 via-casa-surface to-casa-surface border border-amber-500/20 shadow-sm flex flex-col justify-start">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-800 flex items-center justify-center font-bold">
