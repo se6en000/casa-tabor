@@ -415,6 +415,54 @@ function CompactReminderCard({ event, now = new Date(), onClick, onDoubleClick, 
     lpOrigin.current = null
   }
 
+  if (past) {
+    return (
+      <div
+        onClick={(e) => { e.stopPropagation(); onClick() }}
+        onDoubleClick={(e) => { e.stopPropagation(); onDoubleClick?.() }}
+        onKeyDown={(e) => {
+          if (e.key !== 'Enter' && e.key !== ' ') return
+          e.preventDefault()
+          onClick()
+        }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        role="button"
+        tabIndex={0}
+        className={cn(
+          'relative w-full rounded-xl border border-amber-300/60 bg-amber-50/40 shadow-xs cursor-pointer touch-pan-y overflow-hidden',
+          'hover:opacity-85 hover:border-amber-400/80 transition-all duration-200 min-h-[38px] px-2.5 py-1.5 flex items-center justify-between gap-2',
+          'border-l-4 border-l-amber-400 opacity-45'
+        )}
+        data-calendar-event
+      >
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <span className="font-mono text-caption font-bold text-amber-950 tabular-nums shrink-0">
+            {isTimed ? format(start, 'h:mm a') : 'ALL DAY'}
+          </span>
+          <span className="text-amber-300 shrink-0">•</span>
+          <span className="text-caption sm:text-body-sm font-semibold text-casa-navy truncate">
+            {cleanTitle}
+          </span>
+        </div>
+        {members.length > 0 && (
+          <div className="flex items-center gap-1 shrink-0">
+            {members.slice(0, 2).map((m) => (
+              <CalendarPill
+                key={m.id}
+                color={m.family_member?.color_hex ?? 'var(--color-casa-gold)'}
+                className="!text-2xs !py-0 !px-1.5"
+              >
+                {m.family_member?.name}
+              </CalendarPill>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div
       onClick={(e) => { e.stopPropagation(); onClick() }}
@@ -551,6 +599,83 @@ function EventCard({ event, household, now = new Date(), onClick, onDoubleClick,
   const handleTouchEnd = () => {
     if (lpTimer.current) { clearTimeout(lpTimer.current); lpTimer.current = null }
     lpOrigin.current = null
+  }
+
+  if (past && !isHeroState) {
+    return (
+      <motion.div
+        layout
+        initial={{ opacity: 0, y: 4 }}
+        animate={{ opacity: 0.45, y: 0 }}
+        exit={{ opacity: 0, y: -4 }}
+        transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+        onClick={(e) => { e.stopPropagation(); onClick() }}
+        onDoubleClick={(e) => { e.stopPropagation(); onDoubleClick() }}
+        onKeyDown={(e) => {
+          if (e.key !== 'Enter' && e.key !== ' ') return
+          e.preventDefault()
+          onClick()
+        }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        role="button"
+        tabIndex={0}
+        className={cn(
+          'relative rounded-xl border border-casa-border/60 bg-casa-surface/90 shadow-xs cursor-pointer touch-pan-y overflow-hidden',
+          'hover:opacity-85 hover:border-casa-gold/60 transition-all duration-200 min-h-[38px] px-2.5 py-1.5 flex items-center justify-between gap-2',
+          'border-l-4'
+        )}
+        style={{ borderLeftColor: color }}
+        data-calendar-event
+      >
+        {/* Left: Time + Divider + Title */}
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <span className="font-mono text-caption font-bold text-casa-navy tabular-nums shrink-0">
+            {isAllDayEvent
+              ? (displayStartDay ? format(displayStartDay, 'MMM d') : 'ALL DAY')
+              : format(start, 'h:mm a')}
+          </span>
+          <span className="text-casa-divider shrink-0">•</span>
+          <span className="text-caption sm:text-body-sm font-semibold text-casa-navy truncate">
+            {isBirthday && <span className="mr-1" aria-hidden="true">🎂</span>}
+            {cleanTitle}
+          </span>
+        </div>
+
+        {/* Right: Driver/Supervisor Tag + Mini Avatar Stack */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {responsibility.responsible && (
+            <div
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-casa-bg border border-casa-border/70 text-caption font-medium"
+              title={`${responsibility.responsible.name} ${responsibility.roleBadge === 'drive' ? 'driver assigned' : isHosted ? 'hosting' : 'supervising'}`}
+            >
+              <span
+                className="flex size-3.5 shrink-0 items-center justify-center rounded-full text-caption font-extrabold text-white"
+                style={{ backgroundColor: responsibility.responsible.color ?? 'var(--color-casa-gold)' }}
+              >
+                {responsibility.responsible.initial ?? responsibility.responsible.name?.[0]?.toUpperCase() ?? '?'}
+              </span>
+              <span className="text-caption font-semibold text-casa-navy hidden xs:inline">
+                {responsibility.roleBadge === 'drive' ? 'Drives' : isHosted ? 'Hosting' : 'Supervising'}
+              </span>
+            </div>
+          )}
+
+          {responsibility.attendees.length > 0 && (
+            <PersonAvatarStack
+              people={responsibility.attendees.map((m) => ({
+                id: m.id,
+                name: m.family_member?.name ?? '?',
+                color: m.family_member?.color_hex ?? SHARED_COLOR,
+              }))}
+              max={3}
+              size="xs"
+            />
+          )}
+        </div>
+      </motion.div>
+    )
   }
 
   return (

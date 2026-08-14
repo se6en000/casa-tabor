@@ -144,6 +144,60 @@ export function DayEventCard({
         setMovingToNeedsYou(false)
       }
     }
+    if (past) {
+      return (
+        <motion.li
+          layout
+          initial={{ opacity: 0, x: -8 }}
+          animate={{ opacity: 0.45, x: 0 }}
+          exit={{ opacity: 0, height: 0, marginBottom: 0, overflow: 'hidden' }}
+          transition={{ duration: 0.2, delay: index * 0.02 }}
+          className="cursor-pointer list-none"
+          data-calendar-event
+          onMouseEnter={onMouseEnter}
+          onMouseLeave={onMouseLeave}
+          onClick={(e) => { e.stopPropagation(); onOpen() }}
+        >
+          <div
+            className={cn(
+              'relative w-full overflow-hidden rounded-xl border border-amber-300/60 bg-amber-50/40 shadow-xs transition-all duration-200 min-h-[38px] px-3 py-1.5 flex items-center justify-between gap-2 border-l-4 border-l-amber-400 opacity-45 hover:opacity-85',
+              isHighlighted && 'border-amber-400 ring-2 ring-casa-gold shadow-card-hover',
+              className
+            )}
+          >
+            {/* Left: Time + Indicator + Title */}
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <span className="font-mono text-caption font-bold text-amber-950 tabular-nums shrink-0">
+                {format(start, 'h:mm a')}
+              </span>
+              <span className="text-amber-300 shrink-0">•</span>
+              <span className="text-caption sm:text-body-sm font-semibold text-casa-navy truncate">
+                {event.title}
+              </span>
+            </div>
+
+            {/* Right: Member Pills + Done status */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              {event.members.length > 0 && (
+                <div className="flex gap-1">
+                  {event.members.slice(0, 2).map((m) => (
+                    <CalendarPill
+                      key={m.id}
+                      color={m.family_member?.color_hex ?? SHARED_GOLD}
+                      className="!text-2xs !py-0 !px-1.5"
+                    >
+                      {m.family_member?.name}
+                    </CalendarPill>
+                  ))}
+                </div>
+              )}
+              <span className="text-caption text-amber-900/60 font-medium">✓ Done</span>
+            </div>
+          </div>
+        </motion.li>
+      )
+    }
+
     return (
       <motion.li
         layout
@@ -233,6 +287,105 @@ export function DayEventCard({
                 icon={<NeedsYouTransferIcon className={cn('w-4 h-4', movingToNeedsYou && 'animate-pulse')} />}
               />
             </div>
+          </div>
+        </div>
+      </motion.li>
+    )
+  }
+
+  if (past && !happening) {
+    return (
+      <motion.li
+        layout
+        initial={{ opacity: 0, x: -8 }}
+        animate={{ opacity: 0.45, x: 0 }}
+        transition={{ duration: 0.2, delay: index * 0.02 }}
+        className="cursor-pointer list-none"
+        data-calendar-event
+        onMouseEnter={onMouseEnter}
+        onMouseLeave={onMouseLeave}
+        onClick={(e) => { e.stopPropagation(); onOpen() }}
+      >
+        <div
+          className={cn(
+            'relative w-full min-w-0 overflow-hidden rounded-xl border border-casa-border/60 bg-casa-surface/90 shadow-xs transition-all duration-200 min-h-[38px] px-3 py-1.5 flex items-center justify-between gap-2.5 border-l-4 opacity-45 hover:opacity-85',
+            isHighlighted ? 'border-casa-navy ring-2 ring-casa-gold shadow-card-hover' : 'hover:border-casa-gold/60',
+            className
+          )}
+          style={{ borderLeftColor: eventColor(event) }}
+        >
+          {/* Left: Time + Divider + Title + (optional brief location) */}
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <span className="font-mono text-caption font-bold text-casa-navy tabular-nums shrink-0">
+              {event.all_day ? 'ALL DAY' : format(start, 'h:mm a')}
+            </span>
+            <span className="text-casa-divider shrink-0">•</span>
+            <span className="text-caption sm:text-body-sm font-semibold text-casa-navy truncate">
+              {isBirthday && <span className="mr-1" aria-hidden="true">🎂</span>}
+              {cleanTitle}
+            </span>
+            {event.location_name && (
+              <span className="hidden md:flex items-center gap-1 text-caption text-casa-muted truncate max-w-[160px]">
+                <span className="text-casa-divider">•</span>
+                <span className="truncate">{isHosted ? 'At home' : event.location_name}</span>
+              </span>
+            )}
+          </div>
+
+          {/* Right: Driver/Supervisor Capsule + Attendee Avatars */}
+          <div className="flex items-center gap-2 shrink-0">
+            {responsibility.responsible ? (
+              <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-casa-bg border border-casa-border/70 text-caption font-medium">
+                <span
+                  className="w-4 h-4 rounded-full text-white flex items-center justify-center text-caption font-bold shrink-0"
+                  style={{ backgroundColor: responsibility.responsible?.color ?? SHARED_GOLD }}
+                >
+                  {responsibility.responsible?.initial ?? '?'}
+                </span>
+                <span className="text-caption font-semibold text-casa-navy truncate max-w-[70px]">
+                  {responsibility.responsible.name}
+                </span>
+                <span className={cn(
+                  'text-caption font-bold px-1 rounded flex items-center gap-1',
+                  responsibility.roleBadge === 'drive' ? 'bg-casa-gold/15 text-casa-gold' : 'bg-casa-success/15 text-casa-success-strong'
+                )}>
+                  {responsibility.roleBadge === 'drive' ? (
+                    <>
+                      <span className="w-3 h-3 bg-casa-navy rounded-full inline-flex items-center justify-center shrink-0">
+                        <DrivingBadgeIcon />
+                      </span>
+                      <span>Drives</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="w-3 h-3 bg-casa-success-strong rounded-full inline-flex items-center justify-center shrink-0">
+                        <SupervisingBadgeIcon />
+                      </span>
+                      <span>{isHosted ? 'Hosting' : 'Supervising'}</span>
+                    </>
+                  )}
+                </span>
+              </div>
+            ) : (
+              responsibility.summary && (
+                <span className={cn('text-caption font-semibold hidden sm:inline', isHosted ? 'text-casa-success-strong' : 'text-casa-gold')}>
+                  {responsibility.summary}
+                </span>
+              )
+            )}
+
+            {responsibility.attendees.length > 0 && (
+              <PersonAvatarStack
+                people={responsibility.attendees.map((m) => ({
+                  id: m.id,
+                  name: m.family_member?.name ?? '?',
+                  color: m.family_member?.color_hex ?? SHARED_GOLD,
+                }))}
+                max={3}
+                size="xs"
+                className="shrink-0"
+              />
+            )}
           </div>
         </div>
       </motion.li>

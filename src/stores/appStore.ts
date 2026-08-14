@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { AppMode, ExperienceMode, CanvasSubmode, DinnerPlan } from '../types'
+import { saveTonightDinnerPlan, normalizeDinnerPlan } from '../utils/dinnerPlanSync.ts'
 
 export const DEFAULT_DINNER_PLAN: DinnerPlan = {
   mode: 'cook',
@@ -36,8 +37,8 @@ interface AppStore {
 
   // Tonight's Kitchen state
   dinnerPlan: DinnerPlan
-  setDinnerPlan: (plan: DinnerPlan) => void
-  resetDinnerPlan: () => void
+  setDinnerPlan: (plan: DinnerPlan, options?: { localOnly?: boolean }) => void
+  resetDinnerPlan: (options?: { localOnly?: boolean }) => void
 }
 
 const getInitialExperienceMode = (): ExperienceMode => {
@@ -127,16 +128,23 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
 
   dinnerPlan: getInitialDinnerPlan(),
-  setDinnerPlan: (dinnerPlan) => {
+  setDinnerPlan: (dinnerPlan, options) => {
+    const normalized = normalizeDinnerPlan(dinnerPlan) || dinnerPlan
     try {
-      localStorage.setItem('casa-tonight-kitchen-plan', JSON.stringify(dinnerPlan))
+      localStorage.setItem('casa-tonight-kitchen-plan', JSON.stringify(normalized))
     } catch {}
-    set({ dinnerPlan })
+    set({ dinnerPlan: normalized })
+    if (!options?.localOnly) {
+      void saveTonightDinnerPlan(normalized)
+    }
   },
-  resetDinnerPlan: () => {
+  resetDinnerPlan: (options) => {
     try {
-      localStorage.removeItem('casa-tonight-kitchen-plan')
+      localStorage.setItem('casa-tonight-kitchen-plan', JSON.stringify(DEFAULT_DINNER_PLAN))
     } catch {}
     set({ dinnerPlan: DEFAULT_DINNER_PLAN })
+    if (!options?.localOnly) {
+      void saveTonightDinnerPlan(DEFAULT_DINNER_PLAN)
+    }
   },
 }))

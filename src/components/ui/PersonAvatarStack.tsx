@@ -11,7 +11,7 @@ export interface PersonAvatar {
 export interface PersonAvatarStackProps extends HTMLAttributes<HTMLDivElement> {
   people: PersonAvatar[]
   max?: number
-  size?: 'sm' | 'md' | 'lg'
+  size?: 'xs' | 'sm' | 'md' | 'lg'
   emptyLabel?: string
   /**
    * Small status dot pinned to the avatar's bottom-right corner (e.g. a `bg-casa-error`
@@ -24,18 +24,21 @@ export interface PersonAvatarStackProps extends HTMLAttributes<HTMLDivElement> {
 }
 
 const sizeClass = {
+  xs: 'size-5 text-caption',
   sm: 'size-7 text-caption',
   md: 'size-9 text-body-sm',
   lg: 'size-12 text-body-sm',
 } as const
 
 const overlapClass = {
+  xs: '-ml-1.5',
   sm: '-ml-2',
   md: '-ml-2.5',
   lg: '-ml-3',
 } as const
 
 const badgeSizeClass = {
+  xs: 'size-2',
   sm: 'size-2.5',
   md: 'size-3',
   lg: 'size-3.5',
@@ -95,7 +98,7 @@ export function PersonAvatarStack({
             sizeClass[size],
           )}
         >
-          <User size={size === 'sm' ? 12 : size === 'md' ? 14 : 16} />
+          <User size={size === 'xs' ? 10 : size === 'sm' ? 12 : size === 'md' ? 14 : 16} />
         </span>
       )}
       {overflow > 0 && (

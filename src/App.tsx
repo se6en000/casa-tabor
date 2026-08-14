@@ -22,6 +22,7 @@ import { useRollingEvents } from './hooks/useCalendarEvents'
 import { useAppStore } from './stores/appStore'
 import SidecarCompanion from './components/shared/SidecarCompanion'
 import CanvasUndoToast from './components/canvas/CanvasUndoToast'
+import { useTonightDinnerSync } from './hooks/useTonightDinnerSync'
 
 const SAFE_MODE = String(import.meta.env.VITE_SAFE_MODE ?? '').toLowerCase()
 const IS_SAFE_MODE = SAFE_MODE === '1' || SAFE_MODE === 'true' || SAFE_MODE === 'yes'
@@ -63,6 +64,7 @@ function AppShell() {
   const { setRoomToneZone } = useTheme()
   usePushNotifications()
   useAppUpdater()
+  useTonightDinnerSync()
 
   const { settings } = useScreensaverSettings()
   const ssMs   = settings.enabled && !IS_SAFE_MODE ? settings.screensaverMins * 60_000 : Infinity
