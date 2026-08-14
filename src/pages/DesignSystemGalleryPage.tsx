@@ -24,6 +24,13 @@ import {
   Bell,
   Check,
   Layers as LayersIcon,
+  SlidersHorizontal,
+  ChevronRight,
+  X,
+  Leaf,
+  RotateCcw,
+  Flame,
+  ShieldCheck,
 } from 'lucide-react'
 import { cn } from '../utils/cn'
 import { DEVICE_MATRIX, closestDeviceProfile } from '../lib/deviceMatrix.mjs'
@@ -185,6 +192,23 @@ export default function DesignSystemGalleryPage() {
   const [activeCardOption, setActiveCardOption] = useState<'optionA' | 'optionB' | 'optionC'>('optionA')
   const [reminderCompleted, setReminderCompleted] = useState(false)
 
+  // ── Capsule & Pill Matrix State ──────────────────────────────────────────
+  const [pillGalleryTab, setPillGalleryTab] = useState<'archetypes' | 'track_colors' | 'before_after' | 'contract'>('track_colors')
+  const [demoViewSegment, setDemoViewSegment] = useState<'day' | 'stacked' | 'week' | 'month'>('day')
+  const [demoModeSegment, setDemoModeSegment] = useState<'calm' | 'turbo'>('calm')
+  const [demoCookSegment, setDemoCookSegment] = useState<'tonight' | 'plan'>('tonight')
+  const [demoFilterChips, setDemoFilterChips] = useState<string[]>(['quick', 'favorite'])
+  const [demoPillFeedback, setDemoPillFeedback] = useState<string | null>(null)
+  const [trackLabView, setTrackLabView] = useState<'day' | 'stacked' | 'week' | 'month'>('day')
+  const [trackLabMode, setTrackLabMode] = useState<'calm' | 'turbo'>('calm')
+  const [trackLabSurface, setTrackLabSurface] = useState<'card' | 'bg'>('card')
+
+  const toggleDemoFilter = (id: string) => {
+    setDemoFilterChips((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    )
+  }
+
   const density = document.documentElement.dataset.density ?? 'touch'
   const closest = useMemo(
     () => closestDeviceProfile(width, height, isFinePointer ? 'fine-pointer' : 'touch'),
@@ -239,6 +263,962 @@ export default function DesignSystemGalleryPage() {
           description="This gallery is a read-only QA surface. Household appearance and text-size controls live in Appearance & Display."
         />
       </Card>
+
+      {/* ════════════════════════════════════════════════════════════════════════
+          💎 SHOWCASE: PILLS, SWITCHES & CHIPS STANDARDIZATION MATRIX (CONTRACT V2.0)
+         ════════════════════════════════════════════════════════════════════════ */}
+      <div className="rounded-container border-2 border-casa-gold/60 bg-gradient-to-b from-casa-surface via-casa-surface to-casa-accent-subtle/30 p-6 shadow-widget space-y-6">
+        {/* Section Header & Interactive Navigation Tabs */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-casa-border/60">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-0.5 rounded-full bg-casa-navy text-casa-gold text-caption font-bold uppercase tracking-wider">
+                Design System Standard
+              </span>
+              <h2 className="font-display text-display-sm font-bold text-casa-navy">
+                Pills, Switches & Chips Standardization Matrix
+              </h2>
+            </div>
+            <p className="text-body-sm text-casa-text-secondary mt-1 max-w-2xl">
+              Eliminating pill ambiguity across Casa Tabor. Enforcing 4 strict, non-overlapping component archetypes with distinct tactile cues and accessibility contracts.
+            </p>
+          </div>
+
+          {/* Sub-tab Switcher */}
+          <div className="flex items-center gap-1.5 p-1 rounded-pill bg-casa-bg border border-casa-border self-start lg:self-auto shadow-2xs flex-wrap">
+            <Button
+              size="sm"
+              variant={pillGalleryTab === 'track_colors' ? 'strong' : 'ghost'}
+              onClick={() => setPillGalleryTab('track_colors')}
+              className={cn(
+                'rounded-pill text-caption font-bold min-h-control-sm px-3.5',
+                pillGalleryTab === 'track_colors' ? 'bg-casa-gold text-casa-navy font-bold' : 'text-casa-text-secondary hover:text-casa-navy',
+              )}
+            >
+              <Palette size={13} />
+              <span>Track Color Lab (4 Options)</span>
+            </Button>
+            <Button
+              size="sm"
+              variant={pillGalleryTab === 'archetypes' ? 'strong' : 'ghost'}
+              onClick={() => setPillGalleryTab('archetypes')}
+              className={cn(
+                'rounded-pill text-caption font-bold min-h-control-sm px-3.5',
+                pillGalleryTab === 'archetypes' ? 'bg-casa-navy text-white' : 'text-casa-text-secondary hover:text-casa-navy',
+              )}
+            >
+              <LayersIcon size={13} />
+              <span>4 Canonical Archetypes</span>
+            </Button>
+            <Button
+              size="sm"
+              variant={pillGalleryTab === 'before_after' ? 'strong' : 'ghost'}
+              onClick={() => setPillGalleryTab('before_after')}
+              className={cn(
+                'rounded-pill text-caption font-bold min-h-control-sm px-3.5',
+                pillGalleryTab === 'before_after' ? 'bg-casa-navy text-white' : 'text-casa-text-secondary hover:text-casa-navy',
+              )}
+            >
+              <SlidersHorizontal size={13} />
+              <span>Before vs After Audit</span>
+            </Button>
+            <Button
+              size="sm"
+              variant={pillGalleryTab === 'contract' ? 'strong' : 'ghost'}
+              onClick={() => setPillGalleryTab('contract')}
+              className={cn(
+                'rounded-pill text-caption font-bold min-h-control-sm px-3.5',
+                pillGalleryTab === 'contract' ? 'bg-casa-navy text-white' : 'text-casa-text-secondary hover:text-casa-navy',
+              )}
+            >
+              <ShieldCheck size={13} />
+              <span>Rules & Specs Matrix</span>
+            </Button>
+          </div>
+        </div>
+
+        {/* ── TAB 0: TRACK COLOR COMPARISON LAB ── */}
+        {pillGalleryTab === 'track_colors' && (
+          <div className="space-y-6">
+            {/* Context Controls Bar */}
+            <div className="p-4 rounded-widget bg-casa-bg border border-casa-border flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-body-sm font-bold text-casa-navy flex items-center gap-2">
+                  <Palette size={16} className="text-casa-gold" />
+                  <span>Switch Track Color Laboratory</span>
+                </h3>
+                <p className="text-caption text-casa-text-secondary mt-0.5">
+                  Test and compare 4 distinct track color recipes against different parent card surfaces in real-time.
+                </p>
+              </div>
+
+              {/* Surface Switcher */}
+              <div className="flex items-center gap-2">
+                <span className="text-caption font-bold text-casa-muted uppercase tracking-wider">Surface Context:</span>
+                <div className="flex items-center gap-1 p-1 rounded-pill bg-casa-surface border border-casa-border shadow-2xs">
+                  <Button
+                    size="sm"
+                    variant={trackLabSurface === 'card' ? 'primary' : 'ghost'}
+                    onClick={() => setTrackLabSurface('card')}
+                    className="rounded-pill text-caption font-semibold min-h-control-sm px-3"
+                  >
+                    White Card Surface
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={trackLabSurface === 'bg' ? 'primary' : 'ghost'}
+                    onClick={() => setTrackLabSurface('bg')}
+                    className="rounded-pill text-caption font-semibold min-h-control-sm px-3"
+                  >
+                    Canvas Background
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* 5 Side-by-Side Interactive Track Options */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* 1. CURRENT BASELINE */}
+              <div
+                className={cn(
+                  'rounded-widget border border-casa-border/80 p-5 shadow-sm space-y-4 transition-colors',
+                  trackLabSurface === 'card' ? 'bg-casa-surface' : 'bg-casa-bg',
+                )}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-stone-400" />
+                      <h4 className="font-display text-body-lg font-bold text-casa-navy">
+                        Current Baseline: Dusty Sand / Putty
+                      </h4>
+                    </div>
+                    <p className="text-caption text-casa-text-secondary mt-1">
+                      Current token (<code>--color-casa-toggle-track</code>)
+                    </p>
+                  </div>
+                  <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-900 border border-amber-500/20 text-caption font-bold shrink-0">
+                    ⚠️ Current Baseline
+                  </span>
+                </div>
+
+                {/* Live Custom Segmented Switch (Current Baseline) */}
+                <div className="space-y-3 pt-2">
+                  <div>
+                    <label className="text-caption font-bold uppercase tracking-wider text-casa-muted block mb-1.5">
+                      Calendar View
+                    </label>
+                    <SegmentedControl
+                      aria-label="Baseline calendar view"
+                      value={trackLabView}
+                      onChange={setTrackLabView}
+                      options={[
+                        { value: 'day', label: 'Day' },
+                        { value: 'stacked', label: 'Stacked' },
+                        { value: 'week', label: 'Week' },
+                        { value: 'month', label: 'Month' },
+                      ]}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-caption font-bold uppercase tracking-wider text-casa-muted block mb-1.5">
+                      Ambient Mode
+                    </label>
+                    <div className="max-w-xs">
+                      <SegmentedControl
+                        aria-label="Baseline ambient mode"
+                        value={trackLabMode}
+                        onChange={setTrackLabMode}
+                        options={[
+                          { value: 'calm', label: 'Calm', icon: <Leaf size={14} className="text-emerald-700" /> },
+                          { value: 'turbo', label: 'Turbo', icon: <Flame size={14} className="text-amber-700" /> },
+                        ]}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-button bg-stone-100/60 border border-stone-200/80 text-caption text-casa-text-secondary space-y-1">
+                  <p className="font-semibold text-casa-navy">Visual Critique:</p>
+                  <p>• Dusty yellow-brown undertone makes white card backgrounds look discolored or like unbleached cardboard.</p>
+                  <p>• Inactive text contrast is muted, leading to low glanceability from 8 feet away on wall kiosks.</p>
+                </div>
+              </div>
+
+              {/* 2. OPTION A: CLEAN ALABASTER TRENCH (RECOMMENDED) */}
+              <div
+                className={cn(
+                  'rounded-widget border-2 border-emerald-500/50 p-5 shadow-sm space-y-4 transition-colors',
+                  trackLabSurface === 'card' ? 'bg-casa-surface' : 'bg-casa-bg',
+                )}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                      <h4 className="font-display text-body-lg font-bold text-casa-navy">
+                        Option A: Clean Alabaster Trench
+                      </h4>
+                    </div>
+                    <p className="text-caption text-casa-text-secondary mt-1">
+                      Neutral architectural alabaster (<code>bg-stone-100</code>) + crisp slate text
+                    </p>
+                  </div>
+                  <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-800 border border-emerald-500/30 text-caption font-bold shrink-0">
+                    🌟 Recommended · Modern
+                  </span>
+                </div>
+
+                {/* Live Custom Segmented Switch (Option A) */}
+                <div className="space-y-3 pt-2">
+                  <div>
+                    <label className="text-caption font-bold uppercase tracking-wider text-casa-muted block mb-1.5">
+                      Calendar View
+                    </label>
+                    <SegmentedControl
+                      aria-label="Option A calendar view"
+                      value={trackLabView}
+                      onChange={setTrackLabView}
+                      className="bg-stone-100 border-stone-300/80 [&_.casa-segmented-control-thumb]:bg-white [&_.casa-segmented-control-thumb]:ring-1 [&_.casa-segmented-control-thumb]:ring-black/5 [&_button]:text-slate-500 [&_button[aria-checked=true]]:text-casa-navy [&_button[aria-checked=true]]:font-bold"
+                      options={[
+                        { value: 'day', label: 'Day' },
+                        { value: 'stacked', label: 'Stacked' },
+                        { value: 'week', label: 'Week' },
+                        { value: 'month', label: 'Month' },
+                      ]}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-caption font-bold uppercase tracking-wider text-casa-muted block mb-1.5">
+                      Ambient Mode
+                    </label>
+                    <div className="max-w-xs">
+                      <SegmentedControl
+                        aria-label="Option A ambient mode"
+                        value={trackLabMode}
+                        onChange={setTrackLabMode}
+                        className="bg-stone-100 border-stone-300/80 [&_.casa-segmented-control-thumb]:bg-white [&_.casa-segmented-control-thumb]:ring-1 [&_.casa-segmented-control-thumb]:ring-black/5 [&_button]:text-slate-500 [&_button[aria-checked=true]]:text-casa-navy [&_button[aria-checked=true]]:font-bold"
+                        options={[
+                          { value: 'calm', label: 'Calm', icon: <Leaf size={14} className="text-emerald-700" /> },
+                          { value: 'turbo', label: 'Turbo', icon: <Flame size={14} className="text-amber-700" /> },
+                        ]}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-button bg-emerald-500/10 border border-emerald-500/20 text-caption text-emerald-900 space-y-1">
+                  <p className="font-semibold text-emerald-950">Why This Excels:</p>
+                  <p>• Apple/Linear-grade clean architectural recess with zero yellow/cardboard dinginess.</p>
+                  <p>• Crisp slate text gives <strong>5.2:1 contrast</strong> for instant glanceability across the room.</p>
+                  <p>• The pure white active thumb sits naturally like a physical pill inside a carved groove.</p>
+                </div>
+              </div>
+
+              {/* 3. OPTION B: CHAMPAGNE SILK INSET */}
+              <div
+                className={cn(
+                  'rounded-widget border-2 border-casa-gold/60 p-5 shadow-sm space-y-4 transition-colors',
+                  trackLabSurface === 'card' ? 'bg-casa-surface' : 'bg-casa-bg',
+                )}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-casa-gold" />
+                      <h4 className="font-display text-body-lg font-bold text-casa-navy">
+                        Option B: Champagne Silk Inset
+                      </h4>
+                    </div>
+                    <p className="text-caption text-casa-text-secondary mt-1">
+                      Luminous sunlit champagne (<code>bg-amber-50/80</code>) + warm gold border
+                    </p>
+                  </div>
+                  <span className="px-2 py-0.5 rounded bg-casa-gold/20 text-casa-navy border border-casa-gold/30 text-caption font-bold shrink-0">
+                    ✨ Warm Palm Beach Luxury
+                  </span>
+                </div>
+
+                {/* Live Custom Segmented Switch (Option B) */}
+                <div className="space-y-3 pt-2">
+                  <div>
+                    <label className="text-caption font-bold uppercase tracking-wider text-casa-muted block mb-1.5">
+                      Calendar View
+                    </label>
+                    <SegmentedControl
+                      aria-label="Option B calendar view"
+                      value={trackLabView}
+                      onChange={setTrackLabView}
+                      className="bg-amber-50/80 border-amber-200/80 [&_.casa-segmented-control-thumb]:bg-white [&_.casa-segmented-control-thumb]:ring-1 [&_.casa-segmented-control-thumb]:ring-amber-300/80 [&_button]:text-amber-900/70 [&_button[aria-checked=true]]:text-casa-navy [&_button[aria-checked=true]]:font-bold"
+                      options={[
+                        { value: 'day', label: 'Day' },
+                        { value: 'stacked', label: 'Stacked' },
+                        { value: 'week', label: 'Week' },
+                        { value: 'month', label: 'Month' },
+                      ]}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-caption font-bold uppercase tracking-wider text-casa-muted block mb-1.5">
+                      Ambient Mode
+                    </label>
+                    <div className="max-w-xs">
+                      <SegmentedControl
+                        aria-label="Option B ambient mode"
+                        value={trackLabMode}
+                        onChange={setTrackLabMode}
+                        className="bg-amber-50/80 border-amber-200/80 [&_.casa-segmented-control-thumb]:bg-white [&_.casa-segmented-control-thumb]:ring-1 [&_.casa-segmented-control-thumb]:ring-amber-300/80 [&_button]:text-amber-900/70 [&_button[aria-checked=true]]:text-casa-navy [&_button[aria-checked=true]]:font-bold"
+                        options={[
+                          { value: 'calm', label: 'Calm', icon: <Leaf size={14} className="text-emerald-700" /> },
+                          { value: 'turbo', label: 'Turbo', icon: <Flame size={14} className="text-amber-700" /> },
+                        ]}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-button bg-amber-500/10 border border-amber-500/20 text-caption text-amber-950 space-y-1">
+                  <p className="font-semibold text-casa-navy">Why This Excels:</p>
+                  <p>• Preserves Casa Tabor's warm residential tone, but replaces dirty gray-brown with sunlit golden warmth.</p>
+                  <p>• Pairs beautifully with the gold Copilot button and circadian evening lighting shifts.</p>
+                </div>
+              </div>
+
+              {/* 4. OPTION C: COMMAND NAVY INSET */}
+              <div
+                className={cn(
+                  'rounded-widget border border-casa-border/80 p-5 shadow-sm space-y-4 transition-colors',
+                  trackLabSurface === 'card' ? 'bg-casa-surface' : 'bg-casa-bg',
+                )}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-casa-navy" />
+                      <h4 className="font-display text-body-lg font-bold text-casa-navy">
+                        Option C: Command Navy Inset
+                      </h4>
+                    </div>
+                    <p className="text-caption text-casa-text-secondary mt-1">
+                      High-contrast luxury navy (<code>bg-casa-navy</code>) + gold active thumb
+                    </p>
+                  </div>
+                  <span className="px-2 py-0.5 rounded bg-casa-navy text-white text-caption font-bold shrink-0">
+                    ⚓ Kiosk 8-Foot Power
+                  </span>
+                </div>
+
+                {/* Live Custom Segmented Switch (Option C) */}
+                <div className="space-y-3 pt-2">
+                  <div>
+                    <label className="text-caption font-bold uppercase tracking-wider text-casa-muted block mb-1.5">
+                      Calendar View
+                    </label>
+                    <SegmentedControl
+                      aria-label="Option C calendar view"
+                      value={trackLabView}
+                      onChange={setTrackLabView}
+                      className="bg-casa-navy border-casa-navy [&_.casa-segmented-control-thumb]:bg-casa-gold [&_button]:text-white/70 [&_button[aria-checked=true]]:text-casa-navy [&_button[aria-checked=true]]:font-bold"
+                      options={[
+                        { value: 'day', label: 'Day' },
+                        { value: 'stacked', label: 'Stacked' },
+                        { value: 'week', label: 'Week' },
+                        { value: 'month', label: 'Month' },
+                      ]}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-caption font-bold uppercase tracking-wider text-casa-muted block mb-1.5">
+                      Ambient Mode
+                    </label>
+                    <div className="max-w-xs">
+                      <SegmentedControl
+                        aria-label="Option C ambient mode"
+                        value={trackLabMode}
+                        onChange={setTrackLabMode}
+                        className="bg-casa-navy border-casa-navy [&_.casa-segmented-control-thumb]:bg-casa-gold [&_button]:text-white/70 [&_button[aria-checked=true]]:text-casa-navy [&_button[aria-checked=true]]:font-bold"
+                        options={[
+                          { value: 'calm', label: 'Calm', icon: <Leaf size={14} className="text-emerald-400" /> },
+                          { value: 'turbo', label: 'Turbo', icon: <Flame size={14} className="text-amber-400" /> },
+                        ]}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-button bg-casa-navy/5 border border-casa-navy/10 text-caption text-casa-text-secondary space-y-1">
+                  <p className="font-semibold text-casa-navy">Why This Excels:</p>
+                  <p>• Maximum distance scannability for large wall kiosks across a kitchen or living room.</p>
+                  <p>• Graphic authority that anchors the calendar navigation firmly at the top of the screen.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── TAB 1: 4 CANONICAL ARCHETYPES (INTERACTIVE LAB) ── */}
+        {pillGalleryTab === 'archetypes' && (
+          <div className="space-y-6">
+            {/* Feedback Alert if an action was triggered */}
+            {demoPillFeedback && (
+              <div className="p-3 rounded-widget bg-emerald-500/10 border border-emerald-500/30 text-emerald-900 text-body-sm flex items-center justify-between animate-fadeIn">
+                <div className="flex items-center gap-2 font-medium">
+                  <CheckCircle2 size={16} className="text-emerald-700" />
+                  <span>{demoPillFeedback}</span>
+                </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setDemoPillFeedback(null)}
+                  className="text-caption font-bold text-emerald-800 hover:underline min-h-control-sm px-2 py-0.5"
+                >
+                  Dismiss
+                </Button>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Archetype 1: SegmentedControl */}
+              <div className="rounded-widget border border-casa-border/80 bg-casa-surface p-5 shadow-sm space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-casa-navy" />
+                      <h3 className="font-display text-body-lg font-bold text-casa-navy">
+                        1. SegmentedControl (The Switcher)
+                      </h3>
+                    </div>
+                    <p className="text-caption text-casa-text-secondary mt-1">
+                      Mutually exclusive view or mode switcher on a single recessed track. Exactly one item active.
+                    </p>
+                  </div>
+                  <span className="px-2.5 py-0.5 rounded-full bg-casa-bg border border-casa-border text-caption font-mono text-casa-navy font-semibold shrink-0">
+                    Track + Thumb
+                  </span>
+                </div>
+
+                <div className="space-y-3 pt-2">
+                  <div>
+                    <label className="text-caption font-bold uppercase tracking-wider text-casa-muted block mb-1.5">
+                      Calendar View Controller
+                    </label>
+                    <SegmentedControl
+                      aria-label="Demo view switcher"
+                      value={demoViewSegment}
+                      onChange={setDemoViewSegment}
+                      options={[
+                        { value: 'day', label: 'Day' },
+                        { value: 'stacked', label: 'Stacked' },
+                        { value: 'week', label: 'Week' },
+                        { value: 'month', label: 'Month' },
+                      ]}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-caption font-bold uppercase tracking-wider text-casa-muted block mb-1.5">
+                      Global Ambient Mode
+                    </label>
+                    <SegmentedControl
+                      aria-label="Demo mode switcher"
+                      value={demoModeSegment}
+                      onChange={setDemoModeSegment}
+                      options={[
+                        { value: 'calm', label: 'Calm', icon: <Leaf size={14} className="text-emerald-700" /> },
+                        { value: 'turbo', label: 'Turbo', icon: <Flame size={14} className="text-amber-700" /> },
+                      ]}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-caption font-bold uppercase tracking-wider text-casa-muted block mb-1.5">
+                      Meal Hub Section Scope
+                    </label>
+                    <SegmentedControl
+                      aria-label="Demo cook switcher"
+                      value={demoCookSegment}
+                      onChange={setDemoCookSegment}
+                      options={[
+                        { value: 'tonight', label: 'Cook tonight' },
+                        { value: 'plan', label: 'Plan the week', icon: <Sparkles size={14} className="text-casa-gold" /> },
+                      ]}
+                    />
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-button bg-casa-bg border border-casa-border/80 text-caption text-casa-text-secondary space-y-1">
+                  <div className="font-semibold text-casa-navy flex items-center justify-between">
+                    <span>Active Selection Contract:</span>
+                    <span className="font-mono text-casa-gold">View: {demoViewSegment} · Mode: {demoModeSegment}</span>
+                  </div>
+                  <p>• <strong>Container:</strong> Recessed track (<code>bg-casa-toggle-track</code>) with 9999px pill radius.</p>
+                  <p>• <strong>Indicator:</strong> Elevated floating thumb with micro-shadow (<code>shadow-card</code>).</p>
+                  <p>• <strong>Keyboard/A11y:</strong> Arrow-key navigable, <code>role="radiogroup"</code>.</p>
+                </div>
+              </div>
+
+              {/* Archetype 2: FilterChip */}
+              <div className="rounded-widget border border-casa-border/80 bg-casa-surface p-5 shadow-sm space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-casa-gold" />
+                      <h3 className="font-display text-body-lg font-bold text-casa-navy">
+                        2. FilterChip (Selectable Tag / Filter)
+                      </h3>
+                    </div>
+                    <p className="text-caption text-casa-text-secondary mt-1">
+                      Standalone multi-select or single-select filter pills that flow in ribbons.
+                    </p>
+                  </div>
+                  <span className="px-2.5 py-0.5 rounded-full bg-casa-bg border border-casa-border text-caption font-mono text-casa-navy font-semibold shrink-0">
+                    Standalone Tag
+                  </span>
+                </div>
+
+                <div className="space-y-3 pt-2">
+                  <label className="text-caption font-bold uppercase tracking-wider text-casa-muted block">
+                    Dinner Prep Filters (Tap to toggle multi-selection)
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { id: 'quick', label: 'Something quick', icon: <Zap size={13} /> },
+                      { id: 'favorite', label: 'Family favorite', icon: <Sparkles size={13} /> },
+                      { id: 'new', label: 'Something new' },
+                      { id: 'fancy', label: 'A little fancy' },
+                      { id: 'pantry', label: 'Use up the pantry' },
+                    ].map((chip) => {
+                      const isSelected = demoFilterChips.includes(chip.id)
+                      return (
+                        <Chip
+                          key={chip.id}
+                          selected={isSelected}
+                          tone={isSelected ? 'accent' : 'neutral'}
+                          icon={isSelected ? <Check size={14} className="stroke-[2.5]" /> : chip.icon}
+                          onClick={() => toggleDemoFilter(chip.id)}
+                        >
+                          {chip.label}
+                        </Chip>
+                      )
+                    })}
+                  </div>
+
+                  {/* Dismissible Chip Demo */}
+                  <div className="pt-2">
+                    <span className="text-caption text-casa-muted block mb-1.5">Dismissible Tag Variation:</span>
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-pill bg-casa-accent-subtle border border-casa-accent-soft-border text-caption font-semibold text-casa-navy">
+                        <span>Allergen: Peanut-Free</span>
+                        <IconButton
+                          size="sm"
+                          icon={<X size={13} />}
+                          aria-label="Remove filter"
+                          variant="ghost"
+                          onClick={() => setDemoPillFeedback('Peanut-Free filter cleared')}
+                          className="size-control-sm min-h-0 min-w-0 p-0 text-casa-text-secondary hover:text-casa-error"
+                        />
+                      </span>
+                      <span className="text-caption text-casa-muted">
+                        Active filters: <strong>{demoFilterChips.length}</strong> selected
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-button bg-casa-bg border border-casa-border/80 text-caption text-casa-text-secondary space-y-1">
+                  <div className="font-semibold text-casa-navy">FilterChip Contract:</div>
+                  <p>• <strong>Unselected:</strong> Subtle 1px neutral border, neutral background, muted text.</p>
+                  <p>• <strong>Selected:</strong> Branded warm gold tint (<code>bg-casa-accent-soft</code>), active gold border + checkmark.</p>
+                  <p>• <strong>A11y:</strong> Renders <code>&lt;button aria-pressed="..."&gt;</code>, keyboard focusable.</p>
+                </div>
+              </div>
+
+              {/* Archetype 3: PillButton (CTA / Trigger) */}
+              <div className="rounded-widget border border-casa-border/80 bg-casa-surface p-5 shadow-sm space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                      <h3 className="font-display text-body-lg font-bold text-casa-navy">
+                        3. PillButton (Action Trigger / CTA)
+                      </h3>
+                    </div>
+                    <p className="text-caption text-casa-text-secondary mt-1">
+                      Primary or prominent standalone capsule triggers that launch workflows or open sidecars.
+                    </p>
+                  </div>
+                  <span className="px-2.5 py-0.5 rounded-full bg-casa-bg border border-casa-border text-caption font-mono text-casa-navy font-semibold shrink-0">
+                    Action Verb
+                  </span>
+                </div>
+
+                <div className="space-y-3 pt-2">
+                  <label className="text-caption font-bold uppercase tracking-wider text-casa-muted block">
+                    Interactive Action Triggers
+                  </label>
+                  <div className="flex flex-wrap items-center gap-3">
+                    {/* Primary Copilot CTA */}
+                    <Button
+                      variant="primary"
+                      onClick={() => setDemoPillFeedback('AI Copilot Assistant drawer summoned')}
+                      className="rounded-pill px-4 text-body-sm font-bold min-h-control"
+                    >
+                      <Sparkles size={16} />
+                      <span>Copilot</span>
+                    </Button>
+
+                    {/* Primary Navy Action */}
+                    <Button
+                      variant="strong"
+                      onClick={() => setDemoPillFeedback('Quick Add Event dialog opened')}
+                      className="rounded-pill px-4 text-body-sm font-semibold min-h-control"
+                    >
+                      <Zap size={15} className="text-casa-gold" />
+                      <span>Add Event</span>
+                    </Button>
+
+                    {/* Outlined Secondary Action */}
+                    <Button
+                      variant="secondary"
+                      onClick={() => setDemoPillFeedback('Route directions calculating')}
+                      className="rounded-pill px-3.5 text-body-sm font-semibold min-h-control"
+                    >
+                      <Navigation size={14} className="text-casa-gold" />
+                      <span>Get Directions</span>
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-button bg-casa-bg border border-casa-border/80 text-caption text-casa-text-secondary space-y-1">
+                  <div className="font-semibold text-casa-navy">PillButton Contract:</div>
+                  <p>• <strong>Visual Weight:</strong> High contrast solid background or distinct verb action.</p>
+                  <p>• <strong>Iconography:</strong> Leads with an action icon (e.g. <code>✨ Copilot</code>, <code>⚡ Add</code>).</p>
+                  <p>• <strong>Rule:</strong> Never use the unselected ghost look of a filter chip for primary CTAs.</p>
+                </div>
+              </div>
+
+              {/* Archetype 4: StatusBadge */}
+              <div className="rounded-widget border border-casa-border/80 bg-casa-surface p-5 shadow-sm space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                      <h3 className="font-display text-body-lg font-bold text-casa-navy">
+                        4. StatusBadge (Diagnostic & Alert Indicator)
+                      </h3>
+                    </div>
+                    <p className="text-caption text-casa-text-secondary mt-1">
+                      Informational tags, live status indicators, or tap-to-inspect alert counters.
+                    </p>
+                  </div>
+                  <span className="px-2.5 py-0.5 rounded-full bg-casa-bg border border-casa-border text-caption font-mono text-casa-navy font-semibold shrink-0">
+                    Informational
+                  </span>
+                </div>
+
+                <div className="space-y-3 pt-2">
+                  <label className="text-caption font-bold uppercase tracking-wider text-casa-muted block">
+                    Diagnostic & Triage Badges
+                  </label>
+                  <div className="flex flex-wrap items-center gap-3">
+                    {/* Interactive Triage Alert with Explicit Chevron */}
+                    <Button
+                      variant="subtle"
+                      onClick={() => setDemoPillFeedback('Triage Alerts drawer opened (7 items pending)')}
+                      className="rounded-pill bg-amber-500/15 border-amber-500/30 hover:border-amber-500/60 text-amber-950 font-bold text-body-sm min-h-control px-3.5"
+                    >
+                      <Bell size={15} className="text-amber-700" />
+                      <span>7 Triage Alerts</span>
+                      <ChevronRight size={14} className="text-amber-800" />
+                    </Button>
+
+                    {/* Live System Indicator */}
+                    <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-pill bg-emerald-500/10 border border-emerald-500/20 text-emerald-900 font-semibold text-caption">
+                      <StatusDot variant="active" size="sm" />
+                      <span>Live Sync Active</span>
+                    </span>
+
+                    {/* Metadata Context Badge */}
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-pill bg-casa-bg border border-casa-border text-casa-navy font-medium text-caption">
+                      <Car size={13} className="text-casa-gold" />
+                      <span>Owen & Emme Transit</span>
+                    </span>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-button bg-casa-bg border border-casa-border/80 text-caption text-casa-text-secondary space-y-1">
+                  <div className="font-semibold text-casa-navy">StatusBadge Contract:</div>
+                  <p>• <strong>Scale:</strong> Compact padding, semantic color tinting (Amber warning, Emerald success).</p>
+                  <p>• <strong>Affordance:</strong> If tap-interactive, MUST include an explicit trailing chevron (<code>›</code>).</p>
+                  <p>• <strong>Non-interactive:</strong> Renders as semantic <code>&lt;span&gt;</code> with live status dot.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── TAB 2: BEFORE VS AFTER SCREEN AUDIT ── */}
+        {pillGalleryTab === 'before_after' && (
+          <div className="space-y-6">
+            <div className="p-4 rounded-widget bg-casa-bg border border-casa-border text-body-sm text-casa-text-secondary">
+              <strong className="text-casa-navy">Omnichannel Audit Summary:</strong> Below are real interface fragments showing the confusion created by applying the same generic beige capsule to every component, contrasted with the clean, standardized contract.
+            </div>
+
+            {/* Case Study 1: Header / Top Bar Controls */}
+            <div className="rounded-widget border border-casa-border/80 bg-casa-surface p-5 shadow-sm space-y-4">
+              <div className="flex items-center justify-between border-b border-casa-border/50 pb-2.5">
+                <div>
+                  <span className="text-caption font-bold uppercase tracking-widest text-casa-gold">Case Study 1</span>
+                  <h3 className="font-display text-body-lg font-bold text-casa-navy">
+                    Top Navigation & Header Controls
+                  </h3>
+                </div>
+                <span className="text-caption text-casa-muted">Header Right Tool Cluster</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* BEFORE */}
+                <div className="rounded-card border-2 border-dashed border-casa-error/40 bg-casa-error/5 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="px-2 py-0.5 rounded bg-casa-error/20 text-casa-error text-caption font-bold uppercase">
+                      Before: Ambiguous Pill Soup
+                    </span>
+                    <span className="text-caption text-casa-error font-medium">3 competing pill types</span>
+                  </div>
+                  <div className="p-4 rounded-button bg-casa-bg border border-casa-border flex items-center justify-between flex-wrap gap-2">
+                    <span className="text-body-sm text-casa-muted font-medium">2:04 PM</span>
+                    <div className="flex items-center gap-2">
+                      {/* Ambiguous icon capsule */}
+                      <div className="px-3 py-1.5 rounded-pill bg-white border border-casa-border text-casa-muted text-caption flex items-center gap-2">
+                        <RotateCcw size={14} />
+                        <span className="w-px h-3 bg-casa-border" />
+                        <Utensils size={14} />
+                      </div>
+                      {/* Flat ambiguous copilot */}
+                      <div className="px-4 py-1.5 rounded-pill bg-casa-accent-subtle border border-casa-accent-soft-border text-caption font-bold text-casa-navy flex items-center gap-1.5">
+                        <Sparkles size={14} />
+                        <span>Copilot</span>
+                      </div>
+                      {/* Floating alert pill */}
+                      <div className="px-3 py-1.5 rounded-pill bg-amber-50 border border-amber-200 text-caption font-medium text-amber-900 flex items-center gap-1">
+                        <Bell size={13} />
+                        <span>7 Alerts</span>
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-caption text-casa-error leading-relaxed">
+                    ⚠️ <strong>Problem:</strong> Is the icon capsule a switch or two buttons? Is Copilot a selected filter or an action? Everything has the exact same radius and weight.
+                  </p>
+                </div>
+
+                {/* AFTER */}
+                <div className="rounded-card border-2 border-emerald-500/40 bg-emerald-500/5 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-800 text-caption font-bold uppercase">
+                      After: Standardized Contracts
+                    </span>
+                    <span className="text-caption text-emerald-800 font-medium">Distinct tactile affordances</span>
+                  </div>
+                  <div className="p-4 rounded-button bg-casa-bg border border-casa-border flex items-center justify-between flex-wrap gap-2">
+                    <span className="text-body-sm text-casa-navy font-bold font-mono">2:04 PM</span>
+                    <div className="flex items-center gap-2">
+                      {/* Discrete square icon buttons */}
+                      <IconButton
+                        size="sm"
+                        variant="secondary"
+                        icon={<RotateCcw size={14} />}
+                        aria-label="Refresh header view"
+                        className="rounded-button"
+                      />
+                      {/* High-visibility solid gold CTA */}
+                      <Button size="sm" variant="primary" className="rounded-pill px-3.5 font-bold">
+                        <Sparkles size={14} />
+                        <span>Copilot</span>
+                      </Button>
+                      {/* Distinct alert badge with tap chevron */}
+                      <Button size="sm" variant="subtle" className="rounded-pill bg-amber-500/15 border-amber-400 text-amber-950 font-bold px-3">
+                        <Bell size={13} className="text-amber-700" />
+                        <span>7 Alerts</span>
+                        <ChevronRight size={12} />
+                      </Button>
+                    </div>
+                  </div>
+                  <p className="text-caption text-emerald-800 leading-relaxed">
+                    ✅ <strong>Benefit:</strong> Instant glanceability. Tools are square buttons, Copilot is the primary hero action, and alerts have an explicit tap-to-expand chevron.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Case Study 2: Meal Hub View Switch vs Query Filters */}
+            <div className="rounded-widget border border-casa-border/80 bg-casa-surface p-5 shadow-sm space-y-4">
+              <div className="flex items-center justify-between border-b border-casa-border/50 pb-2.5">
+                <div>
+                  <span className="text-caption font-bold uppercase tracking-widest text-casa-gold">Case Study 2</span>
+                  <h3 className="font-display text-body-lg font-bold text-casa-navy">
+                    Meal Hub View Switcher vs. Recipe Query Filters
+                  </h3>
+                </div>
+                <span className="text-caption text-casa-muted">Cook Tonight vs Plan</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* BEFORE */}
+                <div className="rounded-card border-2 border-dashed border-casa-error/40 bg-casa-error/5 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="px-2 py-0.5 rounded bg-casa-error/20 text-casa-error text-caption font-bold uppercase">
+                      Before: Stacked Competing Pills
+                    </span>
+                  </div>
+                  <div className="p-4 rounded-button bg-casa-bg border border-casa-border space-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className="px-3 py-1 rounded-pill bg-white border border-casa-border text-caption font-bold text-casa-navy">Cook tonight</span>
+                      <span className="px-3 py-1 rounded-pill text-caption text-casa-muted">Plan the week</span>
+                    </div>
+                    <div className="text-caption font-display font-bold text-casa-navy">What are we feeling tonight?</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      <span className="px-3 py-1 rounded-pill bg-amber-100 border border-amber-300 text-caption font-bold text-casa-navy">Something quick</span>
+                      <span className="px-3 py-1 rounded-pill bg-white border border-casa-border text-caption text-casa-text-secondary">Family favorite</span>
+                      <span className="px-3 py-1 rounded-pill bg-white border border-casa-border text-caption text-casa-text-secondary">Something new</span>
+                    </div>
+                  </div>
+                  <p className="text-caption text-casa-error leading-relaxed">
+                    ⚠️ <strong>Problem:</strong> Two rows of nearly identical rounded pills sitting on top of each other. Users cannot tell which row changes the view and which filters recipes.
+                  </p>
+                </div>
+
+                {/* AFTER */}
+                <div className="rounded-card border-2 border-emerald-500/40 bg-emerald-500/5 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-800 text-caption font-bold uppercase">
+                      After: Structural Separation
+                    </span>
+                  </div>
+                  <div className="p-4 rounded-button bg-casa-bg border border-casa-border space-y-3">
+                    {/* Proper Segmented Track */}
+                    <div className="max-w-xs">
+                      <SegmentedControl
+                        aria-label="Demo cook scope"
+                        value="tonight"
+                        onChange={() => undefined}
+                        options={[
+                          { value: 'tonight', label: 'Cook tonight' },
+                          { value: 'plan', label: 'Plan the week', icon: <Sparkles size={13} className="text-casa-gold" /> },
+                        ]}
+                      />
+                    </div>
+                    <div className="text-caption font-display font-bold text-casa-navy pt-1">What are we feeling tonight?</div>
+                    {/* Standalone Filter Chips */}
+                    <div className="flex flex-wrap gap-1.5">
+                      <Chip
+                        selected
+                        tone="accent"
+                        icon={<Check size={12} className="stroke-[3]" />}
+                        onClick={() => undefined}
+                      >
+                        Something quick
+                      </Chip>
+                      <Chip
+                        tone="neutral"
+                        onClick={() => undefined}
+                      >
+                        Family favorite
+                      </Chip>
+                      <Chip
+                        tone="neutral"
+                        onClick={() => undefined}
+                      >
+                        Something new
+                      </Chip>
+                    </div>
+                  </div>
+                  <p className="text-caption text-emerald-800 leading-relaxed">
+                    ✅ <strong>Benefit:</strong> Clear cognitive hierarchy: the track switches the view mode, while the standalone chips clearly act as recipe filters.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── TAB 3: RULES & SPECS MATRIX ── */}
+        {pillGalleryTab === 'contract' && (
+          <div className="space-y-4">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-body-sm border-collapse">
+                <thead>
+                  <tr className="border-b-2 border-casa-navy text-casa-navy font-bold text-caption uppercase tracking-wider">
+                    <th className="py-2.5 pr-4">Archetype</th>
+                    <th className="py-2.5 px-4">Primary UX Job</th>
+                    <th className="py-2.5 px-4">HTML & ARIA Contract</th>
+                    <th className="py-2.5 px-4">Visual Tokens</th>
+                    <th className="py-2.5 px-4">Min Touch Target</th>
+                    <th className="py-2.5 pl-4">Strict DO NOT Rule</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-casa-border/70 text-casa-text-secondary text-caption">
+                  <tr className="hover:bg-casa-bg/60">
+                    <td className="py-3 pr-4 font-bold text-casa-navy whitespace-nowrap">
+                      SegmentedControl
+                    </td>
+                    <td className="py-3 px-4">Mutually exclusive view or mode switching (e.g. Day/Week/Month).</td>
+                    <td className="py-3 px-4 font-mono">role="radiogroup" + role="radio"</td>
+                    <td className="py-3 px-4">Recessed track (<code>bg-casa-toggle-track</code>) + active elevated white thumb.</td>
+                    <td className="py-3 px-4 font-semibold text-casa-navy">44px mobile / 48px kiosk</td>
+                    <td className="py-3 pl-4 text-casa-error font-medium">Never render standalone options without the surrounding track.</td>
+                  </tr>
+                  <tr className="hover:bg-casa-bg/60">
+                    <td className="py-3 pr-4 font-bold text-casa-navy whitespace-nowrap">
+                      FilterChip
+                    </td>
+                    <td className="py-3 px-4">Filtering lists, search tokens, multi-select modifiers.</td>
+                    <td className="py-3 px-4 font-mono">&lt;button aria-pressed="..."&gt;</td>
+                    <td className="py-3 px-4">Unselected: 1px border. Selected: <code>bg-casa-accent-soft</code> + gold ring + check.</td>
+                    <td className="py-3 px-4 font-semibold text-casa-navy">44px mobile / 48px kiosk</td>
+                    <td className="py-3 pl-4 text-casa-error font-medium">Never place directly adjacent to a SegmentedControl without a section header.</td>
+                  </tr>
+                  <tr className="hover:bg-casa-bg/60">
+                    <td className="py-3 pr-4 font-bold text-casa-navy whitespace-nowrap">
+                      PillButton (CTA)
+                    </td>
+                    <td className="py-3 px-4">Triggering modals, sidecars (Copilot), or primary workflows.</td>
+                    <td className="py-3 px-4 font-mono">&lt;button type="button"&gt;</td>
+                    <td className="py-3 px-4">Solid brand fill (<code>bg-casa-gold</code> or <code>bg-casa-navy</code>) + action verb/icon.</td>
+                    <td className="py-3 px-4 font-semibold text-casa-navy">44px mobile / 48px kiosk</td>
+                    <td className="py-3 pl-4 text-casa-error font-medium">Never use the unselected beige border style of a filter chip for primary CTAs.</td>
+                  </tr>
+                  <tr className="hover:bg-casa-bg/60">
+                    <td className="py-3 pr-4 font-bold text-casa-navy whitespace-nowrap">
+                      StatusBadge
+                    </td>
+                    <td className="py-3 px-4">Glanceable system status, alerts count, diagnostic states.</td>
+                    <td className="py-3 px-4 font-mono">&lt;span&gt; or &lt;button&gt; (if drawer)</td>
+                    <td className="py-3 px-4">Semantic tint (amber-500/15, emerald-500/10) + trailing chevron (<code>›</code>) if tappable.</td>
+                    <td className="py-3 px-4 font-semibold text-casa-navy">32px badge (44px tap zone)</td>
+                    <td className="py-3 pl-4 text-casa-error font-medium">Never leave a tappable alert badge without an explicit chevron affordance.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-4 p-3.5 rounded-button bg-casa-accent-soft border border-casa-accent-soft-border flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <ShieldCheck size={18} className="text-casa-navy shrink-0" />
+                <span className="text-caption font-semibold text-casa-navy">
+                  Contract verification: Automated design system linting ensures all 4 archetypes enforce 44px+ touch targets and semantic ARIA states.
+                </span>
+              </div>
+              <span className="text-caption font-bold text-casa-gold uppercase tracking-wider shrink-0">
+                100% Compliant
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* ════════════════════════════════════════════════════════════════════════
           ✨ NEW SECTION: CALENDAR CARD POLISH OPTIONS (INTERACTIVE LAB)

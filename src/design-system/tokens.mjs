@@ -45,7 +45,7 @@ export const DEFAULT_THEME_COLORS = {
   'casa-success': '#27AE60',
   'casa-warning': '#E67E22',
   'casa-surface-subtle': '#FAF6EE',
-  'casa-control-border': '#E3DACB',
+  'casa-control-border': '#EADBC3',
   'casa-divider-strong': '#E4DBCB',
   'casa-text-secondary': '#5C5D66',
   'casa-text-tertiary': '#8D8E99',
@@ -60,7 +60,7 @@ export const DEFAULT_THEME_COLORS = {
   'casa-info-soft': '#E7F4F4',
   'casa-success-strong': '#2A6A34',
   'casa-success-soft': '#DBF0DC',
-  'casa-toggle-track': '#EDE7DA',
+  'casa-toggle-track': '#FAF3E6',
   'casa-top-pick-band': '#8A5A1E',
 }
 
