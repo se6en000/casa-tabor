@@ -1,4 +1,5 @@
 import type { HTMLAttributes } from 'react'
+import { User } from 'lucide-react'
 import { cn } from '../../utils/cn'
 
 export interface PersonAvatar {
@@ -94,7 +95,7 @@ export function PersonAvatarStack({
             sizeClass[size],
           )}
         >
-          ?
+          <User size={size === 'sm' ? 12 : size === 'md' ? 14 : 16} />
         </span>
       )}
       {overflow > 0 && (

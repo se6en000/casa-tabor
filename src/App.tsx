@@ -99,6 +99,7 @@ function GlobalAIDrawer({
   routePath,
   wakeWordEnabled,
   onOpenEventDetails,
+  focusedEventId,
 }: {
   screensaverActive: boolean
   open: boolean
@@ -107,6 +108,7 @@ function GlobalAIDrawer({
   routePath: string
   wakeWordEnabled: boolean
   onOpenEventDetails: (event: EventWithDetails) => void
+  focusedEventId?: string | null
 }) {
   const [anchor, setAnchor] = useState<{ right: number; top: number } | undefined>()
   const [launchContext, setLaunchContext] = useState<AIDrawerLaunchContext | undefined>()
@@ -115,6 +117,11 @@ function GlobalAIDrawer({
   const { data: family = [] } = useFamilyMembers()
   const { data: weather } = useHomeWeather()
   useWakeWord(open, screensaverActive, !safeMode && wakeWordEnabled)
+
+  const focusedEvent = useMemo(
+    () => (focusedEventId ? events.find((e) => e.id === focusedEventId) || null : null),
+    [events, focusedEventId]
+  )
 
   const routePage = routePath.startsWith('/calendar')
     ? 'calendar'
@@ -169,6 +176,7 @@ function GlobalAIDrawer({
       homeCity={weather?.city}
       onSleepCommand={() => document.dispatchEvent(new CustomEvent('screensaver-on'))}
       launchContext={launchContext}
+      focusedEvent={focusedEvent || undefined}
       onOpenEventDetails={onOpenEventDetails}
     />
   )
@@ -189,9 +197,16 @@ function AppShell() {
   const { aiDrawerOpen, setAiDrawerOpen, experienceMode } = useAppStore()
   const [quickCreateOpen, setQuickCreateOpen] = useState(false)
   const [selectedDrawerEvent, setSelectedDrawerEvent] = useState<EventWithDetails | null>(null)
+  const [focusedCopilotEventId, setFocusedCopilotEventId] = useState<string | null>(null)
   const location = useLocation()
   // Grocery page has its own dedicated FAB for adding items.
   const hideFab = location.pathname.startsWith('/settings') || location.pathname.startsWith('/grocery') || screensaverActive
+
+  useEffect(() => {
+    if (!aiDrawerOpen) {
+      setFocusedCopilotEventId(null)
+    }
+  }, [aiDrawerOpen])
 
   useEffect(() => {
     setRoomToneZone(currentZone)
@@ -223,23 +238,29 @@ function AppShell() {
   }, [settings.wakeWordSensitivity])
 
   // Global "open this event's details" primitive — any surface in the app (not just the
-  // AI chat drawer) can dispatch this with just an event id. We only need `{ id }` here;
-  // EventDetailPanel fetches the full record itself via useEventDetails().
+  // AI chat drawer) can dispatch this with just an event id.
+  // If AI Copilot is currently open, we perform a Focus Swap to load the event in Copilot
+  // rather than opening a competing EventDetailPanel drawer.
   useEffect(() => {
     const onOpenEventById = (e: Event) => {
       const eventId = (e as CustomEvent<{ eventId?: string }>).detail?.eventId
       if (!eventId) return
-      document.dispatchEvent(new CustomEvent('casa:close-event-details'))
-      setAiDrawerOpen(false)
-      setSelectedDrawerEvent({ id: eventId } as EventWithDetails)
+      if (aiDrawerOpen) {
+        setFocusedCopilotEventId(eventId)
+      } else {
+        document.dispatchEvent(new CustomEvent('casa:close-event-details'))
+        setFocusedCopilotEventId(null)
+        setSelectedDrawerEvent({ id: eventId } as EventWithDetails)
+      }
     }
     document.addEventListener('casa:open-event-details', onOpenEventById)
     return () => document.removeEventListener('casa:open-event-details', onOpenEventById)
-  }, [setAiDrawerOpen])
+  }, [aiDrawerOpen])
 
   const openEventDetailsFromAssistant = (event: EventWithDetails) => {
     document.dispatchEvent(new CustomEvent('casa:close-event-details'))
     setAiDrawerOpen(false)
+    setFocusedCopilotEventId(null)
     setSelectedDrawerEvent(event)
   }
 
@@ -262,6 +283,7 @@ function AppShell() {
           routePath={location.pathname}
           wakeWordEnabled={settings.wakeWordEnabled}
           onOpenEventDetails={openEventDetailsFromAssistant}
+          focusedEventId={focusedCopilotEventId}
         />
       </div>
 

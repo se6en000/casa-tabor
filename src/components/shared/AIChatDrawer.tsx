@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import type React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIcon, Camera, Mic, Keyboard, RotateCcw, MessagesSquare, Plus, Square, CalendarDays, ShoppingCart, ChefHat, Pencil, AlertTriangle, Clock3, Utensils, Bell, UserPlus, MapPin, Mail, Activity, ChevronRight } from 'lucide-react'
+import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIcon, Camera, Mic, Keyboard, RotateCcw, MessagesSquare, Plus, Square, CalendarDays, ShoppingCart, ChefHat, Pencil, AlertTriangle, Clock3, Utensils, Bell, UserPlus, MapPin, Mail, Activity, ChevronRight, Navigation, ArrowRight } from 'lucide-react'
 import { format } from 'date-fns'
 import { useNavigate } from 'react-router-dom'
 import { cn } from '../../utils/cn'
@@ -212,8 +212,8 @@ export default function AIChatDrawer({
   }, [open, isMobile])
 
   const dynamicSuggestions = useMemo(
-    () => deriveDynamicFollowUpSuggestions(messages, page, events, new Date()),
-    [messages, page, events],
+    () => deriveDynamicFollowUpSuggestions(messages, page, events, new Date(), focusedEvent),
+    [messages, page, events, focusedEvent],
   )
   const eventById = useMemo(
     () => new Map(events.map((event) => [event.id, event])),
@@ -1011,8 +1011,56 @@ export default function AIChatDrawer({
 
             {/* Messages */}
             <BounceScroll nativeScroll className="flex-1 min-h-0" innerClassName="px-4 py-4 space-y-3">
+              {/* Focused Event Banner */}
+              {focusedEvent && (
+                <div className="flex items-center justify-between gap-2.5 px-3.5 py-2.5 rounded-2xl bg-casa-gold/10 border border-casa-gold/30 text-casa-navy shadow-subtle mb-1">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 font-bold text-body-sm truncate">
+                      <CalendarDays size={14} className="text-casa-gold shrink-0" />
+                      <span className="truncate">{focusedEvent.title}</span>
+                    </div>
+                    <div className="text-caption text-casa-muted truncate mt-0.5 font-medium flex items-center gap-1">
+                      <span>{format(new Date(focusedEvent.start_time), 'EEE, MMM d · h:mm a')}</span>
+                      {focusedEvent.location_name && (
+                        <>
+                          <span>·</span>
+                          <MapPin size={11} className="text-casa-gold shrink-0 inline" />
+                          <span className="truncate">{focusedEvent.location_name}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {(focusedEvent.address || focusedEvent.location_name) && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          const dest = encodeURIComponent(focusedEvent.address || focusedEvent.location_name || '')
+                          window.open(`https://www.google.com/maps/search/?api=1&query=${dest}`, '_blank')
+                        }}
+                        title="Open directions in Google Maps"
+                        className="px-2.5 py-1 text-caption font-bold rounded-lg bg-casa-gold/20 hover:bg-casa-gold/30 text-casa-navy border border-casa-gold/40 flex items-center gap-1"
+                      >
+                        <Navigation size={12} className="text-casa-gold" />
+                        <span>Directions</span>
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onOpenEventDetails?.(focusedEvent)}
+                      className="px-2.5 py-1 text-caption font-semibold rounded-lg bg-white border border-casa-border hover:bg-casa-surface text-casa-navy shadow-xs flex items-center gap-1"
+                    >
+                      <span>Full Details</span>
+                      <ArrowRight size={12} />
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               {/* Session resume banner */}
-              {hasSession && messages.length > 0 && (
+              {hasSession && messages.length > 0 && !focusedEvent && (
                 <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-casa-gold/8 border border-casa-gold/20 text-caption text-casa-muted">
                   <Sparkles size={11} className="text-casa-gold flex-shrink-0" />
                   <span>Resuming previous conversation</span>
@@ -2795,7 +2843,17 @@ function deriveDynamicFollowUpSuggestions(
   page: string,
   events: EventWithDetails[],
   now: Date,
+  focusedEvent?: EventWithDetails,
 ): string[] {
+  if (focusedEvent) {
+    return [
+      `Who is driving for ${focusedEvent.title}?`,
+      `Reschedule ${focusedEvent.title}`,
+      `Add location for ${focusedEvent.title}`,
+      `Check for conflicts with ${focusedEvent.title}`,
+    ]
+  }
+
   if (!messages || messages.length === 0) {
     return buildDynamicSuggestions(page, events, now)
   }

@@ -10,6 +10,8 @@ import {
   Sparkles,
   Calendar,
   CheckCircle2,
+  Navigation,
+  ArrowRight,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useLiveClock, greetingFor } from '../../hooks/useLiveClock'
@@ -33,6 +35,15 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
   const { data: conflicts = [] } = useWeekConflicts()
   const { data: prepItems = [] } = usePrepItems()
   const { data: weather } = useHomeWeather()
+
+  // Filter out meal events from general appointments stream (handled by Tonight's Kitchen)
+  const appointmentEvents = useMemo(() => {
+    return todayEvents.filter((e) => {
+      const cat = (e.category || '').toLowerCase()
+      const title = (e.title || '').toLowerCase()
+      return !cat.includes('meal') && !cat.includes('prep') && !cat.includes('cook') && !title.includes('dinner') && !title.includes('lunch')
+    })
+  }, [todayEvents])
 
   // Filter out dismissed items
   const activeConflicts = useMemo(() => conflicts.filter((c) => !c.resolved), [conflicts])
@@ -240,9 +251,10 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                 variant="ghost"
                 size="sm"
                 onClick={() => navigate('/cook')}
-                className="text-body-sm font-bold text-casa-navy hover:text-casa-gold transition-colors flex items-center gap-1 min-h-[32px] p-0"
+                className="text-body-sm font-bold text-casa-navy hover:text-casa-gold transition-colors flex items-center gap-1 min-h-[36px] px-2"
               >
-                Recipe ➔
+                <span>Recipe</span>
+                <ArrowRight size={14} />
               </Button>
             </div>
           </div>
@@ -252,21 +264,21 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-display text-body-lg font-bold text-casa-navy flex items-center gap-2">
                 <Calendar size={18} className="text-casa-gold" />
-                Today's Appointments ({todayEvents.length})
+                Today's Appointments ({appointmentEvents.length})
               </h3>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setCanvasSubmode('turbo')}
-                className="text-caption font-bold text-casa-gold hover:underline min-h-[32px] p-0"
+                className="text-caption font-bold text-casa-gold hover:underline min-h-[36px] px-2"
               >
                 Expand All
               </Button>
             </div>
 
             <div className="space-y-2.5 overflow-y-auto max-h-72 pr-1">
-              {todayEvents.length > 0 ? (
-                todayEvents.map((evt) => {
+              {appointmentEvents.length > 0 ? (
+                appointmentEvents.map((evt) => {
                   let isNow = false
                   try {
                     const start = parseISO(evt.start_time).getTime()
@@ -331,6 +343,22 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                       </div>
 
                       <div className="flex items-center gap-2 shrink-0">
+                        {(evt.address || evt.location_name) && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              const dest = encodeURIComponent(evt.address || evt.location_name || '')
+                              window.open(`https://www.google.com/maps/search/?api=1&query=${dest}`, '_blank')
+                            }}
+                            title="Open navigation directions"
+                            className="h-8 px-2 rounded-xl bg-casa-gold/15 hover:bg-casa-gold/25 text-casa-navy text-caption font-bold flex items-center gap-1 shrink-0 border border-casa-gold/30"
+                          >
+                            <Navigation size={12} className="text-casa-gold" />
+                            <span>Directions</span>
+                          </Button>
+                        )}
                         <PersonAvatarStack people={avatarPeople} size="sm" max={2} />
                         <ChevronRight size={14} className="text-casa-muted group-hover:text-casa-navy ml-1 transition-transform group-hover:translate-x-0.5" />
                       </div>
