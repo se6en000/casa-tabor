@@ -731,15 +731,15 @@ export default function MobileCookingView({
           )}
         </div>
 
-        {/* High-Contrast Scan Button launching Screenshot 2 Sheet */}
+        {/* Soft Champagne Scan Button */}
         <Button
-          variant="strong"
+          variant="champagne"
           size="md"
           onClick={() => setScanSheetOpen(true)}
-          leadingIcon={<Camera size={16} className="text-casa-gold shrink-0" />}
-          className="shrink-0 h-11 px-4 font-bold text-caption text-white rounded-xl border border-casa-gold/40 shadow-xs"
+          leadingIcon={<Camera size={16} className="text-casa-navy shrink-0" />}
+          className="shrink-0 h-11 px-4 font-bold text-caption rounded-xl"
         >
-          <span className="text-white font-bold">Scan</span>
+          <span>Scan</span>
         </Button>
       </div>
 
@@ -980,13 +980,13 @@ export default function MobileCookingView({
 
                       <div className="flex items-center gap-2">
                         <Button
-                          variant="strong"
+                          variant="champagne"
                           size="sm"
                           onClick={() => toggleStepTimer(step.number, step.timerDurationSeconds || 60)}
-                          leadingIcon={timerState.running ? <Pause size={14} className="text-casa-gold shrink-0" /> : <Play size={14} className="text-casa-gold shrink-0" />}
-                          className="font-bold text-caption text-white rounded-xl shadow-xs"
+                          leadingIcon={timerState.running ? <Pause size={14} className="text-casa-navy shrink-0" /> : <Play size={14} className="text-casa-navy shrink-0" />}
+                          className="font-bold text-caption rounded-xl shadow-xs"
                         >
-                          <span className="text-white font-bold">{timerState.running ? 'Pause' : 'Start Timer'}</span>
+                          <span>{timerState.running ? 'Pause' : 'Start Timer'}</span>
                         </Button>
                         <IconButton
                           icon={<RotateCcw size={14} />}

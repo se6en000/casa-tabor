@@ -381,7 +381,7 @@ Provide clear, concise, practical culinary advice. If they ask about substitutio
           />
 
           <Button
-            variant="primary"
+            variant="champagne"
             size="md"
             type="submit"
             disabled={!input.trim() || isTyping}

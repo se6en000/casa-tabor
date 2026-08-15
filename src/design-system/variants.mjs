@@ -18,7 +18,7 @@ const CONTROL_BASE =
   'focus-visible:ring-2 focus-visible:ring-casa-gold focus-visible:ring-offset-2 focus-visible:ring-offset-casa-bg ' +
   'disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none'
 
-export const BUTTON_VARIANTS = ['primary', 'strong', 'secondary', 'subtle', 'ghost', 'danger']
+export const BUTTON_VARIANTS = ['primary', 'strong', 'secondary', 'subtle', 'ghost', 'danger', 'champagne']
 export const BUTTON_SIZES = ['sm', 'md', 'lg']
 
 const BUTTON_VARIANT_CLASSES = {
@@ -28,6 +28,7 @@ const BUTTON_VARIANT_CLASSES = {
   subtle: 'bg-surface-inset text-content-primary border border-casa-border/70 hover:bg-surface-subtle',
   ghost: 'bg-transparent text-content-heading hover:bg-casa-bg',
   danger: 'bg-casa-error text-white hover:brightness-110',
+  champagne: 'bg-casa-gold/15 text-casa-navy font-bold border border-casa-gold/35 hover:bg-casa-gold/25 hover:border-casa-gold/50 shadow-2xs',
 }
 
 const BUTTON_SIZE_CLASSES = {
@@ -53,7 +54,7 @@ export function buttonClassName(options = {}) {
   ].filter(Boolean).join(' ')
 }
 
-export const ICON_BUTTON_VARIANTS = ['primary', 'strong', 'secondary', 'ghost', 'danger']
+export const ICON_BUTTON_VARIANTS = ['primary', 'strong', 'secondary', 'ghost', 'danger', 'champagne']
 export const ICON_BUTTON_SIZES = ['sm', 'md', 'lg']
 
 const ICON_BUTTON_VARIANT_CLASSES = {
@@ -62,6 +63,7 @@ const ICON_BUTTON_VARIANT_CLASSES = {
   secondary: 'bg-casa-surface text-content-heading border border-casa-border hover:bg-casa-bg',
   ghost: 'bg-transparent text-casa-muted hover:text-content-heading hover:bg-casa-bg',
   danger: 'bg-transparent text-casa-error hover:bg-casa-error/10',
+  champagne: 'bg-casa-gold/15 text-casa-navy border border-casa-gold/35 hover:bg-casa-gold/25 hover:border-casa-gold/50 shadow-2xs',
 }
 
 const ICON_BUTTON_SIZE_CLASSES = {

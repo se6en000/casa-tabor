@@ -201,11 +201,11 @@ export default function MobileRecipeScanSheet({
                       autoFocus
                     />
                     <Button
-                      variant="strong"
+                      variant="champagne"
                       size="sm"
                       onClick={handleUrlSubmit}
                       disabled={!urlValue.trim()}
-                      className="shrink-0 h-10 px-3 font-bold text-caption text-white rounded-xl"
+                      className="shrink-0 h-10 px-3 font-bold text-caption rounded-xl"
                       leadingIcon={<ArrowRight size={15} />}
                     >
                       Fetch

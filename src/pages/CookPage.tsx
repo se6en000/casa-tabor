@@ -3288,9 +3288,9 @@ export default function CookPage() {
                         )}
                       </div>
                       <Button
-                        variant="primary"
+                        variant="champagne"
                         size="md"
-                        className="font-bold min-h-control px-6 shrink-0 shadow-card"
+                        className="font-bold min-h-control px-6 shrink-0"
                       >
                         Resume Cooking →
                       </Button>
@@ -3308,7 +3308,6 @@ export default function CookPage() {
                 {moodShortlistRecipes.length > 0 ? (
                   (() => {
                     const topInsight = moodShortlistRecipes[0]
-                    const isTop = true
                     const focus = parseRecipeImageFocus(topInsight.recipe.image_url)
                     const minutesLabel = topInsight.minutes ? `${topInsight.minutes} min` : (topInsight.recipe.cook_time ?? 'Quick cook')
                     const approvalLabel = buildTopPickApproval(topInsight)
@@ -3372,7 +3371,7 @@ export default function CookPage() {
                           <div className="mt-auto pt-2 flex items-center gap-3">
                             <Button
                               onClick={() => openRecipeForCookMode(topInsight.recipe.id)}
-                              variant={isTop ? 'primary' : 'secondary'}
+                              variant="champagne"
                               className="mt-auto"
                               size="lg"
                               fullWidth
@@ -3399,7 +3398,7 @@ export default function CookPage() {
                     <Text>Import recipes from your library or URL to unlock your mood-based shortlist.</Text>
                     <Button
                       onClick={openImportDialog}
-                      variant="primary"
+                      variant="champagne"
                       size="md"
                       leadingIcon={<Upload size={16} />}
                       className="font-bold min-h-control"
@@ -3486,7 +3485,7 @@ export default function CookPage() {
                               aria-label="Move later"
                             />
                             <Button
-                              variant="primary"
+                              variant="champagne"
                               size="sm"
                               onClick={() => openRecipeForCookMode(recipe.id)}
                               className="font-bold min-h-[30px] px-2.5 text-caption"
@@ -3570,7 +3569,6 @@ export default function CookPage() {
                     {moodShortlistRecipes.slice(1, 3).map((insight, altIndex) => {
                       const focus = parseRecipeImageFocus(insight.recipe.image_url)
                       const minutesLabel = insight.minutes ? `${insight.minutes} min` : (insight.recipe.cook_time ?? 'Quick cook')
-                      const isTop = false
                       return (
                         <div
                           key={`${insight.recipe.id}-alt-${altIndex}`}
@@ -3599,7 +3597,7 @@ export default function CookPage() {
                               event.stopPropagation()
                               openRecipeForCookMode(insight.recipe.id)
                             }}
-                            variant={isTop ? 'primary' : 'secondary'}
+                            variant="champagne"
                             className="mt-auto shrink-0 font-bold"
                             size="sm"
                           >
@@ -3683,13 +3681,13 @@ export default function CookPage() {
               {/* Actions Bar */}
               <div className="flex flex-wrap items-center gap-3 pt-1">
                 <Button
-                  variant="primary"
+                  variant="champagne"
                   size="lg"
                   onClick={() => void generateMealPlan()}
                   disabled={mealPlannerLoading}
                   loading={mealPlannerLoading}
                   leadingIcon={<Sparkles size={16} />}
-                  className="font-bold shadow-card px-6 min-h-control"
+                  className="font-bold px-6 min-h-control"
                 >
                   {mealPlannerLoading ? 'Generating Plan…' : 'Generate Weekly Plan'}
                 </Button>
@@ -3703,13 +3701,13 @@ export default function CookPage() {
                   Optimize Budget
                 </Button>
                 <Button
-                  variant="strong"
+                  variant="champagne"
                   size="lg"
                   onClick={() => void applyPlannerGroceries()}
                   disabled={mealPlannerAddingGroceries || pendingPlannerGroceries.length === 0}
                   loading={mealPlannerAddingGroceries}
                   leadingIcon={<ShoppingCart size={16} className="text-casa-gold" />}
-                  className="font-bold min-h-control px-6 ml-auto shadow-card"
+                  className="font-bold min-h-control px-6 ml-auto"
                 >
                   {mealPlannerAddingGroceries
                     ? `Adding Groceries... (${pendingPlannerGroceries.length})`
@@ -4069,11 +4067,11 @@ export default function CookPage() {
                   )}
                 </div>
                 <Button
-                  variant="primary"
+                  variant="champagne"
                   size="md"
                   onClick={openImportDialog}
                   leadingIcon={<Upload size={16} />}
-                  className="font-bold min-h-control shadow-card px-4"
+                  className="font-bold min-h-control px-4"
                 >
                   Import recipe
                 </Button>
@@ -4115,7 +4113,7 @@ export default function CookPage() {
                             {recipe.cook_time ? `${recipe.cook_time} · ` : ''}{recipe.servings ? `${recipe.servings} servings` : 'Standard'}
                           </Text>
                         </div>
-                        <Button variant="primary" size="sm" leadingIcon={<Utensils size={13} />} className="shrink-0 font-bold">
+                        <Button variant="champagne" size="sm" leadingIcon={<Utensils size={13} />} className="shrink-0 font-bold">
                           Cook
                         </Button>
                       </Card>
@@ -4190,7 +4188,7 @@ export default function CookPage() {
                       />
                       {plannedSlot && (
                         <div className="absolute top-2.5 left-2.5">
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-casa-gold text-casa-navy text-caption font-mono font-bold border border-casa-gold shadow-xs">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-casa-gold/20 text-casa-navy text-caption font-mono font-bold border border-casa-gold/35 shadow-xs">
                             <Sparkles size={10} className="text-casa-navy" />
                             {SLOT_LABELS[plannedSlot]}
                           </span>
@@ -4216,7 +4214,7 @@ export default function CookPage() {
 
                       <div className="mt-auto pt-2 flex items-center gap-2">
                         <Button
-                          variant="primary"
+                          variant="champagne"
                           size="sm"
                           className="flex-1 font-bold min-h-control"
                           onClick={(event) => {
@@ -4289,7 +4287,7 @@ export default function CookPage() {
                             return (
                               <Button
                                 key={slot}
-                                variant={isCurrent ? 'primary' : 'secondary'}
+                                variant={isCurrent ? 'champagne' : 'secondary'}
                                 size="sm"
                                 onClick={() => void handleScheduleSlot(recipe, slot)}
                                 className={cn(
@@ -4388,14 +4386,14 @@ export default function CookPage() {
                         )}
 
                         <Button
-                          variant="primary"
+                          variant="champagne"
                           size="sm"
                           fullWidth
                           onClick={() => void addSelectedRecipeGroceries(recipe)}
                           disabled={smartAddingRecipeId === recipe.id || selectedCount === 0}
                           loading={smartAddingRecipeId === recipe.id}
                           leadingIcon={<ShoppingCart size={13} />}
-                          className="font-bold min-h-control shadow-card"
+                          className="font-bold min-h-control"
                         >
                           Add {selectedCount} to cart →
                         </Button>
@@ -4692,7 +4690,7 @@ export default function CookPage() {
                   Cancel
                 </Button>
                 <Button
-                  variant="primary"
+                  variant="champagne"
                   onClick={() => setImportStep(2)}
                   disabled={!hasImportSource}
                   className="font-bold min-h-control"
@@ -4707,7 +4705,7 @@ export default function CookPage() {
                   Back
                 </Button>
                 <Button
-                  variant="primary"
+                  variant="champagne"
                   onClick={() => void runImportFromCurrentSources()}
                   disabled={importingRecipe || !hasImportSource}
                   loading={importingRecipe}
@@ -4732,7 +4730,7 @@ export default function CookPage() {
                   Save recipe
                 </Button>
                 <Button
-                  variant="primary"
+                  variant="champagne"
                   disabled={!importDraft || importSaving}
                   onClick={() => void saveImportedRecipe({ openCookMode: true })}
                   loading={importSaving}
@@ -5134,7 +5132,7 @@ export default function CookPage() {
                 Cancel edit
               </Button>
               <Button
-                variant="primary"
+                variant="champagne"
                 onClick={() => void saveRecipeEdits()}
                 disabled={recipeEditorSaving}
                 loading={recipeEditorSaving}

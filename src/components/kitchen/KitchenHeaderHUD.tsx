@@ -306,7 +306,7 @@ export default function KitchenHeaderHUD({
                       />
                       <span className="text-body-sm text-casa-muted">minutes</span>
                       <Button
-                        variant="primary"
+                        variant="champagne"
                         size="sm"
                         onClick={() => {
                           const label = customTimerLabel.trim() || `${customTimerMinutes}m Timer`
@@ -328,18 +328,13 @@ export default function KitchenHeaderHUD({
 
         {/* AI Sous Chef Toggle Button */}
         <Button
-          variant={isSousChefOpen ? 'primary' : 'secondary'}
+          variant={isSousChefOpen ? 'champagne' : 'secondary'}
           size="md"
           onClick={onToggleSousChef}
-          className={cn(
-            'font-bold min-h-control px-3.5 flex items-center gap-2 transition-all shadow-sm',
-            isSousChefOpen
-              ? 'bg-gradient-to-r from-amber-500 to-casa-gold text-slate-950 shadow-md'
-              : 'text-casa-navy'
-          )}
+          className="font-bold min-h-control px-3.5 flex items-center gap-2 transition-all"
           aria-label={isSousChefOpen ? 'Hide AI Sous Chef' : 'Show AI Sous Chef'}
         >
-          <Sparkles size={16} className={isSousChefOpen ? 'text-slate-950 animate-pulse' : 'text-casa-gold'} />
+          <Sparkles size={16} className={isSousChefOpen ? 'text-casa-gold animate-pulse' : 'text-casa-gold'} />
           <span className="hidden sm:inline">Sous Chef AI</span>
         </Button>
       </div>

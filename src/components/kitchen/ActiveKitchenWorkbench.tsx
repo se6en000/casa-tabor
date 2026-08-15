@@ -284,10 +284,10 @@ export default function ActiveKitchenWorkbench({
             </Button>
 
             <Button
-              variant="primary"
+              variant="champagne"
               size="lg"
               onClick={onExit}
-              className="w-full sm:w-auto font-bold min-h-control px-8 rounded-2xl bg-gradient-to-r from-amber-500 to-casa-gold text-slate-950 shadow-md"
+              className="w-full sm:w-auto font-bold min-h-control px-8 rounded-2xl"
             >
               Back to Recipe Library
             </Button>

@@ -283,10 +283,10 @@ export default function KitchenStepFocusHUD({
           </Button>
         ) : (
           <Button
-            variant="primary"
+            variant="champagne"
             size="lg"
             onClick={() => onStepChange(Math.min(steps.length - 1, currentStepIndex + 1))}
-            className="min-h-[56px] sm:min-h-[64px] px-6 sm:px-10 font-bold text-body sm:text-body-lg flex items-center gap-2 rounded-2xl bg-gradient-to-r from-amber-500 to-casa-gold hover:from-amber-600 hover:to-amber-500 text-slate-950 shadow-md"
+            className="min-h-[56px] sm:min-h-[64px] px-6 sm:px-10 font-bold text-body sm:text-body-lg flex items-center gap-2 rounded-2xl"
             aria-label="Next step"
           >
             <span>Next Step</span>

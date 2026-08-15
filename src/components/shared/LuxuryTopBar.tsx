@@ -45,11 +45,6 @@ const NAV_TABS = [
 // ── Zone A: Brand Monogram ───────────────────────────────────────
 function BrandZone({ isWarm }: { isWarm: boolean }) {
   const { setCanvasSubmode } = useAppStore()
-  const location = useLocation()
-  const isCook = location.pathname.startsWith('/cook')
-  const isSettings = location.pathname.startsWith('/settings')
-
-  const brandTitle = isCook ? 'Basic Cooking Mode' : isSettings ? 'Household Settings' : 'Casa Tabor'
 
   return (
     <NavLink
@@ -68,7 +63,7 @@ function BrandZone({ isWarm }: { isWarm: boolean }) {
           isWarm ? 'text-casa-navy' : 'text-white',
         )}
       >
-        {brandTitle}
+        Casa Tabor
       </span>
     </NavLink>
   )

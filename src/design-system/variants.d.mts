@@ -1,4 +1,4 @@
-export type ButtonVariant = 'primary' | 'strong' | 'secondary' | 'subtle' | 'ghost' | 'danger'
+export type ButtonVariant = 'primary' | 'strong' | 'secondary' | 'subtle' | 'ghost' | 'danger' | 'champagne'
 export type ButtonSize = 'sm' | 'md' | 'lg'
 
 export const BUTTON_VARIANTS: ButtonVariant[]
@@ -11,7 +11,7 @@ export function buttonClassName(options?: {
   loading?: boolean
 }): string
 
-export type IconButtonVariant = 'primary' | 'strong' | 'secondary' | 'ghost' | 'danger'
+export type IconButtonVariant = 'primary' | 'strong' | 'secondary' | 'ghost' | 'danger' | 'champagne'
 export type IconButtonSize = 'sm' | 'md' | 'lg'
 
 export const ICON_BUTTON_VARIANTS: IconButtonVariant[]
