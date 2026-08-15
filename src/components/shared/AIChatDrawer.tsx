@@ -5,7 +5,7 @@ import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIc
 import { format } from 'date-fns'
 import { useNavigate } from 'react-router-dom'
 import { cn } from '../../utils/cn'
-import { useAIAssistant, type AIMessage } from '../../hooks/useAIAssistant'
+import { useAIAssistant, type AIMessage, type GroceryAssistantContext } from '../../hooks/useAIAssistant'
 import type { PrivateConversation } from '../../hooks/useAIConversationHistory'
 import {
   useSpeechInput,
@@ -15,7 +15,7 @@ import {
 import { useLedStrip } from '../../hooks/useLedStrip'
 import { useProfileSession } from '../../contexts/ProfileSessionContext'
 import { supabase } from '../../lib/supabase'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import type { FamilyMember, DinnerPlan, DinnerMode } from '../../types'
 import { useAppStore } from '../../stores/appStore'
@@ -120,6 +120,86 @@ export default function AIChatDrawer({
   const qc = useQueryClient()
   const { profile, signOut } = useProfileSession()
 
+  // ── Preload Real-Time Grocery List, Pantry Inventory, and Meal Plans for Copilot ──
+  const { data: copilotGroceryItems = [] } = useQuery({
+    queryKey: ['copilot-grocery-items'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('grocery_items')
+        .select('id,name,category,checked,quantity,unit,notes')
+        .order('created_at', { ascending: false })
+      if (error) return []
+      return (data ?? []) as Array<{ id: string; name: string; category: string; checked: boolean; quantity: string | null; unit: string | null; notes: string | null }>
+    },
+    staleTime: 20_000,
+  })
+
+  const { data: copilotPantrySettings } = useQuery({
+    queryKey: ['copilot-pantry-settings'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('settings')
+        .select('value')
+        .eq('key', 'pantry_inventory')
+        .maybeSingle()
+      return data?.value ?? null
+    },
+    staleTime: 60_000,
+  })
+
+  const { data: copilotMealPlans = [] } = useQuery({
+    queryKey: ['copilot-meal-plans'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('recipe_meal_plans')
+        .select('id,recipe_id,slot,recipes(name,cook_time,servings,recipe_ingredients(raw_text))')
+        .order('created_at', { ascending: false })
+      return (data ?? []) as any[]
+    },
+    staleTime: 60_000,
+  })
+
+  const groceryContext = useMemo<GroceryAssistantContext>(() => {
+    const toBuy = copilotGroceryItems.filter((i) => !i.checked)
+    const inCart = copilotGroceryItems.filter((i) => i.checked)
+
+    const pantryMap = (copilotPantrySettings && typeof copilotPantrySettings === 'object' ? copilotPantrySettings : {}) as Record<string, any>
+    const pantryInventory = Object.entries(pantryMap).map(([key, val]) => ({
+      name: val?.name ?? key,
+      category: val?.category ?? 'pantry',
+      currentStock: Number(val?.current_stock ?? val?.quantity ?? 0),
+      unit: String(val?.unit ?? 'pkg'),
+      lowStockThreshold: Number(val?.low_stock_threshold ?? 1),
+    }))
+
+    const plannedDinners = copilotMealPlans.map((plan: any) => ({
+      slot: plan.slot ?? 'tonight',
+      recipeName: plan.recipes?.name ?? 'Planned Recipe',
+      cookTime: plan.recipes?.cook_time ?? null,
+      servings: plan.recipes?.servings ?? null,
+      ingredientCount: plan.recipes?.recipe_ingredients?.length ?? 0,
+      ingredients: (plan.recipes?.recipe_ingredients ?? []).map((ing: any) => ing.raw_text).filter(Boolean),
+    }))
+
+    return {
+      totalItems: copilotGroceryItems.length,
+      toBuyCount: toBuy.length,
+      inCartCount: inCart.length,
+      items: copilotGroceryItems.map((item) => ({
+        id: item.id,
+        name: item.name,
+        category: item.category,
+        checked: item.checked,
+        quantity: item.quantity,
+        unit: item.unit,
+        notes: item.notes,
+      })),
+      pantryInventory,
+      plannedDinners,
+      recentAisleCategories: Array.from(new Set(copilotGroceryItems.map((i) => i.category))),
+    }
+  }, [copilotGroceryItems, copilotPantrySettings, copilotMealPlans])
+
   const {
     messages,
     loading,
@@ -140,6 +220,7 @@ export default function AIChatDrawer({
     family,
     homeCity,
     focusedEvent,
+    groceryContext,
     onSessionEnd: onClose,
   })
 

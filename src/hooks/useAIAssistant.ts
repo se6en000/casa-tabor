@@ -20,6 +20,44 @@ import { useProfileSession } from '../contexts/ProfileSessionContext'
 
 export type { AIMessage }
 
+export interface GroceryAssistantContext {
+  totalItems: number
+  toBuyCount: number
+  inCartCount: number
+  items: Array<{
+    id: string
+    name: string
+    category: string
+    checked: boolean
+    quantity?: string | null
+    unit?: string | null
+    notes?: string | null
+  }>
+  pantryInventory?: Array<{
+    name: string
+    category: string
+    currentStock: number
+    unit: string
+    lowStockThreshold: number
+  }>
+  pantryCadencePredictions?: Array<{
+    name: string
+    cadenceDays: number
+    daysUntil: number
+    dueLabel?: string
+    confidence?: string
+  }>
+  plannedDinners?: Array<{
+    slot: string
+    recipeName: string
+    cookTime?: string | null
+    servings?: string | null
+    ingredientCount: number
+    ingredients: string[]
+  }>
+  recentAisleCategories?: string[]
+}
+
 export interface AssistantContext {
   page: string
   assistantMode?: 'general' | 'chef'
@@ -27,6 +65,7 @@ export interface AssistantContext {
   family: FamilyMember[]
   homeCity?: string
   focusedEvent?: EventWithDetails
+  groceryContext?: GroceryAssistantContext
   onSessionEnd?: () => void
 }
 
@@ -158,6 +197,24 @@ function buildContext(ctx: AssistantContext, messages: AIMessage[], experienceMo
         completed: item.completed,
         assigned_to: item.assigned_to,
       })),
+    } : undefined,
+    grocery: ctx.groceryContext ? {
+      total_items: ctx.groceryContext.totalItems,
+      to_buy_count: ctx.groceryContext.toBuyCount,
+      in_cart_count: ctx.groceryContext.inCartCount,
+      items: ctx.groceryContext.items.slice(0, 100).map((i) => ({
+        id: i.id,
+        name: i.name,
+        category: i.category,
+        checked: i.checked,
+        quantity: i.quantity ?? null,
+        unit: i.unit ?? null,
+        notes: i.notes ?? null,
+      })),
+      pantry_inventory: ctx.groceryContext.pantryInventory?.slice(0, 60),
+      pantry_cadence_predictions: ctx.groceryContext.pantryCadencePredictions?.slice(0, 25),
+      planned_dinners: ctx.groceryContext.plannedDinners?.slice(0, 10),
+      recent_aisle_categories: ctx.groceryContext.recentAisleCategories,
     } : undefined,
   }
 }

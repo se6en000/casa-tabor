@@ -123,7 +123,7 @@ export default function SidecarCompanion({
         <AIChatDrawer
           open={aiDrawerOpen}
           onClose={closeSidecar}
-          page={routePath.startsWith('/cook') ? 'cook' : routePath.startsWith('/calendar') ? 'calendar' : 'home'}
+          page={routePath.startsWith('/cook') ? 'cook' : routePath.startsWith('/calendar') ? 'calendar' : routePath.startsWith('/grocery') ? 'grocery' : 'home'}
           events={rollingEvents}
           family={family}
           homeCity={weather?.city}

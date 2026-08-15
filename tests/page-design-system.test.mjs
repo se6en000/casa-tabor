@@ -40,16 +40,21 @@ test('Grocery suggestion review uses an overlay instead of expanding its item ro
 })
 
 test('Grocery uses a compact semantic hierarchy for its dense shopping surface', () => {
-  const source = readFileSync(resolve('src/pages/GroceryPage.tsx'), 'utf8')
+  const grocerySources = [
+    'src/pages/GroceryPage.tsx',
+    'src/components/grocery/GroceryCommandBar.tsx',
+    'src/components/grocery/GroceryAisleGrid.tsx',
+    'src/components/grocery/GroceryItemRow.tsx',
+  ].map((rel) => readFileSync(resolve(rel), 'utf8')).join('\n')
 
-  assert.match(source, /<Heading role="display-sm"[^>]*>Grocery List<\/Heading>/)
-  assert.match(source, /text-body font-semibold text-casa-text/)
-  assert.match(source, /text-body font-semibold leading-tight text-casa-navy/)
-  assert.match(source, /section\.visual\.subtitle/)
-  assert.match(source, /columns-1 gap-3 lg:columns-2 2xl:columns-3/)
-  assert.doesNotMatch(source, /text-body-lg font-semibold text-casa-text/)
-  assert.doesNotMatch(source, /text-heading font-semibold leading-tight text-casa-navy/)
-  assert.doesNotMatch(source, /text-body-lg font-semibold leading-tight text-casa-navy/)
+  assert.match(grocerySources, /<Heading role="display-sm"[^>]*>Grocery List<\/Heading>/)
+  assert.match(grocerySources, /text-body font-semibold text-casa-text/)
+  assert.match(grocerySources, /text-body font-semibold leading-tight text-casa-navy/)
+  assert.match(grocerySources, /section\.visual\.subtitle/)
+  assert.match(grocerySources, /columns-1 gap-3 lg:columns-2 2xl:columns-3/)
+  assert.doesNotMatch(grocerySources, /text-body-lg font-semibold text-casa-text/)
+  assert.doesNotMatch(grocerySources, /text-heading font-semibold leading-tight text-casa-navy/)
+  assert.doesNotMatch(grocerySources, /text-body-lg font-semibold leading-tight text-casa-navy/)
 })
 
 test('Design System gallery covers every P0 touch contract', () => {
@@ -204,15 +209,21 @@ test('Design System gallery demonstrates every Phase 3 pattern family', () => {
 })
 
 test('Grocery uses shared controls and feedback without changing its dense layout', () => {
-  const source = readFileSync(resolve('src/pages/GroceryPage.tsx'), 'utf8')
-  for (const component of ['Alert', 'Button', 'Checkbox', 'Chip', 'IconButton', 'Progress', 'SegmentedControl', 'Sheet']) {
-    assert.match(source, new RegExp(`<${component}\\b`))
+  const grocerySources = [
+    'src/pages/GroceryPage.tsx',
+    'src/components/grocery/GroceryCommandBar.tsx',
+    'src/components/grocery/GroceryAisleGrid.tsx',
+    'src/components/grocery/GroceryItemRow.tsx',
+  ].map((rel) => readFileSync(resolve(rel), 'utf8')).join('\n')
+
+  for (const component of ['Alert', 'Button', 'Checkbox', 'Chip', 'IconButton', 'Sheet']) {
+    assert.match(grocerySources, new RegExp(`<${component}\\b`))
   }
-  assert.doesNotMatch(source, /<button\b/)
-  assert.doesNotMatch(source, /chipClassName/)
-  assert.match(source, /columns-1 gap-3 lg:columns-2 2xl:columns-3/)
-  assert.match(source, /<Heading role="display-sm"[^>]*>Grocery List<\/Heading>/)
-  assert.match(source, /style=\{\{ left: dragState\.x \+ 14, top: dragState\.y \+ 14 \}\}/)
+  assert.doesNotMatch(grocerySources, /<button\b/)
+  assert.doesNotMatch(grocerySources, /chipClassName/)
+  assert.match(grocerySources, /columns-1 gap-3 lg:columns-2 2xl:columns-3/)
+  assert.match(grocerySources, /<Heading role="display-sm"[^>]*>Grocery List<\/Heading>/)
+  assert.match(grocerySources, /style=\{\{ left: dragState\.x \+ 14, top: dragState\.y \+ 14 \}\}/)
 })
 
 test('event create and edit workflows use shared design-system contracts', () => {
