@@ -214,35 +214,36 @@ export function DayEventCard({
         onClick={(e) => { e.stopPropagation(); onOpen() }}
       >
         <div className={cn(
-          'relative w-full overflow-hidden rounded-widget border bg-amber-50/40 shadow-card grid grid-cols-1 sm:grid-cols-[125px_1fr] md:grid-cols-[135px_1fr] transition-all',
+          'relative w-full overflow-hidden rounded-widget border bg-amber-50/40 shadow-card grid grid-cols-1 sm:grid-cols-[125px_1fr] md:grid-cols-[135px_1fr] xl:grid-cols-[140px_1fr] transition-all',
           isHighlighted ? 'border-amber-400 ring-2 ring-inset ring-casa-gold shadow-card-hover' : 'border-casa-gold/30',
           className
         )}>
           {/* Left Pillar: Sand/Amber Time Block */}
-          <div className="bg-amber-200/60 text-amber-950 p-3.5 sm:p-4 flex flex-row sm:flex-col justify-between items-center sm:items-start border-b sm:border-b-0 sm:border-r border-amber-300/40">
-            <div>
-              <div className="font-mono text-body-lg sm:text-heading font-bold text-amber-950 tabular-nums leading-none">
+          <div className="bg-amber-200/60 text-amber-950 px-3 py-1.5 sm:px-3 sm:py-2 flex flex-row sm:flex-col justify-between items-center sm:items-start border-b sm:border-b-0 sm:border-r border-amber-300/40 min-w-0">
+            <div className="min-w-0">
+              <div className="font-mono text-body sm:text-body-lg font-bold text-amber-950 tabular-nums leading-none">
                 {format(start, 'h:mm')}
               </div>
-              <div className="font-mono text-caption font-semibold uppercase text-amber-900/75 mt-0.5">
+              <div className="font-mono text-2xs sm:text-caption font-normal uppercase text-amber-900/75 mt-0.5 leading-none">
                 {format(start, 'a')} · REMINDER
               </div>
             </div>
-            <Bell size={14} className="text-amber-800 shrink-0 mt-1" />
+            <Bell size={13} className="text-amber-800 shrink-0 mt-0.5" />
           </div>
 
           {/* Right Content */}
-          <div className="p-3.5 sm:p-4 flex items-center justify-between gap-3 flex-wrap sm:flex-nowrap bg-casa-surface/60">
+          <div className="px-3 py-1.5 sm:px-3.5 sm:py-2 flex items-center justify-between gap-2.5 flex-wrap sm:flex-nowrap bg-casa-surface/60 min-w-0">
             <div className="min-w-0 flex-1">
-              <span className={cn('text-body-sm font-bold text-casa-navy block truncate', checking && 'line-through opacity-50')}>
+              <span className={cn('text-body-sm font-bold text-casa-navy block truncate leading-snug', checking && 'line-through opacity-50')}>
                 {event.title}
               </span>
               {event.members.length > 0 && (
-                <div className="flex gap-1 mt-1">
+                <div className="flex gap-1 mt-0.5">
                   {event.members.slice(0, 3).map((m) => (
                     <CalendarPill
                       key={m.id}
                       color={m.family_member?.color_hex ?? SHARED_GOLD}
+                      className="!text-2xs !py-0 !px-1.5"
                     >
                       {m.family_member?.name}
                     </CalendarPill>
@@ -251,14 +252,14 @@ export function DayEventCard({
               )}
             </div>
 
-            {/* Action Buttons (44px touch targets) */}
-            <div className="flex items-center gap-1.5 shrink-0">
+            {/* Action Buttons (Streamlined & accessible) */}
+            <div className="flex items-center gap-1 shrink-0">
               <Button
                 size="sm"
                 variant={checking ? 'primary' : 'secondary'}
                 onClick={handleCheck}
                 disabled={checking || snoozing || movingToNeedsYou}
-                className={cn('min-h-[44px] px-3.5 text-caption font-bold', checking ? 'bg-casa-success text-white' : 'border-casa-border hover:border-casa-navy')}
+                className={cn('min-h-[34px] sm:min-h-[36px] px-2.5 sm:px-3 py-1 text-caption font-bold shadow-none', checking ? 'bg-casa-success text-white' : 'border-casa-border hover:border-casa-navy')}
               >
                 <Check size={14} strokeWidth={2.5} className="mr-1" />
                 Done
@@ -273,7 +274,7 @@ export function DayEventCard({
                     disabled={checking || snoozing || movingToNeedsYou || !onSnooze}
                     aria-label="Snooze reminder"
                     title="Snooze"
-                    className="min-h-[44px] min-w-[44px] text-casa-muted hover:text-casa-navy"
+                    className="min-h-[34px] min-w-[34px] text-casa-muted hover:text-casa-navy"
                     icon={<SnoozeOneHourIcon className={cn('w-4 h-4', snoozing && 'animate-pulse')} />}
                   />
                 )}
@@ -285,7 +286,7 @@ export function DayEventCard({
                 disabled={checking || snoozing || movingToNeedsYou || !onSendToNeedsYou}
                 aria-label="Move to Needs you"
                 title="Move to Needs you"
-                className="min-h-[44px] min-w-[44px] text-casa-muted hover:text-casa-navy"
+                className="min-h-[34px] min-w-[34px] text-casa-muted hover:text-casa-navy"
                 icon={<NeedsYouTransferIcon className={cn('w-4 h-4', movingToNeedsYou && 'animate-pulse')} />}
               />
             </div>
@@ -338,35 +339,29 @@ export function DayEventCard({
           {/* Right: Driver/Supervisor Capsule + Attendee Avatars */}
           <div className="flex items-center gap-2 shrink-0">
             {responsibility.responsible ? (
-              <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-casa-bg border border-casa-border/70 text-caption font-medium">
-                <span
-                  className="w-4 h-4 rounded-full text-white flex items-center justify-center text-caption font-bold shrink-0"
-                  style={{ backgroundColor: responsibility.responsible?.color ?? SHARED_GOLD }}
-                >
-                  {responsibility.responsible?.initial ?? '?'}
-                </span>
-                <span className="text-caption font-semibold text-casa-navy truncate max-w-[70px]">
+              <div
+                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-casa-bg border border-casa-border/70 text-caption font-medium"
+                title={`${responsibility.responsible.name} (${responsibility.roleBadge === 'drive' ? 'Driver assigned' : isHosted ? 'Hosting' : 'Supervising'})`}
+              >
+                <div className="relative inline-flex shrink-0">
+                  <span
+                    className="w-4 h-4 rounded-full text-white flex items-center justify-center text-caption font-bold shrink-0 leading-none"
+                    style={{ backgroundColor: responsibility.responsible?.color ?? SHARED_GOLD }}
+                  >
+                    {responsibility.responsible?.initial ?? '?'}
+                  </span>
+                  <span
+                    className={cn(
+                      'absolute -bottom-1 -right-1 w-2.5 h-2.5 rounded-full border border-casa-surface flex items-center justify-center',
+                      responsibility.roleBadge === 'drive' ? 'bg-casa-navy' : 'bg-casa-success-strong'
+                    )}
+                    aria-label={responsibility.roleBadge === 'drive' ? 'Drives' : isHosted ? 'Hosting' : 'Supervising'}
+                  >
+                    {responsibility.roleBadge === 'drive' ? <DrivingBadgeIcon /> : <SupervisingBadgeIcon />}
+                  </span>
+                </div>
+                <span className="text-caption font-semibold text-casa-navy truncate max-w-[75px]">
                   {responsibility.responsible.name}
-                </span>
-                <span className={cn(
-                  'text-caption font-bold px-1 rounded flex items-center gap-1',
-                  responsibility.roleBadge === 'drive' ? 'bg-casa-gold/15 text-casa-gold' : 'bg-casa-success/15 text-casa-success-strong'
-                )}>
-                  {responsibility.roleBadge === 'drive' ? (
-                    <>
-                      <span className="w-3 h-3 bg-casa-navy rounded-full inline-flex items-center justify-center shrink-0">
-                        <DrivingBadgeIcon />
-                      </span>
-                      <span>Drives</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="w-3 h-3 bg-casa-success-strong rounded-full inline-flex items-center justify-center shrink-0">
-                        <SupervisingBadgeIcon />
-                      </span>
-                      <span>{isHosted ? 'Hosting' : 'Supervising'}</span>
-                    </>
-                  )}
                 </span>
               </div>
             ) : (
@@ -507,35 +502,29 @@ export function DayEventCard({
           {/* Footer Row: Responsibility Chip + Attendee Stack */}
           <div className="pt-3 border-t border-casa-divider/70 flex flex-wrap items-center justify-between gap-2">
             {responsibility.responsible ? (
-              <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-casa-bg border border-casa-border/80">
-                <span
-                  className="w-6 h-6 rounded-full text-white flex items-center justify-center text-caption font-bold"
-                  style={{ backgroundColor: responsibility.responsible?.color ?? 'var(--color-casa-gold)' }}
-                >
-                  {responsibility.responsible?.initial ?? '?'}
-                </span>
+              <div
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-casa-bg border border-casa-border/80 text-caption font-medium"
+                title={`${responsibility.responsible.name} (${responsibility.roleBadge === 'drive' ? 'Driver assigned' : isHosted ? 'Hosting' : 'Supervising'})`}
+              >
+                <div className="relative inline-flex shrink-0">
+                  <span
+                    className="w-5 h-5 rounded-full text-white flex items-center justify-center text-caption font-bold leading-none"
+                    style={{ backgroundColor: responsibility.responsible?.color ?? 'var(--color-casa-gold)' }}
+                  >
+                    {responsibility.responsible?.initial ?? '?'}
+                  </span>
+                  <span
+                    className={cn(
+                      'absolute -bottom-1 -right-1 w-3 h-3 rounded-full border border-casa-surface flex items-center justify-center',
+                      responsibility.roleBadge === 'drive' ? 'bg-casa-navy' : 'bg-casa-success-strong'
+                    )}
+                    aria-label={responsibility.roleBadge === 'drive' ? 'Drives' : isHosted ? 'Hosting' : 'Supervising'}
+                  >
+                    {responsibility.roleBadge === 'drive' ? <DrivingBadgeIcon /> : <SupervisingBadgeIcon />}
+                  </span>
+                </div>
                 <span className="text-caption font-semibold text-casa-navy">
                   {responsibility.responsible.name}
-                </span>
-                <span className={cn(
-                  'text-caption font-bold px-1.5 py-0.5 rounded flex items-center gap-1',
-                  responsibility.roleBadge === 'drive' ? 'bg-casa-gold/15 text-casa-gold' : 'bg-casa-success/15 text-casa-success-strong'
-                )}>
-                  {responsibility.roleBadge === 'drive' ? (
-                    <>
-                      <span className="w-3.5 h-3.5 bg-casa-navy rounded-full inline-flex items-center justify-center">
-                        <DrivingBadgeIcon />
-                      </span>
-                      <span>Driver Assigned</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="w-3.5 h-3.5 bg-casa-success-strong rounded-full inline-flex items-center justify-center">
-                        <SupervisingBadgeIcon />
-                      </span>
-                      <span>{isHosted ? 'Hosting' : 'Supervising'}</span>
-                    </>
-                  )}
                 </span>
               </div>
             ) : (
@@ -567,18 +556,18 @@ export function DayEventCard({
 
 export function DrivingBadgeIcon() {
   return (
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <circle cx="12" cy="12" r="8.5" stroke="white" strokeWidth="2" strokeLinecap="round" />
-      <circle cx="12" cy="12" r="2" stroke="white" strokeWidth="2" />
-      <path d="M12 3.5v6M5.8 16.6l4.1-2.7M18.2 16.6l-4.1-2.7" stroke="white" strokeWidth="2" strokeLinecap="round" />
+    <svg viewBox="0 0 24 24" fill="none" className="w-full h-full p-0.5" aria-hidden>
+      <circle cx="12" cy="12" r="8.5" stroke="white" strokeWidth="2.2" strokeLinecap="round" />
+      <circle cx="12" cy="12" r="2" stroke="white" strokeWidth="2.2" />
+      <path d="M12 3.5v6M5.8 16.6l4.1-2.7M18.2 16.6l-4.1-2.7" stroke="white" strokeWidth="2.2" strokeLinecap="round" />
     </svg>
   )
 }
 
 export function SupervisingBadgeIcon() {
   return (
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path d="M12 3l7 2.6v5.2c0 4.3-3 7.3-7 8.4-4-1.1-7-4.1-7-8.4V5.6z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    <svg viewBox="0 0 24 24" fill="none" className="w-full h-full p-0.5" aria-hidden>
+      <path d="M12 3l7 2.6v5.2c0 4.3-3 7.3-7 8.4-4-1.1-7-4.1-7-8.4V5.6z" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
 }

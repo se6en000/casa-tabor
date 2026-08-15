@@ -40,18 +40,18 @@ function formatCompactDuration(minutes: number): string {
 
 function DrivingBadgeIcon() {
   return (
-    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <circle cx="12" cy="12" r="8.5" stroke="white" strokeWidth="2" strokeLinecap="round" />
-      <circle cx="12" cy="2" stroke="white" strokeWidth="2" />
-      <path d="M12 3.5v6M5.8 16.6l4.1-2.7M18.2 16.6l-4.1-2.7" stroke="white" strokeWidth="2" strokeLinecap="round" />
+    <svg viewBox="0 0 24 24" fill="none" className="w-full h-full p-0.5" aria-hidden>
+      <circle cx="12" cy="12" r="8.5" stroke="white" strokeWidth="2.2" strokeLinecap="round" />
+      <circle cx="12" cy="12" r="2" stroke="white" strokeWidth="2.2" />
+      <path d="M12 3.5v6M5.8 16.6l4.1-2.7M18.2 16.6l-4.1-2.7" stroke="white" strokeWidth="2.2" strokeLinecap="round" />
     </svg>
   )
 }
 
 function SupervisingBadgeIcon() {
   return (
-    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path d="M12 3l7 2.6v5.2c0 4.3-3 7.3-7 8.4-4-1.1-7-4.1-7-8.4V5.6z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    <svg viewBox="0 0 24 24" fill="none" className="w-full h-full p-0.5" aria-hidden>
+      <path d="M12 3l7 2.6v5.2c0 4.3-3 7.3-7 8.4-4-1.1-7-4.1-7-8.4V5.6z" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
 }
@@ -648,17 +648,28 @@ function EventCard({ event, household, now = new Date(), onClick, onDoubleClick,
         <div className="flex items-center gap-1.5 shrink-0">
           {responsibility.responsible && (
             <div
-              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-casa-bg border border-casa-border/70 text-caption font-medium"
-              title={`${responsibility.responsible.name} ${responsibility.roleBadge === 'drive' ? 'driver assigned' : isHosted ? 'hosting' : 'supervising'}`}
+              className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-full bg-casa-bg border border-casa-border/70 text-caption font-medium"
+              title={`${responsibility.responsible.name} (${responsibility.roleBadge === 'drive' ? 'Driver assigned' : isHosted ? 'Hosting' : 'Supervising'})`}
             >
-              <span
-                className="flex size-3.5 shrink-0 items-center justify-center rounded-full text-caption font-extrabold text-white"
-                style={{ backgroundColor: responsibility.responsible.color ?? 'var(--color-casa-gold)' }}
-              >
-                {responsibility.responsible.initial ?? responsibility.responsible.name?.[0]?.toUpperCase() ?? '?'}
-              </span>
-              <span className="text-caption font-semibold text-casa-navy hidden xs:inline">
-                {responsibility.roleBadge === 'drive' ? 'Drives' : isHosted ? 'Hosting' : 'Supervising'}
+              <div className="relative inline-flex shrink-0">
+                <span
+                  className="flex size-3.5 shrink-0 items-center justify-center rounded-full text-caption font-extrabold text-white leading-none"
+                  style={{ backgroundColor: responsibility.responsible.color ?? 'var(--color-casa-gold)' }}
+                >
+                  {responsibility.responsible.initial ?? responsibility.responsible.name?.[0]?.toUpperCase() ?? '?'}
+                </span>
+                <span
+                  className={cn(
+                    'absolute -bottom-1 -right-1 w-2.5 h-2.5 rounded-full border border-casa-surface flex items-center justify-center',
+                    responsibility.roleBadge === 'drive' ? 'bg-casa-navy' : 'bg-casa-success-strong'
+                  )}
+                  aria-label={responsibility.roleBadge === 'drive' ? 'Drives' : isHosted ? 'Hosting' : 'Supervising'}
+                >
+                  {responsibility.roleBadge === 'drive' ? <DrivingBadgeIcon /> : <SupervisingBadgeIcon />}
+                </span>
+              </div>
+              <span className="text-caption font-semibold text-casa-navy hidden xs:inline truncate max-w-[65px]">
+                {responsibility.responsible.name ? responsibility.responsible.name.split(' ')[0] : ''}
               </span>
             </div>
           )}
@@ -818,43 +829,34 @@ function EventCard({ event, household, now = new Date(), onClick, onDoubleClick,
             {responsibility.responsible ? (
               <div
                 className={cn(
-                  'inline-flex min-w-0 max-w-[70%] items-center gap-1 px-1.5 py-0.5 rounded-full border text-caption font-semibold',
+                  'inline-flex min-w-0 max-w-[70%] items-center gap-1.5 px-2 py-0.5 rounded-full border text-caption font-semibold',
                   isHeroState
                     ? 'bg-white/10 border-white/20 text-white'
                     : 'bg-casa-bg border-casa-border/80 text-casa-navy'
                 )}
-                title={`${responsibility.responsible.name} ${responsibility.roleBadge === 'drive' ? 'driver assigned' : isHosted ? 'hosting' : 'supervising'}`}
+                title={`${responsibility.responsible.name} (${responsibility.roleBadge === 'drive' ? 'Driver assigned' : isHosted ? 'Hosting' : 'Supervising'})`}
               >
-                <span
-                  className="flex size-4 shrink-0 items-center justify-center rounded-full text-caption font-extrabold leading-none text-white"
-                  style={{ backgroundColor: responsibility.responsible.color ?? 'var(--color-casa-gold)' }}
-                >
-                  {responsibility.responsible.initial ?? responsibility.responsible.name?.[0]?.toUpperCase() ?? '?'}
-                </span>
-                <span className="truncate font-medium max-w-[50px]">
+                <div className="relative inline-flex shrink-0">
+                  <span
+                    className="flex size-4 shrink-0 items-center justify-center rounded-full text-caption font-extrabold leading-none text-white"
+                    style={{ backgroundColor: responsibility.responsible.color ?? 'var(--color-casa-gold)' }}
+                  >
+                    {responsibility.responsible.initial ?? responsibility.responsible.name?.[0]?.toUpperCase() ?? '?'}
+                  </span>
+                  <span
+                    className={cn(
+                      'absolute -bottom-1 -right-1 w-2.5 h-2.5 rounded-full border border-casa-surface flex items-center justify-center',
+                      responsibility.roleBadge === 'drive'
+                        ? isHeroState ? 'bg-casa-navy' : 'bg-casa-navy'
+                        : isHeroState ? 'bg-emerald-600' : 'bg-casa-success-strong'
+                    )}
+                    aria-label={responsibility.roleBadge === 'drive' ? 'Drives' : isHosted ? 'Hosting' : 'Supervising'}
+                  >
+                    {responsibility.roleBadge === 'drive' ? <DrivingBadgeIcon /> : <SupervisingBadgeIcon />}
+                  </span>
+                </div>
+                <span className="truncate font-medium max-w-[70px]">
                   {responsibility.responsible.name ? responsibility.responsible.name.split(' ')[0] : ''}
-                </span>
-                <span className={cn(
-                  'text-caption font-bold px-1 rounded flex items-center gap-0.5',
-                  responsibility.roleBadge === 'drive'
-                    ? isHeroState ? 'bg-casa-gold/25 text-casa-gold' : 'bg-casa-gold/15 text-casa-gold'
-                    : isHeroState ? 'bg-emerald-400/25 text-emerald-300' : 'bg-casa-success/15 text-casa-success-strong'
-                )}>
-                  {responsibility.roleBadge === 'drive' ? (
-                    <>
-                      <span className="w-2.5 h-2.5 bg-casa-navy rounded-full inline-flex items-center justify-center shrink-0">
-                        <DrivingBadgeIcon />
-                      </span>
-                      <span className="text-caption font-bold">Drives</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="w-2.5 h-2.5 bg-casa-success-strong rounded-full inline-flex items-center justify-center shrink-0">
-                        <SupervisingBadgeIcon />
-                      </span>
-                      <span className="text-caption font-bold">{isHosted ? 'Hosting' : 'Supervising'}</span>
-                    </>
-                  )}
                 </span>
               </div>
             ) : (
