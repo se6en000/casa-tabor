@@ -11,7 +11,7 @@ import {
 } from './usePrepItems'
 import { useFamilyMembers } from './useFamilyMembers'
 import { useHomeWeather } from './useHomeWeather'
-import type { SnoozeDuration } from '../utils/snoozeDuration'
+import { type SnoozeDuration, snoozeDurationLabel } from '../utils/snoozeDuration'
 import { useAttentionStore } from '../stores/attentionStore'
 import { useAppStore } from '../stores/appStore'
 import type { PrepItem, Conflict, FamilyMember } from '../types'
@@ -277,7 +277,17 @@ export function useTurboCanvasPresenter(): TurboCanvasPresenterState {
   }
 
   const handleSnoozePrep = (id: string, period: SnoozeDuration) => {
-    snoozePrep(id, period)
+    const item = prepItems.find((p) => p.id === id)
+    const toastId = `prep-${id}`
+    const periodLabel = snoozeDurationLabel(period) || period
+    const label = item?.description || item?.event_title || 'Task'
+    scheduleUndoableAction({
+      id: toastId,
+      title: `Snoozed (${periodLabel})`,
+      actionLabel: label,
+      onCommit: () => snoozePrep(id, period),
+      onUndo: () => {},
+    })
   }
 
   const handlePushPrep = (item: PrepItem, bucket: 'later_today' | 'tomorrow' | 'weekend') => {

@@ -187,8 +187,8 @@ function AppShell() {
 
       <TouchKeyboard />
 
-      {/* Global Living Canvas Undo Toast */}
-      {experienceMode === 'living_canvas' && <CanvasUndoToast />}
+      {/* Global Undo Toast */}
+      <CanvasUndoToast />
 
       {/* Art screensaver overlay — always available when triggered manually; idle auto-fire respects settings.enabled */}
       {screensaverActive && (

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import {
   AlertTriangle,
   CheckCircle2,
@@ -79,10 +79,54 @@ export default function ActionQueueWidget({
   const [pushedExpanded, setPushedExpanded] = useState(false)
   const [openSnoozeId, setOpenSnoozeId] = useState<string | null>(null)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+  const [optimisticDismissedIds, setOptimisticDismissedIds] = useState<Set<string>>(new Set())
 
-  const totalUrgent = activeConflicts.length
-  const totalTasks = activePrep.length
+  // Instant 0ms client-side filter
+  const visibleConflicts = useMemo(
+    () => activeConflicts.filter((c) => !optimisticDismissedIds.has(`conflict-${c.id}`)),
+    [activeConflicts, optimisticDismissedIds]
+  )
+
+  const visiblePrep = useMemo(
+    () => activePrep.filter((p) => !optimisticDismissedIds.has(`prep-${p.id}`)),
+    [activePrep, optimisticDismissedIds]
+  )
+
+  const totalUrgent = visibleConflicts.length
+  const totalTasks = visiblePrep.length
   const totalActionable = totalUrgent + totalTasks
+
+  const onInstantComplete = (item: PrepItem) => {
+    setOptimisticDismissedIds((prev) => new Set(prev).add(`prep-${item.id}`))
+    setOpenSnoozeId(null)
+    setOpenMenuId(null)
+    handleCompletePrep(item)
+  }
+
+  const onInstantSnooze = (item: PrepItem, period: SnoozeDuration) => {
+    setOptimisticDismissedIds((prev) => new Set(prev).add(`prep-${item.id}`))
+    setOpenSnoozeId(null)
+    setOpenMenuId(null)
+    handleSnoozePrep(item.id, period)
+  }
+
+  const onInstantDownvote = (item: PrepItem) => {
+    setOptimisticDismissedIds((prev) => new Set(prev).add(`prep-${item.id}`))
+    setOpenMenuId(null)
+    handleDownvotePrep(item)
+  }
+
+  const onInstantPush = (item: PrepItem, bucket: 'later_today' | 'tomorrow' | 'weekend') => {
+    setOptimisticDismissedIds((prev) => new Set(prev).add(`prep-${item.id}`))
+    setOpenSnoozeId(null)
+    setOpenMenuId(null)
+    handlePushPrep(item, bucket)
+  }
+
+  const onInstantResolveConflict = (conflict: Conflict, resolution: string) => {
+    setOptimisticDismissedIds((prev) => new Set(prev).add(`conflict-${conflict.id}`))
+    handleResolveConflict(conflict, resolution)
+  }
 
   return (
     <div className="w-full h-full flex flex-col bg-transparent overflow-hidden min-h-0 relative">
@@ -136,89 +180,170 @@ export default function ActionQueueWidget({
       {/* ── Scrollable Action Container ── */}
       <div className="flex-1 overflow-y-auto pr-1 space-y-3.5 min-h-0 touch-pan-y overscroll-contain pb-6">
         {/* ── SECTION 1: URGENT LOGISTICS & CONFLICTS ── */}
-        {activeConflicts.length > 0 && (
+        {visibleConflicts.length > 0 && (
           <div className="space-y-3">
             <div className="flex items-center gap-2 px-1">
               <span className="w-2 h-2 rounded-full bg-amber-500" />
               <h3 className="text-caption font-bold uppercase tracking-wider text-casa-muted">
-                Urgent Logistics Triage ({activeConflicts.length})
+                Urgent Logistics Triage ({visibleConflicts.length})
               </h3>
             </div>
 
-            {activeConflicts.map((c) => {
-              const isDriveTime = c.conflict_type === 'drive_time'
-              const isOverlap = c.conflict_type === 'double_book' || c.conflict_type === 'overlap'
-              const availabilities = getDriverAvailabilities(c)
-              const recommended = availabilities.find((a) => a.isAvailable) || availabilities[0]
+            <AnimatePresence mode="popLayout">
+              {visibleConflicts.map((c) => {
+                const isDriveTime = c.conflict_type === 'drive_time'
+                const isOverlap = c.conflict_type === 'double_book' || c.conflict_type === 'overlap'
+                const availabilities = getDriverAvailabilities(c)
+                const recommended = availabilities.find((a) => a.isAvailable) || availabilities[0]
 
-              return (
-                <motion.div
-                  key={c.id}
-                  layout
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.96 }}
-                  transition={{ duration: 0.2 }}
-                  className="p-4.5 rounded-2xl bg-amber-50/80 border border-amber-300/90 shadow-card relative"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="inline-flex items-center gap-1 text-caption font-bold px-2 py-0.5 rounded-full bg-amber-200/90 text-amber-950 uppercase tracking-wide">
-                          {isDriveTime ? (
-                            <>
-                              <Car size={12} />
-                              Ride Needed
-                            </>
-                          ) : isOverlap ? (
-                            <>
-                              <AlertTriangle size={12} />
-                              Schedule Conflict
-                            </>
-                          ) : (
-                            <>
-                              <Sparkles size={12} />
-                              Attention Needed
-                            </>
-                          )}
-                        </span>
+                return (
+                  <motion.div
+                    key={c.id}
+                    layout
+                    initial={{ opacity: 0, y: 12, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{
+                      opacity: 0,
+                      x: 90,
+                      scale: 0.94,
+                      transition: { duration: 0.22, ease: [0.32, 0.72, 0, 1] },
+                    }}
+                    transition={{
+                      layout: { duration: 0.28, ease: [0.25, 1, 0.5, 1] },
+                    }}
+                    className="p-4.5 rounded-2xl bg-amber-50/80 border border-amber-300/90 shadow-card relative"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="inline-flex items-center gap-1 text-caption font-bold px-2 py-0.5 rounded-full bg-amber-200/90 text-amber-950 uppercase tracking-wide">
+                            {isDriveTime ? (
+                              <>
+                                <Car size={12} />
+                                Ride Needed
+                              </>
+                            ) : isOverlap ? (
+                              <>
+                                <AlertTriangle size={12} />
+                                Schedule Conflict
+                              </>
+                            ) : (
+                              <>
+                                <Sparkles size={12} />
+                                Attention Needed
+                              </>
+                            )}
+                          </span>
+                        </div>
+
+                        <p className="text-body-sm font-bold text-casa-navy leading-snug">
+                          {c.description || 'Household logistics need coordination'}
+                        </p>
                       </div>
 
-                      <p className="text-body-sm font-bold text-casa-navy leading-snug">
-                        {c.description || 'Household logistics need coordination'}
-                      </p>
+                      <IconButton
+                        variant="ghost"
+                        size="sm"
+                        title="Solve with Copilot"
+                        aria-label="Solve with Copilot"
+                        onClick={() => openCopilotForConflict(c)}
+                        className="p-2.5 rounded-xl text-casa-gold hover:bg-casa-gold/20 min-h-[44px] min-w-[44px] shrink-0 flex items-center justify-center"
+                        icon={<Sparkles size={16} />}
+                      />
                     </div>
 
-                    <IconButton
-                      variant="ghost"
-                      size="sm"
-                      title="Solve with Copilot"
-                      aria-label="Solve with Copilot"
-                      onClick={() => openCopilotForConflict(c)}
-                      className="p-2.5 rounded-xl text-casa-gold hover:bg-casa-gold/20 min-h-[44px] min-w-[44px] shrink-0 flex items-center justify-center"
-                      icon={<Sparkles size={16} />}
-                    />
-                  </div>
+                    {/* ── Driver & Resolution Controls ── */}
+                    <div className="mt-3 pt-3 border-t border-amber-200/70">
+                      {isDriveTime ? (
+                        <div className="space-y-2.5">
+                          <div className="flex flex-wrap items-center gap-2">
+                            {recommended && (
+                              <Button
+                                size="sm"
+                                variant="primary"
+                                onClick={() =>
+                                  onInstantResolveConflict(
+                                    c,
+                                    `Assigned ${recommended.member.name} as driver`
+                                  )
+                                }
+                                className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-caption font-bold shadow-sm transition-all min-h-[44px] flex items-center gap-2"
+                              >
+                                <Car size={15} />
+                                <span>Assign {recommended.member.name} (Recommended)</span>
+                              </Button>
+                            )}
 
-                  {/* ── Driver & Resolution Controls ── */}
-                  <div className="mt-3 pt-3 border-t border-amber-200/70">
-                    {isDriveTime ? (
-                      <div className="space-y-2.5">
-                        <div className="flex flex-wrap items-center gap-2">
-                          {recommended && (
                             <Button
                               size="sm"
-                              variant="primary"
-                              onClick={() =>
-                                handleResolveConflict(
-                                  c,
-                                  `Assigned ${recommended.member.name} as driver`
-                                )
-                              }
-                              className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-caption font-bold shadow-sm transition-all min-h-[44px] flex items-center gap-2"
+                              variant="ghost"
+                              onClick={() => openCopilotForConflict(c)}
+                              className="px-3.5 py-2 rounded-xl text-amber-900 hover:bg-amber-200/60 text-caption font-semibold transition-all min-h-[44px] flex items-center gap-1.5"
                             >
-                              <Car size={15} />
-                              <span>Assign {recommended.member.name} (Recommended)</span>
+                              <Sparkles size={14} className="text-amber-700" />
+                              <span>Ask Copilot</span>
+                            </Button>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 pt-1">
+                            <span className="text-caption text-casa-muted font-medium mr-1">
+                              Or assign:
+                            </span>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {availabilities.map(({ member, isAvailable }) => (
+                                <Button
+                                  key={member.id}
+                                  size="sm"
+                                  variant="secondary"
+                                  onClick={() =>
+                                    onInstantResolveConflict(
+                                      c,
+                                      `Assigned ${member.name} as driver`
+                                    )
+                                  }
+                                  title={`${member.name}: ${isAvailable ? 'Free' : 'Has conflict'}`}
+                                  className={cn(
+                                    'px-3 py-2 rounded-xl text-caption font-semibold transition-all min-h-[44px] flex items-center gap-1.5',
+                                    isAvailable
+                                      ? 'bg-casa-surface border-casa-border hover:border-casa-navy text-casa-navy'
+                                      : 'bg-casa-surface/60 border-casa-border/50 text-casa-muted opacity-80'
+                                  )}
+                                >
+                                  <StatusDot
+                                    variant={isAvailable ? 'active' : 'warning'}
+                                    size="sm"
+                                    pulse={false}
+                                  />
+                                  <span>{member.name}</span>
+                                </Button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      ) : isOverlap ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            onClick={() =>
+                              onInstantResolveConflict(c, 'Split transport: 2 drivers assigned')
+                            }
+                            className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-caption font-bold shadow-sm transition-all min-h-[44px] flex items-center gap-1.5"
+                          >
+                            <Car size={14} />
+                            <span>Assign 2nd Driver</span>
+                          </Button>
+
+                          {c.event_a && (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() =>
+                                onInstantResolveConflict(c, `Kept: ${c.event_a?.title || 'Event A'}`)
+                              }
+                              className="px-3 py-2 rounded-xl bg-casa-surface border border-casa-border hover:border-casa-navy text-casa-navy text-caption font-semibold transition-all min-h-[44px]"
+                            >
+                              Prioritize {shortTitle(c.event_a.title, 14)}
                             </Button>
                           )}
 
@@ -229,113 +354,41 @@ export default function ActionQueueWidget({
                             className="px-3.5 py-2 rounded-xl text-amber-900 hover:bg-amber-200/60 text-caption font-semibold transition-all min-h-[44px] flex items-center gap-1.5"
                           >
                             <Sparkles size={14} className="text-amber-700" />
-                            <span>Ask Copilot</span>
+                            <span>Reschedule with Copilot</span>
+                          </Button>
+
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => onInstantResolveConflict(c, 'Acknowledged overlap')}
+                            className="px-3 py-2 rounded-xl text-casa-muted hover:text-casa-navy hover:bg-black/5 text-caption font-semibold transition-all min-h-[44px]"
+                          >
+                            Acknowledge
                           </Button>
                         </div>
-
-                        <div className="flex items-center gap-1.5 pt-1">
-                          <span className="text-caption text-casa-muted font-medium mr-1">
-                            Or assign:
-                          </span>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            {availabilities.map(({ member, isAvailable }) => (
-                              <Button
-                                key={member.id}
-                                size="sm"
-                                variant="secondary"
-                                onClick={() =>
-                                  handleResolveConflict(
-                                    c,
-                                    `Assigned ${member.name} as driver`
-                                  )
-                                }
-                                title={`${member.name}: ${isAvailable ? 'Free' : 'Has conflict'}`}
-                                className={cn(
-                                  'px-3 py-2 rounded-xl text-caption font-semibold transition-all min-h-[44px] flex items-center gap-1.5',
-                                  isAvailable
-                                    ? 'bg-casa-surface border-casa-border hover:border-casa-navy text-casa-navy'
-                                    : 'bg-casa-surface/60 border-casa-border/50 text-casa-muted opacity-80'
-                                )}
-                              >
-                                <StatusDot
-                                  variant={isAvailable ? 'active' : 'warning'}
-                                  size="sm"
-                                  pulse={false}
-                                />
-                                <span>{member.name}</span>
-                              </Button>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    ) : isOverlap ? (
-                      <div className="flex flex-wrap items-center gap-2">
+                      ) : (
                         <Button
                           size="sm"
                           variant="primary"
-                          onClick={() =>
-                            handleResolveConflict(c, 'Split transport: 2 drivers assigned')
-                          }
-                          className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-caption font-bold shadow-sm transition-all min-h-[44px] flex items-center gap-1.5"
+                          onClick={() => onInstantResolveConflict(c, 'Resolved')}
+                          className="px-3.5 py-2 rounded-xl bg-amber-500 text-white hover:bg-amber-600 text-caption font-bold shadow-sm transition-all min-h-[44px] flex items-center gap-1.5"
                         >
-                          <Car size={14} />
-                          <span>Assign 2nd Driver</span>
+                          <Check size={14} />
+                          <span>Acknowledge & Clear</span>
                         </Button>
-
-                        {c.event_a && (
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() =>
-                              handleResolveConflict(c, `Kept: ${c.event_a?.title || 'Event A'}`)
-                            }
-                            className="px-3 py-2 rounded-xl bg-casa-surface border border-casa-border hover:border-casa-navy text-casa-navy text-caption font-semibold transition-all min-h-[44px]"
-                          >
-                            Prioritize {shortTitle(c.event_a.title, 14)}
-                          </Button>
-                        )}
-
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => openCopilotForConflict(c)}
-                          className="px-3.5 py-2 rounded-xl text-amber-900 hover:bg-amber-200/60 text-caption font-semibold transition-all min-h-[44px] flex items-center gap-1.5"
-                        >
-                          <Sparkles size={14} className="text-amber-700" />
-                          <span>Reschedule with Copilot</span>
-                        </Button>
-
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleResolveConflict(c, 'Acknowledged overlap')}
-                          className="px-3 py-2 rounded-xl text-casa-muted hover:text-casa-navy hover:bg-black/5 text-caption font-semibold transition-all min-h-[44px]"
-                        >
-                          Acknowledge
-                        </Button>
-                      </div>
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant="primary"
-                        onClick={() => handleResolveConflict(c, 'Resolved')}
-                        className="px-3.5 py-2 rounded-xl bg-amber-500 text-white hover:bg-amber-600 text-caption font-bold shadow-sm transition-all min-h-[44px] flex items-center gap-1.5"
-                      >
-                        <Check size={14} />
-                        <span>Acknowledge & Clear</span>
-                      </Button>
-                    )}
-                  </div>
-                </motion.div>
-              )
-            })}
+                      )}
+                    </div>
+                  </motion.div>
+                )
+              })}
+            </AnimatePresence>
           </div>
         )}
 
         {/* ── SECTION 2: LUXURY UNIVERSAL CARDS ON SOLID CANVAS ── */}
         <div className="space-y-3.5">
           <AnimatePresence mode="popLayout">
-            {activePrep.map((item) => {
+            {visiblePrep.map((item) => {
               const badge = sourceBadge(item)
               const BadgeIcon = badge.icon
               const amount = extractAmount(item.description || item.event_title)
@@ -347,10 +400,17 @@ export default function ActionQueueWidget({
                 <motion.article
                   key={item.id}
                   layout
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, x: 28, scale: 0.96 }}
-                  transition={{ duration: 0.22, ease: [0.2, 0.8, 0.2, 1] }}
+                  initial={{ opacity: 0, y: 12, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{
+                    opacity: 0,
+                    x: 90,
+                    scale: 0.94,
+                    transition: { duration: 0.22, ease: [0.32, 0.72, 0, 1] },
+                  }}
+                  transition={{
+                    layout: { duration: 0.28, ease: [0.25, 1, 0.5, 1] },
+                  }}
                   className="p-5 rounded-2xl bg-casa-surface border border-casa-border/90 hover:border-casa-gold/60 transition-all shadow-card hover:shadow-card-hover flex flex-col gap-3.5 relative"
                 >
                   {/* ── Top Context & Category Strip ── */}
@@ -392,10 +452,7 @@ export default function ActionQueueWidget({
                               variant="ghost"
                               size="sm"
                               align="start"
-                              onClick={() => {
-                                handleDownvotePrep(item)
-                                setOpenMenuId(null)
-                              }}
+                              onClick={() => onInstantDownvote(item)}
                               className="w-full text-caption text-casa-error hover:bg-rose-50 transition-colors font-medium min-h-[38px]"
                               leadingIcon={<ThumbsDown size={13} />}
                             >
@@ -425,7 +482,7 @@ export default function ActionQueueWidget({
                     <Button
                       size="sm"
                       variant="secondary"
-                      onClick={() => handleCompletePrep(item)}
+                      onClick={() => onInstantComplete(item)}
                       className="px-3.5 sm:px-4 py-1.5 rounded-full bg-casa-bg hover:bg-emerald-50 text-casa-navy hover:text-emerald-950 border border-casa-border hover:border-emerald-500/80 text-caption font-bold shadow-2xs transition-all min-h-[38px] shrink-0"
                       leadingIcon={<Check size={14} strokeWidth={2.5} className="text-emerald-600" />}
                     >
@@ -437,7 +494,7 @@ export default function ActionQueueWidget({
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => handleSnoozePrep(item.id, 'tomorrow')}
+                        onClick={() => onInstantSnooze(item, 'tomorrow')}
                         className="px-3 sm:px-3.5 py-1.5 text-caption font-semibold text-casa-navy hover:text-casa-gold-hover transition-colors min-h-[38px] rounded-l-full rounded-r-none border-none"
                         title="Snooze to tomorrow morning"
                         leadingIcon={<Clock size={13} className="text-casa-gold" />}
@@ -477,10 +534,7 @@ export default function ActionQueueWidget({
                             variant="ghost"
                             size="sm"
                             align="start"
-                            onClick={() => {
-                              handleSnoozePrep(item.id, '3h')
-                              setOpenSnoozeId(null)
-                            }}
+                            onClick={() => onInstantSnooze(item, '3h')}
                             className="w-full px-2.5 py-1.5 rounded-xl bg-casa-bg hover:bg-casa-gold/15 border border-casa-border/60 text-caption text-casa-navy transition-colors font-medium min-h-[36px]"
                             leadingIcon={<Moon size={13} className="text-casa-gold" />}
                           >
@@ -491,10 +545,7 @@ export default function ActionQueueWidget({
                             variant="ghost"
                             size="sm"
                             align="start"
-                            onClick={() => {
-                              handleSnoozePrep(item.id, 'tomorrow')
-                              setOpenSnoozeId(null)
-                            }}
+                            onClick={() => onInstantSnooze(item, 'tomorrow')}
                             className="w-full px-2.5 py-1.5 rounded-xl bg-casa-bg hover:bg-casa-gold/15 border border-casa-border/60 text-caption text-casa-navy transition-colors font-medium min-h-[36px]"
                             leadingIcon={<Sun size={13} className="text-casa-gold" />}
                           >
@@ -505,10 +556,7 @@ export default function ActionQueueWidget({
                             variant="ghost"
                             size="sm"
                             align="start"
-                            onClick={() => {
-                              handlePushPrep(item, 'weekend')
-                              setOpenSnoozeId(null)
-                            }}
+                            onClick={() => onInstantPush(item, 'weekend')}
                             className="w-full px-2.5 py-1.5 rounded-xl bg-casa-bg hover:bg-casa-gold/15 border border-casa-border/60 text-caption text-casa-navy transition-colors font-medium min-h-[36px]"
                             leadingIcon={<Calendar size={13} className="text-casa-gold" />}
                           >
@@ -523,7 +571,7 @@ export default function ActionQueueWidget({
             })}
           </AnimatePresence>
 
-          {activePrep.length === 0 && activeConflicts.length === 0 && (
+          {visiblePrep.length === 0 && visibleConflicts.length === 0 && (
             <div className="flex flex-col items-center justify-center h-48 text-center p-6 bg-emerald-50/50 rounded-2xl border border-emerald-200">
               <CheckCircle2 size={36} className="text-emerald-600 mb-2" />
               <h4 className="font-display text-body-lg font-bold text-emerald-900">
