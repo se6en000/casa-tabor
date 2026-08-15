@@ -38,10 +38,12 @@ import { getEventDisplayStartDay } from '../../utils/eventTime'
 import { cleanEventTitle, isBirthdayEvent } from '../../utils/eventTitle'
 import { BirthdayCardDecoration } from '../shared/BirthdayCardDecoration'
 import { Alert, Button, Card, Chip, DisclosureSection, IconButton, Switch } from '../ui'
+import { Input } from '../ui/Field'
 import EventTransportationSection from './EventTransportationSection'
 import InlinePlaceEditor from './InlinePlaceEditor'
 import AddressReviewSummary, { AddressTechnicalStatusChip, type AddressTechnicalStatus } from './AddressReviewSummary'
 import RecurrenceScopeDialog from './RecurrenceScopeDialog'
+import type { SnoozeDuration } from '../../utils/snoozeDuration'
 import {
   isTrustedPlaceSelection,
   persistScopedEventLocation,
@@ -61,6 +63,7 @@ import {
   type RecurringQuickActionRequest,
   type RecurringQuickActionResult,
 } from '../../hooks/useRecurringQuickAction'
+import { useReminderNeedsYouActions } from '../../hooks/useReminderNeedsYouActions'
 import { publishEventAggregatePatch } from '../../lib/eventAggregateCache'
 
 // Calendar-specific aliases compose the shared theme contract without creating a parallel palette.
@@ -853,7 +856,7 @@ function MemberEditor({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2.5">
       {mutationError && <p role="alert" className="w-full text-caption text-casa-error">{mutationError}</p>}
       {allMembers.map((member) => {
         const selected = assignedIds.has(member.id)
@@ -873,14 +876,23 @@ function MemberEditor({
             disabled={saving !== null}
             selected={selected}
             tone={selected ? 'accent' : 'neutral'}
-            className={cn(selected && 'border-transparent text-white', isLoading && 'opacity-60')}
+            className={cn(
+              'min-h-control-lg px-3 py-1.5 font-medium transition-transform active:scale-95 cursor-pointer select-none',
+              selected && 'border-transparent text-white shadow-2xs',
+              isLoading && 'opacity-60'
+            )}
             style={selected ? { backgroundColor: member.color_hex, borderColor: member.color_hex } : undefined}
           >
             <span
-              className={cn('size-2 shrink-0 rounded-full', selected && 'bg-white/60')}
+              className={cn(
+                'flex size-5 shrink-0 items-center justify-center rounded-full text-caption font-bold transition-all',
+                selected ? 'bg-white/25 text-white' : 'text-white'
+              )}
               style={selected ? undefined : { backgroundColor: member.color_hex }}
-            />
-            {member.name}
+            >
+              {selected ? <Check size={12} strokeWidth={2.5} /> : (member.name?.[0]?.toUpperCase() ?? '?')}
+            </span>
+            <span className="text-body-sm font-semibold">{member.name}</span>
           </Chip>
         )
       })}
@@ -1087,6 +1099,138 @@ function PanelHeader({
   const [scopeOpen, setScopeOpen] = useState(false)
   const [addressEditError, setAddressEditError] = useState<string | null>(null)
   const [addressSaving, setAddressSaving] = useState(false)
+  const queryClient = useQueryClient()
+  const { completeReminder, snoozeReminderByDuration } = useReminderNeedsYouActions()
+  const [shiftingTime, setShiftingTime] = useState(false)
+  const [editingTitle, setEditingTitle] = useState(false)
+  const [titleDraft, setTitleDraft] = useState(displayTitle)
+  const [savingTitle, setSavingTitle] = useState(false)
+  const [timeShiftError, setTimeShiftError] = useState<string | null>(null)
+  const [reminderActionState, setReminderActionState] = useState<string | null>(null)
+
+  useEffect(() => {
+    setTitleDraft(displayTitle)
+    setEditingTitle(false)
+  }, [displayTitle, event.id])
+
+  const saveTitle = async () => {
+    const trimmed = titleDraft.trim()
+    if (!trimmed || trimmed === displayTitle) {
+      setEditingTitle(false)
+      setTitleDraft(displayTitle)
+      return
+    }
+    setSavingTitle(true)
+    publishEventAggregatePatch(queryClient, event.id, {
+      title: trimmed,
+    })
+    try {
+      const result = await onQuickAction({
+        operation: 'update',
+        changedPaths: ['event.title'],
+        detailPatch: { event: { title: trimmed } },
+      })
+      if (result === 'cancelled') {
+        publishEventAggregatePatch(queryClient, event.id, {
+          title: event.title,
+        })
+        setTitleDraft(displayTitle)
+        return
+      }
+      if (result === 'legacy') {
+        const { error } = await supabase.from('events').update({ title: trimmed }).eq('id', event.id)
+        if (error) throw error
+      }
+      await queryClient.invalidateQueries({ queryKey: ['events'] })
+      await queryClient.invalidateQueries({ queryKey: ['event-details', event.id] })
+    } catch (e) {
+      console.error('Failed to update title', e)
+      setTitleDraft(displayTitle)
+    } finally {
+      setSavingTitle(false)
+      setEditingTitle(false)
+    }
+  }
+
+  const shiftTime = async (deltaMinutes: number) => {
+    if (shiftingTime || !event.start_time || !event.end_time) return
+    const startMs = new Date(event.start_time).getTime()
+    const endMs = new Date(event.end_time).getTime()
+    const deltaMs = deltaMinutes * 60_000
+    const nextStartIso = new Date(startMs + deltaMs).toISOString()
+    const nextEndIso = new Date(endMs + deltaMs).toISOString()
+
+    setShiftingTime(true)
+    setTimeShiftError(null)
+    publishEventAggregatePatch(queryClient, event.id, {
+      start_time: nextStartIso,
+      end_time: nextEndIso,
+    })
+
+    try {
+      const result = await onQuickAction({
+        operation: 'update',
+        changedPaths: ['event.startTime', 'event.endTime'],
+        detailPatch: {
+          event: {
+            start_time: nextStartIso,
+            end_time: nextEndIso,
+          },
+        },
+      })
+      if (result === 'cancelled') {
+        publishEventAggregatePatch(queryClient, event.id, {
+          start_time: event.start_time,
+          end_time: event.end_time,
+        })
+        return
+      }
+      if (result === 'legacy') {
+        const { error } = await supabase
+          .from('events')
+          .update({ start_time: nextStartIso, end_time: nextEndIso })
+          .eq('id', event.id)
+        if (error) throw error
+      }
+      await queryClient.invalidateQueries({ queryKey: ['events'] })
+      await queryClient.invalidateQueries({ queryKey: ['event-details', event.id] })
+      queryClient.removeQueries({ queryKey: ['travel-eta'] })
+    } catch (cause) {
+      publishEventAggregatePatch(queryClient, event.id, {
+        start_time: event.start_time,
+        end_time: event.end_time,
+      })
+      const msg = cause instanceof Error ? cause.message : 'Could not adjust time.'
+      setTimeShiftError(msg)
+    } finally {
+      setShiftingTime(false)
+    }
+  }
+
+  const handleCompleteReminder = async () => {
+    setReminderActionState('completing')
+    try {
+      await completeReminder(event.id)
+      onClose()
+    } catch (cause) {
+      console.error('Failed to complete reminder', cause)
+    } finally {
+      setReminderActionState(null)
+    }
+  }
+
+  const handleSnoozeReminder = async (duration: SnoozeDuration) => {
+    setReminderActionState(`snoozing-${duration}`)
+    try {
+      await snoozeReminderByDuration(event, duration)
+      onClose()
+    } catch (cause) {
+      console.error('Failed to snooze reminder', cause)
+    } finally {
+      setReminderActionState(null)
+    }
+  }
+
   const peopleCountLabel = reminder ? `${attendeeCount} assigned` : `${attendeeCount} attending`
   const editPeopleLabel = reminder ? 'Edit people' : 'Edit attendees'
   const peopleSectionLabel = reminder ? 'Assigned people' : 'Attendees'
@@ -1251,10 +1395,58 @@ function PanelHeader({
         </div>
 
         {/* Title hero */}
-        <h2 className="event-command-center-title relative z-10 mt-2 font-bold leading-tight text-casa-navy">
-          {isBirthday && <span className="mr-1.5" aria-hidden="true">🎉</span>}
-          {displayTitle}
-        </h2>
+        {editingTitle ? (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              void saveTitle()
+            }}
+            className="relative z-10 mt-2 flex items-center gap-2"
+          >
+            <Input
+              value={titleDraft}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTitleDraft(e.target.value)}
+              onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                if (e.key === 'Escape') {
+                  setTitleDraft(displayTitle)
+                  setEditingTitle(false)
+                }
+              }}
+              autoFocus
+              aria-label="Edit title"
+              className="event-command-center-title font-bold text-body-lg text-casa-navy flex-1 min-w-0"
+            />
+            <IconButton
+              type="submit"
+              icon={savingTitle ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
+              aria-label="Save title"
+              variant="primary"
+              size="sm"
+              disabled={savingTitle}
+            />
+            <IconButton
+              type="button"
+              icon={<X size={15} />}
+              aria-label="Cancel editing title"
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                setTitleDraft(displayTitle)
+                setEditingTitle(false)
+              }}
+            />
+          </form>
+        ) : (
+          <h2
+            onClick={() => { setTitleDraft(displayTitle); setEditingTitle(true) }}
+            className="event-command-center-title group relative z-10 mt-2 flex cursor-pointer items-center gap-2 font-bold leading-tight text-casa-navy hover:text-amber-950 transition-colors"
+            title="Click to edit title"
+          >
+            {isBirthday && <span className="mr-1.5" aria-hidden="true">🎉</span>}
+            <span>{displayTitle}</span>
+            <Pencil size={13} className="text-casa-muted/60 hover:text-casa-navy transition-colors shrink-0" aria-hidden="true" />
+          </h2>
+        )}
 
         {/* Meta line: category + date + duration */}
         <div className="relative z-10 mt-2 flex flex-wrap items-center gap-2 text-body-sm">
@@ -1280,7 +1472,79 @@ function PanelHeader({
               <span className="text-caption font-semibold text-casa-muted">Repeats</span>
             </>
           )}
+          {!event.all_day && event.start_time && event.end_time && (
+            <div className="flex items-center gap-1 ml-auto">
+              <Button
+                variant="secondary"
+                size="sm"
+                className="min-h-control-sm px-2 text-caption font-semibold rounded-pill active:scale-95 transition-transform"
+                disabled={shiftingTime}
+                onClick={() => void shiftTime(-15)}
+                aria-label="Move 15 minutes earlier"
+              >
+                -15m
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="min-h-control-sm px-2 text-caption font-semibold rounded-pill active:scale-95 transition-transform"
+                disabled={shiftingTime}
+                onClick={() => void shiftTime(15)}
+                aria-label="Move 15 minutes later"
+              >
+                +15m
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="min-h-control-sm px-2 text-caption font-semibold rounded-pill active:scale-95 transition-transform"
+                disabled={shiftingTime}
+                onClick={() => void shiftTime(30)}
+                aria-label="Move 30 minutes later"
+              >
+                +30m
+              </Button>
+              {shiftingTime && <Loader2 size={13} className="animate-spin text-casa-muted ml-0.5" />}
+            </div>
+          )}
         </div>
+
+        {timeShiftError && (
+          <p role="alert" className="relative z-10 mt-1 text-caption text-casa-error">{timeShiftError}</p>
+        )}
+
+        {reminder && (
+          <div className="relative mt-2.5 flex flex-wrap items-center gap-2">
+            <Button
+              variant="primary"
+              size="sm"
+              leadingIcon={reminderActionState === 'completing' ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+              disabled={reminderActionState !== null}
+              className="min-h-control font-semibold shadow-2xs active:scale-95 transition-transform"
+              onClick={() => void handleCompleteReminder()}
+            >
+              Mark Done
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={reminderActionState !== null}
+              className="min-h-control font-semibold text-caption active:scale-95 transition-transform"
+              onClick={() => void handleSnoozeReminder('1h')}
+            >
+              Snooze 1h
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={reminderActionState !== null}
+              className="min-h-control font-semibold text-caption active:scale-95 transition-transform"
+              onClick={() => void handleSnoozeReminder('tomorrow')}
+            >
+              Tomorrow
+            </Button>
+          </div>
+        )}
 
         <div className="relative mt-3">
             {showAddressSummary ? (

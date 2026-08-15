@@ -20,6 +20,7 @@ import {
   Alert,
   Button,
   Chip,
+  ConfirmationDialog,
   DateTimeDial,
   DisclosureSection,
   FormSummaryCard,
@@ -2067,7 +2068,7 @@ function EventEditSheetContent({
             }}
             onSelect={(scope) => void handleRecurringDelete(scope)}
           />
-          <Modal
+          <ConfirmationDialog
             open={showDeleteConfirm}
             onClose={() => {
               if (deleting) return
@@ -2075,42 +2076,35 @@ function EventEditSheetContent({
               setDeleteError(null)
               setDeleteBlocked(false)
             }}
-            title={deleteBlocked ? 'Cannot safely delete this event' : 'Delete this event?'}
-            size="sm"
-          >
-            <p className="text-body-sm text-casa-muted">
-              {deleteBlocked
+            onConfirm={() => void handleDelete()}
+            title={
+              deleteBlocked
+                ? 'Cannot safely delete this event'
+                : (titleRef.current?.value || displayTitle || event.title || '').trim()
+                  ? `Delete "${(titleRef.current?.value || displayTitle || event.title || '').trim()}"?`
+                  : 'Delete this event?'
+            }
+            description={
+              deleteBlocked
                 ? 'Casa left the event unchanged. Close this message and try again after recurring deletion is available.'
-                : 'This removes the event from Casa and its connected Google Calendar.'}
-            </p>
-            {deleteError && <p role="alert" className="mt-3 text-body-sm text-casa-error">{deleteError}</p>}
-            <div className="mt-4 flex justify-end gap-2">
-              <Button variant="secondary" onClick={() => {
-                setShowDeleteConfirm(false)
-                setDeleteError(null)
-                setDeleteBlocked(false)
-              }}>
-                {deleteBlocked ? 'Close' : 'Cancel'}
-              </Button>
-              {!deleteBlocked && (
-                <Button variant="danger" loading={deleting} onClick={() => void handleDelete()}>Delete event</Button>
-              )}
-            </div>
-          </Modal>
-          <Modal
+                : 'This will remove the event from Casa Tabor and its connected Google Calendar.'
+            }
+            confirmLabel="Delete event"
+            cancelLabel={deleteBlocked ? 'Close' : 'Keep event'}
+            destructive={!deleteBlocked}
+            loading={deleting}
+            error={deleteError}
+          />
+          <ConfirmationDialog
             open={showDiscardConfirm}
             onClose={cancelDiscard}
+            onConfirm={confirmDiscard}
             title="Discard changes?"
-            size="sm"
-          >
-            <p className="text-body-sm text-casa-muted">
-              You have unsaved changes. Closing now will discard them.
-            </p>
-            <div className="mt-4 flex justify-end gap-2">
-              <Button variant="secondary" onClick={cancelDiscard}>Keep editing</Button>
-              <Button variant="danger" onClick={confirmDiscard}>Discard changes</Button>
-            </div>
-          </Modal>
+            description="You have unsaved changes. Closing now will discard them."
+            confirmLabel="Discard changes"
+            cancelLabel="Keep editing"
+            destructive
+          />
         </>
       )}
     </AnimatePresence>
