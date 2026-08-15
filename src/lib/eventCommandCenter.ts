@@ -122,8 +122,8 @@ const TRIP_KEYWORDS = /\b(trip|outing|camp|scalloping|excursion|road trip|day tr
 const HOSTED_KEYWORDS = /\b(sitter|babysitter|nanny|plumber|delivery|repair|technician|cleaner|handyman|contractor|at home|home visit)\b/i
 const COVERAGE_KEYWORDS = /\b(sitter|babysitter|nanny|caregiver|childcare|watching|watch(?:es)?|caring for)\b/i
 const LOCATION_ONLY_KEYWORDS = /\b(sleep[\s-]?over|overnight stay|field trip|team bus)\b/i
-const REMOTE_KEYWORDS = /\b(zoom|google meet|microsoft teams|facetime|video call|virtual|online|remote|phone call)\b/i
-const HOSTED_CATEGORIES = new Set(['home_maintenance'])
+const REMOTE_KEYWORDS = /\b(zoom|google meet|microsoft teams|facetime|video call|virtual|online|remote|phone call|online order|order submission|submit order|place order|order online|webinar|livestream|telehealth|portal)\b/i
+const HOSTED_CATEGORIES = new Set(['home_maintenance', 'task', 'reminder', 'chore', 'family_admin', 'errand'])
 const TRIP_CATEGORIES = new Set(['travel', 'holiday'])
 
 function eventDurationHours(event: EventWithDetails): number {
@@ -139,30 +139,34 @@ function isAtHome(event: EventWithDetails, homeName?: string | null): boolean {
   const hasDestination = Boolean(event.address || event.location_name)
   if (!hasDestination) return true
   const loc = (event.location_name ?? '').toLowerCase()
-  if (loc.includes('home')) return true
+  if (loc === 'home' || loc.includes('at home')) return true
   if (homeName && loc.includes(homeName.toLowerCase())) return true
   return false
 }
 
 export function inferEventMode(event: EventWithDetails, opts?: { homeName?: string | null }): EventMode {
   const title = event.title ?? ''
+  const description = event.description ?? ''
   const category = event.enrichment?.category ?? ''
   const durationH = eventDurationHours(event)
 
-  // 1. Hosted — no destination or clearly at-home location.
+  // 1. Remote or online task -> hosted (no physical travel)
+  if (REMOTE_KEYWORDS.test(`${title} ${description}`) || /https?:\/\//i.test(`${title} ${description}`)) return 'hosted'
+
+  // 2. Hosted — no destination or clearly at-home location or task categories.
   if (isAtHome(event, opts?.homeName)) return 'hosted'
   if (HOSTED_CATEGORIES.has(category) || HOSTED_KEYWORDS.test(title)) return 'hosted'
 
-  // 2. Trip — long duration, trip categories, all-day, or trip keywords.
+  // 3. Trip — long duration, trip categories, all-day, or trip keywords.
   if (event.all_day) return 'trip'
   if (durationH >= 4) return 'trip'
   if (TRIP_CATEGORIES.has(category)) return 'trip'
   if (TRIP_KEYWORDS.test(title)) return 'trip'
 
-  // 3. Pickup — collect/drop a person.
+  // 4. Pickup — collect/drop a person.
   if (PICKUP_KEYWORDS.test(title)) return 'pickup'
 
-  // 4. Default — a there-and-back appointment event.
+  // 5. Default — a there-and-back appointment event.
   return 'appointment'
 }
 
@@ -172,15 +176,19 @@ export function inferEventPlanKind(
   opts?: { homeName?: string | null },
 ): EventPlanKind {
   const title = event.title ?? ''
+  const description = event.description ?? ''
   const location = event.location_name ?? ''
   const address = event.address ?? ''
-  const searchable = `${title} ${location} ${address}`
+  const searchable = `${title} ${description} ${location} ${address}`
   if (REMOTE_KEYWORDS.test(searchable) || /https?:\/\//i.test(searchable)) return 'remote'
   if (COVERAGE_KEYWORDS.test(title)) return 'coverage'
   if (LOCATION_ONLY_KEYWORDS.test(title)) return 'details'
+  if (event.event_type === 'reminder') return 'details'
+  const category = event.enrichment?.category ?? ''
+  if (HOSTED_CATEGORIES.has(category) && !address) return 'details'
   if (isAtHome(event, opts?.homeName)) {
     const explicitlyAtHome = /\b(at home|home visit)\b/i.test(`${title} ${location}`)
-    const hostedAtHome = HOSTED_CATEGORIES.has(event.enrichment?.category ?? '') || HOSTED_KEYWORDS.test(title)
+    const hostedAtHome = HOSTED_CATEGORIES.has(category) || HOSTED_KEYWORDS.test(title)
     return explicitlyAtHome || hostedAtHome ? 'at_home' : 'details'
   }
   return mode === 'hosted' ? 'at_home' : 'travel'

@@ -5,7 +5,7 @@ const FLIGHT_KEYWORDS = /\bflight\b|(?:^|\s)[A-Z]{3}\s*(?:→|->)\s*[A-Z]{3}(?:\
 const TRIP_KEYWORDS = /\b(trip|outing|camp|scalloping|excursion|road trip|day trip|festival|fair|beach|park day|vacation|staycation)\b/i
 const COVERAGE_KEYWORDS = /\b(sitter|babysitter|nanny|caregiver|childcare|watching|watch(?:es)?|caring for)\b/i
 const LOCATION_ONLY_KEYWORDS = /\b(sleep[\s-]?over|overnight stay|field trip|team bus)\b/i
-const REMOTE_KEYWORDS = /\b(zoom|google meet|microsoft teams|facetime|video call|virtual|online|remote|phone call)\b|https?:\/\//i
+const REMOTE_KEYWORDS = /\b(zoom|google meet|microsoft teams|facetime|video call|virtual|online|remote|phone call|online order|order submission|submit order|place order|order online|webinar|livestream|telehealth|portal)\b|https?:\/\//i
 
 function text(value) {
   return typeof value === 'string' ? value.trim() : ''
@@ -45,9 +45,10 @@ function memberCanDrive(member) {
 
 export function classifyTransportationDefault(event, legacy = {}) {
   const title = text(event?.title)
+  const description = text(event?.description)
   const location = text(event?.location_name)
   const address = text(event?.address)
-  const searchable = `${title} ${location} ${address}`
+  const searchable = `${title} ${description} ${location} ${address}`
 
   if (
     event?.event_type === 'reminder'
@@ -67,7 +68,10 @@ export function classifyTransportationDefault(event, legacy = {}) {
   if (isAtHome(event)) return { kind: 'none', reason: 'at_home' }
   if (FLIGHT_KEYWORDS.test(title)) return { kind: 'no_route', reason: 'flight' }
 
-  const category = text(event?.category)
+  const category = text(event?.category || event?.enrichment?.category)
+  if (['task', 'reminder', 'chore', 'home_maintenance', 'family_admin'].includes(category) && !address) {
+    return { kind: 'none', reason: 'task' }
+  }
   const requestedMode = text(legacy?.mode_override)
   const trip = requestedMode === 'trip'
     || event?.all_day === true

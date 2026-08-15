@@ -304,10 +304,10 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                 <div className="mt-5">
                   <JourneyProgressBar
                     now={now}
-                    leaveAt={leaveAt}
+                    leaveAt={isTravelEvent ? leaveAt : null}
                     startTime={nextEvent.start_time}
                     endTime={nextEvent.end_time}
-                    driveTimeMins={driveTimeMins}
+                    driveTimeMins={isTravelEvent ? driveTimeMins : null}
                     isAllDay={Boolean(nextEvent.all_day)}
                     showLabels={true}
                     originName={originName}
@@ -322,8 +322,9 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                 <div className="flex items-center gap-2 flex-wrap">
                   {nextEvent.members.map((m) => {
                     const isDriver =
-                      (driverFamilyMemberId && m.family_member?.id === driverFamilyMemberId) ||
-                      (driverName && m.family_member?.name?.toLowerCase() === driverName.toLowerCase())
+                      Boolean(isTravelEvent &&
+                        ((driverFamilyMemberId && m.family_member?.id === driverFamilyMemberId) ||
+                        (driverName && m.family_member?.name?.toLowerCase() === driverName.toLowerCase())))
 
                     return (
                       <span
@@ -368,7 +369,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                       )}
                     </span>
                   )}
-                  {(nextEvent.address || nextEvent.location_name) && (
+                  {isTravelEvent && (nextEvent.address || nextEvent.location_name) && (
                     <Button
                       variant="ghost"
                       size="sm"

@@ -18,6 +18,7 @@ import { usePrepItems } from '../../hooks/usePrepItems'
 import { useTravelEta } from '../../hooks/useTravelEta'
 import { useAppStore } from '../../stores/appStore'
 import { useLiveClock } from '../../hooks/useLiveClock'
+import { inferEventMode, inferEventPlanKind } from '../../lib/eventCommandCenter'
 import { openEventDetails } from '../../utils/openEventDetails'
 import { Button } from '../ui'
 
@@ -66,22 +67,35 @@ export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate 
   const isHeroActive = Boolean(activeEvent)
   const isHeroTomorrow = !activeEvent && !nextUpcomingEvent && Boolean(tomorrowEvents[0])
 
-  // Hero ETA Calculation
-  const heroDestination = heroEvent?.address ?? heroEvent?.location_name ?? null
+  // Hero Travel Classification & ETA Calculation
+  const isHeroTravel = useMemo(() => {
+    if (!heroEvent || heroEvent.all_day || heroEvent.event_type === 'reminder') return false
+    const mode = inferEventMode(heroEvent)
+    const kind = inferEventPlanKind(heroEvent, mode)
+    if (kind !== 'travel') return false
+    const loc = (heroEvent.location_name || '').trim().toLowerCase()
+    if (loc === 'home' || loc.includes('at home')) return false
+    return Boolean(
+      (heroEvent.address && heroEvent.address.trim().length > 0) ||
+      (heroEvent.location_name && heroEvent.location_name.trim().length > 0)
+    )
+  }, [heroEvent])
+
+  const heroDestination = isHeroTravel ? (heroEvent?.address ?? heroEvent?.location_name ?? null) : null
   const heroTravelEta = useTravelEta({
     destination: heroDestination,
     eventStartIso: heroEvent?.start_time ?? null,
-    enabled: Boolean(heroEvent && heroDestination),
+    enabled: Boolean(heroEvent && heroDestination && isHeroTravel),
     bufferMins: 10,
   })
 
   // Derive driver & responsible member
   const heroDriver = useMemo(() => {
-    if (!heroEvent) return null
+    if (!heroEvent || !isHeroTravel) return null
     const driverMember = heroEvent.members?.find((m) => m.role === 'driver' || m.role === 'primary')?.family_member
       ?? heroEvent.members?.[0]?.family_member
     return driverMember?.name ?? null
-  }, [heroEvent])
+  }, [heroEvent, isHeroTravel])
 
   // Triage / Needs You Items
   const activeConflicts = useMemo(() => {
@@ -123,7 +137,7 @@ export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate 
                 <span>First Up Tomorrow · {format(getEventStartDate(heroEvent), 'h:mm a')}</span>
               ) : (
                 <span>
-                  {heroTravelEta.data?.leave_by
+                  {isHeroTravel && heroTravelEta.data?.leave_by
                     ? `Leave at ${format(new Date(heroTravelEta.data.leave_by), 'h:mm a')} · On Track`
                     : `Starts in ${Math.max(1, differenceInMinutes(getEventStartDate(heroEvent), now))} min`}
                 </span>
@@ -159,15 +173,17 @@ export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate 
 
           {/* Action Buttons Track */}
           <div className="flex items-center gap-2 mt-3.5 pt-2 border-t border-white/10">
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={openDirections}
-              leadingIcon={<Navigation size={14} />}
-              className="flex-1 min-h-[38px] font-bold text-caption bg-casa-gold text-casa-navy hover:bg-amber-400"
-            >
-              Directions
-            </Button>
+            {isHeroTravel && heroDestination && (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={openDirections}
+                leadingIcon={<Navigation size={14} />}
+                className="flex-1 min-h-[38px] font-bold text-caption bg-casa-gold text-casa-navy hover:bg-amber-400"
+              >
+                Directions
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="sm"

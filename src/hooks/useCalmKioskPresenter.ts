@@ -8,6 +8,7 @@ import { usePrepItems, useCompletePrepItem } from './usePrepItems'
 import { useFamilyMembers } from './useFamilyMembers'
 import { useHomeWeather } from './useHomeWeather'
 import { useAppStore } from '../stores/appStore'
+import { inferEventMode, inferEventPlanKind } from '../lib/eventCommandCenter'
 import type { EventTransportationPlan, TransportationLeg } from '../lib/eventTransportation'
 import type { Conflict, PrepItem, FamilyMember } from '../types'
 
@@ -270,14 +271,32 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     }
   }, [nextEvent, now])
 
-  const driveTimeMins = useMemo(() => {
-    if (!nextEvent) return null
-    return nextEvent.enrichment?.drive_time_mins ?? null
+  const isTravelEvent = useMemo(() => {
+    if (!nextEvent) return false
+    if (nextEvent.all_day) return false
+    if (nextEvent.event_type === 'reminder') return false
+    const mode = inferEventMode(nextEvent)
+    const kind = inferEventPlanKind(nextEvent, mode)
+    if (kind !== 'travel') return false
+    const locationName = (nextEvent.location_name || '').trim().toLowerCase()
+    const isHome = locationName === 'home' || locationName.includes('at home')
+    if (isHome) return false
+    const hasPhysicalDestination = Boolean(
+      (nextEvent.address && nextEvent.address.trim().length > 0) ||
+      (nextEvent.location_name && nextEvent.location_name.trim().length > 0)
+    )
+    return hasPhysicalDestination
   }, [nextEvent])
 
+  const driveTimeMins = useMemo(() => {
+    if (!isTravelEvent || !nextEvent) return null
+    return nextEvent.enrichment?.drive_time_mins ?? null
+  }, [isTravelEvent, nextEvent])
+
   const transportationPlan = useMemo<EventTransportationPlan | null>(() => {
+    if (!isTravelEvent) return null
     return nextEvent?.plan_override?.transportation_plan ?? (nextEvent as any)?.transportation_plan ?? null
-  }, [nextEvent])
+  }, [isTravelEvent, nextEvent])
 
   const outboundLeg = useMemo<TransportationLeg | null>(() => {
     if (!transportationPlan?.legs?.length) return null
@@ -309,34 +328,22 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
   }, [returnLeg])
 
   const driverName = useMemo(() => {
+    if (!isTravelEvent) return null
     return outboundLeg?.driverName || null
-  }, [outboundLeg])
+  }, [isTravelEvent, outboundLeg])
 
   const driverFamilyMemberId = useMemo(() => {
+    if (!isTravelEvent) return null
     if (!outboundLeg?.driverName && !outboundLeg?.driverId) return null
     if (outboundLeg.driverId) return outboundLeg.driverId
     const match = nextEvent?.members?.find(
       (m) => m.family_member?.name?.toLowerCase() === outboundLeg.driverName?.toLowerCase(),
     )
     return match?.family_member?.id || null
-  }, [outboundLeg, nextEvent])
-
-  const isTravelEvent = useMemo(() => {
-    if (!nextEvent) return false
-    if (nextEvent.all_day) return false
-    if (transportationPlan && transportationPlan.legs.length > 0) return true
-    const cat = (nextEvent.enrichment?.category || (nextEvent as any).category || '').toLowerCase()
-    if (cat.includes('home') || cat.includes('hosted')) return false
-    return Boolean(
-      (driveTimeMins !== null && driveTimeMins > 0) ||
-      nextEvent.enrichment?.departure_time ||
-      nextEvent.address ||
-      nextEvent.location_name
-    )
-  }, [nextEvent, driveTimeMins, transportationPlan])
+  }, [isTravelEvent, outboundLeg, nextEvent])
 
   const leaveAt = useMemo(() => {
-    if (!nextEvent || nextEvent.all_day) return null
+    if (!nextEvent || nextEvent.all_day || !isTravelEvent) return null
     try {
       if (nextEvent.enrichment?.departure_time) {
         return new Date(nextEvent.enrichment.departure_time)
@@ -351,11 +358,11 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
       if (driveTimeMins && driveTimeMins > 0) {
         return subMinutes(start, driveTimeMins)
       }
-      return start
+      return null
     } catch {
       return null
     }
-  }, [nextEvent, driveTimeMins, outboundLeg])
+  }, [nextEvent, isTravelEvent, driveTimeMins, outboundLeg])
 
   const minutesUntilLeave = useMemo(() => {
     if (!leaveAt) return null
