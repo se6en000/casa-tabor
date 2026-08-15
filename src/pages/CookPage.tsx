@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState, type ClipboardEvent } from 'react
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
+  CalendarPlus,
   Camera,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Clock3,
@@ -49,6 +51,8 @@ import {
   Switch,
   Text,
   Textarea,
+  Toast,
+  type ToastTone,
 } from '../components/ui'
 import ActiveKitchenWorkbench from '../components/kitchen/ActiveKitchenWorkbench'
 import MobileCookingView from '../components/mobile/MobileCookingView'
@@ -570,6 +574,22 @@ export default function CookPage() {
   const [foodProfile, setFoodProfile] = useState<FoodProfile>(DEFAULT_FOOD_PROFILE)
   const [plannerAdvancedOpen, setPlannerAdvancedOpen] = useState(false)
   const [plannerLogOpen, setPlannerLogOpen] = useState(false)
+
+  // Toast with Undo state
+  const [toastState, setToastState] = useState<{
+    open: boolean
+    message: React.ReactNode
+    tone?: ToastTone
+    actionLabel?: string
+    onAction?: () => void
+  } | null>(null)
+  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Non-modal Inline Card Trays State
+  const [activeGroceryRecipeId, setActiveGroceryRecipeId] = useState<string | null>(null)
+  const [recipeGrocerySelections, setRecipeGrocerySelections] = useState<Record<string, Set<number>>>({})
+  const [activeSchedulePickerRecipeId, setActiveSchedulePickerRecipeId] = useState<string | null>(null)
+
   const importFileInputRef = useRef<HTMLInputElement>(null)
   const importCameraInputRef = useRef<HTMLInputElement>(null)
   const photoEditorUploadInputRef = useRef<HTMLInputElement>(null)
@@ -1477,7 +1497,10 @@ export default function CookPage() {
     return String(newList.id)
   }
 
-  async function insertUniqueGroceryItems(listId: string, items: Array<{ name: string; quantity: string | null; unit: string | null; notes: string }>): Promise<number> {
+  async function insertUniqueGroceryItems(
+    listId: string,
+    items: Array<{ name: string; quantity: string | null; unit: string | null; notes: string }>,
+  ): Promise<{ insertedCount: number; insertedIds: string[] }> {
     const { data: existingItems, error: existingError } = await supabase
       .from('grocery_items')
       .select('name')
@@ -1509,11 +1532,270 @@ export default function CookPage() {
       }]
     })
 
-    if (rowsToInsert.length > 0) {
-      const { error: insertError } = await supabase.from('grocery_items').insert(rowsToInsert)
-      if (insertError && insertError.code !== '23505') throw insertError
+    if (rowsToInsert.length === 0) {
+      return { insertedCount: 0, insertedIds: [] }
     }
-    return rowsToInsert.length
+
+    const { data: insertedRows, error: insertError } = await supabase
+      .from('grocery_items')
+      .insert(rowsToInsert)
+      .select('id')
+    if (insertError && insertError.code !== '23505') throw insertError
+    const insertedIds = (insertedRows ?? []).map((row) => (row as { id: string }).id)
+    return { insertedCount: rowsToInsert.length, insertedIds }
+  }
+
+  function showToast(options: {
+    message: React.ReactNode
+    tone?: ToastTone
+    actionLabel?: string
+    onAction?: () => void
+    duration?: number
+  }) {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current)
+      toastTimeoutRef.current = null
+    }
+    setToastState({
+      open: true,
+      message: options.message,
+      tone: options.tone ?? 'success',
+      actionLabel: options.actionLabel,
+      onAction: options.onAction,
+    })
+    toastTimeoutRef.current = setTimeout(() => {
+      setToastState(null)
+    }, options.duration ?? 6000)
+  }
+
+  function toggleGroceryDrawer(recipe: Recipe) {
+    if (activeGroceryRecipeId === recipe.id) {
+      setActiveGroceryRecipeId(null)
+    } else {
+      setActiveSchedulePickerRecipeId(null)
+      setActiveGroceryRecipeId(recipe.id)
+      const recipeIngredients = ingredientsByRecipe.get(recipe.id) ?? []
+      if (!recipeGrocerySelections[recipe.id]) {
+        setRecipeGrocerySelections((prev) => ({
+          ...prev,
+          [recipe.id]: new Set(recipeIngredients.map((_, i) => i)),
+        }))
+      }
+    }
+  }
+
+  function toggleIngredientSelection(recipeId: string, index: number) {
+    setRecipeGrocerySelections((prev) => {
+      const current = new Set(prev[recipeId] ?? [])
+      if (current.has(index)) {
+        current.delete(index)
+      } else {
+        current.add(index)
+      }
+      return { ...prev, [recipeId]: current }
+    })
+  }
+
+  function toggleAllIngredients(recipe: Recipe) {
+    const recipeIngredients = ingredientsByRecipe.get(recipe.id) ?? []
+    setRecipeGrocerySelections((prev) => {
+      const current = prev[recipe.id] ?? new Set()
+      const allSelected = current.size === recipeIngredients.length
+      return {
+        ...prev,
+        [recipe.id]: allSelected ? new Set() : new Set(recipeIngredients.map((_, i) => i)),
+      }
+    })
+  }
+
+  async function addSelectedRecipeGroceries(recipe: Recipe) {
+    const recipeIngredients = ingredientsByRecipe.get(recipe.id) ?? []
+    const selectedIndexes = recipeGrocerySelections[recipe.id] ?? new Set(recipeIngredients.map((_, i) => i))
+    const itemsToAdd = recipeIngredients
+      .filter((_, i) => selectedIndexes.has(i))
+      .map((ingredient) => {
+        const normalized = normalizeRecipeIngredientFields({
+          rawText: ingredient.raw_text,
+          name: ingredient.name,
+          quantity: ingredient.quantity,
+          unit: ingredient.unit,
+        })
+        return {
+          name: (normalized.name || ingredient.raw_text).trim().replace(/\s+/g, ' '),
+          quantity: normalized.quantity,
+          unit: normalized.unit,
+          notes: `From recipe: ${recipe.name}`,
+        }
+      })
+
+    if (itemsToAdd.length === 0) {
+      showToast({ message: 'No ingredients selected to add.', tone: 'info', duration: 3000 })
+      return
+    }
+
+    setSmartAddingRecipeId(recipe.id)
+    try {
+      const listId = await getOrCreateShoppingListId()
+      const { insertedCount, insertedIds } = await insertUniqueGroceryItems(listId, itemsToAdd)
+      setActiveGroceryRecipeId(null)
+
+      if (insertedCount > 0) {
+        showToast({
+          message: `Added ${insertedCount} ingredient${insertedCount === 1 ? '' : 's'} from "${recipe.name}" to cart.`,
+          tone: 'success',
+          actionLabel: 'Undo',
+          onAction: () => {
+            void undoAddGroceries(insertedIds, recipe.name)
+          },
+        })
+      } else {
+        showToast({
+          message: `Selected ingredients from "${recipe.name}" are already in your cart.`,
+          tone: 'info',
+        })
+      }
+    } catch (error) {
+      showToast({
+        message: formatSupabaseError(error, 'Could not add ingredients to cart'),
+        tone: 'danger',
+      })
+    } finally {
+      setSmartAddingRecipeId(null)
+    }
+  }
+
+  async function undoAddGroceries(insertedIds: string[], recipeName: string) {
+    if (insertedIds.length === 0) return
+    try {
+      const { error } = await supabase
+        .from('grocery_items')
+        .delete()
+        .in('id', insertedIds)
+      if (error) throw error
+      setToastState(null)
+      showToast({
+        message: `Removed ingredients for "${recipeName}" from cart.`,
+        tone: 'info',
+        duration: 4000,
+      })
+    } catch (error) {
+      showToast({
+        message: formatSupabaseError(error, 'Could not undo grocery addition'),
+        tone: 'danger',
+      })
+    }
+  }
+
+  function toggleSchedulePicker(recipe: Recipe) {
+    if (activeSchedulePickerRecipeId === recipe.id) {
+      setActiveSchedulePickerRecipeId(null)
+    } else {
+      setActiveGroceryRecipeId(null)
+      setActiveSchedulePickerRecipeId(recipe.id)
+    }
+  }
+
+  async function handleScheduleSlot(recipe: Recipe, targetSlot: (typeof SLOT_ORDER)[number]) {
+    const existingSlot = plannedRecipes.find((p) => p.recipe.id === recipe.id)?.plan.slot
+    const actionId = `quick-plan:${recipe.id}:${targetSlot}`
+    setPlannedMealActionId(actionId)
+    setActiveSchedulePickerRecipeId(null)
+
+    try {
+      const { error } = await supabase.from('recipe_meal_plans').upsert(
+        [{
+          recipe_id: recipe.id,
+          slot: targetSlot,
+          planned_for: new Date().toISOString(),
+          notes: null,
+        }],
+        { onConflict: 'recipe_id,slot' },
+      )
+      if (error) throw error
+      if (existingSlot && existingSlot !== targetSlot) {
+        await supabase
+          .from('recipe_meal_plans')
+          .delete()
+          .eq('recipe_id', recipe.id)
+          .eq('slot', existingSlot)
+      }
+      await refetchMealPlans()
+      showToast({
+        message: `Scheduled "${recipe.name}" for ${SLOT_LABELS[targetSlot]}.`,
+        tone: 'success',
+        actionLabel: 'Undo',
+        onAction: () => {
+          void undoScheduleMeal(recipe, targetSlot, existingSlot)
+        },
+      })
+    } catch (error) {
+      showToast({
+        message: formatSupabaseError(error, 'Could not schedule meal'),
+        tone: 'danger',
+      })
+    } finally {
+      setPlannedMealActionId(null)
+    }
+  }
+
+  async function undoScheduleMeal(recipe: Recipe, assignedSlot: (typeof SLOT_ORDER)[number], previousSlot?: (typeof SLOT_ORDER)[number]) {
+    try {
+      await supabase
+        .from('recipe_meal_plans')
+        .delete()
+        .eq('recipe_id', recipe.id)
+        .eq('slot', assignedSlot)
+
+      if (previousSlot) {
+        await supabase.from('recipe_meal_plans').upsert(
+          [{
+            recipe_id: recipe.id,
+            slot: previousSlot,
+            planned_for: new Date().toISOString(),
+            notes: null,
+          }],
+          { onConflict: 'recipe_id,slot' },
+        )
+      }
+      await refetchMealPlans()
+      setToastState(null)
+      showToast({
+        message: previousSlot
+          ? `Restored "${recipe.name}" to ${SLOT_LABELS[previousSlot]}.`
+          : `Removed "${recipe.name}" from schedule.`,
+        tone: 'info',
+        duration: 4000,
+      })
+    } catch (error) {
+      showToast({
+        message: formatSupabaseError(error, 'Could not undo schedule change'),
+        tone: 'danger',
+      })
+    }
+  }
+
+  async function handleRemoveFromSchedule(recipe: Recipe) {
+    const plan = plannedRecipes.find((p) => p.recipe.id === recipe.id)?.plan
+    if (!plan) return
+    const previousSlot = plan.slot
+    setActiveSchedulePickerRecipeId(null)
+
+    try {
+      await removePlannedMeal(plan, recipe)
+      showToast({
+        message: `Removed "${recipe.name}" from ${SLOT_LABELS[previousSlot]}.`,
+        tone: 'info',
+        actionLabel: 'Undo',
+        onAction: () => {
+          void handleScheduleSlot(recipe, previousSlot)
+        },
+      })
+    } catch (error) {
+      showToast({
+        message: formatSupabaseError(error, 'Could not remove meal'),
+        tone: 'danger',
+      })
+    }
   }
 
   async function smartAddIngredientsToShoppingList(recipe: Recipe) {
@@ -1541,15 +1823,28 @@ export default function CookPage() {
           notes: `From recipe: ${recipe.name}`,
         }
       })
-      const insertedCount = await insertUniqueGroceryItems(listId, items)
+      const { insertedCount, insertedIds } = await insertUniqueGroceryItems(listId, items)
 
-      setLibraryActionStatus(
-        insertedCount > 0
-          ? `Added ${insertedCount} ingredient${insertedCount === 1 ? '' : 's'} from "${recipe.name}" to shopping list.`
-          : `All ingredients from "${recipe.name}" are already on your shopping list.`,
-      )
+      if (insertedCount > 0) {
+        showToast({
+          message: `Added ${insertedCount} ingredient${insertedCount === 1 ? '' : 's'} from "${recipe.name}" to cart.`,
+          tone: 'success',
+          actionLabel: 'Undo',
+          onAction: () => {
+            void undoAddGroceries(insertedIds, recipe.name)
+          },
+        })
+      } else {
+        showToast({
+          message: `All ingredients from "${recipe.name}" are already in your cart.`,
+          tone: 'info',
+        })
+      }
     } catch (error) {
-      setLibraryActionError(formatSupabaseError(error, 'Could not add ingredients to shopping list'))
+      showToast({
+        message: formatSupabaseError(error, 'Could not add ingredients to cart'),
+        tone: 'danger',
+      })
     } finally {
       setSmartAddingRecipeId(null)
     }
@@ -1771,7 +2066,7 @@ export default function CookPage() {
         throw new Error('No active grocery items to add.')
       }
       const listId = await getOrCreateShoppingListId()
-      const inserted = await insertUniqueGroceryItems(
+      const { insertedCount: inserted } = await insertUniqueGroceryItems(
         listId,
         pendingPlannerGroceries.map((item) => {
           const tracker = projectedPantryForItem(item)
@@ -2881,108 +3176,925 @@ export default function CookPage() {
 
       {/* ── Desktop & Large Kiosk Meal & Kitchen Workbench (>= lg) ── */}
       <div className="hidden lg:block w-full">
-        <PageShell width="full" className="space-y-6 p-4 sm:p-6 lg:p-8 pb-36 lg:pb-16 text-casa-text">
-        {/* Top Navigation & Mode Switcher */}
-      <Card tone="surface" padding="lg" className="space-y-4 shadow-sm">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <SegmentedControl
-            aria-label="Cook view"
-            value={cookLandingMode}
-            onChange={setCookLandingMode}
-            options={[
-              { value: 'cook-now', label: 'Cook tonight', icon: <Utensils size={15} /> },
-              { value: 'plan-week', label: 'Plan the week', icon: <Sparkles size={15} className="text-casa-gold" /> },
-            ]}
-          />
-
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate('/settings/food-profile')}
-              className="text-body-sm font-semibold text-casa-navy hover:text-casa-gold min-h-control"
-            >
-              Food Profile
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate('/settings/pantry-inventory')}
-              className="text-body-sm font-semibold text-casa-navy hover:text-casa-gold min-h-control"
-            >
-              Pantry Inventory
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate('/grocery')}
-              leadingIcon={<ShoppingCart size={14} />}
-              className="text-body-sm font-semibold text-casa-navy hover:text-casa-gold min-h-control"
-            >
-              Shopping List
-            </Button>
-          </div>
-        </div>
-
-        {cookLandingMode === 'cook-now' ? (
-          <div className="mt-2 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-2">
+        <PageShell width="full" className="space-y-8 p-4 sm:p-6 lg:p-8 pb-36 lg:pb-16 text-casa-text">
+          {/* ── Open Atelier Masthead & Mode Switcher (No outer card) ── */}
+          <div className="space-y-4 pb-6 border-b border-casa-border/50">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-caption font-semibold uppercase tracking-wider text-casa-gold">Dinner Shortlist</p>
-                <Heading role="display-sm" className="font-display font-bold text-casa-navy mt-0.5">
-                  What are we feeling tonight?
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-casa-gold/20 text-casa-navy text-caption font-mono font-bold tracking-wider uppercase border border-casa-gold/30">
+                    <Sparkles size={11} className="text-casa-gold" />
+                    The Tabor Kitchen &amp; Atelier
+                  </span>
+                  <span className="text-caption text-casa-muted font-mono font-medium hidden sm:inline">
+                    Palm Beach Residence
+                  </span>
+                </div>
+                <Heading role="display-sm" className="font-display text-display-sm font-bold text-casa-navy mt-1 tracking-tight">
+                  {cookLandingMode === 'cook-now' ? 'What are we feeling tonight?' : 'Weekly Dinner Planner & Atelier'}
                 </Heading>
               </div>
-              <p className="text-caption text-casa-muted font-medium">{landingMetaLabel}</p>
+
+              {/* Quick Navigation Action Pills */}
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => navigate('/settings/food-profile')}
+                  leadingIcon={<Users size={14} className="text-casa-gold" />}
+                  className="text-body-sm font-semibold text-casa-navy hover:text-casa-gold min-h-control bg-casa-surface/90 border-casa-border shadow-2xs"
+                >
+                  Food Profile
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => navigate('/settings/pantry-inventory')}
+                  leadingIcon={<Layers size={14} className="text-casa-gold" />}
+                  className="text-body-sm font-semibold text-casa-navy hover:text-casa-gold min-h-control bg-casa-surface/90 border-casa-border shadow-2xs"
+                >
+                  Pantry Inventory
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => navigate('/grocery')}
+                  leadingIcon={<ShoppingCart size={14} className="text-casa-gold" />}
+                  className="text-body-sm font-semibold text-casa-navy hover:text-casa-gold min-h-control bg-casa-surface/90 border-casa-border shadow-2xs"
+                >
+                  Shopping List
+                </Button>
+              </div>
             </div>
 
-            {/* Quick Recipe Search Bar & Scan Button */}
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1">
-                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-casa-muted z-10 pointer-events-none" />
-                <Input
-                  value={recipeSearch}
-                  onChange={(event) => setRecipeSearch(event.target.value)}
-                  placeholder="Search recipes to cook..."
-                  className="pl-9 pr-8 bg-casa-surface"
-                />
-                {recipeSearch.trim() && (
-                  <IconButton
-                    icon={<X size={14} />}
-                    aria-label="Clear search"
-                    onClick={() => setRecipeSearch('')}
-                    size="sm"
-                    variant="ghost"
-                    className="absolute right-1.5 top-1/2 -translate-y-1/2"
-                  />
+            {/* Mode Switcher & Context Bar */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
+              <SegmentedControl
+                aria-label="Cook view"
+                value={cookLandingMode}
+                onChange={setCookLandingMode}
+                options={[
+                  { value: 'cook-now', label: 'Cook tonight', icon: <Utensils size={15} /> },
+                  { value: 'plan-week', label: 'Plan the week', icon: <Sparkles size={15} className="text-casa-gold" /> },
+                ]}
+                className="min-w-[18rem]"
+              />
+
+              <p className="text-caption text-casa-muted font-medium">
+                {cookLandingMode === 'cook-now'
+                  ? landingMetaLabel
+                  : `Household of ${foodProfile.householdSize} · $${foodProfile.weeklyBudgetUsd}/week budget · ${foodProfile.defaultMealsPerWeek} meals`}
+              </p>
+            </div>
+          </div>
+
+          {/* ── COOK TONIGHT: DUAL-PANE UPPER MASTER STAGE (60/40 Split) ── */}
+          {cookLandingMode === 'cook-now' && (
+            <div className="grid grid-cols-12 gap-8 items-start">
+              {/* ── LEFT COLUMN (60%): TONIGHT'S CINEMATIC STAGE & ACTIVE SESSION ── */}
+              <div className="col-span-12 lg:col-span-7 xl:col-span-7 space-y-5">
+                {/* Active Session (Jump Back In) */}
+                {resumeRecipe && (
+                  <Card
+                    tone="ambient"
+                    padding="md"
+                    className="border-casa-gold/40 shadow-widget cursor-pointer hover:border-casa-gold transition-all rounded-3xl"
+                    onClick={() => {
+                      openRecipeForCookMode(resumeRecipe.recipe.id)
+                      setStepIndex(
+                        Math.max(
+                          0,
+                          Math.min(resumeRecipe.progress.stepIndex, Math.max(0, resumeRecipe.progress.totalSteps - 1)),
+                        ),
+                      )
+                    }}
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full bg-casa-gold animate-pulse" />
+                          <span className="text-caption font-mono font-bold uppercase tracking-widest text-amber-800">
+                            Active Session · Jump Back In
+                          </span>
+                          <span className="text-caption font-mono font-bold px-2.5 py-0.5 rounded-full bg-casa-surface text-casa-navy border border-casa-border shadow-2xs">
+                            Step {resumeRecipe.progress.stepIndex + 1} of {resumeRecipe.progress.totalSteps}
+                          </span>
+                        </div>
+                        <p className="font-display text-heading font-bold text-casa-navy">
+                          {resumeRecipe.recipe.name}
+                        </p>
+                        {resumeRecentLabel && (
+                          <p className="text-caption text-casa-muted">Recent history: {resumeRecentLabel}</p>
+                        )}
+                      </div>
+                      <Button
+                        variant="primary"
+                        size="md"
+                        className="font-bold min-h-control px-6 shrink-0 shadow-card"
+                      >
+                        Resume Cooking →
+                      </Button>
+                    </div>
+                    <Progress
+                      value={resumeRecipe.progress.stepIndex + 1}
+                      max={Math.max(1, resumeRecipe.progress.totalSteps)}
+                      aria-label="Saved cooking progress"
+                      className="mt-3.5 [&_.casa-progress]:h-2"
+                    />
+                  </Card>
+                )}
+
+                {/* The Michelin Plinth: Tonight's Feature Pick (The Singular Hero Plinth) */}
+                {moodShortlistRecipes.length > 0 ? (
+                  (() => {
+                    const topInsight = moodShortlistRecipes[0]
+                    const isTop = true
+                    const focus = parseRecipeImageFocus(topInsight.recipe.image_url)
+                    const minutesLabel = topInsight.minutes ? `${topInsight.minutes} min` : (topInsight.recipe.cook_time ?? 'Quick cook')
+                    const approvalLabel = buildTopPickApproval(topInsight)
+
+                    return (
+                      <Card
+                        padding="none"
+                        tone="ambient"
+                        className="flex flex-col overflow-hidden transition-all group shadow-widget rounded-3xl border-casa-gold/50 ring-2 ring-casa-gold/60 relative"
+                      >
+                        {/* Crown Plinth Banner */}
+                        <div className="bg-gradient-to-r from-casa-gold/35 via-casa-gold/20 to-transparent px-5 py-3 text-caption font-mono font-bold uppercase tracking-widest text-casa-navy border-b border-casa-gold/30 flex items-center justify-between">
+                          <span className="flex items-center gap-2">
+                            <Sparkles size={14} className="text-casa-gold animate-pulse" />
+                            Tonight's Feature Plinth · Curated for the Tabor Kitchen
+                          </span>
+                          <span className="text-caption font-mono font-bold text-amber-900/80 px-2 py-0.5 rounded-full bg-casa-gold/20 border border-casa-gold/30">
+                            Top Pick
+                          </span>
+                        </div>
+
+                        {/* Expansive 16:9 Photography */}
+                        <div className="relative overflow-hidden bg-casa-surface aspect-[16/9] w-full">
+                          <RecipeImage
+                            src={getRecipeImage(topInsight.recipe)}
+                            alt={topInsight.recipe.name}
+                            focalX={focus.focalX}
+                            focalY={focus.focalY}
+                            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-103"
+                          />
+                          <div className="absolute top-3 right-3 flex items-center gap-2">
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-casa-surface/95 backdrop-blur-md text-casa-navy text-caption font-mono font-bold border border-casa-border/80 shadow-card">
+                              <Clock3 size={13} className="text-casa-gold" />
+                              {minutesLabel}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Plinth Body */}
+                        <div className="p-6 flex flex-col flex-1 gap-4">
+                          <div>
+                            <Heading role="heading" className="font-display font-bold leading-tight text-casa-navy text-heading sm:text-display-xs">
+                              {topInsight.recipe.name}
+                            </Heading>
+                            <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                              <Chip tone="neutral" size="sm" icon={<Users size={13} />}>
+                                {topInsight.recipe.servings ? `${topInsight.recipe.servings} Servings` : '4 Servings'}
+                              </Chip>
+                              {approvalLabel && (
+                                <Chip tone="success" size="sm" icon={<CheckCircle2 size={13} />}>
+                                  {approvalLabel}
+                                </Chip>
+                              )}
+                            </div>
+                            <p className="mt-3 text-body-sm text-casa-text-secondary line-clamp-2 leading-relaxed italic border-l-2 border-casa-gold pl-3 py-0.5">
+                              "{buildMoodReason(topInsight)}"
+                            </p>
+                          </div>
+
+                          {/* Action Bar */}
+                          <div className="mt-auto pt-2 flex items-center gap-3">
+                            <Button
+                              onClick={() => openRecipeForCookMode(topInsight.recipe.id)}
+                              variant={isTop ? 'primary' : 'secondary'}
+                              className="mt-auto"
+                              size="lg"
+                              fullWidth
+                            >
+                              Start cooking
+                            </Button>
+                            <IconButton
+                              icon={<ShoppingCart size={16} />}
+                              variant="secondary"
+                              size="lg"
+                              onClick={() => void smartAddIngredientsToShoppingList(topInsight.recipe)}
+                              disabled={smartAddingRecipeId === topInsight.recipe.id}
+                              title="Smart add ingredients to grocery list"
+                              aria-label={`Add ingredients for ${topInsight.recipe.name} to shopping list`}
+                              className="shrink-0 bg-casa-surface border-casa-border hover:border-casa-gold size-control-lg shadow-2xs"
+                            />
+                          </div>
+                        </div>
+                      </Card>
+                    )
+                  })()
+                ) : (
+                  <Card tone="subtle" padding="lg" className="text-center space-y-3 border-dashed border-casa-border rounded-3xl">
+                    <Text>Import recipes from your library or URL to unlock your mood-based shortlist.</Text>
+                    <Button
+                      onClick={openImportDialog}
+                      variant="primary"
+                      size="md"
+                      leadingIcon={<Upload size={16} />}
+                      className="font-bold min-h-control"
+                    >
+                      Import recipe
+                    </Button>
+                  </Card>
                 )}
               </div>
-              <Button
-                variant="primary"
-                size="md"
-                onClick={openImportDialog}
-                leadingIcon={<Camera size={16} />}
-                className="shrink-0 font-semibold min-h-control"
-              >
-                Scan
-              </Button>
+
+              {/* ── RIGHT COLUMN (40%): OPEN AGENDA & RHYTHM SHORTLIST (No heavy outer cards) ── */}
+              <div className="col-span-12 lg:col-span-5 xl:col-span-5 space-y-6">
+                {/* The Weekly Horizon: Open Menu List */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-2 pb-2 border-b border-casa-border/50">
+                    <div>
+                      <Heading role="heading" className="font-display text-body-lg font-bold text-casa-navy">
+                        The Weekly Horizon
+                      </Heading>
+                      <p className="text-caption text-casa-text-secondary">
+                        Upcoming family dinner slots.
+                      </p>
+                    </div>
+                    <span className="text-caption font-mono font-bold px-2.5 py-0.5 rounded-full bg-casa-surface border border-casa-border text-casa-navy shadow-2xs">
+                      {plannedRecipes.length} Planned
+                    </span>
+                  </div>
+
+                  {plannedMealError && (
+                    <Alert tone="danger" title="Planned meals update failed" className="shadow-sm">
+                      {plannedMealError}
+                    </Alert>
+                  )}
+                  {!plannedMealError && plannedMealStatus && (
+                    <Alert tone="success" title="Planned meals updated" className="shadow-sm">
+                      {plannedMealStatus}
+                    </Alert>
+                  )}
+
+                  {plannedRecipes.length === 0 ? (
+                    <div className="py-3 text-center space-y-1.5">
+                      <p className="text-caption text-casa-muted">No meal slots queued yet this week.</p>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setCookLandingMode('plan-week')}
+                        leadingIcon={<Sparkles size={13} className="text-casa-gold" />}
+                        className="text-caption font-bold text-casa-gold"
+                      >
+                        Launch AI Weekly Planner →
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-casa-border/50">
+                      {plannedRecipes.slice(0, 6).map(({ plan, recipe }) => (
+                        <div
+                          key={`${plan.slot}-${recipe.id}`}
+                          className="py-2.5 px-1.5 flex items-center justify-between gap-2 hover:bg-casa-surface/60 rounded-xl transition-colors"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <span className="text-caption font-mono font-bold uppercase tracking-wider text-casa-gold block">
+                              {SLOT_LABELS[plan.slot]}
+                            </span>
+                            <p className="font-display text-body font-bold text-casa-navy truncate mt-0.5">
+                              {recipe.name}
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-1 shrink-0">
+                            <IconButton
+                              icon={<ChevronLeft size={13} />}
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => void shiftPlannedMealSlot(plan, recipe, -1)}
+                              disabled={plan.slot === 'tonight' || plannedMealActionId !== null}
+                              aria-label="Move earlier"
+                            />
+                            <IconButton
+                              icon={<ChevronRight size={13} />}
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => void shiftPlannedMealSlot(plan, recipe, 1)}
+                              disabled={plan.slot === 'this-week' || plannedMealActionId !== null}
+                              aria-label="Move later"
+                            />
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              onClick={() => openRecipeForCookMode(recipe.id)}
+                              className="font-bold min-h-[30px] px-2.5 text-caption"
+                            >
+                              Cook
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => void markPlannedMealCooked(plan, recipe)}
+                              disabled={plannedMealActionId !== null}
+                              className="font-semibold min-h-[30px] px-2 text-caption"
+                            >
+                              Done
+                            </Button>
+                            <IconButton
+                              icon={<Trash2 size={13} />}
+                              variant="danger"
+                              size="sm"
+                              onClick={() => void removePlannedMeal(plan, recipe)}
+                              disabled={plannedMealActionId === `${plan.slot}:${recipe.id}` || plannedMealActionId !== null}
+                              aria-label={`Remove ${recipe.name}`}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Tonight's Rhythm & Shortlist Alternatives (Open Pill Section) */}
+                <div className="space-y-4 pt-5 border-t border-casa-border/50">
+                  {/* Mood Header & Selector */}
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-caption font-bold uppercase tracking-wider text-casa-muted">
+                        Tonight's Rhythm ({shortlistHeadingLabel})
+                      </span>
+                      <Button
+                        onClick={() => setShortlistOffsets((current) => ({ ...current, [cookMood]: current[cookMood] + 1 }))}
+                        variant="ghost"
+                        size="sm"
+                        leadingIcon={<RotateCcw size={13} className="text-casa-gold" />}
+                        className="font-bold min-h-control text-caption text-casa-gold hover:text-amber-800 p-0"
+                      >
+                        Shuffle
+                      </Button>
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5">
+                      {COOK_MOOD_OPTIONS.map((mood) => {
+                        const isSelected = cookMood === mood.id
+                        return (
+                          <Chip
+                            key={mood.id}
+                            onClick={() => {
+                              setCookMood(mood.id)
+                              setShortlistOffsets((current) => ({ ...current, [mood.id]: 0 }))
+                            }}
+                            selected={isSelected}
+                            tone={isSelected ? 'accent' : 'neutral'}
+                            size="sm"
+                            className={cn(
+                              'min-h-control-sm text-caption font-semibold transition-all px-3 py-1',
+                              isSelected && 'shadow-xs border-casa-gold/70 text-casa-navy font-bold ring-1 ring-casa-gold/30',
+                            )}
+                          >
+                            {mood.label}
+                          </Chip>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Alternative Shortlist Recommendations (Cards #2 and #3 as Open Rows) */}
+                  <div className="space-y-2 pt-1">
+                    <span className="text-caption font-bold uppercase tracking-wider text-casa-muted block">
+                      Shortlist Alternatives ({Math.max(0, moodShortlistRecipes.length - 1)})
+                    </span>
+
+                    {moodShortlistRecipes.slice(1, 3).map((insight, altIndex) => {
+                      const focus = parseRecipeImageFocus(insight.recipe.image_url)
+                      const minutesLabel = insight.minutes ? `${insight.minutes} min` : (insight.recipe.cook_time ?? 'Quick cook')
+                      const isTop = false
+                      return (
+                        <div
+                          key={`${insight.recipe.id}-alt-${altIndex}`}
+                          className="flex items-center gap-3 p-2.5 rounded-2xl hover:bg-casa-surface/80 transition-colors group cursor-pointer"
+                          onClick={() => openRecipeForCookMode(insight.recipe.id)}
+                        >
+                          <div className="relative size-14 rounded-xl overflow-hidden bg-casa-surface shrink-0 border border-casa-border/80">
+                            <RecipeImage
+                              src={getRecipeImage(insight.recipe)}
+                              alt={insight.recipe.name}
+                              focalX={focus.focalX}
+                              focalY={focus.focalY}
+                              className="size-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            />
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <Text as="h3" role="body-lg" className="font-semibold leading-tight text-casa-navy truncate">{insight.recipe.name}</Text>
+                            <p className="text-caption text-casa-muted mt-0.5 truncate">
+                              {minutesLabel} · {insight.recipe.servings ? `${insight.recipe.servings} Servings` : '4 Servings'}
+                            </p>
+                          </div>
+
+                          <Button
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              openRecipeForCookMode(insight.recipe.id)
+                            }}
+                            variant={isTop ? 'primary' : 'secondary'}
+                            className="mt-auto shrink-0 font-bold"
+                            size="sm"
+                          >
+                            Cook
+                          </Button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── PLAN THE WEEK WORKSPACE ── */}
+          {cookLandingMode === 'plan-week' && (
+            <Card tone="surface" padding="lg" className="space-y-6 shadow-card border-casa-border rounded-3xl">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-casa-border/60">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Sparkles size={18} className="text-casa-gold" />
+                    <Heading role="heading" className="font-display text-heading font-bold text-casa-navy">
+                      Meal Planner AI Atelier
+                    </Heading>
+                  </div>
+                  <p className="text-body-sm text-casa-text-secondary mt-0.5">
+                    Plan dinners with intelligent ingredient reuse to eliminate food waste and reduce grocery spend.
+                  </p>
+                </div>
+              </div>
+
+              {/* Strategy Selector */}
+              <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-casa-bg rounded-2xl border border-casa-border/60">
+                <div className="flex items-center gap-2">
+                  <span className="text-caption font-bold uppercase tracking-wider text-casa-muted">Strategy:</span>
+                  {(['balanced', 'budget', 'speed'] as const).map((strat) => (
+                    <Chip
+                      key={strat}
+                      onClick={() => setMealPlannerStrategy(strat)}
+                      selected={mealPlannerStrategy === strat}
+                      tone={mealPlannerStrategy === strat ? 'accent' : 'neutral'}
+                      className="capitalize font-semibold min-h-control"
+                    >
+                      {strat}
+                    </Chip>
+                  ))}
+                </div>
+                <p className="text-caption text-casa-muted font-medium">
+                  {strategyInstruction(mealPlannerStrategy)}
+                </p>
+              </div>
+
+              {/* Prompt Box */}
+              <div className="space-y-2.5">
+                <Textarea
+                  value={mealPlannerPrompt}
+                  onChange={(event) => setMealPlannerPrompt(event.target.value)}
+                  rows={2}
+                  placeholder="Plan 5 dinners this week under $140 with overlapping ingredients and one seafood meal."
+                  className="text-body bg-casa-surface border-casa-border focus:border-casa-gold"
+                />
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  {[
+                    'High overlap & low waste',
+                    'Fast 20m weeknights',
+                    'Budget friendly under $120',
+                    'Use up pantry staples',
+                  ].map((preset) => (
+                    <Chip
+                      key={preset}
+                      size="sm"
+                      onClick={() => setMealPlannerPrompt(preset)}
+                      className="text-caption font-medium bg-casa-bg border-casa-border hover:border-casa-gold/60 cursor-pointer"
+                    >
+                      {preset}
+                    </Chip>
+                  ))}
+                </div>
+              </div>
+
+              {/* Actions Bar */}
+              <div className="flex flex-wrap items-center gap-3 pt-1">
+                <Button
+                  variant="primary"
+                  size="lg"
+                  onClick={() => void generateMealPlan()}
+                  disabled={mealPlannerLoading}
+                  loading={mealPlannerLoading}
+                  leadingIcon={<Sparkles size={16} />}
+                  className="font-bold shadow-card px-6 min-h-control"
+                >
+                  {mealPlannerLoading ? 'Generating Plan…' : 'Generate Weekly Plan'}
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  onClick={() => void optimizeCurrentPlanForBudget()}
+                  disabled={mealPlannerLoading || !mealPlannerPlan}
+                  className="font-semibold min-h-control"
+                >
+                  Optimize Budget
+                </Button>
+                <Button
+                  variant="strong"
+                  size="lg"
+                  onClick={() => void applyPlannerGroceries()}
+                  disabled={mealPlannerAddingGroceries || pendingPlannerGroceries.length === 0}
+                  loading={mealPlannerAddingGroceries}
+                  leadingIcon={<ShoppingCart size={16} className="text-casa-gold" />}
+                  className="font-bold min-h-control px-6 ml-auto shadow-card"
+                >
+                  {mealPlannerAddingGroceries
+                    ? `Adding Groceries... (${pendingPlannerGroceries.length})`
+                    : `Apply to Shopping List (${pendingPlannerGroceries.length})`}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setPlannerAdvancedOpen((val) => !val)}
+                  className="text-caption font-bold text-casa-gold"
+                >
+                  {plannerAdvancedOpen ? 'Hide Advanced' : 'Show Advanced'}
+                </Button>
+              </div>
+
+              {/* Advanced Planner Settings */}
+              {plannerAdvancedOpen && (
+                <Card tone="subtle" padding="md" className="space-y-3 rounded-2xl border-casa-border">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Input
+                      value={mealPlannerTemplateName}
+                      onChange={(event) => setMealPlannerTemplateName(event.target.value)}
+                      placeholder="Template name"
+                      className="flex-1 text-caption min-h-control"
+                    />
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => void saveCurrentPromptTemplate()}
+                      className="min-h-control"
+                    >
+                      Save Template
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => void runWeeklyAutoDraft()}
+                      className="min-h-control font-bold text-casa-gold"
+                    >
+                      Auto Weekly Draft
+                    </Button>
+                  </div>
+
+                  {mealPlannerTemplates.length > 0 && (
+                    <div className="space-y-1">
+                      <p className="text-caption text-casa-muted font-semibold">Saved Templates</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {mealPlannerTemplates.map((tpl) => (
+                          <div key={tpl.id} className="inline-flex items-center gap-1 rounded-pill border border-casa-border bg-casa-surface px-2.5 py-1 text-caption shadow-2xs">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setMealPlannerPrompt(tpl.prompt)}
+                              className="min-h-0 p-0 text-casa-navy hover:bg-transparent font-medium"
+                            >
+                              {tpl.name}
+                            </Button>
+                            <IconButton
+                              icon={<Trash2 size={12} />}
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => void deleteMealPlannerTemplate(tpl.id)}
+                              aria-label={`Delete ${tpl.name} template`}
+                              className="min-h-0 min-w-0 p-0 text-casa-muted hover:text-casa-error hover:bg-transparent"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {typeof mealPlannerDebug?.elapsed_ms === 'number' && (
+                    <p className="text-caption font-mono text-casa-muted">
+                      trace {mealPlannerLastTraceId ? mealPlannerLastTraceId.slice(0, 8) : 'n/a'} · {mealPlannerDebug.elapsed_ms}ms
+                    </p>
+                  )}
+                </Card>
+              )}
+
+              {mealPlannerError && (
+                <Alert tone="danger" title="Meal planning error" className="shadow-sm">
+                  {mealPlannerError}
+                </Alert>
+              )}
+              {!mealPlannerError && mealPlannerStatus && (
+                <Alert tone="success" title="Plan ready" className="shadow-sm">
+                  {mealPlannerStatus}
+                </Alert>
+              )}
+
+              {/* Generated Plan Details */}
+              {mealPlannerPlan && (
+                <div className="space-y-5 pt-4 border-t border-casa-border/60">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <Heading role="heading" className="font-display text-heading font-bold text-casa-navy">
+                      Proposed Weekly Dinners ({configuredPlannerMeals.filter((m) => m.enabled).length})
+                    </Heading>
+                    <div className="flex items-center gap-2">
+                      <span className="text-caption font-mono font-bold px-3 py-1 rounded-full bg-emerald-500/15 text-emerald-800 border border-emerald-500/30">
+                        Est. Cost: ${configuredPlannerMetrics.estimatedLow} – ${configuredPlannerMetrics.estimatedHigh}
+                      </span>
+                      <span className="text-caption font-mono font-bold px-3 py-1 rounded-full bg-casa-gold/20 text-casa-navy border border-casa-gold/30">
+                        Overlap Score: {(mealPlannerPlan.budget_fit_score * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Over Budget Swap Hints */}
+                  {overBudgetSwapHints.length > 0 && (
+                    <Alert tone="warning" title="Budget optimization suggestions">
+                      <ul className="list-disc pl-4 space-y-0.5 mt-1 text-body-sm">
+                        {overBudgetSwapHints.map((hint) => (
+                          <li key={hint}>{hint}</li>
+                        ))}
+                      </ul>
+                    </Alert>
+                  )}
+
+                  {/* Proposed Meals Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
+                    {configuredPlannerMeals.map((meal) => (
+                      <Card
+                        key={meal.key}
+                        tone={meal.enabled ? 'surface' : 'subtle'}
+                        padding="md"
+                        className={cn(
+                          'space-y-2.5 transition-all rounded-2xl border-casa-border shadow-card',
+                          !meal.enabled && 'opacity-60',
+                        )}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-caption font-bold uppercase tracking-wider text-casa-gold">
+                            {SLOT_LABELS[meal.slot]}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <Switch
+                              checked={meal.enabled}
+                              onCheckedChange={() => toggleConfiguredMeal(meal.key)}
+                              label="Include"
+                            />
+                            <IconButton
+                              icon={<Trash2 size={13} />}
+                              variant="danger"
+                              size="sm"
+                              onClick={() => deleteConfiguredMeal(meal.key)}
+                              aria-label={`Remove ${meal.recipe_name} from plan`}
+                            />
+                          </div>
+                        </div>
+                        <p className="font-display text-body-lg font-bold text-casa-navy">{meal.recipe_name}</p>
+                        <p className="text-caption text-casa-text-secondary line-clamp-2 leading-relaxed">{meal.reason}</p>
+                      </Card>
+                    ))}
+                  </div>
+
+                  {/* Plan Action Buttons */}
+                  <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => void applyPlannerMealQueue()}
+                      className="font-bold min-h-control"
+                    >
+                      Queue meals for week
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => void reinforceCurrentPlanPreferences()}
+                      className="min-h-control font-semibold"
+                    >
+                      Love this pattern (learn)
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        void (async () => {
+                          if (!mealPlannerPlan) return
+                          try {
+                            await recordPlannerRejection(mealPlannerPlan)
+                            setMealPlannerStatus('Captured feedback. Regenerating with updated learning…')
+                            await generateMealPlan()
+                          } catch (error) {
+                            setMealPlannerError(formatSupabaseError(error, 'Could not save planner feedback'))
+                          }
+                        })()
+                      }}
+                      className="min-h-control text-casa-muted"
+                    >
+                      This plan missed (learn + regenerate)
+                    </Button>
+                  </div>
+
+                  {/* Overlap Ingredients & Deductions */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-2">
+                    <Card tone="subtle" padding="md" className="space-y-2 rounded-2xl border-casa-border">
+                      <p className="text-caption font-bold uppercase tracking-wider text-casa-navy flex items-center gap-1.5">
+                        <Sparkles size={14} className="text-casa-gold" />
+                        Shared Overlap Ingredients ({mealPlannerPlan.overlap_ingredients.length})
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {mealPlannerPlan.overlap_ingredients.map((item) => (
+                          <Chip key={item.name} size="sm" tone="accent">
+                            {item.name} ({item.recipe_count} recipes)
+                          </Chip>
+                        ))}
+                      </div>
+                    </Card>
+
+                    <Card tone="subtle" padding="md" className="space-y-2 rounded-2xl border-casa-border">
+                      <p className="text-caption font-bold uppercase tracking-wider text-casa-navy flex items-center gap-1.5">
+                        <Layers size={14} className="text-casa-gold" />
+                        Pantry Deductions ({mealPlannerPlan.pantry_deductions.length})
+                      </p>
+                      <p className="text-caption text-casa-text-secondary line-clamp-2">
+                        {mealPlannerPlan.pantry_deductions.map((d) => d.name).join(', ')}
+                      </p>
+                    </Card>
+                  </div>
+
+                  {/* Overlap-Optimized Groceries Checklist */}
+                  <div className="space-y-3 pt-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <Heading role="heading" className="font-display text-heading font-bold text-casa-navy">
+                        Overlap-Optimized Groceries ({pendingPlannerGroceries.length} to buy)
+                      </Heading>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => navigate('/settings/pantry-inventory')}
+                        className="text-caption font-bold text-casa-gold hover:underline min-h-control"
+                      >
+                        Manage pantry inventory →
+                      </Button>
+                    </div>
+
+                    {lowStockPlannerItems.length > 0 && (
+                      <p className="text-caption text-amber-800 font-medium">
+                        {lowStockPlannerItems.length} item{lowStockPlannerItems.length === 1 ? '' : 's'} projected low in pantry after this plan — review before shopping.
+                      </p>
+                    )}
+
+                    {mealPlannerAddResult && (
+                      <Alert tone="success" title="Shopping list updated">
+                        Added {mealPlannerAddResult.inserted} new items to shopping list ({mealPlannerAddResult.attempted} processed).
+                      </Alert>
+                    )}
+
+                    <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
+                      {configuredPlannerGroceries.map((item) => {
+                        const checked = Boolean(mealPlannerPantryConfig[plannerGroceryKey(item)])
+                        const tracker = projectedPantryForItem(item)
+                        return (
+                          <div
+                            key={`${item.name}-${item.category}`}
+                            className="rounded-xl border border-casa-border bg-casa-surface p-3 flex items-center justify-between gap-3 shadow-2xs"
+                          >
+                            <Checkbox
+                              checked={checked}
+                              onChange={() => togglePlannerPantryItem(item)}
+                              label={
+                                <span className={cn('text-body-sm font-semibold', checked ? 'line-through text-casa-muted' : 'text-casa-navy')}>
+                                  {item.name}
+                                  {item.quantity ? ` · ${item.quantity}${item.unit ? ` ${item.unit}` : ''}` : ''}
+                                  {item.suggested_purchase_display && (
+                                    <span className="text-casa-muted font-normal"> · buy {item.suggested_purchase_display}</span>
+                                  )}
+                                </span>
+                              }
+                            />
+                            <div className="flex items-center gap-2">
+                              <Chip size="sm" tone="neutral">
+                                {item.category}
+                              </Chip>
+                              {tracker.lowStock && (
+                                <Chip size="sm" tone="danger">
+                                  Low stock
+                                </Chip>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Action Log Drawer */}
+                  {mealPlannerActionLog.length > 0 && (
+                    <div className="pt-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setPlannerLogOpen((val) => !val)}
+                        className="text-caption font-mono text-casa-muted"
+                      >
+                        {plannerLogOpen ? 'Hide action log' : `Show action log (${mealPlannerActionLog.length})`}
+                      </Button>
+                      {plannerLogOpen && (
+                        <div className="mt-2 max-h-40 overflow-y-auto space-y-1.5 pr-1">
+                          {mealPlannerActionLog.slice(0, 10).map((log) => (
+                            <div key={log.id} className="p-2.5 rounded-xl bg-casa-surface border border-casa-border text-caption">
+                              <p className="font-semibold text-casa-navy">{log.action}: {log.status}</p>
+                              <p className="text-casa-muted">{log.detail}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </Card>
+          )}
+
+          {/* ── THE RECIPE VAULT & CATALOG (Open Gallery Section) ── */}
+          <div className="space-y-5 pt-8 border-t border-casa-border/60">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
+              <div>
+                <Heading role="heading" className="font-display text-heading font-bold text-casa-navy">
+                  Recipe Vault &amp; Catalog
+                </Heading>
+                <p className="text-body-sm text-casa-text-secondary mt-0.5">
+                  Browse and search all {recipes.length} saved household recipes.
+                </p>
+              </div>
+
+              {libraryActionError && (
+                <Alert tone="danger" title="Library action failed">
+                  {libraryActionError}
+                </Alert>
+              )}
+              {!libraryActionError && libraryActionStatus && (
+                <Alert tone="success" title="Action completed">
+                  {libraryActionStatus}
+                </Alert>
+              )}
+
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="relative min-w-[15rem] flex-1 sm:flex-initial">
+                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-casa-muted z-10" />
+                  <Input
+                    value={recipeSearch}
+                    onChange={(event) => setRecipeSearch(event.target.value)}
+                    placeholder="Search recipes..."
+                    className="pl-9 min-h-control"
+                  />
+                  {recipeSearch.trim() && (
+                    <IconButton
+                      icon={<X size={14} />}
+                      aria-label="Clear search"
+                      onClick={() => setRecipeSearch('')}
+                      size="sm"
+                      variant="ghost"
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2"
+                    />
+                  )}
+                </div>
+                <Button
+                  variant="primary"
+                  size="md"
+                  onClick={openImportDialog}
+                  leadingIcon={<Upload size={16} />}
+                  className="font-bold min-h-control shadow-card px-4"
+                >
+                  Import recipe
+                </Button>
+              </div>
             </div>
 
-            {/* If user searched, render instant matching recipe search results */}
+            {/* Real-time search matches dropdown tray if user searches */}
             {recipeSearch.trim() && (
-              <div className="space-y-2 p-3 bg-casa-surface rounded-card border border-casa-border shadow-xs">
-                <div className="flex items-center justify-between">
-                  <Text role="caption" muted className="font-semibold uppercase tracking-wider">
-                    Found {filteredRecipes.length} {filteredRecipes.length === 1 ? 'recipe' : 'recipes'}
+              <div className="space-y-3 p-4 bg-casa-surface rounded-2xl border border-casa-gold/40 shadow-card">
+                <div className="flex items-center justify-between pb-2 border-b border-casa-border/60">
+                  <Text role="caption" muted className="font-bold uppercase tracking-wider text-casa-gold">
+                    Found {filteredRecipes.length} {filteredRecipes.length === 1 ? 'matching recipe' : 'matching recipes'}
                   </Text>
-                  <Button variant="ghost" size="sm" onClick={() => setRecipeSearch('')}>
-                    Clear
+                  <Button variant="ghost" size="sm" onClick={() => setRecipeSearch('')} className="text-caption font-semibold">
+                    Clear search
                   </Button>
                 </div>
                 {filteredRecipes.length === 0 ? (
-                  <EmptyState title="No recipes match" description="Try a different keyword or import a new recipe." />
+                  <EmptyState title="No recipes match" description="Try a different keyword or scan a new recipe from photo or URL." />
                 ) : (
-                  <div className="grid gap-2 sm:grid-cols-2 max-h-72 overflow-y-auto pr-1">
+                  <div className="grid gap-2.5 sm:grid-cols-2 max-h-72 overflow-y-auto pr-1">
                     {filteredRecipes.map((recipe) => (
                       <Card
                         key={recipe.id}
@@ -2993,15 +4105,17 @@ export default function CookPage() {
                           setRecipeSearch('')
                           openRecipeForCookMode(recipe.id)
                         }}
-                        className="flex items-center justify-between gap-3 border border-casa-border hover:border-casa-gold"
+                        className="flex items-center justify-between gap-3 border border-casa-border hover:border-casa-gold/80 group"
                       >
                         <div className="min-w-0 flex-1">
-                          <Text role="body-sm" className="font-semibold text-casa-navy truncate">{recipe.name}</Text>
+                          <Text role="body-sm" className="font-semibold text-casa-navy truncate group-hover:text-casa-gold transition-colors">
+                            {recipe.name}
+                          </Text>
                           <Text role="caption" muted className="truncate">
                             {recipe.cook_time ? `${recipe.cook_time} · ` : ''}{recipe.servings ? `${recipe.servings} servings` : 'Standard'}
                           </Text>
                         </div>
-                        <Button variant="primary" size="sm" leadingIcon={<Utensils size={14} />}>
+                        <Button variant="primary" size="sm" leadingIcon={<Utensils size={13} />} className="shrink-0 font-bold">
                           Cook
                         </Button>
                       </Card>
@@ -3011,844 +4125,287 @@ export default function CookPage() {
               </div>
             )}
 
-            {/* Mood Chips */}
-            <div className="flex flex-wrap gap-2">
-              {COOK_MOOD_OPTIONS.map((mood) => (
+            {/* Filter Chips */}
+            <div className="flex flex-wrap items-center gap-2">
+              {([
+                { id: 'all', label: `All Recipes (${recipes.length})` },
+                { id: 'quick', label: `Quick Cooks (${quickTonightCount})` },
+                { id: 'planned', label: `Planned This Week (${plannedRecipes.length})` },
+              ] as const).map((filter) => (
                 <Chip
-                  key={mood.id}
-                  onClick={() => {
-                    setCookMood(mood.id)
-                    setShortlistOffsets((current) => ({ ...current, [mood.id]: 0 }))
-                  }}
-                  selected={cookMood === mood.id}
-                  tone={cookMood === mood.id ? 'accent' : 'neutral'}
-                  className="min-h-control text-body-sm font-semibold"
+                  key={filter.id}
+                  onClick={() => setRecipeBrowseFilter(filter.id)}
+                  selected={recipeBrowseFilter === filter.id}
+                  tone={recipeBrowseFilter === filter.id ? 'accent' : 'neutral'}
+                  className="min-h-control font-semibold"
                 >
-                  {mood.label}
+                  {filter.label}
                 </Chip>
               ))}
             </div>
 
-            {/* Shortlist Header */}
-            <div className="flex items-center justify-between gap-3 pt-2">
-              <Text role="body-sm" className="font-semibold text-casa-navy">
-                3 {shortlistHeadingLabel} recommendations for tonight
-              </Text>
-              <Button
-                onClick={() => setShortlistOffsets((current) => ({ ...current, [cookMood]: current[cookMood] + 1 }))}
-                variant="ghost"
-                size="sm"
-                leadingIcon={<RotateCcw size={14} />}
-                className="font-bold min-h-control text-casa-gold hover:text-amber-800"
-              >
-                Shuffle recommendations
-              </Button>
-            </div>
+            {filteredRecipes.length === 0 && (
+              <EmptyState
+                title="No recipes found"
+                description="Try adjusting your search or filters, or import a new recipe."
+              />
+            )}
 
-            {moodShortlistRecipes.length === 0 ? (
-              <Card tone="subtle" padding="lg" className="text-center space-y-3">
-                <Text>Import recipes from your library or URL to unlock your mood-based shortlist.</Text>
-                <Button
-                  onClick={openImportDialog}
-                  variant="primary"
-                  size="md"
-                  leadingIcon={<Upload size={16} />}
-                  className="font-bold min-h-control"
-                >
-                  Import recipe
-                </Button>
-              </Card>
-            ) : (
-              <div
-                className={cn(
-                  'grid gap-4 sm:gap-6',
-                  aiDrawerOpen ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3',
-                )}
-              >
-                {moodShortlistRecipes.map((insight, index) => {
-                  const focus = parseRecipeImageFocus(insight.recipe.image_url)
-                  const isTop = index === 0
-                  const minutesLabel = insight.minutes ? `${insight.minutes} min` : (insight.recipe.cook_time ?? 'Quick cook')
-                  const approvalLabel = isTop ? buildTopPickApproval(insight) : null
-                  return (
-                    <Card
-                      key={`${insight.recipe.id}-${index}`}
-                      padding="none"
-                      tone={isTop ? 'ambient' : 'surface'}
-                      className={cn(
-                        'flex flex-col overflow-hidden transition-all group shadow-sm',
-                        isTop && 'ring-2 ring-casa-gold/50 shadow-card border-casa-gold/40',
-                      )}
-                    >
-                      {isTop && (
-                        <div className="bg-casa-gold/25 px-4 py-2 text-caption font-bold uppercase tracking-widest text-casa-navy border-b border-casa-gold/30 flex items-center gap-1.5">
-                          <Sparkles size={13} className="text-casa-gold animate-pulse" />
-                          Top pick for tonight
-                        </div>
-                      )}
+            {/* Recipe Grid */}
+            <div
+              className={cn(
+                'grid gap-5',
+                aiDrawerOpen
+                  ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
+                  : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4',
+              )}
+            >
+              {filteredRecipes.slice(0, 32).map((recipe) => {
+                const focus = parseRecipeImageFocus(recipe.image_url)
+                const plannedSlot = plannedRecipes.find((p) => p.recipe.id === recipe.id)?.plan.slot
+                const isGroceryDrawerOpen = activeGroceryRecipeId === recipe.id
+                const isSchedulePickerOpen = activeSchedulePickerRecipeId === recipe.id
+                const recipeIngredients = ingredientsByRecipe.get(recipe.id) ?? []
+                const selectedSet = recipeGrocerySelections[recipe.id] ?? new Set(recipeIngredients.map((_, i) => i))
+                const selectedCount = selectedSet.size
+
+                return (
+                  <Card
+                    key={recipe.id}
+                    tone="surface"
+                    padding="none"
+                    className={cn(
+                      'overflow-hidden flex flex-col group transition-all shadow-card rounded-2xl cursor-pointer hover:shadow-card-hover border-casa-border',
+                      (isGroceryDrawerOpen || isSchedulePickerOpen) ? 'ring-2 ring-casa-gold/80 border-casa-gold' : 'hover:ring-2 hover:ring-casa-gold/50',
+                    )}
+                    onClick={() => openRecipeForCookMode(recipe.id)}
+                  >
+                    <div className="relative overflow-hidden bg-casa-surface">
                       <RecipeImage
-                        src={getRecipeImage(insight.recipe)}
-                        alt={insight.recipe.name}
+                        src={getRecipeImage(recipe)}
+                        alt={recipe.name}
                         focalX={focus.focalX}
                         focalY={focus.focalY}
-                        className={cn(
-                          'w-full object-cover transition-transform duration-500 group-hover:scale-102',
-                          isTop ? 'h-48 sm:h-52' : 'h-40 sm:h-44',
-                        )}
+                        className="h-44 w-full object-cover group-hover:scale-103 transition-transform duration-500"
                       />
-                      <div className="p-4 sm:p-5 flex flex-col flex-1 gap-3">
-                        <div>
-                          {isTop ? (
-                            <Heading role="heading" className="font-display font-bold leading-snug text-casa-navy text-body-lg sm:text-heading">
-                              {insight.recipe.name}
-                            </Heading>
-                          ) : (
-                            <Text as="h3" role="body-lg" className="font-semibold leading-tight text-casa-navy">{insight.recipe.name}</Text>
-                          )}
-                          <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                            <Chip tone="neutral" size="sm" icon={<Clock3 size={13} />}>
-                              {minutesLabel}
-                            </Chip>
-                            {approvalLabel && (
-                              <Chip tone="success" size="sm" icon={<Users size={13} />}>
-                                {approvalLabel}
-                              </Chip>
-                            )}
-                          </div>
-                          {isTop && (
-                            <p className="mt-2 text-body-sm text-casa-text-secondary line-clamp-2 leading-relaxed">
-                              {buildMoodReason(insight)}
-                            </p>
-                          )}
+                      {plannedSlot && (
+                        <div className="absolute top-2.5 left-2.5">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-casa-gold text-casa-navy text-caption font-mono font-bold border border-casa-gold shadow-xs">
+                            <Sparkles size={10} className="text-casa-navy" />
+                            {SLOT_LABELS[plannedSlot]}
+                          </span>
                         </div>
-                        <Button
-                          onClick={() => openRecipeForCookMode(insight.recipe.id)}
-                          variant={isTop ? 'primary' : 'secondary'}
-                          className="mt-auto"
-                          size="lg"
-                          fullWidth
-                        >
-                          Start cooking
-                        </Button>
-                      </div>
-                    </Card>
-                  )
-                })}
-              </div>
-            )}
-
-            {/* Resume Active Cooking Banner */}
-            {resumeRecipe && (
-              <Card
-                tone="ambient"
-                padding="md"
-                className="mt-4 border-amber-500/30 cursor-pointer hover:border-casa-gold transition-all"
-                onClick={() => {
-                  openRecipeForCookMode(resumeRecipe.recipe.id)
-                  setStepIndex(
-                    Math.max(
-                      0,
-                      Math.min(resumeRecipe.progress.stepIndex, Math.max(0, resumeRecipe.progress.totalSteps - 1)),
-                    ),
-                  )
-                }}
-              >
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full bg-casa-gold animate-pulse" />
-                      <span className="text-caption font-bold uppercase tracking-widest text-amber-800">
-                        Jump back in
-                      </span>
-                      <span className="text-caption font-mono font-bold text-casa-navy">
-                        Step {resumeRecipe.progress.stepIndex + 1} of {resumeRecipe.progress.totalSteps}
-                      </span>
+                      )}
+                      {recipe.cook_time && (
+                        <div className="absolute top-2.5 right-2.5">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-casa-surface/90 backdrop-blur-sm text-casa-navy text-caption font-mono font-bold border border-casa-border/80 shadow-xs">
+                            <Clock3 size={11} className="text-casa-gold" />
+                            {recipe.cook_time}
+                          </span>
+                        </div>
+                      )}
                     </div>
-                    <p className="font-display text-body-lg font-bold text-casa-navy">
-                      {resumeRecipe.recipe.name}
-                    </p>
-                    {resumeRecentLabel && (
-                      <p className="text-caption text-casa-muted">Also recent: {resumeRecentLabel}</p>
-                    )}
-                  </div>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    className="font-bold min-h-control px-4 shrink-0"
-                  >
-                    Resume Cooking →
-                  </Button>
-                </div>
-                <Progress
-                  value={resumeRecipe.progress.stepIndex + 1}
-                  max={Math.max(1, resumeRecipe.progress.totalSteps)}
-                  aria-label="Saved cooking progress"
-                  className="mt-3 [&_.casa-progress]:h-2"
-                />
-              </Card>
-            )}
-          </div>
-        ) : (
-          /* Plan the week workspace header */
-          <div className="mt-2 space-y-4">
-            <div>
-              <p className="text-caption font-semibold uppercase tracking-wider text-casa-gold">Weekly Planner</p>
-              <Heading role="display-sm" className="font-display font-bold text-casa-navy mt-0.5">
-                Build an overlap-optimized weekly dinner plan
-              </Heading>
-              <p className="text-body-sm text-casa-text-secondary mt-1">
-                Profile: {foodProfile.householdSize} people · ${foodProfile.weeklyBudgetUsd}/week · {foodProfile.defaultMealsPerWeek} meals · {foodProfile.weeknightMaxMinutes} min weeknights
-              </p>
-            </div>
-          </div>
-        )}
-      </Card>
 
-      {/* Plan the Week Workspace */}
-      {cookLandingMode === 'plan-week' && (
-        <Card tone="surface" padding="lg" className="space-y-5 shadow-sm">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-casa-border/60">
-            <div>
-              <div className="flex items-center gap-2">
-                <Sparkles size={18} className="text-casa-gold" />
-                <Heading role="heading" className="font-display text-heading font-bold text-casa-navy">
-                  Meal Planner AI Workspace
-                </Heading>
-              </div>
-              <p className="text-body-sm text-casa-text-secondary mt-0.5">
-                Plan dinners with ingredient reuse to cut shopping costs and eliminate food waste.
-              </p>
-            </div>
-          </div>
+                    <div className="p-4 flex flex-col flex-1 gap-2.5">
+                      <Heading role="heading" className="font-display font-bold text-body-lg text-casa-navy line-clamp-2 group-hover:text-casa-gold transition-colors">
+                        {recipe.name}
+                      </Heading>
+                      <p className="text-caption text-casa-muted">
+                        {recipe.servings ? `${recipe.servings} servings` : 'Standard servings'}{recipe.cook_time ? ` · ${recipe.cook_time}` : ''}
+                      </p>
 
-          {/* Strategy Selector */}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <span className="text-caption font-bold uppercase tracking-wider text-casa-muted">Strategy:</span>
-              {(['balanced', 'budget', 'speed'] as const).map((strat) => (
-                <Chip
-                  key={strat}
-                  onClick={() => setMealPlannerStrategy(strat)}
-                  selected={mealPlannerStrategy === strat}
-                  tone={mealPlannerStrategy === strat ? 'accent' : 'neutral'}
-                  className="capitalize font-semibold min-h-control"
-                >
-                  {strat}
-                </Chip>
-              ))}
-            </div>
-            <p className="text-caption text-casa-muted">
-              {strategyInstruction(mealPlannerStrategy)}
-            </p>
-          </div>
-
-          {/* Prompt Box */}
-          <div className="space-y-2">
-            <Textarea
-              value={mealPlannerPrompt}
-              onChange={(event) => setMealPlannerPrompt(event.target.value)}
-              rows={2}
-              placeholder="Plan 5 dinners this week under $140 with overlapping ingredients and one fish meal."
-              className="text-body"
-            />
-            <div className="flex flex-wrap items-center gap-1.5 pt-1">
-              {[
-                'High overlap & low waste',
-                'Fast 20m weeknights',
-                'Budget friendly under $120',
-                'Use up pantry staples',
-              ].map((preset) => (
-                <Chip
-                  key={preset}
-                  size="sm"
-                  onClick={() => setMealPlannerPrompt(preset)}
-                  className="text-caption font-medium"
-                >
-                  {preset}
-                </Chip>
-              ))}
-            </div>
-          </div>
-
-          {/* Actions Bar */}
-          <div className="flex flex-wrap items-center gap-3 pt-1">
-            <Button
-              variant="primary"
-              size="lg"
-              onClick={() => void generateMealPlan()}
-              disabled={mealPlannerLoading}
-              loading={mealPlannerLoading}
-              leadingIcon={<Sparkles size={16} />}
-              className="font-bold shadow-sm px-6 min-h-control"
-            >
-              {mealPlannerLoading ? 'Generating Plan…' : 'Generate weekly plan'}
-            </Button>
-            <Button
-              variant="secondary"
-              size="lg"
-              onClick={() => void optimizeCurrentPlanForBudget()}
-              disabled={mealPlannerLoading || !mealPlannerPlan}
-              className="font-semibold min-h-control"
-            >
-              Optimize budget
-            </Button>
-            <Button
-              variant="strong"
-              size="lg"
-              onClick={() => void applyPlannerGroceries()}
-              disabled={mealPlannerAddingGroceries || pendingPlannerGroceries.length === 0}
-              loading={mealPlannerAddingGroceries}
-              leadingIcon={<ShoppingCart size={16} />}
-              className="font-bold min-h-control px-6 ml-auto"
-            >
-              {mealPlannerAddingGroceries
-                ? `Adding groceries... (${pendingPlannerGroceries.length})`
-                : `Apply to shopping (${pendingPlannerGroceries.length})`}
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setPlannerAdvancedOpen((val) => !val)}
-              className="text-caption font-bold text-casa-gold"
-            >
-              {plannerAdvancedOpen ? 'Hide advanced' : 'Show advanced'}
-            </Button>
-          </div>
-
-          {/* Advanced Planner Settings */}
-          {plannerAdvancedOpen && (
-            <Card tone="subtle" padding="md" className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <Input
-                  value={mealPlannerTemplateName}
-                  onChange={(event) => setMealPlannerTemplateName(event.target.value)}
-                  placeholder="Template name"
-                  className="flex-1 text-caption min-h-control"
-                />
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => void saveCurrentPromptTemplate()}
-                  className="min-h-control"
-                >
-                  Save template
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => void runWeeklyAutoDraft()}
-                  className="min-h-control font-bold text-casa-gold"
-                >
-                  Auto weekly draft
-                </Button>
-              </div>
-
-              {mealPlannerTemplates.length > 0 && (
-                <div className="space-y-1">
-                  <p className="text-caption text-casa-muted font-semibold">Saved templates</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {mealPlannerTemplates.map((tpl) => (
-                      <div key={tpl.id} className="inline-flex items-center gap-1 rounded-pill border border-casa-border bg-casa-surface px-2.5 py-1 text-caption">
+                      <div className="mt-auto pt-2 flex items-center gap-2">
                         <Button
-                          variant="ghost"
+                          variant="primary"
                           size="sm"
-                          onClick={() => setMealPlannerPrompt(tpl.prompt)}
-                          className="min-h-0 p-0 text-casa-navy hover:bg-transparent font-medium"
+                          className="flex-1 font-bold min-h-control"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            openRecipeForCookMode(recipe.id)
+                          }}
+                          leadingIcon={<Utensils size={13} />}
                         >
-                          {tpl.name}
+                          Cook
                         </Button>
                         <IconButton
-                          icon={<Trash2 size={12} />}
-                          variant="ghost"
+                          icon={<CalendarPlus size={15} />}
+                          variant="secondary"
                           size="sm"
-                          onClick={() => void deleteMealPlannerTemplate(tpl.id)}
-                          aria-label={`Delete ${tpl.name} template`}
-                          className="min-h-0 min-w-0 p-0 text-casa-muted hover:text-casa-error hover:bg-transparent"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {typeof mealPlannerDebug?.elapsed_ms === 'number' && (
-                <p className="text-caption font-mono text-casa-muted">
-                  trace {mealPlannerLastTraceId ? mealPlannerLastTraceId.slice(0, 8) : 'n/a'} · {mealPlannerDebug.elapsed_ms}ms
-                </p>
-              )}
-            </Card>
-          )}
-
-          {mealPlannerError && (
-            <Alert tone="danger" title="Meal planning error" className="shadow-sm">
-              {mealPlannerError}
-            </Alert>
-          )}
-          {!mealPlannerError && mealPlannerStatus && (
-            <Alert tone="success" title="Plan ready" className="shadow-sm">
-              {mealPlannerStatus}
-            </Alert>
-          )}
-
-          {/* Generated Plan Details */}
-          {mealPlannerPlan && (
-            <div className="space-y-4 pt-4 border-t border-casa-border/60">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <Heading role="heading" className="font-display text-heading font-bold text-casa-navy">
-                  Proposed Weekly Dinners ({configuredPlannerMeals.filter((m) => m.enabled).length})
-                </Heading>
-                <div className="flex items-center gap-2">
-                  <span className="text-caption font-bold px-3 py-1 rounded-full bg-emerald-500/15 text-emerald-800 border border-emerald-500/30">
-                    Est. Cost: ${configuredPlannerMetrics.estimatedLow} – ${configuredPlannerMetrics.estimatedHigh}
-                  </span>
-                  <span className="text-caption font-bold px-3 py-1 rounded-full bg-casa-gold/20 text-casa-navy border border-casa-gold/30">
-                    Overlap Score: {(mealPlannerPlan.budget_fit_score * 100).toFixed(0)}%
-                  </span>
-                </div>
-              </div>
-
-              {/* Over Budget Swap Hints */}
-              {overBudgetSwapHints.length > 0 && (
-                <Alert tone="warning" title="Budget optimization suggestions">
-                  <ul className="list-disc pl-4 space-y-0.5 mt-1 text-body-sm">
-                    {overBudgetSwapHints.map((hint) => (
-                      <li key={hint}>{hint}</li>
-                    ))}
-                  </ul>
-                </Alert>
-              )}
-
-              {/* Proposed Meals Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                {configuredPlannerMeals.map((meal) => (
-                  <Card
-                    key={meal.key}
-                    tone={meal.enabled ? 'surface' : 'subtle'}
-                    padding="md"
-                    className={cn(
-                      'space-y-2 transition-all',
-                      !meal.enabled && 'opacity-60',
-                    )}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-caption font-bold uppercase tracking-wider text-casa-gold">
-                        {SLOT_LABELS[meal.slot]}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <Switch
-                          checked={meal.enabled}
-                          onCheckedChange={() => toggleConfiguredMeal(meal.key)}
-                          label="Include"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            toggleSchedulePicker(recipe)
+                          }}
+                          disabled={plannedMealActionId !== null}
+                          title={plannedSlot ? `Currently scheduled for ${SLOT_LABELS[plannedSlot]} (Click to change slot)` : 'Schedule for dinner'}
+                          aria-label={`Schedule ${recipe.name}`}
+                          className={cn(
+                            'shrink-0 min-h-control size-control bg-casa-surface border-casa-border hover:border-casa-gold',
+                            (plannedSlot || isSchedulePickerOpen) && 'border-casa-gold text-casa-gold bg-casa-gold/15',
+                          )}
                         />
                         <IconButton
-                          icon={<Trash2 size={13} />}
-                          variant="danger"
+                          icon={<ShoppingCart size={15} />}
+                          variant="secondary"
                           size="sm"
-                          onClick={() => deleteConfiguredMeal(meal.key)}
-                          aria-label={`Remove ${meal.recipe_name} from plan`}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            toggleGroceryDrawer(recipe)
+                          }}
+                          disabled={smartAddingRecipeId === recipe.id}
+                          title="Add ingredients to grocery list"
+                          aria-label={`Add ingredients for ${recipe.name} to shopping list`}
+                          className={cn(
+                            'shrink-0 min-h-control size-control bg-casa-surface border-casa-border hover:border-casa-gold',
+                            isGroceryDrawerOpen && 'border-casa-gold text-casa-gold bg-casa-gold/15',
+                          )}
                         />
                       </div>
                     </div>
-                    <p className="font-display text-body-lg font-bold text-casa-navy">{meal.recipe_name}</p>
-                    <p className="text-caption text-casa-text-secondary line-clamp-2">{meal.reason}</p>
-                  </Card>
-                ))}
-              </div>
 
-              {/* Plan Action Buttons (Queue & Feedback Learning) */}
-              <div className="flex flex-wrap items-center gap-2 pt-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => void applyPlannerMealQueue()}
-                  className="font-bold min-h-control"
-                >
-                  Queue meals for week
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => void reinforceCurrentPlanPreferences()}
-                  className="min-h-control"
-                >
-                  Love this pattern (learn)
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    void (async () => {
-                      if (!mealPlannerPlan) return
-                      try {
-                        await recordPlannerRejection(mealPlannerPlan)
-                        setMealPlannerStatus('Captured feedback. Regenerating with updated learning…')
-                        await generateMealPlan()
-                      } catch (error) {
-                        setMealPlannerError(formatSupabaseError(error, 'Could not save planner feedback'))
-                      }
-                    })()
-                  }}
-                  className="min-h-control text-casa-muted"
-                >
-                  This plan missed (learn + regenerate)
-                </Button>
-              </div>
-
-              {/* Overlap Ingredients & Deductions */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-2">
-                <Card tone="subtle" padding="md" className="space-y-2">
-                  <p className="text-caption font-bold uppercase tracking-wider text-casa-navy flex items-center gap-1.5">
-                    <Sparkles size={14} className="text-casa-gold" />
-                    Shared Overlap Ingredients ({mealPlannerPlan.overlap_ingredients.length})
-                  </p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {mealPlannerPlan.overlap_ingredients.map((item) => (
-                      <Chip key={item.name} size="sm" tone="accent">
-                        {item.name} ({item.recipe_count} recipes)
-                      </Chip>
-                    ))}
-                  </div>
-                </Card>
-
-                <Card tone="subtle" padding="md" className="space-y-2">
-                  <p className="text-caption font-bold uppercase tracking-wider text-casa-navy flex items-center gap-1.5">
-                    <Layers size={14} className="text-casa-gold" />
-                    Pantry Deductions ({mealPlannerPlan.pantry_deductions.length})
-                  </p>
-                  <p className="text-caption text-casa-text-secondary line-clamp-2">
-                    {mealPlannerPlan.pantry_deductions.map((d) => d.name).join(', ')}
-                  </p>
-                </Card>
-              </div>
-
-              {/* Overlap-Optimized Groceries Checklist */}
-              <div className="space-y-3 pt-2">
-                <div className="flex items-center justify-between gap-2">
-                  <Heading role="heading" className="font-display text-heading font-bold text-casa-navy">
-                    Overlap-Optimized Groceries ({pendingPlannerGroceries.length} to buy)
-                  </Heading>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => navigate('/settings/pantry-inventory')}
-                    className="text-caption font-bold text-casa-gold hover:underline min-h-control"
-                  >
-                    Manage pantry inventory →
-                  </Button>
-                </div>
-
-                {lowStockPlannerItems.length > 0 && (
-                  <p className="text-caption text-amber-800 font-medium">
-                    {lowStockPlannerItems.length} item{lowStockPlannerItems.length === 1 ? '' : 's'} projected low in pantry after this plan — review before shopping.
-                  </p>
-                )}
-
-                {mealPlannerAddResult && (
-                  <Alert tone="success" title="Shopping list updated">
-                    Added {mealPlannerAddResult.inserted} new items to shopping list ({mealPlannerAddResult.attempted} processed).
-                  </Alert>
-                )}
-
-                <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
-                  {configuredPlannerGroceries.map((item) => {
-                    const checked = Boolean(mealPlannerPantryConfig[plannerGroceryKey(item)])
-                    const tracker = projectedPantryForItem(item)
-                    return (
+                    {/* Inline Schedule Slot Selector Tray (Modal-Free) */}
+                    {isSchedulePickerOpen && (
                       <div
-                        key={`${item.name}-${item.category}`}
-                        className="rounded-xl border border-casa-border bg-casa-surface p-3 flex items-center justify-between gap-3"
+                        className="p-3 bg-casa-bg border-t border-casa-border/80 space-y-2 rounded-b-2xl"
+                        onClick={(e) => e.stopPropagation()}
                       >
-                        <Checkbox
-                          checked={checked}
-                          onChange={() => togglePlannerPantryItem(item)}
-                          label={
-                            <span className={cn('text-body-sm font-semibold', checked ? 'line-through text-casa-muted' : 'text-casa-navy')}>
-                              {item.name}
-                              {item.quantity ? ` · ${item.quantity}${item.unit ? ` ${item.unit}` : ''}` : ''}
-                              {item.suggested_purchase_display && (
-                                <span className="text-casa-muted font-normal"> · buy {item.suggested_purchase_display}</span>
-                              )}
-                            </span>
-                          }
-                        />
-                        <div className="flex items-center gap-2">
-                          <Chip size="sm" tone="neutral">
-                            {item.category}
-                          </Chip>
-                          {tracker.lowStock && (
-                            <Chip size="sm" tone="danger">
-                              Low stock
-                            </Chip>
-                          )}
+                        <div className="flex items-center justify-between gap-1 pb-1 border-b border-casa-border/50">
+                          <span className="text-caption font-mono font-bold uppercase tracking-wider text-casa-navy">
+                            Choose Dinner Slot
+                          </span>
+                          <IconButton
+                            icon={<X size={13} />}
+                            size="sm"
+                            variant="ghost"
+                            aria-label="Close schedule picker"
+                            onClick={() => setActiveSchedulePickerRecipeId(null)}
+                            className="size-6 p-0 min-h-0 min-w-0 text-casa-muted hover:text-casa-navy"
+                          />
                         </div>
+
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {SLOT_ORDER.map((slot) => {
+                            const isCurrent = plannedSlot === slot
+                            const slotLabel = slot === 'tonight' ? 'Tonight' : slot === 'tomorrow' ? 'Tomorrow' : 'This Week'
+                            return (
+                              <Button
+                                key={slot}
+                                variant={isCurrent ? 'primary' : 'secondary'}
+                                size="sm"
+                                onClick={() => void handleScheduleSlot(recipe, slot)}
+                                className={cn(
+                                  'min-h-[36px] py-1 px-1 text-center font-bold text-caption uppercase tracking-wider font-mono',
+                                  isCurrent && 'shadow-xs border-casa-gold',
+                                )}
+                              >
+                                {slotLabel}
+                              </Button>
+                            )
+                          })}
+                        </div>
+
+                        {plannedSlot && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            fullWidth
+                            onClick={() => void handleRemoveFromSchedule(recipe)}
+                            leadingIcon={<Trash2 size={12} className="text-casa-error" />}
+                            className="text-caption font-bold text-casa-error hover:bg-casa-error/10 min-h-0 py-1"
+                          >
+                            Remove from schedule
+                          </Button>
+                        )}
                       </div>
-                    )
-                  })}
-                </div>
-              </div>
+                    )}
 
-              {/* Action Log Drawer */}
-              {mealPlannerActionLog.length > 0 && (
-                <div className="pt-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setPlannerLogOpen((val) => !val)}
-                    className="text-caption font-mono text-casa-muted"
-                  >
-                    {plannerLogOpen ? 'Hide action log' : `Show action log (${mealPlannerActionLog.length})`}
-                  </Button>
-                  {plannerLogOpen && (
-                    <div className="mt-2 max-h-40 overflow-y-auto space-y-1.5 pr-1">
-                      {mealPlannerActionLog.slice(0, 10).map((log) => (
-                        <div key={log.id} className="p-2 rounded-lg bg-casa-surface border border-casa-border text-caption">
-                          <p className="font-semibold text-casa-navy">{log.action}: {log.status}</p>
-                          <p className="text-casa-muted">{log.detail}</p>
+                    {/* Inline Grocery Ingredient Review Tray (Modal-Free) */}
+                    {isGroceryDrawerOpen && (
+                      <div
+                        className="p-3 bg-casa-bg border-t border-casa-border/80 space-y-2.5 rounded-b-2xl"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="flex items-center justify-between gap-1 pb-1 border-b border-casa-border/50">
+                          <span className="text-caption font-mono font-bold uppercase tracking-wider text-casa-navy truncate">
+                            Ingredients ({selectedCount}/{recipeIngredients.length})
+                          </span>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => toggleAllIngredients(recipe)}
+                              className="text-caption font-semibold p-0 min-h-0 text-casa-gold hover:text-amber-800"
+                            >
+                              {selectedCount === recipeIngredients.length ? 'Clear' : 'All'}
+                            </Button>
+                            <IconButton
+                              icon={<X size={13} />}
+                              size="sm"
+                              variant="ghost"
+                              aria-label="Close ingredient selector"
+                              onClick={() => setActiveGroceryRecipeId(null)}
+                              className="size-6 p-0 min-h-0 min-w-0 text-casa-muted hover:text-casa-navy"
+                            />
+                          </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </Card>
-      )}
 
-      {/* Planned Meals Section */}
-      <Card tone="surface" padding="lg" className="space-y-4 shadow-sm">
-        <div className="flex items-center justify-between gap-2 pb-2 border-b border-casa-border/60">
-          <div>
-            <Heading role="heading" className="font-display text-heading font-bold text-casa-navy">
-              Planned Dinners
-            </Heading>
-            <p className="text-body-sm text-casa-text-secondary">
-              Slot schedule for upcoming family meals.
-            </p>
-          </div>
-          <Text role="caption" muted>
-            {plannedRecipes.length} planned
-          </Text>
-        </div>
+                        {recipeIngredients.length === 0 ? (
+                          <p className="text-caption text-casa-muted py-1">No ingredients listed for this recipe.</p>
+                        ) : (
+                          <div className="max-h-44 overflow-y-auto space-y-1.5 pr-1">
+                            {recipeIngredients.map((ingredient, idx) => {
+                              const isChecked = selectedSet.has(idx)
+                              const text = ingredient.name || ingredient.raw_text
+                              const qtyText = ingredient.quantity ? `${ingredient.quantity}${ingredient.unit ? ` ${ingredient.unit}` : ''}` : ''
+                              return (
+                                <div
+                                  key={`${ingredient.recipe_id}-${idx}`}
+                                  onClick={() => toggleIngredientSelection(recipe.id, idx)}
+                                  className={cn(
+                                    'flex items-center gap-2 p-1.5 rounded-xl border text-caption cursor-pointer transition-colors select-none',
+                                    isChecked
+                                      ? 'bg-casa-surface border-casa-gold/60 text-casa-navy'
+                                      : 'bg-casa-surface/40 border-casa-border/60 text-casa-muted line-through opacity-70',
+                                  )}
+                                >
+                                  <Checkbox
+                                    checked={isChecked}
+                                    onChange={() => toggleIngredientSelection(recipe.id, idx)}
+                                    label=""
+                                    className="pointer-events-none"
+                                  />
+                                  <span className="truncate font-medium flex-1">
+                                    {text}
+                                  </span>
+                                  {qtyText && (
+                                    <span className="text-caption font-mono text-casa-muted shrink-0">
+                                      {qtyText}
+                                    </span>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
 
-        {plannedMealError && (
-          <Alert tone="danger" title="Planned meals update failed" className="shadow-sm">
-            {plannedMealError}
-          </Alert>
-        )}
-        {!plannedMealError && plannedMealStatus && (
-          <Alert tone="success" title="Planned meals updated" className="shadow-sm">
-            {plannedMealStatus}
-          </Alert>
-        )}
-
-        {plannedRecipes.length === 0 ? (
-          <p className="text-body-sm text-casa-muted py-2">
-            No meal slots scheduled yet. Choose recipes below or from your weekly planner.
-          </p>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {plannedRecipes.slice(0, 9).map(({ plan, recipe }) => (
-              <Card
-                key={`${plan.slot}-${recipe.id}`}
-                tone="surface"
-                padding="md"
-                className="space-y-3"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <span className="text-caption font-bold uppercase tracking-wider text-casa-gold">
-                      {SLOT_LABELS[plan.slot]}
-                    </span>
-                    <p className="font-display text-body-lg font-bold text-casa-navy truncate mt-0.5">
-                      {recipe.name}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <IconButton
-                      icon={<ChevronLeft size={14} />}
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => void shiftPlannedMealSlot(plan, recipe, -1)}
-                      disabled={plan.slot === 'tonight' || plannedMealActionId !== null}
-                      aria-label="Move planned meal earlier"
-                    />
-                    <IconButton
-                      icon={<ChevronRight size={14} />}
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => void shiftPlannedMealSlot(plan, recipe, 1)}
-                      disabled={plan.slot === 'this-week' || plannedMealActionId !== null}
-                      aria-label="Move planned meal later"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between gap-2 pt-2 border-t border-casa-border/50">
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={() => openRecipeForCookMode(recipe.id)}
-                    className="font-bold min-h-control"
-                  >
-                    Cook now
-                  </Button>
-                  <div className="flex items-center gap-1.5">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => void markPlannedMealCooked(plan, recipe)}
-                      disabled={plannedMealActionId !== null}
-                      className="font-semibold min-h-control"
-                    >
-                      Done
-                    </Button>
-                    <IconButton
-                      icon={<Trash2 size={14} />}
-                      variant="danger"
-                      size="sm"
-                      onClick={() => void removePlannedMeal(plan, recipe)}
-                      disabled={plannedMealActionId === `${plan.slot}:${recipe.id}` || plannedMealActionId !== null}
-                      aria-label={`Remove ${recipe.name}`}
-                    />
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
-        )}
-      </Card>
-
-      {/* Recipe Library Section */}
-      <Card tone="surface" padding="lg" className="space-y-5 shadow-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-casa-border/60">
-          <div>
-            <Heading role="heading" className="font-display text-heading font-bold text-casa-navy">
-              Recipe Library
-            </Heading>
-            <p className="text-body-sm text-casa-text-secondary mt-0.5">
-              Browse and search all {recipes.length} saved household recipes.
-            </p>
-          </div>
-
-          {libraryActionError && (
-            <Alert tone="danger" title="Library action failed">
-              {libraryActionError}
-            </Alert>
-          )}
-          {!libraryActionError && libraryActionStatus && (
-            <Alert tone="success" title="Action completed">
-              {libraryActionStatus}
-            </Alert>
-          )}
-
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="relative min-w-[15rem] flex-1 sm:flex-initial">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-casa-muted z-10" />
-              <Input
-                value={recipeSearch}
-                onChange={(event) => setRecipeSearch(event.target.value)}
-                placeholder="Search recipes..."
-                className="pl-9 min-h-control"
-              />
-            </div>
-            <Button
-              variant="primary"
-              size="md"
-              onClick={openImportDialog}
-              leadingIcon={<Upload size={16} />}
-              className="font-bold min-h-control shadow-sm px-4"
-            >
-              Import recipe
-            </Button>
-          </div>
-        </div>
-
-        {/* Filter Chips */}
-        <div className="flex flex-wrap items-center gap-2">
-          {([
-            { id: 'all', label: `All Recipes (${recipes.length})` },
-            { id: 'quick', label: `Quick Cooks (${quickTonightCount})` },
-            { id: 'planned', label: `Planned This Week (${plannedRecipes.length})` },
-          ] as const).map((filter) => (
-            <Chip
-              key={filter.id}
-              onClick={() => setRecipeBrowseFilter(filter.id)}
-              selected={recipeBrowseFilter === filter.id}
-              tone={recipeBrowseFilter === filter.id ? 'accent' : 'neutral'}
-              className="min-h-control font-semibold"
-            >
-              {filter.label}
-            </Chip>
-          ))}
-        </div>
-
-        {filteredRecipes.length === 0 && (
-          <EmptyState
-            title="No recipes found"
-            description="Try adjusting your search or filters, or import a new recipe."
-          />
-        )}
-
-        {/* Recipe Grid */}
-        <div
-          className={cn(
-            'grid gap-4 sm:gap-6',
-            aiDrawerOpen
-              ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
-              : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4',
-          )}
-        >
-          {filteredRecipes.slice(0, 32).map((recipe) => (
-            <Card
-              key={recipe.id}
-              tone="surface"
-              padding="none"
-              className="overflow-hidden flex flex-col group hover:ring-2 hover:ring-casa-gold/40 transition-all shadow-sm cursor-pointer"
-              onClick={() => openRecipeForCookMode(recipe.id)}
-            >
-              {(() => {
-                const focus = parseRecipeImageFocus(recipe.image_url)
-                return (
-                  <RecipeImage
-                    src={getRecipeImage(recipe)}
-                    alt={recipe.name}
-                    focalX={focus.focalX}
-                    focalY={focus.focalY}
-                    className="h-44 w-full object-cover group-hover:scale-102 transition-transform duration-500"
-                  />
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          fullWidth
+                          onClick={() => void addSelectedRecipeGroceries(recipe)}
+                          disabled={smartAddingRecipeId === recipe.id || selectedCount === 0}
+                          loading={smartAddingRecipeId === recipe.id}
+                          leadingIcon={<ShoppingCart size={13} />}
+                          className="font-bold min-h-control shadow-card"
+                        >
+                          Add {selectedCount} to cart →
+                        </Button>
+                      </div>
+                    )}
+                  </Card>
                 )
-              })()}
-              <div className="p-4 flex flex-col flex-1 gap-2">
-                <Heading role="heading" className="font-display font-bold text-body-lg text-casa-navy line-clamp-2">
-                  {recipe.name}
-                </Heading>
-                <p className="text-caption text-casa-muted">
-                  {recipe.cook_time ? `${recipe.cook_time} · ` : ''}
-                  {recipe.servings ? `${recipe.servings} servings` : 'Standard servings'}
-                </p>
-                <div className="mt-auto pt-3 flex items-center gap-2">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    fullWidth
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      void smartAddIngredientsToShoppingList(recipe)
-                    }}
-                    disabled={smartAddingRecipeId === recipe.id}
-                    loading={smartAddingRecipeId === recipe.id}
-                    leadingIcon={<ShoppingCart size={14} />}
-                    className="font-bold min-h-control"
-                  >
-                    Smart add groceries
-                  </Button>
-                </div>
-              </div>
-            </Card>
-          ))}
-        </div>
-      </Card>
+              })}
+            </div>
+          </div>
 
       {/* Delete Confirmation Modal */}
       <Modal
@@ -4591,6 +5148,16 @@ export default function CookPage() {
       )}
         </PageShell>
       </div>
+
+      {/* Global Toast with Undo Notification */}
+      <Toast
+        open={Boolean(toastState?.open)}
+        message={toastState?.message ?? ''}
+        tone={toastState?.tone ?? 'info'}
+        actionLabel={toastState?.actionLabel}
+        onAction={toastState?.onAction}
+        onClose={() => setToastState(null)}
+      />
     </div>
   )
 }
