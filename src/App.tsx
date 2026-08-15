@@ -1,6 +1,6 @@
 import { useState, useEffect, Component, type ReactNode } from 'react'
 import { BrowserRouter, useLocation } from 'react-router-dom'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query'
 import AnimatedRoutes from './components/shared/AnimatedRoutes'
 import TabletSidebar from './components/layout/TabletSidebar'
 import MobileFloatingDock from './components/layout/MobileFloatingDock'
@@ -59,6 +59,7 @@ const queryClient = new QueryClient({
 })
 
 function AppShell() {
+  const queryClient = useQueryClient()
   const { currentZone } = useRoomTone()
   const { setRoomToneZone } = useTheme()
   usePushNotifications()
@@ -88,21 +89,44 @@ function AppShell() {
   }, [currentZone, setRoomToneZone])
 
   useEffect(() => {
+    const triggerCatchUpSync = () => {
+      void queryClient.invalidateQueries({ queryKey: ['events'] })
+      void queryClient.invalidateQueries({ queryKey: ['grocery'] })
+      void queryClient.invalidateQueries({ queryKey: ['notifications'] })
+      void queryClient.invalidateQueries({ queryKey: ['conflicts'] })
+    }
+
     const onSleep = () => setScreensaverActive(true)
     const onSleepIdle = () => {
       if (aiDrawerOpen) return
       setScreensaverActive(true)
     }
-    const onWake  = () => setScreensaverActive(false)
+    const onWake  = () => {
+      setScreensaverActive(false)
+      triggerCatchUpSync()
+    }
+    const onVisibilityOrFocus = () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'hidden') {
+        triggerCatchUpSync()
+      }
+    }
+
     document.addEventListener('screensaver-on', onSleep)
     document.addEventListener('screensaver-idle-on', onSleepIdle)
     document.addEventListener('wake-kiosk', onWake)
+    document.addEventListener('visibilitychange', onVisibilityOrFocus)
+    window.addEventListener('focus', onVisibilityOrFocus)
+    window.addEventListener('online', onVisibilityOrFocus)
+
     return () => {
       document.removeEventListener('screensaver-on', onSleep)
       document.removeEventListener('screensaver-idle-on', onSleepIdle)
       document.removeEventListener('wake-kiosk', onWake)
+      document.removeEventListener('visibilitychange', onVisibilityOrFocus)
+      window.removeEventListener('focus', onVisibilityOrFocus)
+      window.removeEventListener('online', onVisibilityOrFocus)
     }
-  }, [aiDrawerOpen])
+  }, [aiDrawerOpen, queryClient])
 
   useEffect(() => {
     fetch('http://127.0.0.1:8766/wake-sensitivity', {

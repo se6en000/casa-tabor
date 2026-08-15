@@ -58,7 +58,9 @@ export function useAppUpdater() {
       if (document.visibilityState === 'visible') check()
     }
     document.addEventListener('visibilitychange', onVisible)
+    document.addEventListener('wake-kiosk', check)
     window.addEventListener('focus', check)
+    window.addEventListener('online', check)
     // Initial check shortly after mount (covers a client that loaded an old cached
     // shell right as a deploy landed).
     const kickoff = window.setTimeout(check, 4_000)
@@ -68,7 +70,9 @@ export function useAppUpdater() {
       window.clearInterval(interval)
       window.clearTimeout(kickoff)
       document.removeEventListener('visibilitychange', onVisible)
+      document.removeEventListener('wake-kiosk', check)
       window.removeEventListener('focus', check)
+      window.removeEventListener('online', check)
     }
   }, [])
 }

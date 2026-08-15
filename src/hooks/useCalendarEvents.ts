@@ -193,7 +193,7 @@ async function fetchEventsForRange(start: Date, end: Date): Promise<EventWithDet
     .filter((event) => eventOverlapsRange(event, start, end))
 }
 
-async function fetchEventDetails(eventId: string): Promise<EventWithDetails> {
+async function fetchEventDetails(eventId: string): Promise<EventWithDetails | null> {
   const { data, error } = await supabase
     .from('events')
     .select(EVENT_DETAIL_SELECT)
@@ -201,15 +201,20 @@ async function fetchEventDetails(eventId: string): Promise<EventWithDetails> {
     .is('deleted_at', null)
     .single()
 
-  if (error) throw error
-  return normalizeEventRow(data)
+  if (error) {
+    if (error.code === 'PGRST116' || error.message?.includes('Cannot coerce the result to a single JSON object')) {
+      return null
+    }
+    throw error
+  }
+  return data ? normalizeEventRow(data) : null
 }
 
 export function useEventDetails(event: EventWithDetails | null, enabled = true) {
   return useQuery({
     queryKey: ['event-details', event?.id],
     queryFn: () => fetchEventDetails(event!.id),
-    enabled: enabled && Boolean(event),
+    enabled: enabled && Boolean(event?.id),
     staleTime: 5 * 60_000,
   })
 }
@@ -348,8 +353,21 @@ let _realtimeSubscribers = 0
 let _realtimeChannel: ReturnType<typeof supabase.channel> | null = null
 const _invalidateCallbacks = new Set<() => void>()
 const _planInvalidateCallbacks = new Set<() => void>()
+const _queryClientInstances = new Set<ReturnType<typeof useQueryClient>>()
 let _debounceTimer: ReturnType<typeof setTimeout> | null = null
 let _planDebounceTimer: ReturnType<typeof setTimeout> | null = null
+let _reconnectTimer: ReturnType<typeof setTimeout> | null = null
+
+function _evictDeletedEventFromCache(deletedId: string) {
+  if (!deletedId) return
+  _queryClientInstances.forEach((qc) => {
+    qc.setQueriesData<EventWithDetails[]>({ queryKey: ['events'] }, (old) => {
+      if (!Array.isArray(old)) return old
+      return old.filter((ev) => ev.id !== deletedId)
+    })
+    qc.removeQueries({ queryKey: ['event-details', deletedId] })
+  })
+}
 
 function _fireInvalidation() {
   if (_debounceTimer) clearTimeout(_debounceTimer)
@@ -367,6 +385,41 @@ function _firePlanInvalidation() {
   }, 600)
 }
 
+function _subscribeRealtimeChannel() {
+  if (_realtimeChannel) return
+  _realtimeChannel = supabase
+    .channel('events-realtime-singleton')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, (payload: any) => {
+      if (payload?.eventType === 'DELETE' && payload.old?.id) {
+        _evictDeletedEventFromCache(payload.old.id)
+      }
+      _fireInvalidation()
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'event_members' }, _fireInvalidation)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'event_plan_overrides' }, _firePlanInvalidation)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'event_enrichments' }, _fireInvalidation)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'event_checklist_items' }, _fireInvalidation)
+    .subscribe((status, err) => {
+      if (status === 'SUBSCRIBED') {
+        // Connected / reconnected: catch up on any missed updates
+        _fireInvalidation()
+        _firePlanInvalidation()
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        console.warn('[CalendarRealtime] Channel status:', status, err?.message ?? '')
+        if (_realtimeSubscribers > 0 && !_reconnectTimer) {
+          _reconnectTimer = setTimeout(() => {
+            _reconnectTimer = null
+            if (_realtimeSubscribers > 0 && _realtimeChannel) {
+              try { supabase.removeChannel(_realtimeChannel) } catch {}
+              _realtimeChannel = null
+              _subscribeRealtimeChannel()
+            }
+          }, 3000)
+        }
+      }
+    })
+}
+
 function useRealtimeEventInvalidation() {
   const qc = useQueryClient()
   useEffect(() => {
@@ -380,26 +433,27 @@ function useRealtimeEventInvalidation() {
     }
     _invalidateCallbacks.add(cb)
     _planInvalidateCallbacks.add(planCb)
+    _queryClientInstances.add(qc)
     _realtimeSubscribers++
 
     if (_realtimeSubscribers === 1) {
-      _realtimeChannel = supabase
-        .channel('events-realtime-singleton')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, _fireInvalidation)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'event_members' }, _fireInvalidation)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'event_plan_overrides' }, _firePlanInvalidation)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'event_enrichments' }, _fireInvalidation)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'event_checklist_items' }, _fireInvalidation)
-        .subscribe()
+      _subscribeRealtimeChannel()
     }
 
     return () => {
       _invalidateCallbacks.delete(cb)
       _planInvalidateCallbacks.delete(planCb)
+      _queryClientInstances.delete(qc)
       _realtimeSubscribers--
-      if (_realtimeSubscribers === 0 && _realtimeChannel) {
-        supabase.removeChannel(_realtimeChannel)
-        _realtimeChannel = null
+      if (_realtimeSubscribers === 0) {
+        if (_reconnectTimer) {
+          clearTimeout(_reconnectTimer)
+          _reconnectTimer = null
+        }
+        if (_realtimeChannel) {
+          supabase.removeChannel(_realtimeChannel)
+          _realtimeChannel = null
+        }
         if (_debounceTimer) {
           clearTimeout(_debounceTimer)
           _debounceTimer = null

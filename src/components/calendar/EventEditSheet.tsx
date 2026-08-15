@@ -135,33 +135,35 @@ interface Props {
   initialDelete?: boolean
   initialAiTools?: boolean
   presentation?: 'sheet' | 'inline'
+  detailError?: boolean
 }
 
 export default function EventEditSheet(props: Props) {
   const detailQuery = useEventDetails(props.event)
   const inline = props.presentation === 'inline'
 
-  if (!props.open || detailQuery.data) {
-    return <EventEditSheetContent {...props} event={detailQuery.data ?? props.event} />
+  if (!props.open || detailQuery.data || detailQuery.isError) {
+    return (
+      <EventEditSheetContent
+        {...props}
+        event={detailQuery.data ?? props.event}
+        detailError={detailQuery.isError}
+      />
+    )
   }
 
   if (inline) {
     return (
-      <div className="flex h-full min-h-0 items-center justify-center bg-casa-bg-2 p-6" role="status">
-        {detailQuery.isError ? (
-          <Alert tone="danger" title="Event details could not be loaded" className="max-w-md">
-            <div className="mt-2">
-              <Button variant="secondary" size="sm" onClick={() => void detailQuery.refetch()}>
-                Try again
-              </Button>
-            </div>
-          </Alert>
-        ) : (
-          <div className="inline-flex items-center gap-2 text-body-sm text-casa-muted">
-            <Loader2 size={18} className="animate-spin" />
-            Loading complete event details…
-          </div>
-        )}
+      <div className="flex h-full min-h-0 flex-col items-center justify-center bg-casa-bg-2 p-6" role="status">
+        <div className="inline-flex items-center gap-2 text-body-sm text-casa-muted">
+          <Loader2 size={18} className="animate-spin" />
+          Loading complete event details…
+        </div>
+        <div className="mt-4">
+          <Button variant="ghost" size="sm" onClick={props.onClose}>
+            Cancel
+          </Button>
+        </div>
       </div>
     )
   }
@@ -192,20 +194,10 @@ export default function EventEditSheet(props: Props) {
           <IconButton icon={<X size={18} />} aria-label="Close editor" onClick={props.onClose} />
         </div>
         <div className="flex flex-1 items-center justify-center p-6">
-          {detailQuery.isError ? (
-            <Alert tone="danger" title="Event details could not be loaded" className="max-w-md">
-              <div className="mt-2">
-                <Button variant="secondary" size="sm" onClick={() => void detailQuery.refetch()}>
-                  Try again
-                </Button>
-              </div>
-            </Alert>
-          ) : (
-            <div className="inline-flex items-center gap-2 text-body-sm text-casa-muted" role="status">
-              <Loader2 size={18} className="animate-spin" />
-              Loading complete event details…
-            </div>
-          )}
+          <div className="inline-flex items-center gap-2 text-body-sm text-casa-muted" role="status">
+            <Loader2 size={18} className="animate-spin" />
+            Loading complete event details…
+          </div>
         </div>
       </motion.div>
     </AnimatePresence>
@@ -219,6 +211,7 @@ function EventEditSheetContent({
   initialDelete = false,
   initialAiTools = false,
   presentation = 'sheet',
+  detailError = false,
 }: Props) {
   const inline = presentation === 'inline'
   const enr = event.enrichment
@@ -1287,8 +1280,22 @@ function EventEditSheetContent({
     setDeleteError(null)
     try {
       if (event.google_event_id) {
-        const googleDelete = await supabase.functions.invoke('delete-google-event', { body: { event_id: event.id } })
-        if (googleDelete.error) throw new Error(`Google Calendar deletion failed: ${googleDelete.error.message}`)
+        try {
+          const googleDelete = await supabase.functions.invoke('delete-google-event', { body: { event_id: event.id } })
+          if (googleDelete.error) {
+            const errorMsg = String(googleDelete.error.message || '')
+            const isNotFound = errorMsg.includes('404') || /not\s*found/i.test(errorMsg)
+            if (!isNotFound) {
+              throw new Error(`Google Calendar deletion failed: ${googleDelete.error.message}`)
+            }
+          }
+        } catch (googleErr) {
+          const message = googleErr instanceof Error ? googleErr.message : String(googleErr)
+          const isNotFound = message.includes('404') || /not\s*found/i.test(message)
+          if (!isNotFound) {
+            throw googleErr
+          }
+        }
       }
       const { error } = await supabase.from('events').delete().eq('id', event.id)
       if (error) throw new Error(`Casa deletion failed: ${error.message}`)
@@ -1506,6 +1513,13 @@ function EventEditSheetContent({
                       ? `${recurringContext.exception_paths.length} field group${recurringContext.exception_paths.length === 1 ? '' : 's'} changed only for this event; other details inherit from the series.`
                       : 'This event currently inherits all editable details from the series.'}
                   </p>
+                )}
+                {detailError && (
+                  <div className="mt-3">
+                    <Alert tone="warning" title="Event details could not be loaded">
+                      Using cached event summary. You can still make changes or delete this event.
+                    </Alert>
+                  </div>
                 )}
                 {saveError && !showScopeModal && (
                   <div className="mt-3">
