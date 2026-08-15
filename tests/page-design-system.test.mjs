@@ -230,9 +230,7 @@ test('event create and edit workflows use shared design-system contracts', () =>
   assert.match(eventEdit, /<Modal/)
   assert.match(eventEdit, /<Alert /)
   assert.doesNotMatch(eventEdit, /\btext-\[(?:\d|\.)+(?:px|rem|em)\]/)
-  assert.doesNotMatch(eventEdit, /z-\[\d+\]/)
-  assert.match(eventDetail, /\{event && \(/)
-  assert.match(eventDetail, /presentation="inline"/)
+  assert.match(eventDetail, /openEventInSidecar/)
 })
 
 test('inline calendar uses density-aware controls and semantic layering', () => {
@@ -355,17 +353,9 @@ test('all calendar views provide a non-conflicting quick-create gesture for thei
 })
 
 test('calendar cards and event details use shared touch contracts', () => {
-  const detail = readFileSync(resolve('src/components/calendar/EventDetailPanel.tsx'), 'utf8')
   const largeCard = readFileSync(resolve('src/components/calendar/LargeEventCard.tsx'), 'utf8')
   const reminderCard = readFileSync(resolve('src/components/calendar/ReminderEventCard.tsx'), 'utf8')
   const stacked = readFileSync(resolve('src/components/calendar/StackedView.tsx'), 'utf8')
-  assert.match(detail, /role="dialog"/)
-  assert.match(detail, /aria-modal="true"/)
-  assert.match(detail, /z-scrim/)
-  assert.match(detail, /z-modal/)
-  assert.doesNotMatch(detail, /z-\[\d+\]/)
-  assert.match(detail, /<IconButton/)
-  assert.match(detail, /<Chip/)
   assert.match(largeCard, /<CalendarPill/)
   assert.match(reminderCard, /<Button/)
   assert.match(reminderCard, /role="button"/)
@@ -390,7 +380,6 @@ test('calendar views use semantic theme, typography, and layering contracts', ()
   const paths = [
     'src/components/calendar/DayView.tsx',
     'src/components/calendar/EventBlock.tsx',
-    'src/components/calendar/EventDetailPanel.tsx',
     'src/components/calendar/MonthView.tsx',
     'src/components/calendar/StackedView.tsx',
     'src/components/calendar/WeekView.tsx',
@@ -409,19 +398,15 @@ test('calendar chrome uses shared controls while runtime event geometry stays in
   const month = readFileSync(resolve('src/components/calendar/MonthView.tsx'), 'utf8')
   const week = readFileSync(resolve('src/components/calendar/WeekView.tsx'), 'utf8')
   const block = readFileSync(resolve('src/components/calendar/EventBlock.tsx'), 'utf8')
-  const detail = readFileSync(resolve('src/components/calendar/EventDetailPanel.tsx'), 'utf8')
   const transportation = readFileSync(resolve('src/components/calendar/EventTransportationSection.tsx'), 'utf8')
 
   assert.match(day, /import \{ Button, CalendarPill, IconButton, PersonAvatarStack \} from '\.\.\/ui'/)
   assert.match(month, /import \{ Button, CalendarPill, IconButton \} from '\.\.\/ui'/)
-  assert.match(detail, /import \{ Alert, Button, Card, Chip, DisclosureSection, IconButton, Switch \} from '\.\.\/ui'/)
   assert.match(page, /import \{ Button, IconButton, SegmentedControl \} from '\.\.\/components\/ui'/)
   assert.doesNotMatch(page, /<button\b/)
   assert.match(page, /<SegmentedControl[\s\S]*?aria-label="Calendar view"[\s\S]*?onChange=\{setActiveView\}/)
   assert.doesNotMatch(page, /variant=\{activeView === v\.key \? 'strong' : 'ghost'\}/)
   assert.match(transportation, /<Switch[\s\S]*label="Driver waits on site"/)
-  assert.equal((detail.match(/<button\b/g) ?? []).length, 1)
-  assert.match(detail, /data-native-drag/)
 
   assert.match(block, /top: `\$\{top\}px`/)
   assert.match(block, /height: `\$\{height\}px`/)

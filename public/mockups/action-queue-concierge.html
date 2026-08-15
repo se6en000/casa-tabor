@@ -1,0 +1,1218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Casa Tabor — Concept 1: The Private Concierge</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,400;1,600&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  
+  <!-- Lucide Icons -->
+  <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.js"></script>
+
+  <style>
+    :root {
+      --color-gold: #C9A96E;
+      --color-gold-hover: #b39255;
+      --color-gold-soft: #F9F3EA;
+      --color-gold-border: #E8DFC8;
+      --color-navy: #1B2A4A;
+      --color-navy-light: #2A3F6D;
+      --color-navy-dark: #0F1A30;
+      
+      --color-bg: #FAF8F5;
+      --color-bg-subtle: #F3EFE8;
+      --color-surface: #FFFFFF;
+      --color-surface-hover: #FCFAF7;
+      
+      --color-text: #22252A;
+      --color-text-secondary: #636674;
+      --color-text-tertiary: #9295A3;
+      
+      --color-border: #E8E2D9;
+      --color-border-subtle: #F0ECE4;
+      
+      --color-tag-owen: #D4A44C;
+      --color-tag-owen-bg: #FDF7EC;
+      --color-tag-finance: #2B5C4A;
+      --color-tag-finance-bg: #EDF7F2;
+      --color-tag-dining: #A64B2A;
+      --color-tag-dining-bg: #FDF0EB;
+      --color-tag-utility: #2C5282;
+      --color-tag-utility-bg: #EBF4FF;
+      
+      --font-display: 'Cormorant Garamond', Georgia, serif;
+      --font-body: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+
+      --shadow-sm: 0 2px 8px rgba(27, 42, 74, 0.04);
+      --shadow-card: 0 4px 20px rgba(27, 42, 74, 0.05), 0 1px 3px rgba(0,0,0,0.02);
+      --shadow-card-hover: 0 12px 32px rgba(27, 42, 74, 0.09), 0 2px 6px rgba(0,0,0,0.03);
+      --shadow-drawer: -12px 0 40px rgba(27, 42, 74, 0.16);
+      
+      --radius-sm: 8px;
+      --radius-md: 14px;
+      --radius-lg: 20px;
+      --radius-pill: 9999px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-body);
+      background-color: var(--color-bg);
+      color: var(--color-text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Top Navigation / Concept Switcher Bar */
+    .concept-nav {
+      background: var(--color-navy);
+      color: #FFFFFF;
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .concept-nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: #FFFFFF;
+    }
+
+    .concept-badge-logo {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      background: var(--color-gold);
+      color: var(--color-navy);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 13px;
+    }
+
+    .concept-title {
+      font-family: var(--font-display);
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+
+    .concept-switcher {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255,255,255,0.08);
+      padding: 4px;
+      border-radius: var(--radius-pill);
+    }
+
+    .concept-tab {
+      padding: 6px 14px;
+      border-radius: var(--radius-pill);
+      color: rgba(255,255,255,0.7);
+      text-decoration: none;
+      font-size: 12.5px;
+      font-weight: 500;
+      transition: all 0.2s ease;
+    }
+
+    .concept-tab:hover {
+      color: #FFFFFF;
+      background: rgba(255,255,255,0.12);
+    }
+
+    .concept-tab.active {
+      background: var(--color-gold);
+      color: var(--color-navy);
+      font-weight: 600;
+    }
+
+    .concept-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .view-pill {
+      font-size: 12px;
+      padding: 4px 10px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 6px;
+      color: #E0E4EC;
+    }
+
+    /* Main Canvas Layout */
+    .canvas-container {
+      max-width: 1440px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 32px 24px;
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 36px;
+      flex: 1;
+    }
+
+    @media (max-width: 1080px) {
+      .canvas-container {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Left Context Column: Living Canvas Preview */
+    .left-canvas-preview {
+      background: #FFFFFF;
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--color-border);
+      padding: 28px;
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .preview-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--color-border-subtle);
+      padding-bottom: 16px;
+    }
+
+    .preview-heading {
+      font-family: var(--font-display);
+      font-size: 24px;
+      color: var(--color-navy);
+      font-weight: 600;
+    }
+
+    .live-time-pill {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      background: var(--color-gold-soft);
+      color: var(--color-navy);
+      padding: 4px 12px;
+      border-radius: var(--radius-pill);
+      font-weight: 600;
+    }
+
+    .calm-hero-card {
+      background: linear-gradient(135deg, #FAF6EE 0%, #F5EFE3 100%);
+      border: 1px solid var(--color-gold-border);
+      border-radius: var(--radius-md);
+      padding: 36px 24px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+    }
+
+    .calm-icon-ring {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      background: #FFFFFF;
+      color: #27AE60;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 12px rgba(39, 174, 96, 0.15);
+    }
+
+    .calm-title {
+      font-family: var(--font-display);
+      font-size: 22px;
+      color: var(--color-navy);
+      font-weight: 600;
+    }
+
+    .calm-subtitle {
+      font-size: 14px;
+      color: var(--color-text-secondary);
+      max-width: 320px;
+      line-height: 1.5;
+    }
+
+    .timeline-strip {
+      display: flex;
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .time-slot {
+      flex: 1;
+      background: var(--color-bg);
+      border: 1px solid var(--color-border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 12px;
+      font-size: 12px;
+    }
+
+    .time-slot-label {
+      font-family: var(--font-mono);
+      color: var(--color-text-tertiary);
+      font-size: 11px;
+      margin-bottom: 4px;
+    }
+
+    .time-slot-val {
+      font-weight: 600;
+      color: var(--color-navy);
+    }
+
+    /* Right Column: The Elevated Action Queue */
+    .action-queue-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .queue-header-box {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      padding-bottom: 4px;
+    }
+
+    .queue-title-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .queue-kicker {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      color: var(--color-gold-hover);
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .queue-kicker-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--color-gold);
+    }
+
+    .queue-main-title {
+      font-family: var(--font-display);
+      font-size: 26px;
+      font-weight: 600;
+      color: var(--color-navy);
+      letter-spacing: -0.2px;
+    }
+
+    .queue-count-badge {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: var(--radius-pill);
+      background: var(--color-gold-soft);
+      color: #7D5C23;
+      border: 1px solid var(--color-gold-border);
+    }
+
+    /* Queue Filter Chips */
+    .filter-chips {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+
+    .filter-chip {
+      padding: 6px 14px;
+      background: #FFFFFF;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-pill);
+      font-size: 12.5px;
+      color: var(--color-text-secondary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+
+    .filter-chip:hover {
+      border-color: var(--color-gold);
+      color: var(--color-navy);
+    }
+
+    .filter-chip.active {
+      background: var(--color-navy);
+      color: #FFFFFF;
+      border-color: var(--color-navy);
+    }
+
+    .filter-chip-count {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      opacity: 0.8;
+    }
+
+    /* Task Card Deck */
+    .cards-deck {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* Luxury Concierge Card */
+    .concierge-card {
+      background: #FFFFFF;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-card);
+      padding: 20px 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      position: relative;
+      transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    .concierge-card:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-card-hover);
+      border-color: var(--color-gold-border);
+    }
+
+    .concierge-card.completed {
+      opacity: 0.45;
+      pointer-events: none;
+      transform: scale(0.98);
+      background: var(--color-bg-subtle);
+      border-style: dashed;
+    }
+
+    /* Card Top Meta */
+    .card-top-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .card-category-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: var(--radius-pill);
+      font-size: 11.5px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+
+    .badge-owen {
+      background: var(--color-tag-owen-bg);
+      color: var(--color-tag-owen);
+      border: 1px solid rgba(212, 164, 76, 0.25);
+    }
+
+    .badge-finance {
+      background: var(--color-tag-finance-bg);
+      color: var(--color-tag-finance);
+      border: 1px solid rgba(43, 92, 74, 0.25);
+    }
+
+    .badge-dining {
+      background: var(--color-tag-dining-bg);
+      color: var(--color-tag-dining);
+      border: 1px solid rgba(166, 75, 42, 0.25);
+    }
+
+    .badge-utility {
+      background: var(--color-tag-utility-bg);
+      color: var(--color-tag-utility);
+      border: 1px solid rgba(44, 82, 130, 0.25);
+    }
+
+    .card-due-indicator {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12px;
+      color: var(--color-text-tertiary);
+      font-family: var(--font-mono);
+    }
+
+    .card-due-indicator.urgent {
+      color: #C0392B;
+      font-weight: 600;
+    }
+
+    /* Card Body */
+    .card-content-grid {
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+    }
+
+    .quick-check-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: 1.5px solid var(--color-border);
+      background: transparent;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: transparent;
+      transition: all 0.2s ease;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .quick-check-btn:hover {
+      border-color: var(--color-gold);
+      color: var(--color-gold);
+      background: var(--color-gold-soft);
+    }
+
+    .card-body-text {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .card-heading {
+      font-family: var(--font-body);
+      font-size: 15.5px;
+      font-weight: 600;
+      color: var(--color-navy);
+      line-height: 1.35;
+    }
+
+    .card-subtext {
+      font-size: 13.5px;
+      color: var(--color-text-secondary);
+      line-height: 1.45;
+    }
+
+    .card-amount-highlight {
+      font-family: var(--font-mono);
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--color-navy);
+      letter-spacing: -0.5px;
+      display: inline-block;
+      margin-top: 4px;
+    }
+
+    /* Card Actions Footer */
+    .card-actions-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: 12px;
+      border-top: 1px solid var(--color-border-subtle);
+    }
+
+    .primary-action-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 18px;
+      background: var(--color-navy);
+      color: #FFFFFF;
+      border: none;
+      border-radius: var(--radius-pill);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .primary-action-btn:hover {
+      background: var(--color-navy-light);
+      box-shadow: 0 4px 12px rgba(27, 42, 74, 0.2);
+    }
+
+    .primary-action-btn.gold-style {
+      background: var(--color-gold);
+      color: var(--color-navy);
+    }
+
+    .primary-action-btn.gold-style:hover {
+      background: var(--color-gold-hover);
+    }
+
+    /* Progressive Disclosure Snooze Menu */
+    .snooze-dropdown-wrap {
+      position: relative;
+    }
+
+    .icon-ghost-btn {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--color-text-tertiary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .icon-ghost-btn:hover {
+      background: var(--color-bg);
+      border-color: var(--color-border);
+      color: var(--color-navy);
+    }
+
+    .snooze-menu {
+      position: absolute;
+      right: 0;
+      bottom: calc(100% + 8px);
+      background: #FFFFFF;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-card-hover);
+      padding: 6px;
+      width: 180px;
+      display: none;
+      flex-direction: column;
+      gap: 2px;
+      z-index: 50;
+    }
+
+    .snooze-menu.open {
+      display: flex;
+      animation: fadeIn 0.15s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .snooze-menu-header {
+      font-size: 10px;
+      text-transform: uppercase;
+      font-family: var(--font-mono);
+      color: var(--color-text-tertiary);
+      padding: 6px 10px;
+      letter-spacing: 0.8px;
+    }
+
+    .snooze-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 10px;
+      font-size: 12.5px;
+      color: var(--color-text);
+      border-radius: 6px;
+      cursor: pointer;
+      background: transparent;
+      border: none;
+      width: 100%;
+      text-align: left;
+      transition: all 0.15s ease;
+    }
+
+    .snooze-item:hover {
+      background: var(--color-bg);
+      color: var(--color-navy);
+      font-weight: 500;
+    }
+
+    /* Interactive Side Drawer Modal (Sign & Pay) */
+    .drawer-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 26, 48, 0.4);
+      backdrop-filter: blur(4px);
+      z-index: 200;
+      display: none;
+      justify-content: flex-end;
+    }
+
+    .drawer-overlay.open {
+      display: flex;
+    }
+
+    .concierge-drawer {
+      width: 480px;
+      max-width: 100%;
+      background: #FFFFFF;
+      height: 100%;
+      box-shadow: var(--shadow-drawer);
+      display: flex;
+      flex-direction: column;
+      animation: slideLeft 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    @keyframes slideLeft {
+      from { transform: translateX(100%); }
+      to { transform: translateX(0); }
+    }
+
+    .drawer-header {
+      padding: 24px;
+      border-bottom: 1px solid var(--color-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .drawer-title {
+      font-family: var(--font-display);
+      font-size: 24px;
+      color: var(--color-navy);
+      font-weight: 600;
+    }
+
+    .drawer-close-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--color-bg);
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--color-text-secondary);
+    }
+
+    .drawer-body {
+      padding: 24px;
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .drawer-doc-box {
+      background: var(--color-bg);
+      border: 1px dashed var(--color-border);
+      border-radius: var(--radius-sm);
+      padding: 18px;
+      font-size: 13px;
+      color: var(--color-text-secondary);
+      line-height: 1.6;
+    }
+
+    .signature-pad {
+      border: 1.5px solid var(--color-border);
+      border-radius: var(--radius-md);
+      height: 140px;
+      background: #FAFAFA;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-style: italic;
+      color: var(--color-text-tertiary);
+      cursor: crosshair;
+      position: relative;
+    }
+
+    .signature-line {
+      position: absolute;
+      bottom: 24px;
+      left: 20px;
+      right: 20px;
+      border-bottom: 1px dashed #CCC;
+    }
+
+    .drawer-footer {
+      padding: 20px 24px;
+      border-top: 1px solid var(--color-border);
+      display: flex;
+      gap: 12px;
+    }
+
+    .drawer-primary-btn {
+      flex: 1;
+      padding: 12px;
+      background: var(--color-navy);
+      color: #FFFFFF;
+      border: none;
+      border-radius: var(--radius-pill);
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    /* Toast */
+    .toast-notification {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--color-navy);
+      color: #FFFFFF;
+      padding: 12px 20px;
+      border-radius: var(--radius-pill);
+      font-size: 13.5px;
+      display: none;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+      z-index: 300;
+    }
+
+    .toast-notification.show {
+      display: flex;
+      animation: popUp 0.3s ease;
+    }
+
+    @keyframes popUp {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Concept Nav -->
+  <header class="concept-nav">
+    <a href="action-queue-showcase.html" class="concept-nav-brand">
+      <div class="concept-badge-logo">CT</div>
+      <div>
+        <span class="concept-title">Casa Tabor</span>
+        <span style="font-size: 11px; opacity: 0.6; margin-left: 6px;">Concept 1 of 3</span>
+      </div>
+    </a>
+
+    <div class="concept-switcher">
+      <a href="action-queue-concierge.html" class="concept-tab active">1. The Private Concierge</a>
+      <a href="action-queue-editorial.html" class="concept-tab">2. The Editorial Ledger</a>
+      <a href="action-queue-horizon.html" class="concept-tab">3. Priority Horizon</a>
+      <a href="action-queue-showcase.html" class="concept-tab">⚡ Master Comparison</a>
+    </div>
+
+    <div class="concept-controls">
+      <span class="view-pill">Wall Kiosk & Desktop</span>
+    </div>
+  </header>
+
+  <!-- Main Canvas -->
+  <main class="canvas-container">
+    
+    <!-- Left Column: Living Canvas Preview -->
+    <section class="left-canvas-preview">
+      <div class="preview-header">
+        <h1 class="preview-heading">Living Canvas · Today</h1>
+        <div class="live-time-pill" id="live-time">11:43 PM</div>
+      </div>
+
+      <div class="calm-hero-card">
+        <div class="calm-icon-ring">
+          <i data-lucide="check" style="width: 26px; height: 26px;"></i>
+        </div>
+        <h2 class="calm-title">No Remaining Scheduled Events</h2>
+        <p class="calm-subtitle">All 8 scheduled family calendar activities for Friday, August 14 have wrapped up peacefully.</p>
+      </div>
+
+      <div style="margin-top: 8px;">
+        <span style="font-family: var(--font-mono); font-size: 11px; color: var(--color-text-tertiary); text-transform: uppercase;">Tomorrow Morning Glance (Saturday)</span>
+        <div class="timeline-strip">
+          <div class="time-slot">
+            <div class="time-slot-label">08:30 AM</div>
+            <div class="time-slot-val">Owen Soccer Practice · Field 3</div>
+          </div>
+          <div class="time-slot">
+            <div class="time-slot-label">10:00 AM</div>
+            <div class="time-slot-val">Farmers Market & Grocery Run</div>
+          </div>
+          <div class="time-slot">
+            <div class="time-slot-label">01:00 PM</div>
+            <div class="time-slot-val">Family Bike Ride</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right Column: Elevated Concierge Action Queue -->
+    <section class="action-queue-panel">
+      
+      <div class="queue-header-box">
+        <div class="queue-title-wrap">
+          <div class="queue-kicker">
+            <span class="queue-kicker-dot"></span>
+            Casa Concierge & Operations
+          </div>
+          <h2 class="queue-main-title">Action Queue</h2>
+        </div>
+        <span class="queue-count-badge" id="active-task-badge">4 Actionable</span>
+      </div>
+
+      <!-- Category Filter Tabs -->
+      <div class="filter-chips">
+        <button class="filter-chip active" onclick="filterCards('all', this)">
+          <span>All Pending</span>
+          <span class="filter-chip-count">4</span>
+        </button>
+        <button class="filter-chip" onclick="filterCards('family', this)">
+          <span>👦 Owen & School</span>
+          <span class="filter-chip-count">1</span>
+        </button>
+        <button class="filter-chip" onclick="filterCards('finance', this)">
+          <span>💳 Bills & Finance</span>
+          <span class="filter-chip-count">2</span>
+        </button>
+        <button class="filter-chip" onclick="filterCards('household', this)">
+          <span>🏡 Household</span>
+          <span class="filter-chip-count">1</span>
+        </button>
+      </div>
+
+      <!-- Action Cards Deck -->
+      <div class="cards-deck" id="cards-deck">
+
+        <!-- Card 1: School Waiver -->
+        <article class="concierge-card" data-category="family" id="card-camp">
+          <div class="card-top-meta">
+            <span class="card-category-badge badge-owen">
+              <i data-lucide="graduation-cap" style="width: 13px; height: 13px;"></i>
+              Owen · 5th Grade
+            </span>
+            <div class="card-due-indicator urgent">
+              <i data-lucide="clock" style="width: 13px; height: 13px;"></i>
+              Due Today (Urgent)
+            </div>
+          </div>
+
+          <div class="card-content-grid">
+            <button class="quick-check-btn" onclick="completeTask('card-camp', 'Owen’s Camp Waiver')" title="Mark Completed">
+              <i data-lucide="check" style="width: 14px; height: 14px;"></i>
+            </button>
+            <div class="card-body-text">
+              <h3 class="card-heading">Science Camp Medical Waiver & Checklist</h3>
+              <p class="card-subtext">Requires parent signature and emergency contact verification before Monday morning drop-off.</p>
+            </div>
+          </div>
+
+          <div class="card-actions-bar">
+            <button class="primary-action-btn gold-style" onclick="openDrawer('waiver')">
+              <i data-lucide="pen-tool" style="width: 14px; height: 14px;"></i>
+              Review & Sign Waiver
+            </button>
+
+            <div class="snooze-dropdown-wrap">
+              <button class="icon-ghost-btn" onclick="toggleSnooze('snooze-1')" title="Snooze / More">
+                <i data-lucide="more-horizontal" style="width: 16px; height: 16px;"></i>
+              </button>
+              <div class="snooze-menu" id="snooze-1">
+                <div class="snooze-menu-header">Postpone Until</div>
+                <button class="snooze-item" onclick="snoozeTask('card-camp', '1 hour')"><span>+1 Hour</span></button>
+                <button class="snooze-item" onclick="snoozeTask('card-camp', 'Tomorrow 8 AM')"><span>Tomorrow 8:00 AM</span></button>
+                <button class="snooze-item" onclick="snoozeTask('card-camp', 'This Weekend')"><span>This Weekend</span></button>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <!-- Card 2: Edison Insurance Bill -->
+        <article class="concierge-card" data-category="finance" id="card-edison">
+          <div class="card-top-meta">
+            <span class="card-category-badge badge-finance">
+              <i data-lucide="shield" style="width: 13px; height: 13px;"></i>
+              Homeowners Insurance
+            </span>
+            <div class="card-due-indicator urgent">
+              <i data-lucide="alert-circle" style="width: 13px; height: 13px;"></i>
+              Due Today
+            </div>
+          </div>
+
+          <div class="card-content-grid">
+            <button class="quick-check-btn" onclick="completeTask('card-edison', 'Edison Insurance')" title="Mark Paid">
+              <i data-lucide="check" style="width: 14px; height: 14px;"></i>
+            </button>
+            <div class="card-body-text">
+              <h3 class="card-heading">Edison Property & Hazard Annual Premium</h3>
+              <p class="card-subtext">Policy #EDH5679813 · Primary Residence Coverage</p>
+              <div class="card-amount-highlight">$7,198.64</div>
+            </div>
+          </div>
+
+          <div class="card-actions-bar">
+            <button class="primary-action-btn" onclick="openDrawer('edison')">
+              <i data-lucide="credit-card" style="width: 14px; height: 14px;"></i>
+              Authorize Payment ($7,198.64)
+            </button>
+
+            <div class="snooze-dropdown-wrap">
+              <button class="icon-ghost-btn" onclick="toggleSnooze('snooze-2')" title="Snooze / More">
+                <i data-lucide="more-horizontal" style="width: 16px; height: 16px;"></i>
+              </button>
+              <div class="snooze-menu" id="snooze-2">
+                <div class="snooze-menu-header">Postpone Payment</div>
+                <button class="snooze-item" onclick="snoozeTask('card-edison', 'Tomorrow')"><span>Tomorrow</span></button>
+                <button class="snooze-item" onclick="snoozeTask('card-edison', 'Next Week')"><span>Next Week</span></button>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <!-- Card 3: East Wok Takeout -->
+        <article class="concierge-card" data-category="finance" id="card-eastwok">
+          <div class="card-top-meta">
+            <span class="card-category-badge badge-dining">
+              <i data-lucide="utensils" style="width: 13px; height: 13px;"></i>
+              Family Dinner · East Wok
+            </span>
+            <div class="card-due-indicator">
+              <i data-lucide="clock" style="width: 13px; height: 13px;"></i>
+              Receipt Match
+            </div>
+          </div>
+
+          <div class="card-content-grid">
+            <button class="quick-check-btn" onclick="completeTask('card-eastwok', 'East Wok Takeout')" title="Reconcile">
+              <i data-lucide="check" style="width: 14px; height: 14px;"></i>
+            </button>
+            <div class="card-body-text">
+              <h3 class="card-heading">East Wok Delivery Reconcile</h3>
+              <p class="card-subtext">Placed for Friday Family Dinner (6 items) via Kelly's card</p>
+              <div class="card-amount-highlight">$59.62</div>
+            </div>
+          </div>
+
+          <div class="card-actions-bar">
+            <button class="primary-action-btn" onclick="completeTask('card-eastwok', 'East Wok')">
+              <i data-lucide="check-circle" style="width: 14px; height: 14px;"></i>
+              Settle & Reconcile ($59.62)
+            </button>
+
+            <div class="snooze-dropdown-wrap">
+              <button class="icon-ghost-btn" onclick="toggleSnooze('snooze-3')" title="Snooze">
+                <i data-lucide="more-horizontal" style="width: 16px; height: 16px;"></i>
+              </button>
+              <div class="snooze-menu" id="snooze-3">
+                <div class="snooze-menu-header">Postpone</div>
+                <button class="snooze-item" onclick="snoozeTask('card-eastwok', 'Tomorrow')"><span>Tomorrow</span></button>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <!-- Card 4: Xfinity Internet Statement -->
+        <article class="concierge-card" data-category="household" id="card-xfinity">
+          <div class="card-top-meta">
+            <span class="card-category-badge badge-utility">
+              <i data-lucide="wifi" style="width: 13px; height: 13px;"></i>
+              Home Internet · Utilities
+            </span>
+            <div class="card-due-indicator">
+              <i data-lucide="calendar" style="width: 13px; height: 13px;"></i>
+              Statement Ready
+            </div>
+          </div>
+
+          <div class="card-content-grid">
+            <button class="quick-check-btn" onclick="completeTask('card-xfinity', 'Xfinity Bill')" title="Acknowledge">
+              <i data-lucide="check" style="width: 14px; height: 14px;"></i>
+            </button>
+            <div class="card-body-text">
+              <h3 class="card-heading">Xfinity Gigabit Fiber Statement</h3>
+              <p class="card-subtext">Monthly recurring service · Autopay scheduled on August 18 ($124.99)</p>
+            </div>
+          </div>
+
+          <div class="card-actions-bar">
+            <button class="primary-action-btn" onclick="completeTask('card-xfinity', 'Xfinity Statement')">
+              <i data-lucide="eye" style="width: 14px; height: 14px;"></i>
+              Acknowledge & Archive
+            </button>
+
+            <div class="snooze-dropdown-wrap">
+              <button class="icon-ghost-btn" onclick="toggleSnooze('snooze-4')" title="Snooze">
+                <i data-lucide="more-horizontal" style="width: 16px; height: 16px;"></i>
+              </button>
+              <div class="snooze-menu" id="snooze-4">
+                <div class="snooze-menu-header">Postpone</div>
+                <button class="snooze-item" onclick="snoozeTask('card-xfinity', 'This Weekend')"><span>This Weekend</span></button>
+              </div>
+            </div>
+          </div>
+        </article>
+
+      </div>
+    </section>
+  </main>
+
+  <!-- Interactive Slide-Over Drawer Modal -->
+  <div class="drawer-overlay" id="drawer-modal" onclick="closeDrawer(event)">
+    <div class="concierge-drawer" onclick="event.stopPropagation()">
+      <div class="drawer-header">
+        <h2 class="drawer-title" id="drawer-header-title">Review & Sign</h2>
+        <button class="drawer-close-btn" onclick="closeDrawer()">
+          <i data-lucide="x" style="width: 18px; height: 18px;"></i>
+        </button>
+      </div>
+      <div class="drawer-body" id="drawer-body-content">
+        <!-- Injected via JS -->
+      </div>
+      <div class="drawer-footer" id="drawer-footer-actions">
+        <!-- Injected via JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast-notification" id="toast">
+    <i data-lucide="check-circle-2" style="width: 18px; height: 18px; color: var(--color-gold);"></i>
+    <span id="toast-text">Task completed</span>
+  </div>
+
+  <script>
+    lucide.createIcons();
+
+    let activeTasksCount = 4;
+
+    function toggleSnooze(id) {
+      document.querySelectorAll('.snooze-menu').forEach(m => {
+        if (m.id !== id) m.classList.remove('open');
+      });
+      const el = document.getElementById(id);
+      if (el) el.classList.toggle('open');
+    }
+
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.snooze-dropdown-wrap')) {
+        document.querySelectorAll('.snooze-menu').forEach(m => m.classList.remove('open'));
+      }
+    });
+
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toast-text').innerText = msg;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 3200);
+    }
+
+    function completeTask(cardId, name) {
+      const card = document.getElementById(cardId);
+      if (!card) return;
+      card.classList.add('completed');
+      activeTasksCount = Math.max(0, activeTasksCount - 1);
+      document.getElementById('active-task-badge').innerText = `${activeTasksCount} Actionable`;
+      showToast(`✓ Completed "${name}"`);
+    }
+
+    function snoozeTask(cardId, duration) {
+      const card = document.getElementById(cardId);
+      if (!card) return;
+      card.style.opacity = '0.3';
+      card.style.transform = 'scale(0.96)';
+      setTimeout(() => {
+        card.style.display = 'none';
+        activeTasksCount = Math.max(0, activeTasksCount - 1);
+        document.getElementById('active-task-badge').innerText = `${activeTasksCount} Actionable`;
+        showToast(`⏰ Snoozed for ${duration}`);
+      }, 300);
+    }
+
+    function filterCards(category, btn) {
+      document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+      btn.classList.add('active');
+
+      const cards = document.querySelectorAll('.concierge-card');
+      cards.forEach(c => {
+        if (category === 'all' || c.getAttribute('data-category') === category) {
+          c.style.display = 'flex';
+        } else {
+          c.style.display = 'none';
+        }
+      });
+    }
+
+    function openDrawer(type) {
+      const drawer = document.getElementById('drawer-modal');
+      const title = document.getElementById('drawer-header-title');
+      const body = document.getElementById('drawer-body-content');
+      const footer = document.getElementById('drawer-footer-actions');
+
+      if (type === 'waiver') {
+        title.innerText = "Owen's Science Camp Waiver";
+        body.innerHTML = `
+          <div class="card-category-badge badge-owen">Owen Tabor · 5th Grade</div>
+          <div class="drawer-doc-box">
+            <strong>Lake Alpine Outdoor Science Education Medical Release</strong><br><br>
+            I hereby give permission for Owen Tabor to participate in all camp activities including hiking, nature laboratory, and water ecology from August 18–22, 2026.
+          </div>
+          <div style="font-size: 12.5px; font-weight: 600; color: var(--color-navy); margin-top: 8px;">Parent / Guardian Digital Signature</div>
+          <div class="signature-pad" onclick="signPad(this)">
+            <span id="sig-text">Tap or drag to sign (Jake Tabor)</span>
+            <div class="signature-line"></div>
+          </div>
+        `;
+        footer.innerHTML = `
+          <button class="drawer-primary-btn" onclick="submitSignature()">Confirm & Sign Waiver</button>
+        `;
+      } else if (type === 'edison') {
+        title.innerText = "Authorize Insurance Payment";
+        body.innerHTML = `
+          <div class="card-category-badge badge-finance">Edison Homeowners Insurance</div>
+          <div style="font-size: 28px; font-family: var(--font-mono); font-weight: 700; color: var(--color-navy); margin: 8px 0;">$7,198.64</div>
+          <div class="drawer-doc-box">
+            <strong>Policy:</strong> #EDH5679813<br>
+            <strong>Billing Period:</strong> Aug 2026 – Aug 2027<br>
+            <strong>Default Payment:</strong> Chase Premier Checking (...4820)
+          </div>
+        `;
+        footer.innerHTML = `
+          <button class="drawer-primary-btn" onclick="submitPayment()">Authorize $7,198.64 Payment</button>
+        `;
+      }
+
+      drawer.classList.add('open');
+      lucide.createIcons();
+    }
+
+    function signPad(el) {
+      document.getElementById('sig-text').innerHTML = `<span style="font-family: 'Cormorant Garamond', cursive; font-size: 26px; color: var(--color-navy); font-weight: 700;">Jake Tabor</span>`;
+    }
+
+    function submitSignature() {
+      closeDrawer();
+      completeTask('card-camp', 'Owen’s Camp Waiver');
+      showToast('✓ Digital waiver signed and emailed to school office');
+    }
+
+    function submitPayment() {
+      closeDrawer();
+      completeTask('card-edison', 'Edison Insurance');
+      showToast('✓ $7,198.64 payment submitted successfully');
+    }
+
+    function closeDrawer() {
+      document.getElementById('drawer-modal').classList.remove('open');
+    }
+  </script>
+</body>
+</html>

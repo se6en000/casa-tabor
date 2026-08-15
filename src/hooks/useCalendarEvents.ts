@@ -193,7 +193,7 @@ async function fetchEventsForRange(start: Date, end: Date): Promise<EventWithDet
     .filter((event) => eventOverlapsRange(event, start, end))
 }
 
-async function fetchEventDetails(eventId: string): Promise<EventWithDetails | null> {
+export async function fetchEventDetails(eventId: string): Promise<EventWithDetails | null> {
   const { data, error } = await supabase
     .from('events')
     .select(EVENT_DETAIL_SELECT)

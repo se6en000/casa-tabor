@@ -113,6 +113,14 @@
         "reason": "Event and family-member colors are runtime-derived."
       },
       {
+        "path": "src/components/calendar/living-flow/components/LivingFlowHeader.tsx",
+        "reason": "Household attendee avatars bind persisted family-member profile colors."
+      },
+      {
+        "path": "src/components/calendar/living-flow/modals/AttendeesPopover.tsx",
+        "reason": "Household attendee avatars bind persisted family-member profile colors."
+      },
+      {
         "path": "src/components/calendar/WeekView.tsx",
         "reason": "Time-grid dimensions, multi-day spans, drag placeholders, drag previews, and event colors are runtime-derived."
       },

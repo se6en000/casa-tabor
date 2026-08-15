@@ -2,14 +2,14 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
-const detailPanel = readFileSync(new URL('../src/components/calendar/EventDetailPanel.tsx', import.meta.url), 'utf8')
+const stateHook = readFileSync(new URL('../src/components/calendar/living-flow/hooks/useLivingFlowState.ts', import.meta.url), 'utf8')
 const editSheet = readFileSync(new URL('../src/components/calendar/EventEditSheet.tsx', import.meta.url), 'utf8')
 const checklist = readFileSync(new URL('../src/components/calendar/ChecklistEditor.tsx', import.meta.url), 'utf8')
 
-test('transportation and attendee mutations publish aggregate patches', () => {
-  assert.match(detailPanel, /publishEventAggregatePatch/)
-  assert.match(detailPanel, /plan_override:/)
-  assert.match(detailPanel, /members: nextMembers/)
+test('transportation and attendee mutations update database and invalidate events query', () => {
+  assert.match(stateHook, /invalidateCalendar/)
+  assert.match(stateHook, /toggleMember/)
+  assert.match(stateHook, /setDriver/)
 })
 
 test('event title and time saves publish aggregate patches', () => {

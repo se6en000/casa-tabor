@@ -1,0 +1,1965 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Casa Tabor — Living Flow Master Working Prototype</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,400;1,600&family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=JetBrains+Mono:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      /* Canonical Casa Tabor Design Tokens */
+      --color-casa-gold: #C9A96E;
+      --color-casa-gold-light: #F7EFE1;
+      --color-casa-gold-subtle: #FAF5EC;
+      --color-casa-gold-dark: #9E7938;
+      
+      --color-casa-navy: #1B2A4A;
+      --color-casa-navy-soft: #283C66;
+      --color-casa-bg: #FAF8F5;
+      --color-casa-bg-2: #F3EFE8;
+      --color-casa-surface: #FFFFFF;
+      --color-casa-text: #2D2D2D;
+      --color-casa-muted: #7E7F8A;
+      --color-casa-border: #E8E2D9;
+      --color-casa-border-subtle: #F0EAE1;
+      --color-casa-success: #27AE60;
+      --color-casa-success-soft: #EBF8F0;
+      --color-casa-warning: #E67E22;
+      --color-casa-error: #C0392B;
+      
+      /* Household Member Canonical Colors */
+      --color-family-kelly: #C4693A;
+      --color-family-liv: #6A9E7F;
+      --color-family-jake: #1B2A4A;
+      --color-family-owen: #D4A44C;
+      --color-family-emme: #C47A8A;
+      --color-family-giselle: #8E44AD;
+      --color-family-grandma: #D35400;
+      
+      /* Typography */
+      --font-display: 'Cormorant Garamond', Georgia, serif;
+      --font-body: 'DM Sans', system-ui, -apple-system, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+      
+      /* Elevation */
+      --shadow-card: 0 2px 12px rgba(27, 42, 74, 0.04), 0 1px 3px rgba(0,0,0,0.02);
+      --shadow-drawer: -10px 0 35px rgba(27, 42, 74, 0.08);
+      --shadow-floating: 0 18px 45px -6px rgba(27, 42, 74, 0.2), 0 4px 14px rgba(0,0,0,0.06);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: var(--font-body);
+      background: #0B0F17;
+      color: var(--color-casa-text);
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ══════ TOP TOOLBAR ══════ */
+    .demo-bar {
+      background: #161F30;
+      border-bottom: 1px solid #28354D;
+      padding: 8px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #E5E7EB;
+      z-index: 100;
+      flex-shrink: 0;
+      gap: 12px;
+    }
+    .demo-bar-left { display: flex; align-items: center; gap: 10px; }
+    .demo-badge {
+      background: var(--color-casa-gold);
+      color: #111827;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+    .demo-title { font-size: 13px; font-weight: 600; color: #F8FAFC; }
+    
+    .device-pills-group {
+      display: flex;
+      background: #0D131F;
+      padding: 3px;
+      border-radius: 8px;
+      border: 1px solid #28354D;
+      gap: 3px;
+    }
+    .device-pill-btn {
+      background: transparent;
+      border: none;
+      color: #94A3B8;
+      padding: 5px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.15s;
+    }
+    .device-pill-btn.active { background: #28354D; color: #FFFFFF; }
+
+    /* ══════ FLUID STAGE ══════ */
+    .stage-container {
+      flex: 1;
+      width: 100%;
+      height: calc(100vh - 49px);
+      display: flex;
+      align-items: stretch;
+      justify-content: stretch;
+      background: #0F172A;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .app-frame {
+      width: 100%;
+      height: 100%;
+      background: var(--color-casa-bg);
+      display: flex;
+      overflow: hidden;
+      position: relative;
+      margin: auto;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .app-frame.device-desktop { width: 100%; height: 100%; border-radius: 0; }
+    .app-frame.device-kiosk { width: 100%; height: 100%; font-size: 1.08rem; }
+    .app-frame.device-tablet { width: min(840px, 96vw); height: min(920px, calc(100vh - 70px)); border-radius: 20px; border: 4px solid #1E293B; box-shadow: 0 25px 60px rgba(0,0,0,0.6); }
+    .app-frame.device-mobile { width: min(400px, 94vw); height: min(840px, calc(100vh - 70px)); border-radius: 38px; border: 8px solid #1E293B; box-shadow: 0 25px 60px rgba(0,0,0,0.7); }
+
+    /* ══════ CALENDAR CANVAS (LEFT) ══════ */
+    .canvas-bg {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      background: var(--color-casa-bg);
+      border-right: 1px solid var(--color-casa-border);
+      overflow: hidden;
+      user-select: none;
+    }
+    .casa-topbar {
+      height: 56px;
+      border-bottom: 1px solid var(--color-casa-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      background: var(--color-casa-surface);
+      flex-shrink: 0;
+    }
+    .brand-mark {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--font-display);
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--color-casa-navy);
+    }
+    .brand-monogram {
+      width: 28px;
+      height: 28px;
+      background: var(--color-casa-navy);
+      color: var(--color-casa-gold);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .calendar-columns-grid {
+      flex: 1;
+      padding: 16px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      overflow-y: auto;
+    }
+    .day-column {
+      background: rgba(255,255,255,0.7);
+      border: 1px solid var(--color-casa-border);
+      border-radius: 12px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .day-header-pill { font-size: 11px; font-weight: 800; color: var(--color-casa-navy); text-transform: uppercase; }
+    .cal-event-card {
+      background: white;
+      border: 1px solid var(--color-casa-border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 13px;
+    }
+    .cal-event-card.selected-event {
+      border: 2px solid var(--color-casa-gold);
+      background: #FFFDF9;
+      box-shadow: 0 4px 12px rgba(201, 169, 110, 0.15);
+    }
+
+    /* ══════ LIVING FLOW SIDECAR (RIGHT) ══════ */
+    .sidecar-panel {
+      width: clamp(400px, 37vw, 540px);
+      min-width: 380px;
+      background: var(--color-casa-surface);
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      border-left: 1px solid var(--color-casa-border);
+      box-shadow: var(--shadow-drawer);
+      position: relative;
+      z-index: 20;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+    .device-mobile .canvas-bg { display: none; }
+    .device-mobile .sidecar-panel { width: 100%; min-width: 100%; border-left: none; }
+
+    /* Top Header */
+    .sidecar-header {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--color-casa-border-subtle);
+      background: var(--color-casa-surface);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+      position: relative;
+    }
+    
+    /* Attendee Trigger Capsule in Header */
+    .attendee-trigger-capsule {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: #FFFFFF;
+      border: 2px solid var(--color-casa-gold);
+      padding: 6px 16px 6px 6px;
+      border-radius: 28px;
+      cursor: pointer;
+      transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 1px 4px rgba(201, 169, 110, 0.15);
+    }
+    .attendee-trigger-capsule:hover {
+      background: #FFFDF9;
+      box-shadow: 0 3px 10px rgba(201, 169, 110, 0.3);
+      transform: translateY(-1px);
+    }
+    .avatar-stack { display: flex; align-items: center; }
+    .avatar-ring {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      color: white;
+      font-weight: 700;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 2px solid white;
+      margin-left: -6px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .avatar-ring:first-child { margin-left: 0; }
+    .attendee-names {
+      font-size: 12.5px;
+      font-weight: 800;
+      color: var(--color-casa-navy);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .header-btn-group { display: flex; align-items: center; gap: 8px; }
+    .icon-action-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: #FFFFFF;
+      border: 1px solid var(--color-casa-border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--color-casa-navy);
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.15s;
+    }
+    .icon-action-btn:hover { border-color: var(--color-casa-gold); background: #FFFDF9; }
+
+    /* Scrollable Body */
+    .sidecar-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 18px 20px 40px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      background: var(--color-casa-bg);
+      min-height: 0;
+      position: relative;
+    }
+
+    /* ══════ FLOATING POPOVERS ══════ */
+    .popover-backdrop {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(15, 23, 42, 0.12);
+      backdrop-filter: blur(1px);
+      z-index: 80;
+    }
+
+    .floating-overlay-card {
+      position: absolute;
+      background: #FFFFFF;
+      border: 2px solid var(--color-casa-gold);
+      border-radius: 20px;
+      padding: 20px;
+      box-shadow: var(--shadow-floating);
+      z-index: 90;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      animation: springFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes springFadeIn {
+      from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    /* Floating Popover Anchors */
+    #attendeeFloatingPopover { top: 66px; left: 16px; right: 16px; }
+    #categoryFloatingPopover { top: 120px; left: 16px; right: 16px; max-height: 80vh; overflow-y: auto; }
+    #timeFloatingPopover { top: 120px; left: 16px; right: 16px; }
+    #driverFloatingPopover { top: 220px; left: 16px; right: 16px; }
+    #placeFloatingPopover { top: 200px; left: 16px; right: 16px; max-height: 75vh; overflow-y: auto; }
+
+    .popover-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .popover-heading {
+      font-size: 13px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--color-casa-navy);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .popover-close-btn {
+      border: none;
+      background: transparent;
+      color: var(--color-casa-navy);
+      font-size: 16px;
+      cursor: pointer;
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+    }
+    .popover-close-btn:hover { background: var(--color-casa-bg); }
+
+    /* ══════ CATEGORY & TYPE MODAL STYLES ══════ */
+    .type-switcher-segment-exact {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      background: var(--color-casa-bg-2);
+      padding: 4px;
+      border-radius: 12px;
+      gap: 4px;
+    }
+    .type-segment-pill {
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: none;
+      background: transparent;
+      font-size: 12.5px;
+      font-weight: 700;
+      color: var(--color-casa-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.15s;
+    }
+    .type-segment-pill.active {
+      background: #FFFFFF;
+      color: var(--color-casa-navy);
+      box-shadow: 0 2px 6px rgba(27, 42, 74, 0.08);
+    }
+
+    .category-grid-exact {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .cat-item-box {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 11px 12px;
+      border-radius: 12px;
+      border: 1.5px solid var(--color-casa-border);
+      background: var(--color-casa-bg);
+      cursor: pointer;
+      font-size: 12.5px;
+      font-weight: 700;
+      color: var(--color-casa-navy);
+      transition: all 0.15s;
+    }
+    .cat-item-box:hover {
+      background: #FFFDF9;
+      border-color: var(--color-casa-gold);
+      transform: translateY(-1px);
+    }
+    .cat-item-box.selected {
+      background: #FFFDF9;
+      border: 2px solid var(--color-casa-gold);
+      color: var(--color-casa-gold-dark);
+      box-shadow: 0 2px 6px rgba(201, 169, 110, 0.15);
+    }
+
+    /* 2x2 Grid of Family Members */
+    .family-members-grid-exact {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .member-card-exact {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: #FAF8F5;
+      border: 1.5px solid var(--color-casa-border);
+      cursor: pointer;
+      transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .member-card-exact:hover {
+      border-color: var(--color-casa-gold);
+      background: #FFFDF9;
+      transform: translateY(-1px);
+    }
+    .member-card-exact.selected {
+      background: #FFFDF9;
+      border: 2px solid var(--color-casa-gold);
+      box-shadow: 0 2px 8px rgba(201, 169, 110, 0.15);
+    }
+    .member-left-exact { display: flex; align-items: center; gap: 10px; }
+    .member-avatar-lg-exact {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      color: white;
+      font-weight: 700;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .member-name-exact { font-size: 15px; font-weight: 700; color: var(--color-casa-navy); line-height: 1.2; }
+    .member-role-exact { font-size: 11.5px; color: var(--color-casa-muted); margin-top: 2px; }
+    .member-badge-icon { font-size: 15px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+    .member-badge-icon.star { color: #EAB308; font-size: 17px; }
+    .member-badge-icon.check { color: #22C55E; }
+    .member-badge-icon.plus { color: var(--color-casa-muted); }
+
+    /* Recurrence Box */
+    .recurrence-box-exact {
+      background: #FFFFFF;
+      border: 1.5px dashed var(--color-casa-gold);
+      border-radius: 12px;
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .recur-label-exact { font-size: 13px; font-weight: 600; color: var(--color-casa-navy); }
+    .recur-toggle-buttons { display: flex; gap: 6px; }
+    .recur-pill-btn {
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      border: 1px solid var(--color-casa-border);
+      background: #FFFFFF;
+      color: var(--color-casa-navy);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .recur-pill-btn.active {
+      background: var(--color-casa-navy);
+      color: #FFFFFF;
+      border-color: var(--color-casa-navy);
+      box-shadow: 0 2px 6px rgba(27, 42, 74, 0.2);
+    }
+
+    /* Date/Time Stepper Styles */
+    .day-selector-grid-exact { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    .day-select-pill-btn {
+      padding: 8px 6px;
+      border-radius: 10px;
+      border: 1.5px solid var(--color-casa-border);
+      background: var(--color-casa-bg);
+      text-align: center;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--color-casa-navy);
+      transition: all 0.15s;
+    }
+    .day-select-pill-btn.active {
+      background: var(--color-casa-navy);
+      color: #FFFFFF;
+      border-color: var(--color-casa-navy);
+      box-shadow: 0 2px 6px rgba(27, 42, 74, 0.2);
+    }
+    .day-select-pill-btn small { display: block; font-size: 10px; font-weight: 500; opacity: 0.8; margin-top: 1px; }
+
+    .time-stepper-touch-grid {
+      display: grid;
+      grid-template-columns: 1.2fr 1.2fr 1fr;
+      gap: 10px;
+      background: var(--color-casa-bg);
+      padding: 12px;
+      border-radius: 14px;
+      border: 1px solid var(--color-casa-border);
+    }
+    .stepper-column-box { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+    .stepper-label-tag { font-size: 10.5px; font-weight: 800; text-transform: uppercase; color: var(--color-casa-muted); letter-spacing: 0.5px; }
+    .stepper-number-display {
+      font-family: var(--font-mono);
+      font-size: 26px;
+      font-weight: 800;
+      color: var(--color-casa-navy);
+      background: #FFFFFF;
+      border: 1.5px solid var(--color-casa-border);
+      padding: 6px 12px;
+      border-radius: 10px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .stepper-buttons-row { display: flex; gap: 4px; width: 100%; }
+    .stepper-arrow-btn {
+      flex: 1;
+      height: 38px;
+      border-radius: 8px;
+      border: 1.5px solid var(--color-casa-border);
+      background: #FFFFFF;
+      font-size: 16px;
+      font-weight: 800;
+      color: var(--color-casa-navy);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+    .stepper-arrow-btn:hover { background: var(--color-casa-gold-light); border-color: var(--color-casa-gold); transform: translateY(-1px); }
+    .ampm-toggle-btn {
+      width: 100%;
+      height: 38px;
+      border-radius: 8px;
+      border: 1.5px solid var(--color-casa-border);
+      background: #FFFFFF;
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--color-casa-navy);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+    .duration-chips-row { display: flex; gap: 6px; flex-wrap: wrap; }
+    .dur-chip-btn {
+      padding: 6px 14px;
+      border-radius: 16px;
+      border: 1.5px solid var(--color-casa-border);
+      background: var(--color-casa-bg);
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--color-casa-navy);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .dur-chip-btn.active {
+      background: var(--color-casa-gold);
+      color: #111827;
+      border-color: var(--color-casa-gold);
+      box-shadow: 0 2px 6px rgba(201, 169, 110, 0.2);
+    }
+
+    /* Travel Behavior & Driver Selector */
+    .travel-behavior-switcher {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      background: var(--color-casa-bg-2);
+      padding: 4px;
+      border-radius: 12px;
+      gap: 4px;
+    }
+    .travel-behavior-btn {
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: none;
+      background: transparent;
+      font-size: 12.5px;
+      font-weight: 700;
+      color: var(--color-casa-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.15s;
+    }
+    .travel-behavior-btn.active { background: #FFFFFF; color: var(--color-casa-navy); box-shadow: 0 2px 6px rgba(27, 42, 74, 0.08); }
+    .driver-selection-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    /* Place & Address Popover Styles */
+    .place-search-field-box {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--color-casa-bg);
+      border: 2px solid var(--color-casa-gold);
+      padding: 10px 14px;
+      border-radius: 12px;
+    }
+    .place-search-input { flex: 1; border: none; background: transparent; font-size: 14.5px; font-weight: 600; color: var(--color-casa-navy); outline: none; }
+    .place-item-card-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      background: var(--color-casa-bg);
+      border: 1.5px solid var(--color-casa-border);
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .place-item-card-row:hover { background: #FFFDF9; border-color: var(--color-casa-gold); transform: translateY(-1px); }
+    .place-item-card-row.selected { background: #FFFDF9; border: 2px solid var(--color-casa-gold); box-shadow: 0 2px 8px rgba(201, 169, 110, 0.15); }
+    .place-left-info { display: flex; align-items: center; gap: 10px; }
+    .place-name-txt { font-size: 14px; font-weight: 700; color: var(--color-casa-navy); }
+    .place-addr-txt { font-size: 11.5px; color: var(--color-casa-muted); margin-top: 2px; }
+    .place-drive-txt { font-family: var(--font-mono); font-size: 12px; font-weight: 700; color: var(--color-casa-success); }
+
+    /* Hero Title Card */
+    .hero-title-card {
+      background: var(--color-casa-surface);
+      padding: 18px 20px;
+      border-radius: 18px;
+      border: 1px solid var(--color-casa-border);
+      box-shadow: var(--shadow-card);
+    }
+    .event-main-title {
+      font-family: var(--font-display);
+      font-size: 32px;
+      font-weight: 600;
+      color: var(--color-casa-navy);
+      line-height: 1.15;
+      outline: none;
+      word-break: break-word;
+    }
+
+    .meta-pills-cluster {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      margin-top: 12px;
+    }
+    .action-chip {
+      background: var(--color-casa-bg);
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--color-casa-navy);
+      border: 1.5px solid var(--color-casa-border);
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .action-chip:hover { border-color: var(--color-casa-gold); background: white; }
+    .action-chip.gold-active {
+      background: var(--color-casa-gold-light);
+      border-color: var(--color-casa-gold);
+      color: var(--color-casa-gold-dark);
+      font-weight: 700;
+    }
+
+    /* ══════ HERO DEPARTURE INTELLIGENCE CAPSULE ══════ */
+    .departure-intelligence-card {
+      background: linear-gradient(135deg, #1B2A4A 0%, #283C66 100%);
+      color: white;
+      border-radius: 18px;
+      padding: 18px 20px;
+      box-shadow: 0 6px 22px -3px rgba(27, 42, 74, 0.25);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      cursor: pointer;
+      transition: transform 0.15s;
+    }
+    .departure-intelligence-card:hover { transform: translateY(-1px); }
+    .departure-top-badge-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .dep-live-tag {
+      background: rgba(39, 174, 96, 0.25);
+      border: 1px solid rgba(39, 174, 96, 0.6);
+      color: #6EE7B7;
+      font-size: 10.5px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .dep-countdown-pill {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--color-casa-gold);
+      background: rgba(201, 169, 110, 0.2);
+      padding: 2px 8px;
+      border-radius: 10px;
+    }
+    .dep-main-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .dep-headline-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #94A3B8;
+    }
+    .dep-time-huge {
+      font-family: var(--font-mono);
+      font-size: 34px;
+      font-weight: 800;
+      color: #FFFFFF;
+      letter-spacing: -0.5px;
+      line-height: 1;
+      margin-top: 3px;
+    }
+    .dep-sub-metrics {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: #CBD5E1;
+      flex-wrap: wrap;
+    }
+
+    /* ══════ TIMELINE ROUTE & BEHAVIOR ══════ */
+    .journey-timeline-card {
+      background: var(--color-casa-surface);
+      border-radius: 18px;
+      border: 1px solid var(--color-casa-border);
+      padding: 18px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      box-shadow: var(--shadow-card);
+    }
+    .journey-timeline-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .journey-behavior-toggle {
+      display: flex;
+      background: var(--color-casa-bg);
+      border: 1.5px solid var(--color-casa-border);
+      border-radius: 20px;
+      padding: 2px;
+      gap: 2px;
+    }
+    .behavior-toggle-chip {
+      border: none;
+      background: transparent;
+      padding: 4px 10px;
+      border-radius: 16px;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--color-casa-muted);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .behavior-toggle-chip.active {
+      background: var(--color-casa-navy);
+      color: white;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+    }
+
+    .journey-step-node { display: flex; align-items: flex-start; gap: 12px; }
+    .node-pin-icon {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: var(--color-casa-surface);
+      border: 2px solid var(--color-casa-gold);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      color: var(--color-casa-navy);
+      flex-shrink: 0;
+    }
+    .node-pin-icon.navy { background: var(--color-casa-navy); border-color: var(--color-casa-navy); color: white; }
+    .node-content-card {
+      flex: 1;
+      background: var(--color-casa-bg);
+      border: 1.5px solid var(--color-casa-border);
+      border-radius: 14px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .node-card-top { display: flex; align-items: center; justify-content: space-between; }
+    .node-title-text { font-size: 13.5px; font-weight: 700; color: var(--color-casa-navy); }
+    .node-time-badge { font-family: var(--font-mono); font-size: 12.5px; font-weight: 700; color: var(--color-casa-navy); }
+    
+    .driver-action-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: white;
+      border: 1.5px solid var(--color-casa-border);
+      padding: 5px 12px;
+      border-radius: 18px;
+      font-size: 11.5px;
+      font-weight: 700;
+      color: var(--color-casa-navy);
+      cursor: pointer;
+      width: fit-content;
+      margin-top: 4px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+      transition: all 0.15s;
+    }
+    .driver-action-pill:hover { border-color: var(--color-casa-gold); background: #FFFDF9; transform: translateY(-1px); }
+
+    /* Venue Card */
+    .venue-showcase-card {
+      background: var(--color-casa-surface);
+      border-radius: 18px;
+      border: 1.5px solid var(--color-casa-gold);
+      padding: 16px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      box-shadow: var(--shadow-card);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .venue-showcase-card:hover {
+      box-shadow: 0 4px 16px rgba(201, 169, 110, 0.2);
+      transform: translateY(-1px);
+    }
+    .venue-card-top-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* ══════ DEDICATED REMINDER VIEW CARD ══════ */
+    .reminder-focus-card {
+      background: #FFFFFF;
+      border: 2px solid var(--color-casa-gold);
+      border-radius: 20px;
+      padding: 28px 22px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 18px;
+      box-shadow: var(--shadow-card);
+    }
+    .reminder-badge-ring {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background: var(--color-casa-gold-light);
+      border: 3px solid var(--color-casa-gold);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 30px;
+    }
+    .reminder-action-btn-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      width: 100%;
+      margin-top: 6px;
+    }
+    .rem-big-btn {
+      padding: 14px;
+      border-radius: 14px;
+      font-size: 14px;
+      font-weight: 700;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.15s;
+    }
+    .rem-big-btn:hover { transform: translateY(-1px); }
+    .rem-big-btn.done { background: var(--color-casa-success); color: white; box-shadow: 0 4px 12px rgba(39, 174, 96, 0.2); }
+    .rem-big-btn.snooze { background: var(--color-casa-bg-2); color: var(--color-casa-navy); border: 1.5px solid var(--color-casa-border); }
+
+    /* Sticky Footer */
+    .sidecar-footer-bar {
+      padding: 12px 18px;
+      background: var(--color-casa-surface);
+      border-top: 1px solid var(--color-casa-border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .copilot-sparkle-btn {
+      flex: 1;
+      padding: 12px 16px;
+      border-radius: 24px;
+      background: linear-gradient(135deg, #FAF4EB 0%, #F5E8D3 100%);
+      border: 1.5px solid var(--color-casa-gold);
+      color: var(--color-casa-navy);
+      font-weight: 700;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Demo Bar -->
+  <header class="demo-bar">
+    <div class="demo-bar-left">
+      <span class="demo-badge">Living Master Prototype</span>
+      <span class="demo-title">Casa Tabor — Unified Event & Reminder Experience</span>
+    </div>
+
+    <div class="device-pills-group">
+      <button class="device-pill-btn active" onclick="setDevice('desktop')">💻 Desktop</button>
+      <button class="device-pill-btn" onclick="setDevice('tablet')">📟 Tablet</button>
+      <button class="device-pill-btn" onclick="setDevice('mobile')">📱 Mobile</button>
+      <button class="device-pill-btn" onclick="setDevice('kiosk')">📺 Kiosk</button>
+    </div>
+  </header>
+
+  <!-- Stage Container -->
+  <main class="stage-container">
+    <div class="app-frame device-desktop" id="appFrame">
+      
+      <!-- Calendar Background Canvas -->
+      <div class="canvas-bg">
+        <div class="casa-topbar">
+          <div class="brand-mark"><div class="brand-monogram">CT</div> Casa Tabor</div>
+          <div style="font-size: 12px; font-weight: 600; color: var(--color-casa-muted);">Friday, Aug 14 · West Palm Beach</div>
+        </div>
+        <div class="calendar-columns-grid">
+          <div class="day-column">
+            <div class="day-header-pill">Fri 14 · Today</div>
+            <div class="cal-event-card"><strong>11:30 PM</strong> · Coffee Run</div>
+            <div class="cal-event-card"><strong>1:00 PM</strong> · Dentist Appointment</div>
+          </div>
+          <div class="day-column">
+            <div class="day-header-pill">Sat 15 · Tomorrow</div>
+            <div class="cal-event-card selected-event" id="calCardMall">
+              <strong id="calCardTime">2:25 PM</strong> · <span id="calCardTitle">Liv and Mom Mall</span>
+            </div>
+            <div class="cal-event-card"><strong>9:55 AM</strong> · Mow Lawn (Jake)</div>
+          </div>
+          <div class="day-column">
+            <div class="day-header-pill">Sun 16</div>
+            <div class="cal-event-card"><strong>1:00 PM</strong> · Owen Soccer Practice</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════ UNIFIED WORKING SIDECAR PANEL ═══════ -->
+      <aside class="sidecar-panel">
+        
+        <!-- Global Backdrop for Popovers -->
+        <div class="popover-backdrop" id="globalPopoverBackdrop" style="display: none;" onclick="closeAllPopovers()"></div>
+
+        <!-- ══════ FLOATING ATTENDEES POPOVER ══════ -->
+        <div class="floating-overlay-card" id="attendeeFloatingPopover" style="display: none;">
+          <div class="popover-title-row">
+            <span class="popover-heading">👥 Family Attendees</span>
+            <button class="popover-close-btn" onclick="closeAllPopovers()" title="Close">✕</button>
+          </div>
+
+          <!-- 2x2 Grid of Family Members -->
+          <div class="family-members-grid-exact" id="attendeeCardsGrid"></div>
+
+          <!-- Recurrence Scope Box -->
+          <div class="recurrence-box-exact">
+            <span class="recur-label-exact">Apply changes to:</span>
+            <div class="recur-toggle-buttons">
+              <button class="recur-pill-btn active" id="recur-this-btn" onclick="setRecurScope('this')">This Sat Only</button>
+              <button class="recur-pill-btn" id="recur-all-btn" onclick="setRecurScope('all')">All Repeating</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ══════ ⭐ FLOATING CATEGORY & SCHEDULE TYPE MODAL / POPOVER ══════ -->
+        <div class="floating-overlay-card" id="categoryFloatingPopover" style="display: none;">
+          <div class="popover-title-row">
+            <span class="popover-heading">🏷️ Schedule Type & Category</span>
+            <button class="popover-close-btn" onclick="closeAllPopovers()" title="Close">✕</button>
+          </div>
+
+          <!-- 1. Schedule Type 2-Way Switcher -->
+          <div>
+            <div style="font-size: 11px; font-weight: 800; color: var(--color-casa-muted); text-transform: uppercase; margin-bottom: 6px;">Schedule Type</div>
+            <div class="type-switcher-segment-exact">
+              <button class="type-segment-pill active" id="mode-btn-event" onclick="setMode('event')">
+                <span>📅</span> Calendar Event
+              </button>
+              <button class="type-segment-pill" id="mode-btn-reminder" onclick="setMode('reminder')">
+                <span>🔔</span> Task Reminder
+              </button>
+            </div>
+          </div>
+
+          <!-- 2A. Event Category Grid -->
+          <div id="eventCategorySection">
+            <div style="font-size: 11px; font-weight: 800; color: var(--color-casa-muted); text-transform: uppercase; margin-bottom: 8px;">Event Categories</div>
+            <div class="category-grid-exact">
+              <div class="cat-item-box selected" id="cat-opt-social" onclick="selectEventCategory('🛍️ Social', 'Liv and Mom Mall', '🛍️', 'The Gardens Mall', '3101 PGA Blvd, Palm Beach Gardens, FL', 20, 8.4)">
+                <span>🛍️ Social / Outing</span>
+                <span>✓</span>
+              </div>
+              <div class="cat-item-box" id="cat-opt-sports" onclick="selectEventCategory('⚽ Sports', 'Owen Soccer Game', '⚽', 'Jupiter Community Park', '3377 Church St, Jupiter, FL', 16, 7.1)">
+                <span>⚽ Sports & Practice</span>
+                <span>+</span>
+              </div>
+              <div class="cat-item-box" id="cat-opt-medical" onclick="selectEventCategory('🏥 Medical', 'Dentist Checkup', '🏥', 'Pediatric Dental Care', '103 PGA Blvd, Palm Beach Gardens, FL', 10, 3.2)">
+                <span>🏥 Medical / Doctor</span>
+                <span>+</span>
+              </div>
+              <div class="cat-item-box" id="cat-opt-birthday" onclick="selectEventCategory('🎂 Birthday', 'Emma Birthday Party', '🎂', 'Dave & Busters', '4000 PGA Blvd, Palm Beach Gardens, FL', 15, 6.0)">
+                <span>🎂 Birthday Party</span>
+                <span>+</span>
+              </div>
+              <div class="cat-item-box" id="cat-opt-school" onclick="selectEventCategory('🏫 School', 'School Open House', '🏫', 'The Benjamin School', '11000 Ellison Wilson Rd, North Palm Beach, FL', 14, 5.9)">
+                <span>🏫 School / Academics</span>
+                <span>+</span>
+              </div>
+              <div class="cat-item-box" id="cat-opt-dining" onclick="selectEventCategory('🍽️ Dining', 'Family Dinner Out', '🍽️', 'BrickTops Restaurant', '2350 PGA Blvd, Palm Beach Gardens, FL', 12, 4.5)">
+                <span>🍽️ Dining & Food</span>
+                <span>+</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 2B. Task Reminder Category Grid -->
+          <div id="reminderCategorySection" style="display: none;">
+            <div style="font-size: 11px; font-weight: 800; color: var(--color-casa-muted); text-transform: uppercase; margin-bottom: 8px;">Reminder Categories</div>
+            <div class="category-grid-exact">
+              <div class="cat-item-box selected" id="rem-opt-meds" onclick="selectReminderCategory('💊 Meds & Health', 'Liv Evening Meds', '💊')">
+                <span>💊 Meds & Health</span>
+                <span>✓</span>
+              </div>
+              <div class="cat-item-box" id="rem-opt-errand" onclick="selectReminderCategory('🛒 Errand', 'Pickup Target Drive-up Order', '🛒')">
+                <span>🛒 Household Errand</span>
+                <span>+</span>
+              </div>
+              <div class="cat-item-box" id="rem-opt-school" onclick="selectReminderCategory('📚 School', 'Sign Permission Slip for Liv', '📚')">
+                <span>📚 School & Chores</span>
+                <span>+</span>
+              </div>
+              <div class="cat-item-box" id="rem-opt-maint" onclick="selectReminderCategory('🔧 Maintenance', 'Trash & Recycle Bin Curbside', '🔧')">
+                <span>🔧 Home Maintenance</span>
+                <span>+</span>
+              </div>
+              <div class="cat-item-box" id="rem-opt-pet" onclick="selectReminderCategory('🐾 Pet Care', 'Give Dog Heartworm Chew', '🐾')">
+                <span>🐾 Pet Care</span>
+                <span>+</span>
+              </div>
+              <div class="cat-item-box" id="rem-opt-admin" onclick="selectReminderCategory('📋 Family Admin', 'Review Soccer Camp Schedule', '📋')">
+                <span>📋 Family Admin</span>
+                <span>+</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Recurrence Scope for Category -->
+          <div class="recurrence-box-exact">
+            <span class="recur-label-exact">Apply category to:</span>
+            <div class="recur-toggle-buttons">
+              <button class="recur-pill-btn active">This Sat Only</button>
+              <button class="recur-pill-btn">All Repeating</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ══════ FLOATING DATE & TIME MODAL / POPOVER ══════ -->
+        <div class="floating-overlay-card" id="timeFloatingPopover" style="display: none;">
+          <div class="popover-title-row">
+            <span class="popover-heading">🕒 Schedule & Start Time</span>
+            <button class="popover-close-btn" onclick="closeAllPopovers()" title="Close">✕</button>
+          </div>
+
+          <!-- 1. Day Selector Ribbon -->
+          <div>
+            <div style="font-size: 11px; font-weight: 800; color: var(--color-casa-muted); text-transform: uppercase; margin-bottom: 6px;">Select Day</div>
+            <div class="day-selector-grid-exact">
+              <div class="day-select-pill-btn" id="day-opt-today" onclick="setDay('Today, Aug 14', 'day-opt-today')">Today<small>Fri 14</small></div>
+              <div class="day-select-pill-btn active" id="day-opt-tomorrow" onclick="setDay('Sat, Aug 15', 'day-opt-tomorrow')">Tomorrow<small>Sat 15</small></div>
+              <div class="day-select-pill-btn" id="day-opt-sun" onclick="setDay('Sun, Aug 16', 'day-opt-sun')">Sunday<small>Sun 16</small></div>
+              <div class="day-select-pill-btn" id="day-opt-pick" onclick="setDay('Mon, Aug 17', 'day-opt-pick')">Pick Date<small>📅</small></div>
+            </div>
+          </div>
+
+          <!-- 2. Touch Stepper Wheels (48px Targets) -->
+          <div>
+            <div style="font-size: 11px; font-weight: 800; color: var(--color-casa-muted); text-transform: uppercase; margin-bottom: 6px;">Start Time (Touch Steppers)</div>
+            <div class="time-stepper-touch-grid">
+              
+              <!-- Hour Column -->
+              <div class="stepper-column-box">
+                <span class="stepper-label-tag">Hour</span>
+                <div class="stepper-number-display" id="stepperHour">02</div>
+                <div class="stepper-buttons-row">
+                  <button class="stepper-arrow-btn" onclick="stepHour(-1)">−</button>
+                  <button class="stepper-arrow-btn" onclick="stepHour(1)">+</button>
+                </div>
+              </div>
+
+              <!-- Minute Column (5m step) -->
+              <div class="stepper-column-box">
+                <span class="stepper-label-tag">Minute</span>
+                <div class="stepper-number-display" id="stepperMin">25</div>
+                <div class="stepper-buttons-row">
+                  <button class="stepper-arrow-btn" onclick="stepMinute(-5)">−</button>
+                  <button class="stepper-arrow-btn" onclick="stepMinute(5)">+</button>
+                </div>
+              </div>
+
+              <!-- Period Column -->
+              <div class="stepper-column-box">
+                <span class="stepper-label-tag">Period</span>
+                <div class="stepper-number-display" id="stepperPeriod" style="font-size: 22px;">PM</div>
+                <button class="ampm-toggle-btn" onclick="togglePeriod()">AM / PM</button>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- 3. Duration Presets -->
+          <div>
+            <div style="font-size: 11px; font-weight: 800; color: var(--color-casa-muted); text-transform: uppercase; margin-bottom: 6px;">Event Duration</div>
+            <div class="duration-chips-row">
+              <button class="dur-chip-btn" id="dur-45" onclick="setDuration(45, 'dur-45')">45m</button>
+              <button class="dur-chip-btn" id="dur-90" onclick="setDuration(90, 'dur-90')">1h 30m</button>
+              <button class="dur-chip-btn active" id="dur-160" onclick="setDuration(160, 'dur-160')">2h 40m</button>
+              <button class="dur-chip-btn" id="dur-240" onclick="setDuration(240, 'dur-240')">4h</button>
+              <button class="dur-chip-btn" id="dur-all" onclick="setDuration(480, 'dur-all')">All Day</button>
+            </div>
+          </div>
+
+          <!-- 4. Recurrence Box for Date/Time -->
+          <div class="recurrence-box-exact">
+            <span class="recur-label-exact">Apply timing to:</span>
+            <div class="recur-toggle-buttons">
+              <button class="recur-pill-btn active">This Sat Only</button>
+              <button class="recur-pill-btn">All Repeating</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ══════ FLOATING DRIVER & DROPOFF/STAY POPOVER ══════ -->
+        <div class="floating-overlay-card" id="driverFloatingPopover" style="display: none;">
+          <div class="popover-title-row">
+            <span class="popover-heading" id="driverPopoverHeading">🚗 Driver & Travel Mode</span>
+            <button class="popover-close-btn" onclick="closeAllPopovers()">✕</button>
+          </div>
+
+          <!-- 1. Drop Off vs Stay Switcher -->
+          <div>
+            <div style="font-size: 11px; font-weight: 800; color: var(--color-casa-muted); text-transform: uppercase; margin-bottom: 6px;">Travel Behavior</div>
+            <div class="travel-behavior-switcher">
+              <button class="travel-behavior-btn active" id="btn-mode-stay" onclick="setTravelBehavior('stay')">
+                <span>☕</span> Parent Stays on Site
+              </button>
+              <button class="travel-behavior-btn" id="btn-mode-dropoff" onclick="setTravelBehavior('dropoff')">
+                <span>🚗</span> Drop Off & Pick Up
+              </button>
+            </div>
+          </div>
+
+          <!-- 2. Household Primary Drivers -->
+          <div>
+            <div style="font-size: 11px; font-weight: 800; color: var(--color-casa-muted); text-transform: uppercase; margin-bottom: 6px;">Select Driver</div>
+            <div class="driver-selection-grid">
+              
+              <!-- Kelly -->
+              <div class="member-card-exact selected" id="drv-opt-kelly" onclick="assignSelectedDriver('Kelly')">
+                <div class="member-left-exact">
+                  <div class="member-avatar-lg-exact" style="background: var(--color-family-kelly);">K</div>
+                  <div>
+                    <div class="member-name-exact">Kelly</div>
+                    <div class="member-role-exact">Mom · Primary</div>
+                  </div>
+                </div>
+                <div class="member-badge-icon check">✓</div>
+              </div>
+
+              <!-- Jake -->
+              <div class="member-card-exact" id="drv-opt-jake" onclick="assignSelectedDriver('Jake')">
+                <div class="member-left-exact">
+                  <div class="member-avatar-lg-exact" style="background: var(--color-family-jake);">J</div>
+                  <div>
+                    <div class="member-name-exact">Jake</div>
+                    <div class="member-role-exact">Dad · Driver</div>
+                  </div>
+                </div>
+                <div class="member-badge-icon plus">+</div>
+              </div>
+
+              <!-- Both Parents -->
+              <div class="member-card-exact" id="drv-opt-both" onclick="assignSelectedDriver('Both Parents')">
+                <div class="member-left-exact">
+                  <div class="member-avatar-lg-exact" style="background: var(--color-casa-gold); color:#111827;">👥</div>
+                  <div>
+                    <div class="member-name-exact">Both</div>
+                    <div class="member-role-exact">Ride Together</div>
+                  </div>
+                </div>
+                <div class="member-badge-icon plus">+</div>
+              </div>
+
+              <!-- Giselle (Nanny) -->
+              <div class="member-card-exact" id="drv-opt-giselle" onclick="assignSelectedDriver('Giselle')">
+                <div class="member-left-exact">
+                  <div class="member-avatar-lg-exact" style="background: var(--color-family-giselle);">G</div>
+                  <div>
+                    <div class="member-name-exact">Giselle</div>
+                    <div class="member-role-exact">Caregiver / Nanny</div>
+                  </div>
+                </div>
+                <div class="member-badge-icon plus">+</div>
+              </div>
+
+              <!-- Grandma Susan -->
+              <div class="member-card-exact" id="drv-opt-grandma" onclick="assignSelectedDriver('Grandma')">
+                <div class="member-left-exact">
+                  <div class="member-avatar-lg-exact" style="background: var(--color-family-grandma);">S</div>
+                  <div>
+                    <div class="member-name-exact">Grandma</div>
+                    <div class="member-role-exact">Family Helper</div>
+                  </div>
+                </div>
+                <div class="member-badge-icon plus">+</div>
+              </div>
+
+              <!-- Carpool / Other Parent -->
+              <div class="member-card-exact" id="drv-opt-carpool" onclick="assignSelectedDriver('Carpool')">
+                <div class="member-left-exact">
+                  <div class="member-avatar-lg-exact" style="background: #475569;">🚖</div>
+                  <div>
+                    <div class="member-name-exact">Carpool</div>
+                    <div class="member-role-exact">Team / Friend</div>
+                  </div>
+                </div>
+                <div class="member-badge-icon plus">+</div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Apply to Return Trip Switch -->
+          <div style="background: var(--color-casa-bg); padding: 10px 12px; border-radius: 10px; border: 1px solid var(--color-casa-border); display: flex; align-items: center; justify-content: space-between; font-size: 12.5px; font-weight: 600; color: var(--color-casa-navy);">
+            <span>Also assign to Return Pickup (5:05 PM)</span>
+            <input type="checkbox" id="syncReturnCheckbox" checked style="width: 18px; height: 18px; accent-color: var(--color-casa-gold); cursor: pointer;" />
+          </div>
+        </div>
+
+        <!-- ══════ FLOATING SMART PLACE & ADDRESS POPOVER ══════ -->
+        <div class="floating-overlay-card" id="placeFloatingPopover" style="display: none;">
+          <div class="popover-title-row">
+            <span class="popover-heading">📍 Change Destination & Address</span>
+            <button class="popover-close-btn" onclick="closeAllPopovers()">✕</button>
+          </div>
+
+          <!-- Search Box -->
+          <div class="place-search-field-box">
+            <span style="font-size: 16px;">🔍</span>
+            <input type="text" class="place-search-input" id="placeSearchBox" placeholder="Search address, mall, school, park…" value="The Gardens Mall" />
+            <button onclick="document.getElementById('placeSearchBox').value=''; document.getElementById('placeSearchBox').focus();" style="border:none; background:transparent; font-size:14px; color:var(--color-casa-muted); cursor:pointer;">✕</button>
+          </div>
+
+          <!-- Household Quick Picks & Live ETA -->
+          <div>
+            <div style="font-size: 11px; font-weight: 800; color: var(--color-casa-muted); text-transform: uppercase; margin-bottom: 8px;">Frequent Household Places</div>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              
+              <!-- Gardens Mall -->
+              <div class="place-item-card-row selected" id="place-row-gardens" onclick="setPlace('The Gardens Mall', '3101 PGA Blvd, Palm Beach Gardens, FL 33410', 20, 8.4, '🛍️', 'Liv and Mom Mall')">
+                <div class="place-left-info">
+                  <span style="font-size: 20px;">🛍️</span>
+                  <div>
+                    <div class="place-name-txt">The Gardens Mall</div>
+                    <div class="place-addr-txt">3101 PGA Blvd, Palm Beach Gardens, FL</div>
+                  </div>
+                </div>
+                <div class="place-drive-txt">20m drive</div>
+              </div>
+
+              <!-- Target PGA -->
+              <div class="place-item-card-row" id="place-row-target" onclick="setPlace('Target on PGA', '5900 PGA Blvd, Palm Beach Gardens, FL 33418', 12, 4.8, '🎯', 'Target Run (Liv & Mom)')">
+                <div class="place-left-info">
+                  <span style="font-size: 20px;">🎯</span>
+                  <div>
+                    <div class="place-name-txt">Target on PGA</div>
+                    <div class="place-addr-txt">5900 PGA Blvd, Palm Beach Gardens, FL</div>
+                  </div>
+                </div>
+                <div class="place-drive-txt">12m drive</div>
+              </div>
+
+              <!-- Jupiter Community Park -->
+              <div class="place-item-card-row" id="place-row-park" onclick="setPlace('Jupiter Community Park', '3377 Church St, Jupiter, FL 33458', 16, 7.1, '⚽', 'Soccer Practice')">
+                <div class="place-left-info">
+                  <span style="font-size: 20px;">⚽</span>
+                  <div>
+                    <div class="place-name-txt">Jupiter Community Park</div>
+                    <div class="place-addr-txt">3377 Church St, Jupiter, FL</div>
+                  </div>
+                </div>
+                <div class="place-drive-txt">16m drive</div>
+              </div>
+
+              <!-- The Benjamin School -->
+              <div class="place-item-card-row" id="place-row-school" onclick="setPlace('The Benjamin School', '11000 Ellison Wilson Rd, North Palm Beach, FL 33408', 14, 5.9, '🏫', 'School Campus')">
+                <div class="place-left-info">
+                  <span style="font-size: 20px;">🏫</span>
+                  <div>
+                    <div class="place-name-txt">The Benjamin School</div>
+                    <div class="place-addr-txt">11000 Ellison Wilson Rd, North Palm Beach, FL</div>
+                  </div>
+                </div>
+                <div class="place-drive-txt">14m drive</div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Recurrence Scope for Address -->
+          <div class="recurrence-box-exact">
+            <span class="recur-label-exact">Update address for:</span>
+            <div class="recur-toggle-buttons">
+              <button class="recur-pill-btn active">This Sat Only</button>
+              <button class="recur-pill-btn">All Repeating Dates</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ══════ TOP HEADER ══════ -->
+        <div class="sidecar-header">
+          <!-- 1-Tap Attendee Capsule -->
+          <div class="attendee-trigger-capsule" onclick="openPopover('attendeeFloatingPopover')" title="Tap to manage attendees">
+            <div class="avatar-stack" id="headerAvatars"></div>
+            <span class="attendee-names" id="headerAttendeeLabel">Kelly + Liv</span>
+            <span style="font-size: 10px; color: var(--color-casa-muted);">▾</span>
+          </div>
+
+          <div class="header-btn-group">
+            <button class="icon-action-btn" title="Share event link">🔗</button>
+            <button class="icon-action-btn" title="Close sidecar">✕</button>
+          </div>
+        </div>
+
+        <!-- Scrollable Body -->
+        <div class="sidecar-body">
+          
+          <!-- Hero Title Block -->
+          <div class="hero-title-card">
+            <h2 class="event-main-title" contenteditable="true" spellcheck="false" id="titleText" oninput="onTitleChange(this.innerText)">Liv and Mom Mall</h2>
+            
+            <div class="meta-pills-cluster">
+              <!-- ⭐ 1-Tap Category Pill (Opens Category Modal) -->
+              <button class="action-chip gold-active" onclick="openPopover('categoryFloatingPopover')" title="Tap to change category or switch to reminder">
+                <span id="pillCat">🛍️ Social</span> <span>▾</span>
+              </button>
+              
+              <!-- 1-Tap Date Pill -->
+              <button class="action-chip" onclick="openPopover('timeFloatingPopover')" title="Tap to change date or time">
+                <span id="pillDate">📅 Sat, Aug 15</span> <span>▾</span>
+              </button>
+
+              <!-- 1-Tap Time Pill -->
+              <button class="action-chip" onclick="openPopover('timeFloatingPopover')" title="Tap to change date or time">
+                <span id="pillTime">🕒 2:25 PM</span> <span>▾</span>
+              </button>
+
+              <!-- Micro Steppers -->
+              <div style="display: flex; align-items: center; background: white; border: 1.5px solid var(--color-casa-border); border-radius: 20px; padding: 2px;">
+                <button class="stepper-btn" onclick="nudgeTime(-15)" style="border:none; background:transparent; font-size:11px; font-weight:700; color:var(--color-casa-muted); padding:4px 8px; cursor:pointer;">-15m</button>
+                <button class="stepper-btn" onclick="nudgeTime(15)" style="border:none; background:transparent; font-size:11px; font-weight:700; color:var(--color-casa-muted); padding:4px 8px; cursor:pointer;">+15m</button>
+                <button class="stepper-btn" onclick="nudgeTime(30)" style="border:none; background:transparent; font-size:11px; font-weight:700; color:var(--color-casa-muted); padding:4px 8px; cursor:pointer;">+30m</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ══════ EVENT MAIN CONTAINER ══════ -->
+          <div id="eventMainContainer" style="display: flex; flex-direction: column; gap: 14px;">
+            
+            <!-- ⭐ HERO DEPARTURE INTELLIGENCE CAPSULE -->
+            <div class="departure-intelligence-card" onclick="openPopover('timeFloatingPopover')" title="Tap to adjust start time or duration">
+              <div class="departure-top-badge-row">
+                <span class="dep-live-tag">🟢 Live Traffic Clear · I-95 N</span>
+                <span class="dep-countdown-pill" id="heroCountdownText">Leave in 45m</span>
+              </div>
+
+              <div class="dep-main-row">
+                <div>
+                  <div class="dep-headline-label">Leave Home By</div>
+                  <div class="dep-time-huge" id="heroDepartTime">1:55 PM</div>
+                </div>
+                <div style="text-align: right;">
+                  <div class="dep-headline-label">Arrive By</div>
+                  <div style="font-family: var(--font-mono); font-size: 20px; font-weight: 700; color: #E2E8F0; margin-top: 3px;" id="heroArriveTime">2:25 PM</div>
+                </div>
+              </div>
+
+              <div class="dep-sub-metrics">
+                <span id="heroDriveLabel">🚗 20m drive</span>
+                <span>•</span>
+                <span id="heroDistanceLabel">📍 8.4 mi</span>
+                <span>•</span>
+                <span id="heroBufferLabel">🅿️ +5m buffer</span>
+                <span style="margin-left: auto; font-size: 11px; color: var(--color-casa-gold);" id="heroBehaviorBadge">Parent Stays on Site ☕</span>
+              </div>
+            </div>
+
+            <!-- LIVING ROUTE TIMELINE -->
+            <div class="journey-timeline-card">
+              <div class="journey-timeline-header-row">
+                <span style="font-size: 11.5px; font-weight: 800; text-transform: uppercase; color: var(--color-casa-navy); letter-spacing: 0.5px;">🚗 Route & Drivers</span>
+                
+                <!-- 1-Tap Drop Off vs Stay Switcher -->
+                <div class="journey-behavior-toggle">
+                  <button class="behavior-toggle-chip active" id="chip-stay" onclick="setTravelBehavior('stay')">☕ Stay on Site</button>
+                  <button class="behavior-toggle-chip" id="chip-dropoff" onclick="setTravelBehavior('dropoff')">🚗 Drop Off & Pick Up</button>
+                </div>
+              </div>
+
+              <!-- Leg 1: Depart Home -->
+              <div class="journey-step-node">
+                <div class="node-pin-icon navy">🏡</div>
+                <div class="node-content-card">
+                  <div class="node-card-top">
+                    <span class="node-title-text" id="leg1Label">Depart Home (Outbound)</span>
+                    <span class="node-time-badge" id="stepDepartTime">1:55 PM</span>
+                  </div>
+                  <span style="font-size: 12px; color: var(--color-casa-muted);" id="stepDepartSubtext">20 min drive · 8.4 miles</span>
+                  
+                  <!-- 1-Tap Driver Pill for Leg 1 -->
+                  <div class="driver-action-pill" onclick="openDriverPopover(1)" title="Tap to change driver or travel mode">
+                    <div style="width: 8px; height: 8px; border-radius: 50%;" id="leg-1-dot"></div>
+                    <span>Driver: <strong id="leg-1-name">Kelly</strong></span>
+                    <span style="font-size: 10px; color: var(--color-casa-muted);">▾ Change</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Middle Venue Node -->
+              <div class="journey-step-node">
+                <div class="node-pin-icon" id="venueStepIcon">🛍️</div>
+                <div class="node-content-card">
+                  <div class="node-card-top">
+                    <span class="node-title-text" id="venueStepTitle">The Gardens Mall</span>
+                    <span class="node-time-badge" id="stepVenueTime">2:25 PM – 5:05 PM</span>
+                  </div>
+                  <span style="font-size: 12px; color: var(--color-casa-navy); font-weight: 600;" id="stayExplainText">
+                    ☕ Kelly stays on site with Liv (2h 40m)
+                  </span>
+                </div>
+              </div>
+
+              <!-- Leg 2: Return Trip -->
+              <div class="journey-step-node">
+                <div class="node-pin-icon navy">🏡</div>
+                <div class="node-content-card">
+                  <div class="node-card-top">
+                    <span class="node-title-text" id="leg2Label">Return Home (Drive Back)</span>
+                    <span class="node-time-badge" id="stepReturnTime">5:27 PM Arrival</span>
+                  </div>
+                  <span style="font-size: 12px; color: var(--color-casa-muted);" id="leg2Subtext">22 min return drive</span>
+                  
+                  <!-- 1-Tap Driver Pill for Leg 2 -->
+                  <div class="driver-action-pill" onclick="openDriverPopover(2)" title="Tap to change pickup driver">
+                    <div style="width: 8px; height: 8px; border-radius: 50%;" id="leg-2-dot"></div>
+                    <span>Driver: <strong id="leg-2-name">Kelly</strong></span>
+                    <span style="font-size: 10px; color: var(--color-casa-muted);">▾ Change</span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- VENUE & ADDRESS CARD -->
+            <div class="venue-showcase-card" onclick="openPopover('placeFloatingPopover')" title="Tap to change or edit address">
+              <div class="venue-card-top-row">
+                <div>
+                  <div style="font-size: 16px; font-weight: 700; color: var(--color-casa-navy);" id="venueCardTitle">The Gardens Mall</div>
+                  <div style="font-size: 12.5px; color: var(--color-casa-muted); margin-top: 3px;" id="venueCardAddr">3101 PGA Blvd, Palm Beach Gardens, FL 33410</div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <span class="action-chip gold-active" style="font-size: 11px; padding: 4px 10px; border-radius: 12px;">📍 Mapped</span>
+                  <span class="action-chip" style="font-size: 11px; padding: 4px 10px; border-radius: 12px; background: white;">✏️ Change</span>
+                </div>
+              </div>
+
+              <div style="display: flex; gap: 8px; margin-top: 4px;" onclick="event.stopPropagation()">
+                <button class="action-chip gold-active" style="flex: 1; justify-content: center; font-size: 12px;" onclick="alert('Opening Apple Maps for: ' + state.venue.address)">🚗 Apple Maps</button>
+                <button class="action-chip" style="flex: 1; justify-content: center; font-size: 12px; background: white;" onclick="alert('Opening Google Maps for: ' + state.venue.address)">🗺️ Google Maps</button>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- ══════ REMINDER MAIN CONTAINER ══════ -->
+          <div id="reminderMainContainer" style="display: none; flex-direction: column; gap: 14px;">
+            <div class="reminder-focus-card">
+              <div class="reminder-badge-ring" id="remBadgeIcon">💊</div>
+              <div>
+                <span class="action-chip gold-active" style="margin-bottom: 6px;">🔔 Household Task Reminder</span>
+                <h3 style="font-family: var(--font-display); font-size: 28px; font-weight: 600; color: var(--color-casa-navy);" id="remHeadingTitle">Liv Evening Meds</h3>
+                <p style="font-size: 13px; color: var(--color-casa-muted); margin-top: 4px;" id="remSubtext">Assigned to: Kelly + Liv · Due Sat 15 at 2:25 PM</p>
+              </div>
+
+              <div class="reminder-action-btn-grid">
+                <button class="rem-big-btn done" onclick="alert('Marked as Completed! ✓')">
+                  <span style="font-size: 22px;">✓</span>
+                  <span>Mark Done</span>
+                </button>
+                <button class="rem-big-btn snooze" onclick="alert('Snoozed for 1 hour ⏰')">
+                  <span style="font-size: 22px;">⏰</span>
+                  <span>Snooze (1h)</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Sticky AI Footer -->
+        <footer class="sidecar-footer-bar">
+          <button class="copilot-sparkle-btn" onclick="alert('Copilot: Travel and schedule coordination ready!')">
+            <span>✨</span>
+            <span>Ask Copilot about schedule & logistics…</span>
+          </button>
+        </footer>
+
+      </aside>
+
+    </div>
+  </main>
+
+  <!-- ══════ STATE ENGINE SCRIPT ══════ -->
+  <script>
+    const state = {
+      mode: 'event', // 'event' | 'reminder'
+      title: 'Liv and Mom Mall',
+      category: '🛍️ Social',
+      categoryIcon: '🛍️',
+      travelBehavior: 'stay',
+      driverLeg1: 'Kelly',
+      driverLeg2: 'Kelly',
+      dayText: 'Sat, Aug 15',
+      hour: 2,
+      min: 25,
+      period: 'PM',
+      durationMinutes: 160,
+      bufferMinutes: 5,
+      venue: {
+        name: 'The Gardens Mall',
+        address: '3101 PGA Blvd, Palm Beach Gardens, FL 33410',
+        driveMinutes: 20,
+        distanceMiles: 8.4,
+        icon: '🛍️'
+      },
+      members: {
+        kelly: { name: 'Kelly', role: 'Parent · Driver', initial: 'K', color: 'var(--color-family-kelly)', active: true, isPrimary: true },
+        liv: { name: 'Liv', role: 'Child', initial: 'L', color: 'var(--color-family-liv)', active: true, isPrimary: false },
+        jake: { name: 'Jake', role: 'Parent · Driver', initial: 'J', color: 'var(--color-family-jake)', active: false, isPrimary: false },
+        owen: { name: 'Owen', role: 'Child', initial: 'O', color: 'var(--color-family-owen)', active: false, isPrimary: false }
+      }
+    };
+
+    function init() {
+      renderAttendees();
+      renderAllTimes();
+      renderVenue();
+      renderDriversAndBehavior();
+    }
+
+    function openPopover(id) {
+      closeAllPopovers();
+      document.getElementById('globalPopoverBackdrop').style.display = 'block';
+      document.getElementById(id).style.display = 'flex';
+    }
+
+    function closeAllPopovers() {
+      document.getElementById('globalPopoverBackdrop').style.display = 'none';
+      ['attendeeFloatingPopover', 'categoryFloatingPopover', 'timeFloatingPopover', 'driverFloatingPopover', 'placeFloatingPopover'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+      });
+    }
+
+    function setDevice(dev) {
+      document.querySelectorAll('.device-pill-btn').forEach(b => b.classList.remove('active'));
+      event.target.classList.add('active');
+      document.getElementById('appFrame').className = 'app-frame device-' + dev;
+    }
+
+    // Attendees Management
+    function renderAttendees() {
+      const activeList = Object.values(state.members).filter(m => m.active);
+      
+      document.getElementById('headerAvatars').innerHTML = activeList.map(m => 
+        `<div class="avatar-ring" style="background: ${m.color};">${m.initial}</div>`
+      ).join('');
+      document.getElementById('headerAttendeeLabel').innerText = activeList.map(m => m.name).join(' + ') || 'No Attendees';
+
+      const grid = document.getElementById('attendeeCardsGrid');
+      grid.innerHTML = Object.entries(state.members).map(([key, m]) => {
+        let badgeIcon = '+';
+        let badgeClass = 'plus';
+        if (m.active) {
+          if (m.isPrimary) {
+            badgeIcon = '⭐';
+            badgeClass = 'star';
+          } else {
+            badgeIcon = '✓';
+            badgeClass = 'check';
+          }
+        }
+        return `
+          <div class="member-card-exact ${m.active ? 'selected' : ''}" onclick="toggleMember('${key}')">
+            <div class="member-left-exact">
+              <div class="member-avatar-lg-exact" style="background: ${m.color};">${m.initial}</div>
+              <div>
+                <div class="member-name-exact">${m.name}</div>
+                <div class="member-role-exact">${m.role}</div>
+              </div>
+            </div>
+            <div class="member-badge-icon ${badgeClass}">${badgeIcon}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function toggleMember(key) {
+      state.members[key].active = !state.members[key].active;
+      renderAttendees();
+      renderDriversAndBehavior();
+    }
+
+    function setRecurScope(scope) {
+      document.getElementById('recur-this-btn').classList.toggle('active', scope === 'this');
+      document.getElementById('recur-all-btn').classList.toggle('active', scope === 'all');
+    }
+
+    // ══════ CATEGORY & TYPE ENGINE ══════
+    function setMode(mode) {
+      state.mode = mode;
+      document.getElementById('mode-btn-event').classList.toggle('active', mode === 'event');
+      document.getElementById('mode-btn-reminder').classList.toggle('active', mode === 'reminder');
+      
+      document.getElementById('eventCategorySection').style.display = mode === 'event' ? 'block' : 'none';
+      document.getElementById('reminderCategorySection').style.display = mode === 'reminder' ? 'block' : 'none';
+
+      document.getElementById('eventMainContainer').style.display = mode === 'event' ? 'flex' : 'none';
+      document.getElementById('reminderMainContainer').style.display = mode === 'reminder' ? 'flex' : 'none';
+    }
+
+    function selectEventCategory(catName, defaultTitle, icon, venueName, addr, driveMins, distMiles) {
+      state.mode = 'event';
+      state.category = catName;
+      state.categoryIcon = icon;
+      state.title = defaultTitle;
+
+      if (venueName && addr) {
+        state.venue = {
+          name: venueName,
+          address: addr,
+          driveMinutes: driveMins,
+          distanceMiles: distMiles,
+          icon: icon
+        };
+      }
+
+      document.getElementById('pillCat').innerText = catName;
+      document.getElementById('titleText').innerText = defaultTitle;
+      document.getElementById('calCardTitle').innerText = defaultTitle;
+
+      setMode('event');
+      renderVenue();
+      renderAllTimes();
+      closeAllPopovers();
+    }
+
+    function selectReminderCategory(catName, title, icon) {
+      state.mode = 'reminder';
+      state.category = catName;
+      state.categoryIcon = icon;
+      state.title = title;
+
+      document.getElementById('pillCat').innerText = catName;
+      document.getElementById('titleText').innerText = title;
+      document.getElementById('calCardTitle').innerText = title;
+      document.getElementById('remBadgeIcon').innerText = icon;
+      document.getElementById('remHeadingTitle').innerText = title;
+
+      setMode('reminder');
+      closeAllPopovers();
+    }
+
+    // ══════ DATE & TIME ENGINE ══════
+    function renderAllTimes() {
+      const mStr = (state.min < 10 ? '0' : '') + state.min;
+      const arriveTimeStr = `${state.hour}:${mStr} ${state.period}`;
+      
+      document.getElementById('pillTime').innerText = `🕒 ${arriveTimeStr}`;
+      document.getElementById('pillDate').innerText = `📅 ${state.dayText}`;
+      document.getElementById('stepperHour').innerText = (state.hour < 10 ? '0' : '') + state.hour;
+      document.getElementById('stepperMin').innerText = mStr;
+      document.getElementById('stepperPeriod').innerText = state.period;
+      document.getElementById('heroArriveTime').innerText = arriveTimeStr;
+      document.getElementById('calCardTime').innerText = arriveTimeStr;
+
+      const totalPreMins = state.venue.driveMinutes + state.bufferMinutes;
+      let totalMins = (state.hour % 12) * 60 + state.min - totalPreMins;
+      if (totalMins < 0) totalMins += 12 * 60;
+      
+      const depHour = Math.floor(totalMins / 60) || 12;
+      const depMin = totalMins % 60;
+      const depTimeStr = `${depHour}:${depMin < 10 ? '0' : ''}${depMin} ${state.period}`;
+
+      document.getElementById('heroDepartTime').innerText = depTimeStr;
+      document.getElementById('stepDepartTime').innerText = depTimeStr;
+
+      const stayEndTotal = (state.hour % 12) * 60 + state.min + state.durationMinutes;
+      const stayEndHour = (Math.floor(stayEndTotal / 60) % 12) || 12;
+      const stayEndMin = stayEndTotal % 60;
+      const endFormatted = `${stayEndHour}:${stayEndMin < 10 ? '0' : ''}${stayEndMin} ${state.period}`;
+      
+      document.getElementById('stepVenueTime').innerText = `${arriveTimeStr} – ${endFormatted}`;
+
+      const returnArrTotal = stayEndTotal + state.venue.driveMinutes;
+      const retHour = (Math.floor(returnArrTotal / 60) % 12) || 12;
+      const retMin = returnArrTotal % 60;
+      
+      document.getElementById('stepReturnTime').innerText = `${retHour}:${retMin < 10 ? '0' : ''}${retMin} ${state.period} Arrival`;
+    }
+
+    function stepHour(d) {
+      state.hour += d;
+      if (state.hour > 12) state.hour = 1;
+      if (state.hour < 1) state.hour = 12;
+      renderAllTimes();
+    }
+
+    function stepMinute(d) {
+      state.min += d;
+      if (state.min >= 60) { state.min = 0; stepHour(1); }
+      if (state.min < 0) { state.min = 55; stepHour(-1); }
+      renderAllTimes();
+    }
+
+    function togglePeriod() {
+      state.period = state.period === 'PM' ? 'AM' : 'PM';
+      renderAllTimes();
+    }
+
+    function nudgeTime(mins) {
+      state.min += mins;
+      while (state.min >= 60) { state.min -= 60; stepHour(1); }
+      while (state.min < 0) { state.min += 60; stepHour(-1); }
+      renderAllTimes();
+    }
+
+    function setDay(dText, btnId) {
+      state.dayText = dText;
+      document.querySelectorAll('.day-select-pill-btn').forEach(b => b.classList.remove('active'));
+      const activeBtn = document.getElementById(btnId);
+      if (activeBtn) activeBtn.classList.add('active');
+      renderAllTimes();
+    }
+
+    function setDuration(mins, btnId) {
+      state.durationMinutes = mins;
+      document.querySelectorAll('.dur-chip-btn').forEach(b => b.classList.remove('active'));
+      const activeBtn = document.getElementById(btnId);
+      if (activeBtn) activeBtn.classList.add('active');
+      renderAllTimes();
+    }
+
+    // ══════ VENUE & ADDRESS ENGINE ══════
+    function renderVenue() {
+      document.getElementById('venueCardTitle').innerText = state.venue.name;
+      document.getElementById('venueCardAddr').innerText = state.venue.address;
+      document.getElementById('venueStepTitle').innerText = state.venue.name;
+      document.getElementById('venueStepIcon').innerText = state.venue.icon;
+      document.getElementById('heroDriveLabel').innerText = `🚗 ${state.venue.driveMinutes}m drive`;
+      document.getElementById('heroDistanceLabel').innerText = `📍 ${state.venue.distanceMiles} mi`;
+      document.getElementById('placeSearchBox').value = state.venue.name;
+      document.getElementById('stepDepartSubtext').innerText = `${state.venue.driveMinutes} min drive · ${state.venue.distanceMiles} miles`;
+      renderAllTimes();
+    }
+
+    function setPlace(name, address, driveMinutes, distanceMiles, icon, newTitle) {
+      state.venue = { name, address, driveMinutes, distanceMiles, icon };
+      if (newTitle) {
+        state.title = newTitle;
+        document.getElementById('titleText').innerText = newTitle;
+        document.getElementById('calCardTitle').innerText = newTitle;
+      }
+      
+      document.querySelectorAll('.place-item-card-row').forEach(r => r.classList.remove('selected'));
+      if (event && event.currentTarget) {
+        event.currentTarget.classList.add('selected');
+      }
+
+      renderVenue();
+      renderDriversAndBehavior();
+      closeAllPopovers();
+    }
+
+    // ══════ DROPOFF VS STAY & DRIVERS ══════
+    let activeLegTarget = 1;
+
+    function openDriverPopover(legNum) {
+      activeLegTarget = legNum;
+      document.getElementById('driverPopoverHeading').innerText = `🚗 Driver for Leg ${legNum} (${legNum === 1 ? 'Outbound' : 'Return'})`;
+      openPopover('driverFloatingPopover');
+    }
+
+    function setTravelBehavior(behavior) {
+      state.travelBehavior = behavior;
+      
+      document.getElementById('btn-mode-stay').classList.toggle('active', behavior === 'stay');
+      document.getElementById('btn-mode-dropoff').classList.toggle('active', behavior === 'dropoff');
+      document.getElementById('chip-stay').classList.toggle('active', behavior === 'stay');
+      document.getElementById('chip-dropoff').classList.toggle('active', behavior === 'dropoff');
+
+      renderDriversAndBehavior();
+    }
+
+    function assignSelectedDriver(name) {
+      const syncReturn = document.getElementById('syncReturnCheckbox').checked;
+
+      if (state.travelBehavior === 'stay' || syncReturn) {
+        state.driverLeg1 = name;
+        state.driverLeg2 = name;
+      } else {
+        if (activeLegTarget === 1) {
+          state.driverLeg1 = name;
+        } else {
+          state.driverLeg2 = name;
+        }
+      }
+
+      renderDriversAndBehavior();
+      closeAllPopovers();
+    }
+
+    function renderDriversAndBehavior() {
+      const activeAttendeeNames = Object.values(state.members).filter(m => m.active).map(m => m.name).join(', ');
+
+      const getDriverColor = (name) => {
+        if (name === 'Kelly') return 'var(--color-family-kelly)';
+        if (name === 'Jake') return 'var(--color-family-jake)';
+        if (name === 'Giselle') return 'var(--color-family-giselle)';
+        if (name === 'Grandma') return 'var(--color-family-grandma)';
+        return 'var(--color-casa-gold)';
+      };
+
+      document.getElementById('leg-1-name').innerText = state.driverLeg1;
+      document.getElementById('leg-1-dot').style.background = getDriverColor(state.driverLeg1);
+      document.getElementById('leg-2-name').innerText = state.driverLeg2;
+      document.getElementById('leg-2-dot').style.background = getDriverColor(state.driverLeg2);
+
+      if (state.travelBehavior === 'stay') {
+        document.getElementById('heroBehaviorBadge').innerText = 'Parent Stays on Site ☕';
+        document.getElementById('leg1Label').innerText = 'Depart Home Together';
+        document.getElementById('stayExplainText').innerText = `☕ ${state.driverLeg1} stays on site with ${activeAttendeeNames} (2h 40m)`;
+        document.getElementById('leg2Label').innerText = 'Return Home Together';
+        document.getElementById('leg2Subtext').innerText = `22 min return drive · ${state.driverLeg2} driving`;
+      } else {
+        document.getElementById('heroBehaviorBadge').innerText = 'Drop Off & Pick Up Later 🚗';
+        document.getElementById('leg1Label').innerText = 'Leg 1: Drop Off Drive';
+        document.getElementById('stayExplainText').innerText = `⏳ Kids at venue · Pickup scheduled at 5:05 PM (Reminder: 4:45 PM)`;
+        document.getElementById('leg2Label').innerText = 'Leg 2: Return Pickup Drive';
+        document.getElementById('leg2Subtext').innerText = `22 min return drive · ${state.driverLeg2} picking up`;
+      }
+    }
+
+    function onTitleChange(newTitle) {
+      state.title = newTitle;
+      document.getElementById('calCardTitle').innerText = newTitle;
+    }
+
+    init();
+  </script>
+</body>
+</html>

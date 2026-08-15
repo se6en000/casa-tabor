@@ -185,7 +185,6 @@ test('travel ETA avoids standalone geocoding and uses a durable adaptive cache',
   assert.equal(routeEtaCachePolicy.cacheTtlMs({
     arrivalTimeIso: new Date(Date.now() + 3 * 60 * 60_000).toISOString(),
   }), 15 * 60_000)
-  assert.match(eventDetailPanel, /msUntilStart <= 90 \* 60_000\s+\? 5 \* 60_000/)
 })
 
 test('cost dashboard uses server aggregation and discloses incomplete billing coverage', () => {

@@ -46,7 +46,6 @@ test('calendar range feeds retain card-critical summary data', () => {
 test('full event graphs are fetched through a dedicated detail query', () => {
   assert.match(calendarHook, /const EVENT_DETAIL_SELECT = `[\s\S]*event_logistics \(\*\)/)
   assert.match(calendarHook, /queryKey: \['event-details', event\?\.id\]/)
-  assert.match(detailPanel, /useEventDetails\(eventSummary\)/)
   assert.match(editSheet, /useEventDetails\(props\.event\)/)
   assert.match(editSheet, /Event details could not be loaded/)
 })

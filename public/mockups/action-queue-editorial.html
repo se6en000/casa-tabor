@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Casa Tabor — Concept 2: The Editorial Ledger</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  
+  <!-- Lucide Icons -->
+  <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.js"></script>
+
+  <style>
+    :root {
+      --color-gold: #C9A96E;
+      --color-gold-hover: #B89555;
+      --color-gold-soft: #F9F4EB;
+      --color-gold-border: #E8DEC9;
+      --color-navy: #1B2A4A;
+      --color-navy-dark: #0E1729;
+      
+      --color-bg: #FAF8F5;
+      --color-bg-paper: #F5EFE6;
+      --color-surface: #FFFFFF;
+      
+      --color-text: #23272F;
+      --color-text-secondary: #6B7280;
+      --color-text-tertiary: #9CA3AF;
+      
+      --color-hairline: rgba(27, 42, 74, 0.08);
+      --color-hairline-accent: rgba(201, 169, 110, 0.4);
+
+      --font-display: 'Cormorant Garamond', Georgia, serif;
+      --font-body: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+
+      --radius-sm: 6px;
+      --radius-md: 12px;
+      --radius-lg: 18px;
+      --radius-pill: 9999px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-body);
+      background-color: var(--color-bg);
+      color: var(--color-text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Top Navigation Bar */
+    .concept-nav {
+      background: var(--color-navy-dark);
+      color: #FFFFFF;
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .concept-nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: #FFFFFF;
+    }
+
+    .concept-badge-logo {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      background: var(--color-gold);
+      color: var(--color-navy);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 13px;
+    }
+
+    .concept-title {
+      font-family: var(--font-display);
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+
+    .concept-switcher {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255,255,255,0.08);
+      padding: 4px;
+      border-radius: var(--radius-pill);
+    }
+
+    .concept-tab {
+      padding: 6px 14px;
+      border-radius: var(--radius-pill);
+      color: rgba(255,255,255,0.7);
+      text-decoration: none;
+      font-size: 12.5px;
+      font-weight: 500;
+      transition: all 0.2s ease;
+    }
+
+    .concept-tab:hover {
+      color: #FFFFFF;
+      background: rgba(255,255,255,0.12);
+    }
+
+    .concept-tab.active {
+      background: var(--color-gold);
+      color: var(--color-navy);
+      font-weight: 600;
+    }
+
+    /* Main Container */
+    .ledger-container {
+      max-width: 1380px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 36px 32px;
+      display: grid;
+      grid-template-columns: 1fr 1.05fr;
+      gap: 50px;
+      flex: 1;
+    }
+
+    @media (max-width: 1080px) {
+      .ledger-container {
+        grid-template-columns: 1fr;
+        padding: 24px 16px;
+      }
+    }
+
+    /* Left Editorial Atmosphere */
+    .editorial-cover {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 32px 36px;
+      background: #FFFFFF;
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--color-hairline);
+      box-shadow: 0 4px 24px rgba(27, 42, 74, 0.03);
+    }
+
+    .cover-issue-tag {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--color-gold-hover);
+      margin-bottom: 8px;
+    }
+
+    .cover-masthead {
+      font-family: var(--font-display);
+      font-size: 42px;
+      font-weight: 600;
+      color: var(--color-navy);
+      line-height: 1.1;
+      margin-bottom: 12px;
+    }
+
+    .cover-summary {
+      font-size: 15px;
+      color: var(--color-text-secondary);
+      line-height: 1.6;
+      max-width: 480px;
+      margin-bottom: 28px;
+    }
+
+    .ambient-quote-box {
+      border-left: 2px solid var(--color-gold);
+      padding: 16px 20px;
+      background: var(--color-gold-soft);
+      border-radius: 0 var(--radius-md) var(--radius-md) 0;
+      font-family: var(--font-display);
+      font-size: 18px;
+      font-style: italic;
+      color: var(--color-navy);
+      line-height: 1.5;
+    }
+
+    .status-summary-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-top: 36px;
+      padding-top: 24px;
+      border-top: 1px solid var(--color-hairline);
+    }
+
+    .status-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .status-item-num {
+      font-family: var(--font-mono);
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--color-navy);
+    }
+
+    .status-item-lbl {
+      font-size: 11.5px;
+      color: var(--color-text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+
+    /* Right Column: Editorial Ledger */
+    .editorial-ledger-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .ledger-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      padding-bottom: 16px;
+      border-bottom: 2px solid var(--color-navy);
+    }
+
+    .ledger-title-group h2 {
+      font-family: var(--font-display);
+      font-size: 32px;
+      font-weight: 600;
+      color: var(--color-navy);
+      letter-spacing: -0.5px;
+    }
+
+    .ledger-title-group p {
+      font-size: 13px;
+      color: var(--color-text-secondary);
+      margin-top: 2px;
+    }
+
+    .ledger-stamp {
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--color-gold-hover);
+      font-weight: 600;
+      background: var(--color-gold-soft);
+      padding: 4px 12px;
+      border-radius: var(--radius-pill);
+    }
+
+    /* Borderless Ledger Rows */
+    .ledger-list {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .ledger-row {
+      display: grid;
+      grid-template-columns: 36px 1fr auto;
+      gap: 20px;
+      align-items: center;
+      padding: 22px 12px;
+      border-bottom: 1px solid var(--color-hairline);
+      transition: all 0.25s ease;
+      position: relative;
+    }
+
+    .ledger-row:hover {
+      background: rgba(201, 169, 110, 0.04);
+      padding-left: 18px;
+      padding-right: 18px;
+      border-radius: var(--radius-md);
+    }
+
+    .ledger-row.completed {
+      opacity: 0.35;
+      text-decoration: line-through;
+      pointer-events: none;
+    }
+
+    /* Minimalist Check Trigger */
+    .ledger-check-ring {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      border: 1.5px solid #C5C9D3;
+      background: #FFFFFF;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: transparent;
+      transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    .ledger-check-ring:hover {
+      border-color: var(--color-gold);
+      background: var(--color-gold-soft);
+      color: var(--color-gold);
+      transform: scale(1.1);
+    }
+
+    .ledger-content {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .ledger-kicker-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11.5px;
+      font-family: var(--font-mono);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--color-text-tertiary);
+    }
+
+    .tag-accent-owen { color: #B38634; font-weight: 600; }
+    .tag-accent-bill { color: #1E6B52; font-weight: 600; }
+    .tag-accent-dine { color: #A84B29; font-weight: 600; }
+
+    .ledger-headline {
+      font-family: var(--font-display);
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--color-navy);
+      line-height: 1.25;
+    }
+
+    .ledger-sub {
+      font-size: 13.5px;
+      color: var(--color-text-secondary);
+      line-height: 1.4;
+    }
+
+    .ledger-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .amount-display {
+      font-family: var(--font-mono);
+      font-size: 17px;
+      font-weight: 600;
+      color: var(--color-navy);
+      text-align: right;
+    }
+
+    .editorial-btn {
+      padding: 7px 16px;
+      background: transparent;
+      border: 1px solid var(--color-navy);
+      border-radius: var(--radius-pill);
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--color-navy);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+
+    .editorial-btn:hover {
+      background: var(--color-navy);
+      color: #FFFFFF;
+    }
+
+    .editorial-btn.primary-gold {
+      background: var(--color-gold);
+      border-color: var(--color-gold);
+      color: var(--color-navy);
+    }
+
+    .editorial-btn.primary-gold:hover {
+      background: var(--color-gold-hover);
+      border-color: var(--color-gold-hover);
+    }
+
+    .toast-notification {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--color-navy);
+      color: #FFFFFF;
+      padding: 12px 20px;
+      border-radius: var(--radius-pill);
+      font-size: 13.5px;
+      display: none;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+      z-index: 300;
+    }
+
+    .toast-notification.show {
+      display: flex;
+      animation: popUp 0.3s ease;
+    }
+
+    @keyframes popUp {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Concept Nav -->
+  <header class="concept-nav">
+    <a href="action-queue-showcase.html" class="concept-nav-brand">
+      <div class="concept-badge-logo">CT</div>
+      <div>
+        <span class="concept-title">Casa Tabor</span>
+        <span style="font-size: 11px; opacity: 0.6; margin-left: 6px;">Concept 2 of 3</span>
+      </div>
+    </a>
+
+    <div class="concept-switcher">
+      <a href="action-queue-concierge.html" class="concept-tab">1. The Private Concierge</a>
+      <a href="action-queue-editorial.html" class="concept-tab active">2. The Editorial Ledger</a>
+      <a href="action-queue-horizon.html" class="concept-tab">3. Priority Horizon</a>
+      <a href="action-queue-showcase.html" class="concept-tab">⚡ Master Comparison</a>
+    </div>
+
+    <div class="concept-controls">
+      <span style="font-size: 12px; opacity: 0.8;">Quiet Luxury Layout</span>
+    </div>
+  </header>
+
+  <!-- Ledger Grid Layout -->
+  <main class="ledger-container">
+
+    <!-- Left Cover / Family Atmosphere -->
+    <section class="editorial-cover">
+      <div>
+        <div class="cover-issue-tag">Tabor Residence · Palm Beach</div>
+        <h1 class="cover-masthead">Evening Daily Dispatch</h1>
+        <p class="cover-summary">
+          A tranquil glance at active household logistics, approvals, and financial releases before winding down for the night.
+        </p>
+
+        <div class="ambient-quote-box">
+          “Order and simplicity are the first steps toward peace in the home.”
+        </div>
+      </div>
+
+      <div class="status-summary-grid">
+        <div class="status-item">
+          <div class="status-item-num" id="stat-pending">4</div>
+          <div class="status-item-lbl">Pending Items</div>
+        </div>
+        <div class="status-item">
+          <div class="status-item-num">$7,258</div>
+          <div class="status-item-lbl">Total Payable</div>
+        </div>
+        <div class="status-item">
+          <div class="status-item-num">1</div>
+          <div class="status-item-lbl">Signature Needed</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right Ledger Panel -->
+    <section class="editorial-ledger-panel">
+      
+      <div class="ledger-header">
+        <div class="ledger-title-group">
+          <h2>Active Register</h2>
+          <p>Sorted by editorial priority & time sensitivity</p>
+        </div>
+        <div class="ledger-stamp">Quiet Mode Active</div>
+      </div>
+
+      <div class="ledger-list">
+
+        <!-- Row 1: Camp Waiver -->
+        <article class="ledger-row" id="row-camp">
+          <button class="ledger-check-ring" onclick="markRow('row-camp', 'Owen’s Camp Waiver')" title="Mark Done">
+            <i data-lucide="check" style="width: 14px; height: 14px;"></i>
+          </button>
+          
+          <div class="ledger-content">
+            <div class="ledger-kicker-row">
+              <span class="tag-accent-owen">Owen · 5th Grade</span>
+              <span>·</span>
+              <span>Due Today</span>
+            </div>
+            <h3 class="ledger-headline">Science Camp Medical Waiver & Equipment Form</h3>
+            <p class="ledger-sub">Requires guardian digital endorsement for Alpine lake excursion</p>
+          </div>
+
+          <div class="ledger-actions">
+            <button class="editorial-btn primary-gold" onclick="markRow('row-camp', 'Signed Owen Waiver')">
+              <i data-lucide="pen-tool" style="width: 13px; height: 13px;"></i>
+              Sign
+            </button>
+          </div>
+        </article>
+
+        <!-- Row 2: Edison Insurance -->
+        <article class="ledger-row" id="row-edison">
+          <button class="ledger-check-ring" onclick="markRow('row-edison', 'Edison Insurance')" title="Mark Done">
+            <i data-lucide="check" style="width: 14px; height: 14px;"></i>
+          </button>
+          
+          <div class="ledger-content">
+            <div class="ledger-kicker-row">
+              <span class="tag-accent-bill">Insurance · Premium</span>
+              <span>·</span>
+              <span>Policy #EDH5679813</span>
+            </div>
+            <h3 class="ledger-headline">Edison Homeowners & Hazard Annual Policy</h3>
+            <p class="ledger-sub">Chase Premier Checking · Direct authorization required</p>
+          </div>
+
+          <div class="ledger-actions">
+            <div class="amount-display">$7,198.64</div>
+            <button class="editorial-btn" onclick="markRow('row-edison', 'Paid Edison Insurance')">
+              Release Pay
+            </button>
+          </div>
+        </article>
+
+        <!-- Row 3: East Wok Takeout -->
+        <article class="ledger-row" id="row-eastwok">
+          <button class="ledger-check-ring" onclick="markRow('row-eastwok', 'East Wok Takeout')" title="Mark Done">
+            <i data-lucide="check" style="width: 14px; height: 14px;"></i>
+          </button>
+          
+          <div class="ledger-content">
+            <div class="ledger-kicker-row">
+              <span class="tag-accent-dine">Dining · Friday Dinner</span>
+              <span>·</span>
+              <span>Kelly’s Card</span>
+            </div>
+            <h3 class="ledger-headline">East Wok Delivery Reconcile</h3>
+            <p class="ledger-sub">Family takeout order receipt settlement</p>
+          </div>
+
+          <div class="ledger-actions">
+            <div class="amount-display">$59.62</div>
+            <button class="editorial-btn" onclick="markRow('row-eastwok', 'Reconciled East Wok')">
+              Settle
+            </button>
+          </div>
+        </article>
+
+        <!-- Row 4: Xfinity Internet -->
+        <article class="ledger-row" id="row-xfinity">
+          <button class="ledger-check-ring" onclick="markRow('row-xfinity', 'Xfinity Statement')" title="Mark Done">
+            <i data-lucide="check" style="width: 14px; height: 14px;"></i>
+          </button>
+          
+          <div class="ledger-content">
+            <div class="ledger-kicker-row">
+              <span>Utilities · Gigabit Fiber</span>
+              <span>·</span>
+              <span>Autopay Aug 18</span>
+            </div>
+            <h3 class="ledger-headline">Xfinity Internet Monthly Statement</h3>
+            <p class="ledger-sub">Regular recurring invoice archived for tax files</p>
+          </div>
+
+          <div class="ledger-actions">
+            <div class="amount-display" style="color: var(--color-text-secondary); font-size: 15px;">$124.99</div>
+            <button class="editorial-btn" onclick="markRow('row-xfinity', 'Archived Xfinity Statement')">
+              Archive
+            </button>
+          </div>
+        </article>
+
+      </div>
+    </section>
+  </main>
+
+  <div class="toast-notification" id="toast">
+    <i data-lucide="check-circle-2" style="width: 18px; height: 18px; color: var(--color-gold);"></i>
+    <span id="toast-text">Register updated</span>
+  </div>
+
+  <script>
+    lucide.createIcons();
+
+    let count = 4;
+
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toast-text').innerText = msg;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    function markRow(id, name) {
+      const row = document.getElementById(id);
+      if (!row) return;
+      row.classList.add('completed');
+      count = Math.max(0, count - 1);
+      document.getElementById('stat-pending').innerText = count;
+      showToast(`✓ Ledger updated: ${name}`);
+    }
+  </script>
+</body>
+</html>

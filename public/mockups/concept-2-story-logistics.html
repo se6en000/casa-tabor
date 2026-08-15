@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Casa Tabor Concept 2 — Story & Logistics Dual-Layer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,400&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --color-casa-gold: #C9A96E;
+      --color-casa-gold-light: #F4E8D3;
+      --color-casa-gold-dark: #A27B3A;
+      --color-casa-navy: #1B2A4A;
+      --color-casa-navy-soft: #283C66;
+      --color-casa-bg: #FAF8F5;
+      --color-casa-bg-2: #F2EEE7;
+      --color-casa-surface: #FFFFFF;
+      --color-casa-text: #2D2D2D;
+      --color-casa-muted: #7E7F8A;
+      --color-casa-border: #E8E2D9;
+      --color-casa-border-subtle: #F0EAE1;
+      --color-casa-success: #27AE60;
+      --color-casa-success-soft: #E8F7EE;
+      --color-casa-warning: #E67E22;
+      --color-casa-warning-soft: #FCF1E6;
+      --color-casa-error: #C0392B;
+      
+      --color-family-kelly: #C4693A;
+      --color-family-liv: #6A9E7F;
+      --color-family-jake: #1B2A4A;
+      --color-family-owen: #D4A44C;
+      --color-family-emme: #C47A8A;
+      
+      --font-display: 'Cormorant Garamond', Georgia, serif;
+      --font-body: 'DM Sans', system-ui, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      font-family: var(--font-body);
+      background: #111827;
+      color: var(--color-casa-text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    /* Top Demo Control Header */
+    .demo-bar {
+      background: #1F2937;
+      border-bottom: 1px solid #374151;
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #E5E7EB;
+      z-index: 50;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .demo-bar h1 {
+      font-size: 14px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .demo-bar h1 span {
+      background: var(--color-casa-gold);
+      color: #1A1A1A;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .nav-tabs-group {
+      display: flex;
+      gap: 8px;
+    }
+    .nav-tab-btn {
+      background: #374151;
+      border: 1px solid #4B5563;
+      color: #E5E7EB;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+    .nav-tab-btn.active {
+      background: var(--color-casa-gold);
+      color: #111827;
+      border-color: var(--color-casa-gold);
+    }
+    .device-switcher {
+      display: flex;
+      background: #111827;
+      padding: 3px;
+      border-radius: 8px;
+      border: 1px solid #374151;
+      gap: 4px;
+    }
+    .device-btn {
+      background: transparent;
+      border: none;
+      color: #9CA3AF;
+      padding: 6px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+    .device-btn.active {
+      background: #374151;
+      color: #FFFFFF;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+
+    /* Outer Stage Wrapper */
+    .stage-container {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: radial-gradient(circle at 50% 50%, #1E293B 0%, #0F172A 100%);
+      overflow: auto;
+    }
+
+    /* Screen Emulation Frame */
+    .app-frame {
+      width: 1440px;
+      height: 900px;
+      background: var(--color-casa-bg);
+      border-radius: 16px;
+      box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255,255,255,0.1);
+      display: flex;
+      overflow: hidden;
+      position: relative;
+      transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1), height 0.35s cubic-bezier(0.16, 1, 0.3, 1), border-radius 0.3s;
+    }
+
+    .app-frame.device-kiosk {
+      width: 1920px;
+      height: 1080px;
+    }
+    .app-frame.device-desktop {
+      width: 1440px;
+      height: 880px;
+    }
+    .app-frame.device-tablet {
+      width: 860px;
+      height: 1024px;
+    }
+    .app-frame.device-mobile {
+      width: 412px;
+      height: 860px;
+      border-radius: 40px;
+      border: 8px solid #1F2937;
+    }
+
+    /* Left Simulated Background */
+    .canvas-bg {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: var(--color-casa-bg);
+      border-right: 1px solid var(--color-casa-border);
+      opacity: 0.35;
+      pointer-events: none;
+      filter: blur(1.5px);
+      user-select: none;
+    }
+    .canvas-topbar {
+      height: 64px;
+      border-bottom: 1px solid var(--color-casa-border);
+      display: flex;
+      align-items: center;
+      padding: 0 24px;
+      gap: 32px;
+      background: var(--color-casa-surface);
+    }
+    .brand {
+      font-family: var(--font-display);
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--color-casa-navy);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .brand-badge {
+      width: 32px;
+      height: 32px;
+      background: var(--color-casa-navy);
+      color: var(--color-casa-gold);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .canvas-grid {
+      flex: 1;
+      padding: 24px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+    .mock-day-col {
+      background: rgba(255,255,255,0.7);
+      border: 1px solid var(--color-casa-border);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .mock-day-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--color-casa-navy);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .mock-card {
+      background: white;
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid var(--color-casa-border);
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       CONCEPT 2: STORY & LOGISTICS DUAL-LAYER SIDECAR
+       ═══════════════════════════════════════════════════════════ */
+    .sidecar-panel {
+      width: 560px;
+      background: var(--color-casa-surface);
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      border-left: 1px solid var(--color-casa-border);
+      box-shadow: -10px 0 35px rgba(27, 42, 74, 0.08);
+      position: relative;
+      z-index: 20;
+      overflow: hidden;
+    }
+
+    .device-mobile .canvas-bg {
+      display: none;
+    }
+    .device-mobile .sidecar-panel {
+      width: 100%;
+      border-left: none;
+    }
+
+    /* Top Hero Capsule */
+    .hero-capsule {
+      background: linear-gradient(145deg, #1B2A4A 0%, #283C66 100%);
+      color: white;
+      padding: 24px;
+      position: relative;
+      flex-shrink: 0;
+    }
+    .hero-top-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .hero-tag {
+      background: rgba(201, 169, 110, 0.25);
+      border: 1px solid rgba(201, 169, 110, 0.5);
+      color: var(--color-casa-gold);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 4px 10px;
+      border-radius: 14px;
+    }
+    .close-btn-light {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.15);
+      border: none;
+      color: white;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      transition: background 0.2s;
+    }
+    .close-btn-light:hover {
+      background: rgba(255,255,255,0.3);
+    }
+    .hero-title {
+      font-family: var(--font-display);
+      font-size: 34px;
+      font-weight: 600;
+      line-height: 1.15;
+      margin-bottom: 8px;
+    }
+    .hero-meta {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 14px;
+      color: #D1D5DB;
+    }
+    .hero-countdown {
+      background: #10B981;
+      color: white;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    /* Segmented Deck Switcher */
+    .deck-switcher {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      padding: 6px;
+      background: var(--color-casa-bg-2);
+      border-bottom: 1px solid var(--color-casa-border);
+      gap: 4px;
+    }
+    .deck-tab {
+      padding: 10px 8px;
+      border: none;
+      background: transparent;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--color-casa-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+    .deck-tab.active {
+      background: var(--color-casa-surface);
+      color: var(--color-casa-navy);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+    }
+
+    /* Scrollable Deck Container */
+    .deck-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      background: var(--color-casa-bg);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* Cards in Deck */
+    .story-card {
+      background: var(--color-casa-surface);
+      border: 1px solid var(--color-casa-border);
+      border-radius: 16px;
+      padding: 18px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .story-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .story-card-title {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--color-casa-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Gear Checklist */
+    .gear-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      background: var(--color-casa-bg);
+      border-radius: 10px;
+      border: 1px solid var(--color-casa-border-subtle);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .gear-item:hover {
+      border-color: var(--color-casa-gold);
+    }
+    .gear-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .gear-check {
+      width: 22px;
+      height: 22px;
+      border-radius: 6px;
+      border: 2px solid var(--color-casa-border);
+      background: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .gear-item.packed .gear-check {
+      background: var(--color-casa-success);
+      border-color: var(--color-casa-success);
+      color: white;
+    }
+    .gear-item.packed .gear-text {
+      text-decoration: line-through;
+      color: var(--color-casa-muted);
+    }
+    .gear-text {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--color-casa-navy);
+    }
+    .gear-owner {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 12px;
+      background: #FEE2E2;
+      color: var(--color-family-liv);
+    }
+
+    /* Logistics Multi-Leg Driver Board */
+    .leg-card {
+      background: var(--color-casa-surface);
+      border: 1px solid var(--color-casa-border);
+      border-radius: 16px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .leg-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .leg-badge {
+      background: var(--color-casa-bg-2);
+      color: var(--color-casa-navy);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 6px;
+    }
+    .leg-time {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--color-casa-navy);
+    }
+    .driver-selector-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--color-casa-bg);
+      border: 1px solid var(--color-casa-border);
+      padding: 8px 12px;
+      border-radius: 12px;
+    }
+    .driver-identity {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .driver-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--color-family-kelly);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .driver-name {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--color-casa-navy);
+    }
+    .swap-btn {
+      background: white;
+      border: 1px solid var(--color-casa-border);
+      padding: 4px 10px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--color-casa-navy);
+      cursor: pointer;
+    }
+
+    /* Wait on site switch */
+    .switch-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-top: 1px solid var(--color-casa-border-subtle);
+    }
+    .switch-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--color-casa-navy);
+    }
+    .switch-ui {
+      width: 44px;
+      height: 24px;
+      background: var(--color-casa-border);
+      border-radius: 12px;
+      position: relative;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .switch-ui.on {
+      background: var(--color-casa-success);
+    }
+    .switch-knob {
+      width: 20px;
+      height: 20px;
+      background: white;
+      border-radius: 50%;
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      transition: transform 0.2s;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+    .switch-ui.on .switch-knob {
+      transform: translateX(20px);
+    }
+
+    /* Floating Action Bar */
+    .action-dock {
+      padding: 16px 20px;
+      background: var(--color-casa-surface);
+      border-top: 1px solid var(--color-casa-border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    .primary-cta {
+      flex: 1;
+      padding: 14px;
+      border-radius: 14px;
+      background: var(--color-casa-navy);
+      color: white;
+      border: none;
+      font-size: 14px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      cursor: pointer;
+      box-shadow: 0 3px 10px rgba(27, 42, 74, 0.2);
+      transition: all 0.2s;
+    }
+    .primary-cta:hover {
+      background: var(--color-casa-navy-soft);
+      transform: translateY(-1px);
+    }
+    .secondary-cta {
+      padding: 14px 18px;
+      border-radius: 14px;
+      background: var(--color-casa-gold);
+      color: #1A1A1A;
+      border: none;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Demo Bar -->
+  <header class="demo-bar">
+    <h1>
+      <span>Concept 2</span>
+      Story & Logistics Dual-Layer (Segmented Glance + Deep Dive)
+    </h1>
+    <div class="nav-tabs-group">
+      <a href="concept-1-living-flow.html" class="nav-tab-btn">Concept 1</a>
+      <a href="concept-2-story-logistics.html" class="nav-tab-btn active">Concept 2</a>
+      <a href="concept-3-assistive-deck.html" class="nav-tab-btn">Concept 3</a>
+      <a href="index.html" class="nav-tab-btn" style="background: var(--color-casa-navy); color: var(--color-casa-gold);">Showroom Overview</a>
+    </div>
+    <div class="device-switcher">
+      <button class="device-btn" onclick="setDevice('mobile')">📱 Mobile (390px)</button>
+      <button class="device-btn" onclick="setDevice('tablet')">📟 Tablet (860px)</button>
+      <button class="device-btn active" onclick="setDevice('desktop')">💻 Desktop (1440px)</button>
+      <button class="device-btn" onclick="setDevice('kiosk')">📺 Kiosk (1920px)</button>
+    </div>
+  </header>
+
+  <!-- Stage Container -->
+  <main class="stage-container">
+    <div class="app-frame device-desktop" id="appFrame">
+      
+      <!-- Blurred Canvas Background -->
+      <div class="canvas-bg">
+        <div class="canvas-topbar">
+          <div class="brand"><div class="brand-badge">CT</div> Casa Tabor</div>
+          <div style="margin-left: 20px; font-weight: 600;">Calendar • Week View</div>
+        </div>
+        <div class="canvas-grid">
+          <div class="mock-day-col">
+            <div class="mock-day-title">Sat 15</div>
+            <div class="mock-card"><strong>2:25 PM</strong> · Liv and Mom Mall</div>
+          </div>
+          <div class="mock-day-col">
+            <div class="mock-day-title">Sun 16</div>
+            <div class="mock-card"><strong>1:00 PM</strong> · Owen Soccer Practice</div>
+          </div>
+          <div class="mock-day-col">
+            <div class="mock-day-title">Mon 17</div>
+            <div class="mock-card"><strong>8:00 AM</strong> · School Run</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════ CONCEPT 2 SIDECAR ═══════ -->
+      <aside class="sidecar-panel">
+        
+        <!-- Hero Glance Capsule -->
+        <div class="hero-capsule">
+          <div class="hero-top-row">
+            <span class="hero-tag">🛍️ Social Event</span>
+            <button class="close-btn-light" title="Close">✕</button>
+          </div>
+          <h2 class="hero-title">Liv and Mom Mall</h2>
+          <div class="hero-meta">
+            <span>Sat, Aug 15 · 2:25 PM</span>
+            <span>•</span>
+            <span class="hero-countdown">Departs in 1h 20m</span>
+          </div>
+        </div>
+
+        <!-- Segmented Deck Switcher -->
+        <div class="deck-switcher">
+          <button class="deck-tab active" id="tab-story" onclick="switchDeck('story')">
+            <span>🎒</span> Story & Prep
+          </button>
+          <button class="deck-tab" id="tab-logistics" onclick="switchDeck('logistics')">
+            <span>🚗</span> Route & Drive
+          </button>
+          <button class="deck-tab" id="tab-remind" onclick="switchDeck('remind')">
+            <span>🔔</span> Tasks & Notes
+          </button>
+        </div>
+
+        <!-- Scrollable Deck Area -->
+        <div class="deck-content" id="deckBody">
+          
+          <!-- TAB 1: STORY & PREP (Default) -->
+          <div id="view-story" style="display: flex; flex-direction: column; gap: 16px;">
+            
+            <!-- What to Bring & Gear -->
+            <div class="story-card">
+              <div class="story-card-header">
+                <span class="story-card-title">🎒 What to Bring Checklist</span>
+                <span style="font-size: 11px; color: var(--color-casa-muted); font-weight: 600;">1 of 3 packed</span>
+              </div>
+              <div class="gear-item packed" onclick="this.classList.toggle('packed')">
+                <div class="gear-left">
+                  <div class="gear-check">✓</div>
+                  <span class="gear-text">Gift Card for Aunt Sarah</span>
+                </div>
+                <span class="gear-owner">Liv</span>
+              </div>
+              <div class="gear-item" onclick="this.classList.toggle('packed')">
+                <div class="gear-left">
+                  <div class="gear-check"></div>
+                  <span class="gear-text">Receipt for Zara returns</span>
+                </div>
+                <span class="gear-owner">Kelly</span>
+              </div>
+              <div class="gear-item" onclick="this.classList.toggle('packed')">
+                <div class="gear-left">
+                  <div class="gear-check"></div>
+                  <span class="gear-text">Water bottles & snack bags</span>
+                </div>
+                <span class="gear-owner">Shared</span>
+              </div>
+            </div>
+
+            <!-- Venue Highlights & Parking Tips -->
+            <div class="story-card">
+              <div class="story-card-header">
+                <span class="story-card-title">📍 Venue & Parking Details</span>
+                <span style="color: var(--color-casa-success); font-size: 11px; font-weight: 700;">● Open Now</span>
+              </div>
+              <div>
+                <strong style="font-size: 15px; color: var(--color-casa-navy);">The Gardens Mall</strong>
+                <p style="font-size: 13px; color: var(--color-casa-muted); margin-top: 2px;">3101 PGA Blvd, Palm Beach Gardens, FL</p>
+              </div>
+              <div style="background: #F8F9FA; padding: 10px 12px; border-radius: 10px; font-size: 12px; color: #4B5563;">
+                🅿️ <strong>Parking Note:</strong> Park near Nordstrom upper deck for closest entrance to food court.
+              </div>
+            </div>
+
+            <!-- Contact & Coordination -->
+            <div class="story-card">
+              <div class="story-card-header">
+                <span class="story-card-title">👥 Attendees & Contacts</span>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <span style="background: #FFF2EB; color: var(--color-family-kelly); padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 700;">● Kelly (Driver)</span>
+                <span style="background: #EAF5EE; color: var(--color-family-liv); padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 700;">● Liv</span>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- TAB 2: ROUTE & DRIVE (Hidden initially) -->
+          <div id="view-logistics" style="display: none; flex-direction: column; gap: 16px;">
+            
+            <div class="leg-card">
+              <div class="leg-top">
+                <span class="leg-badge">Leg 1 · Outbound Drive</span>
+                <span class="leg-time">Leave at 1:55 PM</span>
+              </div>
+              <div style="font-size: 13px; color: var(--color-casa-muted);">Home ➔ The Gardens Mall (20 min drive)</div>
+              
+              <div class="driver-selector-bar">
+                <div class="driver-identity">
+                  <div class="driver-avatar">K</div>
+                  <div>
+                    <div class="driver-name">Kelly</div>
+                    <div style="font-size: 11px; color: var(--color-casa-muted);">Driving Kelly, Liv</div>
+                  </div>
+                </div>
+                <button class="swap-btn" onclick="alert('Driver swap sheet opened')">Swap Driver</button>
+              </div>
+
+              <div class="switch-row">
+                <span class="switch-label">Parent waits on site during event</span>
+                <div class="switch-ui on" onclick="this.classList.toggle('on')">
+                  <div class="switch-knob"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="leg-card">
+              <div class="leg-top">
+                <span class="leg-badge">Leg 2 · Return Trip</span>
+                <span class="leg-time">Leave at 5:05 PM</span>
+              </div>
+              <div style="font-size: 13px; color: var(--color-casa-muted);">The Gardens Mall ➔ Home (22 min drive)</div>
+              
+              <div class="driver-selector-bar">
+                <div class="driver-identity">
+                  <div class="driver-avatar">K</div>
+                  <div>
+                    <div class="driver-name">Kelly</div>
+                    <div style="font-size: 11px; color: var(--color-casa-muted);">Driving Kelly, Liv</div>
+                  </div>
+                </div>
+                <button class="swap-btn" onclick="alert('Driver swap sheet opened')">Swap Driver</button>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- TAB 3: TASKS & REMINDERS -->
+          <div id="view-remind" style="display: none; flex-direction: column; gap: 16px;">
+            <div class="story-card">
+              <div class="story-card-header">
+                <span class="story-card-title">🔔 Linked Household Tasks</span>
+              </div>
+              <div class="gear-item" onclick="this.classList.toggle('packed')">
+                <div class="gear-left">
+                  <div class="gear-check"></div>
+                  <span class="gear-text">Pick up dry cleaning on the way back</span>
+                </div>
+                <span class="gear-owner">Kelly</span>
+              </div>
+              <div class="gear-item" onclick="this.classList.toggle('packed')">
+                <div class="gear-left">
+                  <div class="gear-check"></div>
+                  <span class="gear-text">Confirm dinner reservations for 6:30 PM</span>
+                </div>
+                <span class="gear-owner">Jake</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Sticky Floating Action Dock -->
+        <div class="action-dock">
+          <button class="primary-cta" onclick="alert('Navigating via Apple Maps with live family ETA sharing!')">
+            <span>🚗</span>
+            <span>Start Navigation (20m)</span>
+          </button>
+          <button class="secondary-cta" onclick="alert('Casa AI Copilot opened')">
+            <span>✨ Ask AI</span>
+          </button>
+        </div>
+
+      </aside>
+
+    </div>
+  </main>
+
+  <script>
+    function setDevice(device) {
+      document.querySelectorAll('.device-btn').forEach(btn => btn.classList.remove('active'));
+      event.target.classList.add('active');
+      const frame = document.getElementById('appFrame');
+      frame.className = 'app-frame device-' + device;
+    }
+
+    function switchDeck(deck) {
+      document.querySelectorAll('.deck-tab').forEach(tab => tab.classList.remove('active'));
+      document.getElementById('view-story').style.display = 'none';
+      document.getElementById('view-logistics').style.display = 'none';
+      document.getElementById('view-remind').style.display = 'none';
+
+      if (deck === 'story') {
+        document.getElementById('tab-story').classList.add('active');
+        document.getElementById('view-story').style.display = 'flex';
+      } else if (deck === 'logistics') {
+        document.getElementById('tab-logistics').classList.add('active');
+        document.getElementById('view-logistics').style.display = 'flex';
+      } else {
+        document.getElementById('tab-remind').classList.add('active');
+        document.getElementById('view-remind').style.display = 'flex';
+      }
+    }
+  </script>
+</body>
+</html>

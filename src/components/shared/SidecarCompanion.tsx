@@ -1,12 +1,13 @@
 import { useMemo, useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useQuery } from '@tanstack/react-query'
 import { useAppStore } from '../../stores/appStore'
-import { useRollingEvents, type EventWithDetails } from '../../hooks/useCalendarEvents'
+import { useRollingEvents, fetchEventDetails, type EventWithDetails } from '../../hooks/useCalendarEvents'
 import { useLiveClock } from '../../hooks/useLiveClock'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
 import { useHomeWeather } from '../../hooks/useHomeWeather'
 import { cn } from '../../utils/cn'
-import EventDetailPanel from '../calendar/EventDetailPanel'
+import LivingFlowSidecar from '../calendar/living-flow/LivingFlowSidecar'
 import AIChatDrawer from './AIChatDrawer'
 
 interface SidecarCompanionProps {
@@ -29,14 +30,26 @@ export default function SidecarCompanion({
   } = useAppStore()
 
   const now = useLiveClock(60_000)
-  const { data: events = [] } = useRollingEvents(now)
+  const { data: rollingEvents = [] } = useRollingEvents(now)
   const { data: family = [] } = useFamilyMembers()
   const { data: weather } = useHomeWeather()
 
-  const selectedEvent = useMemo(
-    () => (selectedSidecarEventId ? events.find((e) => e.id === selectedSidecarEventId) || ({ id: selectedSidecarEventId } as EventWithDetails) : null),
-    [events, selectedSidecarEventId]
-  )
+  // Fetch full details if event is from outside rolling horizon
+  const { data: fetchedEvent } = useQuery({
+    queryKey: ['event-details', selectedSidecarEventId],
+    queryFn: () => selectedSidecarEventId ? fetchEventDetails(selectedSidecarEventId) : null,
+    enabled: Boolean(selectedSidecarEventId),
+    staleTime: 5 * 60_000,
+  })
+
+  const selectedEvent = useMemo<EventWithDetails | null>(() => {
+    if (!selectedSidecarEventId) return null
+    return (
+      fetchedEvent ||
+      rollingEvents.find((e) => e.id === selectedSidecarEventId) ||
+      ({ id: selectedSidecarEventId } as EventWithDetails)
+    )
+  }, [fetchedEvent, rollingEvents, selectedSidecarEventId])
 
   const [windowWidth, setWindowWidth] = useState(() => (typeof window !== 'undefined' ? window.innerWidth : 1280))
   const isMobile = windowWidth < 640
@@ -49,8 +62,8 @@ export default function SidecarCompanion({
 
   const sidecarWidth = useMemo(() => {
     if (isMobile) return windowWidth
-    // Scale proportionally: ~35% of viewport width, comfortably bounded between 400px (laptops/tablets) and 840px (1080p+ kiosks)
-    return Math.min(840, Math.max(400, Math.round(windowWidth * 0.35)))
+    // Exact 5/16 (31.25%) rail proportion matching Calm page & Casa Tabor design system
+    return Math.min(840, Math.max(420, Math.round(windowWidth * 0.3125)))
   }, [isMobile, windowWidth])
 
   const isCook = routePath.startsWith('/cook')
@@ -93,7 +106,7 @@ export default function SidecarCompanion({
         isEventView ? 'flex' : 'hidden'
       )}>
         {selectedEvent && (
-          <EventDetailPanel
+          <LivingFlowSidecar
             event={selectedEvent}
             onClose={closeSidecar}
             embedded={true}
@@ -111,7 +124,7 @@ export default function SidecarCompanion({
           open={aiDrawerOpen}
           onClose={closeSidecar}
           page={routePath.startsWith('/cook') ? 'cook' : routePath.startsWith('/calendar') ? 'calendar' : 'home'}
-          events={events}
+          events={rollingEvents}
           family={family}
           homeCity={weather?.city}
           onSleepCommand={() => document.dispatchEvent(new CustomEvent('screensaver-on'))}

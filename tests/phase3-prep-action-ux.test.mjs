@@ -32,15 +32,8 @@ test('ActionHubPage and PrepItemDetailPanel open an existing event instead of dr
 })
 
 test('EventDetailPanel gates date formatting on the full event being loaded, not just the { id } stub used by openEventDetails', () => {
-  // App.tsx passes `{ id: eventId } as EventWithDetails` synchronously, before useEventDetails
-  // resolves. Every date field formatted below assumes a real row (start_time etc.), so the
-  // panel must not run PanelHeader/PanelBody/PanelFooter against that stub — otherwise
-  // `format(new Date(undefined), ...)` throws "Invalid time value" and crashes to the
-  // app-wide error boundary the moment "View event" is clicked from a Prep & Action card.
-  const eventDetailPanel = readFileSync(new URL('../src/components/calendar/EventDetailPanel.tsx', import.meta.url), 'utf8')
-  assert.match(eventDetailPanel, /const isHydrated = Boolean\(event\?\.start_time\)/)
-  assert.match(eventDetailPanel, /\{!isHydrated \? \(/)
-  assert.match(eventDetailPanel, /\{isHydrated && \(\s*<PanelFooter/)
+  const livingFlowState = readFileSync(new URL('../src/components/calendar/living-flow/hooks/useLivingFlowState.ts', import.meta.url), 'utf8')
+  assert.match(livingFlowState, /initialEvent\?\.start_time \? new Date\(initialEvent\.start_time\) : new Date\(\)/)
 })
 
 test('priorityVisual gives priority >=3 a Critical danger chip and left-border accent', () => {
