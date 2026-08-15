@@ -123,6 +123,9 @@ export default function SwipeableReminderPill({ id, title, members, onClick, onC
       {/* The pill */}
       <div
         ref={pillRef}
+        role="button"
+        tabIndex={0}
+        data-tactile="true"
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
@@ -130,7 +133,13 @@ export default function SwipeableReminderPill({ id, title, members, onClick, onC
           e.stopPropagation()
           if (!moved.current) onClick?.()
         }}
-        className="relative z-raised inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border-[1.5px] border-casa-gold bg-casa-accent-soft text-casa-navy text-caption font-semibold select-none cursor-pointer"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            onClick?.()
+          }
+        }}
+        className="relative z-raised inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border-[1.5px] border-casa-gold bg-casa-accent-soft text-casa-navy text-caption font-semibold select-none cursor-pointer active:scale-[0.97] active:opacity-75 transition-all duration-150"
         style={{
           willChange: 'transform',
           touchAction: 'pan-y',

@@ -24,6 +24,8 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(function Card(
       ref={ref}
       tabIndex={interactive ? (tabIndex ?? 0) : tabIndex}
       role={interactive ? (role ?? 'button') : role}
+      data-tactile={interactive ? 'true' : undefined}
+      data-card-interactive={interactive ? 'true' : undefined}
       onKeyDown={interactive ? (event) => {
         onKeyDown?.(event)
         if (!event.defaultPrevented && (event.key === 'Enter' || event.key === ' ')) {
@@ -31,7 +33,7 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(function Card(
           event.currentTarget.click()
         }
       } : onKeyDown}
-      className={cn(cardClassName({ padding, tone, interactive }), className)}
+      className={cn(cardClassName({ padding, tone, interactive }), interactive && 'casa-card-interactive', className)}
       {...rest}
     />
   )

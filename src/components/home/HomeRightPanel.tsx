@@ -755,7 +755,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem, 
               <div className="mt-4 pt-4 border-t border-casa-border">
                 <Link
                   to="/actions#recent-activity"
-                  className="block rounded-modal bg-casa-navy px-3.5 pb-3.5 pt-4 text-white shadow-modal hover:brightness-105 transition"
+                  className="block rounded-modal bg-casa-navy px-3.5 pb-3.5 pt-4 text-white shadow-modal hover:brightness-105 transition-all duration-150 active:scale-[0.97] active:opacity-75"
                 >
                   <div className="flex items-center gap-2.5">
                     <Sparkles size={15} className="text-white/90 shrink-0" />

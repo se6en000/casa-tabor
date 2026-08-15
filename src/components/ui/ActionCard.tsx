@@ -78,10 +78,12 @@ export const ActionCard = forwardRef<HTMLDivElement, ActionCardProps>(
         initial={{ opacity: 0, y: 5 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95 }}
+        whileTap={rest.onClick ? { scale: 0.97, opacity: 0.75 } : undefined}
         transition={{ duration: 0.2 }}
         className={cn(
           'p-4 rounded-widget border shadow-sm relative flex flex-col justify-between',
           toneConfig.container,
+          rest.onClick && 'cursor-pointer transition-all duration-150',
           className,
         )}
         {...rest}

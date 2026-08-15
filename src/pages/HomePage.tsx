@@ -439,7 +439,7 @@ export default function HomePage() {
           <div className="mt-3 mb-1 lg:hidden">
             <Link
               to="/cook"
-              className="flex items-center justify-between p-3.5 bg-casa-surface border border-casa-border border-l-4 border-l-casa-gold rounded-card shadow-subtle hover:border-casa-gold transition-all"
+              className="flex items-center justify-between p-3.5 bg-casa-surface border border-casa-border border-l-4 border-l-casa-gold rounded-card shadow-subtle hover:border-casa-gold transition-all duration-150 active:scale-[0.97] active:opacity-75"
             >
               <div className="flex items-center gap-3 min-w-0">
                 <div className="w-9 h-9 rounded-xl bg-casa-gold/15 flex items-center justify-center flex-shrink-0 text-casa-gold">
@@ -1306,6 +1306,7 @@ function TimelineRow({
         initial={{ opacity: 0, x: -8 }}
         animate={{ opacity: past ? 0.4 : 1, x: 0 }}
         exit={{ opacity: 0, height: 0, marginBottom: 0, overflow: 'hidden' }}
+        whileTap={{ scale: 0.97, opacity: 0.75 }}
         transition={{ duration: 0.3, delay: index * 0.04 }}
         className="cursor-pointer"
         onClick={e => { e.stopPropagation(); onClick() }}
@@ -1372,6 +1373,7 @@ function TimelineRow({
     <motion.li
       initial={{ opacity: 0, x: -8 }}
       animate={{ opacity: past ? 0.45 : 1, x: 0 }}
+      whileTap={{ scale: 0.97, opacity: 0.75 }}
       transition={{ duration: 0.3, delay: index * 0.04 }}
       className="cursor-pointer"
       role="button"

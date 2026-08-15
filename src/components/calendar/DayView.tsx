@@ -151,6 +151,7 @@ export function DayEventCard({
           initial={{ opacity: 0, x: -8 }}
           animate={{ opacity: 0.45, x: 0 }}
           exit={{ opacity: 0, height: 0, marginBottom: 0, overflow: 'hidden' }}
+          whileTap={{ scale: 0.97, opacity: 0.75 }}
           transition={{ duration: 0.2, delay: index * 0.02 }}
           className="cursor-pointer list-none"
           data-calendar-event
@@ -204,6 +205,7 @@ export function DayEventCard({
         initial={{ opacity: 0, x: -8 }}
         animate={{ opacity: past ? 0.4 : 1, x: 0 }}
         exit={{ opacity: 0, height: 0, marginBottom: 0, overflow: 'hidden' }}
+        whileTap={{ scale: 0.97, opacity: 0.75 }}
         transition={{ duration: 0.3, delay: index * 0.04 }}
         className="cursor-pointer list-none"
         data-calendar-event
@@ -299,6 +301,7 @@ export function DayEventCard({
         layout
         initial={{ opacity: 0, x: -8 }}
         animate={{ opacity: 0.45, x: 0 }}
+        whileTap={{ scale: 0.97, opacity: 0.75 }}
         transition={{ duration: 0.2, delay: index * 0.02 }}
         className="cursor-pointer list-none"
         data-calendar-event
@@ -397,6 +400,7 @@ export function DayEventCard({
       layout
       initial={{ opacity: 0, x: -8 }}
       animate={{ opacity: past ? 0.45 : 1, x: 0 }}
+      whileTap={{ scale: 0.97, opacity: 0.75 }}
       transition={{ duration: 0.3, delay: index * 0.04 }}
       className="cursor-pointer list-none"
       data-calendar-event

@@ -161,6 +161,8 @@ const CARD_TONE_CLASSES = {
   stylish: 'bg-gradient-to-br from-casa-surface via-casa-surface to-casa-accent-subtle/40 border-casa-gold/30 shadow-widget',
 }
 
+export const TACTILE_PRESS_CLASSES = 'active:scale-[0.97] active:opacity-75 transition-all duration-150'
+
 /**
  * @param {{padding?: string, tone?: string, interactive?: boolean}} [options]
  * @returns {string}
@@ -173,7 +175,7 @@ export function cardClassName(options = {}) {
     CARD_TONE_CLASSES[tone],
     CARD_PADDING_CLASSES[padding],
     options.interactive
-      ? 'transition-all duration-150 cursor-pointer hover:shadow-card-hover outline-none focus-visible:ring-2 focus-visible:ring-casa-gold focus-visible:ring-offset-2'
+      ? 'transition-all duration-150 cursor-pointer hover:shadow-card-hover active:scale-[0.97] active:opacity-75 outline-none focus-visible:ring-2 focus-visible:ring-casa-gold focus-visible:ring-offset-2'
       : '',
   ].filter(Boolean).join(' ')
 }

@@ -49,6 +49,7 @@ export const ScheduleStreamItem = forwardRef<HTMLDivElement, ScheduleStreamItemP
       <motion.div
         ref={ref}
         layout
+        whileTap={onClick ? { scale: 0.97, opacity: 0.75 } : undefined}
         onClick={onClick}
         role={onClick ? 'button' : undefined}
         tabIndex={onClick ? 0 : undefined}

@@ -124,8 +124,18 @@ export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate 
          ══════════════════════════════════════════════════════════════ */}
       {heroEvent ? (
         <div
+          role="button"
+          tabIndex={0}
+          data-tactile="true"
+          data-calendar-event
           onClick={() => openEventDetails(heroEvent.id)}
-          className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-casa-navy via-slate-900 to-slate-950 text-white p-4 shadow-[0_8px_24px_-4px_rgba(27,42,74,0.25)] border border-casa-gold/30 cursor-pointer active:scale-[0.99] transition-all"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              openEventDetails(heroEvent.id)
+            }
+          }}
+          className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-casa-navy via-slate-900 to-slate-950 text-white p-4 shadow-[0_8px_24px_-4px_rgba(27,42,74,0.25)] border border-casa-gold/30 cursor-pointer active:scale-[0.97] active:opacity-75 transition-all duration-150"
         >
           {/* Top Status Pill */}
           <div className="flex items-center gap-2 mb-2">
@@ -228,8 +238,17 @@ export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate 
             {activeConflicts.map((c) => (
               <div
                 key={c.id}
+                role="button"
+                tabIndex={0}
+                data-tactile="true"
                 onClick={() => navigate('/actions')}
-                className="flex items-center gap-2.5 p-2.5 rounded-xl bg-casa-surface border border-casa-border shadow-2xs shrink-0 cursor-pointer hover:border-casa-gold active:scale-98 transition-all max-w-[240px]"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    navigate('/actions')
+                  }
+                }}
+                className="flex items-center gap-2.5 p-2.5 rounded-xl bg-casa-surface border border-casa-border shadow-2xs shrink-0 cursor-pointer hover:border-casa-gold active:scale-[0.97] active:opacity-75 transition-all duration-150 max-w-[240px]"
               >
                 <div className="w-7 h-7 rounded-lg bg-amber-500/15 flex items-center justify-center text-amber-600 shrink-0">
                   <Zap size={14} strokeWidth={2.2} />
@@ -245,8 +264,17 @@ export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate 
             {activePrep.map((p) => (
               <div
                 key={p.id}
+                role="button"
+                tabIndex={0}
+                data-tactile="true"
                 onClick={() => navigate('/actions')}
-                className="flex items-center gap-2.5 p-2.5 rounded-xl bg-casa-surface border border-casa-border shadow-2xs shrink-0 cursor-pointer hover:border-casa-gold active:scale-98 transition-all max-w-[240px]"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    navigate('/actions')
+                  }
+                }}
+                className="flex items-center gap-2.5 p-2.5 rounded-xl bg-casa-surface border border-casa-border shadow-2xs shrink-0 cursor-pointer hover:border-casa-gold active:scale-[0.97] active:opacity-75 transition-all duration-150 max-w-[240px]"
               >
                 <div className="w-7 h-7 rounded-lg bg-red-500/15 flex items-center justify-center text-red-500 shrink-0">
                   <AlertCircle size={14} strokeWidth={2.2} />
@@ -266,7 +294,7 @@ export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate 
          ══════════════════════════════════════════════════════════════ */}
       <Link
         to="/cook"
-        className="flex items-center justify-between p-3.5 bg-casa-surface border border-casa-border border-l-4 border-l-casa-gold rounded-xl shadow-2xs hover:border-casa-gold active:scale-[0.99] transition-all"
+        className="flex items-center justify-between p-3.5 bg-casa-surface border border-casa-border border-l-4 border-l-casa-gold rounded-xl shadow-2xs hover:border-casa-gold active:scale-[0.97] active:opacity-75 transition-all duration-150"
       >
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-9 h-9 rounded-xl bg-casa-gold/15 flex items-center justify-center text-casa-gold shrink-0">
@@ -327,8 +355,18 @@ export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate 
               return (
                 <div
                   key={ev.id}
+                  role="button"
+                  tabIndex={0}
+                  data-tactile="true"
+                  data-calendar-event
                   onClick={() => openEventDetails(ev.id)}
-                  className="flex items-center gap-3 p-3 rounded-xl bg-casa-surface border border-casa-border shadow-2xs hover:border-casa-gold active:scale-[0.99] transition-all cursor-pointer"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      openEventDetails(ev.id)
+                    }
+                  }}
+                  className="flex items-center gap-3 p-3 rounded-xl bg-casa-surface border border-casa-border shadow-2xs hover:border-casa-gold active:scale-[0.97] active:opacity-75 transition-all duration-150 cursor-pointer"
                 >
                   {/* Time Badge */}
                   <div className="flex flex-col items-center justify-center min-w-[48px] text-center shrink-0">
@@ -387,8 +425,18 @@ export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate 
               return (
                 <div
                   key={ev.id}
+                  role="button"
+                  tabIndex={0}
+                  data-tactile="true"
+                  data-calendar-event
                   onClick={() => openEventDetails(ev.id)}
-                  className="flex items-center gap-3 p-3 rounded-xl bg-casa-surface border border-casa-border shadow-2xs hover:border-casa-gold active:scale-[0.99] transition-all cursor-pointer"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      openEventDetails(ev.id)
+                    }
+                  }}
+                  className="flex items-center gap-3 p-3 rounded-xl bg-casa-surface border border-casa-border shadow-2xs hover:border-casa-gold active:scale-[0.97] active:opacity-75 transition-all duration-150 cursor-pointer"
                 >
                   <div className="flex flex-col items-center justify-center min-w-[48px] text-center shrink-0">
                     <span className="text-body-sm font-mono font-bold text-casa-navy leading-none">

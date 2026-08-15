@@ -608,6 +608,7 @@ function EventCard({ event, household, now = new Date(), onClick, onDoubleClick,
         initial={{ opacity: 0, y: 4 }}
         animate={{ opacity: 0.45, y: 0 }}
         exit={{ opacity: 0, y: -4 }}
+        whileTap={{ scale: 0.97, opacity: 0.75 }}
         transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
         onClick={(e) => { e.stopPropagation(); onClick() }}
         onDoubleClick={(e) => { e.stopPropagation(); onDoubleClick() }}
@@ -684,6 +685,7 @@ function EventCard({ event, household, now = new Date(), onClick, onDoubleClick,
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: past ? 0.45 : 1, y: 0 }}
       exit={{ opacity: 0, y: -4 }}
+      whileTap={{ scale: 0.97, opacity: 0.75 }}
       transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
       onClick={(e) => { e.stopPropagation(); onClick() }}
       onDoubleClick={(e) => { e.stopPropagation(); onDoubleClick() }}

@@ -618,8 +618,17 @@ export default function ActionQueueWidget({
                   return (
                     <div
                       key={item.id}
+                      role="button"
+                      tabIndex={0}
+                      data-tactile="true"
                       onClick={() => setSpotlightItemId(item.id)}
-                      className="py-3 px-3 -mx-1.5 rounded-xl flex items-start justify-between gap-3 group cursor-pointer hover:bg-casa-bg/80 border border-transparent hover:border-casa-border/60 transition-all"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          setSpotlightItemId(item.id)
+                        }
+                      }}
+                      className="py-3 px-3 -mx-1.5 rounded-xl flex items-start justify-between gap-3 group cursor-pointer hover:bg-casa-bg/80 border border-transparent hover:border-casa-border/60 transition-all duration-150 active:scale-[0.97] active:opacity-75"
                     >
                       <div className="flex items-start gap-3 min-w-0 flex-1">
                         <IconButton

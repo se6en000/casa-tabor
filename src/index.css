@@ -343,8 +343,16 @@ button, a, [role="button"], label, select {
 }
 
 /* ── Active press feedback (replaces hover on touch) ─────────── */
-/* Gives instant visual confirmation when a user taps a button.  */
-button:active, a:active, [role="button"]:active {
+/* Gives instant tactile confirmation when a user taps/presses a button, calendar card, or interactive element. */
+button:active,
+a:active,
+[role="button"]:active,
+[data-calendar-event]:active,
+[data-card-interactive]:active,
+[data-tactile="true"]:active,
+.casa-card-interactive:active,
+[data-event-block]:active,
+[data-event-pill]:active {
   opacity: 0.75;
   transform: scale(0.97);
   transition: opacity 60ms, transform 60ms;

@@ -89,7 +89,11 @@ function DayPopover({ day, events, onClose, onSelectDay, onSelectEvent }: DayPop
           return (
             <div
               key={event.id}
-              className="flex items-start gap-3 px-4 py-2.5 hover:bg-casa-surface cursor-pointer transition-colors"
+              role="button"
+              tabIndex={0}
+              data-tactile="true"
+              data-calendar-event
+              className="flex items-start gap-3 px-4 py-2.5 hover:bg-casa-surface cursor-pointer transition-all duration-150"
               onClick={() => { onSelectEvent(event); onClose() }}
             >
               <div

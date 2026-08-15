@@ -66,11 +66,21 @@ export default function BriefingWidget({
               .map((evt) => (
                 <div
                   key={evt.id}
+                  role="button"
+                  tabIndex={0}
+                  data-tactile="true"
+                  data-calendar-event
                   onMouseEnter={() => setHighlightedEventId(evt.id)}
                   onMouseLeave={() => setHighlightedEventId(null)}
                   onClick={() => onOpenEvent(evt)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      onOpenEvent(evt)
+                    }
+                  }}
                   className={cn(
-                    'p-3.5 rounded-2xl border transition-all cursor-pointer group min-h-[48px] flex flex-col justify-center',
+                    'p-3.5 rounded-2xl border transition-all duration-150 cursor-pointer group min-h-[48px] flex flex-col justify-center active:scale-[0.97] active:opacity-75',
                     highlightedEventId === evt.id
                       ? 'border-casa-navy bg-casa-gold/15 shadow-sm'
                       : 'border-casa-border/50 bg-casa-bg/40 hover:bg-casa-surface'

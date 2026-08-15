@@ -44,6 +44,7 @@ export type CardTone = 'surface' | 'subtle' | 'accent' | 'ambient' | 'stylish'
 
 export const CARD_PADDINGS: CardPadding[]
 export const CARD_TONES: CardTone[]
+export const TACTILE_PRESS_CLASSES: string
 
 export function cardClassName(options?: {
   padding?: CardPadding

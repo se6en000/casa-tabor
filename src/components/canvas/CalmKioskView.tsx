@@ -702,9 +702,19 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                     return (
                       <div
                         key={evt.id}
+                        role="button"
+                        tabIndex={0}
+                        data-tactile="true"
+                        data-calendar-event
                         onClick={() => onOpenEvent(evt)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            onOpenEvent(evt)
+                          }
+                        }}
                         className={cn(
-                          'flex items-center justify-between px-4 py-3 rounded-2xl border transition-all cursor-pointer group gap-3',
+                          'flex items-center justify-between px-4 py-3 rounded-2xl border transition-all duration-150 cursor-pointer group gap-3 active:scale-[0.97] active:opacity-75',
                           isDone
                             ? 'bg-casa-surface-subtle/50 border-casa-border/30 opacity-60'
                             : 'bg-amber-500/8 hover:bg-amber-500/12 border-amber-500/25 shadow-2xs'
@@ -769,9 +779,19 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                   return (
                     <div
                       key={evt.id}
+                      role="button"
+                      tabIndex={0}
+                      data-tactile="true"
+                      data-calendar-event
                       onClick={() => onOpenEvent(evt)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          onOpenEvent(evt)
+                        }
+                      }}
                       className={cn(
-                        'flex items-center justify-between px-4 py-3 rounded-2xl border transition-all cursor-pointer group gap-3',
+                        'flex items-center justify-between px-4 py-3 rounded-2xl border transition-all duration-150 cursor-pointer group gap-3 active:scale-[0.97] active:opacity-75',
                         isNow
                           ? 'bg-emerald-500/8 hover:bg-emerald-500/12 border-emerald-500/30 ring-1 ring-emerald-500/20'
                           : 'bg-casa-bg/40 hover:bg-casa-surface border-casa-border/35 hover:border-casa-gold/40'
@@ -852,8 +872,18 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                       return (
                         <div
                           key={evt.id}
+                          role="button"
+                          tabIndex={0}
+                          data-tactile="true"
+                          data-calendar-event
                           onClick={() => onOpenEvent(evt)}
-                          className="flex items-center justify-between px-4 py-3 rounded-2xl border bg-casa-bg/40 hover:bg-casa-surface border-casa-border/35 hover:border-casa-gold/40 transition-all cursor-pointer group gap-3"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              onOpenEvent(evt)
+                            }
+                          }}
+                          className="flex items-center justify-between px-4 py-3 rounded-2xl border bg-casa-bg/40 hover:bg-casa-surface border-casa-border/35 hover:border-casa-gold/40 transition-all duration-150 cursor-pointer group gap-3 active:scale-[0.97] active:opacity-75"
                         >
                           <div className="flex items-center gap-2.5 min-w-0 flex-1">
                             <span className="font-mono text-body-sm font-semibold text-casa-navy shrink-0">
