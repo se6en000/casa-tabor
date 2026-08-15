@@ -80,6 +80,7 @@ export default function ActionQueueWidget({
   const [openSnoozeId, setOpenSnoozeId] = useState<string | null>(null)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [optimisticDismissedIds, setOptimisticDismissedIds] = useState<Set<string>>(new Set())
+  const [spotlightItemId, setSpotlightItemId] = useState<string | null>(null)
 
   // Instant 0ms client-side filter
   const visibleConflicts = useMemo(
@@ -91,6 +92,23 @@ export default function ActionQueueWidget({
     () => activePrep.filter((p) => !optimisticDismissedIds.has(`prep-${p.id}`)),
     [activePrep, optimisticDismissedIds]
   )
+
+  const { heroItem, microItems } = useMemo(() => {
+    if (visiblePrep.length === 0) {
+      return { heroItem: null, microItems: [] }
+    }
+    const spotlightIndex = spotlightItemId
+      ? visiblePrep.findIndex((p) => p.id === spotlightItemId)
+      : -1
+
+    if (spotlightIndex >= 0) {
+      const hero = visiblePrep[spotlightIndex]
+      const micro = visiblePrep.filter((_, idx) => idx !== spotlightIndex)
+      return { heroItem: hero, microItems: micro }
+    }
+
+    return { heroItem: visiblePrep[0], microItems: visiblePrep.slice(1) }
+  }, [visiblePrep, spotlightItemId])
 
   const totalUrgent = visibleConflicts.length
   const totalTasks = visiblePrep.length
@@ -385,191 +403,280 @@ export default function ActionQueueWidget({
           </div>
         )}
 
-        {/* ── SECTION 2: LUXURY UNIVERSAL CARDS ON SOLID CANVAS ── */}
+        {/* ── SECTION 2: PALM BEACH TRAVERTINE PLINTH & SPOTLIGHT FOCUS ── */}
         <div className="space-y-3.5">
           <AnimatePresence mode="popLayout">
-            {visiblePrep.map((item) => {
-              const badge = sourceBadge(item)
-              const BadgeIcon = badge.icon
-              const amount = extractAmount(item.description || item.event_title)
-              const doneLabel = resolveButtonLabel(item)
-              const isSnoozeOpen = openSnoozeId === item.id
-              const isMenuOpen = openMenuId === item.id
+            {heroItem && (
+              (() => {
+                const heroBadge = sourceBadge(heroItem)
+                const HeroBadgeIcon = heroBadge.icon
+                const heroAmount = extractAmount(heroItem.description || heroItem.event_title)
+                const heroDoneLabel = resolveButtonLabel(heroItem)
+                const isHeroSnoozeOpen = openSnoozeId === heroItem.id
+                const isHeroMenuOpen = openMenuId === heroItem.id
 
-              return (
-                <motion.article
-                  key={item.id}
-                  layout
-                  initial={{ opacity: 0, y: 12, scale: 0.98 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{
-                    opacity: 0,
-                    x: 90,
-                    scale: 0.94,
-                    transition: { duration: 0.22, ease: [0.32, 0.72, 0, 1] },
-                  }}
-                  transition={{
-                    layout: { duration: 0.28, ease: [0.25, 1, 0.5, 1] },
-                  }}
-                  className="p-5 rounded-2xl bg-casa-surface border border-casa-border/90 hover:border-casa-gold/60 transition-all shadow-card hover:shadow-card-hover flex flex-col gap-3.5 relative"
-                >
-                  {/* ── Top Context & Category Strip ── */}
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="inline-flex items-center gap-1.5 text-caption font-semibold px-3 py-1 rounded-full bg-casa-accent-subtle text-casa-top-pick-band border border-casa-accent-subtle-border tracking-wide">
-                      <BadgeIcon size={12} className="text-casa-gold shrink-0" />
-                      <span>{badge.label}</span>
-                    </span>
-
-                    <div className="flex items-center gap-2.5">
-                      {item.due_by ? (
-                        <span className="text-caption text-casa-error font-mono font-semibold flex items-center gap-1">
-                          <span>Due Today</span>
+                return (
+                  <motion.article
+                    key={heroItem.id}
+                    layout
+                    initial={{ opacity: 0, y: 12, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{
+                      opacity: 0,
+                      x: 90,
+                      scale: 0.94,
+                      transition: { duration: 0.22, ease: [0.32, 0.72, 0, 1] },
+                    }}
+                    transition={{
+                      layout: { duration: 0.28, ease: [0.25, 1, 0.5, 1] },
+                    }}
+                    className="p-5 sm:p-6 rounded-3xl bg-casa-surface border border-casa-gold/40 hover:border-casa-gold/70 transition-all shadow-card flex flex-col gap-4 relative overflow-hidden before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1.5 before:bg-casa-gold before:rounded-l-3xl"
+                  >
+                    {/* ── Top Context & Category Strip ── */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="inline-flex items-center gap-1.5 text-caption font-semibold px-3 py-1 rounded-full bg-casa-accent-subtle text-casa-top-pick-band border border-casa-accent-subtle-border tracking-wide">
+                          <HeroBadgeIcon size={12} className="text-casa-gold shrink-0" />
+                          <span>{heroBadge.label}</span>
                         </span>
-                      ) : (
-                        <span className="text-caption text-casa-muted font-mono">
-                          Receipt Match
+                        <span className="inline-flex items-center gap-1 text-caption font-semibold px-2.5 py-1 rounded-full bg-casa-gold/15 text-casa-top-pick-band border border-casa-gold/30">
+                          <Sparkles size={11} className="text-casa-gold" />
+                          <span>Priority Focus</span>
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2.5">
+                        {heroItem.due_by ? (
+                          <span className="text-caption text-casa-error font-semibold px-2.5 py-1 rounded-full bg-rose-50 border border-rose-200/80">
+                            Due Today
+                          </span>
+                        ) : (
+                          <span className="text-caption text-casa-muted font-mono font-medium">
+                            Receipt Match
+                          </span>
+                        )}
+
+                        <div className="relative">
+                          <IconButton
+                            variant="ghost"
+                            size="sm"
+                            aria-label="Options"
+                            title="Options"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setOpenMenuId(isHeroMenuOpen ? null : heroItem.id)
+                            }}
+                            className="text-casa-muted hover:text-casa-navy transition-colors opacity-70 hover:opacity-100 min-h-[36px] min-w-[36px]"
+                            icon={<ExternalLink size={14} />}
+                          />
+
+                          {/* Overflow / Downvote Menu */}
+                          {isHeroMenuOpen && (
+                            <div className="absolute right-0 top-full mt-1 w-44 bg-casa-surface rounded-xl border border-casa-border shadow-modal p-1.5 z-40 flex flex-col gap-1 animate-in fade-in zoom-in-95 duration-150">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                align="start"
+                                onClick={() => onInstantDownvote(heroItem)}
+                                className="w-full text-caption text-casa-error hover:bg-rose-50 transition-colors font-medium min-h-[38px]"
+                                leadingIcon={<ThumbsDown size={13} />}
+                              >
+                                <span>Mark Not Relevant</span>
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* ── Synthesized Content Body ── */}
+                    <div className="min-w-0 flex flex-col gap-1.5 pl-0.5">
+                      <h4 className="font-body text-body sm:text-body-lg font-bold text-casa-navy leading-snug">
+                        {heroItem.description || heroItem.event_title || 'Prep Item'}
+                      </h4>
+                      {heroAmount && (
+                        <span className="font-mono text-title-sm font-bold text-casa-navy mt-0.5 inline-flex items-center gap-1.5 text-casa-gold-hover">
+                          {heroAmount}
                         </span>
                       )}
+                    </div>
 
-                      <div className="relative">
-                        <IconButton
-                          variant="ghost"
+                    {/* ── Universal 2-Anchor Footer: [ Done ] vs [ Snooze ▾ ] ── */}
+                    <div className="pt-3.5 border-t border-casa-border/60 flex items-center justify-between gap-3 flex-wrap sm:flex-nowrap">
+                      {/* Primary Anchor 1: Done (Navy strong action with guaranteed white text) */}
+                      <Button
+                        size="sm"
+                        variant="strong"
+                        onClick={() => onInstantComplete(heroItem)}
+                        className="px-5 py-2.5 rounded-full min-h-[48px] text-body-sm font-bold shadow-card flex items-center gap-2 shrink-0 hover:brightness-110"
+                        leadingIcon={<Check size={16} strokeWidth={2.5} className="text-emerald-400" />}
+                      >
+                        <span>{heroDoneLabel}</span>
+                      </Button>
+
+                      {/* Primary Anchor 2: Split Snooze Pill with Expandable Presets */}
+                      <div className="inline-flex items-stretch rounded-full bg-casa-surface border border-casa-border hover:border-casa-gold transition-all shadow-xs shrink-0">
+                        <Button
                           size="sm"
-                          aria-label="Options"
-                          title="Options"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setOpenMenuId(isMenuOpen ? null : item.id)
-                          }}
-                          className="text-casa-muted hover:text-casa-navy transition-colors opacity-70 hover:opacity-100 min-h-[32px] min-w-[32px]"
-                          icon={<ExternalLink size={13} />}
-                        />
+                          variant="ghost"
+                          onClick={() => onInstantSnooze(heroItem, 'tomorrow')}
+                          className="px-4 py-2 text-body-sm font-semibold text-casa-navy hover:text-casa-gold-hover transition-colors min-h-[48px] rounded-l-full rounded-r-none border-none flex items-center gap-2"
+                          title="Snooze to tomorrow morning"
+                          leadingIcon={<Clock size={14} className="text-casa-gold" />}
+                        >
+                          <span>Snooze Tomorrow</span>
+                        </Button>
 
-                        {/* Discreet Overflow / Downvote Menu */}
-                        {isMenuOpen && (
-                          <div className="absolute right-0 top-full mt-1 w-44 bg-casa-surface rounded-xl border border-casa-border shadow-modal p-1.5 z-40 flex flex-col gap-1 animate-in fade-in zoom-in-95 duration-150">
+                        <IconButton
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setOpenSnoozeId(isHeroSnoozeOpen ? null : heroItem.id)}
+                          aria-label="More snooze options"
+                          title="More snooze options"
+                          className="px-3 border-l border-casa-border/70 text-casa-muted hover:text-casa-navy hover:bg-casa-gold/10 transition-colors rounded-r-full rounded-l-none min-h-[48px] min-w-[40px]"
+                          icon={
+                            <ChevronDown
+                              size={15}
+                              className={cn('transition-transform duration-200', isHeroSnoozeOpen && 'rotate-180')}
+                            />
+                          }
+                        />
+                      </div>
+                    </div>
+
+                    {/* ── In-Flow Expandable Snooze Presets ── */}
+                    <AnimatePresence>
+                      {isHeroSnoozeOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+                          className="overflow-hidden"
+                        >
+                          <div className="pt-2.5 mt-1 border-t border-dashed border-casa-border/60 grid grid-cols-1 sm:grid-cols-3 gap-1.5">
                             <Button
                               variant="ghost"
                               size="sm"
                               align="start"
-                              onClick={() => onInstantDownvote(item)}
-                              className="w-full text-caption text-casa-error hover:bg-rose-50 transition-colors font-medium min-h-[38px]"
-                              leadingIcon={<ThumbsDown size={13} />}
+                              onClick={() => onInstantSnooze(heroItem, '3h')}
+                              className="w-full px-3 py-2 rounded-xl bg-casa-surface hover:bg-casa-gold/15 border border-casa-border/70 text-caption text-casa-navy transition-colors font-medium min-h-[40px]"
+                              leadingIcon={<Moon size={13} className="text-casa-gold" />}
                             >
-                              <span>Mark Not Relevant</span>
+                              <span className="flex-1 text-left text-caption font-semibold">Tonight (+3h)</span>
+                            </Button>
+
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              align="start"
+                              onClick={() => onInstantSnooze(heroItem, 'tomorrow')}
+                              className="w-full px-3 py-2 rounded-xl bg-casa-surface hover:bg-casa-gold/15 border border-casa-border/70 text-caption text-casa-navy transition-colors font-medium min-h-[40px]"
+                              leadingIcon={<Sun size={13} className="text-casa-gold" />}
+                            >
+                              <span className="flex-1 text-left text-caption font-semibold">Tomorrow (9 AM)</span>
+                            </Button>
+
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              align="start"
+                              onClick={() => onInstantPush(heroItem, 'weekend')}
+                              className="w-full px-3 py-2 rounded-xl bg-casa-surface hover:bg-casa-gold/15 border border-casa-border/70 text-caption text-casa-navy transition-colors font-medium min-h-[40px]"
+                              leadingIcon={<Calendar size={13} className="text-casa-gold" />}
+                            >
+                              <span className="flex-1 text-left text-caption font-semibold">This Weekend</span>
                             </Button>
                           </div>
-                        )}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </motion.article>
+                )
+              })()
+            )}
+          </AnimatePresence>
+
+          {/* ── QUIET MINIMALIST MICRO-QUEUE: Subsequent Matters ── */}
+          {microItems.length > 0 && (
+            <div className="p-4 sm:p-5 rounded-3xl bg-casa-surface border border-casa-border/80 shadow-sm space-y-2">
+              <div className="flex items-center justify-between pb-2 border-b border-casa-border/50">
+                <span className="text-caption font-bold uppercase tracking-wider text-casa-muted">
+                  Queued Household Matters ({microItems.length})
+                </span>
+                <span className="text-caption text-casa-gold font-medium">
+                  Tap row to focus
+                </span>
+              </div>
+
+              <div className="divide-y divide-casa-border/40">
+                {microItems.map((item) => {
+                  const badge = sourceBadge(item)
+                  const BadgeIcon = badge.icon
+                  const amount = extractAmount(item.description || item.event_title)
+
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => setSpotlightItemId(item.id)}
+                      className="py-3 px-3 -mx-1.5 rounded-xl flex items-start justify-between gap-3 group cursor-pointer hover:bg-casa-bg/80 border border-transparent hover:border-casa-border/60 transition-all"
+                    >
+                      <div className="flex items-start gap-3 min-w-0 flex-1">
+                        <IconButton
+                          variant="secondary"
+                          size="sm"
+                          aria-label={`Mark ${item.description || item.event_title || 'item'} done`}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onInstantComplete(item)
+                          }}
+                          className="min-w-[44px] min-h-[44px] rounded-full border border-casa-border hover:border-casa-gold hover:bg-casa-bg flex items-center justify-center text-casa-muted hover:text-casa-gold shrink-0 transition-all shadow-2xs group-hover:border-casa-gold/60 mt-0.5"
+                          icon={<Check size={16} strokeWidth={2.5} />}
+                        />
+
+                        <div className="min-w-0 flex-1 pt-0.5">
+                          <div className="text-body-sm font-semibold text-casa-navy line-clamp-3 leading-snug break-words">
+                            {item.description || item.event_title}
+                          </div>
+                          <div className="flex items-center gap-2 text-caption text-casa-muted mt-1 flex-wrap">
+                            <span className="inline-flex items-center gap-1">
+                              <BadgeIcon size={12} className="text-casa-gold shrink-0" />
+                              <span>{badge.label}</span>
+                            </span>
+                            <span>·</span>
+                            <span className="text-casa-error font-medium">
+                              {item.due_by ? 'Due Today' : 'Receipt Match'}
+                            </span>
+                            {amount && (
+                              <>
+                                <span>·</span>
+                                <span className="font-mono font-bold text-casa-navy">{amount}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1 shrink-0 pt-0.5">
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onInstantSnooze(item, 'tomorrow')
+                          }}
+                          className="px-3 py-1.5 text-caption font-semibold text-casa-navy hover:bg-casa-bg border border-casa-border/70 rounded-full min-h-[40px] flex items-center gap-1.5 shadow-2xs"
+                          leadingIcon={<Clock size={12} className="text-casa-gold" />}
+                        >
+                          <span>Snooze</span>
+                        </Button>
                       </div>
                     </div>
-                  </div>
-
-                  {/* ── Synthesized Content Body ── */}
-                  <div className="min-w-0 flex flex-col gap-1">
-                    <h4 className="font-body text-body-sm font-bold text-casa-navy leading-snug">
-                      {item.description || item.event_title || 'Prep Item'}
-                    </h4>
-                    {amount && (
-                      <span className="font-mono text-body font-bold text-casa-navy mt-0.5">
-                        {amount}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* ── Universal 2-Anchor Footer: [ Done ] vs [ Snooze ▾ ] ── */}
-                  <div className="pt-3 border-t border-casa-border/50 flex items-center justify-between gap-2.5 flex-nowrap">
-                    {/* Primary Anchor 1: Done (Clean, light, high-contrast readable pill) */}
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => onInstantComplete(item)}
-                      className="px-3.5 sm:px-4 py-1.5 rounded-full bg-casa-bg hover:bg-emerald-50 text-casa-navy hover:text-emerald-950 border border-casa-border hover:border-emerald-500/80 text-caption font-bold shadow-2xs transition-all min-h-[38px] shrink-0"
-                      leadingIcon={<Check size={14} strokeWidth={2.5} className="text-emerald-600" />}
-                    >
-                      <span>{doneLabel}</span>
-                    </Button>
-
-                    {/* Primary Anchor 2: Split Snooze Pill with Expandable Presets */}
-                    <div className="inline-flex items-stretch rounded-full bg-casa-bg border border-casa-border hover:border-casa-gold/80 transition-all shadow-2xs shrink-0">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => onInstantSnooze(item, 'tomorrow')}
-                        className="px-3 sm:px-3.5 py-1.5 text-caption font-semibold text-casa-navy hover:text-casa-gold-hover transition-colors min-h-[38px] rounded-l-full rounded-r-none border-none"
-                        title="Snooze to tomorrow morning"
-                        leadingIcon={<Clock size={13} className="text-casa-gold" />}
-                      >
-                        <span>Snooze Tomorrow</span>
-                      </Button>
-
-                      <IconButton
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setOpenSnoozeId(isSnoozeOpen ? null : item.id)}
-                        aria-label="More snooze options"
-                        title="More snooze options"
-                        className="px-2 border-l border-casa-border/70 text-casa-muted hover:text-casa-navy hover:bg-casa-gold/10 transition-colors rounded-r-full rounded-l-none min-h-[38px] min-w-[34px]"
-                        icon={
-                          <ChevronDown
-                            size={13}
-                            className={cn('transition-transform duration-200', isSnoozeOpen && 'rotate-180')}
-                          />
-                        }
-                      />
-                    </div>
-                  </div>
-
-                  {/* ── In-Flow Expandable Snooze Presets (Zero Clipping, Zero Overflow) ── */}
-                  <AnimatePresence>
-                    {isSnoozeOpen && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
-                        transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
-                        className="overflow-hidden"
-                      >
-                        <div className="pt-2.5 mt-1 border-t border-dashed border-casa-border/60 grid grid-cols-1 sm:grid-cols-3 gap-1.5">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            align="start"
-                            onClick={() => onInstantSnooze(item, '3h')}
-                            className="w-full px-2.5 py-1.5 rounded-xl bg-casa-bg hover:bg-casa-gold/15 border border-casa-border/60 text-caption text-casa-navy transition-colors font-medium min-h-[36px]"
-                            leadingIcon={<Moon size={13} className="text-casa-gold" />}
-                          >
-                            <span className="flex-1 text-left text-2xs sm:text-caption">Tonight (+3h)</span>
-                          </Button>
-
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            align="start"
-                            onClick={() => onInstantSnooze(item, 'tomorrow')}
-                            className="w-full px-2.5 py-1.5 rounded-xl bg-casa-bg hover:bg-casa-gold/15 border border-casa-border/60 text-caption text-casa-navy transition-colors font-medium min-h-[36px]"
-                            leadingIcon={<Sun size={13} className="text-casa-gold" />}
-                          >
-                            <span className="flex-1 text-left text-2xs sm:text-caption">Tomorrow (9 AM)</span>
-                          </Button>
-
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            align="start"
-                            onClick={() => onInstantPush(item, 'weekend')}
-                            className="w-full px-2.5 py-1.5 rounded-xl bg-casa-bg hover:bg-casa-gold/15 border border-casa-border/60 text-caption text-casa-navy transition-colors font-medium min-h-[36px]"
-                            leadingIcon={<Calendar size={13} className="text-casa-gold" />}
-                          >
-                            <span className="flex-1 text-left text-2xs sm:text-caption">This Weekend</span>
-                          </Button>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </motion.article>
-              )
-            })}
-          </AnimatePresence>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
           {visiblePrep.length === 0 && visibleConflicts.length === 0 && (
             <div className="flex flex-col items-center justify-center h-48 text-center p-6 bg-emerald-50/50 rounded-2xl border border-emerald-200">

@@ -146,7 +146,7 @@ export default function NowAndNextWidget({
       </div>
 
       {/* ── Scrollable Schedule Stream ── */}
-      <div className="flex-1 overflow-y-auto pr-1 space-y-2.5 min-h-0 touch-pan-y overscroll-contain">
+      <div className="flex-1 overflow-y-auto px-1.5 py-1 space-y-2.5 min-h-0 touch-pan-y overscroll-contain">
         {activeDayTab === 'today' ? (
           <>
             {/* Collapsed Past Events Toggle */}

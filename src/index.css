@@ -353,15 +353,24 @@ button:active, a:active, [role="button"]:active {
 /* High-emphasis action foregrounds are component contracts, not utility
    combinations. The descendant rule prevents nested label/icon styles from
    weakening contrast on theme-customized touch surfaces. */
-.casa-action-primary,
-.casa-action-primary > span,
-.casa-action-primary svg {
+.casa-action-primary:not(.bg-casa-navy):not([class*="bg-casa-navy"]):not(.text-white):not([class*="text-white"]),
+.casa-action-primary:not(.bg-casa-navy):not([class*="bg-casa-navy"]):not(.text-white):not([class*="text-white"]) > span,
+.casa-action-primary:not(.bg-casa-navy):not([class*="bg-casa-navy"]):not(.text-white):not([class*="text-white"]) svg {
   color: var(--color-casa-navy) !important;
 }
 
 .casa-action-strong,
 .casa-action-strong > span,
-.casa-action-strong svg {
+.casa-action-strong svg,
+button.bg-casa-navy,
+button.bg-casa-navy > span,
+button.bg-casa-navy svg,
+button[class*="bg-casa-navy"],
+button[class*="bg-casa-navy"] > span,
+button[class*="bg-casa-navy"] svg,
+[role="button"].bg-casa-navy,
+[role="button"].bg-casa-navy > span,
+[role="button"][class*="bg-casa-navy"] {
   color: var(--color-casa-on-dark) !important;
 }
 

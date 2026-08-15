@@ -161,7 +161,7 @@ export function DayEventCard({
           <div
             className={cn(
               'relative w-full overflow-hidden rounded-xl border border-amber-300/60 bg-amber-50/40 shadow-xs transition-all duration-200 min-h-[38px] px-3 py-1.5 flex items-center justify-between gap-2 border-l-4 border-l-amber-400 opacity-45 hover:opacity-85',
-              isHighlighted && 'border-amber-400 ring-2 ring-casa-gold shadow-card-hover',
+              isHighlighted && 'border-amber-400 ring-2 ring-inset ring-casa-gold shadow-card-hover',
               className
             )}
           >
@@ -213,7 +213,7 @@ export function DayEventCard({
       >
         <div className={cn(
           'relative w-full overflow-hidden rounded-widget border bg-amber-50/40 shadow-card grid grid-cols-1 sm:grid-cols-[125px_1fr] md:grid-cols-[135px_1fr] transition-all',
-          isHighlighted ? 'border-amber-400 ring-2 ring-casa-gold shadow-card-hover' : 'border-casa-gold/30',
+          isHighlighted ? 'border-amber-400 ring-2 ring-inset ring-casa-gold shadow-card-hover' : 'border-casa-gold/30',
           className
         )}>
           {/* Left Pillar: Sand/Amber Time Block */}
@@ -309,7 +309,7 @@ export function DayEventCard({
         <div
           className={cn(
             'relative w-full min-w-0 overflow-hidden rounded-xl border border-casa-border/60 bg-casa-surface/90 shadow-xs transition-all duration-200 min-h-[38px] px-3 py-1.5 flex items-center justify-between gap-2.5 border-l-4 opacity-45 hover:opacity-85',
-            isHighlighted ? 'border-casa-navy ring-2 ring-casa-gold shadow-card-hover' : 'hover:border-casa-gold/60',
+            isHighlighted ? 'border-casa-navy ring-2 ring-inset ring-casa-gold shadow-card-hover' : 'hover:border-casa-gold/60',
             className
           )}
           style={{ borderLeftColor: eventColor(event) }}
@@ -408,7 +408,7 @@ export function DayEventCard({
         'relative w-full min-w-0 overflow-hidden rounded-widget border shadow-card hover:shadow-card-hover transition-all duration-200',
         'grid grid-cols-1 sm:grid-cols-[125px_1fr] md:grid-cols-[135px_1fr] xl:grid-cols-[140px_1fr]',
         isBirthday ? 'bg-gradient-to-br from-casa-accent-subtle via-casa-surface to-casa-bg' : 'bg-casa-surface',
-        isHighlighted ? 'border-casa-navy ring-2 ring-casa-gold shadow-card-hover' : 'border-casa-border/60 hover:border-casa-navy/60',
+        isHighlighted ? 'border-casa-navy ring-2 ring-inset ring-casa-gold shadow-card-hover' : 'border-casa-border/60 hover:border-casa-navy/60',
         className
       )}>
         {isBirthday && <BirthdayCardDecoration />}
