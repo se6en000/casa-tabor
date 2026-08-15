@@ -21,6 +21,9 @@ export function useAppUpdater() {
   const reloadingRef = useRef(false)
 
   useEffect(() => {
+    // In local development, never poll or auto-reload on version checks
+    if (import.meta.env.DEV) return
+
     const runningVersion = typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : null
 
     const isBusy = () => {

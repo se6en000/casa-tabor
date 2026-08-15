@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { format, isAfter, isBefore } from 'date-fns'
 import {
   Sparkles,
@@ -373,7 +374,15 @@ function UtilityTrack({
 }) {
   const navigate = useNavigate()
   const location = useLocation()
+  const queryClient = useQueryClient()
+  const [isSpinning, setIsSpinning] = useState(false)
   const isSettings = location.pathname.startsWith('/settings')
+
+  const handleRefresh = async () => {
+    setIsSpinning(true)
+    await queryClient.invalidateQueries()
+    setTimeout(() => setIsSpinning(false), 600)
+  }
 
   const iconCn = (isActive = false) =>
     cn(
@@ -398,10 +407,10 @@ function UtilityTrack({
     >
       {/* Refresh Screen */}
       <IconButton
-        icon={<RefreshCw size={14} strokeWidth={1.8} />}
-        aria-label="Refresh Screen"
-        onClick={() => window.location.reload()}
-        title="Refresh Screen"
+        icon={<RefreshCw size={14} strokeWidth={1.8} className={cn('transition-transform', isSpinning && 'animate-spin')} />}
+        aria-label="Refresh Data"
+        onClick={handleRefresh}
+        title="Refresh Data"
         size="sm"
         variant="ghost"
         className={iconCn(false)}

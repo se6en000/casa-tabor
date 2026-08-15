@@ -352,19 +352,24 @@
 
     <!-- Concept Tabs -->
     <div class="concept-select-bar">
-      <button class="concept-btn active" onclick="loadConcept('action-queue-concierge.html', 'Concept 1: The Private Concierge', 'Bespoke archetype cards with prominent currency/child metadata, high-touch primary CTA buttons, and clean progressive disclosure snooze.', this)">
+      <button class="concept-btn active" onclick="loadConcept('action-queue-universal-triage.html', '⭐ Universal Triage: Done vs. Snooze', 'Universal 2-anchor design: every arbitrary household task gets a clean [Done] and [Snooze ▾] loop with zero button spam.', this)">
+        <i data-lucide="check-check" style="width: 14px; height: 14px;"></i>
+        ⭐ Universal Triage
+      </button>
+
+      <button class="concept-btn" onclick="loadConcept('action-queue-concierge.html', 'Concept 1: The Private Concierge', 'Bespoke archetype cards with prominent currency/child metadata, high-touch primary CTA buttons, and clean progressive disclosure snooze.', this)">
         <i data-lucide="sparkles" style="width: 14px; height: 14px;"></i>
-        1. Private Concierge
+        1. Concierge
       </button>
 
       <button class="concept-btn" onclick="loadConcept('action-queue-editorial.html', 'Concept 2: The Editorial Ledger', 'Quiet luxury architectural style with borderless rows, hairline dividers, Cormorant Garamond headings, and minimal champagne checks.', this)">
         <i data-lucide="book-open" style="width: 14px; height: 14px;"></i>
-        2. Editorial Ledger
+        2. Ledger
       </button>
 
       <button class="concept-btn" onclick="loadConcept('action-queue-horizon.html', 'Concept 3: Priority Horizon', 'Executive nightly briefing with split urgency zones (urgent approvals & payments spotlight vs compact daily stream).', this)">
         <i data-lucide="layout-grid" style="width: 14px; height: 14px;"></i>
-        3. Priority Horizon
+        3. Horizon
       </button>
     </div>
 
@@ -382,7 +387,7 @@
         <i data-lucide="smartphone" style="width: 14px; height: 14px;"></i>
         Mobile
       </button>
-      <a href="action-queue-concierge.html" target="_blank" class="popout-link" id="popout-btn">
+      <a href="action-queue-universal-triage.html" target="_blank" class="popout-link" id="popout-btn">
         <i data-lucide="external-link" style="width: 13px; height: 13px;"></i>
         Open Standalone
       </a>
@@ -391,16 +396,16 @@
 
   <!-- Info Bar -->
   <div class="concept-info-bar">
-    <div class="concept-pill-badge" id="info-badge">Concept 1: The Private Concierge</div>
+    <div class="concept-pill-badge" id="info-badge">⭐ Universal Triage: Done vs. Snooze</div>
     <div class="concept-desc-text" id="info-desc">
-      Bespoke archetype cards with prominent currency/child metadata, high-touch primary CTA buttons, and clean progressive disclosure snooze.
+      Universal 2-anchor design: every arbitrary household task gets a clean [Done] and [Snooze ▾] loop with zero button spam.
     </div>
   </div>
 
   <!-- Interactive Stage -->
   <main class="stage-wrapper">
     <div class="mockup-frame-container viewport-kiosk" id="mockup-frame-box">
-      <iframe src="action-queue-concierge.html" class="mockup-iframe" id="active-mockup-iframe"></iframe>
+      <iframe src="action-queue-universal-triage.html" class="mockup-iframe" id="active-mockup-iframe"></iframe>
     </div>
   </main>
 
@@ -412,6 +417,20 @@
     </h2>
 
     <div class="cards-grid">
+      <!-- Universal Triage Card -->
+      <a href="action-queue-universal-triage.html" target="_blank" class="concept-card-link" style="border-color: var(--color-gold); background: rgba(201, 169, 110, 0.08);">
+        <h3>
+          ⭐ Universal Done vs. Snooze Triage
+          <i data-lucide="arrow-up-right" style="width: 16px; height: 16px;"></i>
+        </h3>
+        <p>Built for real-world chaotic household items. Standardizes every task to a 2-anchor [Done] and [Snooze ▾] loop with gesture & focus deck modes.</p>
+        <div class="concept-card-tags">
+          <span class="mini-tag">Executive 2-Anchor</span>
+          <span class="mini-tag">Swipe Deck</span>
+          <span class="mini-tag">30s Focus Queue</span>
+        </div>
+      </a>
+
       <!-- Card 1 -->
       <a href="action-queue-concierge.html" target="_blank" class="concept-card-link">
         <h3>
