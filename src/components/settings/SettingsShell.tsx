@@ -3,11 +3,12 @@ import { useEffect, useRef } from 'react'
 import {
   Users, Sun, MessageSquare, Bot, Home, Activity,
   BookmarkCheck, Layers, ChevronRight, Music2, LineChart, Bug, Brain,
-  Palette, ShoppingCart, Lock, LayoutGrid,
+  Palette, ShoppingCart, Lock, LayoutGrid, ChevronLeft,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import BounceScroll from '../shared/BounceScroll'
 import { Button, Heading, MasterDetailLayout, Text } from '../ui'
+import MobileSettingsHome from '../mobile/MobileSettingsHome'
 
 // ── Nav structure ──────────────────────────────────────────────────────────
 
@@ -71,14 +72,13 @@ export default function SettingsShell() {
   const navigate = useNavigate()
   const tabsRef = useRef<HTMLDivElement>(null)
 
-  // On mobile: are we looking at the list or a detail page?
+  // On mobile: are we looking at the root list or a detail page?
   const isRoot = location.pathname === '/settings'
 
-  // Redirect /settings → first item on desktop (no-op on mobile since we show list)
+  // Redirect /settings → first item on desktop (no-op on mobile since we show MobileSettingsHome)
   useEffect(() => {
     if (location.pathname === '/settings') {
-      // Only auto-navigate on wider screens
-      if (window.innerWidth >= 768) {
+      if (window.innerWidth >= 1024) {
         navigate('/settings/display', { replace: true })
       }
     }
@@ -98,7 +98,6 @@ export default function SettingsShell() {
     
     if (!activeButton) return
 
-    // Check if button is already visible in the scroll container
     const container = tabsRef.current
     const buttonLeft = activeButton.offsetLeft
     const buttonRight = buttonLeft + activeButton.offsetWidth
@@ -109,7 +108,6 @@ export default function SettingsShell() {
       buttonLeft >= containerScrollLeft && 
       buttonRight <= containerScrollLeft + containerWidth
 
-    // Only scroll if button is NOT fully visible
     if (!isVisible) {
       activeButton.scrollIntoView({
         behavior: 'smooth',
@@ -125,90 +123,106 @@ export default function SettingsShell() {
       showDetailOnMobile={!isRoot}
       master={(
         <>
-        {/* Sidebar header */}
-        <div className="px-5 py-5 border-b border-casa-border flex-shrink-0">
-          <Heading role="display-sm">Settings</Heading>
-        </div>
+          {/* ── Mobile Dedicated Settings Hub (< md) ── */}
+          <div className="md:hidden w-full h-full overflow-y-auto">
+            <MobileSettingsHome />
+          </div>
 
-        {/* Nav groups */}
-        <BounceScroll className="flex-1">
-          <nav className="px-3 py-3 space-y-5">
-            {NAV_GROUPS.map(group => (
-              <div key={group.label}>
-                <p className="text-caption font-bold text-casa-muted uppercase tracking-widest px-2 mb-1.5">
-                  {group.label}
-                </p>
-                <ul className="space-y-0.5">
-                  {group.items.map(item => (
-                    <li key={item.to}>
-                      <NavLink
-                        to={item.to}
-                        className={({ isActive }) => cn(
-                          'flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors group',
-                          isActive
-                            ? 'bg-casa-gold/10 text-casa-gold'
-                            : 'text-casa-navy hover:bg-casa-bg'
-                        )}
-                      >
-                        {({ isActive }) => (
-                          <>
-                            <item.icon size={16} className={cn('flex-shrink-0', isActive ? 'text-casa-gold' : 'text-casa-muted group-hover:text-casa-navy')} />
-                            <div className="flex-1 min-w-0">
-                              <Text role="body-sm" className="font-medium leading-none">{item.label}</Text>
-                              <Text role="caption" muted className="mt-0.5 md:block truncate hidden">{item.desc}</Text>
-                            </div>
-                            <ChevronRight size={14} className="md:hidden text-casa-muted flex-shrink-0" />
-                          </>
-                        )}
-                      </NavLink>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </nav>
-        </BounceScroll>
+          {/* ── Desktop Settings Sidebar (>= md) ── */}
+          <div className="hidden md:flex flex-col h-full">
+            <div className="px-5 py-5 border-b border-casa-border flex-shrink-0">
+              <Heading role="display-sm">Settings</Heading>
+            </div>
+
+            <BounceScroll className="flex-1">
+              <nav className="px-3 py-3 space-y-5">
+                {NAV_GROUPS.map(group => (
+                  <div key={group.label}>
+                    <p className="text-caption font-bold text-casa-muted uppercase tracking-widest px-2 mb-1.5">
+                      {group.label}
+                    </p>
+                    <ul className="space-y-0.5">
+                      {group.items.map(item => (
+                        <li key={item.to}>
+                          <NavLink
+                            to={item.to}
+                            className={({ isActive }) => cn(
+                              'flex items-center gap-3 px-3 py-2.5 rounded-lg min-h-control transition-colors group',
+                              isActive
+                                ? 'bg-casa-gold/10 text-casa-gold'
+                                : 'text-casa-navy hover:bg-casa-bg'
+                            )}
+                          >
+                            {({ isActive }) => (
+                              <>
+                                <item.icon size={16} className={cn('flex-shrink-0', isActive ? 'text-casa-gold' : 'text-casa-muted group-hover:text-casa-navy')} />
+                                <div className="flex-1 min-w-0">
+                                  <Text role="body-sm" className="font-medium leading-none">{item.label}</Text>
+                                  <Text role="caption" muted className="mt-0.5 md:block truncate hidden">{item.desc}</Text>
+                                </div>
+                                <ChevronRight size={14} className="md:hidden text-casa-muted flex-shrink-0" />
+                              </>
+                            )}
+                          </NavLink>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </nav>
+            </BounceScroll>
+          </div>
         </>
       )}
       detail={(
         <>
-        {/* Mobile horizontal tabs (replaces back button + menu) */}
-        <div className="md:hidden border-b border-casa-border bg-casa-surface flex-shrink-0">
-          {/* Tabs header */}
-          <div className="px-4 py-3 flex items-center justify-between border-b border-casa-border/50">
-            <h2 className="font-semibold text-body-sm text-casa-navy">Settings</h2>
+          {/* ── Mobile subpage header with Back button ── */}
+          <div className="md:hidden border-b border-casa-border bg-casa-surface flex-shrink-0">
+            <div className="px-3 py-2.5 flex items-center justify-between">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate('/settings')}
+                leadingIcon={<ChevronLeft size={18} />}
+                className="font-bold text-caption text-casa-gold"
+              >
+                Household Settings
+              </Button>
+              <span className="text-caption font-semibold text-casa-navy truncate pr-2">
+                {activeItem?.label || 'Settings'}
+              </span>
+            </div>
+            
+            {/* Scrollable tabs */}
+            <div
+              ref={tabsRef}
+              className="overflow-x-auto scroll-smooth scrollbar-hide flex settings-tabs border-t border-casa-border/40"
+            >
+              {ALL_ITEMS.map((item) => (
+                <Button
+                  key={item.to}
+                  data-path={item.to}
+                  variant="ghost"
+                  onClick={() => navigate(item.to)}
+                  className={cn(
+                    'min-h-[36px] px-3 py-2 text-caption font-medium whitespace-nowrap flex-shrink-0 transition-all outline-none',
+                    activeItem?.to === item.to
+                      ? 'bg-casa-gold/15 text-casa-gold font-bold rounded-lg'
+                      : 'text-casa-muted hover:text-casa-navy'
+                  )}
+                >
+                  {item.label}
+                </Button>
+              ))}
+            </div>
           </div>
           
-          {/* Scrollable tabs */}
-          <div
-            ref={tabsRef}
-            className="overflow-x-auto scroll-smooth scrollbar-hide flex settings-tabs"
-          >
-            {ALL_ITEMS.map((item) => (
-              <Button
-                key={item.to}
-                data-path={item.to}
-                variant="ghost"
-                onClick={() => navigate(item.to)}
-                className={cn(
-                  'min-h-control px-4 py-3 text-body-sm font-medium whitespace-nowrap flex-shrink-0 border-b-2 transition-all outline-none focus-visible:ring-2 focus-visible:ring-casa-gold',
-                  activeItem?.to === item.to
-                    ? 'border-casa-navy bg-casa-bg text-casa-navy'
-                    : 'border-transparent text-casa-muted hover:text-casa-navy'
-                )}
-              >
-                {item.label}
-              </Button>
-            ))}
-          </div>
-        </div>
-        
-        {/* Page content */}
-        <BounceScroll className="flex-1">
-          <div className="settings-surface mx-auto w-full max-w-page-narrow px-page-gutter py-section-gap">
-            <Outlet />
-          </div>
-        </BounceScroll>
+          {/* Page content */}
+          <BounceScroll className="flex-1">
+            <div className="settings-surface mx-auto w-full max-w-page-narrow px-page-gutter py-section-gap pb-28">
+              <Outlet />
+            </div>
+          </BounceScroll>
         </>
       )}
     />

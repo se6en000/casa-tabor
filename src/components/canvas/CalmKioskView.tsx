@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { format, parseISO, differenceInMinutes } from 'date-fns'
+import { format, parseISO, differenceInMinutes, addDays } from 'date-fns'
 import {
   MapPin,
   Car,
@@ -45,6 +45,9 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
     nextEvent,
     pastEvents,
     upcomingAppointments,
+    tomorrowEvents,
+    isTodayDone,
+    firstTomorrowEvent,
     isEvening,
     isDinnerPast,
     totalAttentionCount,
@@ -140,7 +143,11 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
             )}
           >
             <Calendar size={14} />
-            <span>Schedule ({upcomingAppointments.length})</span>
+            <span>
+              {upcomingAppointments.length > 0
+                ? `Schedule (${upcomingAppointments.length})`
+                : `Tomorrow (${tomorrowEvents.length})`}
+            </span>
           </Button>
 
           <Button
@@ -391,10 +398,16 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                 <CheckCircle2 size={32} />
               </div>
               <h3 className="font-display text-heading font-bold text-white tracking-tight">
-                {isEvening ? 'Evening Wind-Down · Schedule Complete' : 'Schedule is Clear Today'}
+                {isEvening
+                  ? 'Evening Wind-Down · Schedule Complete'
+                  : isTodayDone && pastEvents.length > 0
+                  ? 'All Done for Today!'
+                  : 'Schedule is Clear Today'}
               </h3>
               <p className="text-body-sm text-white/70 max-w-md mt-2 leading-relaxed">
-                {isEvening
+                {firstTomorrowEvent
+                  ? `All scheduled events for today are finished. First up tomorrow: ${firstTomorrowEvent.title}${firstTomorrowEvent.all_day ? ' (All Day)' : ` at ${format(parseISO(firstTomorrowEvent.start_time), 'h:mm a')}`}.`
+                  : isEvening
                   ? 'All scheduled events for today are finished. Rest well & check tomorrow’s preview.'
                   : 'No upcoming events scheduled for today. Relax and enjoy your day!'}
               </p>
@@ -539,7 +552,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
             </div>
           )}
 
-          {/* 1. Today's Appointments & Reminders (Top) */}
+          {/* 1. Today's Appointments & Reminders (Top) / Tomorrow Preview */}
           <div className={cn(
             'rounded-3xl p-6 bg-casa-surface border border-casa-border/60 shadow-sm flex-col justify-start',
             mobileSubTab === 'schedule' ? 'flex' : 'hidden lg:flex'
@@ -547,19 +560,35 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-xl bg-casa-gold/20 text-casa-navy flex items-center justify-center font-bold">
-                  <Calendar size={18} className="text-casa-gold" />
+                  {upcomingAppointments.length > 0 ? (
+                    <Calendar size={18} className="text-casa-gold" />
+                  ) : (
+                    <Sparkles size={18} className="text-casa-gold" />
+                  )}
                 </div>
-                <h3 className="font-display text-body-lg font-bold text-casa-navy">
-                  Today's Appointments ({upcomingAppointments.length})
-                </h3>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-display text-body-lg font-bold text-casa-navy">
+                      {upcomingAppointments.length > 0
+                        ? `Today's Appointments (${upcomingAppointments.length})`
+                        : `Tomorrow's Preview (${tomorrowEvents.length})`}
+                    </h3>
+                    {upcomingAppointments.length === 0 && pastEvents.length > 0 && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-3xs font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-800 border border-emerald-500/25">
+                        <Check size={10} className="stroke-[3]" />
+                        <span>Done Today</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setCanvasSubmode('turbo')}
+                onClick={() => (upcomingAppointments.length > 0 ? setCanvasSubmode('turbo') : navigateTo('/calendar'))}
                 className="text-caption font-bold text-casa-gold hover:underline min-h-[44px] px-3"
               >
-                Expand All
+                {upcomingAppointments.length > 0 ? 'Expand All' : 'Full Calendar'}
               </Button>
             </div>
 
@@ -575,7 +604,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                   className="min-h-[36px] py-1.5 px-3 rounded-xl bg-casa-surface-subtle/80 hover:bg-casa-surface-subtle text-caption text-casa-muted hover:text-casa-navy border border-casa-border/30 transition-colors"
                 >
                   <span className="inline-flex items-center gap-2 font-medium">
-                    <CheckCircle2 size={13} className="text-casa-muted/80" />
+                    <CheckCircle2 size={13} className="text-emerald-600/80" />
                     <span>{pastEvents.length} completed earlier today</span>
                   </span>
                   {showPastEvents ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
@@ -628,10 +657,10 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
               </div>
             )}
 
-            {/* Active & Upcoming Appointments Stream */}
-            <div className="space-y-2 overflow-y-auto max-h-80 pr-1">
-              {upcomingAppointments.length > 0 ? (
-                upcomingAppointments.map((evt) => {
+            {/* Active & Upcoming Appointments Stream (or Tomorrow Preview Stream) */}
+            {upcomingAppointments.length > 0 ? (
+              <div className="space-y-2 overflow-y-auto max-h-80 pr-1">
+                {upcomingAppointments.map((evt) => {
                   let isNow = false
                   try {
                     const start = parseISO(evt.start_time).getTime()
@@ -789,15 +818,101 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                       </div>
                     </div>
                   )
-                })
-              ) : (
-                <p className="text-caption text-casa-muted py-6 text-center">
-                  {pastEvents.length > 0
-                    ? 'All scheduled appointments for today are completed.'
-                    : 'No appointments scheduled for today.'}
-                </p>
-              )}
-            </div>
+                })}
+              </div>
+            ) : (
+              /* Tomorrow Preview Section */
+              <div className="space-y-3">
+                <div className="flex items-center justify-between py-1.5 px-1 border-b border-casa-border/40 text-caption text-casa-muted">
+                  <span className="font-semibold text-casa-navy flex items-center gap-1.5">
+                    <Calendar size={13} className="text-casa-gold" />
+                    <span>Tomorrow · {format(addDays(now, 1), 'EEEE, MMMM d')}</span>
+                  </span>
+                  <span>{tomorrowEvents.length} event{tomorrowEvents.length === 1 ? '' : 's'}</span>
+                </div>
+
+                {tomorrowEvents.length > 0 ? (
+                  <div className="space-y-2 overflow-y-auto max-h-72 pr-1">
+                    {tomorrowEvents.map((evt) => {
+                      const driverMember = evt.members.find(
+                        (m) =>
+                          m.family_member?.name &&
+                          (evt.title.toLowerCase().includes(m.family_member.name.toLowerCase() + ' drives') ||
+                            evt.title.toLowerCase().includes('picked up by ' + m.family_member.name.toLowerCase()) ||
+                            m.role?.toLowerCase() === 'driver')
+                      )
+
+                      const avatarPeople = evt.members.map((m) => ({
+                        id: m.family_member?.id || m.id,
+                        name: m.family_member?.name || 'Member',
+                        color: m.family_member?.color_hex || 'var(--color-casa-navy)',
+                      }))
+
+                      return (
+                        <div
+                          key={evt.id}
+                          onClick={() => onOpenEvent(evt)}
+                          className="flex items-center justify-between px-4 py-3 rounded-2xl border bg-casa-bg/40 hover:bg-casa-surface border-casa-border/35 hover:border-casa-gold/40 transition-all cursor-pointer group gap-3"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                            <span className="font-mono text-body-sm font-semibold text-casa-navy shrink-0">
+                              {evt.all_day ? 'All Day' : format(parseISO(evt.start_time), 'h:mm a')}
+                            </span>
+
+                            <span className="text-casa-muted/60 text-caption hidden sm:inline shrink-0">
+                              ·
+                            </span>
+
+                            <span className="text-body-sm font-semibold text-casa-navy truncate group-hover:text-casa-gold transition-colors">
+                              {evt.title}
+                            </span>
+
+                            {evt.location_name && (
+                              <span className="text-caption text-casa-text-secondary truncate hidden md:inline">
+                                · {evt.location_name}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2.5 shrink-0">
+                            {driverMember?.family_member?.name && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-3xs font-semibold bg-amber-500/10 text-amber-900 border border-amber-500/20 hidden sm:inline-flex">
+                                <Car size={10} className="text-amber-800" />
+                                <span>{driverMember.family_member.name} drives</span>
+                              </span>
+                            )}
+                            <PersonAvatarStack people={avatarPeople} size="sm" max={2} />
+                            <ChevronRight
+                              size={14}
+                              className="text-casa-muted group-hover:text-casa-navy transition-transform group-hover:translate-x-0.5"
+                            />
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="py-7 px-4 rounded-2xl bg-casa-bg/25 text-center flex flex-col items-center justify-center gap-2 border border-casa-border/30">
+                    <div className="w-10 h-10 rounded-2xl bg-amber-500/15 text-casa-gold flex items-center justify-center">
+                      <Sparkles size={20} className="text-casa-gold" />
+                    </div>
+                    <h4 className="text-body-sm font-bold text-casa-navy">All caught up for today!</h4>
+                    <p className="text-caption text-casa-muted max-w-xs">
+                      No appointments scheduled for tomorrow — enjoy an open day.
+                    </p>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => navigateTo('/calendar')}
+                      className="text-caption font-bold text-casa-gold hover:underline mt-1"
+                    >
+                      <span>Open Full Calendar</span>
+                      <ArrowRight size={13} className="ml-1" />
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* 2. Tonight's Kitchen (Bottom) */}

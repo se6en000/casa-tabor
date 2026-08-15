@@ -360,7 +360,7 @@ export default function MonthView() {
       </div>
 
       {/* Calendar grid */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto pb-28 md:pb-0">
         <div className="grid grid-cols-7 border-l border-t border-casa-divider">
           {grid.map(day => {
             const key = format(day, 'yyyy-MM-dd')

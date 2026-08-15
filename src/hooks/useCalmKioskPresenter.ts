@@ -23,6 +23,8 @@ export interface CalmKioskPresenterState {
   upcomingAppointments: EventWithDetails[]
   todayEvents: EventWithDetails[]
   tomorrowEvents: EventWithDetails[]
+  isTodayDone: boolean
+  firstTomorrowEvent: EventWithDetails | null
   activeConflicts: Conflict[]
   activePrep: PrepItem[]
   familyMembers: FamilyMember[]
@@ -172,6 +174,23 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     })
   }, [todayEvents, nextEvent, now])
 
+  const tomorrowEventsSorted = useMemo(() => {
+    return tomorrowEvents
+      .filter((e) => !isMealEvent(e))
+      .sort((a, b) => {
+        if (a.all_day && !b.all_day) return -1
+        if (!a.all_day && b.all_day) return 1
+        try {
+          return parseISO(a.start_time).getTime() - parseISO(b.start_time).getTime()
+        } catch {
+          return 0
+        }
+      })
+  }, [tomorrowEvents])
+
+  const isTodayDone = !nextEvent && upcomingAppointments.length === 0
+  const firstTomorrowEvent = tomorrowEventsSorted[0] || null
+
   const hour = now.getHours()
   const isEvening = hour >= 18
   const isDinnerPast = hour >= 20
@@ -185,7 +204,7 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
   const pickupsCount = useMemo(() => {
     return todayEvents.filter((e) => {
       const t = (e.title || '').toLowerCase()
-      return t.includes('pickup') || t.includes('picked up') || t.includes('drop-off') || t.includes('carpool')
+      return t.includes('pickup') || t.includes('drop-off') || t.includes('carpool')
     }).length
   }, [todayEvents])
 
@@ -198,23 +217,23 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
         : `${weather.temp}°F with ${weather.condition.toLowerCase()} skies.`
       : ''
 
-    if (isEvening) {
-      const count = tomorrowEvents.length
+    if (isTodayDone || isEvening) {
+      const count = tomorrowEventsSorted.length
       if (count === 0) {
         return `Schedule complete for today. Tomorrow is open with no early appointments.`
       }
 
-      const timedEvents = tomorrowEvents.filter((e) => !e.all_day)
-      const firstEvent = timedEvents[0] || tomorrowEvents[0]
+      const timedEvents = tomorrowEventsSorted.filter((e) => !e.all_day)
+      const firstEvent = timedEvents[0] || tomorrowEventsSorted[0]
 
       let startTimeStr = ''
-      if (!firstEvent.all_day) {
+      if (firstEvent && !firstEvent.all_day) {
         try {
           startTimeStr = ` at ${format(parseISO(firstEvent.start_time), 'h:mm a')}`
         } catch {}
       }
 
-      const pickupEvt = tomorrowEvents.find((e) => {
+      const pickupEvt = tomorrowEventsSorted.find((e) => {
         const t = (e.title || '').toLowerCase()
         return t.includes('pickup') || t.includes('drop-off')
       })
@@ -239,7 +258,7 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     const dinnerNote = isDinnerPast ? ' Dinner served.' : ' Dinner planned for 6:30 PM.'
 
     return `${weatherNote}${nextSummary}${dinnerNote}`
-  }, [isEvening, hour, todayEvents, tomorrowEvents, nextEvent, weather, isDinnerPast, now])
+  }, [isTodayDone, isEvening, hour, todayEvents, tomorrowEventsSorted, nextEvent, weather, isDinnerPast, now])
 
   const minutesUntilNext = useMemo(() => {
     if (!nextEvent) return null
@@ -419,7 +438,9 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     pastEvents,
     upcomingAppointments,
     todayEvents,
-    tomorrowEvents,
+    tomorrowEvents: tomorrowEventsSorted,
+    isTodayDone,
+    firstTomorrowEvent,
     activeConflicts,
     activePrep,
     familyMembers,

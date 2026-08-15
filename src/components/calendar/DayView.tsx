@@ -798,7 +798,7 @@ export default function DayView() {
         {/* Events list */}
         <BounceScroll
           className="flex-1"
-          innerClassName="px-5 py-4"
+          innerClassName="px-5 py-4 pb-28 md:pb-4"
           onClick={() => setSelectedEventId(null)}
         >
           {dayEvents.length === 0 ? (

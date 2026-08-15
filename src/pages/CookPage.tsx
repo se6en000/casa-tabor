@@ -15,6 +15,7 @@ import {
   Upload,
   Users,
   Utensils,
+  X,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatSupabaseError } from '../lib/formatSupabaseError'
@@ -50,6 +51,7 @@ import {
   Textarea,
 } from '../components/ui'
 import ActiveKitchenWorkbench from '../components/kitchen/ActiveKitchenWorkbench'
+import MobileCookingView from '../components/mobile/MobileCookingView'
 import { useAppStore } from '../stores/appStore'
 
 
@@ -2860,9 +2862,27 @@ export default function CookPage() {
     )
   }
 
+  const fullRecipes = useMemo(() => {
+    return recipes.map((recipe) => ({
+      ...recipe,
+      ingredients: ingredients.filter((ing) => ing.recipe_id === recipe.id),
+      steps: steps.filter((st) => st.recipe_id === recipe.id),
+    }))
+  }, [recipes, ingredients, steps])
+
   return (
     <div className="h-full min-h-0 flex-1 overflow-y-auto overscroll-contain touch-pan-y bg-casa-bg">
-      <PageShell width="full" className="space-y-6 p-4 sm:p-6 lg:p-8 pb-36 lg:pb-16 text-casa-text">
+      {/* ── Dedicated Mobile Basic Cooking Mode (< lg) ── */}
+      <div className="lg:hidden w-full h-full overflow-y-auto">
+        <MobileCookingView
+          onOpenImport={openImportDialog}
+          catalogRecipes={fullRecipes}
+        />
+      </div>
+
+      {/* ── Desktop & Large Kiosk Meal & Kitchen Workbench (>= lg) ── */}
+      <div className="hidden lg:block w-full">
+        <PageShell width="full" className="space-y-6 p-4 sm:p-6 lg:p-8 pb-36 lg:pb-16 text-casa-text">
         {/* Top Navigation & Mode Switcher */}
       <Card tone="surface" padding="lg" className="space-y-4 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -2916,6 +2936,81 @@ export default function CookPage() {
               </div>
               <p className="text-caption text-casa-muted font-medium">{landingMetaLabel}</p>
             </div>
+
+            {/* Quick Recipe Search Bar & Scan Button */}
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-casa-muted z-10 pointer-events-none" />
+                <Input
+                  value={recipeSearch}
+                  onChange={(event) => setRecipeSearch(event.target.value)}
+                  placeholder="Search recipes to cook..."
+                  className="pl-9 pr-8 bg-casa-surface"
+                />
+                {recipeSearch.trim() && (
+                  <IconButton
+                    icon={<X size={14} />}
+                    aria-label="Clear search"
+                    onClick={() => setRecipeSearch('')}
+                    size="sm"
+                    variant="ghost"
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2"
+                  />
+                )}
+              </div>
+              <Button
+                variant="primary"
+                size="md"
+                onClick={openImportDialog}
+                leadingIcon={<Camera size={16} />}
+                className="shrink-0 font-semibold min-h-control"
+              >
+                Scan
+              </Button>
+            </div>
+
+            {/* If user searched, render instant matching recipe search results */}
+            {recipeSearch.trim() && (
+              <div className="space-y-2 p-3 bg-casa-surface rounded-card border border-casa-border shadow-xs">
+                <div className="flex items-center justify-between">
+                  <Text role="caption" muted className="font-semibold uppercase tracking-wider">
+                    Found {filteredRecipes.length} {filteredRecipes.length === 1 ? 'recipe' : 'recipes'}
+                  </Text>
+                  <Button variant="ghost" size="sm" onClick={() => setRecipeSearch('')}>
+                    Clear
+                  </Button>
+                </div>
+                {filteredRecipes.length === 0 ? (
+                  <EmptyState title="No recipes match" description="Try a different keyword or import a new recipe." />
+                ) : (
+                  <div className="grid gap-2 sm:grid-cols-2 max-h-72 overflow-y-auto pr-1">
+                    {filteredRecipes.map((recipe) => (
+                      <Card
+                        key={recipe.id}
+                        interactive
+                        padding="sm"
+                        tone="surface"
+                        onClick={() => {
+                          setRecipeSearch('')
+                          openRecipeForCookMode(recipe.id)
+                        }}
+                        className="flex items-center justify-between gap-3 border border-casa-border hover:border-casa-gold"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <Text role="body-sm" className="font-semibold text-casa-navy truncate">{recipe.name}</Text>
+                          <Text role="caption" muted className="truncate">
+                            {recipe.cook_time ? `${recipe.cook_time} · ` : ''}{recipe.servings ? `${recipe.servings} servings` : 'Standard'}
+                          </Text>
+                        </div>
+                        <Button variant="primary" size="sm" leadingIcon={<Utensils size={14} />}>
+                          Cook
+                        </Button>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Mood Chips */}
             <div className="flex flex-wrap gap-2">
@@ -4495,7 +4590,8 @@ export default function CookPage() {
           </div>
         </Modal>
       )}
-      </PageShell>
+        </PageShell>
+      </div>
     </div>
   )
 }

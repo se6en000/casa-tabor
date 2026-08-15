@@ -22,8 +22,8 @@ export const BUTTON_VARIANTS = ['primary', 'strong', 'secondary', 'subtle', 'gho
 export const BUTTON_SIZES = ['sm', 'md', 'lg']
 
 const BUTTON_VARIANT_CLASSES = {
-  primary: 'casa-action-primary bg-casa-gold shadow-card hover:brightness-110',
-  strong: 'casa-action-strong bg-casa-navy shadow-card hover:brightness-110',
+  primary: 'casa-action-primary bg-casa-gold text-casa-navy font-bold shadow-card hover:brightness-110',
+  strong: 'casa-action-strong bg-casa-navy text-white font-bold shadow-card hover:brightness-110',
   secondary: 'bg-casa-surface text-content-heading border border-casa-border hover:bg-casa-bg',
   subtle: 'bg-surface-inset text-content-primary border border-casa-border/70 hover:bg-surface-subtle',
   ghost: 'bg-transparent text-content-heading hover:bg-casa-bg',
@@ -57,8 +57,8 @@ export const ICON_BUTTON_VARIANTS = ['primary', 'strong', 'secondary', 'ghost', 
 export const ICON_BUTTON_SIZES = ['sm', 'md', 'lg']
 
 const ICON_BUTTON_VARIANT_CLASSES = {
-  primary: 'casa-action-primary bg-casa-gold shadow-card hover:brightness-110',
-  strong: 'casa-action-strong bg-casa-navy shadow-card hover:brightness-110',
+  primary: 'casa-action-primary bg-casa-gold text-casa-navy shadow-card hover:brightness-110',
+  strong: 'casa-action-strong bg-casa-navy text-white shadow-card hover:brightness-110',
   secondary: 'bg-casa-surface text-content-heading border border-casa-border hover:bg-casa-bg',
   ghost: 'bg-transparent text-casa-muted hover:text-content-heading hover:bg-casa-bg',
   danger: 'bg-transparent text-casa-error hover:bg-casa-error/10',

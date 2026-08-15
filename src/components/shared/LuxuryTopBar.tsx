@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { format, isAfter, isBefore } from 'date-fns'
 import {
@@ -8,15 +8,18 @@ import {
   Zap,
   Leaf,
   Settings,
+  Bell,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useLiveClock } from '../../hooks/useLiveClock'
 import { useHomeWeather } from '../../hooks/useHomeWeather'
 import { useTodayEvents } from '../../hooks/useCalendarEvents'
+import { useNotifications } from '../../hooks/useNotifications'
 import { cn } from '../../utils/cn'
 import { IconButton, Button } from '../ui'
 import { useAppStore } from '../../stores/appStore'
 import { WeatherIcon } from './WeatherIcon'
+import NotificationDrawer from './NotificationDrawer'
 
 /* ════════════════════════════════════════════════════════════════
    LuxuryTopBar — Unified premium navigation bar
@@ -43,6 +46,11 @@ const NAV_TABS = [
 // ── Zone A: Brand Monogram ───────────────────────────────────────
 function BrandZone({ isWarm }: { isWarm: boolean }) {
   const { setCanvasSubmode } = useAppStore()
+  const location = useLocation()
+  const isCook = location.pathname.startsWith('/cook')
+  const isSettings = location.pathname.startsWith('/settings')
+
+  const brandTitle = isCook ? 'Basic Cooking Mode' : isSettings ? 'Household Settings' : 'Casa Tabor'
 
   return (
     <NavLink
@@ -57,11 +65,11 @@ function BrandZone({ isWarm }: { isWarm: boolean }) {
       </span>
       <span
         className={cn(
-          'font-display text-heading hidden sm:inline-block tracking-[0.02em] font-semibold leading-none',
+          'font-display text-heading inline-block tracking-[0.02em] font-semibold leading-none',
           isWarm ? 'text-casa-navy' : 'text-white',
         )}
       >
-        Casa Tabor
+        {brandTitle}
       </span>
     </NavLink>
   )
@@ -382,7 +390,7 @@ function UtilityTrack({
   return (
     <div
       className={cn(
-        'inline-flex items-center p-0.5 rounded-full border gap-0.5',
+        'hidden sm:inline-flex items-center p-0.5 rounded-full border gap-0.5',
         isWarm
           ? 'bg-casa-surface/40 border-casa-border/40'
           : 'bg-white/5 border-white/10',
@@ -482,6 +490,8 @@ function CopilotAction() {
 export default function LuxuryTopBar() {
   const { experienceMode, canvasSubmode } = useAppStore()
   const location = useLocation()
+  const [notifOpen, setNotifOpen] = useState(false)
+  const { unreadCount } = useNotifications()
 
   const isCanvas = experienceMode === 'living_canvas'
   const isCalm = isCanvas && canvasSubmode === 'calm'
@@ -490,50 +500,72 @@ export default function LuxuryTopBar() {
   const isWarm = isCalm // Warm material when in calm mode
 
   return (
-    <header
-      className={cn(
-        'app-topbar w-full flex items-center justify-between flex-shrink-0 z-sticky transition-all duration-300',
-        'luxury-topbar',
-        isWarm && 'luxury-topbar--warm',
-      )}
-      role="banner"
-      aria-label="Casa Tabor main navigation"
-    >
-      {/* ── Left cluster: Brand + Nav + Mode ────────────── */}
-      <div className="flex items-center gap-3 min-w-0">
-        <BrandZone isWarm={isWarm} />
-
-        {/* Gold divider between brand and nav */}
-        <span className="topbar-gold-divider hidden md:block" />
-
-        {/* Navigation Rail — ALWAYS FIRST so nav buttons NEVER shift position */}
-        <NavRail isWarm={isWarm} isCanvas={isCanvas} />
-
-        {/* Mode Switcher — renders AFTER nav rail */}
-        {isCanvas && isHome && (
-          <>
-            <span className="topbar-gold-divider hidden lg:block" />
-            <ModeSwitch isWarm={isWarm} />
-          </>
+    <>
+      <header
+        className={cn(
+          'app-topbar w-full flex items-center justify-between flex-shrink-0 z-sticky transition-all duration-300',
+          'luxury-topbar',
+          isWarm && 'luxury-topbar--warm',
         )}
-      </div>
+        role="banner"
+        aria-label="Casa Tabor main navigation"
+      >
+        {/* ── Left cluster: Brand + Nav + Mode ────────────── */}
+        <div className="flex items-center gap-3 min-w-0">
+          <BrandZone isWarm={isWarm} />
 
-      {/* ── Right cluster: Info + Utility + AI ──────────── */}
-      <div className="flex items-center gap-2.5 flex-shrink-0">
-        <AmbientInfo isWarm={isWarm} showEvents={!isCanvas} />
+          {/* Gold divider between brand and nav */}
+          <span className="topbar-gold-divider hidden md:block" />
 
-        <span className="topbar-gold-divider hidden lg:block" />
+          {/* Navigation Rail — ALWAYS FIRST so nav buttons NEVER shift position */}
+          <NavRail isWarm={isWarm} isCanvas={isCanvas} />
 
-        <UtilityTrack isWarm={isWarm} isCanvas={isCanvas} />
+          {/* Mode Switcher — renders AFTER nav rail */}
+          {isCanvas && isHome && (
+            <>
+              <span className="topbar-gold-divider hidden lg:block" />
+              <ModeSwitch isWarm={isWarm} />
+            </>
+          )}
+        </div>
 
-        {!isCook && (
-          <>
-            <span className="topbar-gold-divider hidden sm:block" />
-            <CopilotAction />
-          </>
-        )}
-      </div>
-    </header>
+        {/* ── Right cluster: Info + Utility + Notifications + AI ──────────── */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <AmbientInfo isWarm={isWarm} showEvents={!isCanvas} />
+
+          <span className="topbar-gold-divider hidden lg:block" />
+
+          <UtilityTrack isWarm={isWarm} isCanvas={isCanvas} />
+
+          {/* Mobile Notification Bell Button */}
+          <div className="relative sm:hidden">
+            <IconButton
+              icon={<Bell size={16} strokeWidth={1.8} />}
+              aria-label="Household Notifications"
+              onClick={() => setNotifOpen(true)}
+              size="sm"
+              variant="ghost"
+              className={cn(
+                'w-9 h-9 rounded-full flex items-center justify-center relative transition-colors',
+                isWarm ? 'bg-casa-surface/60 border border-casa-border/40 text-casa-navy' : 'bg-white/10 text-white'
+              )}
+            />
+            {unreadCount > 0 && (
+              <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-red-500 border-2 border-casa-surface pointer-events-none" />
+            )}
+          </div>
+
+          {!isCook && (
+            <>
+              <span className="topbar-gold-divider hidden sm:block" />
+              <CopilotAction />
+            </>
+          )}
+        </div>
+      </header>
+
+      <NotificationDrawer open={notifOpen} onClose={() => setNotifOpen(false)} />
+    </>
   )
 }
 

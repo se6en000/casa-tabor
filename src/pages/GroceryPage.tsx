@@ -2376,7 +2376,7 @@ export default function GroceryPage() {
                 <p className="text-body-sm text-casa-muted">Add items below or ask the AI.</p>
               </div>
             ) : (
-            <div className="pt-3 pb-6">
+            <div className="pt-3 pb-28 md:pb-6">
               {dragState && (
                 <div className="mb-3 rounded-2xl border border-casa-border bg-casa-surface p-3">
                   <p className="text-caption font-semibold text-casa-muted uppercase tracking-wider mb-2">
