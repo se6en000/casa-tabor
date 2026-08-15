@@ -844,6 +844,13 @@ export default function CookPage() {
     }
     return map
   }, [ingredients])
+  const fullRecipes = useMemo(() => {
+    return recipes.map((recipe) => ({
+      ...recipe,
+      ingredients: ingredientsByRecipe.get(recipe.id) ?? [],
+      steps: stepsByRecipe.get(recipe.id) ?? [],
+    }))
+  }, [recipes, ingredientsByRecipe, stepsByRecipe])
   const plannedRecipes = mealPlans
     .map((plan) => ({ plan, recipe: recipeById.get(plan.recipe_id) }))
     .filter((row): row is { plan: RecipeMealPlan; recipe: Recipe } => Boolean(row.recipe))
@@ -2861,14 +2868,6 @@ export default function CookPage() {
       />
     )
   }
-
-  const fullRecipes = useMemo(() => {
-    return recipes.map((recipe) => ({
-      ...recipe,
-      ingredients: ingredients.filter((ing) => ing.recipe_id === recipe.id),
-      steps: steps.filter((st) => st.recipe_id === recipe.id),
-    }))
-  }, [recipes, ingredients, steps])
 
   return (
     <div className="h-full min-h-0 flex-1 overflow-y-auto overscroll-contain touch-pan-y bg-casa-bg">
