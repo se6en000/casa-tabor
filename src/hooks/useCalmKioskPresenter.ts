@@ -115,12 +115,11 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     return upcoming[0] || null
   }, [todayEvents, now])
 
-  // Past events today (already ended, excluding hero and meals)
+  // Past events today (already ended, excluding meals)
   const pastEvents = useMemo(() => {
     return todayEvents
       .filter((e) => {
         if (isMealEvent(e)) return false
-        if (nextEvent && e.id === nextEvent.id) return false
         if (e.all_day) return false
         try {
           const end = parseISO(e.end_time)
@@ -136,14 +135,13 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
           return 0
         }
       })
-  }, [todayEvents, nextEvent, now])
+  }, [todayEvents, now])
 
-  // Upcoming / active appointment stream (happening now or later today, excluding hero and meals)
+  // Upcoming / active appointment stream (happening now or later today, including hero, excluding meals)
   const upcomingAppointments = useMemo(() => {
     return todayEvents
       .filter((e) => {
         if (isMealEvent(e)) return false
-        if (nextEvent && e.id === nextEvent.id) return false
         if (e.all_day) return true
         try {
           const end = parseISO(e.end_time)
@@ -159,13 +157,12 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
           return 0
         }
       })
-  }, [todayEvents, nextEvent, now])
+  }, [todayEvents, now])
 
-  // Filter appointment stream (exclude meals, hero item, stale ended items)
+  // Filter appointment stream (exclude meals, stale ended items)
   const appointmentEvents = useMemo(() => {
     return todayEvents.filter((e) => {
       if (isMealEvent(e)) return false
-      if (nextEvent && e.id === nextEvent.id) return false
       try {
         if (!e.all_day && parseISO(e.end_time).getTime() < now.getTime() - 30 * 60 * 1000) {
           return false
@@ -173,7 +170,7 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
       } catch {}
       return true
     })
-  }, [todayEvents, nextEvent, now])
+  }, [todayEvents, now])
 
   const tomorrowEventsSorted = useMemo(() => {
     return tomorrowEvents

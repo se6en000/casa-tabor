@@ -392,6 +392,8 @@ function _subscribeRealtimeChannel() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, (payload: any) => {
       if (payload?.eventType === 'DELETE' && payload.old?.id) {
         _evictDeletedEventFromCache(payload.old.id)
+      } else if (payload?.eventType === 'UPDATE' && payload.new?.id && payload.new?.status === 'cancelled') {
+        _evictDeletedEventFromCache(payload.new.id)
       }
       _fireInvalidation()
     })

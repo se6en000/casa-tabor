@@ -1,13 +1,14 @@
+import { useState } from 'react'
 import { format } from 'date-fns'
-import { Bell, Check, TimerReset } from 'lucide-react'
+import { Bell, Check, TimerReset, Loader2 } from 'lucide-react'
 
 interface LivingReminderCardProps {
   title: string
   categoryIcon?: string
   dueDate: Date
   assignedAttendees: string
-  onMarkDone: () => void
-  onSnooze: () => void
+  onMarkDone: () => void | Promise<void>
+  onSnooze: () => void | Promise<void>
 }
 
 export default function LivingReminderCard({
@@ -17,12 +18,35 @@ export default function LivingReminderCard({
   onMarkDone,
   onSnooze
 }: LivingReminderCardProps) {
+  const [actionState, setActionState] = useState<'idle' | 'completing' | 'snoozing'>('idle')
   const formattedDue = format(dueDate, 'EEE d · h:mm a')
 
+  const handleMarkDone = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (actionState !== 'idle') return
+    setActionState('completing')
+    await onMarkDone()
+  }
+
+  const handleSnooze = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (actionState !== 'idle') return
+    setActionState('snoozing')
+    await onSnooze()
+  }
+
   return (
-    <div className="bg-white border-2 border-amber-400 rounded-2xl p-7 flex flex-col items-center text-center gap-4 shadow-sm">
-      <div className="w-16 h-16 rounded-full bg-amber-50 border-2 border-amber-400 flex items-center justify-center text-amber-700 shadow-sm">
-        <Bell size={28} />
+    <div className="bg-white border-2 border-amber-400 rounded-2xl p-7 flex flex-col items-center text-center gap-4 shadow-sm transition-all">
+      <div className={`w-16 h-16 rounded-full border-2 flex items-center justify-center shadow-sm transition-all duration-300 ${
+        actionState === 'completing'
+          ? 'bg-emerald-50 border-emerald-500 text-emerald-600 scale-105'
+          : 'bg-amber-50 border-amber-400 text-amber-700'
+      }`}>
+        {actionState === 'completing' ? (
+          <Check size={32} className="animate-in zoom-in-50 duration-200" />
+        ) : (
+          <Bell size={28} />
+        )}
       </div>
 
       <div>
@@ -40,18 +64,28 @@ export default function LivingReminderCard({
 
       <div className="grid grid-cols-2 gap-3 w-full mt-1.5">
         <button
-          onClick={onMarkDone}
-          className="p-3.5 rounded-2xl bg-emerald-600 text-white text-sm font-bold flex flex-col items-center gap-1 hover:-translate-y-0.5 transition-transform shadow-sm"
+          onClick={handleMarkDone}
+          disabled={actionState !== 'idle'}
+          className={`p-3.5 rounded-2xl text-white text-sm font-bold flex flex-col items-center gap-1 transition-all shadow-sm ${
+            actionState === 'completing'
+              ? 'bg-emerald-700 scale-95 opacity-90'
+              : 'bg-emerald-600 hover:-translate-y-0.5 active:scale-95'
+          }`}
         >
-          <Check size={20} />
-          <span>Mark Done</span>
+          {actionState === 'completing' ? <Loader2 size={20} className="animate-spin" /> : <Check size={20} />}
+          <span>{actionState === 'completing' ? 'Marking Done…' : 'Mark Done'}</span>
         </button>
         <button
-          onClick={onSnooze}
-          className="p-3.5 rounded-2xl bg-slate-100 text-slate-800 border border-slate-200 text-sm font-bold flex flex-col items-center gap-1 hover:-translate-y-0.5 transition-transform hover:border-amber-400"
+          onClick={handleSnooze}
+          disabled={actionState !== 'idle'}
+          className={`p-3.5 rounded-2xl bg-slate-100 text-slate-800 border border-slate-200 text-sm font-bold flex flex-col items-center gap-1 transition-all hover:border-amber-400 ${
+            actionState === 'snoozing'
+              ? 'bg-amber-50 border-amber-400 scale-95 opacity-90'
+              : 'hover:-translate-y-0.5 active:scale-95'
+          }`}
         >
-          <TimerReset size={20} />
-          <span>Snooze (1h)</span>
+          {actionState === 'snoozing' ? <Loader2 size={20} className="animate-spin text-amber-700" /> : <TimerReset size={20} />}
+          <span>{actionState === 'snoozing' ? 'Snoozing…' : 'Snooze (1h)'}</span>
         </button>
       </div>
     </div>

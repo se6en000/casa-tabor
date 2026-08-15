@@ -2281,11 +2281,13 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
                 <ToolActionPreview tool={ta.tool} args={ta.args} events={events} />
                 <div className="flex flex-wrap gap-2 mt-3">
                   {(() => {
+                    const isReminderAction = (ta.args as { event_type?: string })?.event_type === 'reminder'
+                    const membersArg = Array.isArray(ta.args.members) ? ta.args.members : []
                     const hasConflictOrDuplicate = Boolean(
                       ta.tool === 'create_event' && (
                         ta.args.calendar_preflight ||
                         ta.args.allow_calendar_conflicts ||
-                        findOverlappingEvent(events, ta.args.start ?? ta.args.start_time, ta.args.end ?? ta.args.end_time)
+                        (!isReminderAction && findOverlappingEvent(events, ta.args.start ?? ta.args.start_time, ta.args.end ?? ta.args.end_time, null, membersArg, ta.args.event_type))
                       )
                     )
                     return (
@@ -2575,7 +2577,10 @@ function findOverlappingEvent(
   startTimeStr: unknown,
   endTimeStr: unknown,
   ignoreEventId?: string | null,
+  targetMembers?: unknown,
+  eventTypeStr?: unknown,
 ): EventWithDetails | null {
+  if (eventTypeStr === 'reminder') return null
   if (!startTimeStr || typeof startTimeStr !== 'string') return null
   const startMs = new Date(startTimeStr).getTime()
   if (!Number.isFinite(startMs)) return null
@@ -2583,13 +2588,27 @@ function findOverlappingEvent(
     ? new Date(endTimeStr).getTime()
     : startMs + 3600_000
 
+  const cleanTargetMembers = (Array.isArray(targetMembers) ? targetMembers : [])
+    .map((m) => String(m).trim().toLowerCase())
+    .filter(Boolean)
+
+  if (cleanTargetMembers.length === 0) return null
+
   return events.find((e) => {
     if (ignoreEventId && e.id === ignoreEventId) return false
-    if (e.all_day || !e.start_time) return false
+    if (e.all_day || !e.start_time || e.event_type === 'reminder') return false
     const eStart = new Date(e.start_time).getTime()
     const eEnd = new Date(e.end_time ?? e.start_time).getTime()
     if (!Number.isFinite(eStart) || !Number.isFinite(eEnd)) return false
-    return Math.max(startMs, eStart) < Math.min(endMs, eEnd)
+    const overlaps = Math.max(startMs, eStart) < Math.min(endMs, eEnd)
+    if (!overlaps) return false
+
+    const eMembers = (e.members ?? (e as any).event_members ?? []).map((m: any) =>
+      (m.family_member?.name ?? m.family_members?.name ?? m.name ?? '').trim().toLowerCase()
+    ).filter(Boolean)
+
+    if (eMembers.length === 0) return false
+    return cleanTargetMembers.some((tm) => eMembers.includes(tm))
   }) ?? null
 }
 
@@ -2650,9 +2669,10 @@ function ToolActionPreview({ tool, args, events }: { tool: string; args: Record<
     const startStr = (args.start ?? args.start_time) as string | undefined
     const endStr = (args.end ?? args.end_time) as string | undefined
     const titleStr = String(args.title ?? '').trim()
-    const conflict = !isReminder ? findOverlappingEvent(events, startStr, endStr) : null
+    const membersArg = Array.isArray(args.members) ? args.members : []
+    const conflict = !isReminder ? findOverlappingEvent(events, startStr, endStr, null, membersArg, args.event_type) : null
     const duplicate = !isReminder && startStr && titleStr ? events.find((e) => {
-      if (e.all_day || !e.start_time) return false
+      if (e.all_day || !e.start_time || e.event_type === 'reminder') return false
       const sameDay = new Date(e.start_time).toDateString() === new Date(startStr).toDateString()
       const sameTitle = e.title.trim().toLowerCase() === titleStr.toLowerCase()
       return sameDay && sameTitle
@@ -2670,12 +2690,13 @@ function ToolActionPreview({ tool, args, events }: { tool: string; args: Record<
 
     const activeConflict = preflightConflict ?? conflict
     const activeDuplicate = preflightDuplicate ?? duplicate
+    const isExactMatch = activeDuplicate && activeDuplicate.title?.trim().toLowerCase() === titleStr.toLowerCase()
 
     return (
       <div className="space-y-3">
         <ConfirmationHeading kind={isReminder ? 'reminder' : 'calendar'}>
           {activeDuplicate
-            ? 'Duplicate Event Detected'
+            ? (isReminder ? 'Duplicate Reminder Detected' : 'Duplicate Event Detected')
             : activeConflict
               ? 'Calendar Conflict Detected'
               : preview.heading}
@@ -2686,7 +2707,11 @@ function ToolActionPreview({ tool, args, events }: { tool: string; args: Record<
           <div className="rounded-xl border border-amber-300/80 bg-amber-500/10 p-3 text-caption text-amber-900 dark:text-amber-200 space-y-1.5 shadow-2xs">
             <div className="flex items-center gap-1.5 font-semibold text-amber-800 dark:text-amber-300">
               <AlertTriangle size={14} className="shrink-0 text-amber-600" />
-              <span>An event with this name already exists</span>
+              <span>
+                {isExactMatch
+                  ? (isReminder ? 'A reminder with this name already exists' : 'An event with this name already exists')
+                  : (isReminder ? 'A similar reminder is already scheduled' : 'A similar event is already scheduled')}
+              </span>
             </div>
             <p className="text-body-sm font-bold text-casa-navy">
               "{activeDuplicate.title}"
@@ -2697,7 +2722,7 @@ function ToolActionPreview({ tool, args, events }: { tool: string; args: Record<
               </p>
             )}
             <p className="pt-1 text-caption font-medium text-amber-900 dark:text-amber-100">
-              Do you still want to create this event and keep both?
+              Do you still want to create this {isReminder ? 'reminder' : 'event'} and keep both?
             </p>
           </div>
         ) : activeConflict ? (
@@ -2716,7 +2741,7 @@ function ToolActionPreview({ tool, args, events }: { tool: string; args: Record<
               </p>
             )}
             <p className="pt-1 text-caption font-medium text-amber-900 dark:text-amber-100">
-              There is something else already scheduled at this time. Do you still want to create this event?
+              There is something else already scheduled at this time for this member. Do you still want to create this event?
             </p>
           </div>
         ) : null}
@@ -2739,7 +2764,18 @@ function ToolActionPreview({ tool, args, events }: { tool: string; args: Record<
     const preview = buildUpdatePreviewCopy(args, matchedEvent)
     const changes = summarizeUpdateArgs(args)
     const scopeLabel = recurrenceScopeLabel(args.recurrence_scope)
-    const conflict = findOverlappingEvent(events, args.start_time ?? matchedEvent?.start_time, args.end_time ?? matchedEvent?.end_time, String(args.id ?? ''))
+    const existingMembers = (matchedEvent?.members ?? []).map((m) => m.family_member?.name ?? '').filter(Boolean)
+    const membersArg = Array.isArray(args.members) ? args.members : existingMembers
+    const conflict = matchedEvent?.event_type !== 'reminder' && args.event_type !== 'reminder'
+      ? findOverlappingEvent(
+          events,
+          args.start_time ?? matchedEvent?.start_time,
+          args.end_time ?? matchedEvent?.end_time,
+          String(args.id ?? ''),
+          membersArg,
+          args.event_type ?? matchedEvent?.event_type,
+        )
+      : null
     const MAX_VISIBLE = 6
     const visibleChanges = expanded ? changes : changes.slice(0, MAX_VISIBLE)
     return (

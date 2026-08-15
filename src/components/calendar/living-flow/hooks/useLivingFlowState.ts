@@ -152,10 +152,17 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
   // ═══════════════ REAL SUPABASE MUTATIONS ═══════════════
 
   const invalidateCalendar = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ['events'] })
-    queryClient.invalidateQueries({ queryKey: ['prep-items'] })
-    queryClient.invalidateQueries({ queryKey: ['conflicts'] })
-  }, [queryClient])
+    void queryClient.invalidateQueries({ queryKey: ['events'] })
+    void queryClient.invalidateQueries({ queryKey: ['today-events'] })
+    void queryClient.invalidateQueries({ queryKey: ['rolling-events'] })
+    void queryClient.invalidateQueries({ queryKey: ['prep-items'] })
+    void queryClient.invalidateQueries({ queryKey: ['conflicts'] })
+    void queryClient.invalidateQueries({ queryKey: ['event-details'] })
+    if (initialEvent?.id) {
+      void queryClient.invalidateQueries({ queryKey: ['event-details', initialEvent.id] })
+    }
+    void queryClient.refetchQueries({ queryKey: ['events'], type: 'active' })
+  }, [queryClient, initialEvent?.id])
 
   // Update Title
   const updateTitle = useCallback(async (newTitle: string) => {
@@ -326,40 +333,133 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
   // Delete Event
   const deleteEvent = useCallback(async () => {
     if (!initialEvent?.id) return
-    if (!confirm('Are you sure you want to delete this event?')) return
+    if (!confirm('Are you sure you want to delete this?')) return
+    const eventId = initialEvent.id
+
+    // 1. Optimistically evict event from all cached query lists for 0ms Hero and schedule sync
+    queryClient.setQueriesData<EventWithDetails[]>({ queryKey: ['events'] }, (old) => {
+      if (!Array.isArray(old)) return old
+      return old.filter((ev) => ev.id !== eventId)
+    })
+    queryClient.removeQueries({ queryKey: ['event-details', eventId] })
+
+    onClose?.()
+
     try {
       const { error } = await supabase
         .from('events')
         .delete()
-        .eq('id', initialEvent.id)
+        .eq('id', eventId)
 
       if (error) throw error
       invalidateCalendar()
-      onClose?.()
     } catch (err) {
       console.error('[LivingFlow] Failed to delete event:', err)
+      invalidateCalendar()
     }
-  }, [initialEvent?.id, invalidateCalendar, onClose])
+  }, [initialEvent?.id, queryClient, invalidateCalendar, onClose])
 
-  // Mark Completed
+  // Mark Completed / Done
   const markCompleted = useCallback(async () => {
     if (!initialEvent?.id) return
+    const eventId = initialEvent.id
+
+    // 1. Optimistically evict event from all cached query lists for 0ms Hero and schedule sync
+    queryClient.setQueriesData<EventWithDetails[]>({ queryKey: ['events'] }, (old) => {
+      if (!Array.isArray(old)) return old
+      return old.filter((ev) => ev.id !== eventId)
+    })
+    queryClient.removeQueries({ queryKey: ['event-details', eventId] })
+
+    onClose?.()
+
+    try {
+      const isReminder = initialEvent.event_type === 'reminder' || state.mode === 'reminder'
+      if (isReminder) {
+        const { error } = await supabase.rpc('complete_reminder_with_linked_actions', {
+          p_reminder_id: eventId,
+          p_expected_updated_at: initialEvent.updated_at ?? null,
+        })
+        if (error) {
+          console.warn('[LivingFlow] complete_reminder_with_linked_actions error, falling back to direct cancellation:', error)
+          const { error: cancelError } = await supabase
+            .from('events')
+            .update({ 
+              status: 'cancelled',
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', eventId)
+          if (cancelError) throw cancelError
+
+          // Also resolve any linked prep items
+          await supabase
+            .from('prep_items')
+            .update({ dismissed: true, completed: true, completed_at: new Date().toISOString() })
+            .eq('source_ref', eventId)
+            .eq('dismissed', false)
+        }
+      } else {
+        const { error } = await supabase
+          .from('events')
+          .update({ 
+            status: 'cancelled',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', eventId)
+
+        if (error) throw error
+      }
+      invalidateCalendar()
+    } catch (err) {
+      console.error('[LivingFlow] Failed to complete event:', err)
+      invalidateCalendar()
+    }
+  }, [initialEvent?.id, initialEvent?.event_type, initialEvent?.updated_at, state.mode, queryClient, invalidateCalendar, onClose])
+
+  // Snooze Reminder
+  const snoozeReminder = useCallback(async (durationMinutes: number = 60) => {
+    if (!initialEvent?.id) return
+    const eventId = initialEvent.id
+    const now = new Date()
+    const baseTime = initialEvent.start_time ? new Date(initialEvent.start_time) : now
+    const referenceMs = baseTime.getTime() < now.getTime() ? now.getTime() : baseTime.getTime()
+    const newStart = new Date(referenceMs + durationMinutes * 60 * 1000)
+    const durationMs = (state.durationMinutes || 15) * 60 * 1000
+    const newEnd = new Date(newStart.getTime() + durationMs)
+
+    // 1. Optimistically update cached event start/end times
+    queryClient.setQueriesData<EventWithDetails[]>({ queryKey: ['events'] }, (old) => {
+      if (!Array.isArray(old)) return old
+      return old.map((ev) => {
+        if (ev.id !== eventId) return ev
+        return {
+          ...ev,
+          start_time: newStart.toISOString(),
+          end_time: newEnd.toISOString(),
+        }
+      }).sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+    })
+
+    onClose?.()
+
     try {
       const { error } = await supabase
         .from('events')
-        .update({ 
-          status: 'completed',
+        .update({
+          start_time: newStart.toISOString(),
+          end_time: newEnd.toISOString(),
+          status: 'confirmed',
           updated_at: new Date().toISOString()
         })
-        .eq('id', initialEvent.id)
+        .eq('id', eventId)
 
       if (error) throw error
       invalidateCalendar()
-      onClose?.()
     } catch (err) {
-      console.error('[LivingFlow] Failed to complete event:', err)
+      console.error('[LivingFlow] Failed to snooze reminder:', err)
+      invalidateCalendar()
     }
-  }, [initialEvent?.id, invalidateCalendar, onClose])
+  }, [initialEvent?.id, initialEvent?.start_time, state.durationMinutes, queryClient, invalidateCalendar, onClose])
 
   const setRecurScope = useCallback((scope: RecurrenceScope) => {
     setState(prev => ({ ...prev, recurScope: scope }))
@@ -380,6 +480,7 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     setCategory,
     deleteEvent,
     markCompleted,
+    snoozeReminder,
     setRecurScope
   }
 }

@@ -38,7 +38,7 @@ import NotificationDrawer from './NotificationDrawer'
 
 // ── Navigation tabs ──────────────────────────────────────────────
 const NAV_TABS = [
-  { path: '/', label: 'Living Canvas', classicLabel: 'Home' },
+  { path: '/', label: 'Home', classicLabel: 'Home' },
   { path: '/calendar', label: 'Calendar', classicLabel: 'Calendar' },
   { path: '/cook', label: 'Meals & Kitchen', classicLabel: 'Meals & Kitchen' },
   { path: '/grocery', label: 'Grocery List', classicLabel: 'Grocery List' },

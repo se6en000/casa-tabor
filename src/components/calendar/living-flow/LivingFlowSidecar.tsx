@@ -43,6 +43,7 @@ export default function LivingFlowSidecar({
     setCategory,
     deleteEvent,
     markCompleted,
+    snoozeReminder,
     setRecurScope
   } = useLivingFlowState(event, handleAnimatedClose)
 
@@ -132,7 +133,7 @@ export default function LivingFlowSidecar({
             dueDate={state.startDate}
             assignedAttendees={activeAttendeesNames}
             onMarkDone={markCompleted}
-            onSnooze={() => nudgeMinutes(60)}
+            onSnooze={() => snoozeReminder(60)}
           />
         )}
 

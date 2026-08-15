@@ -26,6 +26,7 @@ export function useReminderNeedsYouActions() {
       qc.invalidateQueries({ queryKey: ['events'] }),
       qc.invalidateQueries({ queryKey: ['prep-items'] }),
     ])
+    void qc.refetchQueries({ queryKey: ['events'], type: 'active' })
   }, [qc])
 
   const ensureReminderInNeedsYou = useCallback(async (
@@ -73,6 +74,13 @@ export function useReminderNeedsYouActions() {
   const snoozeReminderByDuration = useCallback(async (event: EventWithDetails, duration: SnoozeDuration = '1h') => {
     const window = computeReminderSnoozeWindow(event.start_time, event.end_time, duration, new Date())
 
+    // Optimistically update cache
+    qc.setQueriesData<EventWithDetails[]>({ queryKey: ['events'] }, (old) => {
+      if (!Array.isArray(old)) return old
+      return old.map((ev) => (ev.id === event.id ? { ...ev, start_time: window.start, end_time: window.end } : ev))
+        .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+    })
+
     const { error } = await supabase
       .from('events')
       .update({
@@ -84,9 +92,16 @@ export function useReminderNeedsYouActions() {
 
     if (error) throw error
     await invalidateReminderSurfaces()
-  }, [invalidateReminderSurfaces])
+  }, [qc, invalidateReminderSurfaces])
 
   const moveReminderToNeedsYou = useCallback(async (event: EventWithDetails) => {
+    // Optimistically evict
+    qc.setQueriesData<EventWithDetails[]>({ queryKey: ['events'] }, (old) => {
+      if (!Array.isArray(old)) return old
+      return old.filter((ev) => ev.id !== event.id)
+    })
+    qc.removeQueries({ queryKey: ['event-details', event.id] })
+
     await ensureReminderInNeedsYou(event, REMINDER_SOURCE_MANUAL)
 
     const { error } = await supabase
@@ -96,12 +111,19 @@ export function useReminderNeedsYouActions() {
 
     if (error) throw error
     await invalidateReminderSurfaces()
-  }, [ensureReminderInNeedsYou, invalidateReminderSurfaces])
+  }, [qc, ensureReminderInNeedsYou, invalidateReminderSurfaces])
 
   const completeReminder = useCallback(async (
     reminderId: string,
     expectedUpdatedAt?: string,
   ) => {
+    // Optimistically evict completed reminder immediately
+    qc.setQueriesData<EventWithDetails[]>({ queryKey: ['events'] }, (old) => {
+      if (!Array.isArray(old)) return old
+      return old.filter((ev) => ev.id !== reminderId)
+    })
+    qc.removeQueries({ queryKey: ['event-details', reminderId] })
+
     const { data, error } = await supabase.rpc('complete_reminder_with_linked_actions', {
       p_reminder_id: reminderId,
       p_expected_updated_at: expectedUpdatedAt ?? null,
@@ -110,7 +132,7 @@ export function useReminderNeedsYouActions() {
     if (!data?.ok) throw new Error('Casa could not complete this reminder.')
     await invalidateReminderSurfaces()
     return data
-  }, [invalidateReminderSurfaces])
+  }, [qc, invalidateReminderSurfaces])
 
   const queueMissedReminders = useCallback(async (events: EventWithDetails[], now: Date) => {
     const nowMs = now.getTime()

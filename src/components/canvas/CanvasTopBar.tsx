@@ -66,7 +66,7 @@ export default function CanvasTopBar() {
         )}
       >
         {[
-          { path: '/', label: 'Living Canvas' },
+          { path: '/', label: 'Home' },
           { path: '/calendar', label: 'Calendar' },
           { path: '/cook', label: 'Meals & Kitchen' },
           { path: '/grocery', label: 'Grocery List' },
