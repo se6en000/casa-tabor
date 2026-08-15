@@ -23,7 +23,7 @@ export function useTravelEta({
   eventStartIso,
   departureTimeIso,
   enabled = true,
-  bufferMins = 10,
+  bufferMins = 5,
   refetchIntervalMs = false,
 }: {
   origin?: string | null

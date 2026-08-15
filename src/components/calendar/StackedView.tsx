@@ -570,7 +570,13 @@ function EventCard({ event, household, now = new Date(), onClick, onDoubleClick,
     [event, household, now, overrideVersion]
   )
 
-  const departureTime = enr?.departure_time ? new Date(enr.departure_time) : null
+  const departureTime = useMemo(() => {
+    if (enr?.departure_time) return new Date(enr.departure_time)
+    if (enr?.drive_time_mins && event.start_time && !isHosted && !event.all_day) {
+      return new Date(new Date(event.start_time).getTime() - (enr.drive_time_mins + 5) * 60_000)
+    }
+    return null
+  }, [enr?.departure_time, enr?.drive_time_mins, event.start_time, isHosted, event.all_day])
   const durationMins = differenceInMinutes(end, start)
   const durationStr = formatCompactDuration(durationMins)
 
@@ -757,26 +763,14 @@ function EventCard({ event, household, now = new Date(), onClick, onDoubleClick,
           )}
         </div>
 
-        {/* Pillar bottom indicators: Leave-by / Weather / Alert (Pure SVG) */}
-        <div className="w-full pt-1.5 flex flex-col gap-1 min-w-0">
-          {departureTime && !happening && !isHosted && (
-            <span
-              className={cn(
-                'flex items-center gap-0.5 text-caption font-bold leading-none truncate max-w-full',
-                isHeroState ? 'text-casa-gold' : 'text-casa-gold'
-              )}
-              title={`Leave by ${format(departureTime, 'h:mm a')}`}
-            >
-              <Navigation size={9} className="shrink-0 text-casa-gold" />
-              <span className="text-caption font-semibold truncate">{format(departureTime, 'h:mm')}</span>
-            </span>
+        {/* Pillar bottom indicators: Weather / Alert (Pure SVG) */}
+        <div className="w-full pt-1 flex items-center justify-between min-w-0">
+          {event.location_name ? (
+            <WeatherIcon condition={event.enrichment?.weather_at_event} size={12} />
+          ) : (
+            <span />
           )}
-          <div className="flex items-center justify-between w-full">
-            {event.location_name && (
-              <WeatherIcon condition={event.enrichment?.weather_at_event} size={11} />
-            )}
-            {urgentAction && <AlertTriangle size={11} className="text-amber-400 shrink-0 ml-auto" />}
-          </div>
+          {urgentAction && <AlertTriangle size={11} className="text-amber-400 shrink-0 ml-auto" />}
         </div>
       </div>
 
@@ -798,21 +792,33 @@ function EventCard({ event, household, now = new Date(), onClick, onDoubleClick,
             {cleanTitle}
           </p>
 
-          {/* Location / Mode (Pure SVG icon) */}
+          {/* Location / Mode / Leave by */}
           {(event.location_name || isHosted) && (
             <div
               className={cn(
-                'flex items-center gap-1 text-caption min-w-0',
+                'flex items-center gap-1.5 text-caption min-w-0 flex-wrap',
                 isHeroState ? 'text-white/70' : 'text-casa-muted'
               )}
             >
               {isHosted ? (
                 <span className="text-caption font-semibold uppercase tracking-wide">At home</span>
               ) : (
-                <span className="flex items-center gap-1 truncate text-caption">
-                  <MapPin size={10} className="shrink-0 text-casa-gold" />
-                  <span className="truncate">{event.location_name}</span>
-                </span>
+                <>
+                  <span className="flex items-center gap-1 truncate text-caption">
+                    <MapPin size={10} className="shrink-0 text-casa-gold" />
+                    <span className="truncate">{event.location_name}</span>
+                  </span>
+                  {departureTime && !happening && (
+                    <span className={cn(
+                      'inline-flex items-center gap-1 font-semibold text-caption shrink-0',
+                      isHeroState ? 'text-casa-gold' : 'text-casa-gold'
+                    )}>
+                      <span className="opacity-40">•</span>
+                      <Navigation size={10} className="shrink-0" />
+                      <span>Leave by {format(departureTime, 'h:mm a')}</span>
+                    </span>
+                  )}
+                </>
               )}
             </div>
           )}

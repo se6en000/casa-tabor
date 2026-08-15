@@ -32,6 +32,7 @@ import {
   Activity,
   Layers as LayersIcon,
   Lock,
+  Gift,
 } from 'lucide-react'
 import { cn } from '../utils/cn'
 import { DEVICE_MATRIX, closestDeviceProfile } from '../lib/deviceMatrix.mjs'
@@ -1178,7 +1179,7 @@ export default function DesignSystemGalleryPage() {
                   }
                   prepSummary={
                     <div className="flex items-center gap-2 text-slate-300/90 text-caption">
-                      <span className="text-sm shrink-0">🎁</span>
+                      <Gift size={15} className="text-casa-gold shrink-0" />
                       <span className="font-semibold text-white/90 shrink-0">Bring:</span>
                       <span className="text-white/75 truncate">New patient forms · Dental retainer case</span>
                     </div>

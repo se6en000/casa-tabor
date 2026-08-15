@@ -34,10 +34,17 @@ export default function LivingDepartureHero({
     >
       {/* Top Badge Row */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <span className="bg-emerald-500/25 border border-emerald-500/60 text-emerald-300 text-xs font-extrabold uppercase tracking-wider py-0.5 px-2 rounded-full flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span>Live Traffic Clear · I-95 N</span>
-        </span>
+        {venue.trafficDelayMinutes && venue.trafficDelayMinutes > 0 ? (
+          <span className="bg-amber-500/25 border border-amber-500/60 text-amber-300 text-xs font-extrabold uppercase tracking-wider py-0.5 px-2 rounded-full flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+            <span>+{venue.trafficDelayMinutes}m Traffic Delay</span>
+          </span>
+        ) : (
+          <span className="bg-emerald-500/25 border border-emerald-500/60 text-emerald-300 text-xs font-extrabold uppercase tracking-wider py-0.5 px-2 rounded-full flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span>{venue.driveMinutes > 0 ? 'Live Traffic Clear' : 'Calculating Route…'}</span>
+          </span>
+        )}
         <span className="font-mono text-xs font-bold text-amber-300 bg-amber-300/20 py-0.5 px-2 rounded-full">
           {countdownText}
         </span>

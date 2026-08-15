@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { MapPin, X, Search, ShoppingBag, Target, Trees, GraduationCap } from 'lucide-react'
 import type { VenueInfo } from '../types'
+import { useSavedPlaces, savedPlaceAddress } from '../../../../hooks/useSavedPlaces'
 
 interface DestinationPopoverProps {
   currentVenue: VenueInfo
@@ -8,33 +9,33 @@ interface DestinationPopoverProps {
   onClose: () => void
 }
 
-const HOUSEHOLD_FAVORITES = [
+const DEFAULT_FAVORITES = [
   {
     name: 'The Gardens Mall',
     address: '3101 PGA Blvd, Palm Beach Gardens, FL 33410',
-    driveMinutes: 20,
-    distanceMiles: 8.4,
+    driveMinutes: 0,
+    distanceMiles: 0,
     icon: ShoppingBag
   },
   {
     name: 'Target on PGA',
     address: '5900 PGA Blvd, Palm Beach Gardens, FL 33418',
-    driveMinutes: 12,
-    distanceMiles: 4.8,
+    driveMinutes: 0,
+    distanceMiles: 0,
     icon: Target
   },
   {
     name: 'Jupiter Community Park',
     address: '3377 Church St, Jupiter, FL 33458',
-    driveMinutes: 16,
-    distanceMiles: 7.1,
+    driveMinutes: 0,
+    distanceMiles: 0,
     icon: Trees
   },
   {
     name: 'The Benjamin School',
     address: '11000 Ellison Wilson Rd, North Palm Beach, FL 33408',
-    driveMinutes: 14,
-    distanceMiles: 5.9,
+    driveMinutes: 0,
+    distanceMiles: 0,
     icon: GraduationCap
   }
 ]
@@ -45,8 +46,19 @@ export default function DestinationPopover({
   onClose
 }: DestinationPopoverProps) {
   const [searchTerm, setSearchTerm] = useState(currentVenue.name)
+  const { data: savedPlaces = [] } = useSavedPlaces()
 
-  const filteredPlaces = HOUSEHOLD_FAVORITES.filter(p => 
+  const favorites = savedPlaces.length > 0
+    ? savedPlaces.map(p => ({
+        name: p.name,
+        address: savedPlaceAddress(p) || p.address || '',
+        driveMinutes: 0,
+        distanceMiles: 0,
+        icon: MapPin
+      }))
+    : DEFAULT_FAVORITES
+
+  const filteredPlaces = favorites.filter(p => 
     p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     p.address.toLowerCase().includes(searchTerm.toLowerCase())
   )
@@ -98,7 +110,7 @@ export default function DestinationPopover({
           Frequent Household Places
         </div>
         <div className="flex flex-col gap-2">
-          {(filteredPlaces.length > 0 ? filteredPlaces : HOUSEHOLD_FAVORITES).map((place) => {
+          {(filteredPlaces.length > 0 ? filteredPlaces : DEFAULT_FAVORITES).map((place) => {
             const isSelected = currentVenue.name.toLowerCase() === place.name.toLowerCase()
             const IconComp = place.icon
             return (
@@ -129,9 +141,11 @@ export default function DestinationPopover({
                     <div className="text-xs text-slate-500 mt-0.5 truncate">{place.address}</div>
                   </div>
                 </div>
-                <div className="font-mono text-xs font-bold text-emerald-600 shrink-0 ml-2">
-                  {place.driveMinutes}m drive
-                </div>
+                {place.driveMinutes > 0 && (
+                  <div className="font-mono text-xs font-bold text-emerald-600 shrink-0 ml-2">
+                    {place.driveMinutes}m drive
+                  </div>
+                )}
               </div>
             )
           })}
@@ -140,3 +154,4 @@ export default function DestinationPopover({
     </div>
   )
 }
+

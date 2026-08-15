@@ -21,26 +21,26 @@ const DEFAULT_HOUSEHOLD_PLACES: VenueInfo[] = [
   {
     name: 'The Gardens Mall',
     address: '3101 PGA Blvd, Palm Beach Gardens, FL 33410',
-    driveMinutes: 20,
-    distanceMiles: 8.4
+    driveMinutes: 0,
+    distanceMiles: 0
   },
   {
     name: 'Target on PGA',
     address: '5900 PGA Blvd, Palm Beach Gardens, FL 33418',
-    driveMinutes: 12,
-    distanceMiles: 4.8
+    driveMinutes: 0,
+    distanceMiles: 0
   },
   {
     name: 'Jupiter Community Park',
     address: '3377 Church St, Jupiter, FL 33458',
-    driveMinutes: 16,
-    distanceMiles: 7.1
+    driveMinutes: 0,
+    distanceMiles: 0
   },
   {
     name: 'The Benjamin School',
     address: '11000 Ellison Wilson Rd, North Palm Beach, FL 33408',
-    driveMinutes: 14,
-    distanceMiles: 5.9
+    driveMinutes: 0,
+    distanceMiles: 0
   }
 ]
 
@@ -61,8 +61,8 @@ export default function LivingVenueCard({
     ? savedPlaces.map(p => ({
         name: p.name,
         address: savedPlaceAddress(p) || p.address || '',
-        driveMinutes: 15,
-        distanceMiles: 6.0
+        driveMinutes: 0,
+        distanceMiles: 0
       }))
     : DEFAULT_HOUSEHOLD_PLACES
 
@@ -128,8 +128,8 @@ export default function LivingVenueCard({
     onSelectVenue({
       name: item.name,
       address: item.address,
-      driveMinutes: 18,
-      distanceMiles: 7.5
+      driveMinutes: 0,
+      distanceMiles: 0,
     })
     setIsChanging(false)
     setSearchTerm('')
@@ -282,9 +282,15 @@ export default function LivingVenueCard({
                       <div className="text-xs text-slate-500 truncate">{place.address}</div>
                     </div>
                   </div>
-                  <div className="font-mono text-xs font-bold text-emerald-600 shrink-0 ml-1.5">
-                    {place.driveMinutes}m
-                  </div>
+                  {place.driveMinutes > 0 ? (
+                    <div className="font-mono text-xs font-bold text-emerald-600 shrink-0 ml-1.5">
+                      {place.driveMinutes}m
+                    </div>
+                  ) : (
+                    <span className="text-xs font-bold text-slate-600 bg-slate-100 border border-slate-200 py-0.5 px-2 rounded-lg shrink-0 ml-1.5">
+                      Select
+                    </span>
+                  )}
                 </div>
               )
             })}

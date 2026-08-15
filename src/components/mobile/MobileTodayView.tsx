@@ -86,7 +86,7 @@ export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate 
     destination: heroDestination,
     eventStartIso: heroEvent?.start_time ?? null,
     enabled: Boolean(heroEvent && heroDestination && isHeroTravel),
-    bufferMins: 10,
+    bufferMins: 5,
   })
 
   // Derive driver & responsible member

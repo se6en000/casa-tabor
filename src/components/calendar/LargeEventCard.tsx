@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { format, isSameDay } from 'date-fns'
 import { CheckCircle2, Clock3, Navigation } from 'lucide-react'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
@@ -37,6 +38,13 @@ export default function LargeEventCard({
   const cleanTitle = cleanEventTitle(event.title)
   const showSyncState = event.event_type !== 'reminder'
   const isGoogleSynced = !!event.google_event_id
+  const departureAt = useMemo(() => {
+    if (event.enrichment?.departure_time) return new Date(event.enrichment.departure_time)
+    if (event.enrichment?.drive_time_mins && event.start_time) {
+      return new Date(new Date(event.start_time).getTime() - (event.enrichment.drive_time_mins + 5) * 60_000)
+    }
+    return null
+  }, [event.enrichment?.departure_time, event.enrichment?.drive_time_mins, event.start_time])
 
   return (
     <div
@@ -143,14 +151,14 @@ export default function LargeEventCard({
             )}
           </div>
 
-          {event.enrichment?.departure_time && !happening && (
+          {departureAt && !happening && (
             <div className="flex items-center gap-1 mt-1.5 text-body-sm font-semibold text-casa-gold">
               <Navigation size={12} className="shrink-0" />
-              Leave by {format(new Date(event.enrichment.departure_time), 'h:mm a')}
-              {event.enrichment.drive_time_mins && ` · ${event.enrichment.drive_time_mins} min drive`}
+              Leave by {format(departureAt, 'h:mm a')}
+              {event.enrichment?.drive_time_mins && ` · ${event.enrichment.drive_time_mins} min drive`}
             </div>
           )}
-          {!event.enrichment?.departure_time && event.enrichment?.prep_notes && (
+          {!departureAt && event.enrichment?.prep_notes && (
             <p className="text-body-sm text-casa-muted mt-1 line-clamp-1">{event.enrichment.prep_notes}</p>
           )}
         </div>

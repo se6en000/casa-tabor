@@ -1,6 +1,6 @@
-import { useRef } from 'react'
+import { useMemo, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { Repeat } from 'lucide-react'
+import { Repeat, Navigation } from 'lucide-react'
 import { format } from 'date-fns'
 import { cn } from '../../utils/cn'
 import { cleanEventTitle } from '../../utils/eventTitle'
@@ -64,6 +64,15 @@ export default function EventBlock({ event, onClick, onDoubleClick, columnCount 
   const isCompact = height < 50
   const confidence = event.enrichment?.confidence
   const confidenceDotClass = confidence ? CONFIDENCE_DOT[confidence] : null
+
+  const departureAt = useMemo(() => {
+    if (event.all_day) return null
+    if (event.enrichment?.departure_time) return new Date(event.enrichment.departure_time)
+    if (event.enrichment?.drive_time_mins && event.start_time) {
+      return new Date(new Date(event.start_time).getTime() - (event.enrichment.drive_time_mins + 5) * 60_000)
+    }
+    return null
+  }, [event.enrichment?.departure_time, event.enrichment?.drive_time_mins, event.start_time, event.all_day])
 
   // ── Long-press drag detection ────────────────────────────────
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -140,12 +149,17 @@ export default function EventBlock({ event, onClick, onDoubleClick, columnCount 
         {cleanEventTitle(event.title)}
       </p>
 
-      {/* Time range */}
-      {!isCompact && (
+      {/* Leave by & Time range */}
+      {departureAt ? (
+        <p className="text-caption font-mono font-bold text-amber-200 truncate flex items-center gap-1 mt-0.5">
+          <Navigation size={9} className="shrink-0 text-amber-300" />
+          <span>Leave {format(departureAt, 'h:mm a')}</span>
+        </p>
+      ) : !isCompact ? (
         <p className="text-caption font-body opacity-80 mt-0.5">
           {format(start, 'h:mm a')} – {format(end, 'h:mm a')}
         </p>
-      )}
+      ) : null}
 
       {/* Compact member metadata avoids oversized controls inside the time grid. */}
       {!isCompact && event.members && event.members.length > 0 && (() => {

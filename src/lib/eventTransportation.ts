@@ -132,7 +132,7 @@ export function eventPassengerNames(event: Pick<EventWithDetails, 'members'>): s
 export function createDefaultTransportationPlan(
   event: EventWithDetails,
   homeAddress: string,
-  driver?: { id: string; name: string } | null,
+  driver?: { id: string | null; name: string } | null,
 ): EventTransportationPlan {
   const destinationName = event.location_name?.trim() || event.address?.trim() || 'Event location'
   const attendeeRoster = eventPassengerNames(event)
@@ -323,4 +323,158 @@ export function updateTransportationDriver(
         : leg,
     ),
   }
+}
+
+export function buildEventTransportationPlan(
+  event: EventWithDetails,
+  homeAddress: string,
+  driver?: { id: string | null; name: string } | null,
+  options?: { waitOnSite?: boolean },
+): EventTransportationPlan {
+  const base = createDefaultTransportationPlan(event, homeAddress, driver)
+  const waitOnSite = options?.waitOnSite ?? true
+  const withWait = updateTransportationWait(base, waitOnSite)
+  const fullPlan = appendReturnHomeLeg(withWait, event, homeAddress)
+  if (driver) {
+    return updateTransportationDriver(fullPlan, 0, driver, true)
+  }
+  return fullPlan
+}
+
+export function applyDriverChangeToPlan(
+  plan: EventTransportationPlan,
+  legIndex: number,
+  driver: { id: string | null; name: string },
+  syncBoth: boolean = false,
+): EventTransportationPlan {
+  const shouldSync = syncBoth || plan.waitOnSite || plan.legs.length <= 1
+  return updateTransportationDriver(plan, legIndex, driver, shouldSync)
+}
+
+export function applyWaitBehaviorToPlan(
+  plan: EventTransportationPlan,
+  behavior: 'stay' | 'dropoff',
+  event: EventWithDetails,
+  homeAddress: string,
+): EventTransportationPlan {
+  const waitOnSite = behavior === 'stay'
+  let currentPlan = plan
+  if (currentPlan.legs.length < 2) {
+    currentPlan = appendReturnHomeLeg(currentPlan, event, homeAddress)
+  }
+  const updated = updateTransportationWait(currentPlan, waitOnSite)
+  if (waitOnSite && updated.legs[0]) {
+    const primaryDriver = {
+      id: updated.legs[0].driverId,
+      name: updated.legs[0].driverName,
+    }
+    return updateTransportationDriver(updated, 0, primaryDriver, true)
+  }
+  return updated
+}
+
+export interface CalculatedRouteDetails {
+  found: boolean
+  driveMinutes: number
+  distanceMiles: number
+  departureTimeIso: string | null
+  arrivalTimeIso: string | null
+  trafficDelayMinutes: number
+  routeSummary: string | null
+  error?: string
+}
+
+export function parseDistanceMilesFromSummary(summary?: string | null): number {
+  if (!summary) return 0
+  const match = summary.match(/([0-9]+(?:\.[0-9]+)?)\s*mi\b/i)
+  return match ? Number(match[1]) : 0
+}
+
+export function buildLogisticsStepsFromRoute({
+  eventId,
+  eventTitle,
+  startTime,
+  endTime,
+  venueName,
+  venueAddress,
+  homeAddress,
+  driveMinutes,
+  distanceMiles,
+  driverLeg1 = 'Jake',
+  driverLeg2 = 'Jake',
+  attendees = [],
+  waitOnSite = true,
+  bufferMinutes = 5,
+}: {
+  eventId: string
+  eventTitle: string
+  startTime: string
+  endTime: string
+  venueName: string
+  venueAddress: string
+  homeAddress?: string
+  driveMinutes: number
+  distanceMiles: number
+  driverLeg1?: string
+  driverLeg2?: string
+  attendees?: string[]
+  waitOnSite?: boolean
+  bufferMinutes?: number
+}) {
+  const startDate = new Date(startTime)
+  const endDate = new Date(endTime)
+  const isInvalidDate = Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())
+
+  const totalPreMinutes = Math.max(0, driveMinutes) + Math.max(0, bufferMinutes)
+  const departureDate = isInvalidDate ? new Date() : new Date(startDate.getTime() - totalPreMinutes * 60_000)
+  const returnDate = isInvalidDate ? new Date() : new Date(endDate.getTime() + Math.max(0, driveMinutes) * 60_000)
+
+  const attendeesText = attendees.length > 0 ? attendees.join(', ') : 'Family'
+  const durationMinutes = isInvalidDate ? 60 : Math.max(15, Math.round((endDate.getTime() - startDate.getTime()) / 60_000))
+  const hours = Math.floor(durationMinutes / 60)
+  const mins = durationMinutes % 60
+  const durationText = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`
+
+  const steps = [
+    {
+      id: crypto.randomUUID(),
+      event_id: eventId,
+      sort_order: 1,
+      step_type: 'departure',
+      icon: '🚗',
+      title: waitOnSite ? 'Depart Home Together' : 'Leg 1: Drop Off Drive',
+      description: `${driveMinutes} min drive · ${distanceMiles} miles · ${driverLeg1} driving ${attendeesText}`,
+      time: departureDate.toISOString(),
+      location_name: 'Home',
+      address: homeAddress || '',
+    },
+    {
+      id: crypto.randomUUID(),
+      event_id: eventId,
+      sort_order: 2,
+      step_type: 'arrival',
+      icon: '📍',
+      title: venueName || eventTitle || 'Destination',
+      description: waitOnSite
+        ? `${driverLeg1} stays on site with ${attendeesText} (${durationText})`
+        : `Attendees at venue · Pickup scheduled at end`,
+      time: startDate.toISOString(),
+      location_name: venueName || 'Destination',
+      address: venueAddress || '',
+    },
+    {
+      id: crypto.randomUUID(),
+      event_id: eventId,
+      sort_order: 3,
+      step_type: waitOnSite ? 'return' : 'pickup',
+      icon: '🏠',
+      title: waitOnSite ? 'Return Home Together' : 'Leg 2: Return Pickup Drive',
+      description: `${driveMinutes} min return drive · ${driverLeg2} driving`,
+      time: returnDate.toISOString(),
+      location_name: 'Home',
+      address: homeAddress || '',
+    },
+  ]
+
+  return steps
 }

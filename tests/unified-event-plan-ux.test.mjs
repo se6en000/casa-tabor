@@ -72,7 +72,7 @@ test('addressed non-reminder events still expose The Plan even when they are not
 
 test('transportation passengers use touch chips and synchronize with event attendees', () => {
   assert.match(livingHook, /toggleMember/)
-  assert.match(livingHook, /from\('event_members'\)/)
+  assert.match(eventMutations, /from\('event_members'\)/)
   assert.match(transportation, /\.from\('event_members'\)\.upsert/)
 })
 
@@ -157,11 +157,13 @@ test('saved place addresses confirm directly from the event panel and run a reco
   assert.match(savedPlaceAddressConfirmation, /update public\.event_plan_overrides/)
 })
 
+const eventMutations = readFileSync(resolve('src/lib/eventMutations.ts'), 'utf8')
+
 test('category locking prevents AI overwrite while manual category edits stay locked', () => {
   assert.match(categoryLockMigration, /category_locked boolean not null default false/)
   assert.match(enrichFunction, /effectiveLockedCategory/)
   assert.match(enrichFunction, /category_locked: Boolean\(effectiveLockedCategory\)/)
-  assert.match(livingHook, /category_locked: true/)
+  assert.match(eventMutations, /category_locked: true/)
   assert.match(eventEdit, /category_locked: categoryLocked/)
   assert.match(eventQuery, /category_locked/)
 })

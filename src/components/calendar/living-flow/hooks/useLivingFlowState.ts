@@ -7,6 +7,23 @@ import { CATEGORY_LABEL } from '../../categoryFields'
 import type { EventWithDetails } from '../../../../hooks/useCalendarEvents'
 import type { FamilyMember } from '../../../../types'
 import type { LivingFlowState, LivingFlowMode, TravelBehavior, RecurrenceScope, VenueInfo } from '../types'
+import {
+  buildEventTransportationPlan,
+  applyDriverChangeToPlan,
+  applyWaitBehaviorToPlan,
+  parseDistanceMilesFromSummary,
+} from '../../../../lib/eventTransportation'
+import { saveEventTransportationOverride } from '../../../../lib/eventPlanOverrides'
+import {
+  updateEventTitle,
+  updateEventSchedule,
+  updateEventVenue,
+  toggleEventAttendee,
+  updateEventCategory,
+  snoozeEventOrReminder,
+  completeEventOrReminder,
+  deleteCalendarEvent,
+} from '../../../../lib/eventMutations'
 
 const DEFAULT_VENUE: VenueInfo = {
   name: 'Home',
@@ -63,13 +80,17 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     }
     const matchedPlace = findSavedPlaceByAddress(savedPlaces, initialEvent.address)
     const isHome = (initialEvent.location_name || '').toLowerCase() === 'home' || !initialEvent.address
+    const enr = initialEvent.enrichment
+    const distFromSummary = parseDistanceMilesFromSummary(enr?.route_summary)
+
     return {
       name: initialEvent.location_name || matchedPlace?.name || 'Destination',
       address: initialEvent.address || '',
-      driveMinutes: isHome ? 0 : 18,
-      distanceMiles: isHome ? 0 : 6.5
+      driveMinutes: isHome ? 0 : (enr?.drive_time_mins ?? 0),
+      distanceMiles: isHome ? 0 : (distFromSummary ?? 0),
+      routeSummary: isHome ? null : (enr?.route_summary ?? null),
     }
-  }, [initialEvent?.location_name, initialEvent?.address, savedPlaces])
+  }, [initialEvent?.location_name, initialEvent?.address, initialEvent?.enrichment, savedPlaces])
 
   // Extract initial attendee IDs
   const initialMemberIds = useMemo(() => {
@@ -86,6 +107,29 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     return initialMemberIds[0] || familyMembers.find((m: FamilyMember) => m.role === 'parent')?.id || null
   }, [initialMemberIds, familyMembers])
 
+  const initialDriverLeg1 = useMemo(() => {
+    const plan = initialEvent?.plan_override?.transportation_plan
+    if (plan?.legs?.[0]?.driverName) return plan.legs[0].driverName
+    const overrideId = initialEvent?.plan_override?.driver_overrides?.[0]
+    if (overrideId) {
+      const match = familyMembers.find(m => m.id === overrideId)
+      if (match) return match.name
+    }
+    const parent = familyMembers.find(m => m.role === 'parent' && m.can_drive)
+    return parent?.name || 'Kelly'
+  }, [initialEvent?.plan_override, familyMembers])
+
+  const initialDriverLeg2 = useMemo(() => {
+    const plan = initialEvent?.plan_override?.transportation_plan
+    if (plan?.legs?.[1]?.driverName) return plan.legs[1].driverName
+    const overrideId = initialEvent?.plan_override?.driver_overrides?.[1]
+    if (overrideId) {
+      const match = familyMembers.find(m => m.id === overrideId)
+      if (match) return match.name
+    }
+    return initialDriverLeg1
+  }, [initialEvent?.plan_override, familyMembers, initialDriverLeg1])
+
   const normalizedCategory = useMemo(() => {
     return normalizeCategoryName(initialEvent?.enrichment?.category)
   }, [initialEvent?.enrichment?.category])
@@ -101,8 +145,8 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     category: normalizedCategory.label,
     categoryIcon: '',
     travelBehavior: initialEvent?.plan_override?.waits === false ? 'dropoff' : 'stay',
-    driverLeg1: 'Kelly',
-    driverLeg2: 'Kelly',
+    driverLeg1: initialDriverLeg1,
+    driverLeg2: initialDriverLeg2,
     startDate: initialStartDate,
     endDate: initialEndDate,
     durationMinutes: initialDuration,
@@ -130,9 +174,63 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
       venue: initialVenue,
       selectedMemberIds: initialMemberIds,
       primaryMemberId: initialPrimaryId,
-      travelBehavior: initialEvent.plan_override?.waits === false ? 'dropoff' : 'stay'
+      travelBehavior: initialEvent.plan_override?.waits === false ? 'dropoff' : 'stay',
+      driverLeg1: initialDriverLeg1,
+      driverLeg2: initialDriverLeg2,
     }))
-  }, [initialEvent, initialStartDate, initialEndDate, initialDuration, initialVenue, initialMemberIds, initialPrimaryId])
+  }, [initialEvent, initialStartDate, initialEndDate, initialDuration, initialVenue, initialMemberIds, initialPrimaryId, initialDriverLeg1, initialDriverLeg2])
+
+  // Resolve live route ETA if event has destination address but missing computed driving metrics
+  useEffect(() => {
+    if (!initialEvent?.id || !initialEvent.address || (initialEvent.location_name || '').toLowerCase() === 'home') {
+      return
+    }
+    const hasDriveMins = (initialEvent.enrichment?.drive_time_mins ?? 0) > 0
+    if (hasDriveMins) return
+
+    let isMounted = true
+    setState(prev => ({ ...prev, isCalculatingRoute: true }))
+
+    void (async () => {
+      try {
+        const { data } = await supabase.functions.invoke('route-eta', {
+          body: {
+            destination: initialEvent.address,
+            arrival_time: initialStartDate.toISOString(),
+            buffer_mins: 5,
+          },
+        })
+        if (isMounted && data?.found) {
+          const resolvedVenue: VenueInfo = {
+            name: initialEvent.location_name || 'Destination',
+            address: initialEvent.address || '',
+            driveMinutes: data.drive_time_mins ?? 0,
+            distanceMiles: data.distance_miles ?? parseDistanceMilesFromSummary(data.route_summary) ?? 0,
+            routeSummary: data.route_summary ?? null,
+            trafficDelayMinutes: data.traffic_delay_mins ?? 0,
+          }
+          setState(prev => ({
+            ...prev,
+            venue: resolvedVenue,
+            isCalculatingRoute: false,
+          }))
+          void updateEventVenue(supabase, queryClient, initialEvent, {
+            name: resolvedVenue.name,
+            address: resolvedVenue.address,
+            driveMinutes: resolvedVenue.driveMinutes,
+            distanceMiles: resolvedVenue.distanceMiles,
+            routeSummary: resolvedVenue.routeSummary ?? undefined,
+          }, { familyMembers })
+        } else if (isMounted) {
+          setState(prev => ({ ...prev, isCalculatingRoute: false }))
+        }
+      } catch {
+        if (isMounted) setState(prev => ({ ...prev, isCalculatingRoute: false }))
+      }
+    })()
+
+    return () => { isMounted = false }
+  }, [initialEvent?.id, initialEvent?.address, initialStartDate, familyMembers, queryClient])
 
   // Computed Departure Time
   const departureDate = useMemo(() => {
@@ -164,25 +262,55 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     void queryClient.refetchQueries({ queryKey: ['events'], type: 'active' })
   }, [queryClient, initialEvent?.id])
 
+  const persistDriverAndTravel = useCallback(async (
+    newDriverLeg1: string,
+    newDriverLeg2: string,
+    newBehavior: TravelBehavior,
+  ) => {
+    if (!initialEvent?.id) return
+
+    const findMember = (name: string): FamilyMember | undefined => {
+      const lower = name.toLowerCase().trim()
+      return familyMembers.find(m => m.name.toLowerCase() === lower || m.full_name?.toLowerCase() === lower)
+    }
+
+    const driver1Member = findMember(newDriverLeg1)
+    const driver2Member = findMember(newDriverLeg2)
+    const driver1 = { id: driver1Member?.id ?? null, name: newDriverLeg1 }
+    const driver2 = { id: driver2Member?.id ?? null, name: newDriverLeg2 }
+
+    const homeAddress = '3209 Washington Road, West Palm Beach, FL, 33405-1646'
+    const waits = newBehavior === 'stay'
+
+    const currentPlan = initialEvent.plan_override?.transportation_plan
+      ?? buildEventTransportationPlan(initialEvent, homeAddress, driver1, { waitOnSite: waits })
+
+    const withDriver1 = applyDriverChangeToPlan(currentPlan, 0, driver1, false)
+    const withDriver2 = applyDriverChangeToPlan(withDriver1, 1, driver2, false)
+    const finalPlan = applyWaitBehaviorToPlan(withDriver2, newBehavior, initialEvent, homeAddress)
+
+    await saveEventTransportationOverride({
+      supabase,
+      queryClient,
+      event: initialEvent,
+      transportationPlan: finalPlan,
+      waits,
+      modeOverride: initialEvent.plan_override?.mode_override || 'appointment',
+    })
+
+    invalidateCalendar()
+  }, [initialEvent, familyMembers, queryClient, invalidateCalendar])
+
   // Update Title
   const updateTitle = useCallback(async (newTitle: string) => {
     setState(prev => ({ ...prev, title: newTitle }))
     if (!initialEvent?.id) return
     try {
-      const { error } = await supabase
-        .from('events')
-        .update({ 
-          title: newTitle,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', initialEvent.id)
-
-      if (error) throw error
-      invalidateCalendar()
+      await updateEventTitle(supabase, queryClient, initialEvent.id, newTitle)
     } catch (err) {
       console.error('[LivingFlow] Failed to update event title:', err)
     }
-  }, [initialEvent?.id, invalidateCalendar])
+  }, [initialEvent?.id, queryClient])
 
   // Toggle Attendee
   const toggleMember = useCallback(async (memberId: string) => {
@@ -195,69 +323,98 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
 
     if (!initialEvent?.id) return
     try {
-      if (isSelected) {
-        // Remove from event_members
-        const { error } = await supabase
-          .from('event_members')
-          .delete()
-          .eq('event_id', initialEvent.id)
-          .eq('family_member_id', memberId)
-        if (error) throw error
-      } else {
-        // Add to event_members
-        const { error } = await supabase
-          .from('event_members')
-          .insert({
-            event_id: initialEvent.id,
-            family_member_id: memberId,
-            role: 'attendee',
-            rsvp_status: 'accepted'
-          })
-        if (error) throw error
-      }
-      invalidateCalendar()
+      await toggleEventAttendee(supabase, queryClient, initialEvent, memberId, !isSelected, familyMembers)
     } catch (err) {
       console.error('[LivingFlow] Failed to toggle member:', err)
     }
-  }, [initialEvent?.id, state.selectedMemberIds, invalidateCalendar])
+  }, [initialEvent, state.selectedMemberIds, familyMembers, queryClient])
 
   // Set Travel Behavior
   const setTravelBehavior = useCallback((behavior: TravelBehavior) => {
-    setState(prev => ({ ...prev, travelBehavior: behavior }))
-  }, [])
+    setState(prev => {
+      const nextLeg2 = behavior === 'stay' ? prev.driverLeg1 : prev.driverLeg2
+      void persistDriverAndTravel(prev.driverLeg1, nextLeg2, behavior)
+      return { ...prev, travelBehavior: behavior, driverLeg2: nextLeg2 }
+    })
+  }, [persistDriverAndTravel])
 
   // Set Driver
   const setDriver = useCallback((leg: 1 | 2, driverName: string, syncBoth: boolean) => {
     setState(prev => {
-      if (syncBoth || prev.travelBehavior === 'stay') {
-        return { ...prev, driverLeg1: driverName, driverLeg2: driverName }
+      const nextLeg1 = (syncBoth || prev.travelBehavior === 'stay' || leg === 1) ? driverName : prev.driverLeg1
+      const nextLeg2 = (syncBoth || prev.travelBehavior === 'stay' || leg === 2) ? driverName : prev.driverLeg2
+      void persistDriverAndTravel(nextLeg1, nextLeg2, prev.travelBehavior)
+      return {
+        ...prev,
+        driverLeg1: nextLeg1,
+        driverLeg2: nextLeg2
       }
-      return leg === 1 
-        ? { ...prev, driverLeg1: driverName }
-        : { ...prev, driverLeg2: driverName }
     })
-  }, [])
+  }, [persistDriverAndTravel])
 
   // Set Venue / Address
   const setVenue = useCallback(async (venue: VenueInfo) => {
-    setState(prev => ({ ...prev, venue }))
-    if (!initialEvent?.id) return
-    try {
-      const { error } = await supabase
-        .from('events')
-        .update({
-          location_name: venue.name,
-          address: venue.address,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', initialEvent.id)
+    const isHome = (venue.name || '').toLowerCase() === 'home' || !venue.address?.trim()
 
-      if (error) throw error
-      invalidateCalendar()
+    setState(prev => ({
+      ...prev,
+      venue: {
+        ...venue,
+        driveMinutes: isHome ? 0 : (venue.driveMinutes || prev.venue.driveMinutes || 0),
+        distanceMiles: isHome ? 0 : (venue.distanceMiles || prev.venue.distanceMiles || 0),
+      },
+      isCalculatingRoute: !isHome && !venue.driveMinutes,
+    }))
+
+    if (!initialEvent?.id) return
+
+    let calculatedVenue = { ...venue }
+
+    if (!isHome && (!calculatedVenue.driveMinutes || calculatedVenue.driveMinutes === 0)) {
+      try {
+        const { data } = await supabase.functions.invoke('route-eta', {
+          body: {
+            destination: venue.address,
+            arrival_time: state.startDate.toISOString(),
+            buffer_mins: state.bufferMinutes,
+          },
+        })
+        if (data?.found) {
+          calculatedVenue = {
+            ...calculatedVenue,
+            driveMinutes: data.drive_time_mins ?? 0,
+            distanceMiles: data.distance_miles ?? parseDistanceMilesFromSummary(data.route_summary) ?? 0,
+            routeSummary: data.route_summary ?? null,
+            trafficDelayMinutes: data.traffic_delay_mins ?? 0,
+          }
+          setState(prev => ({
+            ...prev,
+            venue: calculatedVenue,
+            isCalculatingRoute: false,
+          }))
+        } else {
+          setState(prev => ({ ...prev, isCalculatingRoute: false }))
+        }
+      } catch (err) {
+        console.warn('[LivingFlow] Failed to compute route ETA:', err)
+        setState(prev => ({ ...prev, isCalculatingRoute: false }))
+      }
+    }
+
+    try {
+      await updateEventVenue(supabase, queryClient, initialEvent, {
+        name: calculatedVenue.name,
+        address: calculatedVenue.address,
+        driveMinutes: calculatedVenue.driveMinutes,
+        distanceMiles: calculatedVenue.distanceMiles,
+        routeSummary: calculatedVenue.routeSummary ?? undefined,
+      }, {
+        familyMembers,
+      })
     } catch (err) {
       console.error('[LivingFlow] Failed to update venue:', err)
     }
-  }, [initialEvent?.id, invalidateCalendar])
+  }, [initialEvent, state.startDate, state.bufferMinutes, familyMembers, queryClient])
 
   // Set Start Time and Duration
   const setStartAndDuration = useCallback(async (startDate: Date, durationMins: number) => {
@@ -271,21 +428,11 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
 
     if (!initialEvent?.id) return
     try {
-      const { error } = await supabase
-        .from('events')
-        .update({
-          start_time: startDate.toISOString(),
-          end_time: endDate.toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', initialEvent.id)
-
-      if (error) throw error
-      invalidateCalendar()
+      await updateEventSchedule(supabase, queryClient, initialEvent, startDate, endDate)
     } catch (err) {
       console.error('[LivingFlow] Failed to update event timing:', err)
     }
-  }, [initialEvent?.id, invalidateCalendar])
+  }, [initialEvent, queryClient])
 
   // Nudge Time (+/- 15m)
   const nudgeMinutes = useCallback((mins: number) => {
@@ -299,167 +446,51 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
 
   // Set Category & Mode
   const setCategory = useCallback(async (catName: string, icon: string, mode: LivingFlowMode = 'event') => {
-    const catSlug = catName.toLowerCase().replace(/\s+/g, '_')
     setState(prev => ({ ...prev, category: catName, categoryIcon: icon, mode }))
     if (!initialEvent?.id) return
     try {
-      // 1. Update events table event_type
-      const { error: eventError } = await supabase
-        .from('events')
-        .update({
-          event_type: mode === 'reminder' ? 'reminder' : 'event',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', initialEvent.id)
-
-      if (eventError) throw eventError
-
-      // 2. Upsert event_enrichments category
-      await supabase
-        .from('event_enrichments')
-        .upsert({
-          event_id: initialEvent.id,
-          category: catSlug,
-          category_locked: true,
-          updated_at: new Date().toISOString()
-        }, { onConflict: 'event_id' })
-
-      invalidateCalendar()
+      await updateEventCategory(supabase, queryClient, initialEvent.id, catName, mode)
     } catch (err) {
       console.error('[LivingFlow] Failed to update category:', err)
     }
-  }, [initialEvent?.id, invalidateCalendar])
+  }, [initialEvent?.id, queryClient])
 
   // Delete Event
   const deleteEvent = useCallback(async () => {
     if (!initialEvent?.id) return
     if (!confirm('Are you sure you want to delete this?')) return
-    const eventId = initialEvent.id
-
-    // 1. Optimistically evict event from all cached query lists for 0ms Hero and schedule sync
-    queryClient.setQueriesData<EventWithDetails[]>({ queryKey: ['events'] }, (old) => {
-      if (!Array.isArray(old)) return old
-      return old.filter((ev) => ev.id !== eventId)
-    })
-    queryClient.removeQueries({ queryKey: ['event-details', eventId] })
-
     onClose?.()
 
     try {
-      const { error } = await supabase
-        .from('events')
-        .delete()
-        .eq('id', eventId)
-
-      if (error) throw error
-      invalidateCalendar()
+      await deleteCalendarEvent(supabase, queryClient, initialEvent.id)
     } catch (err) {
       console.error('[LivingFlow] Failed to delete event:', err)
-      invalidateCalendar()
     }
-  }, [initialEvent?.id, queryClient, invalidateCalendar, onClose])
+  }, [initialEvent?.id, queryClient, onClose])
 
   // Mark Completed / Done
   const markCompleted = useCallback(async () => {
     if (!initialEvent?.id) return
-    const eventId = initialEvent.id
-
-    // 1. Optimistically evict event from all cached query lists for 0ms Hero and schedule sync
-    queryClient.setQueriesData<EventWithDetails[]>({ queryKey: ['events'] }, (old) => {
-      if (!Array.isArray(old)) return old
-      return old.filter((ev) => ev.id !== eventId)
-    })
-    queryClient.removeQueries({ queryKey: ['event-details', eventId] })
-
     onClose?.()
 
     try {
-      const isReminder = initialEvent.event_type === 'reminder' || state.mode === 'reminder'
-      if (isReminder) {
-        const { error } = await supabase.rpc('complete_reminder_with_linked_actions', {
-          p_reminder_id: eventId,
-          p_expected_updated_at: initialEvent.updated_at ?? null,
-        })
-        if (error) {
-          console.warn('[LivingFlow] complete_reminder_with_linked_actions error, falling back to direct cancellation:', error)
-          const { error: cancelError } = await supabase
-            .from('events')
-            .update({ 
-              status: 'cancelled',
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', eventId)
-          if (cancelError) throw cancelError
-
-          // Also resolve any linked prep items
-          await supabase
-            .from('prep_items')
-            .update({ dismissed: true, completed: true, completed_at: new Date().toISOString() })
-            .eq('source_ref', eventId)
-            .eq('dismissed', false)
-        }
-      } else {
-        const { error } = await supabase
-          .from('events')
-          .update({ 
-            status: 'cancelled',
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', eventId)
-
-        if (error) throw error
-      }
-      invalidateCalendar()
+      await completeEventOrReminder(supabase, queryClient, initialEvent)
     } catch (err) {
       console.error('[LivingFlow] Failed to complete event:', err)
-      invalidateCalendar()
     }
-  }, [initialEvent?.id, initialEvent?.event_type, initialEvent?.updated_at, state.mode, queryClient, invalidateCalendar, onClose])
+  }, [initialEvent, queryClient, onClose])
 
   // Snooze Reminder
   const snoozeReminder = useCallback(async (durationMinutes: number = 60) => {
     if (!initialEvent?.id) return
-    const eventId = initialEvent.id
-    const now = new Date()
-    const baseTime = initialEvent.start_time ? new Date(initialEvent.start_time) : now
-    const referenceMs = baseTime.getTime() < now.getTime() ? now.getTime() : baseTime.getTime()
-    const newStart = new Date(referenceMs + durationMinutes * 60 * 1000)
-    const durationMs = (state.durationMinutes || 15) * 60 * 1000
-    const newEnd = new Date(newStart.getTime() + durationMs)
-
-    // 1. Optimistically update cached event start/end times
-    queryClient.setQueriesData<EventWithDetails[]>({ queryKey: ['events'] }, (old) => {
-      if (!Array.isArray(old)) return old
-      return old.map((ev) => {
-        if (ev.id !== eventId) return ev
-        return {
-          ...ev,
-          start_time: newStart.toISOString(),
-          end_time: newEnd.toISOString(),
-        }
-      }).sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
-    })
-
     onClose?.()
 
     try {
-      const { error } = await supabase
-        .from('events')
-        .update({
-          start_time: newStart.toISOString(),
-          end_time: newEnd.toISOString(),
-          status: 'confirmed',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', eventId)
-
-      if (error) throw error
-      invalidateCalendar()
+      await snoozeEventOrReminder(supabase, queryClient, initialEvent, durationMinutes)
     } catch (err) {
       console.error('[LivingFlow] Failed to snooze reminder:', err)
-      invalidateCalendar()
     }
-  }, [initialEvent?.id, initialEvent?.start_time, state.durationMinutes, queryClient, invalidateCalendar, onClose])
+  }, [initialEvent, queryClient, onClose])
 
   const setRecurScope = useCallback((scope: RecurrenceScope) => {
     setState(prev => ({ ...prev, recurScope: scope }))

@@ -7,6 +7,7 @@ import { cleanEventTitle } from '../utils/eventTitle'
 import { buildReminderPrepDescription } from '../utils/reminderLateness'
 import { computeReminderSnoozeWindow } from '../utils/reminderSnooze'
 import type { SnoozeDuration } from '../utils/snoozeDuration'
+import { publishEventAggregatePatch, evictEventFromAllCaches } from '../lib/eventAggregateCache'
 
 const ONE_HOUR_MS = 60 * 60 * 1000
 const ONE_DAY_MS = 24 * 60 * 60 * 1000
@@ -24,6 +25,7 @@ export function useReminderNeedsYouActions() {
     await Promise.all([
       qc.invalidateQueries({ queryKey: ['today-events'] }),
       qc.invalidateQueries({ queryKey: ['events'] }),
+      qc.invalidateQueries({ queryKey: ['rolling-events'] }),
       qc.invalidateQueries({ queryKey: ['prep-items'] }),
     ])
     void qc.refetchQueries({ queryKey: ['events'], type: 'active' })
@@ -39,23 +41,21 @@ export function useReminderNeedsYouActions() {
       .select('id')
       .in('source_type', activeSources)
       .eq('source_ref', event.id)
+      .eq('dismissed', false)
       .limit(1)
 
     if (existingError) throw existingError
-    if ((existing ?? []).length > 0) return
+    if (existing && existing.length > 0) return
 
     const now = new Date()
-    const dueBy = new Date(now.getTime() + ONE_DAY_MS)
-    const overdueMs = now.getTime() - (getEventStartDate(event).getTime() + MISSED_GRACE_MS)
-    const priority = sourceType === REMINDER_SOURCE_MISSED && overdueMs > 2 * ONE_HOUR_MS ? 3 : 2
+    const startDate = getEventStartDate(event)
+    const dueBy = sourceType === REMINDER_SOURCE_MISSED ? now : new Date(startDate.getTime() + ONE_HOUR_MS)
+    const priority = sourceType === REMINDER_SOURCE_MISSED ? 'high' : 'medium'
 
     const { error: insertError } = await supabase
       .from('prep_items')
       .insert({
-        event_id: null,
-        type: 'reminder',
-        category: 'general_todo',
-        emoji: '🔔',
+        title: cleanEventTitle(event.title),
         description: buildReminderPrepDescription(cleanEventTitle(event.title), sourceType),
         event_title: cleanEventTitle(event.title),
         event_date: event.start_time,
@@ -74,11 +74,11 @@ export function useReminderNeedsYouActions() {
   const snoozeReminderByDuration = useCallback(async (event: EventWithDetails, duration: SnoozeDuration = '1h') => {
     const window = computeReminderSnoozeWindow(event.start_time, event.end_time, duration, new Date())
 
-    // Optimistically update cache
-    qc.setQueriesData<EventWithDetails[]>({ queryKey: ['events'] }, (old) => {
-      if (!Array.isArray(old)) return old
-      return old.map((ev) => (ev.id === event.id ? { ...ev, start_time: window.start, end_time: window.end } : ev))
-        .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+    // Optimistically update all 4 caches
+    publishEventAggregatePatch(qc, event.id, {
+      start_time: window.start,
+      end_time: window.end,
+      status: 'confirmed',
     })
 
     const { error } = await supabase
@@ -95,12 +95,8 @@ export function useReminderNeedsYouActions() {
   }, [qc, invalidateReminderSurfaces])
 
   const moveReminderToNeedsYou = useCallback(async (event: EventWithDetails) => {
-    // Optimistically evict
-    qc.setQueriesData<EventWithDetails[]>({ queryKey: ['events'] }, (old) => {
-      if (!Array.isArray(old)) return old
-      return old.filter((ev) => ev.id !== event.id)
-    })
-    qc.removeQueries({ queryKey: ['event-details', event.id] })
+    // 0ms Evict from all caches
+    evictEventFromAllCaches(qc, event.id)
 
     await ensureReminderInNeedsYou(event, REMINDER_SOURCE_MANUAL)
 
@@ -117,12 +113,8 @@ export function useReminderNeedsYouActions() {
     reminderId: string,
     expectedUpdatedAt?: string,
   ) => {
-    // Optimistically evict completed reminder immediately
-    qc.setQueriesData<EventWithDetails[]>({ queryKey: ['events'] }, (old) => {
-      if (!Array.isArray(old)) return old
-      return old.filter((ev) => ev.id !== reminderId)
-    })
-    qc.removeQueries({ queryKey: ['event-details', reminderId] })
+    // 0ms Evict from all caches
+    evictEventFromAllCaches(qc, reminderId)
 
     const { data, error } = await supabase.rpc('complete_reminder_with_linked_actions', {
       p_reminder_id: reminderId,

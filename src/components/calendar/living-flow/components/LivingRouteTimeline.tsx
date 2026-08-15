@@ -105,7 +105,9 @@ export default function LivingRouteTimeline({
             </span>
           </div>
           <span className="text-xs text-slate-500">
-            {venue.driveMinutes} min drive · {venue.distanceMiles} miles · {driverLeg1} driving {activeAttendees}
+            {venue.driveMinutes > 0 
+              ? `${venue.driveMinutes} min drive · ${venue.distanceMiles} miles · ${driverLeg1} driving ${activeAttendees}`
+              : `Calculating route… · ${driverLeg1} driving ${activeAttendees}`}
           </span>
 
           <div
@@ -207,7 +209,9 @@ export default function LivingRouteTimeline({
             </span>
           </div>
           <span className="text-xs text-slate-500">
-            {venue.driveMinutes} min return drive · {driverLeg2} driving
+            {venue.driveMinutes > 0
+              ? `${venue.driveMinutes} min return drive · ${driverLeg2} driving`
+              : `Calculating return route… · ${driverLeg2} driving`}
           </span>
 
           <div

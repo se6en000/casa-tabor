@@ -4,7 +4,7 @@ import {
   addDays, isSameMonth, isSameDay, isToday, parseISO,
 } from 'date-fns'
 import { AnimatePresence, motion } from 'framer-motion'
-import { X, Clock, MapPin } from 'lucide-react'
+import { X, Clock, MapPin, Navigation } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { useCalendarStore } from '../../stores/calendarStore'
 import { useMonthEvents } from '../../hooks/useCalendarEvents'
@@ -110,13 +110,29 @@ function DayPopover({ day, events, onClose, onSelectDay, onSelectEvent }: DayPop
                 {reminder && (
                   <span className="text-caption font-semibold uppercase tracking-wide text-casa-warning">Reminder</span>
                 )}
-                <div className="flex items-center gap-3 mt-0.5">
+                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                   {!isAllDay && !reminder && (
                     <span className="flex items-center gap-1 text-caption text-casa-muted">
                       <Clock size={10} />
                       {format(start, 'h:mm a')}
                     </span>
                   )}
+                  {(() => {
+                    const depIso = event.enrichment?.departure_time
+                    const driveMins = event.enrichment?.drive_time_mins
+                    const depDate = depIso
+                      ? new Date(depIso)
+                      : (driveMins && event.start_time
+                        ? new Date(new Date(event.start_time).getTime() - (driveMins + 5) * 60_000)
+                        : null)
+                    if (!depDate || isAllDay || reminder) return null
+                    return (
+                      <span className="flex items-center gap-1 text-caption font-semibold text-casa-gold truncate">
+                        <Navigation size={10} className="shrink-0" />
+                        Leave by {format(depDate, 'h:mm a')}
+                      </span>
+                    )
+                  })()}
                   {event.location_name && (
                     <span className="flex items-center gap-1 text-caption text-casa-muted truncate">
                       <MapPin size={10} />

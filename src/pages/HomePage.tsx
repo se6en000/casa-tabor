@@ -272,7 +272,7 @@ export default function HomePage() {
     destination: heroDestination,
     eventStartIso: nextTodayEvent?.start_time ?? null,
     enabled: Boolean(nextTodayEvent && heroDestination),
-    bufferMins: 10,
+    bufferMins: 5,
   })
 
   // Show tomorrow section always (not just when today is done)

@@ -7,6 +7,8 @@ export interface VenueInfo {
   address: string
   driveMinutes: number
   distanceMiles: number
+  routeSummary?: string | null
+  trafficDelayMinutes?: number
   icon?: string
 }
 
@@ -24,6 +26,7 @@ export interface LivingFlowState {
   bufferMinutes: number
   recurScope: RecurrenceScope
   venue: VenueInfo
+  isCalculatingRoute?: boolean
   selectedMemberIds: string[]
   primaryMemberId: string | null
 }

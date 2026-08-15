@@ -33,7 +33,8 @@ export interface EventPlanOverride {
   two_driver_confirmed: boolean
   transportation_plan: EventTransportationPlan | null
   location_signature: string | null
-  location_projection_blocked: boolean
+  location_projection_blocked?: boolean
+  created_at?: string
   updated_at: string
 }
 
@@ -400,6 +401,7 @@ function _subscribeRealtimeChannel() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'event_members' }, _fireInvalidation)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'event_plan_overrides' }, _firePlanInvalidation)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'event_enrichments' }, _fireInvalidation)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'event_logistics' }, _fireInvalidation)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'event_checklist_items' }, _fireInvalidation)
     .subscribe((status, err) => {
       if (status === 'SUBSCRIBED') {

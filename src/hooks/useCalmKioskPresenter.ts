@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { format, parseISO, differenceInMinutes, subMinutes } from 'date-fns'
 import { useLiveClock, greetingFor } from './useLiveClock'
@@ -19,6 +19,10 @@ export interface CalmKioskPresenterState {
   timeHorizonLabel: string
   weather: ReturnType<typeof useHomeWeather>['data']
   nextEvent: EventWithDetails | null
+  primaryHeroEvent: EventWithDetails | null
+  concurrentEvents: EventWithDetails[]
+  selectedHeroEventId: string | null
+  setSelectedHeroEventId: (id: string | null) => void
   appointmentEvents: EventWithDetails[]
   pastEvents: EventWithDetails[]
   upcomingAppointments: EventWithDetails[]
@@ -63,6 +67,8 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
   const { data: familyMembers = [] } = useFamilyMembers()
   const { data: weather } = useHomeWeather()
 
+  const [selectedHeroEventId, setSelectedHeroEventId] = useState<string | null>(null)
+
   const resolveConflict = useResolveConflict()
   const completePrep = useCompletePrepItem()
 
@@ -99,9 +105,75 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     )
   }
 
-  // Find next upcoming event today (that hasn't ended yet)
-  const nextEvent = useMemo(() => {
-    const upcoming = todayEvents.filter((e) => {
+  // Helper to test if an event is travel / off-site
+  const checkIsTravelEvent = (e: EventWithDetails | null | undefined): boolean => {
+    if (!e || e.all_day || e.event_type === 'reminder') return false
+    const mode = inferEventMode(e)
+    const kind = inferEventPlanKind(e, mode)
+    if (kind !== 'travel') return false
+    const locationName = (e.location_name || '').trim().toLowerCase()
+    const isHome = locationName === 'home' || locationName.includes('at home')
+    if (isHome) return false
+    const hasPhysicalDestination = Boolean(
+      (e.address && e.address.trim().length > 0) ||
+      (e.location_name && e.location_name.trim().length > 0)
+    )
+    return hasPhysicalDestination
+  }
+
+  // Priority scoring function to intelligently rank simultaneous events:
+  // Travel / off-site appointments take primary priority, followed by time-to-leave urgency, then home tasks.
+  const scoreEventForHero = (e: EventWithDetails, currentTime: Date): number => {
+    let score = 0
+    const isTravel = checkIsTravelEvent(e)
+    try {
+      const start = parseISO(e.start_time)
+      const end = parseISO(e.end_time)
+      const isUnderway = start.getTime() <= currentTime.getTime() && end.getTime() > currentTime.getTime()
+      const minsToStart = differenceInMinutes(start, currentTime)
+
+      let driveTime = e.enrichment?.drive_time_mins || 0
+      let departureTime: Date | null = null
+      if (e.enrichment?.departure_time) {
+        departureTime = new Date(e.enrichment.departure_time)
+      } else if (driveTime > 0) {
+        departureTime = subMinutes(start, driveTime)
+      }
+      const minsToLeave = departureTime ? differenceInMinutes(departureTime, currentTime) : null
+
+      if (isTravel) {
+        // Tier 1: Travel / Off-site
+        score += 100
+        if (minsToLeave !== null && minsToLeave <= 0 && minsToStart > 0) {
+          score += 80 // Time to leave now
+        } else if (minsToLeave !== null && minsToLeave <= 15 && minsToStart > 0) {
+          score += 50 // Prepare to leave
+        } else if (isUnderway) {
+          score += 40 // En route / underway
+        } else if (minsToStart <= 60) {
+          score += 25
+        }
+      } else {
+        // Tier 2/3: Local / Chores / On-site
+        if (isUnderway) {
+          score += 35
+        } else if (minsToStart <= 15) {
+          score += 20
+        } else if (minsToStart <= 60) {
+          score += 10
+        }
+      }
+
+      // Secondary tie-breaker: earlier start time gets priority
+      score -= (start.getTime() - currentTime.getTime()) / (1000 * 60 * 60)
+    } catch {}
+
+    return score
+  }
+
+  // Active candidates today (that haven't finished more than 15 mins ago)
+  const activeCandidates = useMemo(() => {
+    return todayEvents.filter((e) => {
       if (e.all_day) return false
       if (isMealEvent(e)) return false
       try {
@@ -112,8 +184,78 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
         return false
       }
     })
-    return upcoming[0] || null
   }, [todayEvents, now])
+
+  // Multi-Event Detection & Priority Ranking
+  const { primaryHeroEvent, concurrentEvents, activeHeroEvent } = useMemo(() => {
+    if (activeCandidates.length === 0) {
+      return { primaryHeroEvent: null, concurrentEvents: [], activeHeroEvent: null }
+    }
+
+    // 1. Check for events currently underway
+    const underwayEvents = activeCandidates.filter((e) => {
+      try {
+        const start = parseISO(e.start_time).getTime()
+        const end = parseISO(e.end_time).getTime()
+        return start <= now.getTime() && end > now.getTime()
+      } catch {
+        return false
+      }
+    })
+
+    let activePool: EventWithDetails[] = []
+    if (underwayEvents.length > 0) {
+      activePool = underwayEvents
+    } else {
+      // Find earliest start time
+      const earliestStart = activeCandidates.reduce((min, e) => {
+        try {
+          const t = parseISO(e.start_time).getTime()
+          return t < min ? t : min
+        } catch {
+          return min
+        }
+      }, Infinity)
+
+      // Pool includes events starting within 15 mins of the earliest upcoming start time
+      activePool = activeCandidates.filter((e) => {
+        try {
+          const t = parseISO(e.start_time).getTime()
+          return Math.abs(t - earliestStart) <= 15 * 60 * 1000
+        } catch {
+          return false
+        }
+      })
+    }
+
+    if (activePool.length === 0) {
+      activePool = [activeCandidates[0]]
+    }
+
+    // Sort active pool by priority score descending (travel/off-site first)
+    const sortedPool = [...activePool].sort((a, b) => scoreEventForHero(b, now) - scoreEventForHero(a, now))
+    const primary = sortedPool[0] || null
+
+    // Determine currently focused hero event (defaults to primary, or user-selected)
+    let focused: EventWithDetails | null = primary
+    if (selectedHeroEventId) {
+      const match = activeCandidates.find((e) => e.id === selectedHeroEventId)
+      if (match) {
+        focused = match
+      }
+    }
+
+    // Concurrent companion events: other active items besides the currently focused one
+    const others = sortedPool.filter((e) => e.id !== focused?.id)
+
+    return {
+      primaryHeroEvent: primary,
+      concurrentEvents: others,
+      activeHeroEvent: focused,
+    }
+  }, [activeCandidates, selectedHeroEventId, now])
+
+  const nextEvent = activeHeroEvent
 
   // Past events today (already ended, excluding meals)
   const pastEvents = useMemo(() => {
@@ -438,6 +580,10 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     timeHorizonLabel,
     weather,
     nextEvent,
+    primaryHeroEvent,
+    concurrentEvents,
+    selectedHeroEventId,
+    setSelectedHeroEventId,
     appointmentEvents,
     pastEvents,
     upcomingAppointments,

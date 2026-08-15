@@ -113,9 +113,15 @@ export function DayEventCard({
     () => deriveCalendarCardResponsibility(event, household, now),
     [event, household, now, overrideVersion],
   )
+  const fallbackDepartureAt = useMemo(() => {
+    if (event.enrichment?.departure_time) return new Date(event.enrichment.departure_time)
+    if (event.enrichment?.drive_time_mins && event.start_time) {
+      return new Date(new Date(event.start_time).getTime() - (event.enrichment.drive_time_mins + 5) * 60_000)
+    }
+    return null
+  }, [event.enrichment?.departure_time, event.enrichment?.drive_time_mins, event.start_time])
   const showLiveLeaveBy = !event.all_day && !happening && !isHosted && Boolean(event.address || event.location_name)
-  const showFallbackLeaveBy = !event.all_day && !happening && !isHosted && !(event.address || event.location_name) && Boolean(event.enrichment?.departure_time)
-  const fallbackDepartureAt = event.enrichment?.departure_time ? new Date(event.enrichment.departure_time) : null
+  const showFallbackLeaveBy = !event.all_day && !happening && !isHosted && !(event.address || event.location_name) && Boolean(fallbackDepartureAt)
 
   if (timed) {
     async function handleCheck(e: React.MouseEvent) {

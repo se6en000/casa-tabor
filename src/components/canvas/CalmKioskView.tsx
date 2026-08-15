@@ -17,6 +17,7 @@ import {
   Navigation,
   ArrowRight,
   Bell,
+  Gift,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useCalmKioskPresenter } from '../../hooks/useCalmKioskPresenter'
@@ -43,6 +44,10 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
     timeHorizonLabel,
     weather,
     nextEvent,
+    primaryHeroEvent,
+    concurrentEvents,
+    selectedHeroEventId,
+    setSelectedHeroEventId,
     pastEvents,
     upcomingAppointments,
     tomorrowEvents,
@@ -268,11 +273,27 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                     )
                   })()}
 
-                  <span className="text-caption text-white/80 font-mono bg-white/10 px-3 py-1 rounded-full border border-white/10">
-                    {nextEvent.all_day
-                      ? 'All Day'
-                      : `${format(parseISO(nextEvent.start_time), 'h:mm a')} – ${format(parseISO(nextEvent.end_time), 'h:mm a')}`}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {selectedHeroEventId && selectedHeroEventId !== primaryHeroEvent?.id && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelectedHeroEventId(null)
+                        }}
+                        className="text-3xs text-casa-gold hover:text-white underline font-semibold transition-colors mr-1 cursor-pointer h-7 px-2 min-h-0"
+                        title="Reset to primary priority event"
+                      >
+                        Reset to Primary
+                      </Button>
+                    )}
+                    <span className="text-caption text-white/80 font-mono bg-white/10 px-3 py-1 rounded-full border border-white/10">
+                      {nextEvent.all_day
+                        ? 'All Day'
+                        : `${format(parseISO(nextEvent.start_time), 'h:mm a')} – ${format(parseISO(nextEvent.end_time), 'h:mm a')}`}
+                    </span>
+                  </div>
                 </div>
 
                 <h2 className="font-display text-display-sm sm:text-display-md font-bold !text-white tracking-tight leading-tight group-hover:text-casa-gold transition-colors">
@@ -294,7 +315,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
 
                 {prepSummaryText && (
                   <div className="flex items-center gap-2 text-slate-300/90 mt-2 text-caption">
-                    <span className="text-sm shrink-0">🎁</span>
+                    <Gift size={15} className="text-casa-gold shrink-0" />
                     <span className="font-semibold text-white/90 shrink-0">Bring:</span>
                     <span className="text-white/75 truncate">{prepSummaryText}</span>
                   </div>
@@ -392,6 +413,129 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                   <ChevronRight size={16} />
                 </div>
               </div>
+
+              {/* ── Concurrent Companion Events (Simultaneous Family Activities) ── */}
+              {concurrentEvents.length > 0 && (
+                <div className="mt-5 pt-4 border-t border-white/10">
+                  <div className="flex items-center justify-between gap-2 mb-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                      <span className="text-caption font-bold uppercase tracking-widest text-casa-gold">
+                        {concurrentEvents.length === 1
+                          ? 'Also Happening Right Now'
+                          : `Also Active (${concurrentEvents.length})`}
+                      </span>
+                    </div>
+                    <span className="text-3xs text-white/40 uppercase tracking-wider font-medium">
+                      Tap card to focus
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {concurrentEvents.map((evt) => {
+                      let isUnderway = false
+                      try {
+                        const start = parseISO(evt.start_time).getTime()
+                        const end = parseISO(evt.end_time).getTime()
+                        isUnderway = !evt.all_day && now.getTime() >= start && now.getTime() <= end
+                      } catch {}
+
+                      const evtMember = evt.members?.[0]?.family_member
+                      const isEvtTravel = Boolean(
+                        !evt.all_day &&
+                          evt.event_type !== 'reminder' &&
+                          (evt.address || evt.location_name) &&
+                          !['home', 'at home'].includes((evt.location_name || '').toLowerCase())
+                      )
+
+                      let prepSummary: string | null = null
+                      if (evt.checklist && evt.checklist.length > 0) {
+                        const pending = evt.checklist.filter((item) => !item.checked)
+                        const list = pending.length > 0 ? pending : evt.checklist
+                        const labels = list.map((item) => item.label?.trim()).filter(Boolean)
+                        if (labels.length > 0) prepSummary = labels.join(' · ')
+                      } else if (evt.enrichment?.what_to_bring) {
+                        const raw = evt.enrichment.what_to_bring as unknown
+                        if (Array.isArray(raw) && raw.length > 0) prepSummary = raw.join(' · ')
+                        else if (typeof raw === 'string' && raw.trim()) prepSummary = raw.trim()
+                      }
+
+                      return (
+                        <div
+                          key={evt.id}
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSelectedHeroEventId(evt.id)
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              setSelectedHeroEventId(evt.id)
+                            }
+                          }}
+                          className="group/item flex items-center justify-between gap-3 p-3 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 hover:border-casa-gold/50 transition-all cursor-pointer shadow-2xs active:scale-[0.98]"
+                          title={`Focus on ${evt.title}`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                              {evtMember && (
+                                <span
+                                  className="inline-flex items-center px-2 py-0.5 rounded-full text-3xs font-bold text-white bg-white/15"
+                                  style={{
+                                    borderLeft: `3px solid ${evtMember.color_hex || 'var(--color-casa-gold)'}`,
+                                  }}
+                                >
+                                  {evtMember.name}
+                                </span>
+                              )}
+                              <span className="text-3xs text-white/60 font-mono">
+                                {evt.all_day ? 'All Day' : `${format(parseISO(evt.start_time), 'h:mm a')}`}
+                              </span>
+                              {isUnderway && (
+                                <span className="inline-flex items-center gap-1 text-3xs font-bold text-emerald-400">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                  Now
+                                </span>
+                              )}
+                              {isEvtTravel && evt.enrichment?.drive_time_mins && (
+                                <span className="text-3xs text-casa-gold font-semibold flex items-center gap-0.5">
+                                  <Car size={10} />
+                                  {evt.enrichment.drive_time_mins}m drive
+                                </span>
+                              )}
+                            </div>
+
+                            <h4 className="text-caption font-semibold text-white truncate group-hover/item:text-casa-gold transition-colors">
+                              {evt.title}
+                            </h4>
+
+                            {prepSummary ? (
+                              <p className="text-2xs text-white/70 truncate mt-0.5 flex items-center gap-1.5 font-normal">
+                                <Gift size={11} className="text-casa-gold shrink-0" />
+                                <span className="font-semibold text-white/85 shrink-0">Bring:</span>
+                                <span className="truncate">{prepSummary}</span>
+                              </p>
+                            ) : evt.location_name ? (
+                              <p className="text-2xs text-white/60 truncate flex items-center gap-1 mt-0.5 font-normal">
+                                <MapPin size={11} className="text-casa-gold shrink-0" />
+                                <span>{evt.location_name}</span>
+                              </p>
+                            ) : null}
+                          </div>
+
+                          <div className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-casa-gold/15 group-hover/item:bg-casa-gold/25 text-casa-gold text-caption font-bold shrink-0 transition-all border border-casa-gold/30">
+                            <span className="text-2xs">Focus</span>
+                            <ChevronRight size={13} className="group-hover/item:translate-x-0.5 transition-transform" />
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
             </motion.div>
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center rounded-3xl p-8 bg-gradient-to-br from-slate-900 to-casa-navy text-white border border-white/10 shadow-xl text-center min-h-[260px]">
