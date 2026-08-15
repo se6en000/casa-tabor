@@ -6,8 +6,6 @@ import {
   Sparkles,
   ImageIcon,
   RefreshCw,
-  Zap,
-  Leaf,
   Settings,
   Bell,
 } from 'lucide-react'
@@ -17,7 +15,7 @@ import { useHomeWeather } from '../../hooks/useHomeWeather'
 import { useTodayEvents } from '../../hooks/useCalendarEvents'
 import { useNotifications } from '../../hooks/useNotifications'
 import { cn } from '../../utils/cn'
-import { IconButton, Button } from '../ui'
+import { IconButton } from '../ui'
 import { useAppStore } from '../../stores/appStore'
 import { WeatherIcon } from './WeatherIcon'
 import NotificationDrawer from './NotificationDrawer'
@@ -30,10 +28,10 @@ import NotificationDrawer from './NotificationDrawer'
    canvasSubmode.
 
    Zone Layout:
-   ┌───────┬────────────┬───────────┬─────────────┬──────────┬──────────┐
-   │ Brand │ ModeSw.    │ NavRail   │ AmbientInfo │ Utility  │ Copilot  │
-   │  (A)  │   (B)      │   (C)     │    (D)      │  (E)     │  (F)     │
-   └───────┴────────────┴───────────┴─────────────┴──────────┴──────────┘
+   ┌───────┬───────────┬─────────────┬──────────┬──────────┐
+   │ Brand │  NavRail  │ AmbientInfo │ Utility  │ Copilot  │
+   │  (A)  │    (B)    │    (C)      │  (D)     │  (E)     │
+   └───────┴───────────┴─────────────┴──────────┴──────────┘
    ═══════════════════════════════════════════════════════════════════ */
 
 // ── Navigation tabs ──────────────────────────────────────────────
@@ -76,60 +74,7 @@ function BrandZone({ isWarm }: { isWarm: boolean }) {
   )
 }
 
-// ── Zone B: Mode Switcher (Living Canvas home only) ──────────────
-function ModeSwitch({ isWarm }: { isWarm: boolean }) {
-  const { canvasSubmode, setCanvasSubmode } = useAppStore()
 
-  return (
-    <div
-      className={cn(
-        'hidden md:inline-flex items-center p-0.5 rounded-full border gap-0.5',
-        isWarm ? 'bg-casa-surface/60 border-casa-border/50' : 'bg-white/5 border-white/10',
-      )}
-      role="tablist"
-      aria-label="Canvas mode"
-    >
-      <Button
-        variant={canvasSubmode === 'calm' ? 'primary' : 'ghost'}
-        size="sm"
-        onClick={() => setCanvasSubmode('calm')}
-        role="tab"
-        aria-selected={canvasSubmode === 'calm'}
-        className={cn(
-          'px-3 min-h-[32px] rounded-full text-caption font-semibold transition-all leading-none',
-          canvasSubmode === 'calm'
-            ? isWarm
-              ? 'bg-casa-navy/10 text-casa-navy border border-casa-gold/40 shadow-2xs font-bold'
-              : 'bg-white/20 text-white border border-white/30 shadow-2xs font-bold'
-            : isWarm
-            ? 'text-casa-text-tertiary hover:text-casa-navy'
-            : 'text-white/60 hover:text-white',
-        )}
-      >
-        <Leaf size={12} strokeWidth={2.2} />
-        <span>Calm</span>
-      </Button>
-      <Button
-        variant={canvasSubmode === 'turbo' ? 'primary' : 'ghost'}
-        size="sm"
-        onClick={() => setCanvasSubmode('turbo')}
-        role="tab"
-        aria-selected={canvasSubmode === 'turbo'}
-        className={cn(
-          'px-3 min-h-[32px] rounded-full text-caption font-semibold transition-all leading-none',
-          canvasSubmode === 'turbo'
-            ? 'bg-amber-500/20 text-amber-900 border border-amber-500/40 shadow-2xs font-bold'
-            : isWarm
-            ? 'text-casa-text-tertiary hover:text-casa-navy'
-            : 'text-white/60 hover:text-white',
-        )}
-      >
-        <Zap size={12} strokeWidth={2.2} />
-        <span>Turbo</span>
-      </Button>
-    </div>
-  )
-}
 
 // ── Zone C: Navigation Rail ──────────────────────────────────────
 function NavRail({
@@ -504,7 +449,6 @@ export default function LuxuryTopBar() {
 
   const isCanvas = experienceMode === 'living_canvas'
   const isCalm = isCanvas && canvasSubmode === 'calm'
-  const isHome = location.pathname === '/'
   const isCook = location.pathname.startsWith('/cook')
   const isWarm = isCalm // Warm material when in calm mode
 
@@ -528,14 +472,6 @@ export default function LuxuryTopBar() {
 
           {/* Navigation Rail — ALWAYS FIRST so nav buttons NEVER shift position */}
           <NavRail isWarm={isWarm} isCanvas={isCanvas} />
-
-          {/* Mode Switcher — renders AFTER nav rail */}
-          {isCanvas && isHome && (
-            <>
-              <span className="topbar-gold-divider hidden lg:block" />
-              <ModeSwitch isWarm={isWarm} />
-            </>
-          )}
         </div>
 
         {/* ── Right cluster: Info + Utility + Notifications + AI ──────────── */}

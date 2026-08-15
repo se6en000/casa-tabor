@@ -121,6 +121,7 @@ export const DESIGN_TOKENS = {
   },
   fontFamily: {
     display: "'Cormorant Garamond', Georgia, serif",
+    serif: "'Source Serif 4', Georgia, serif",
     body: "'DM Sans', system-ui, sans-serif",
     mono: "'JetBrains Mono', monospace",
   },

@@ -16,7 +16,7 @@ import { useLiveClock } from '../../../hooks/useLiveClock'
 import { useReminderNeedsYouActions } from '../../../hooks/useReminderNeedsYouActions'
 import { getEventStartDate, getEventEndDate } from '../../../utils/eventTime'
 import { DayEventCard } from '../../calendar/DayEventCard'
-import { Button } from '../../ui'
+import { Button, IconButton } from '../../ui'
 import { cn } from '../../../utils/cn'
 
 interface NowAndNextWidgetProps {
@@ -94,59 +94,58 @@ export default function NowAndNextWidget({
   }, [sortedTodayEvents, effectiveNow])
 
   return (
-    <div className="w-full h-full flex flex-col rounded-3xl bg-casa-surface border border-casa-border/70 shadow-sm p-3 sm:p-4 overflow-hidden min-h-0">
+    <div className="w-full h-full flex flex-col bg-transparent overflow-hidden min-h-0">
       {/* ── Widget Header: Day Switcher & Quick Add Strip ── */}
-      <div className="flex items-center justify-between gap-2 pb-2 mb-2 border-b border-casa-border/40 shrink-0">
-        {/* Day Switcher */}
-        <div className="inline-flex p-0.5 rounded-xl bg-casa-bg border border-casa-border/60">
+      <div className="flex items-center justify-between gap-3 pb-3 mb-1 shrink-0 px-0.5">
+        {/* Day Switcher Capsule */}
+        <div className="inline-flex p-1 rounded-full bg-casa-surface border border-casa-border/80 shadow-xs">
           <Button
             size="sm"
-            variant={activeDayTab === 'today' ? 'primary' : 'ghost'}
+            variant="ghost"
             onClick={() => setActiveDayTab('today')}
             className={cn(
-              'flex items-center gap-1.5 px-3 py-1 rounded-lg text-caption font-bold transition-all min-h-[44px]',
+              'flex items-center gap-2 px-4 py-2 rounded-full text-body-sm font-bold transition-all min-h-[44px]',
               activeDayTab === 'today'
-                ? 'bg-casa-surface text-casa-navy shadow-xs border border-casa-border/60'
+                ? 'bg-casa-surface-subtle text-casa-navy shadow-2xs'
                 : 'text-casa-muted hover:text-casa-navy'
             )}
           >
-            <Sun size={13} className="text-amber-500" />
+            <Sun size={15} className={activeDayTab === 'today' ? 'text-casa-navy' : 'text-casa-muted'} />
             <span>Today ({todayEvents.length})</span>
           </Button>
 
           <Button
             size="sm"
-            variant={activeDayTab === 'tomorrow' ? 'primary' : 'ghost'}
+            variant="ghost"
             onClick={() => setActiveDayTab('tomorrow')}
             className={cn(
-              'flex items-center gap-1.5 px-3 py-1 rounded-lg text-caption font-bold transition-all min-h-[44px]',
+              'flex items-center gap-2 px-4 py-2 rounded-full text-body-sm font-medium transition-all min-h-[44px]',
               activeDayTab === 'tomorrow'
-                ? 'bg-casa-surface text-casa-navy shadow-xs border border-casa-border/60'
+                ? 'bg-casa-surface-subtle text-casa-navy shadow-2xs font-bold'
                 : 'text-casa-muted hover:text-casa-navy'
             )}
           >
-            <Moon size={13} className="text-indigo-500" />
+            <Moon size={15} className={activeDayTab === 'tomorrow' ? 'text-casa-navy' : 'text-casa-muted'} />
             <span>Tomorrow ({tomorrowEvents.length})</span>
           </Button>
         </div>
 
         {/* Quick New Event Button */}
         {onQuickCreate && (
-          <Button
+          <IconButton
             variant="primary"
             size="sm"
             onClick={onQuickCreate}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-casa-gold text-casa-navy hover:bg-amber-400 text-caption font-bold transition-all shadow-xs min-h-[44px]"
+            className="w-12 h-12 rounded-2xl bg-casa-gold hover:brightness-105 text-white shadow-xs flex items-center justify-center transition-all shrink-0 active:scale-95 min-h-[48px] min-w-[48px]"
+            aria-label="Create a new event"
             title="Create a new event"
-          >
-            <Plus size={14} strokeWidth={2.5} />
-            <span className="hidden xs:inline">New Event</span>
-          </Button>
+            icon={<Plus size={22} strokeWidth={2.5} className="text-white" />}
+          />
         )}
       </div>
 
       {/* ── Scrollable Schedule Stream ── */}
-      <div className="flex-1 overflow-y-auto px-1.5 py-1 space-y-2.5 min-h-0 touch-pan-y overscroll-contain">
+      <div className="flex-1 overflow-y-auto pr-1 space-y-3 min-h-0 touch-pan-y overscroll-contain pb-6">
         {activeDayTab === 'today' ? (
           <>
             {/* Collapsed Past Events Toggle */}
@@ -204,12 +203,11 @@ export default function NowAndNextWidget({
             )}
 
             {/* Glowing NOW Indicator */}
-            <div className="flex items-center gap-2 py-1">
-              <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500 text-white text-2xs font-bold font-mono tracking-wider shadow-xs">
-                <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
-                <span>NOW · {format(effectiveNow, 'h:mm a')}</span>
+            <div className="flex items-center gap-3 py-2 px-1">
+              <div className="px-4 py-1 rounded-full bg-amber-500 text-white text-caption font-mono font-bold tracking-wider shadow-xs uppercase inline-flex items-center justify-center shrink-0">
+                <span>NOW  ·  {format(effectiveNow, 'h:mm a')}</span>
               </div>
-              <div className="flex-1 h-[1.5px] bg-gradient-to-r from-amber-500/80 via-amber-300/40 to-transparent" />
+              <div className="flex-1 h-[1.5px] bg-amber-500/60" />
             </div>
 
             {/* Upcoming / Current Events */}

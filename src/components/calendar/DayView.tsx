@@ -2,8 +2,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { format, isAfter, isBefore, isSameDay, parseISO, differenceInMinutes } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Clock, MapPin, Navigation,
-  Calendar, AlertTriangle, ClipboardList, Bell, Check,
+  Clock, MapPin, Navigation, Send,
+  Calendar, AlertTriangle, ClipboardList, Check,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { useCalendarStore } from '../../stores/calendarStore'
@@ -205,8 +205,8 @@ export function DayEventCard({
         initial={{ opacity: 0, x: -8 }}
         animate={{ opacity: past ? 0.4 : 1, x: 0 }}
         exit={{ opacity: 0, height: 0, marginBottom: 0, overflow: 'hidden' }}
-        whileTap={{ scale: 0.97, opacity: 0.75 }}
-        transition={{ duration: 0.3, delay: index * 0.04 }}
+        whileTap={{ scale: 0.98, opacity: 0.85 }}
+        transition={{ duration: 0.25, delay: index * 0.03 }}
         className="cursor-pointer list-none"
         data-calendar-event
         onMouseEnter={onMouseEnter}
@@ -214,54 +214,56 @@ export function DayEventCard({
         onClick={(e) => { e.stopPropagation(); onOpen() }}
       >
         <div className={cn(
-          'relative w-full overflow-hidden rounded-widget border bg-amber-50/40 shadow-card grid grid-cols-1 sm:grid-cols-[125px_1fr] md:grid-cols-[135px_1fr] transition-all',
-          isHighlighted ? 'border-amber-400 ring-2 ring-inset ring-casa-gold shadow-card-hover' : 'border-casa-gold/30',
+          'w-full overflow-hidden rounded-2xl bg-casa-surface border border-casa-border/80 shadow-xs hover:shadow-card-hover transition-all flex flex-row items-stretch min-h-[58px]',
+          isHighlighted && 'border-casa-gold ring-2 ring-casa-gold/40 shadow-card-hover',
           className
         )}>
-          {/* Left Pillar: Sand/Amber Time Block */}
-          <div className="bg-amber-200/60 text-amber-950 p-3.5 sm:p-4 flex flex-row sm:flex-col justify-between items-center sm:items-start border-b sm:border-b-0 sm:border-r border-amber-300/40">
-            <div>
-              <div className="font-mono text-body-lg sm:text-heading font-bold text-amber-950 tabular-nums leading-none">
-                {format(start, 'h:mm')}
-              </div>
-              <div className="font-mono text-caption font-semibold uppercase text-amber-900/75 mt-0.5">
-                {format(start, 'a')} · REMINDER
-              </div>
+          {/* Left Pillar: Proportional Cashmere Sand Time Block */}
+          <div className="w-[6rem] min-w-[6rem] sm:w-[6.5rem] sm:min-w-[6.5rem] bg-casa-surface-subtle border-r border-casa-control-border/80 px-2.5 py-2 flex flex-col justify-center items-center text-center shrink-0 select-none">
+            <div className="font-body text-body font-bold text-casa-top-pick-band leading-none tabular-nums">
+              {format(start, 'h:mm')}
             </div>
-            <Bell size={14} className="text-amber-800 shrink-0 mt-1" />
+            <div className="font-mono text-3xs font-bold tracking-widest uppercase text-casa-top-pick-band/80 mt-1 flex items-center justify-center gap-0.5 leading-none whitespace-nowrap">
+              <span>{format(start, 'a')}</span>
+              <span>•</span>
+              <span>REMIND</span>
+            </div>
           </div>
 
           {/* Right Content */}
-          <div className="p-3.5 sm:p-4 flex items-center justify-between gap-3 flex-wrap sm:flex-nowrap bg-casa-surface/60">
-            <div className="min-w-0 flex-1">
-              <span className={cn('text-body-sm font-bold text-casa-navy block truncate', checking && 'line-through opacity-50')}>
+          <div className="px-4 py-2.5 flex items-center justify-between gap-3 flex-1 min-w-0 bg-casa-surface">
+            <div className="min-w-0 flex-1 flex items-center gap-2 flex-wrap sm:flex-nowrap">
+              <span className={cn('font-body text-body-sm sm:text-body font-bold text-casa-navy truncate leading-snug', checking && 'line-through opacity-50')}>
                 {event.title}
               </span>
               {event.members.length > 0 && (
-                <div className="flex gap-1 mt-1">
-                  {event.members.slice(0, 3).map((m) => (
-                    <CalendarPill
+                <div className="flex gap-1 shrink-0">
+                  {event.members.slice(0, 2).map((m) => (
+                    <span
                       key={m.id}
-                      color={m.family_member?.color_hex ?? SHARED_GOLD}
+                      className="inline-flex items-center px-2 py-0.5 rounded-full text-caption font-medium bg-casa-info-soft text-casa-info-strong"
                     >
                       {m.family_member?.name}
-                    </CalendarPill>
+                    </span>
                   ))}
                 </div>
               )}
             </div>
 
-            {/* Action Buttons (44px touch targets) */}
+            {/* Action Cluster */}
             <div className="flex items-center gap-1.5 shrink-0">
               <Button
                 size="sm"
-                variant={checking ? 'primary' : 'secondary'}
+                variant="ghost"
                 onClick={handleCheck}
                 disabled={checking || snoozing || movingToNeedsYou}
-                className={cn('min-h-[44px] px-3.5 text-caption font-bold', checking ? 'bg-casa-success text-white' : 'border-casa-border hover:border-casa-navy')}
+                className={cn(
+                  'h-8 px-3 rounded-full border border-casa-control-border bg-casa-surface hover:bg-emerald-50 hover:border-emerald-500 hover:text-emerald-800 text-caption font-bold text-casa-navy shadow-xs flex items-center gap-1 transition-all',
+                  checking && 'bg-casa-success border-casa-success text-white hover:bg-casa-success'
+                )}
               >
-                <Check size={14} strokeWidth={2.5} className="mr-1" />
-                Done
+                <Check size={12} strokeWidth={2.5} className={checking ? 'text-white' : 'text-casa-navy'} />
+                <span>Done</span>
               </Button>
               <SnoozeMenu
                 onSnooze={(duration) => { void handleSnooze(duration) }}
@@ -273,8 +275,8 @@ export function DayEventCard({
                     disabled={checking || snoozing || movingToNeedsYou || !onSnooze}
                     aria-label="Snooze reminder"
                     title="Snooze"
-                    className="min-h-[44px] min-w-[44px] text-casa-muted hover:text-casa-navy"
-                    icon={<SnoozeOneHourIcon className={cn('w-4 h-4', snoozing && 'animate-pulse')} />}
+                    className="w-8 h-8 rounded-full hover:bg-casa-surface-subtle text-casa-muted hover:text-casa-navy flex items-center justify-center transition-all"
+                    icon={<Clock size={14} className={cn(snoozing && 'animate-pulse text-amber-600')} />}
                   />
                 )}
               />
@@ -285,8 +287,8 @@ export function DayEventCard({
                 disabled={checking || snoozing || movingToNeedsYou || !onSendToNeedsYou}
                 aria-label="Move to Needs you"
                 title="Move to Needs you"
-                className="min-h-[44px] min-w-[44px] text-casa-muted hover:text-casa-navy"
-                icon={<NeedsYouTransferIcon className={cn('w-4 h-4', movingToNeedsYou && 'animate-pulse')} />}
+                className="w-8 h-8 rounded-full hover:bg-casa-surface-subtle text-casa-muted hover:text-casa-navy flex items-center justify-center transition-all"
+                icon={<NeedsYouTransferIcon className={cn('w-3.5 h-3.5 text-casa-muted', movingToNeedsYou && 'animate-pulse')} />}
               />
             </div>
           </div>
@@ -400,8 +402,8 @@ export function DayEventCard({
       layout
       initial={{ opacity: 0, x: -8 }}
       animate={{ opacity: past ? 0.45 : 1, x: 0 }}
-      whileTap={{ scale: 0.97, opacity: 0.75 }}
-      transition={{ duration: 0.3, delay: index * 0.04 }}
+      whileTap={{ scale: 0.98, opacity: 0.85 }}
+      transition={{ duration: 0.25, delay: index * 0.03 }}
       className="cursor-pointer list-none"
       data-calendar-event
       onMouseEnter={onMouseEnter}
@@ -409,155 +411,143 @@ export function DayEventCard({
       onClick={(e) => { e.stopPropagation(); onOpen() }}
     >
       <div className={cn(
-        'relative w-full min-w-0 overflow-hidden rounded-widget border shadow-card hover:shadow-card-hover transition-all duration-200',
-        'grid grid-cols-1 sm:grid-cols-[125px_1fr] md:grid-cols-[135px_1fr] xl:grid-cols-[140px_1fr]',
-        isBirthday ? 'bg-gradient-to-br from-casa-accent-subtle via-casa-surface to-casa-bg' : 'bg-casa-surface',
-        isHighlighted ? 'border-casa-navy ring-2 ring-inset ring-casa-gold shadow-card-hover' : 'border-casa-border/60 hover:border-casa-navy/60',
+        'w-full min-w-0 overflow-hidden rounded-2xl bg-casa-surface border border-casa-border/80 shadow-xs hover:shadow-card-hover transition-all flex flex-row items-stretch min-h-[76px]',
+        isBirthday ? 'bg-gradient-to-br from-casa-accent-subtle/30 via-casa-surface to-casa-surface' : 'bg-casa-surface',
+        isHighlighted && 'border-casa-navy ring-2 ring-casa-navy/30 shadow-card-hover',
         className
       )}>
         {isBirthday && <BirthdayCardDecoration />}
 
-        {/* ── Left Pillar: Architectural Time Anchor ── */}
+        {/* ── Left Pillar: Midnight Navy Architectural Anchor ── */}
         <div
           className={cn(
-            'flex flex-row sm:flex-col justify-between items-center sm:items-start p-3.5 sm:p-4 text-white relative border-b sm:border-b-0 sm:border-r border-casa-border/40 sm:border-l-4',
+            'w-[7rem] min-w-[7rem] sm:w-[7.5rem] sm:min-w-[7.5rem] bg-casa-navy text-white p-3 flex flex-col justify-between items-start shrink-0 select-none relative',
             happening ? 'bg-casa-navy ring-1 ring-inset ring-casa-gold/40' : 'bg-casa-navy'
           )}
-          style={{ borderLeftColor: eventColor(event) }}
         >
           <div>
-            <div className="font-mono text-heading sm:text-display-xs font-bold leading-none tracking-tight text-white tabular-nums">
+            <div className="font-body text-body-lg font-bold leading-none text-white tabular-nums">
               {event.all_day ? 'ALL DAY' : format(start, 'h:mm')}
+              {!event.all_day && (
+                <span className="text-caption font-semibold text-white/70 ml-1">
+                  {format(start, 'a')}
+                </span>
+              )}
             </div>
-            {!event.all_day && (
-              <div className="font-mono text-caption uppercase text-white/70 font-semibold mt-1">
-                {format(start, 'a')} {event.end_time && `· ${Math.round(differenceInMinutes(end, start))}m`}
+            {!event.all_day && event.end_time && (
+              <div className="font-mono text-3xs text-white/75 mt-1 font-medium leading-none whitespace-nowrap">
+                {Math.round(differenceInMinutes(end, start))} min
               </div>
             )}
           </div>
 
-          {/* Departure Pill / Travel Bar inside pillar */}
+          {/* Departure Note */}
           {showLiveLeaveBy && (
-            <div className="mt-2 w-full pt-1.5 border-t border-white/15">
+            <div className="text-3xs text-casa-gold font-medium truncate w-full leading-none whitespace-nowrap">
               <LeaveByCard
                 destination={event.address ?? event.location_name}
                 eventStartIso={event.start_time}
                 compact
-                className="!text-casa-gold text-caption font-semibold"
+                className="!text-casa-gold !p-0 !bg-transparent !border-none text-3xs"
               />
             </div>
           )}
           {showFallbackLeaveBy && (
-            <div className="mt-2 w-full pt-1.5 border-t border-white/15">
-              <span className="flex items-center gap-1 text-caption font-semibold text-casa-gold">
-                <Navigation size={11} className="shrink-0" />
-                {fallbackDepartureAt ? `Leave ${format(fallbackDepartureAt, 'h:mm a')}` : 'Leave soon'}
-              </span>
+            <div className="text-3xs text-casa-gold font-medium truncate w-full leading-none whitespace-nowrap">
+              {fallbackDepartureAt ? `Leave ${format(fallbackDepartureAt, 'h:mm a')}` : 'Leave soon'}
             </div>
           )}
         </div>
 
-        {/* ── Right Deck: Content, Driver Chip, Attendees & Action ── */}
-        <div className="p-4 flex flex-col justify-between gap-3 min-w-0 bg-casa-surface">
-          {/* Top Row: Title + Quick Navigation Button */}
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <p className="font-display text-body-lg sm:text-heading font-bold text-casa-navy leading-snug truncate md:overflow-visible md:text-clip md:whitespace-normal">
-                {isBirthday && <span className="mr-1" aria-hidden="true">🎂</span>}
-                {cleanTitle}
-              </p>
-              <div className="flex items-center flex-wrap gap-x-3 gap-y-0.5 mt-1">
-                {event.location_name && (
-                  isHosted ? (
-                    <span className="text-caption font-semibold uppercase tracking-wide text-casa-muted">At home</span>
-                  ) : (
-                    <span className="flex items-center gap-1 text-caption text-casa-muted truncate max-w-[200px] md:max-w-none">
-                      <MapPin size={12} className="shrink-0 text-casa-gold" />
-                      {event.location_name}
-                    </span>
-                  )
-                )}
-                {isHosted && !event.location_name && (
-                  <span className="text-caption font-semibold uppercase tracking-wide text-casa-muted">At home</span>
+        {/* ── Right Content ── */}
+        <div className="p-3.5 flex flex-col justify-between gap-2 flex-1 min-w-0 bg-casa-surface">
+          {/* Top: Title + Location */}
+          <div className="min-w-0">
+            <h3 className="font-serif text-heading font-bold text-casa-navy leading-snug truncate">
+              {isBirthday && <span className="mr-1" aria-hidden="true">🎂</span>}
+              {cleanTitle}
+            </h3>
+            {(event.location_name || isHosted) && (
+              <div className="flex items-center gap-1 text-caption text-casa-muted mt-0.5">
+                {isHosted ? (
+                  <span>At home</span>
+                ) : (
+                  <>
+                    <MapPin size={12} className="shrink-0 text-casa-muted" />
+                    <span className="truncate">{event.location_name}</span>
+                  </>
                 )}
                 {event.location_name && event.enrichment?.weather_at_event && (
                   <WeatherIcon condition={event.enrichment.weather_at_event} size={12} />
                 )}
               </div>
-            </div>
-
-            {/* Quick 1-tap Directions button (44px target) */}
-            {(event.address || event.location_name) && !isHosted && (
-              <IconButton
-                variant="secondary"
-                size="sm"
-                aria-label={`Open directions to ${event.location_name || event.address}`}
-                title="Open directions"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  const query = event.address ? `${event.location_name ? `${event.location_name}, ` : ''}${event.address}` : event.location_name
-                  window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query || '')}`, '_blank')
-                }}
-                className="shrink-0 min-h-[44px] min-w-[44px] text-casa-navy border-casa-border hover:border-casa-navy"
-                icon={<Navigation size={14} className="text-casa-gold" />}
-              />
             )}
           </div>
 
-          {/* Footer Row: Responsibility Chip + Attendee Stack */}
-          <div className="pt-3 border-t border-casa-divider/70 flex flex-wrap items-center justify-between gap-2">
-            {responsibility.responsible ? (
-              <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-casa-bg border border-casa-border/80">
+          {/* Bottom Row: Responsibility Capsule + Attendee Avatars & Send Action */}
+          <div className="flex items-center justify-between gap-2">
+            {/* Responsibility Chips */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {responsibility.responsible && (
                 <span
-                  className="w-6 h-6 rounded-full text-white flex items-center justify-center text-caption font-bold"
-                  style={{ backgroundColor: responsibility.responsible?.color ?? 'var(--color-casa-gold)' }}
+                  className="inline-flex items-center px-2.5 py-0.5 rounded-full text-white text-caption font-bold shadow-2xs"
+                  style={{ backgroundColor: responsibility.responsible?.color ?? SHARED_GOLD }}
                 >
-                  {responsibility.responsible?.initial ?? '?'}
+                  {responsibility.responsible.initial} {responsibility.responsible.name}
                 </span>
-                <span className="text-caption font-semibold text-casa-navy">
-                  {responsibility.responsible.name}
-                </span>
-                <span className={cn(
-                  'text-caption font-bold px-1.5 py-0.5 rounded flex items-center gap-1',
-                  responsibility.roleBadge === 'drive' ? 'bg-casa-gold/15 text-casa-gold' : 'bg-casa-success/15 text-casa-success-strong'
-                )}>
-                  {responsibility.roleBadge === 'drive' ? (
-                    <>
-                      <span className="w-3.5 h-3.5 bg-casa-navy rounded-full inline-flex items-center justify-center">
-                        <DrivingBadgeIcon />
-                      </span>
-                      <span>Driver Assigned</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="w-3.5 h-3.5 bg-casa-success-strong rounded-full inline-flex items-center justify-center">
-                        <SupervisingBadgeIcon />
-                      </span>
-                      <span>{isHosted ? 'Hosting' : 'Supervising'}</span>
-                    </>
-                  )}
-                </span>
-              </div>
-            ) : (
-              <span className={cn('text-caption font-semibold', isHosted ? 'text-casa-success-strong' : 'text-casa-gold')}>
-                {responsibility.summary}
-              </span>
-            )}
+              )}
 
-            {responsibility.attendees.length > 0 && (
-              <div className="flex items-center gap-1.5 ml-auto">
-                <PersonAvatarStack
-                  people={responsibility.attendees.map((m) => ({
-                    id: m.id,
-                    name: m.family_member?.name ?? '?',
-                    color: m.family_member?.color_hex ?? SHARED_GOLD,
-                  }))}
-                  max={4}
+              {responsibility.roleBadge === 'drive' ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-casa-surface-subtle text-casa-top-pick-band border border-casa-control-border text-3xs font-semibold">
+                  <DrivingCompassIcon className="w-3 h-3 text-casa-top-pick-band" />
+                  <span>Driver Assigned</span>
+                </span>
+              ) : responsibility.roleBadge === 'supervise' ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-900 border border-emerald-200/80 text-3xs font-semibold">
+                  <SupervisingBadgeIcon />
+                  <span>{isHosted ? 'Hosting' : 'Supervising'}</span>
+                </span>
+              ) : responsibility.summary ? (
+                <span className="text-caption font-semibold text-casa-top-pick-band">
+                  {responsibility.summary}
+                </span>
+              ) : null}
+            </div>
+
+            {/* Attendees & Navigation Action */}
+            <div className="flex items-center gap-2 ml-auto">
+              {responsibility.attendees.length > 0 && (
+                <div className="flex items-center -space-x-1.5">
+                  {responsibility.attendees.slice(0, 4).map((m) => (
+                    <span
+                      key={m.id}
+                      className="w-5 h-5 rounded-full text-white font-bold text-3xs flex items-center justify-center ring-2 ring-white shadow-2xs shrink-0"
+                      style={{ backgroundColor: m.family_member?.color_hex ?? SHARED_GOLD }}
+                      title={m.family_member?.name}
+                    >
+                      {m.family_member?.name?.[0]?.toUpperCase() ?? '?'}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* Quick Navigation / Send Icon */}
+              {(event.address || event.location_name) && !isHosted && (
+                <IconButton
+                  variant="ghost"
                   size="sm"
-                  className="shrink-0"
+                  aria-label={`Open directions to ${event.location_name || event.address}`}
+                  title="Open directions"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    const query = event.address ? `${event.location_name ? `${event.location_name}, ` : ''}${event.address}` : event.location_name
+                    window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query || '')}`, '_blank')
+                  }}
+                  className="min-h-[30px] min-w-[30px] p-1 text-casa-muted hover:text-casa-navy hover:bg-black/5 rounded-full"
+                  icon={<Send size={14} className="text-casa-muted" />}
                 />
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -569,8 +559,17 @@ export function DrivingBadgeIcon() {
   return (
     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden>
       <circle cx="12" cy="12" r="8.5" stroke="white" strokeWidth="2" strokeLinecap="round" />
-      <circle cx="12" cy="12" r="2" stroke="white" strokeWidth="2" />
+      <circle cx="12" cy="2" r="2" stroke="white" strokeWidth="2" />
       <path d="M12 3.5v6M5.8 16.6l4.1-2.7M18.2 16.6l-4.1-2.7" stroke="white" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export function DrivingCompassIcon({ className = 'w-3.5 h-3.5' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M16.24 7.76l-2.12 6.36-6.36 2.12 2.12-6.36 6.36-2.12z" />
     </svg>
   )
 }
@@ -583,22 +582,10 @@ export function SupervisingBadgeIcon() {
   )
 }
 
-function SnoozeOneHourIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden>
-      <circle cx="12" cy="13" r="7" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M12 9.8v3.4l2.2 1.3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M8.2 3.8h7.6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <path d="M5.7 6.2h2.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  )
-}
-
 function NeedsYouTransferIcon({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden>
-      <path d="M4.5 6.5h10.5M4.5 11.5h8M4.5 16.5h6.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <path d="M14.2 9.2l4.3 3.3-4.3 3.3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    <svg viewBox="0 0 24 24" fill="none" className={className} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M4 12h11M11 7l5 5-5 5M19 5v14" />
     </svg>
   )
 }

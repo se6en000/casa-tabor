@@ -1,12 +1,12 @@
 import { useRef } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
-import { Cloud, Sparkles, ImageIcon, RefreshCw, Zap, Leaf, Settings } from 'lucide-react'
+import { Cloud, Sparkles, ImageIcon, RefreshCw, Settings } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useLiveClock } from '../../hooks/useLiveClock'
 import { useHomeWeather } from '../../hooks/useHomeWeather'
 import { cn } from '../../utils/cn'
-import { IconButton, Button } from '../ui'
+import { IconButton } from '../ui'
 import { useAppStore } from '../../stores/appStore'
 
 export default function CanvasTopBar() {
@@ -98,50 +98,8 @@ export default function CanvasTopBar() {
         ))}
       </nav>
 
-      {/* ── Right: Mode Switcher · Weather/Clock · Actions · Copilot ── */}
+      {/* ── Right: Weather/Clock · Actions · Copilot ── */}
       <div className="flex items-center gap-2.5 flex-shrink-0">
-        {/* Calm / Turbo Mode Switcher (Sleek single container on Home view) */}
-        {isHome && (
-          <div
-            className={cn(
-              'inline-flex items-center p-0.5 rounded-full border gap-0.5',
-              isCalm ? 'bg-casa-surface/60 border-casa-border/50' : 'bg-white/5 border-white/10'
-            )}
-          >
-            <Button
-              variant={canvasSubmode === 'calm' ? 'primary' : 'ghost'}
-              size="sm"
-              onClick={() => setCanvasSubmode('calm')}
-              className={cn(
-                'px-3 min-h-[30px] rounded-full text-caption font-semibold transition-all leading-none',
-                canvasSubmode === 'calm'
-                  ? 'bg-casa-gold text-casa-navy shadow-2xs font-bold'
-                  : isCalm
-                  ? 'text-casa-muted hover:text-casa-navy'
-                  : 'text-white/60 hover:text-white'
-              )}
-            >
-              <Leaf size={12} strokeWidth={2.2} />
-              <span>Calm</span>
-            </Button>
-            <Button
-              variant={canvasSubmode === 'turbo' ? 'primary' : 'ghost'}
-              size="sm"
-              onClick={() => setCanvasSubmode('turbo')}
-              className={cn(
-                'px-3 min-h-[30px] rounded-full text-caption font-semibold transition-all leading-none',
-                canvasSubmode === 'turbo'
-                  ? 'bg-amber-400 text-casa-navy shadow-2xs font-bold'
-                  : isCalm
-                  ? 'text-casa-muted hover:text-casa-navy'
-                  : 'text-white/60 hover:text-white'
-              )}
-            >
-              <Zap size={12} strokeWidth={2.2} />
-              <span>Turbo</span>
-            </Button>
-          </div>
-        )}
 
         {/* Ambient Info: Show weather, date & time on non-home pages */}
         {!isHome && (

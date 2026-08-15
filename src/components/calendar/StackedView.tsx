@@ -485,17 +485,17 @@ function CompactReminderCard({ event, now = new Date(), onClick, onDoubleClick, 
       )}
       data-calendar-event
     >
-      {/* Straight Amber Left Pillar */}
-      <div className="p-2.5 bg-amber-100/70 text-amber-950 flex flex-col justify-between items-start border-r border-amber-200/60 border-l-4 border-l-amber-400 min-w-0 overflow-hidden">
+      {/* Proportional Cashmere Sand Left Pillar */}
+      <div className="p-2.5 bg-casa-surface-subtle text-casa-top-pick-band flex flex-col justify-between items-start border-r border-casa-control-border/80 border-l-4 border-l-casa-top-pick-band min-w-0 overflow-hidden">
         <div className="w-full min-w-0">
-          <span className="font-mono text-body font-bold text-amber-950 tabular-nums leading-none block">
+          <span className="font-body text-body font-bold text-casa-top-pick-band tabular-nums leading-none block">
             {isTimed ? format(start, 'h:mm') : 'ALL DAY'}
           </span>
-          <span className="font-mono text-caption uppercase text-amber-900/70 font-semibold leading-none mt-1 block">
+          <span className="font-mono text-3xs uppercase text-casa-top-pick-band/80 font-bold tracking-wider leading-none mt-1 block">
             {isTimed ? format(start, 'a') : 'REMIND'}
           </span>
         </div>
-        <Bell size={11} className="text-amber-800 shrink-0 mt-1" />
+        <Bell size={11} className="text-casa-top-pick-band shrink-0 mt-1" />
       </div>
 
       {/* Content Deck */}
@@ -777,10 +777,10 @@ function EventCard({ event, household, now = new Date(), onClick, onDoubleClick,
         )}
       >
         <div className="space-y-1 min-w-0">
-          {/* Title — Same crisp font as reminder titles */}
+          {/* Title — Luxury Source Serif 4 title */}
           <p
             className={cn(
-              'stacked-event-title font-bold text-body leading-snug line-clamp-2',
+              'stacked-event-title font-serif font-bold text-body leading-snug line-clamp-2',
               isHeroState ? 'text-white' : 'text-casa-navy'
             )}
           >
