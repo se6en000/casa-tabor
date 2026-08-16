@@ -11,7 +11,7 @@ import LivingFlowSidecar from '../calendar/living-flow/LivingFlowSidecar'
 import ActionInspectionSidecar from '../canvas/widgets/ActionInspectionSidecar'
 import AIChatDrawer from './AIChatDrawer'
 
-import { usePrepItems, usePrepItemDetails } from '../../hooks/usePrepItems'
+import { usePrepItems, usePrepItemDetails, useCompletePrepItem, useSnoozePrepItem } from '../../hooks/usePrepItems'
 import { synthesizeActionAnalysis, extractAmount } from '../../utils/actionInspectionSynthesis'
 import type { ActionAiContext } from '../../hooks/useAIAssistant'
 
@@ -33,6 +33,7 @@ export default function SidecarCompanion({
     selectedSidecarEventId,
     setSelectedSidecarEventId,
     selectedSidecarActionId,
+    openActionInSidecar,
     openAiInSidecar,
     closeSidecar,
   } = useAppStore()
@@ -154,6 +155,9 @@ export default function SidecarCompanion({
     }
   }
 
+  const completePrepItem = useCompletePrepItem()
+  const snoozePrepItem = useSnoozePrepItem()
+
   const isActionView = sidecarTab === 'action' && Boolean(selectedSidecarActionId)
   const isEventView = sidecarTab === 'event' && Boolean(selectedEvent)
   const isFrontView = isActionView || isEventView
@@ -181,6 +185,14 @@ export default function SidecarCompanion({
               onClose={closeSidecar}
               embedded={true}
               onSwitchToAi={handleAskAiAboutAction}
+              onCompleteAction={async (item) => {
+                await completePrepItem(item.id)
+              }}
+              onSnoozeAction={async (item, period) => {
+                await snoozePrepItem(item.id, period, item.due_by)
+              }}
+              onSelectAction={(id) => openActionInSidecar(id)}
+              queueItems={allPrep}
             />
           ) : selectedEvent && selectedEvent.start_time ? (
             <LivingFlowSidecar

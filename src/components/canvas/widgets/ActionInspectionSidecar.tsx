@@ -32,7 +32,13 @@ import { cn } from '../../../utils/cn'
 import type { PrepItem, Conflict } from '../../../types'
 import { sourceBadge } from '../../../utils/prepSourceBadge'
 import { type SnoozeDuration } from '../../../utils/snoozeDuration'
-import { usePrepItems, usePrepItemDetails, useDownvotePrepItem } from '../../../hooks/usePrepItems'
+import {
+  usePrepItems,
+  usePrepItemDetails,
+  useDownvotePrepItem,
+  useCompletePrepItem,
+  useSnoozePrepItem,
+} from '../../../hooks/usePrepItems'
 import { useHouseholdCaptureRules } from '../../../hooks/useHouseholdCaptureRules'
 import {
   synthesizeActionAnalysis,
@@ -78,11 +84,12 @@ export default function ActionInspectionSidecar({
   const qc = useQueryClient()
   const { data: allPrep = [] } = usePrepItems()
   const { data: familyMembers = [] } = useFamilyMembers()
-  const { setSelectedSidecarEventId, setSidecarTab } = useAppStore()
+  const { setSelectedSidecarEventId, setSelectedSidecarActionId, setSidecarTab } = useAppStore()
   const now = useLiveClock(60_000)
   const { data: rollingEvents = [] } = useRollingEvents(now)
 
   const [snoozeOpen, setSnoozeOpen] = useState(false)
+  const [isResolving, setIsResolving] = useState(false)
   const [showRawSource, setShowRawSource] = useState(false)
   const [signingModalOpen, setSigningModalOpen] = useState(false)
   const [signedSuccess, setSignedSuccess] = useState(false)
@@ -92,6 +99,8 @@ export default function ActionInspectionSidecar({
 
   const { rules: captureRules = [], saveRule: saveCaptureRule, removeRule: removeCaptureRule, isSaving: isSavingRule } = useHouseholdCaptureRules()
   const downvote = useDownvotePrepItem()
+  const completePrepItem = useCompletePrepItem()
+  const snoozePrepItem = useSnoozePrepItem()
 
   // Find target prep item
   const currentItem = useMemo(() => {
@@ -233,40 +242,76 @@ export default function ActionInspectionSidecar({
     return queueItems.findIndex((q) => q.id === activeItem.id)
   }, [queueItems, activeItem])
 
+  const handleSelectAction = (itemId: string) => {
+    if (onSelectAction) {
+      onSelectAction(itemId)
+    } else {
+      setSelectedSidecarActionId(itemId)
+    }
+  }
+
   const handlePrev = () => {
-    if (queueIndex > 0 && onSelectAction && queueItems[queueIndex - 1]) {
-      onSelectAction(queueItems[queueIndex - 1].id)
+    if (queueIndex > 0 && queueItems[queueIndex - 1]) {
+      handleSelectAction(queueItems[queueIndex - 1].id)
     }
   }
 
   const handleNext = () => {
-    if (queueIndex >= 0 && queueIndex < queueItems.length - 1 && onSelectAction && queueItems[queueIndex + 1]) {
-      onSelectAction(queueItems[queueIndex + 1].id)
+    if (queueIndex >= 0 && queueIndex < queueItems.length - 1 && queueItems[queueIndex + 1]) {
+      handleSelectAction(queueItems[queueIndex + 1].id)
     }
   }
 
-  const handleActionComplete = () => {
-    if (activeItem && onCompleteAction) {
-      onCompleteAction(activeItem)
+  const handleActionComplete = async () => {
+    if (!activeItem || isResolving) return
+    setIsResolving(true)
+    navigator.vibrate?.(25)
+    try {
+      if (onCompleteAction) {
+        onCompleteAction(activeItem)
+      } else {
+        await completePrepItem(activeItem.id)
+      }
+
       // Auto-advance to next item if available
-      if (queueIndex >= 0 && queueIndex < queueItems.length - 1 && onSelectAction && queueItems[queueIndex + 1]) {
-        onSelectAction(queueItems[queueIndex + 1].id)
-      } else if (queueItems.length <= 1) {
+      if (queueIndex >= 0 && queueIndex < queueItems.length - 1 && queueItems[queueIndex + 1]) {
+        handleSelectAction(queueItems[queueIndex + 1].id)
+      } else if (siblingItems.length > 0) {
+        handleSelectAction(siblingItems[0].id)
+      } else {
         onClose()
       }
+    } catch (err) {
+      console.error('ActionInspectionSidecar: Failed to complete action', err)
+    } finally {
+      setIsResolving(false)
     }
   }
 
-  const handleActionSnooze = (period: SnoozeDuration) => {
-    if (activeItem && onSnoozeAction) {
-      onSnoozeAction(activeItem, period)
-      setSnoozeOpen(false)
+  const handleActionSnooze = async (period: SnoozeDuration) => {
+    if (!activeItem || isResolving) return
+    setIsResolving(true)
+    setSnoozeOpen(false)
+    navigator.vibrate?.(25)
+    try {
+      if (onSnoozeAction) {
+        onSnoozeAction(activeItem, period)
+      } else {
+        await snoozePrepItem(activeItem.id, period, activeItem.due_by)
+      }
+
       // Auto-advance to next item
-      if (queueIndex >= 0 && queueIndex < queueItems.length - 1 && onSelectAction && queueItems[queueIndex + 1]) {
-        onSelectAction(queueItems[queueIndex + 1].id)
-      } else if (queueItems.length <= 1) {
+      if (queueIndex >= 0 && queueIndex < queueItems.length - 1 && queueItems[queueIndex + 1]) {
+        handleSelectAction(queueItems[queueIndex + 1].id)
+      } else if (siblingItems.length > 0) {
+        handleSelectAction(siblingItems[0].id)
+      } else {
         onClose()
       }
+    } catch (err) {
+      console.error('ActionInspectionSidecar: Failed to snooze action', err)
+    } finally {
+      setIsResolving(false)
     }
   }
 
@@ -636,7 +681,7 @@ export default function ActionInspectionSidecar({
                 <button
                   key={sib.id}
                   type="button"
-                  onClick={() => onSelectAction?.(sib.id)}
+                  onClick={() => handleSelectAction(sib.id)}
                   className="text-left px-3 py-2 rounded-xl bg-casa-bg hover:bg-casa-gold/10 border border-casa-border/60 transition-colors flex items-center justify-between text-body-sm font-medium text-casa-text min-h-[44px]"
                 >
                   <span className="truncate">{sib.description || sib.event_title}</span>
@@ -858,17 +903,26 @@ export default function ActionInspectionSidecar({
       {/* ══════════════════════════════════════════════════════════════════════════
           3. PINNED BOTTOM 1-TAP ACTION BAR (48px+ Touch Targets)
          ══════════════════════════════════════════════════════════════════════════ */}
+      {snoozeOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-transparent cursor-default"
+          onClick={() => setSnoozeOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
       <div className="px-5 sm:px-6 py-4 border-t border-casa-border/80 bg-casa-surface/95 backdrop-blur-md shrink-0 flex flex-col gap-2 z-20">
         <div className="flex items-center gap-3">
           {/* Primary Action Button (Navy with Green Check) */}
           <Button
             size="lg"
             variant="strong"
+            disabled={isResolving}
             onClick={handleActionComplete}
             className="flex-1 min-h-[48px] sm:min-h-[52px] rounded-full text-body-sm sm:text-body font-bold shadow-card flex items-center justify-center gap-2 hover:brightness-110"
-            leadingIcon={<Check size={18} strokeWidth={2.5} className="text-emerald-400 shrink-0" />}
+            leadingIcon={isResolving ? <Loader2 size={18} className="animate-spin text-emerald-400 shrink-0" /> : <Check size={18} strokeWidth={2.5} className="text-emerald-400 shrink-0" />}
           >
-            <span>{isPayment ? 'Mark Paid & Done' : 'Mark Done'}</span>
+            <span>{isResolving ? 'Updating…' : isPayment ? 'Mark Paid & Done' : 'Mark Done'}</span>
           </Button>
 
           {/* Snooze Split Pill Button */}
@@ -876,6 +930,7 @@ export default function ActionInspectionSidecar({
             <Button
               size="lg"
               variant="ghost"
+              disabled={isResolving}
               onClick={() => handleActionSnooze('tomorrow')}
               className="px-4 text-body-sm font-semibold text-casa-navy hover:text-casa-gold-hover transition-colors min-h-[48px] sm:min-h-[52px] rounded-l-full rounded-r-none border-none flex items-center gap-2"
               title="Snooze to tomorrow morning"
@@ -887,6 +942,7 @@ export default function ActionInspectionSidecar({
             <IconButton
               size="lg"
               variant="ghost"
+              disabled={isResolving}
               onClick={() => setSnoozeOpen((v) => !v)}
               aria-label="More snooze options"
               title="More snooze options"
@@ -901,13 +957,13 @@ export default function ActionInspectionSidecar({
 
             {/* Snooze Dropdown Menu */}
             {snoozeOpen && (
-              <div className="absolute right-0 bottom-full mb-2 w-52 bg-casa-surface rounded-2xl border border-casa-border shadow-modal p-1.5 z-40 flex flex-col gap-1 animate-in fade-in zoom-in-95 duration-150">
+              <div className="absolute right-0 bottom-full mb-2 w-56 bg-casa-surface rounded-2xl border border-casa-border shadow-modal p-1.5 z-40 flex flex-col gap-1 animate-in fade-in zoom-in-95 duration-150">
                 <Button
                   variant="ghost"
                   size="sm"
                   align="start"
                   onClick={() => handleActionSnooze('3h')}
-                  className="w-full px-3 py-2 rounded-xl text-caption text-casa-navy hover:bg-casa-gold/15 font-semibold min-h-[44px]"
+                  className="w-full px-3 py-2.5 rounded-xl text-caption text-casa-navy hover:bg-casa-gold/15 font-semibold min-h-[44px]"
                   leadingIcon={<Moon size={14} className="text-casa-gold" />}
                 >
                   <span>Tonight (+3h)</span>
@@ -917,7 +973,7 @@ export default function ActionInspectionSidecar({
                   size="sm"
                   align="start"
                   onClick={() => handleActionSnooze('tomorrow')}
-                  className="w-full px-3 py-2 rounded-xl text-caption text-casa-navy hover:bg-casa-gold/15 font-semibold min-h-[44px]"
+                  className="w-full px-3 py-2.5 rounded-xl text-caption text-casa-navy hover:bg-casa-gold/15 font-semibold min-h-[44px]"
                   leadingIcon={<Sun size={14} className="text-casa-gold" />}
                 >
                   <span>Tomorrow Morning (9 AM)</span>
@@ -927,7 +983,7 @@ export default function ActionInspectionSidecar({
                   size="sm"
                   align="start"
                   onClick={() => handleActionSnooze('1d')}
-                  className="w-full px-3 py-2 rounded-xl text-caption text-casa-navy hover:bg-casa-gold/15 font-semibold min-h-[44px]"
+                  className="w-full px-3 py-2.5 rounded-xl text-caption text-casa-navy hover:bg-casa-gold/15 font-semibold min-h-[44px]"
                   leadingIcon={<Clock size={14} className="text-casa-gold" />}
                 >
                   <span>In 24 Hours</span>

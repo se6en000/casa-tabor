@@ -269,4 +269,39 @@ test('Ask AI from ActionInspectionSidecar prefills context and resets session', 
   assert.match(useAIAssistantCode, /required_action:\s*ctx\.focusedAction\.requiredAction/)
 })
 
+test('ActionInspectionSidecar: Snooze and Done buttons execute mutations and auto-advance', () => {
+  const sidecarCode = fs.readFileSync(
+    path.join(process.cwd(), 'src/components/canvas/widgets/ActionInspectionSidecar.tsx'),
+    'utf8'
+  )
+  const sidecarCompanionCode = fs.readFileSync(
+    path.join(process.cwd(), 'src/components/shared/SidecarCompanion.tsx'),
+    'utf8'
+  )
+
+  // 1. ActionInspectionSidecar imports mutation hooks
+  assert.match(sidecarCode, /useCompletePrepItem/, 'Must import useCompletePrepItem')
+  assert.match(sidecarCode, /useSnoozePrepItem/, 'Must import useSnoozePrepItem')
+
+  // 2. ActionInspectionSidecar defines handleActionComplete and handleActionSnooze
+  assert.match(sidecarCode, /handleActionComplete/, 'Must implement handleActionComplete')
+  assert.match(sidecarCode, /handleActionSnooze/, 'Must implement handleActionSnooze')
+  assert.match(sidecarCode, /completePrepItem\(activeItem\.id\)/, 'Must call completePrepItem as fallback')
+  assert.match(sidecarCode, /snoozePrepItem\(activeItem\.id,\s*period,\s*activeItem\.due_by\)/, 'Must call snoozePrepItem as fallback')
+
+  // 3. Snooze dropdown options
+  assert.match(sidecarCode, /handleActionSnooze\('3h'\)/, 'Must support Tonight (+3h) snooze')
+  assert.match(sidecarCode, /handleActionSnooze\('tomorrow'\)/, 'Must support Tomorrow Morning snooze')
+  assert.match(sidecarCode, /handleActionSnooze\('1d'\)/, 'Must support In 24 Hours snooze')
+
+  // 4. SidecarCompanion wires onCompleteAction and onSnoozeAction
+  assert.match(sidecarCompanionCode, /useCompletePrepItem/, 'SidecarCompanion must import useCompletePrepItem')
+  assert.match(sidecarCompanionCode, /useSnoozePrepItem/, 'SidecarCompanion must import useSnoozePrepItem')
+  assert.match(sidecarCompanionCode, /onCompleteAction=\{/, 'SidecarCompanion must pass onCompleteAction')
+  assert.match(sidecarCompanionCode, /onSnoozeAction=\{/, 'SidecarCompanion must pass onSnoozeAction')
+  assert.match(sidecarCompanionCode, /onSelectAction=\{/, 'SidecarCompanion must pass onSelectAction')
+  assert.match(sidecarCompanionCode, /queueItems=\{allPrep\}/, 'SidecarCompanion must pass queueItems')
+})
+
+
 
