@@ -5,7 +5,8 @@ const FLIGHT_KEYWORDS = /\bflight\b|(?:^|\s)[A-Z]{3}\s*(?:→|->)\s*[A-Z]{3}(?:\
 const TRIP_KEYWORDS = /\b(trip|outing|camp|scalloping|excursion|road trip|day trip|festival|fair|beach|park day|vacation|staycation)\b/i
 const COVERAGE_KEYWORDS = /\b(sitter|babysitter|nanny|caregiver|childcare|watching|watch(?:es)?|caring for)\b/i
 const LOCATION_ONLY_KEYWORDS = /\b(sleep[\s-]?over|overnight stay|field trip|team bus)\b/i
-const REMOTE_KEYWORDS = /\b(zoom|google meet|microsoft teams|facetime|video call|virtual|online|remote|phone call|online order|order submission|submit order|place order|order online|webinar|livestream|telehealth|portal)\b|https?:\/\//i
+const VIRTUAL_URL_PATTERN = /https?:\/\/(?:[a-zA-Z0-9-]+\.)*(?:zoom\.us|meet\.google\.com|teams\.microsoft\.com|webex\.com|gotomeeting\.com|chime\.aws)\b/i
+const REMOTE_KEYWORDS = /\b(zoom|google meet|microsoft teams|facetime|video call|virtual meeting|virtual event|remote meeting|telehealth|webinar|livestream|portal|online order|order submission|submit order|place order|order online)\b/i
 
 function text(value) {
   return typeof value === 'string' ? value.trim() : ''
@@ -21,6 +22,27 @@ function durationHours(event) {
 function isAtHome(event) {
   const location = `${text(event?.location_name)} ${text(event?.address)}`.toLowerCase()
   return !location.trim() || /\bhome\b/.test(location)
+}
+
+function isRemoteEvent(event) {
+  const title = text(event?.title)
+  const description = text(event?.description)
+  const location = text(event?.location_name)
+  const address = text(event?.address)
+
+  if (!address && (/^https?:\/\//i.test(location) || VIRTUAL_URL_PATTERN.test(location))) {
+    return true
+  }
+  if (VIRTUAL_URL_PATTERN.test(title) || VIRTUAL_URL_PATTERN.test(description)) {
+    return true
+  }
+  if (REMOTE_KEYWORDS.test(title)) {
+    return true
+  }
+  if (!address && REMOTE_KEYWORDS.test(`${description} ${location}`)) {
+    return true
+  }
+  return false
 }
 
 function localTime(iso, timezone) {
@@ -48,7 +70,6 @@ export function classifyTransportationDefault(event, legacy = {}) {
   const description = text(event?.description)
   const location = text(event?.location_name)
   const address = text(event?.address)
-  const searchable = `${title} ${description} ${location} ${address}`
 
   if (
     event?.event_type === 'reminder'
@@ -62,7 +83,7 @@ export function classifyTransportationDefault(event, legacy = {}) {
     return { kind: 'none', reason: 'inactive' }
   }
   if (!location && !address) return { kind: 'none', reason: 'no_destination' }
-  if (REMOTE_KEYWORDS.test(searchable)) return { kind: 'none', reason: 'remote' }
+  if (isRemoteEvent(event)) return { kind: 'none', reason: 'remote' }
   if (COVERAGE_KEYWORDS.test(title)) return { kind: 'none', reason: 'coverage' }
   if (LOCATION_ONLY_KEYWORDS.test(title)) return { kind: 'none', reason: 'location_only' }
   if (isAtHome(event)) return { kind: 'none', reason: 'at_home' }

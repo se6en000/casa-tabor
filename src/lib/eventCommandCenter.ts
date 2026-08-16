@@ -122,7 +122,8 @@ const TRIP_KEYWORDS = /\b(trip|outing|camp|scalloping|excursion|road trip|day tr
 const HOSTED_KEYWORDS = /\b(sitter|babysitter|nanny|plumber|delivery|repair|technician|cleaner|handyman|contractor|at home|home visit)\b/i
 const COVERAGE_KEYWORDS = /\b(sitter|babysitter|nanny|caregiver|childcare|watching|watch(?:es)?|caring for)\b/i
 const LOCATION_ONLY_KEYWORDS = /\b(sleep[\s-]?over|overnight stay|field trip|team bus)\b/i
-const REMOTE_KEYWORDS = /\b(zoom|google meet|microsoft teams|facetime|video call|virtual|online|remote|phone call|online order|order submission|submit order|place order|order online|webinar|livestream|telehealth|portal)\b/i
+const VIRTUAL_URL_PATTERN = /https?:\/\/(?:[a-zA-Z0-9-]+\.)*(?:zoom\.us|meet\.google\.com|teams\.microsoft\.com|webex\.com|gotomeeting\.com|chime\.aws)\b/i
+const REMOTE_KEYWORDS = /\b(zoom|google meet|microsoft teams|facetime|video call|virtual meeting|virtual event|remote meeting|telehealth|webinar|livestream|portal|online order|order submission|submit order|place order|order online)\b/i
 const HOSTED_CATEGORIES = new Set(['home_maintenance', 'task', 'reminder', 'chore', 'family_admin', 'errand'])
 const TRIP_CATEGORIES = new Set(['travel', 'holiday'])
 
@@ -144,14 +145,42 @@ function isAtHome(event: EventWithDetails, homeName?: string | null): boolean {
   return false
 }
 
-export function inferEventMode(event: EventWithDetails, opts?: { homeName?: string | null }): EventMode {
+export function isRemoteEvent(event: EventWithDetails): boolean {
   const title = event.title ?? ''
   const description = event.description ?? ''
+  const location = (event.location_name ?? '').trim()
+  const address = (event.address ?? '').trim()
+
+  // Explicit URL as location with no physical street address
+  if (!address && (/^https?:\/\//i.test(location) || VIRTUAL_URL_PATTERN.test(location))) {
+    return true
+  }
+
+  // Explicit virtual meeting platforms in title or description
+  if (VIRTUAL_URL_PATTERN.test(title) || VIRTUAL_URL_PATTERN.test(description)) {
+    return true
+  }
+
+  // Explicit remote/virtual meeting keywords in title
+  if (REMOTE_KEYWORDS.test(title)) {
+    return true
+  }
+
+  // Remote keywords in description when there is no physical street address
+  if (!address && REMOTE_KEYWORDS.test(`${description} ${location}`)) {
+    return true
+  }
+
+  return false
+}
+
+export function inferEventMode(event: EventWithDetails, opts?: { homeName?: string | null }): EventMode {
+  const title = event.title ?? ''
   const category = event.enrichment?.category ?? ''
   const durationH = eventDurationHours(event)
 
   // 1. Remote or online task -> hosted (no physical travel)
-  if (REMOTE_KEYWORDS.test(`${title} ${description}`) || /https?:\/\//i.test(`${title} ${description}`)) return 'hosted'
+  if (isRemoteEvent(event)) return 'hosted'
 
   // 2. Hosted — no destination or clearly at-home location or task categories.
   if (isAtHome(event, opts?.homeName)) return 'hosted'
@@ -176,11 +205,9 @@ export function inferEventPlanKind(
   opts?: { homeName?: string | null },
 ): EventPlanKind {
   const title = event.title ?? ''
-  const description = event.description ?? ''
   const location = event.location_name ?? ''
   const address = event.address ?? ''
-  const searchable = `${title} ${description} ${location} ${address}`
-  if (REMOTE_KEYWORDS.test(searchable) || /https?:\/\//i.test(searchable)) return 'remote'
+  if (isRemoteEvent(event)) return 'remote'
   if (COVERAGE_KEYWORDS.test(title)) return 'coverage'
   if (LOCATION_ONLY_KEYWORDS.test(title)) return 'details'
   if (event.event_type === 'reminder') return 'details'

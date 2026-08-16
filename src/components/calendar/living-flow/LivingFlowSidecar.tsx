@@ -9,6 +9,8 @@ import LivingDepartureHero from './components/LivingDepartureHero'
 import LivingRouteTimeline from './components/LivingRouteTimeline'
 import LivingVenueCard from './components/LivingVenueCard'
 import LivingReminderCard from './components/LivingReminderCard'
+import RecurrenceScopeDialog from '../RecurrenceScopeDialog'
+import { ConfirmationDialog } from '../../ui'
 
 import './living-flow.css'
 
@@ -44,6 +46,19 @@ export default function LivingFlowSidecar({
     nudgeMinutes,
     setCategory,
     deleteEvent,
+    handleDelete,
+    handleRecurringDelete,
+    showDeleteScopeModal,
+    setShowDeleteScopeModal,
+    showDeleteConfirm,
+    setShowDeleteConfirm,
+    deleting,
+    deleteError,
+    setDeleteError,
+    deleteBlocked,
+    setDeleteBlocked,
+    recurringDeleteActionIdRef,
+    scopeImpacts,
     markCompleted,
     snoozeReminder,
     setRecurScope
@@ -148,8 +163,10 @@ export default function LivingFlowSidecar({
       <footer className="p-3 bg-white border-t border-slate-200 flex items-center gap-2 shrink-0 z-20">
         <button
           onClick={deleteEvent}
-          className="living-footer-action-btn delete-btn"
+          disabled={deleting}
+          className="living-footer-action-btn delete-btn disabled:opacity-50 disabled:cursor-not-allowed"
           aria-label="Delete this event"
+          title="Delete this event"
         >
           <Trash2 size={18} />
         </button>
@@ -159,6 +176,7 @@ export default function LivingFlowSidecar({
             onClick={markCompleted}
             className="living-footer-action-btn done-btn"
             aria-label="Mark event complete"
+            title="Mark event complete"
           >
             <Check size={18} />
           </button>
@@ -176,8 +194,60 @@ export default function LivingFlowSidecar({
     </aside>
   )
 
+  const modals = (
+    <>
+      <RecurrenceScopeDialog
+        open={showDeleteScopeModal}
+        operation="delete"
+        selectedStart={event?.start_time}
+        impacts={scopeImpacts}
+        loading={deleting}
+        error={deleteError}
+        onClose={() => {
+          setShowDeleteScopeModal(false)
+          setDeleteError(null)
+          recurringDeleteActionIdRef.current = null
+        }}
+        onSelect={(scope) => void handleRecurringDelete(scope)}
+      />
+
+      <ConfirmationDialog
+        open={showDeleteConfirm}
+        onClose={() => {
+          if (deleting) return
+          setShowDeleteConfirm(false)
+          setDeleteError(null)
+          setDeleteBlocked(false)
+        }}
+        onConfirm={() => void handleDelete()}
+        title={
+          deleteBlocked
+            ? 'Cannot safely delete this event'
+            : (state.title || event?.title || '').trim()
+              ? `Delete "${(state.title || event?.title || '').trim()}"?`
+              : 'Delete this event?'
+        }
+        description={
+          deleteBlocked
+            ? (deleteError || 'Casa left the event unchanged.')
+            : 'This will remove the event from Casa Tabor and its connected Google Calendar.'
+        }
+        confirmLabel="Delete event"
+        cancelLabel={deleteBlocked ? 'Close' : 'Keep event'}
+        destructive={!deleteBlocked}
+        loading={deleting}
+        error={deleteError}
+      />
+    </>
+  )
+
   if (embedded) {
-    return content
+    return (
+      <>
+        {content}
+        {modals}
+      </>
+    )
   }
 
   return (
@@ -193,6 +263,7 @@ export default function LivingFlowSidecar({
       >
         {content}
       </div>
+      {modals}
     </>
   )
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../../../lib/supabase'
 import { useFamilyMembers } from '../../../../hooks/useFamilyMembers'
@@ -14,6 +14,14 @@ import {
   parseDistanceMilesFromSummary,
 } from '../../../../lib/eventTransportation'
 import { saveEventTransportationOverride } from '../../../../lib/eventPlanOverrides'
+import type { EventLocationScope } from '../../../../lib/eventLocation'
+import {
+  loadRecurringEditorContext,
+  deleteRecurringEditorMutation,
+  announceRecurringDelete,
+  truncateRecurrenceLinesForFuture,
+  type RecurringEditorContext,
+} from '../../../../lib/recurringEventEditor'
 import {
   updateEventTitle,
   updateEventSchedule,
@@ -172,6 +180,48 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     selectedMemberIds: initialMemberIds,
     primaryMemberId: initialPrimaryId
   })
+
+  // Canonical v2 occurrences use series_id; legacy instances use recurrence_master_id
+  const isCanonicalOccurrence = Boolean(initialEvent?.series_id && initialEvent?.record_kind === 'occurrence')
+  const [recurringContext, setRecurringContext] = useState<RecurringEditorContext | null>(null)
+  const [recurringEditorEnabled, setRecurringEditorEnabled] = useState(false)
+  const [recurringDeleteEnabled, setRecurringDeleteEnabled] = useState(false)
+  const [recurringContextLoading, setRecurringContextLoading] = useState(false)
+  const [showDeleteScopeModal, setShowDeleteScopeModal] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [deleteBlocked, setDeleteBlocked] = useState(false)
+  const recurringDeleteActionIdRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (!initialEvent?.id || !isCanonicalOccurrence) {
+      setRecurringContext(null)
+      setRecurringEditorEnabled(false)
+      setRecurringDeleteEnabled(false)
+      setRecurringContextLoading(false)
+      return
+    }
+    let cancelled = false
+    setRecurringContextLoading(true)
+    setDeleteError(null)
+    loadRecurringEditorContext(initialEvent.id)
+      .then((result) => {
+        if (cancelled) return
+        setRecurringEditorEnabled(result.enabled)
+        setRecurringDeleteEnabled(Boolean(result.deletable))
+        setRecurringContext(result.context ?? null)
+      })
+      .catch((error: Error) => {
+        if (!cancelled) {
+          console.warn('[useLivingFlowState] Could not load recurring event context:', error)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setRecurringContextLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [initialEvent?.id, isCanonicalOccurrence])
 
   // Sync state whenever event prop changes
   useEffect(() => {
@@ -480,18 +530,99 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     }
   }, [initialEvent?.id, queryClient])
 
-  // Delete Event
-  const deleteEvent = useCallback(async () => {
-    if (!initialEvent?.id) return
-    if (!confirm('Are you sure you want to delete this?')) return
-    onClose?.()
+  // Delete Request Entrypoint
+  const requestDelete = useCallback(() => {
+    setDeleteError(null)
+    setDeleteBlocked(false)
+    if (initialEvent?.record_kind === 'series_template') {
+      setDeleteError('This is the recurring pattern for this series, not a single event. Edit or delete the series from one of its dated occurrences instead.')
+      setDeleteBlocked(true)
+      setShowDeleteConfirm(true)
+      return
+    }
+    if (isCanonicalOccurrence && recurringEditorEnabled) {
+      if (!recurringDeleteEnabled) {
+        setDeleteError('Recurring event deletion is not enabled for this series yet.')
+        setDeleteBlocked(true)
+        setShowDeleteConfirm(true)
+        return
+      }
+      setShowDeleteScopeModal(true)
+      return
+    }
+    setShowDeleteConfirm(true)
+  }, [initialEvent?.record_kind, isCanonicalOccurrence, recurringDeleteEnabled, recurringEditorEnabled])
 
+  // Single / Non-recurring Event Delete Handler
+  const handleDelete = useCallback(async () => {
+    if (!initialEvent?.id) return
+    setDeleting(true)
+    setDeleteError(null)
     try {
       await deleteCalendarEvent(supabase, queryClient, initialEvent.id)
+      setShowDeleteConfirm(false)
+      onClose?.()
     } catch (err) {
-      console.error('[LivingFlow] Failed to delete event:', err)
+      setDeleteError(err instanceof Error ? err.message : 'Could not delete this event.')
+    } finally {
+      setDeleting(false)
     }
   }, [initialEvent?.id, queryClient, onClose])
+
+  // Canonical Recurring Series Delete Handler
+  const handleRecurringDelete = useCallback(async (scope: EventLocationScope) => {
+    if (!initialEvent?.id || !recurringContext) {
+      setDeleteError('Recurring series details are unavailable.')
+      return
+    }
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      const seriesPatch: Record<string, unknown> = {}
+      if (scope === 'future') {
+        const originalStart = initialEvent.original_start_time ?? (
+          initialEvent.original_start_date ? `${initialEvent.original_start_date}T00:00:00Z` : initialEvent.start_time
+        )
+        seriesPatch.original_recurrence_lines = truncateRecurrenceLinesForFuture(
+          recurringContext.series.recurrence_lines,
+          originalStart,
+        )
+      }
+      const actionId = recurringDeleteActionIdRef.current ?? crypto.randomUUID()
+      recurringDeleteActionIdRef.current = actionId
+      const result = await deleteRecurringEditorMutation({
+        selected_event_id: initialEvent.id,
+        action_id: actionId,
+        scope,
+        expected_series_revision: recurringContext.series.revision,
+        series_patch: seriesPatch,
+      })
+      recurringDeleteActionIdRef.current = null
+      invalidateCalendar()
+      announceRecurringDelete({ ...result, title: initialEvent.title, scope })
+      setShowDeleteScopeModal(false)
+      onClose?.()
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Could not delete the selected recurring events.')
+    } finally {
+      setDeleting(false)
+    }
+  }, [initialEvent, recurringContext, invalidateCalendar, onClose])
+
+  const scopeImpacts = recurringContext ? {
+    this: {
+      affectedCount: recurringContext.impacts.this.occurrence_count,
+      preservedExceptionCount: recurringContext.impacts.this.exception_count,
+    },
+    future: {
+      affectedCount: recurringContext.impacts.future.occurrence_count,
+      preservedExceptionCount: recurringContext.impacts.future.exception_count,
+    },
+    all: {
+      affectedCount: recurringContext.impacts.all.occurrence_count,
+      preservedExceptionCount: recurringContext.impacts.all.exception_count,
+    },
+  } : undefined
 
   // Mark Completed / Done
   const markCompleted = useCallback(async () => {
@@ -535,7 +666,22 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     setStartAndDuration,
     nudgeMinutes,
     setCategory,
-    deleteEvent,
+    deleteEvent: requestDelete,
+    requestDelete,
+    handleDelete,
+    handleRecurringDelete,
+    showDeleteScopeModal,
+    setShowDeleteScopeModal,
+    showDeleteConfirm,
+    setShowDeleteConfirm,
+    deleting,
+    deleteError,
+    setDeleteError,
+    deleteBlocked,
+    setDeleteBlocked,
+    recurringDeleteActionIdRef,
+    recurringContextLoading,
+    scopeImpacts,
     markCompleted,
     snoozeReminder,
     setRecurScope

@@ -81,6 +81,20 @@ test('remote events never create driving legs', () => {
   assert.deepEqual(plan.legs, [])
 })
 
+test('events with online waiver or ticket URLs in description retain travel plan when physical address exists', () => {
+  const event = makeEvent({
+    title: "Liv going to Piper's 13th Birthday Party",
+    location_name: 'Altitude Trampoline Park',
+    address: '4340 Okeechobee Blvd k-103, West Palm Beach, FL 33409',
+    description: 'RSVP to Andrea at 561-523-8463. Online waiver: https://waiver.roller.app/AltitudeWestPalmBeach/home',
+  })
+  const mode = inferEventMode(event)
+  assert.equal(mode, 'appointment')
+  const plan = derivePlan(event, mode, { household: [] })
+  assert.equal(plan.kind, 'travel')
+  assert.ok(plan.legs.length > 0)
+})
+
 test('care coverage and sleepovers keep their location without inventing driving', () => {
   const coverage = makeEvent({
     title: 'Giselle Watching Owen',
