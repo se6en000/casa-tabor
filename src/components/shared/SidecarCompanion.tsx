@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAppStore } from '../../stores/appStore'
 import { useRollingEvents, fetchEventDetails, type EventWithDetails } from '../../hooks/useCalendarEvents'
 import { useLiveClock } from '../../hooks/useLiveClock'
@@ -37,6 +37,7 @@ export default function SidecarCompanion({
     closeSidecar,
   } = useAppStore()
 
+  const queryClient = useQueryClient()
   const [focusedActionContext, setFocusedActionContext] = useState<ActionAiContext | null>(null)
 
   const now = useLiveClock(60_000)
@@ -79,12 +80,21 @@ export default function SidecarCompanion({
 
   const selectedEvent = useMemo<EventWithDetails | null>(() => {
     if (!selectedSidecarEventId) return null
-    return (
-      fetchedEvent ||
-      rollingEvents.find((e) => e.id === selectedSidecarEventId) ||
-      ({ id: selectedSidecarEventId } as EventWithDetails)
-    )
-  }, [fetchedEvent, rollingEvents, selectedSidecarEventId])
+    if (fetchedEvent && fetchedEvent.start_time) return fetchedEvent
+    const fromRolling = rollingEvents.find((e) => e.id === selectedSidecarEventId)
+    if (fromRolling && fromRolling.start_time) return fromRolling
+
+    // Search any active event queries cached in queryClient
+    const allEventQueries = queryClient.getQueriesData<EventWithDetails[]>({ queryKey: ['events'] })
+    for (const [, cachedList] of allEventQueries) {
+      if (Array.isArray(cachedList)) {
+        const found = cachedList.find((e) => e?.id === selectedSidecarEventId)
+        if (found && found.start_time) return found
+      }
+    }
+
+    return null
+  }, [fetchedEvent, rollingEvents, selectedSidecarEventId, queryClient])
 
   const [windowWidth, setWindowWidth] = useState(() => (typeof window !== 'undefined' ? window.innerWidth : 1280))
   const isMobile = windowWidth < 640
@@ -172,7 +182,7 @@ export default function SidecarCompanion({
               embedded={true}
               onSwitchToAi={handleAskAiAboutAction}
             />
-          ) : selectedEvent ? (
+          ) : selectedEvent && selectedEvent.start_time ? (
             <LivingFlowSidecar
               event={selectedEvent}
               onClose={closeSidecar}
@@ -180,6 +190,11 @@ export default function SidecarCompanion({
               onAskAi={handleAskAiAboutEvent}
               onSwitchToAi={() => setSidecarTab('ai')}
             />
+          ) : selectedSidecarEventId ? (
+            <div className="flex flex-col items-center justify-center h-full p-8 text-center text-casa-muted gap-3">
+              <div className="w-8 h-8 rounded-full border-2 border-casa-gold border-t-transparent animate-spin" />
+              <p className="text-body-sm font-semibold text-casa-navy">Loading event details…</p>
+            </div>
           ) : null}
         </div>
 

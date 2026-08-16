@@ -19,7 +19,7 @@ export default function LivingReminderCard({
   onSnooze
 }: LivingReminderCardProps) {
   const [actionState, setActionState] = useState<'idle' | 'completing' | 'snoozing'>('idle')
-  const formattedDue = format(dueDate, 'EEE d · h:mm a')
+  const formattedDue = !dueDate || isNaN(new Date(dueDate).getTime()) ? '' : format(new Date(dueDate), 'EEE d · h:mm a')
 
   const handleMarkDone = async (e: React.MouseEvent) => {
     e.stopPropagation()

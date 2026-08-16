@@ -236,16 +236,16 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
   // Computed Departure Time
   const departureDate = useMemo(() => {
     const totalPreMinutes = (state.venue.driveMinutes || 0) + state.bufferMinutes
-    const d = new Date(state.startDate)
-    d.setMinutes(d.getMinutes() - totalPreMinutes)
-    return d
+    const base = !state.startDate || isNaN(new Date(state.startDate).getTime()) ? new Date() : new Date(state.startDate)
+    base.setMinutes(base.getMinutes() - totalPreMinutes)
+    return base
   }, [state.startDate, state.venue.driveMinutes, state.bufferMinutes])
 
   // Computed Return Time
   const returnDate = useMemo(() => {
-    const d = new Date(state.endDate)
-    d.setMinutes(d.getMinutes() + (state.venue.driveMinutes || 0))
-    return d
+    const base = !state.endDate || isNaN(new Date(state.endDate).getTime()) ? new Date() : new Date(state.endDate)
+    base.setMinutes(base.getMinutes() + (state.venue.driveMinutes || 0))
+    return base
   }, [state.endDate, state.venue.driveMinutes])
 
   // ═══════════════ REAL SUPABASE MUTATIONS ═══════════════

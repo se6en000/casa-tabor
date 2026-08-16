@@ -25,6 +25,7 @@ interface EventBlockProps {
   onDoubleClick?: () => void
   columnCount?: number
   columnIndex?: number
+  isActive?: boolean
   /** Called after a 450ms touch hold — WeekView takes over the drag from here */
   onDragStart?: (event: EventWithDetails, clientX: number, clientY: number, grabOffsetPx: number) => void
   /** Dims the block while its ghost is being dragged */
@@ -52,7 +53,7 @@ function getEventPosition(event: EventWithDetails) {
   return { top, height }
 }
 
-export default function EventBlock({ event, onClick, onDoubleClick, columnCount = 1, columnIndex = 0, onDragStart, isDragging }: EventBlockProps) {
+export default function EventBlock({ event, onClick, onDoubleClick, columnCount = 1, columnIndex = 0, isActive = false, onDragStart, isDragging }: EventBlockProps) {
   const { top, height } = getEventPosition(event)
   const color = getPrimaryColor(event)
   const start = new Date(event.start_time)
@@ -130,8 +131,9 @@ export default function EventBlock({ event, onClick, onDoubleClick, columnCount 
       className={cn(
         'absolute rounded-lg px-2.5 py-1.5 text-left',
         'hover:brightness-110 hover:shadow-card-hover',
-        'overflow-hidden cursor-pointer border-0',
-        'text-white transition-opacity',
+        'overflow-hidden cursor-pointer',
+        'text-white transition-opacity duration-150',
+        isActive ? 'ring-2 ring-casa-gold z-20 font-bold shadow-lg' : 'border-0',
         isDragging ? 'opacity-30' : 'opacity-100',
       )}
       style={{
@@ -140,11 +142,17 @@ export default function EventBlock({ event, onClick, onDoubleClick, columnCount 
         left: `${leftPercent}%`,
         width: `${widthPercent}%`,
         backgroundColor: color,
+        ...(isActive ? {
+          boxShadow: '0 0 0 3px var(--color-casa-gold), 0 4px 14px rgba(201, 169, 110, 0.5)',
+          border: '2.5px solid var(--color-casa-gold)',
+          zIndex: 20,
+        } : {}),
       }}
     >
       <p className={cn(
         'font-body font-semibold truncate leading-tight',
-        isCompact ? 'text-caption' : 'text-body-sm'
+        isCompact ? 'text-caption' : 'text-body-sm',
+        isActive && 'font-bold text-white'
       )}>
         {cleanEventTitle(event.title)}
       </p>

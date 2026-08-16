@@ -7,6 +7,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { X, Clock, MapPin, Navigation } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { useCalendarStore } from '../../stores/calendarStore'
+import { useAppStore } from '../../stores/appStore'
 import { useMonthEvents } from '../../hooks/useCalendarEvents'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { isHoliday, holidayLabel, HOLIDAY_COLOR, isReminder, REMINDER_COLOR } from '../../utils/holidays'
@@ -48,12 +49,13 @@ const MAX_VISIBLE_EVENTS = 3
 interface DayPopoverProps {
   day: Date
   events: EventWithDetails[]
+  activeEventId: string | null
   onClose: () => void
   onSelectDay: (day: Date) => void
   onSelectEvent: (event: EventWithDetails) => void
 }
 
-function DayPopover({ day, events, onClose, onSelectDay, onSelectEvent }: DayPopoverProps) {
+function DayPopover({ day, events, activeEventId, onClose, onSelectDay, onSelectEvent }: DayPopoverProps) {
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.95, y: 6 }}
@@ -86,6 +88,7 @@ function DayPopover({ day, events, onClose, onSelectDay, onSelectEvent }: DayPop
           const color = holiday ? HOLIDAY_COLOR : reminder ? REMINDER_COLOR : getPrimaryColor(event)
           const start = parseISO(event.start_time)
           const isAllDay = event.start_time.endsWith('00:00:00+00:00') && event.end_time?.endsWith('00:00:00+00:00')
+          const isActive = activeEventId === event.id
           return (
             <div
               key={event.id}
@@ -93,17 +96,28 @@ function DayPopover({ day, events, onClose, onSelectDay, onSelectEvent }: DayPop
               tabIndex={0}
               data-tactile="true"
               data-calendar-event
-              className="flex items-start gap-3 px-4 py-2.5 hover:bg-casa-surface cursor-pointer transition-all duration-150"
+              data-active={isActive ? 'true' : undefined}
+              className={cn(
+                'flex items-start gap-3 px-4 py-2.5 hover:bg-casa-surface cursor-pointer transition-all duration-150',
+                isActive && 'ring-2 ring-casa-gold bg-casa-gold/10 font-bold'
+              )}
+              style={isActive ? {
+                boxShadow: 'inset 0 0 0 2px var(--color-casa-gold)',
+              } : undefined}
               onClick={() => { onSelectEvent(event); onClose() }}
             >
               <div
-                className="w-1.5 h-1.5 rounded-full shrink-0 mt-1.5"
+                className={cn(
+                  'rounded-full shrink-0 mt-1.5 transition-transform',
+                  isActive ? 'w-2 h-2 ring-1 ring-white' : 'w-1.5 h-1.5'
+                )}
                 style={{ backgroundColor: color }}
               />
               <div className="min-w-0 flex-1">
                 <p className={cn(
                   'text-body-sm font-semibold truncate',
                   holiday ? 'text-red-700' : reminder ? 'text-amber-700' : 'text-casa-navy',
+                  isActive && 'text-casa-navy font-bold'
                 )}>
                   {holiday ? holidayLabel(event.title) : reminder ? `🔔 ${event.title}` : event.title}
                 </p>
@@ -180,6 +194,9 @@ interface DayCellProps {
   events: EventWithDetails[]
   isCurrentMonth: boolean
   isPopoverOpen: boolean
+  isExpanded: boolean
+  activeEventId: string | null
+  onToggleExpand: () => void
   onOpen: () => void
   onClose: () => void
   onDrillIn: (day: Date) => void
@@ -193,16 +210,35 @@ interface DayCellProps {
   onDoubleClick: (e: React.MouseEvent) => void
 }
 
-function DayCell({ day, events, isCurrentMonth, isPopoverOpen, onOpen, onClose, onDrillIn, onSelectEvent, onTouchStart, onTouchMove, onTouchEnd, onMouseDown, onMouseUp, onContextMenu, onDoubleClick }: DayCellProps) {
+function DayCell({
+  day,
+  events,
+  isCurrentMonth,
+  isPopoverOpen,
+  isExpanded,
+  activeEventId,
+  onToggleExpand,
+  onOpen,
+  onClose,
+  onDrillIn,
+  onSelectEvent,
+  onTouchStart,
+  onTouchMove,
+  onTouchEnd,
+  onMouseDown,
+  onMouseUp,
+  onContextMenu,
+  onDoubleClick,
+}: DayCellProps) {
   const todayDay = isToday(day)
-  const visible = events.slice(0, MAX_VISIBLE_EVENTS)
+  const visible = isExpanded ? events : events.slice(0, MAX_VISIBLE_EVENTS)
   const overflow = events.length - MAX_VISIBLE_EVENTS
 
   return (
     <div className="relative">
       <div
         className={cn(
-          'group min-h-[150px] p-2 border-b border-r border-casa-divider cursor-pointer transition-colors select-none',
+          'group min-h-[150px] p-2 border-b border-r border-casa-divider cursor-pointer transition-colors select-none flex flex-col',
           isCurrentMonth ? 'bg-casa-bg hover:bg-casa-surface' : 'bg-casa-divider/30',
         )}
         onClick={events.length > 0 ? onOpen : () => onDrillIn(day)}
@@ -216,7 +252,7 @@ function DayCell({ day, events, isCurrentMonth, isPopoverOpen, onOpen, onClose, 
         onDoubleClick={onDoubleClick}
       >
         {/* Date number */}
-        <div className="flex items-start justify-end mb-1">
+        <div className="flex items-start justify-end mb-1 shrink-0">
           <span className={cn(
             'w-8 h-8 flex items-center justify-center rounded-full font-semibold leading-none',
             todayDay
@@ -230,33 +266,90 @@ function DayCell({ day, events, isCurrentMonth, isPopoverOpen, onOpen, onClose, 
         </div>
 
         {/* Event dots / pills */}
-        <div className="space-y-1">
+        <div className="space-y-1 flex-1">
           {visible.map(event => {
             const holiday = isHoliday(event)
             const reminder = !holiday && isReminder(event)
             const color = holiday ? HOLIDAY_COLOR : reminder ? REMINDER_COLOR : getPrimaryColor(event)
+            const isActive = activeEventId === event.id
             return (
               <div
                 key={event.id}
                 data-event-pill
+                data-calendar-event
+                data-active={isActive ? 'true' : undefined}
                 className={cn(
-                  'flex items-center gap-1 px-1.5 py-0.5 rounded text-body-sm font-medium leading-tight truncate cursor-pointer hover:brightness-90 transition-all',
+                  'flex items-center gap-1.5 px-2 py-1 rounded-md text-body-sm font-medium leading-tight truncate cursor-pointer transition-all duration-150 relative select-none',
                   holiday && 'font-semibold tracking-tight',
                   reminder && 'font-semibold',
+                  isActive
+                    ? 'ring-2 ring-casa-gold font-bold shadow-md z-10 scale-[1.02]'
+                    : 'hover:brightness-90',
                 )}
-                style={{ backgroundColor: color + '22', color }}
+                style={{
+                  backgroundColor: isActive
+                    ? (holiday ? 'var(--color-casa-surface)' : color + '33')
+                    : color + '22',
+                  color: holiday ? 'var(--color-casa-error)' : reminder ? 'var(--color-casa-warning)' : color,
+                  ...(isActive ? {
+                    boxShadow: '0 0 0 2.5px var(--color-casa-gold), 0 2px 8px rgba(201, 169, 110, 0.45)',
+                    border: '2px solid var(--color-casa-gold)',
+                  } : {
+                    border: '1px solid transparent',
+                  }),
+                }}
                 onClick={e => { e.stopPropagation(); onSelectEvent(event) }}
               >
                 <span
-                  className="w-1.5 h-1.5 rounded-full shrink-0"
+                  className={cn(
+                    'rounded-full shrink-0 transition-transform',
+                    isActive ? 'w-2 h-2 ring-1 ring-white' : 'w-1.5 h-1.5'
+                  )}
                   style={{ backgroundColor: color }}
                 />
                 <span className="truncate">{holiday ? holidayLabel(event.title) : reminder ? `🔔 ${event.title}` : cleanEventTitle(event.title)}</span>
               </div>
             )
           })}
-          {overflow > 0 && (
-            <div className="pl-1 text-body-sm text-casa-muted">+{overflow} more</div>
+
+          {/* "+# more" expand button */}
+          {!isExpanded && overflow > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              fullWidth
+              align="between"
+              className="pl-1.5 pr-1 py-0.5 min-h-[28px] mt-0.5 rounded text-body-sm font-bold text-casa-gold hover:text-amber-700 hover:bg-casa-gold/15 transition-all group/more cursor-pointer"
+              onClick={e => {
+                e.stopPropagation()
+                onToggleExpand()
+              }}
+              title={`Show all ${events.length} events for ${format(day, 'MMMM d')}`}
+              aria-label={`Show ${overflow} more events`}
+            >
+              <span>+{overflow} more</span>
+              <span className="text-caption opacity-70 group-hover/more:translate-y-0.5 transition-transform" aria-hidden="true">▾</span>
+            </Button>
+          )}
+
+          {/* "− Show less" collapse button */}
+          {isExpanded && overflow > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              fullWidth
+              align="between"
+              className="pl-1.5 pr-1 py-0.5 min-h-[28px] mt-1 rounded text-caption font-bold text-casa-muted hover:text-casa-navy hover:bg-casa-divider/50 transition-all group/less cursor-pointer"
+              onClick={e => {
+                e.stopPropagation()
+                onToggleExpand()
+              }}
+              title="Collapse to 3 events"
+              aria-label="Collapse to 3 events"
+            >
+              <span>− Show less</span>
+              <span className="text-caption opacity-70 group-hover/less:-translate-y-0.5 transition-transform" aria-hidden="true">▴</span>
+            </Button>
           )}
         </div>
       </div>
@@ -267,6 +360,7 @@ function DayCell({ day, events, isCurrentMonth, isPopoverOpen, onOpen, onClose, 
           <DayPopover
             day={day}
             events={events}
+            activeEventId={activeEventId}
             onClose={onClose}
             onSelectDay={onDrillIn}
             onSelectEvent={onSelectEvent}
@@ -281,10 +375,22 @@ function DayCell({ day, events, isCurrentMonth, isPopoverOpen, onOpen, onClose, 
 
 export default function MonthView() {
   const { selectedDate, setSelectedDate, setActiveView, visibleMembers } = useCalendarStore()
+  const { selectedSidecarEventId, aiDrawerOpen, sidecarTab, openEventInSidecar } = useAppStore()
   const { data: allEvents } = useMonthEvents(selectedDate)
   const [openPopoverKey, setOpenPopoverKey] = useState<string | null>(null)
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
+  const [expandedDayKeys, setExpandedDayKeys] = useState<Set<string>>(new Set())
   const [quickCreate, setQuickCreate] = useState<{ open: boolean; start?: Date }>({ open: false })
+
+  const toggleDayExpanded = useCallback((dayKey: string) => {
+    setExpandedDayKeys(prev => {
+      const next = new Set(prev)
+      if (next.has(dayKey)) next.delete(dayKey)
+      else next.add(dayKey)
+      return next
+    })
+  }, [])
+
   const quickCreateGesture = useCalendarQuickCreateGesture<Date>({
     resolveStart: (day) => {
       const start = new Date(day)
@@ -350,6 +456,7 @@ export default function MonthView() {
     isHoliday(e) || isReminder(e) || visibleMembers.length === 0 || e.members.some(m => visibleMembers.includes(m.family_member?.id ?? ''))
   )
 
+  const activeEventId = aiDrawerOpen && sidecarTab === 'event' ? selectedSidecarEventId : null
   const selectedEvent = selectedEventId ? (events.find(e => e.id === selectedEventId) ?? null) : null
 
   function eventsForDay(day: Date): EventWithDetails[] {
@@ -392,10 +499,17 @@ export default function MonthView() {
                 events={dayEvents}
                 isCurrentMonth={isSameMonth(day, selectedDate)}
                 isPopoverOpen={openPopoverKey === key}
+                isExpanded={expandedDayKeys.has(key)}
+                activeEventId={activeEventId}
+                onToggleExpand={() => toggleDayExpanded(key)}
                 onOpen={() => setOpenPopoverKey(key)}
                 onClose={() => setOpenPopoverKey(null)}
                 onDrillIn={drillIntoDay}
-                onSelectEvent={ev => { setSelectedEventId(ev.id); setOpenPopoverKey(null) }}
+                onSelectEvent={ev => {
+                  openEventInSidecar(ev.id)
+                  setSelectedEventId(ev.id)
+                  setOpenPopoverKey(null)
+                }}
                 onTouchStart={e => handleCellTouchStart(e, day)}
                 onTouchMove={handleCellTouchMove}
                 onTouchEnd={cancelLongPress}
@@ -409,7 +523,7 @@ export default function MonthView() {
         </div>
       </div>
 
-      {/* Detail panel */}
+      {/* Detail panel fallback gateway */}
       <div onClick={e => e.stopPropagation()}>
         <EventDetailPanel
           event={selectedEvent}

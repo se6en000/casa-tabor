@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { format, startOfWeek, addDays, isToday, startOfDay } from 'date-fns'
 import { useWeekEvents } from '../../hooks/useCalendarEvents'
 import { useCalendarStore } from '../../stores/calendarStore'
+import { useAppStore } from '../../stores/appStore'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
 import EventBlock from './EventBlock'
@@ -28,6 +29,8 @@ interface DragState {
   clientX: number
   clientY: number
   grabOffsetPx: number
+  origStart?: Date
+  origDurationMs?: number
   ghostWidth: number
   ghostHeight: number
 }
@@ -55,7 +58,7 @@ function computeDropInfo(d: DragState, gridEl: HTMLDivElement, days: Date[]) {
   const hours = Math.floor(clampedHour)
   const minutes = Math.round((clampedHour % 1) * 60)
 
-  const durationMs = new Date(d.event.end_time).getTime() - new Date(d.event.start_time).getTime()
+  const durationMs = d.origDurationMs ?? (new Date(d.event.end_time).getTime() - new Date(d.event.start_time).getTime())
   const newStart = new Date(targetDay)
   newStart.setHours(hours, minutes, 0, 0)
   const newEnd = new Date(newStart.getTime() + durationMs)
@@ -72,6 +75,7 @@ function getPrimaryColor(event: EventWithDetails): string {
 
 export default function WeekView() {
   const { selectedDate, visibleMembers } = useCalendarStore()
+  const { selectedSidecarEventId, aiDrawerOpen, sidecarTab, openEventInSidecar } = useAppStore()
   const weekStart = startOfWeek(selectedDate, { weekStartsOn: 0 })
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
   const weekEnd = addDays(weekStart, 6)
@@ -85,6 +89,7 @@ export default function WeekView() {
     )
   }, [allEvents, visibleMembers])
 
+  const activeEventId = aiDrawerOpen && sidecarTab === 'event' ? selectedSidecarEventId : null
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [editEventId, setEditEventId] = useState<string | null>(null)
   const selectedEvent = selectedEventId ? (events?.find(e => e.id === selectedEventId) ?? null) : null
@@ -257,6 +262,8 @@ export default function WeekView() {
       clientX,
       clientY,
       grabOffsetPx: Math.max(0, Math.min(grabOffsetPx, height - 8)),
+      origStart: new Date(event.start_time),
+      origDurationMs: new Date(event.end_time).getTime() - new Date(event.start_time).getTime(),
       ghostWidth: colWidth * 0.88,
       ghostHeight: height,
     }
@@ -416,18 +423,22 @@ export default function WeekView() {
               const color = holiday ? HOLIDAY_COLOR : reminder ? REMINDER_COLOR : getPrimaryColor(ev)
               const leftPct = (span.startCol / 7) * 100
               const widthPct = ((span.endCol - span.startCol + 1) / 7) * 100
-              const isSelected = selectedEventId === ev.id
+              const isSelected = activeEventId === ev.id
 
               return (
                 <button
                   key={ev.id}
-                  onClick={(e) => { e.stopPropagation(); setSelectedEventId(ev.id) }}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    openEventInSidecar(ev.id)
+                    setSelectedEventId(ev.id)
+                  }}
                   onDoubleClick={(e) => { e.stopPropagation(); setSelectedEventId(null); setEditEventId(ev.id) }}
                   title={`${ev.title} — click to view, double-click to edit`}
                   className={cn(
                     'absolute flex items-center px-2 rounded text-caption font-semibold truncate transition-all',
                     'text-white',
-                    isSelected ? 'brightness-110 ring-2 ring-white/60' : 'hover:brightness-110',
+                    isSelected ? 'brightness-110 ring-2 ring-casa-gold font-bold shadow-lg z-10' : 'hover:brightness-110',
                   )}
                   style={{
                     left: `calc(${leftPct}% + 2px)`,
@@ -435,6 +446,10 @@ export default function WeekView() {
                     top: `${rowIdx * MULTIDAY_ROW_H + 2}px`,
                     height: `${MULTIDAY_ROW_H - 2}px`,
                     backgroundColor: color,
+                    ...(isSelected ? {
+                      boxShadow: '0 0 0 2.5px var(--color-casa-gold), 0 2px 8px rgba(201, 169, 110, 0.45)',
+                      border: '2px solid var(--color-casa-gold)',
+                    } : {}),
                   }}
                 >
                   {holiday ? holidayLabel(ev.title) : reminder ? `🔔 ${ev.title}` : cleanEventTitle(ev.title)}
@@ -520,7 +535,11 @@ export default function WeekView() {
                     <EventBlock
                       key={event.id}
                       event={event}
-                      onClick={() => setSelectedEventId(event.id)}
+                      isActive={activeEventId === event.id}
+                      onClick={() => {
+                        openEventInSidecar(event.id)
+                        setSelectedEventId(event.id)
+                      }}
                       onDoubleClick={() => { setSelectedEventId(null); setEditEventId(event.id) }}
                       columnCount={overlap.columnCount}
                       columnIndex={overlap.columnIndex}

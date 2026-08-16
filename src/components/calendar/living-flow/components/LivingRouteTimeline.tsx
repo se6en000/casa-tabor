@@ -50,10 +50,11 @@ export default function LivingRouteTimeline({
     .map(m => m.name)
     .join(', ') || 'Kids'
 
-  const formattedDepart = format(departureDate, 'h:mm a')
-  const formattedArrive = format(arrivalDate, 'h:mm a')
-  const formattedStayEnd = format(new Date(arrivalDate.getTime() + durationMinutes * 60000), 'h:mm a')
-  const formattedReturn = format(returnDate, 'h:mm a')
+  const formattedDepart = !departureDate || isNaN(departureDate.getTime()) ? '--:--' : format(departureDate, 'h:mm a')
+  const formattedArrive = !arrivalDate || isNaN(arrivalDate.getTime()) ? '--:--' : format(arrivalDate, 'h:mm a')
+  const stayEndMs = arrivalDate && !isNaN(arrivalDate.getTime()) ? arrivalDate.getTime() + (durationMinutes || 60) * 60000 : null
+  const formattedStayEnd = stayEndMs ? format(new Date(stayEndMs), 'h:mm a') : '--:--'
+  const formattedReturn = !returnDate || isNaN(returnDate.getTime()) ? '--:--' : format(returnDate, 'h:mm a')
 
   return (
     <div className="living-journey-timeline">

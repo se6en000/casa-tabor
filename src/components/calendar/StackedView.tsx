@@ -9,6 +9,7 @@ import {
 import { cn } from '../../utils/cn'
 import { cleanEventTitle, isBirthdayEvent } from '../../utils/eventTitle'
 import { useCalendarStore } from '../../stores/calendarStore'
+import { useAppStore } from '../../stores/appStore'
 import { useRollingEvents } from '../../hooks/useCalendarEvents'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
@@ -64,11 +65,6 @@ function getPrimaryColor(event: EventWithDetails): string {
 }
 
 export function getGoingMembers(event: EventWithDetails): FamilyMember[] {
-  // Every member row in event.members represents someone attending the event -
-  // there's no separate "not going" role, and the attendee editor always saves
-  // new/edited members with role 'attendee' (there's no "primary" distinction
-  // for attendees anymore). Keep 'assignee'/'primary' for older/legacy rows so
-  // nothing regresses for events written before this change.
   const selected = (event.members ?? [])
     .filter((member) => {
       const role = member?.role?.toLowerCase() ?? ''
@@ -92,6 +88,7 @@ export function deriveResponsibilityChip(event: EventWithDetails, household: Fam
 
 export default function StackedView() {
   const { visibleMembers, selectedDate, setActiveView } = useCalendarStore()
+  const { selectedSidecarEventId, aiDrawerOpen, sidecarTab, openEventInSidecar } = useAppStore()
   const { data: householdData } = useFamilyMembers()
   // Anchor the 8-day window to the shared calendar selectedDate
   const anchor = startOfDay(selectedDate)
@@ -101,6 +98,7 @@ export default function StackedView() {
   const { data: allEvents } = useRollingEvents(anchor)
   const household = householdData ?? []
 
+  const activeEventId = aiDrawerOpen && sidecarTab === 'event' ? selectedSidecarEventId : null
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [editEventId,     setEditEventId]     = useState<string | null>(null)
   const [deleteIntentEventId, setDeleteIntentEventId] = useState<string | null>(null)
@@ -241,7 +239,11 @@ export default function StackedView() {
                         <CompactReminderCard
                           event={r}
                           now={new Date()}
-                          onClick={() => setSelectedEventId(r.id)}
+                          isHighlighted={activeEventId === r.id}
+                          onClick={() => {
+                            openEventInSidecar(r.id)
+                            setSelectedEventId(r.id)
+                          }}
                           onDoubleClick={() => { setSelectedEventId(null); setEditEventId(r.id) }}
                           onLongPress={(ev, x, y) => setContextMenu({ event: ev, x, y })}
                         />
@@ -252,7 +254,11 @@ export default function StackedView() {
                           event={r}
                           household={household}
                           now={new Date()}
-                          onClick={() => setSelectedEventId(r.id)}
+                          isHighlighted={activeEventId === r.id}
+                          onClick={() => {
+                            openEventInSidecar(r.id)
+                            setSelectedEventId(r.id)
+                          }}
                           onDoubleClick={() => { setSelectedEventId(null); setEditEventId(r.id) }}
                           onLongPress={(ev, x, y) => setContextMenu({ event: ev, x, y })}
                         />
@@ -277,7 +283,11 @@ export default function StackedView() {
                           <CompactReminderCard
                             event={event}
                             now={new Date()}
-                            onClick={() => setSelectedEventId(event.id)}
+                            isHighlighted={activeEventId === event.id}
+                            onClick={() => {
+                              openEventInSidecar(event.id)
+                              setSelectedEventId(event.id)
+                            }}
                             onDoubleClick={() => { setSelectedEventId(null); setEditEventId(event.id) }}
                             onLongPress={(ev, x, y) => setContextMenu({ event: ev, x, y })}
                           />
@@ -288,7 +298,11 @@ export default function StackedView() {
                           event={event}
                           household={household}
                           now={new Date()}
-                          onClick={() => setSelectedEventId(event.id)}
+                          isHighlighted={activeEventId === event.id}
+                          onClick={() => {
+                            openEventInSidecar(event.id)
+                            setSelectedEventId(event.id)
+                          }}
                           onDoubleClick={() => { setSelectedEventId(null); setEditEventId(event.id) }}
                           onLongPress={(ev, x, y) => setContextMenu({ event: ev, x, y })}
                         />
@@ -374,12 +388,13 @@ export default function StackedView() {
 interface CompactReminderCardProps {
   event: EventWithDetails
   now?: Date
+  isHighlighted?: boolean
   onClick: () => void
   onDoubleClick?: () => void
   onLongPress?: (event: EventWithDetails, x: number, y: number) => void
 }
 
-function CompactReminderCard({ event, now = new Date(), onClick, onDoubleClick, onLongPress }: CompactReminderCardProps) {
+function CompactReminderCard({ event, now = new Date(), isHighlighted = false, onClick, onDoubleClick, onLongPress }: CompactReminderCardProps) {
   const start = getEventStartDate(event)
   const end = getEventEndDate(event)
   const past = isBefore(end, now)
@@ -433,8 +448,13 @@ function CompactReminderCard({ event, now = new Date(), onClick, onDoubleClick, 
         className={cn(
           'relative w-full rounded-xl border border-amber-300/60 bg-amber-50/40 shadow-xs cursor-pointer touch-pan-y overflow-hidden',
           'hover:opacity-85 hover:border-amber-400/80 transition-all duration-200 min-h-[38px] px-2.5 py-1.5 flex items-center justify-between gap-2',
-          'border-l-4 border-l-amber-400 opacity-45'
+          'border-l-4 border-l-amber-400',
+          isHighlighted ? 'border-2 border-casa-gold ring-2 ring-casa-gold shadow-card-hover opacity-100 font-bold' : 'opacity-45'
         )}
+        style={isHighlighted ? {
+          boxShadow: '0 0 0 2.5px var(--color-casa-gold), 0 2px 8px rgba(201, 169, 110, 0.45)',
+          border: '2px solid var(--color-casa-gold)',
+        } : undefined}
         data-calendar-event
       >
         <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -478,11 +498,16 @@ function CompactReminderCard({ event, now = new Date(), onClick, onDoubleClick, 
       role="button"
       tabIndex={0}
       className={cn(
-        'relative w-full rounded-widget border border-amber-300/60 bg-amber-50/40 shadow-card cursor-pointer touch-pan-y overflow-hidden',
+        'relative w-full rounded-widget border bg-amber-50/40 shadow-card cursor-pointer touch-pan-y overflow-hidden',
         'hover:shadow-card-hover hover:border-amber-400/80 transition-all duration-200 min-h-control',
         'grid grid-cols-[5.75rem_1fr]',
-        past && 'opacity-45'
+        isHighlighted ? 'border-2 border-casa-gold ring-2 ring-casa-gold shadow-card-hover' : 'border-amber-300/60',
+        past && !isHighlighted && 'opacity-45'
       )}
+      style={isHighlighted ? {
+        boxShadow: '0 0 0 2.5px var(--color-casa-gold), 0 2px 8px rgba(201, 169, 110, 0.45)',
+        border: '2px solid var(--color-casa-gold)',
+      } : undefined}
       data-calendar-event
     >
       {/* Straight Amber Left Pillar */}
@@ -531,12 +556,13 @@ interface EventCardProps {
   event: EventWithDetails
   household: FamilyMember[]
   now?: Date
+  isHighlighted?: boolean
   onClick: () => void
   onDoubleClick: () => void
   onLongPress: (event: EventWithDetails, x: number, y: number) => void
 }
 
-function EventCard({ event, household, now = new Date(), onClick, onDoubleClick, onLongPress }: EventCardProps) {
+function EventCard({ event, household, now = new Date(), isHighlighted = false, onClick, onDoubleClick, onLongPress }: EventCardProps) {
   const color = getPrimaryColor(event)
   const enr = event.enrichment
   const urgentAction = event.actions?.find(a => a.is_urgent && !a.completed)
@@ -612,7 +638,7 @@ function EventCard({ event, household, now = new Date(), onClick, onDoubleClick,
       <motion.div
         layout
         initial={{ opacity: 0, y: 4 }}
-        animate={{ opacity: 0.45, y: 0 }}
+        animate={{ opacity: isHighlighted ? 1 : 0.45, y: 0 }}
         exit={{ opacity: 0, y: -4 }}
         whileTap={{ scale: 0.97, opacity: 0.75 }}
         transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
@@ -629,11 +655,17 @@ function EventCard({ event, household, now = new Date(), onClick, onDoubleClick,
         role="button"
         tabIndex={0}
         className={cn(
-          'relative rounded-xl border border-casa-border/60 bg-casa-surface/90 shadow-xs cursor-pointer touch-pan-y overflow-hidden',
-          'hover:opacity-85 hover:border-casa-gold/60 transition-all duration-200 min-h-[38px] px-2.5 py-1.5 flex items-center justify-between gap-2',
-          'border-l-4'
+          'relative rounded-xl border bg-casa-surface/90 shadow-xs cursor-pointer touch-pan-y overflow-hidden transition-all duration-200 min-h-[38px] px-2.5 py-1.5 flex items-center justify-between gap-2',
+          'border-l-4',
+          isHighlighted ? 'border-2 border-casa-gold ring-2 ring-casa-gold shadow-card-hover opacity-100 font-bold' : 'border-casa-border/60 hover:opacity-85 hover:border-casa-gold/60 opacity-45'
         )}
-        style={{ borderLeftColor: color }}
+        style={{
+          borderLeftColor: color,
+          ...(isHighlighted ? {
+            boxShadow: '0 0 0 2.5px var(--color-casa-gold), 0 2px 8px rgba(201, 169, 110, 0.45)',
+            border: '2px solid var(--color-casa-gold)',
+          } : {}),
+        }}
         data-calendar-event
       >
         {/* Left: Time + Divider + Title */}
@@ -700,7 +732,7 @@ function EventCard({ event, household, now = new Date(), onClick, onDoubleClick,
     <motion.div
       layout
       initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: past ? 0.45 : 1, y: 0 }}
+      animate={{ opacity: past && !isHighlighted ? 0.45 : 1, y: 0 }}
       exit={{ opacity: 0, y: -4 }}
       whileTap={{ scale: 0.97, opacity: 0.75 }}
       transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
@@ -719,12 +751,18 @@ function EventCard({ event, household, now = new Date(), onClick, onDoubleClick,
       className={cn(
         'relative rounded-widget border cursor-pointer touch-pan-y shadow-card overflow-hidden transition-all duration-200 min-h-control',
         'grid grid-cols-[5.75rem_1fr]',
-        isHeroState
-          ? 'bg-casa-navy text-white border-casa-navy ring-1 ring-casa-gold/60 shadow-card-hover'
-          : isBirthday
-            ? 'bg-gradient-to-br from-casa-accent-subtle via-casa-surface to-casa-bg border-casa-border/80 hover:shadow-card-hover hover:border-casa-gold/50'
-            : 'bg-casa-surface text-casa-navy border-casa-border/70 hover:shadow-card-hover hover:border-casa-gold/50'
+        isHighlighted
+          ? 'border-2 border-casa-gold ring-2 ring-casa-gold shadow-card-hover'
+          : isHeroState
+            ? 'bg-casa-navy text-white border-casa-navy ring-1 ring-casa-gold/60 shadow-card-hover'
+            : isBirthday
+              ? 'bg-gradient-to-br from-casa-accent-subtle via-casa-surface to-casa-bg border-casa-border/80 hover:shadow-card-hover hover:border-casa-gold/50'
+              : 'bg-casa-surface text-casa-navy border-casa-border/70 hover:shadow-card-hover hover:border-casa-gold/50'
       )}
+      style={isHighlighted ? {
+        boxShadow: '0 0 0 2.5px var(--color-casa-gold), 0 2px 8px rgba(201, 169, 110, 0.45)',
+        border: '2px solid var(--color-casa-gold)',
+      } : undefined}
       data-calendar-event
     >
       {isBirthday && <BirthdayCardDecoration />}

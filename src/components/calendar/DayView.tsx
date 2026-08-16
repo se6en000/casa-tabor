@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { useCalendarStore } from '../../stores/calendarStore'
+import { useAppStore } from '../../stores/appStore'
 import { useWeekEvents } from '../../hooks/useCalendarEvents'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { useLiveClock } from '../../hooks/useLiveClock'
@@ -748,12 +749,14 @@ function DaySidecar({ dayEvents, selectedDate }: { dayEvents: EventWithDetails[]
 
 export default function DayView() {
   const { selectedDate, visibleMembers } = useCalendarStore()
+  const { selectedSidecarEventId, aiDrawerOpen, sidecarTab, openEventInSidecar } = useAppStore()
   const now = useLiveClock(15_000)
   const { data: family } = useFamilyMembers()
   const { completeReminder, snoozeReminderByDuration, moveReminderToNeedsYou } = useReminderNeedsYouActions()
 
   // Use the week that contains the selected date to get events
   const { data: weekEvents } = useWeekEvents(selectedDate)
+  const activeEventId = aiDrawerOpen && sidecarTab === 'event' ? selectedSidecarEventId : null
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [quickCreate, setQuickCreate] = useState<{ open: boolean; start?: Date }>({ open: false })
   const quickCreateGesture = useCalendarQuickCreateGesture<Date>({
@@ -818,7 +821,11 @@ export default function DayView() {
                     now={now}
                     index={index}
                     household={family ?? []}
-                    onOpen={() => setSelectedEventId(event.id)}
+                    isHighlighted={activeEventId === event.id}
+                    onOpen={() => {
+                      openEventInSidecar(event.id)
+                      setSelectedEventId(event.id)
+                    }}
                     onComplete={completeReminder}
                     onSnooze={(targetEvent, duration) => {
                       void snoozeReminderByDuration(targetEvent, duration).catch((error) => {

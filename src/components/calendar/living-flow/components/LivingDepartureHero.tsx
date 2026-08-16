@@ -19,11 +19,13 @@ export default function LivingDepartureHero({
   travelBehavior,
   onOpenBufferOrTime
 }: LivingDepartureHeroProps) {
-  const formattedDepart = format(departureDate, 'h:mm a')
-  const formattedArrive = format(arrivalDate, 'h:mm a')
+  const formattedDepart = !departureDate || isNaN(departureDate.getTime()) ? '--:--' : format(departureDate, 'h:mm a')
+  const formattedArrive = !arrivalDate || isNaN(arrivalDate.getTime()) ? '--:--' : format(arrivalDate, 'h:mm a')
 
   const now = new Date()
-  const diffMins = Math.round((departureDate.getTime() - now.getTime()) / (1000 * 60))
+  const diffMins = departureDate && !isNaN(departureDate.getTime())
+    ? Math.round((departureDate.getTime() - now.getTime()) / (1000 * 60))
+    : 0
   const countdownText = diffMins > 0 ? `Leave in ${diffMins}m` : 'Depart Now'
 
   return (

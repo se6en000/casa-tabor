@@ -23,6 +23,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useCalmKioskPresenter } from '../../hooks/useCalmKioskPresenter'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { useAppStore } from '../../stores/appStore'
+import { useCalendarStore } from '../../stores/calendarStore'
 import { cn } from '../../utils/cn'
 import { formatDurationLong } from '../../utils/eventTime'
 import { Button, PersonAvatarStack, JourneyProgressBar } from '../ui'
@@ -33,6 +34,8 @@ interface CalmKioskViewProps {
 
 export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
   const dinnerPlan = useAppStore((s) => s.dinnerPlan)
+  const setActiveView = useCalendarStore((s) => s.setActiveView)
+  const setSelectedDate = useCalendarStore((s) => s.setSelectedDate)
   const [showPastEvents, setShowPastEvents] = useState(false)
   const [completedItems, setCompletedItems] = useState<Record<string, boolean>>({})
   const [mobileSubTab, setMobileSubTab] = useState<'schedule' | 'triage' | 'kitchen'>('schedule')
@@ -560,7 +563,11 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                 <Button
                   variant="secondary"
                   size="sm"
-                  onClick={() => navigateTo('/calendar')}
+                  onClick={() => {
+                    setSelectedDate(new Date())
+                    setActiveView('stacked')
+                    navigateTo('/calendar')
+                  }}
                   className="bg-white/10 hover:bg-white/20 text-white font-semibold rounded-xl min-h-[44px] px-4 border border-white/15"
                 >
                   <span>View Tomorrow's Schedule</span>
@@ -730,7 +737,14 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => (upcomingAppointments.length > 0 ? setCanvasSubmode('turbo') : navigateTo('/calendar'))}
+                onClick={() => {
+                  if (upcomingAppointments.length > 0) {
+                    setCanvasSubmode('turbo')
+                  } else {
+                    setActiveView('stacked')
+                    navigateTo('/calendar')
+                  }
+                }}
                 className="text-caption font-bold text-casa-gold hover:underline min-h-[44px] px-3"
               >
                 {upcomingAppointments.length > 0 ? 'Expand All' : 'Full Calendar'}
@@ -1078,7 +1092,10 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => navigateTo('/calendar')}
+                      onClick={() => {
+                        setActiveView('stacked')
+                        navigateTo('/calendar')
+                      }}
                       className="text-caption font-bold text-casa-gold hover:underline mt-1"
                     >
                       <span>Open Full Calendar</span>

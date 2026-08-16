@@ -52,9 +52,10 @@ export default function LivingHeroTitleCard({
   onSelectCategory,
   onNudgeTime
 }: LivingHeroTitleCardProps) {
+  const safeDate = !startDate || isNaN(new Date(startDate).getTime()) ? new Date() : new Date(startDate)
   const [localTitle, setLocalTitle] = useState(title)
   const [expandedSection, setExpandedSection] = useState<'datetime' | 'category' | null>(null)
-  const [currentDate, setCurrentDate] = useState<Date>(new Date(startDate))
+  const [currentDate, setCurrentDate] = useState<Date>(safeDate)
   const [duration, setDuration] = useState<number>(durationMinutes)
   const [activeMode, setActiveMode] = useState<LivingFlowMode>(mode)
 
@@ -63,15 +64,16 @@ export default function LivingHeroTitleCard({
   }, [title])
 
   useEffect(() => {
-    setCurrentDate(new Date(startDate))
+    const d = !startDate || isNaN(new Date(startDate).getTime()) ? new Date() : new Date(startDate)
+    setCurrentDate(d)
   }, [startDate])
 
   useEffect(() => {
     setDuration(durationMinutes)
   }, [durationMinutes])
 
-  const formattedDate = format(startDate, 'EEE, MMM d')
-  const formattedTime = format(startDate, 'h:mm a')
+  const formattedDate = format(currentDate, 'EEE, MMM d')
+  const formattedTime = format(currentDate, 'h:mm a')
 
   // Date / Time stepping
   const hours24 = currentDate.getHours()
