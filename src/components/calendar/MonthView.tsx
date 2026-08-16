@@ -283,20 +283,14 @@ function DayCell({
                   holiday && 'font-semibold tracking-tight',
                   reminder && 'font-semibold',
                   isActive
-                    ? 'ring-2 ring-casa-gold font-bold shadow-md z-10 scale-[1.02]'
-                    : 'hover:brightness-90',
+                    ? 'ring-2 ring-casa-gold font-bold shadow-sm z-10'
+                    : 'border border-transparent hover:brightness-90',
                 )}
                 style={{
                   backgroundColor: isActive
                     ? (holiday ? 'var(--color-casa-surface)' : color + '33')
                     : color + '22',
                   color: holiday ? 'var(--color-casa-error)' : reminder ? 'var(--color-casa-warning)' : color,
-                  ...(isActive ? {
-                    boxShadow: '0 0 0 2.5px var(--color-casa-gold), 0 2px 8px rgba(201, 169, 110, 0.45)',
-                    border: '2px solid var(--color-casa-gold)',
-                  } : {
-                    border: '1px solid transparent',
-                  }),
                 }}
                 onClick={e => { e.stopPropagation(); onSelectEvent(event) }}
               >

@@ -438,7 +438,7 @@ export default function WeekView() {
                   className={cn(
                     'absolute flex items-center px-2 rounded text-caption font-semibold truncate transition-all',
                     'text-white',
-                    isSelected ? 'brightness-110 ring-2 ring-casa-gold font-bold shadow-lg z-10' : 'hover:brightness-110',
+                    isSelected ? 'brightness-110 ring-2 ring-casa-gold font-bold shadow-md z-10' : 'hover:brightness-110',
                   )}
                   style={{
                     left: `calc(${leftPct}% + 2px)`,
@@ -446,10 +446,6 @@ export default function WeekView() {
                     top: `${rowIdx * MULTIDAY_ROW_H + 2}px`,
                     height: `${MULTIDAY_ROW_H - 2}px`,
                     backgroundColor: color,
-                    ...(isSelected ? {
-                      boxShadow: '0 0 0 2.5px var(--color-casa-gold), 0 2px 8px rgba(201, 169, 110, 0.45)',
-                      border: '2px solid var(--color-casa-gold)',
-                    } : {}),
                   }}
                 >
                   {holiday ? holidayLabel(ev.title) : reminder ? `🔔 ${ev.title}` : cleanEventTitle(ev.title)}

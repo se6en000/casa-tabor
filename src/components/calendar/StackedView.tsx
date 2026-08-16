@@ -449,12 +449,8 @@ function CompactReminderCard({ event, now = new Date(), isHighlighted = false, o
           'relative w-full rounded-xl border border-amber-300/60 bg-amber-50/40 shadow-xs cursor-pointer touch-pan-y overflow-hidden',
           'hover:opacity-85 hover:border-amber-400/80 transition-all duration-200 min-h-[38px] px-2.5 py-1.5 flex items-center justify-between gap-2',
           'border-l-4 border-l-amber-400',
-          isHighlighted ? 'border-2 border-casa-gold ring-2 ring-casa-gold shadow-card-hover opacity-100 font-bold' : 'opacity-45'
+          isHighlighted ? 'border-2 border-casa-gold shadow-md opacity-100 font-bold' : 'opacity-45'
         )}
-        style={isHighlighted ? {
-          boxShadow: '0 0 0 2.5px var(--color-casa-gold), 0 2px 8px rgba(201, 169, 110, 0.45)',
-          border: '2px solid var(--color-casa-gold)',
-        } : undefined}
         data-calendar-event
       >
         <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -501,13 +497,9 @@ function CompactReminderCard({ event, now = new Date(), isHighlighted = false, o
         'relative w-full rounded-widget border bg-amber-50/40 shadow-card cursor-pointer touch-pan-y overflow-hidden',
         'hover:shadow-card-hover hover:border-amber-400/80 transition-all duration-200 min-h-control',
         'grid grid-cols-[5.75rem_1fr]',
-        isHighlighted ? 'border-2 border-casa-gold ring-2 ring-casa-gold shadow-card-hover' : 'border-amber-300/60',
+        isHighlighted ? 'border-2 border-casa-gold shadow-md' : 'border-amber-300/60',
         past && !isHighlighted && 'opacity-45'
       )}
-      style={isHighlighted ? {
-        boxShadow: '0 0 0 2.5px var(--color-casa-gold), 0 2px 8px rgba(201, 169, 110, 0.45)',
-        border: '2px solid var(--color-casa-gold)',
-      } : undefined}
       data-calendar-event
     >
       {/* Straight Amber Left Pillar */}
@@ -657,15 +649,9 @@ function EventCard({ event, household, now = new Date(), isHighlighted = false, 
         className={cn(
           'relative rounded-xl border bg-casa-surface/90 shadow-xs cursor-pointer touch-pan-y overflow-hidden transition-all duration-200 min-h-[38px] px-2.5 py-1.5 flex items-center justify-between gap-2',
           'border-l-4',
-          isHighlighted ? 'border-2 border-casa-gold ring-2 ring-casa-gold shadow-card-hover opacity-100 font-bold' : 'border-casa-border/60 hover:opacity-85 hover:border-casa-gold/60 opacity-45'
+          isHighlighted ? 'border-2 border-casa-gold shadow-md opacity-100 font-bold' : 'border-casa-border/60 hover:opacity-85 hover:border-casa-gold/60 opacity-45'
         )}
-        style={{
-          borderLeftColor: color,
-          ...(isHighlighted ? {
-            boxShadow: '0 0 0 2.5px var(--color-casa-gold), 0 2px 8px rgba(201, 169, 110, 0.45)',
-            border: '2px solid var(--color-casa-gold)',
-          } : {}),
-        }}
+        style={{ borderLeftColor: color }}
         data-calendar-event
       >
         {/* Left: Time + Divider + Title */}
@@ -752,17 +738,13 @@ function EventCard({ event, household, now = new Date(), isHighlighted = false, 
         'relative rounded-widget border cursor-pointer touch-pan-y shadow-card overflow-hidden transition-all duration-200 min-h-control',
         'grid grid-cols-[5.75rem_1fr]',
         isHighlighted
-          ? 'border-2 border-casa-gold ring-2 ring-casa-gold shadow-card-hover'
+          ? 'border-2 border-casa-gold shadow-md'
           : isHeroState
-            ? 'bg-casa-navy text-white border-casa-navy ring-1 ring-casa-gold/60 shadow-card-hover'
+            ? 'bg-casa-navy text-white border-casa-navy shadow-card-hover'
             : isBirthday
               ? 'bg-gradient-to-br from-casa-accent-subtle via-casa-surface to-casa-bg border-casa-border/80 hover:shadow-card-hover hover:border-casa-gold/50'
               : 'bg-casa-surface text-casa-navy border-casa-border/70 hover:shadow-card-hover hover:border-casa-gold/50'
       )}
-      style={isHighlighted ? {
-        boxShadow: '0 0 0 2.5px var(--color-casa-gold), 0 2px 8px rgba(201, 169, 110, 0.45)',
-        border: '2px solid var(--color-casa-gold)',
-      } : undefined}
       data-calendar-event
     >
       {isBirthday && <BirthdayCardDecoration />}

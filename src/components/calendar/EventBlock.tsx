@@ -132,8 +132,8 @@ export default function EventBlock({ event, onClick, onDoubleClick, columnCount 
         'absolute rounded-lg px-2.5 py-1.5 text-left',
         'hover:brightness-110 hover:shadow-card-hover',
         'overflow-hidden cursor-pointer',
-        'text-white transition-opacity duration-150',
-        isActive ? 'ring-2 ring-casa-gold z-20 font-bold shadow-lg' : 'border-0',
+        'text-white transition-all duration-150',
+        isActive ? 'ring-2 ring-casa-gold ring-offset-1 ring-offset-casa-bg z-20 font-bold shadow-md' : 'border-0',
         isDragging ? 'opacity-30' : 'opacity-100',
       )}
       style={{
@@ -142,11 +142,7 @@ export default function EventBlock({ event, onClick, onDoubleClick, columnCount 
         left: `${leftPercent}%`,
         width: `${widthPercent}%`,
         backgroundColor: color,
-        ...(isActive ? {
-          boxShadow: '0 0 0 3px var(--color-casa-gold), 0 4px 14px rgba(201, 169, 110, 0.5)',
-          border: '2.5px solid var(--color-casa-gold)',
-          zIndex: 20,
-        } : {}),
+        ...(isActive ? { zIndex: 20 } : {}),
       }}
     >
       <p className={cn(
