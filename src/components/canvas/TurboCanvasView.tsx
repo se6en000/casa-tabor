@@ -77,8 +77,8 @@ export default function TurboCanvasView({ onOpenEvent, onQuickCreate }: TurboCan
 
       {/* ── 2-Pane Living Canvas Action Center Grid ── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 sm:gap-4 flex-1 min-h-0 items-stretch overflow-hidden">
-        {/* ── PANE 1 (Left 60%): Time-Anchored Now & Next Stream ── */}
-        <div className={cn('h-full min-h-0 lg:col-span-7 xl:col-span-7 flex flex-col overflow-hidden', mobileTab === 'schedule' ? 'flex' : 'hidden lg:flex')}>
+        {/* ── PANE 1 (Left 50%): Time-Anchored Now & Next Stream ── */}
+        <div className={cn('h-full min-h-0 lg:col-span-6 xl:col-span-6 flex flex-col overflow-hidden', mobileTab === 'schedule' ? 'flex' : 'hidden lg:flex')}>
           <NowAndNextWidget
             now={now}
             todayEvents={todayEvents}
@@ -91,8 +91,8 @@ export default function TurboCanvasView({ onOpenEvent, onQuickCreate }: TurboCan
           />
         </div>
 
-        {/* ── PANE 2 (Right 40%): Action Queue & Task Engine ── */}
-        <div className={cn('h-full min-h-0 lg:col-span-5 xl:col-span-5 flex flex-col overflow-hidden', mobileTab === 'queue' ? 'flex' : 'hidden lg:flex')}>
+        {/* ── PANE 2 (Right 50%): Action Queue & Task Engine ── */}
+        <div className={cn('h-full min-h-0 lg:col-span-6 xl:col-span-6 flex flex-col overflow-hidden', mobileTab === 'queue' ? 'flex' : 'hidden lg:flex')}>
           <ActionQueueWidget
             activeConflicts={activeConflicts}
             activePrep={activePrep}
