@@ -11,6 +11,19 @@ export const DEFAULT_DINNER_PLAN: DinnerPlan = {
   statusBadge: 'Ingredients ready',
 }
 
+export interface AIChatLaunchContext {
+  launchId?: string
+  prompt?: string
+  autoSend?: boolean
+  source?: string
+  page?: string
+  agent?: 'general' | 'chef'
+  traceId?: string
+  wakeAt?: number
+  right?: number
+  top?: number
+}
+
 interface AppStore {
   mode: AppMode
   setMode: (mode: AppMode) => void
@@ -18,14 +31,20 @@ interface AppStore {
   touchActivity: () => void
   aiDrawerOpen: boolean
   setAiDrawerOpen: (open: boolean) => void
+  aiLaunchContext: AIChatLaunchContext | null
+  setAiLaunchContext: (context: AIChatLaunchContext | null) => void
 
   // Unified Sidecar Companion state
-  sidecarTab: 'event' | 'ai'
-  setSidecarTab: (tab: 'event' | 'ai') => void
+  sidecarTab: 'event' | 'ai' | 'action'
+  setSidecarTab: (tab: 'event' | 'ai' | 'action') => void
+  toggleSidecarTab: () => void
   selectedSidecarEventId: string | null
   setSelectedSidecarEventId: (id: string | null) => void
+  selectedSidecarActionId: string | null
+  setSelectedSidecarActionId: (id: string | null) => void
   openEventInSidecar: (eventId: string) => void
-  openAiInSidecar: () => void
+  openActionInSidecar: (actionId: string) => void
+  openAiInSidecar: (context?: AIChatLaunchContext | null) => void
   closeSidecar: () => void
 
   // Dual-Engine & Living Canvas state
@@ -77,11 +96,24 @@ export const useAppStore = create<AppStore>((set, get) => ({
   touchActivity: () => set({ lastInteraction: Date.now(), mode: 'interactive' }),
   aiDrawerOpen: false,
   setAiDrawerOpen: (aiDrawerOpen) => set({ aiDrawerOpen }),
+  aiLaunchContext: null,
+  setAiLaunchContext: (aiLaunchContext) => set({ aiLaunchContext }),
 
   sidecarTab: 'event',
   setSidecarTab: (sidecarTab) => set({ sidecarTab }),
+  toggleSidecarTab: () => {
+    const current = get().sidecarTab
+    if (current === 'ai') {
+      const fallback = get().selectedSidecarActionId ? 'action' : 'event'
+      set({ sidecarTab: fallback })
+    } else {
+      set({ sidecarTab: 'ai' })
+    }
+  },
   selectedSidecarEventId: null,
   setSelectedSidecarEventId: (selectedSidecarEventId) => set({ selectedSidecarEventId }),
+  selectedSidecarActionId: null,
+  setSelectedSidecarActionId: (selectedSidecarActionId) => set({ selectedSidecarActionId }),
 
   openEventInSidecar: (eventId: string) => {
     set({
@@ -90,16 +122,32 @@ export const useAppStore = create<AppStore>((set, get) => ({
       aiDrawerOpen: true,
     })
   },
-  openAiInSidecar: () => {
+  openActionInSidecar: (actionId: string) => {
+    set({
+      selectedSidecarActionId: actionId,
+      sidecarTab: 'action',
+      aiDrawerOpen: true,
+    })
+  },
+  openAiInSidecar: (context) => {
+    const launchContext = context
+      ? {
+          ...context,
+          launchId: context.launchId || crypto.randomUUID(),
+        }
+      : null
     set({
       sidecarTab: 'ai',
       aiDrawerOpen: true,
+      aiLaunchContext: launchContext,
     })
   },
   closeSidecar: () => {
     set({
       aiDrawerOpen: false,
       selectedSidecarEventId: null,
+      selectedSidecarActionId: null,
+      aiLaunchContext: null,
     })
   },
 

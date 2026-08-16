@@ -36,4 +36,5 @@ export interface LivingFlowProps {
   onClose: () => void
   embedded?: boolean
   onAskAi?: (prompt?: string) => void
+  onSwitchToAi?: () => void
 }

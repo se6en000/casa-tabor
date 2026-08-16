@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Link2, X, ChevronDown, Users, Star, Check, Plus } from 'lucide-react'
+import { Link2, X, ChevronDown, Users, Star, Check, Plus, Rotate3d } from 'lucide-react'
 import type { FamilyMember } from '../../../../types'
 import type { RecurrenceScope } from '../types'
 import { getDisplayMemberColor } from '../../../../design-system/memberColors'
+import { IconButton } from '../../../ui'
 
 interface LivingFlowHeaderProps {
   familyMembers: FamilyMember[]
@@ -12,6 +13,7 @@ interface LivingFlowHeaderProps {
   onToggleMember: (id: string) => void
   onSetRecurScope: (scope: RecurrenceScope) => void
   onClose: () => void
+  onSwitchToAi?: () => void
 }
 
 export default function LivingFlowHeader({
@@ -21,7 +23,8 @@ export default function LivingFlowHeader({
   recurScope,
   onToggleMember,
   onSetRecurScope,
-  onClose
+  onClose,
+  onSwitchToAi
 }: LivingFlowHeaderProps) {
   const [attendeesExpanded, setAttendeesExpanded] = useState(false)
   const activeMembers = familyMembers.filter(m => selectedMemberIds.includes(m.id))
@@ -55,7 +58,16 @@ export default function LivingFlowHeader({
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
+          {onSwitchToAi && (
+            <IconButton
+              icon={<Rotate3d size={16} className="text-amber-700 transition-transform duration-300 group-hover:rotate-180" />}
+              onClick={onSwitchToAi}
+              className="living-header-action-btn group"
+              title="Flip to Copilot chat"
+              aria-label="Flip to Copilot chat"
+            />
+          )}
           <button
             onClick={() => {
               navigator.clipboard?.writeText(window.location.href)
@@ -63,6 +75,7 @@ export default function LivingFlowHeader({
             }}
             className="living-header-action-btn"
             aria-label="Share event link"
+            title="Share event link"
           >
             <Link2 size={16} />
           </button>
@@ -70,6 +83,7 @@ export default function LivingFlowHeader({
             onClick={onClose}
             className="living-header-action-btn"
             aria-label="Close sidecar"
+            title="Close sidecar"
           >
             <X size={16} />
           </button>

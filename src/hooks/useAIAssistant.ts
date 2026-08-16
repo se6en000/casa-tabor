@@ -58,6 +58,18 @@ export interface GroceryAssistantContext {
   recentAisleCategories?: string[]
 }
 
+export interface ActionAiContext {
+  actionId: string
+  title: string
+  subject?: string
+  sender?: string
+  amount?: string | null
+  urgency?: string
+  requiredAction?: string
+  householdImpact?: string
+  emailBody?: string
+}
+
 export interface AssistantContext {
   page: string
   assistantMode?: 'general' | 'chef'
@@ -65,6 +77,7 @@ export interface AssistantContext {
   family: FamilyMember[]
   homeCity?: string
   focusedEvent?: EventWithDetails
+  focusedAction?: ActionAiContext
   groceryContext?: GroceryAssistantContext
   onSessionEnd?: () => void
 }
@@ -159,6 +172,17 @@ function buildContext(ctx: AssistantContext, messages: AIMessage[], experienceMo
     pendingAction: pendingAction ? {
       tool: pendingAction.tool,
       args: pendingAction.args,
+    } : undefined,
+    focusedAction: ctx.focusedAction ? {
+      id: ctx.focusedAction.actionId,
+      title: ctx.focusedAction.title,
+      subject: ctx.focusedAction.subject ?? null,
+      sender: ctx.focusedAction.sender ?? null,
+      amount: ctx.focusedAction.amount ?? null,
+      urgency: ctx.focusedAction.urgency ?? null,
+      required_action: ctx.focusedAction.requiredAction ?? null,
+      household_impact: ctx.focusedAction.householdImpact ?? null,
+      email_body: ctx.focusedAction.emailBody ?? null,
     } : undefined,
     focusedEvent: ctx.focusedEvent ? {
       id: ctx.focusedEvent.id,

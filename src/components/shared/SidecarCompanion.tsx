@@ -8,7 +8,12 @@ import { useFamilyMembers } from '../../hooks/useFamilyMembers'
 import { useHomeWeather } from '../../hooks/useHomeWeather'
 import { cn } from '../../utils/cn'
 import LivingFlowSidecar from '../calendar/living-flow/LivingFlowSidecar'
+import ActionInspectionSidecar from '../canvas/widgets/ActionInspectionSidecar'
 import AIChatDrawer from './AIChatDrawer'
+
+import { usePrepItems, usePrepItemDetails } from '../../hooks/usePrepItems'
+import { synthesizeActionAnalysis, extractAmount } from '../../utils/actionInspectionSynthesis'
+import type { ActionAiContext } from '../../hooks/useAIAssistant'
 
 interface SidecarCompanionProps {
   screensaverActive: boolean
@@ -22,17 +27,47 @@ export default function SidecarCompanion({
 }: SidecarCompanionProps) {
   const {
     aiDrawerOpen,
+    aiLaunchContext,
     sidecarTab,
     setSidecarTab,
     selectedSidecarEventId,
     setSelectedSidecarEventId,
+    selectedSidecarActionId,
+    openAiInSidecar,
     closeSidecar,
   } = useAppStore()
+
+  const [focusedActionContext, setFocusedActionContext] = useState<ActionAiContext | null>(null)
 
   const now = useLiveClock(60_000)
   const { data: rollingEvents = [] } = useRollingEvents(now)
   const { data: family = [] } = useFamilyMembers()
   const { data: weather } = useHomeWeather()
+
+  // Prep items & details for action sidecar context
+  const { data: allPrep = [] } = usePrepItems()
+  const activePrepItem = useMemo(() => {
+    if (!selectedSidecarActionId) return null
+    return allPrep.find((p) => p.id === selectedSidecarActionId) || null
+  }, [allPrep, selectedSidecarActionId])
+  const { data: activePrepDetails } = usePrepItemDetails(activePrepItem)
+
+  const activeActionContext = useMemo<ActionAiContext | null>(() => {
+    if (!activePrepItem) return focusedActionContext
+    const analysis = synthesizeActionAnalysis(activePrepItem, activePrepDetails)
+    const amount = extractAmount(activePrepItem.description) || extractAmount(activePrepItem.event_title)
+    return {
+      actionId: activePrepItem.id,
+      title: activePrepItem.description || activePrepItem.event_title || analysis.subject,
+      subject: analysis.subject,
+      sender: `${analysis.senderLabel} <${analysis.senderEmail}>`,
+      amount,
+      urgency: analysis.urgency,
+      requiredAction: analysis.requiredAction,
+      householdImpact: analysis.householdImpact,
+      emailBody: activePrepDetails?.gmailContext?.email_body || analysis.emailBody,
+    }
+  }, [activePrepItem, activePrepDetails, focusedActionContext])
 
   // Fetch full details if event is from outside rolling horizon
   const { data: fetchedEvent } = useQuery({
@@ -96,46 +131,92 @@ export default function SidecarCompanion({
     }
   }
 
+  const handleAskAiAboutAction = (actCtx?: ActionAiContext) => {
+    if (actCtx) {
+      setFocusedActionContext(actCtx)
+      openAiInSidecar({
+        source: 'action-sidecar',
+        launchId: crypto.randomUUID(),
+        agent: 'general',
+      })
+    } else {
+      setSidecarTab('ai')
+    }
+  }
+
+  const isActionView = sidecarTab === 'action' && Boolean(selectedSidecarActionId)
   const isEventView = sidecarTab === 'event' && Boolean(selectedEvent)
+  const isFrontView = isActionView || isEventView
+  const isFlippedToAi = !isFrontView
 
   const sidecarContent = (
-    <div className="flex-1 flex flex-col min-h-0 overflow-hidden relative w-full h-full">
-      {/* Event Details View (Kept mounted in DOM to preserve edit state and draft forms) */}
-      <div className={cn(
-        'flex-1 flex flex-col min-h-0 overflow-hidden w-full h-full',
-        isEventView ? 'flex' : 'hidden'
-      )}>
-        {selectedEvent && (
-          <LivingFlowSidecar
-            event={selectedEvent}
-            onClose={closeSidecar}
-            embedded={true}
-            onAskAi={handleAskAiAboutEvent}
-          />
-        )}
-      </div>
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden relative w-full h-full sidecar-flip-viewport [perspective:1200px]">
+      <motion.div
+        className="w-full h-full relative sidecar-flip-card"
+        initial={false}
+        animate={{ rotateY: isFlippedToAi ? 180 : 0 }}
+        transition={{ duration: 0.42, ease: [0.34, 1.3, 0.64, 1] }}
+      >
+        {/* Face 1: Action Inspection or Event Details View (Front Face) */}
+        <div
+          className={cn(
+            'absolute inset-0 flex flex-col min-h-0 overflow-hidden w-full h-full bg-casa-surface sidecar-flip-face-front',
+            isFrontView ? 'pointer-events-auto z-10' : 'pointer-events-none z-0'
+          )}
+          aria-hidden={!isFrontView}
+        >
+          {isActionView ? (
+            <ActionInspectionSidecar
+              actionId={selectedSidecarActionId}
+              onClose={closeSidecar}
+              embedded={true}
+              onSwitchToAi={handleAskAiAboutAction}
+            />
+          ) : selectedEvent ? (
+            <LivingFlowSidecar
+              event={selectedEvent}
+              onClose={closeSidecar}
+              embedded={true}
+              onAskAi={handleAskAiAboutEvent}
+              onSwitchToAi={() => setSidecarTab('ai')}
+            />
+          ) : null}
+        </div>
 
-      {/* Casa AI Copilot View (Kept mounted in DOM to preserve conversation stream) */}
-      <div className={cn(
-        'flex-1 flex flex-col min-h-0 overflow-hidden w-full h-full',
-        !isEventView ? 'flex' : 'hidden'
-      )}>
-        <AIChatDrawer
-          open={aiDrawerOpen}
-          onClose={closeSidecar}
-          page={routePath.startsWith('/cook') ? 'cook' : routePath.startsWith('/calendar') ? 'calendar' : routePath.startsWith('/grocery') ? 'grocery' : 'home'}
-          events={rollingEvents}
-          family={family}
-          homeCity={weather?.city}
-          onSleepCommand={() => document.dispatchEvent(new CustomEvent('screensaver-on'))}
-          focusedEvent={selectedEvent || undefined}
-          onOpenEventDetails={(evt) => {
-            setSelectedSidecarEventId(evt.id)
-            setSidecarTab('event')
-          }}
-          embedded={true}
-        />
-      </div>
+        {/* Face 2: Casa AI Copilot View (Back Face) */}
+        <div
+          className={cn(
+            'absolute inset-0 flex flex-col min-h-0 overflow-hidden w-full h-full bg-casa-surface sidecar-flip-face-back',
+            !isFrontView ? 'pointer-events-auto z-10' : 'pointer-events-none z-0'
+          )}
+          aria-hidden={isFrontView}
+        >
+          <AIChatDrawer
+            open={aiDrawerOpen}
+            onClose={closeSidecar}
+            launchContext={aiLaunchContext || undefined}
+            page={routePath.startsWith('/cook') ? 'cook' : routePath.startsWith('/calendar') ? 'calendar' : routePath.startsWith('/grocery') ? 'grocery' : 'home'}
+            events={rollingEvents}
+            family={family}
+            homeCity={weather?.city}
+            onSleepCommand={() => document.dispatchEvent(new CustomEvent('screensaver-on'))}
+            focusedEvent={selectedEvent || undefined}
+            focusedAction={activeActionContext || undefined}
+            onOpenEventDetails={(evt) => {
+              setSelectedSidecarEventId(evt.id)
+              setSidecarTab('event')
+            }}
+            onSwitchToEvent={() => {
+              if (selectedSidecarActionId) {
+                setSidecarTab('action')
+              } else if (selectedSidecarEventId || selectedEvent) {
+                setSidecarTab('event')
+              }
+            }}
+            embedded={true}
+          />
+        </div>
+      </motion.div>
     </div>
   )
 

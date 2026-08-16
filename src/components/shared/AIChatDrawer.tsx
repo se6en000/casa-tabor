@@ -1,11 +1,11 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import type React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIcon, Camera, Mic, Keyboard, RotateCcw, MessagesSquare, Plus, Square, CalendarDays, ShoppingCart, ChefHat, Pencil, AlertTriangle, Clock3, Utensils, Bell, UserPlus, MapPin, Mail, Activity, ChevronRight, Navigation, ArrowRight } from 'lucide-react'
+import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIcon, Camera, Mic, Keyboard, RotateCcw, MessagesSquare, Plus, Square, CalendarDays, ShoppingCart, ChefHat, Pencil, AlertTriangle, Clock3, Utensils, Bell, UserPlus, MapPin, Mail, Activity, ChevronRight, Navigation, ArrowRight, Rotate3d } from 'lucide-react'
 import { format } from 'date-fns'
 import { useNavigate } from 'react-router-dom'
 import { cn } from '../../utils/cn'
-import { useAIAssistant, type AIMessage, type GroceryAssistantContext } from '../../hooks/useAIAssistant'
+import { useAIAssistant, type AIMessage, type GroceryAssistantContext, type ActionAiContext } from '../../hooks/useAIAssistant'
 import type { PrivateConversation } from '../../hooks/useAIConversationHistory'
 import {
   useSpeechInput,
@@ -44,27 +44,22 @@ type PendingVoiceAction = {
 
 
 
+import type { AIChatLaunchContext } from '../../stores/appStore'
+
 interface Props {
   open: boolean
   onClose: () => void
   anchor?: { right: number; top: number }
   page: string
-  launchContext?: {
-    launchId: string
-    prompt?: string
-    autoSend?: boolean
-    source?: string
-    page?: string
-    agent?: 'general' | 'chef'
-    traceId?: string
-    wakeAt?: number
-  }
+  launchContext?: AIChatLaunchContext
   events: EventWithDetails[]
   family: FamilyMember[]
   homeCity?: string
   onSleepCommand?: () => void
   focusedEvent?: EventWithDetails
+  focusedAction?: ActionAiContext
   onOpenEventDetails?: (event: EventWithDetails) => void
+  onSwitchToEvent?: () => void
   embedded?: boolean
 }
 
@@ -81,7 +76,9 @@ export default function AIChatDrawer({
   homeCity,
   onSleepCommand,
   focusedEvent,
+  focusedAction,
   onOpenEventDetails,
+  onSwitchToEvent,
   embedded = false,
 }: Props) {
   const [input, setInput] = useState('')
@@ -220,6 +217,7 @@ export default function AIChatDrawer({
     family,
     homeCity,
     focusedEvent,
+    focusedAction,
     groceryContext,
     onSessionEnd: onClose,
   })
@@ -298,8 +296,8 @@ export default function AIChatDrawer({
 
   const dinnerPlan = useAppStore((s) => s.dinnerPlan)
   const dynamicSuggestions = useMemo(
-    () => deriveDynamicFollowUpSuggestions(messages, page, events, new Date(), focusedEvent, launchContext?.source, dinnerPlan),
-    [messages, page, events, focusedEvent, launchContext?.source, dinnerPlan],
+    () => deriveDynamicFollowUpSuggestions(messages, page, events, new Date(), focusedEvent, launchContext?.source, dinnerPlan, focusedAction),
+    [messages, page, events, focusedEvent, launchContext?.source, dinnerPlan, focusedAction],
   )
   const eventById = useMemo(
     () => new Map(events.map((event) => [event.id, event])),
@@ -856,30 +854,63 @@ export default function AIChatDrawer({
     primeMessages([{ id: crypto.randomUUID(), role: 'assistant', content }])
   }, [open, focusedEvent?.id, sessionLoading, messages.length, loading, primeMessages])
 
+  // Only prime an action greeting when launching AI from an action queue item
+  const firedActionGreetRef = useRef<string | null>(null)
   useEffect(() => {
-    if (!open || focusedEvent || loading) return
+    if (!open || !focusedAction || loading) return
+    const key = `${focusedAction.actionId}:${launchContext?.launchId || 'action'}`
+    if (firedActionGreetRef.current === key) return
+    if (sessionLoading) return
+    firedActionGreetRef.current = key
+
+    // Start a clean, dedicated session for this action queue item
+    startFresh()
+
+    let content = `I'm reviewing the details for **${focusedAction.title}** 📋\n\n`
+    if (focusedAction.sender) content += `✉️ **From:** ${focusedAction.sender}\n`
+    if (focusedAction.amount) content += `💰 **Amount:** ${focusedAction.amount}\n`
+    if (focusedAction.urgency) content += `⚠️ **Urgency:** ${focusedAction.urgency}\n`
+    if (focusedAction.requiredAction) content += `⚡ **Required Action:** ${focusedAction.requiredAction}\n`
+    if (focusedAction.householdImpact) content += `🏡 **Household Impact:** ${focusedAction.householdImpact}\n`
+    content += `\nHow would you like to handle this action item?`
+
+    primeMessages([{ id: crypto.randomUUID(), role: 'assistant', content }])
+  }, [open, focusedAction, launchContext?.launchId, sessionLoading, loading, startFresh, primeMessages])
+
+  useEffect(() => {
+    if (!open || focusedEvent || focusedAction || loading) return
     if (launchContext?.agent !== 'chef') return
     if (sessionLoading) return
-    if (messages.length > 0) return
+    if (!launchContext?.launchId) return
     if (firedChefGreetRef.current === launchContext.launchId) return
     firedChefGreetRef.current = launchContext.launchId
 
     if (launchContext?.source === 'tonights-kitchen') {
       const plan = useAppStore.getState().dinnerPlan
-      primeMessages([{
+      const msg: AIMessage = {
         id: crypto.randomUUID(),
         role: 'assistant',
         content: `🍽️ **Tonight's Kitchen Planning**\n\nCurrently planned: **${plan.title}** (${plan.targetTime || '6:30 PM Target'}).\n\nWhat's the pivot for tonight? Tap a quick option below or tell me what you'd like to switch to!`,
-      }])
+      }
+      if (messages.length === 0) {
+        primeMessages([msg])
+      } else {
+        appendSyntheticMessage(msg)
+      }
       return
     }
 
-    primeMessages([{
+    const defaultChefMsg: AIMessage = {
       id: crypto.randomUUID(),
       role: 'assistant',
       content: "Chef Agent online 👨‍🍳\n\nI can help you plan weeknight meals, optimize for budget/speed, build overlap-friendly grocery lists, and adapt dinners based on what's in your pantry.\n\nTry: “Plan 4 quick dinners under 30 minutes” or “Use what we already have and keep cost low.”",
-    }])
-  }, [open, focusedEvent, loading, launchContext?.agent, launchContext?.launchId, launchContext?.source, sessionLoading, messages.length, primeMessages])
+    }
+    if (messages.length === 0) {
+      primeMessages([defaultChefMsg])
+    } else {
+      appendSyntheticMessage(defaultChefMsg)
+    }
+  }, [open, focusedEvent, loading, launchContext?.agent, launchContext?.launchId, launchContext?.source, sessionLoading, messages.length, primeMessages, appendSyntheticMessage])
 
   // While AI is thinking, suppress new voice input (don't stop the mic — avoids fade/blue flicker)
   useEffect(() => {
@@ -1112,6 +1143,18 @@ export default function AIChatDrawer({
               Private
             </Button>
           )}
+          {onSwitchToEvent && (Boolean(focusedEvent) || Boolean(focusedAction)) && (
+            <Button
+              variant="ghost"
+              type="button"
+              onClick={onSwitchToEvent}
+              title={`Flip to ${focusedEvent ? `event: ${focusedEvent.title}` : focusedAction ? `action: ${focusedAction.title}` : 'details'}`}
+              aria-label="Flip to inspection details"
+              className="size-control flex items-center justify-center text-casa-muted hover:text-casa-navy rounded-button hover:bg-casa-divider outline-none transition-all group active:scale-95 focus-visible:ring-2 focus-visible:ring-casa-gold"
+            >
+              <Rotate3d size={16} className="text-casa-gold transition-transform duration-300 group-hover:rotate-180" />
+            </Button>
+          )}
           {(hasSession || messages.length > 0) && (
             <Button variant="ghost"
               type="button"
@@ -1184,8 +1227,42 @@ export default function AIChatDrawer({
                 </div>
               )}
 
+              {/* Focused Action Banner */}
+              {focusedAction && !focusedEvent && (
+                <div className="flex items-center justify-between gap-2.5 px-3.5 py-2.5 rounded-2xl bg-casa-gold/10 border border-casa-gold/30 text-casa-navy shadow-subtle mb-1">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 font-bold text-body-sm truncate">
+                      <Sparkles size={14} className="text-casa-gold shrink-0" />
+                      <span className="truncate">{focusedAction.title}</span>
+                    </div>
+                    <div className="text-caption text-casa-muted truncate mt-0.5 font-medium flex items-center gap-1">
+                      {focusedAction.sender && <span className="truncate">From: {focusedAction.sender}</span>}
+                      {focusedAction.amount && (
+                        <>
+                          <span>·</span>
+                          <span className="font-mono font-bold text-casa-gold-hover">{focusedAction.amount}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {onSwitchToEvent && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={onSwitchToEvent}
+                        className="px-2.5 py-1 text-caption font-semibold rounded-lg bg-white border border-casa-border hover:bg-casa-surface text-casa-navy shadow-xs flex items-center gap-1 min-h-[36px]"
+                      >
+                        <span>Full Details</span>
+                        <ArrowRight size={12} />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Session resume banner */}
-              {hasSession && messages.length > 0 && !focusedEvent && (
+              {hasSession && messages.length > 0 && !focusedEvent && !focusedAction && (
                 <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-casa-gold/8 border border-casa-gold/20 text-caption text-casa-muted">
                   <Sparkles size={11} className="text-casa-gold flex-shrink-0" />
                   <span>Resuming previous conversation</span>
@@ -3225,6 +3302,7 @@ function deriveDynamicFollowUpSuggestions(
   focusedEvent?: EventWithDetails,
   source?: string,
   currentDinnerPlan?: DinnerPlan,
+  focusedAction?: ActionAiContext,
 ): string[] {
   if (focusedEvent) {
     return [
@@ -3232,6 +3310,39 @@ function deriveDynamicFollowUpSuggestions(
       `Reschedule ${focusedEvent.title}`,
       `Add location for ${focusedEvent.title}`,
       `Check for conflicts with ${focusedEvent.title}`,
+    ]
+  }
+
+  if (focusedAction) {
+    if (focusedAction.amount || /payment|loan|bill|auto-pay|due/i.test(focusedAction.title)) {
+      return [
+        'Verify checking balance',
+        'Mark payment as done',
+        'Snooze to tomorrow',
+        'Explain auto-pay terms',
+      ]
+    }
+    if (/waiver|release|medical|camp|permission/i.test(focusedAction.title)) {
+      return [
+        'Help me sign the waiver',
+        'Check equipment packing list',
+        'Confirm emergency contacts',
+        'Mark waiver as done',
+      ]
+    }
+    if (/spirit|pto|pta|school/i.test(focusedAction.title)) {
+      return [
+        'Confirm spirit day attire',
+        'Check school calendar',
+        'Set morning reminder',
+        'Mark item as done',
+      ]
+    }
+    return [
+      `Mark "${focusedAction.title}" done`,
+      'Snooze for 3 hours',
+      'Summarize full email',
+      'Set reminder for tomorrow',
     ]
   }
 

@@ -78,6 +78,7 @@ function AppShell() {
   const {
     aiDrawerOpen,
     openEventInSidecar,
+    openActionInSidecar,
     openAiInSidecar,
     experienceMode,
   } = useAppStore()
@@ -147,10 +148,23 @@ function AppShell() {
     return () => document.removeEventListener('casa:open-event-details', onOpenEventById)
   }, [openEventInSidecar])
 
+  // Global "open this action's details" primitive — opens non-blocking sidecar companion
+  useEffect(() => {
+    const onOpenActionById = (e: Event) => {
+      const actionId = (e as CustomEvent<{ actionId?: string }>).detail?.actionId
+      if (!actionId) return
+      openActionInSidecar(actionId)
+    }
+    document.addEventListener('casa:open-action-details', onOpenActionById)
+    return () => document.removeEventListener('casa:open-action-details', onOpenActionById)
+  }, [openActionInSidecar])
+
   // Global AI chat dispatcher — opens Copilot tab in sidecar companion
   useEffect(() => {
-    const onOpenAi = () => {
-      openAiInSidecar()
+    const onOpenAi = (e: Event) => {
+      const customEvent = e as CustomEvent<import('./stores/appStore').AIChatLaunchContext | undefined>
+      const detail = customEvent.detail
+      openAiInSidecar(detail || undefined)
     }
     document.addEventListener('open-ai-chat', onOpenAi)
     return () => document.removeEventListener('open-ai-chat', onOpenAi)

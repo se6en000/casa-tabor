@@ -1148,6 +1148,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                     document.dispatchEvent(
                       new CustomEvent('open-ai-chat', {
                         detail: {
+                          launchId: crypto.randomUUID(),
                           agent: 'chef',
                           source: 'tonights-kitchen',
                           prompt: undefined,

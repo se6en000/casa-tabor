@@ -3971,6 +3971,35 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}
  
 ON OPEN (the [EVENT_EDIT_MODE] signal): Give a concise friendly summary of the event so the user knows you're primed — include title, date/time, who's attending, and location if set. Then highlight any ⚠️ MISSING fields as things worth filling in, and ask what they'd like to change or add first.` : ''}
 
+${context.focusedAction ? `
+⭐ ACTION ITEM INSPECTION & ASSISTANCE MODE — CRITICAL INSTRUCTIONS:
+The user is currently inspecting this specific action item from their Action Queue / Inbox.
+You have the complete, verified context of this item right here. DO NOT ask the user for details that are already provided below (such as bill amounts, due dates, sender names, account details, or instructions). Answer questions directly from this action data.
+
+CURRENT ACTION ITEM DATA:
+- Action ID: ${(context.focusedAction as {id: string}).id}
+- Title: ${(context.focusedAction as {title: string}).title}
+- Subject: ${(context.focusedAction as {subject: string | null}).subject ?? 'N/A'}
+- From/Sender: ${(context.focusedAction as {sender: string | null}).sender ?? 'N/A'}
+- Amount: ${(context.focusedAction as {amount: string | null}).amount ?? 'N/A'}
+- Urgency: ${(context.focusedAction as {urgency: string | null}).urgency ?? 'N/A'}
+- Required Action: ${(context.focusedAction as {required_action: string | null}).required_action ?? 'N/A'}
+- Household Impact: ${(context.focusedAction as {household_impact: string | null}).household_impact ?? 'N/A'}
+${(context.focusedAction as {email_body: string | null}).email_body ? `
+SOURCE EMAIL CONTENT:
+"""
+${(context.focusedAction as {email_body: string | null}).email_body}
+"""` : ''}
+
+INSPECTION RULES:
+- When the user asks about this bill, form, payment, event, or task (e.g., "do I need to pay this bill?", "what is this for?", "when is this due?", "what account is this pulling from?", "check your context"), answer authoritatively using the data above.
+- Explain whether it is auto-pay, a manual payment, a waiver needing signature, or a school theme day.
+- If it's an auto-payment (e.g. Bank of America vehicle loan $317.00 auto-pay scheduled from checking ••••9451), clarify that it is scheduled for automatic payment so they do NOT need to manually pay it, but should ensure their checking account has sufficient funds before the scheduled date.
+- If it's a school waiver (e.g. 5th Grade Science Camp), explain what needs to be signed and that they can sign it directly via the digital pad in Casa.
+- If it's a PTO / spirit day announcement, summarize the attire and schedule.
+- Offer clear next steps such as snoozing, marking as done/paid, or creating a reminder.
+` : ''}
+
 ${context.lastContextReference?.summary ? `
 RECENT CONTEXT (helps you infer vague references like "it", "that", "her"):
 Last mentioned: ${context.lastContextReference.summary}

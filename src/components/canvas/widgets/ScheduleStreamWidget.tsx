@@ -8,6 +8,7 @@ import { useLiveClock } from '../../../hooks/useLiveClock'
 import { useReminderNeedsYouActions } from '../../../hooks/useReminderNeedsYouActions'
 import { getEventStartDate } from '../../../utils/eventTime'
 import { DayEventCard } from '../../calendar/DayEventCard'
+import { useAppStore } from '../../../stores/appStore'
 
 interface ScheduleStreamWidgetProps {
   todayEvents: EventWithDetails[]
@@ -26,6 +27,7 @@ export default function ScheduleStreamWidget({
   now,
   familyMembers,
 }: ScheduleStreamWidgetProps) {
+  const { selectedSidecarEventId, sidecarTab } = useAppStore()
   const hookNow = useLiveClock(15_000)
   const effectiveNow = now ?? hookNow
   const { data: hookFamily } = useFamilyMembers()
@@ -67,7 +69,7 @@ export default function ScheduleStreamWidget({
                   now={effectiveNow}
                   index={idx}
                   household={effectiveFamily}
-                  isHighlighted={highlightedEventId === evt.id}
+                  isHighlighted={highlightedEventId === evt.id || (selectedSidecarEventId === evt.id && sidecarTab === 'event')}
                   onMouseEnter={() => setHighlightedEventId(evt.id)}
                   onMouseLeave={() => setHighlightedEventId(null)}
                   onOpen={() => onOpenEvent(evt)}

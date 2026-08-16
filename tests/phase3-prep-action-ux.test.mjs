@@ -6,7 +6,7 @@ const appTsx = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8')
 const openEventDetailsUtil = readFileSync(new URL('../src/utils/openEventDetails.ts', import.meta.url), 'utf8')
 const prepPriority = readFileSync(new URL('../src/utils/prepPriority.ts', import.meta.url), 'utf8')
 const actionHubPage = readFileSync(new URL('../src/pages/ActionHubPage.tsx', import.meta.url), 'utf8')
-const prepItemDetailPanel = readFileSync(new URL('../src/components/home/PrepItemDetailPanel.tsx', import.meta.url), 'utf8')
+const actionInspectionSidecar = readFileSync(new URL('../src/components/canvas/widgets/ActionInspectionSidecar.tsx', import.meta.url), 'utf8')
 const homeRightPanel = readFileSync(new URL('../src/components/home/HomeRightPanel.tsx', import.meta.url), 'utf8')
 const assigneeChip = readFileSync(new URL('../src/components/shared/PrepItemAssigneeChip.tsx', import.meta.url), 'utf8')
 const useNotifications = readFileSync(new URL('../src/hooks/useNotifications.ts', import.meta.url), 'utf8')
@@ -21,14 +21,10 @@ test('openEventDetails helper dispatches the global custom event', () => {
   assert.match(openEventDetailsUtil, /new CustomEvent\('casa:open-event-details', \{ detail: \{ eventId \} \}\)/)
 })
 
-test('ActionHubPage and PrepItemDetailPanel open an existing event instead of drafting a duplicate via AI', () => {
-  assert.match(actionHubPage, /item\.event_id/)
-  assert.match(actionHubPage, /openEventDetails\(item\.event_id!\)/)
-  assert.match(actionHubPage, /View event/)
-
-  assert.match(prepItemDetailPanel, /item\.event_id/)
-  assert.match(prepItemDetailPanel, /openEventDetails\(item\.event_id!\)/)
-  assert.match(prepItemDetailPanel, /View event/)
+test('ActionHubPage and ActionInspectionSidecar open an existing event instead of drafting a duplicate via AI', () => {
+  assert.match(actionHubPage, /openActionInSidecar/)
+  assert.match(actionInspectionSidecar, /item\.event_id|activeItem\?\.event_id|matchedCalendarEvent/)
+  assert.match(actionInspectionSidecar, /handleOpenEventInSidecar|setSelectedSidecarEventId/)
 })
 
 test('EventDetailPanel gates date formatting on the full event being loaded, not just the { id } stub used by openEventDetails', () => {

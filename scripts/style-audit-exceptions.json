@@ -125,10 +125,6 @@
         "reason": "Time-grid dimensions, multi-day spans, drag placeholders, drag previews, and event colors are runtime-derived."
       },
       {
-        "path": "src/components/home/PrepItemDetailPanel.tsx",
-        "reason": "Motion geometry (drag shell shadow/backdrop gradients, drag-handle touch-action) mirrors EventDetailPanel and is runtime-derived or composed from semantic theme variables."
-      },
-      {
         "path": "src/components/layout/TabletSidebar.tsx",
         "reason": "Household avatars bind persisted member colors."
       },
@@ -270,10 +266,6 @@
       {
         "path": "src/components/calendar/WeekView.tsx",
         "reason": "The multi-day event block is a specialized absolutely positioned calendar span with runtime width, selection, and double-click edit behavior."
-      },
-      {
-        "path": "src/components/home/PrepItemDetailPanel.tsx",
-        "reason": "The remaining native button is a pointer-driven drag handle whose touch-action and Framer Motion drag controls must live on the interactive element, matching EventDetailPanel."
       }
     ]
   }

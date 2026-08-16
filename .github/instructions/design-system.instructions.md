@@ -45,6 +45,12 @@ Never solve a new UX need with a page-local one-off if it is likely to recur.
 - Do not rely on hover, tiny icons, color alone, or subtle state changes.
 - Keep labels concrete, readable, and operationally truthful.
 
+## Strict Iconography: No Raw Emojis
+
+- **NEVER use raw Unicode emojis (e.g. 📅, 📋, ⚠️, 🔴, 💡, 🥪, 🎉) anywhere in the UI, badges, pills, buttons, headers, or component copy.**
+- Always use curated Lucide SVG icons (or custom SVG primitives) with appropriate semantic size and color classes (e.g. `<Calendar size={12} className="text-amber-700 shrink-0" />`).
+- Emojis render inconsistently across operating systems and hardware platforms (iOS, Android, Linux Raspberry Pi Kiosk, Chromium), break visual balance, and disrupt the luxury editorial design language of Casa Tabor.
+
 ## Completeness standard
 
 Before considering UX work complete:

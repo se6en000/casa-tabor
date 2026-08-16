@@ -66,7 +66,7 @@ export const ScheduleStreamItem = forwardRef<HTMLDivElement, ScheduleStreamItemP
         className={cn(
           'p-4 rounded-widget border transition-all cursor-pointer relative group min-h-[52px] flex flex-col justify-center',
           isHighlighted
-            ? 'border-casa-navy bg-casa-navy text-white shadow-md'
+            ? 'border-2 border-casa-gold bg-casa-surface shadow-card-hover'
             : 'border-casa-border/50 bg-casa-bg/50 hover:border-casa-gold hover:bg-casa-surface',
           className,
         )}

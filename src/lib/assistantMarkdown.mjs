@@ -1,4 +1,4 @@
-const BLOCK_MARKDOWN_LINE = /^\s{0,3}(?:#{1,6}\s|[-*+]\s|\d+\.\s|>\s|```|\|.+\|)/m
+const BLOCK_MARKDOWN_LINE = /^\s{0,3}(?:#{1,6}\s|[-*+•]\s|\d+\.\s|>\s|```|\|.+\|)/m
 const AGENDA_LINE = /^(?:all day|\d{1,2}:\d{2}\s+[ap]m)\s+—\s+/i
 const LONG_PROSE_LENGTH = 260
 const UUID_PATTERN = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'

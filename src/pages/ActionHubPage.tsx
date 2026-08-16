@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { format, formatDistanceToNow } from 'date-fns'
-import { ClipboardList, Bell, ChevronDown, ChevronLeft, ThumbsDown, CalendarPlus, BellPlus, AlertTriangle, ExternalLink, ShieldCheck } from 'lucide-react'
+import { ClipboardList, Bell, ChevronDown, ChevronLeft, ThumbsDown, CalendarPlus, BellPlus, AlertTriangle, ExternalLink, ShieldCheck, Calendar } from 'lucide-react'
 import { sourceBadge } from '../utils/prepSourceBadge'
 import { needsYouAccent } from '../utils/needsYouAccent'
 import { conflictMetaLine, directorySuggestionMetaLine } from '../utils/needsYouMeta'
@@ -27,7 +27,8 @@ import { openEventDetails } from '../utils/openEventDetails'
 import { priorityVisual } from '../utils/prepPriority'
 import { getPrepItemDisplayDescription } from '../utils/reminderLateness'
 import { formatSnoozeHistoryLabel, type SnoozeDuration } from '../utils/snoozeDuration'
-import PrepItemDetailPanel from '../components/home/PrepItemDetailPanel'
+import { detectSuggestedEvent } from '../utils/actionInspectionSynthesis'
+import { useAppStore } from '../stores/appStore'
 import PrepItemAssigneeChip from '../components/shared/PrepItemAssigneeChip'
 import SnoozeMenu from '../components/shared/SnoozeMenu'
 import AttentionTopicEvidence from '../components/shared/AttentionTopicEvidence'
@@ -98,8 +99,10 @@ export default function ActionHubPage() {
   const { notifications, markRead, clearAll } = useNotifications()
   const { data: conflicts = [] } = useWeekConflicts()
   const resolveConflict = useResolveConflict()
+  const openActionInSidecar = useAppStore((s) => s.openActionInSidecar)
+  const selectedSidecarActionId = useAppStore((s) => s.selectedSidecarActionId)
+  const sidecarTab = useAppStore((s) => s.sidecarTab)
   const [revealedItemId, setRevealedItemId] = useState<string | null>(null)
-  const [selected, setSelected] = useState<PrepItem | null>(null)
   const [actingId, setActingId] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [typeFilter, setTypeFilter] = useState<PrepFilterKey>('all')
@@ -177,7 +180,6 @@ export default function ActionHubPage() {
       if (action === 'complete') await complete(id)
       if (action === 'snooze') await snooze(id, duration, targetDateIso)
       if (action === 'downvote') await downvote(id)
-      if (selected?.id === id) setSelected(null)
     } catch (error) {
       setActionError(error instanceof Error ? error.message : 'Casa could not update this action.')
     } finally {
@@ -332,7 +334,10 @@ export default function ActionHubPage() {
                 <div
                   key={item.id}
                   className={cn(
-                    'rounded-card border border-casa-border bg-casa-bg px-3.5 py-3 transition-opacity',
+                    'rounded-card border-2 transition-all px-3.5 py-3',
+                    selectedSidecarActionId === item.id && sidecarTab === 'action'
+                      ? 'border-casa-gold bg-casa-surface shadow-card-hover'
+                      : 'border-casa-border bg-casa-bg',
                     busy && 'opacity-60',
                   )}
                 >
@@ -348,7 +353,7 @@ export default function ActionHubPage() {
                         {readOnly ? (
                           <p className={cn('min-w-0 flex-1 text-body-sm font-semibold text-casa-text leading-snug', !isRevealed && 'line-clamp-2')}>{getPrepItemDisplayDescription(item.description, item.source_type, item.event_date, now)}</p>
                         ) : (
-                          <Button variant="ghost" className="min-w-0 flex-1 h-auto min-h-0 p-0 text-left hover:bg-transparent" contentClassName="w-full justify-start" onClick={() => setSelected(item)}>
+                          <Button variant="ghost" className="min-w-0 flex-1 h-auto min-h-0 p-0 text-left hover:bg-transparent" contentClassName="w-full justify-start" onClick={() => openActionInSidecar(item.id)}>
                             <p className={cn('text-body-sm font-semibold text-casa-text leading-snug', !isRevealed && 'line-clamp-2')}>{getPrepItemDisplayDescription(item.description, item.source_type, item.event_date, now)}</p>
                           </Button>
                         )}
@@ -382,7 +387,7 @@ export default function ActionHubPage() {
                           </Button>
                         </div>
                       )}
-                      <div className="mt-1.5 flex items-center gap-2">
+                      <div className="mt-1.5 flex items-center gap-2 flex-wrap">
                         {readOnlyMeta ? (
                           <span role="img" aria-label={readOnlyMeta.label} title={readOnlyMeta.label} className="inline-flex shrink-0 text-casa-muted">
                             <readOnlyMeta.icon size={13} strokeWidth={2.2} />
@@ -403,6 +408,16 @@ export default function ActionHubPage() {
                           {readOnlyMeta ? readOnlyMeta.text : (item.event_title || 'Casa Tabor')}
                         </span>
                         {(() => {
+                          const suggested = detectSuggestedEvent(item)
+                          if (!suggested) return null
+                          return (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100/90 text-amber-900 text-2xs font-semibold border border-amber-300/80 shadow-2xs">
+                              <Calendar size={11} className="text-amber-700 shrink-0" />
+                              <span>Suggests {suggested.displayDate}</span>
+                            </span>
+                          )
+                        })()}
+                        {(() => {
                           const historyLabel = formatSnoozeHistoryLabel(item.snooze_count, item.last_snoozed_at, now)
                           return historyLabel ? (
                             <span className="shrink-0 whitespace-nowrap text-caption text-casa-muted" title="This item has been snoozed before">
@@ -422,7 +437,7 @@ export default function ActionHubPage() {
                         )}
                         {!readOnly && (
                           <div className="shrink-0">
-                            <PrepItemAssigneeChip item={item} familyMembers={familyMembers} onNudge={() => setSelected(item)} />
+                            <PrepItemAssigneeChip item={item} familyMembers={familyMembers} onNudge={() => openActionInSidecar(item.id)} />
                           </div>
                         )}
                       </div>
@@ -612,8 +627,6 @@ export default function ActionHubPage() {
         </section>
         )}
       </div>
-
-      <PrepItemDetailPanel item={selected} onClose={() => setSelected(null)} />
     </div>
   )
 }

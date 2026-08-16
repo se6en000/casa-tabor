@@ -22,6 +22,7 @@ import type { PrepItem, Conflict, FamilyMember } from '../../../types'
 import type { SnoozeDuration } from '../../../utils/snoozeDuration'
 import type { DriverAvailability } from '../../../hooks/useTurboCanvasPresenter'
 import { sourceBadge } from '../../../utils/prepSourceBadge'
+import { detectSuggestedEvent } from '../../../utils/actionInspectionSynthesis'
 
 interface ActionQueueWidgetProps {
   activeConflicts: Conflict[]
@@ -62,6 +63,8 @@ function shortTitle(raw?: string | null, maxLen = 22): string {
   return stripped.length > maxLen ? `${stripped.slice(0, maxLen - 1)}…` : stripped
 }
 
+import { useAppStore } from '../../../stores/appStore'
+
 export default function ActionQueueWidget({
   activeConflicts,
   activePrep,
@@ -76,6 +79,7 @@ export default function ActionQueueWidget({
   handleBatchAutoTriage,
   openCopilotForConflict,
 }: ActionQueueWidgetProps) {
+  const { openActionInSidecar, selectedSidecarActionId, sidecarTab } = useAppStore()
   const [pushedExpanded, setPushedExpanded] = useState(false)
   const [openSnoozeId, setOpenSnoozeId] = useState<string | null>(null)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
@@ -414,23 +418,29 @@ export default function ActionQueueWidget({
                 const heroDoneLabel = resolveButtonLabel(heroItem)
                 const isHeroSnoozeOpen = openSnoozeId === heroItem.id
                 const isHeroMenuOpen = openMenuId === heroItem.id
+                const heroSuggestedEvent = detectSuggestedEvent(heroItem)
 
                 return (
-                  <motion.article
+                  <motion.div
                     key={heroItem.id}
-                    layout
+                    layout="position"
                     initial={{ opacity: 0, y: 12, scale: 0.98 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{
                       opacity: 0,
-                      x: 90,
+                      x: -24,
                       scale: 0.94,
                       transition: { duration: 0.22, ease: [0.32, 0.72, 0, 1] },
                     }}
                     transition={{
                       layout: { duration: 0.28, ease: [0.25, 1, 0.5, 1] },
                     }}
-                    className="p-5 sm:p-6 rounded-3xl bg-casa-surface border border-casa-gold/40 hover:border-casa-gold/70 transition-all shadow-card flex flex-col gap-4 relative overflow-hidden before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1.5 before:bg-casa-gold before:rounded-l-3xl"
+                    className={cn(
+                      'p-5 sm:p-6 rounded-3xl bg-casa-surface transition-all flex flex-col gap-4 relative border-2',
+                      selectedSidecarActionId === heroItem.id && sidecarTab === 'action'
+                        ? 'border-casa-gold shadow-card-hover'
+                        : 'border-casa-gold/25 hover:border-casa-gold/60 shadow-card'
+                    )}
                   >
                     {/* ── Top Context & Category Strip ── */}
                     <div className="flex items-center justify-between gap-2">
@@ -443,6 +453,12 @@ export default function ActionQueueWidget({
                           <Sparkles size={11} className="text-casa-gold" />
                           <span>Priority Focus</span>
                         </span>
+                        {heroSuggestedEvent && (
+                          <span className="inline-flex items-center gap-1.5 text-caption font-semibold px-2.5 py-1 rounded-full bg-amber-100/90 text-amber-900 border border-amber-300/80 shadow-2xs">
+                            <Calendar size={12} className="text-amber-700 shrink-0" />
+                            <span>Suggests {heroSuggestedEvent.displayDate}</span>
+                          </span>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-2.5">
@@ -460,14 +476,14 @@ export default function ActionQueueWidget({
                           <IconButton
                             variant="ghost"
                             size="sm"
-                            aria-label="Options"
-                            title="Options"
+                            aria-label="Inspect email & details in sidecar"
+                            title="Inspect in sidecar"
                             onClick={(e) => {
                               e.stopPropagation()
-                              setOpenMenuId(isHeroMenuOpen ? null : heroItem.id)
+                              openActionInSidecar(heroItem.id)
                             }}
-                            className="text-casa-muted hover:text-casa-navy transition-colors opacity-70 hover:opacity-100 min-h-[36px] min-w-[36px]"
-                            icon={<ExternalLink size={14} />}
+                            className="text-casa-muted hover:text-casa-navy transition-colors opacity-70 hover:opacity-100 min-h-[44px] min-w-[44px]"
+                            icon={<ExternalLink size={15} />}
                           />
 
                           {/* Overflow / Downvote Menu */}
@@ -478,7 +494,7 @@ export default function ActionQueueWidget({
                                 size="sm"
                                 align="start"
                                 onClick={() => onInstantDownvote(heroItem)}
-                                className="w-full text-caption text-casa-error hover:bg-rose-50 transition-colors font-medium min-h-[38px]"
+                                className="w-full text-caption text-casa-error hover:bg-rose-50 transition-colors font-medium min-h-[44px]"
                                 leadingIcon={<ThumbsDown size={13} />}
                               >
                                 <span>Mark Not Relevant</span>
@@ -489,9 +505,20 @@ export default function ActionQueueWidget({
                       </div>
                     </div>
 
-                    {/* ── Synthesized Content Body ── */}
-                    <div className="min-w-0 flex flex-col gap-1.5 pl-0.5">
-                      <h4 className="font-body text-body sm:text-body-lg font-bold text-casa-navy leading-snug">
+                    {/* ── Synthesized Content Body (Clickable to inspect in Sidecar) ── */}
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => openActionInSidecar(heroItem.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          openActionInSidecar(heroItem.id)
+                        }
+                      }}
+                      className="min-w-0 flex flex-col gap-1.5 pl-0.5 cursor-pointer group"
+                    >
+                      <h4 className="font-body text-body sm:text-body-lg font-bold text-casa-navy group-hover:text-casa-gold-hover leading-snug transition-colors">
                         {heroItem.description || heroItem.event_title || 'Prep Item'}
                       </h4>
                       {heroAmount && (
@@ -499,6 +526,10 @@ export default function ActionQueueWidget({
                           {heroAmount}
                         </span>
                       )}
+                      <div className="flex items-center gap-1 text-caption text-casa-gold font-medium mt-0.5 opacity-80 group-hover:opacity-100 transition-opacity">
+                        <span>Tap to view email &amp; analysis</span>
+                        <span>›</span>
+                      </div>
                     </div>
 
                     {/* ── Universal 2-Anchor Footer: [ Done ] vs [ Snooze ▾ ] ── */}
@@ -591,7 +622,7 @@ export default function ActionQueueWidget({
                         </motion.div>
                       )}
                     </AnimatePresence>
-                  </motion.article>
+                  </motion.div>
                 )
               })()
             )}
@@ -614,6 +645,7 @@ export default function ActionQueueWidget({
                   const badge = sourceBadge(item)
                   const BadgeIcon = badge.icon
                   const amount = extractAmount(item.description || item.event_title)
+                  const microSuggestedEvent = detectSuggestedEvent(item)
 
                   return (
                     <div
@@ -621,14 +653,23 @@ export default function ActionQueueWidget({
                       role="button"
                       tabIndex={0}
                       data-tactile="true"
-                      onClick={() => setSpotlightItemId(item.id)}
+                      onClick={() => {
+                        setSpotlightItemId(item.id)
+                        openActionInSidecar(item.id)
+                      }}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
                           e.preventDefault()
                           setSpotlightItemId(item.id)
+                          openActionInSidecar(item.id)
                         }
                       }}
-                      className="py-3 px-3 -mx-1.5 rounded-xl flex items-start justify-between gap-3 group cursor-pointer hover:bg-casa-bg/80 border border-transparent hover:border-casa-border/60 transition-all duration-150 active:scale-[0.97] active:opacity-75"
+                      className={cn(
+                        'py-3 px-3 -mx-1.5 rounded-2xl flex items-start justify-between gap-3 group cursor-pointer transition-all duration-150 active:scale-[0.97] active:opacity-75 border-2',
+                        selectedSidecarActionId === item.id && sidecarTab === 'action'
+                          ? 'bg-casa-gold/10 border-casa-gold shadow-xs'
+                          : 'hover:bg-casa-bg/80 border-transparent hover:border-casa-border/60'
+                      )}
                     >
                       <div className="flex items-start gap-3 min-w-0 flex-1">
                         <IconButton
@@ -652,6 +693,15 @@ export default function ActionQueueWidget({
                               <BadgeIcon size={12} className="text-casa-gold shrink-0" />
                               <span>{badge.label}</span>
                             </span>
+                            {microSuggestedEvent && (
+                              <>
+                                <span>·</span>
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100/90 text-amber-900 text-2xs font-semibold border border-amber-300/80">
+                                  <Calendar size={10} className="text-amber-700 shrink-0" />
+                                  <span>Suggests {microSuggestedEvent.displayDate}</span>
+                                </span>
+                              </>
+                            )}
                             <span>·</span>
                             <span className="text-casa-error font-medium">
                               {item.due_by ? 'Due Today' : 'Receipt Match'}

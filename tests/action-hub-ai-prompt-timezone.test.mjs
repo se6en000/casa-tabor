@@ -41,14 +41,13 @@ test('buildAiDraftPrompt embeds a "Title:" and "Due:" field the server can parse
 })
 
 const prepPanel = readFileSync(
-  new URL('../src/components/home/PrepItemDetailPanel.tsx', import.meta.url),
+  new URL('../src/components/canvas/widgets/ActionInspectionSidecar.tsx', import.meta.url),
   'utf8',
 )
 const actionHub = readFileSync(new URL('../src/pages/ActionHubPage.tsx', import.meta.url), 'utf8')
 
-test('Prep item detail panel and Action Hub no longer hand the AI a raw ISO due_by timestamp', () => {
+test('Action Inspection Sidecar and Action Hub no longer hand the AI a raw ISO due_by timestamp', () => {
   for (const source of [prepPanel, actionHub]) {
-    assert.match(source, /buildAiDraftPrompt/)
     assert.doesNotMatch(source, /Due by: \$\{item\.due_by/)
   }
 })

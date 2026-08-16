@@ -720,3 +720,32 @@
   box-shadow: 0 2px 12px rgba(27, 42, 74, 0.04);
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   3D FLIP CARD PERSPECTIVE & TACTILE SELFIE-SWITCH TRANSFORMS
+   ═══════════════════════════════════════════════════════════════════════════ */
+.sidecar-flip-viewport {
+  perspective: 1200px;
+  -webkit-perspective: 1200px;
+  transform-style: preserve-3d;
+}
+
+.sidecar-flip-card {
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+.sidecar-flip-face-front {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transform: rotateY(0deg);
+  transform-style: preserve-3d;
+}
+
+.sidecar-flip-face-back {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transform: rotateY(180deg);
+  transform-style: preserve-3d;
+}
+

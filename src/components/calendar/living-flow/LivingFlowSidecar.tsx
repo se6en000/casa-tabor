@@ -16,7 +16,8 @@ export default function LivingFlowSidecar({
   event,
   onClose,
   embedded = false,
-  onAskAi
+  onAskAi,
+  onSwitchToAi,
 }: LivingFlowProps) {
   const [isClosing, setIsClosing] = useState(false)
 
@@ -69,6 +70,7 @@ export default function LivingFlowSidecar({
         onToggleMember={toggleMember}
         onSetRecurScope={setRecurScope}
         onClose={handleAnimatedClose}
+        onSwitchToAi={onSwitchToAi}
       />
 
       {/* ══════ SCROLLABLE CONTENT BODY ══════ */}
