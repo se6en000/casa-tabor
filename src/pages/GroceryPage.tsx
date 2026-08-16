@@ -50,6 +50,7 @@ import {
   Toast,
   Textarea,
 } from '../components/ui'
+import { useTactileSwapState } from '../components/ui/TactileSwap'
 import {
   appendPantryInventoryAudit,
   normalizePackageUnit,
@@ -578,6 +579,7 @@ export default function GroceryPage() {
   const [dragOverCategory, setDragOverCategory] = useState<string | null>(null)
   const [reviewingItemId, setReviewingItemId] = useState<string | null>(null)
   const [spotlightedItemId, setSpotlightedItemId] = useState<string | null>(null)
+  const { isSwapped: isItemJustMoved, triggerSwap: triggerItemMoved } = useTactileSwapState()
   const inputRef = useRef<HTMLInputElement>(null)
   const recipeFileInputRef = useRef<HTMLInputElement>(null)
   const recipeCameraInputRef = useRef<HTMLInputElement>(null)
@@ -1483,6 +1485,7 @@ export default function GroceryPage() {
   const finishDrag = useCallback((dropCategory: string | null) => {
     setDragState((current) => {
       if (current && dropCategory && dropCategory !== current.fromCategory) {
+        triggerItemMoved(current.itemId, 'move')
         updateItemCategory.mutate({
           id: current.itemId,
           category: dropCategory,
@@ -1494,7 +1497,7 @@ export default function GroceryPage() {
     })
     setDragOverCategory(null)
     document.body.style.userSelect = ''
-  }, [updateItemCategory])
+  }, [triggerItemMoved, updateItemCategory])
 
   const handleMovePointerDown = useCallback((
     item: GroceryItem,
@@ -1830,6 +1833,7 @@ export default function GroceryPage() {
               dragState={dragState}
               dragOverCategory={dragOverCategory}
               spotlightedItemId={spotlightedItemId}
+              isItemJustMoved={isItemJustMoved}
               dismissingIds={dismissingIds}
               dismissingExitingIds={dismissingExitingIds}
               onToggleItem={handleToggle}
@@ -1862,6 +1866,7 @@ export default function GroceryPage() {
                   tone="neutral"
                   selected={reviewingItem.category === category.key}
                   onClick={() => {
+                    triggerItemMoved(reviewingItem.id, 'move')
                     updateItemCategory.mutate({
                       id: reviewingItem.id,
                       category: category.key,

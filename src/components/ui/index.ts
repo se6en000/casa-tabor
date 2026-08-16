@@ -31,6 +31,12 @@ export { ScheduleStreamItem, type ScheduleStreamItemProps } from './ScheduleStre
 export { ActionCard, type ActionCardProps, type ActionCardTone } from './ActionCard'
 export { FormSummaryCard, type FormSummaryCardProps } from './FormSummaryCard'
 export {
+  TactileSheenBeam,
+  TactileSwapBadge,
+  type TactileSheenBeamProps,
+  type TactileSwapBadgeProps,
+} from './TactileSwap'
+export {
   ConfirmationDialog,
   ContentSection,
   MasterDetailLayout,

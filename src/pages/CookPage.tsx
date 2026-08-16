@@ -57,9 +57,15 @@ import {
   Switch,
   Text,
   Textarea,
+  TactileSheenBeam,
+  TactileSwapBadge,
   Toast,
   type ToastTone,
 } from '../components/ui'
+import {
+  TACTILE_SPRING_TRANSITION,
+  TACTILE_SWAP_SCALE_ANIMATION,
+} from '../components/ui/TactileSwap'
 import ActiveKitchenWorkbench from '../components/kitchen/ActiveKitchenWorkbench'
 import MobileCookingView from '../components/mobile/MobileCookingView'
 import { useAppStore } from '../stores/appStore'
@@ -316,6 +322,42 @@ function isCookLandingMode(value: string | null): value is CookLandingMode {
 function isCookMood(value: string | null): value is CookMood {
   return value === 'quick' || value === 'family' || value === 'new' || value === 'fancy' || value === 'pantry'
 }
+
+export function formatRecipeTitle(raw: string | null | undefined): string {
+  if (!raw) return ''
+  const trimmed = raw.trim()
+  if (!trimmed) return ''
+
+  const upperAcronyms = new Set(['GLP-1', 'AI', 'BBQ', 'BLT', 'BLTS', 'PB&J', 'USA', 'IP', 'NY', 'NYC'])
+  const lowerMinorWords = new Set(['a', 'an', 'and', 'as', 'at', 'but', 'by', 'for', 'in', 'nor', 'of', 'on', 'or', 'so', 'the', 'to', 'up', 'yet', 'with', 'la', 'alla', 'de', 'du'])
+
+  const isAllUpper = trimmed === trimmed.toUpperCase() && /[A-Z]/.test(trimmed)
+  const isAllLower = trimmed === trimmed.toLowerCase()
+
+  const words = trimmed.split(/(\s+|-|\/)/)
+  let isFirstWord = true
+  return words
+    .map((w) => {
+      if (/^\s+$/.test(w) || w === '-' || w === '/') return w
+      const lower = w.toLowerCase()
+      if (upperAcronyms.has(w.toUpperCase()) || /^glp-1$/i.test(w)) {
+        isFirstWord = false
+        return w.toUpperCase() === 'GLP-1' || /^glp-1$/i.test(w) ? 'GLP-1' : w.toUpperCase()
+      }
+      if (!isFirstWord && lowerMinorWords.has(lower) && (isAllUpper || isAllLower)) {
+        isFirstWord = false
+        return lower
+      }
+      if (isAllUpper || isAllLower || (w === w.toLowerCase() && !lowerMinorWords.has(lower))) {
+        isFirstWord = false
+        return lower.charAt(0).toUpperCase() + lower.slice(1)
+      }
+      isFirstWord = false
+      return w
+    })
+    .join('')
+}
+
 
 
 
@@ -3620,7 +3662,7 @@ export default function CookPage() {
                           </span>
                         </div>
                         <p className="font-display text-heading font-bold text-casa-navy">
-                          {resumeRecipe.recipe.name}
+                          {formatRecipeTitle(resumeRecipe.recipe.name)}
                         </p>
                         {resumeRecentLabel && (
                           <p className="text-caption text-casa-muted">Recent history: {resumeRecentLabel}</p>
@@ -3688,8 +3730,8 @@ export default function CookPage() {
                         {/* Plinth Body */}
                         <div className="p-6 flex flex-col flex-1 gap-4">
                           <div>
-                            <Heading role="heading" className="font-display font-bold leading-tight text-casa-navy text-heading sm:text-display-xs">
-                              {topInsight.recipe.name}
+                            <Heading role="heading" className="font-display font-bold leading-tight text-casa-navy text-2xl sm:text-3xl lg:text-display-xs">
+                              {formatRecipeTitle(topInsight.recipe.name)}
                             </Heading>
                             <div className="mt-2.5 flex flex-wrap items-center gap-2">
                               <Chip tone="neutral" size="sm" icon={<Users size={13} />}>
@@ -3752,12 +3794,12 @@ export default function CookPage() {
               <div className="col-span-12 lg:col-span-5 xl:col-span-5 space-y-6">
                 {/* The Weekly Horizon: 7-Day Day-of-Week Schedule */}
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between gap-2 pb-2 border-b border-casa-border/50">
+                  <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-casa-border/50">
                     <div>
-                      <Heading role="heading" className="font-display text-body-lg font-bold text-casa-navy">
+                      <Heading role="heading" className="font-display text-lg sm:text-xl font-bold text-casa-navy tracking-tight">
                         The Weekly Horizon
                       </Heading>
-                      <p className="text-caption text-casa-text-secondary">
+                      <p className="text-caption text-casa-text-secondary mt-0.5">
                         7-day family dinner schedule.
                       </p>
                     </div>
@@ -3811,17 +3853,12 @@ export default function CookPage() {
                           initial={false}
                           animate={
                             isJustSwapped
-                              ? {
-                                  scale: [1, 1.015, 0.995, 1],
-                                  transition: { duration: 0.65, ease: 'easeOut' },
-                                }
+                              ? TACTILE_SWAP_SCALE_ANIMATION
                               : isDragging
                               ? { scale: 0.97, opacity: 0.45 }
                               : { scale: 1, opacity: 1 }
                           }
-                          transition={{
-                            layout: { type: 'spring', stiffness: 350, damping: 26 },
-                          }}
+                          transition={TACTILE_SPRING_TRANSITION}
                           className={cn(
                             'p-3 rounded-2xl border transition-colors duration-200 select-none relative overflow-hidden',
                             isJustSwapped && 'border-casa-gold ring-2 ring-inset ring-casa-gold/60 bg-casa-gold/10 shadow-sm',
@@ -3837,14 +3874,7 @@ export default function CookPage() {
                           )}
                         >
                           {/* Radiant Sheen Beam on Swap */}
-                          {isJustSwapped && (
-                            <motion.div
-                              initial={{ x: '-100%' }}
-                              animate={{ x: '200%' }}
-                              transition={{ duration: 0.85, ease: 'easeInOut' }}
-                              className="absolute inset-0 bg-gradient-to-r from-transparent via-casa-gold/30 to-transparent pointer-events-none -skew-x-12 z-10"
-                            />
-                          )}
+                          {isJustSwapped && <TactileSheenBeam />}
 
                           <div className="flex items-center justify-between gap-2 mb-2 relative z-0">
                             <div className="flex items-center gap-2">
@@ -3871,15 +3901,7 @@ export default function CookPage() {
 
                               <AnimatePresence>
                                 {isJustSwapped && (
-                                  <motion.span
-                                    initial={{ opacity: 0, scale: 0.6, x: -6 }}
-                                    animate={{ opacity: 1, scale: 1, x: 0 }}
-                                    exit={{ opacity: 0, scale: 0.6, x: -6 }}
-                                    transition={{ duration: 0.25 }}
-                                    className="inline-flex items-center gap-1 text-2xs font-mono font-bold px-2 py-0.5 rounded-full bg-casa-gold text-white shadow-2xs"
-                                  >
-                                    {justSwappedDates?.type === 'swap' ? '⇄ Swapped' : '✓ Moved'}
-                                  </motion.span>
+                                  <TactileSwapBadge type={justSwappedDates?.type ?? 'swap'} />
                                 )}
                               </AnimatePresence>
                             </div>
@@ -3902,10 +3924,10 @@ export default function CookPage() {
                                   />
                                 )}
                                 <div className="min-w-0 flex-1">
-                                  <p className="font-display text-body-sm font-bold text-casa-navy truncate">
-                                    {recipe.name}
-                                  </p>
-                                  <p className="text-2xs text-casa-muted truncate">
+                                  <h3 className="font-display text-body font-bold text-casa-navy truncate">
+                                    {formatRecipeTitle(recipe.name)}
+                                  </h3>
+                                  <p className="text-caption text-casa-text-secondary truncate mt-0.5">
                                     {recipe.servings ? `${recipe.servings} serv` : 'Family size'} · Chef: Jake & Kelly
                                   </p>
                                 </div>
@@ -4041,7 +4063,7 @@ export default function CookPage() {
                           <div className="flex items-center gap-2 min-w-0 flex-1">
                             <div className="flex items-center gap-1.5 shrink-0">
                               <CalendarPlus size={13} className="text-casa-gold shrink-0" />
-                              <span className="font-display text-caption font-bold text-casa-navy">
+                              <span className="font-display text-body-sm font-bold text-casa-navy">
                                 Upcoming Days (5)
                               </span>
                             </div>
@@ -4111,17 +4133,12 @@ export default function CookPage() {
                                     initial={false}
                                     animate={
                                       isJustSwapped
-                                        ? {
-                                            scale: [1, 1.015, 0.995, 1],
-                                            transition: { duration: 0.65, ease: 'easeOut' },
-                                          }
+                                        ? TACTILE_SWAP_SCALE_ANIMATION
                                         : isDragging
                                         ? { scale: 0.97, opacity: 0.45 }
                                         : { scale: 1, opacity: 1 }
                                     }
-                                    transition={{
-                                      layout: { type: 'spring', stiffness: 350, damping: 26 },
-                                    }}
+                                    transition={TACTILE_SPRING_TRANSITION}
                                     className={cn(
                                       'p-3 rounded-2xl border transition-colors duration-200 select-none relative overflow-hidden',
                                       isJustSwapped && 'border-casa-gold ring-2 ring-inset ring-casa-gold/60 bg-casa-gold/10 shadow-sm',
@@ -4134,14 +4151,8 @@ export default function CookPage() {
                                       )
                                     )}
                                   >
-                                    {isJustSwapped && (
-                                      <motion.div
-                                        initial={{ x: '-100%' }}
-                                        animate={{ x: '200%' }}
-                                        transition={{ duration: 0.85, ease: 'easeInOut' }}
-                                        className="absolute inset-0 bg-gradient-to-r from-transparent via-casa-gold/30 to-transparent pointer-events-none -skew-x-12 z-10"
-                                      />
-                                    )}
+                                    {/* Radiant Sheen Beam on Swap */}
+                                    {isJustSwapped && <TactileSheenBeam />}
 
                                     <div className="flex items-center justify-between gap-2 mb-2 relative z-0">
                                       <div className="flex items-center gap-2">
@@ -4161,15 +4172,7 @@ export default function CookPage() {
 
                                         <AnimatePresence>
                                           {isJustSwapped && (
-                                            <motion.span
-                                              initial={{ opacity: 0, scale: 0.6, x: -6 }}
-                                              animate={{ opacity: 1, scale: 1, x: 0 }}
-                                              exit={{ opacity: 0, scale: 0.6, x: -6 }}
-                                              transition={{ duration: 0.25 }}
-                                              className="inline-flex items-center gap-1 text-2xs font-mono font-bold px-2 py-0.5 rounded-full bg-casa-gold text-white shadow-2xs"
-                                            >
-                                              {justSwappedDates?.type === 'swap' ? '⇄ Swapped' : '✓ Moved'}
-                                            </motion.span>
+                                            <TactileSwapBadge type={justSwappedDates?.type ?? 'swap'} />
                                           )}
                                         </AnimatePresence>
                                       </div>
@@ -4192,10 +4195,10 @@ export default function CookPage() {
                                             />
                                           )}
                                           <div className="min-w-0 flex-1">
-                                            <p className="font-display text-body-sm font-bold text-casa-navy truncate">
-                                              {recipe.name}
-                                            </p>
-                                            <p className="text-2xs text-casa-muted truncate">
+                                            <h3 className="font-display text-body font-bold text-casa-navy truncate">
+                                              {formatRecipeTitle(recipe.name)}
+                                            </h3>
+                                            <p className="text-caption text-casa-text-secondary truncate mt-0.5">
                                               {recipe.servings ? `${recipe.servings} serv` : 'Family size'} · Chef: Jake & Kelly
                                             </p>
                                           </div>
@@ -4302,9 +4305,12 @@ export default function CookPage() {
                   {/* Mood Header & Selector */}
                   <div className="space-y-2.5">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-caption font-bold uppercase tracking-wider text-casa-muted">
-                        Tonight's Rhythm ({shortlistHeadingLabel})
-                      </span>
+                      <Heading role="heading" className="font-display text-lg sm:text-xl font-bold text-casa-navy tracking-tight">
+                        Tonight's Rhythm
+                        <span className="ml-2 font-body text-caption font-semibold text-casa-text-secondary uppercase tracking-wider">
+                          ({shortlistHeadingLabel})
+                        </span>
+                      </Heading>
                       <Button
                         onClick={() => setShortlistOffsets((current) => ({ ...current, [cookMood]: current[cookMood] + 1 }))}
                         variant="ghost"
@@ -4342,10 +4348,15 @@ export default function CookPage() {
                   </div>
 
                   {/* Alternative Shortlist Recommendations (Cards #2 and #3 as Open Rows) */}
-                  <div className="space-y-2 pt-1">
-                    <span className="text-caption font-bold uppercase tracking-wider text-casa-muted block">
-                      Shortlist Alternatives ({Math.max(0, moodShortlistRecipes.length - 1)})
-                    </span>
+                  <div className="space-y-2.5 pt-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <Heading role="heading" className="font-display text-lg sm:text-xl font-bold text-casa-navy tracking-tight">
+                        Shortlist Alternatives
+                        <span className="ml-2 font-body text-caption font-semibold text-casa-text-secondary">
+                          ({Math.max(0, moodShortlistRecipes.length - 1)})
+                        </span>
+                      </Heading>
+                    </div>
 
                     {moodShortlistRecipes.slice(1, 3).map((insight, altIndex) => {
                       const focus = parseRecipeImageFocus(insight.recipe.image_url)
@@ -4353,7 +4364,7 @@ export default function CookPage() {
                       return (
                         <div
                           key={`${insight.recipe.id}-alt-${altIndex}`}
-                          className="flex items-center gap-3 p-2.5 rounded-2xl hover:bg-casa-surface/80 transition-colors group cursor-pointer"
+                          className="flex items-center gap-3 p-2.5 rounded-2xl hover:bg-casa-surface/80 transition-colors group cursor-pointer border border-transparent hover:border-casa-border/60"
                           onClick={() => openRecipeForCookMode(insight.recipe.id)}
                         >
                           <div className="relative size-14 rounded-xl overflow-hidden bg-casa-surface shrink-0 border border-casa-border/80">
@@ -4367,8 +4378,8 @@ export default function CookPage() {
                           </div>
 
                           <div className="min-w-0 flex-1">
-                            <Text as="h3" role="body-lg" className="font-semibold leading-tight text-casa-navy truncate">{insight.recipe.name}</Text>
-                            <p className="text-caption text-casa-muted mt-0.5 truncate">
+                            <Text as="h3" role="body-lg" className="font-display text-body font-bold leading-snug text-casa-navy truncate group-hover:text-casa-gold transition-colors">{formatRecipeTitle(insight.recipe.name)}</Text>
+                            <p className="text-caption text-casa-text-secondary mt-0.5 truncate">
                               {minutesLabel} · {insight.recipe.servings ? `${insight.recipe.servings} Servings` : '4 Servings'}
                             </p>
                           </div>
@@ -4379,7 +4390,7 @@ export default function CookPage() {
                               openRecipeForCookMode(insight.recipe.id)
                             }}
                             variant="champagne"
-                            className="mt-auto shrink-0 font-bold"
+                            className="mt-auto shrink-0 font-bold shadow-2xs"
                             size="sm"
                           >
                             Cook
@@ -4988,7 +4999,7 @@ export default function CookPage() {
 
                     <div className="p-4 flex flex-col flex-1 gap-2.5">
                       <Heading role="heading" className="font-display font-bold text-body-lg text-casa-navy line-clamp-2 group-hover:text-casa-gold transition-colors">
-                        {recipe.name}
+                        {formatRecipeTitle(recipe.name)}
                       </Heading>
                       <p className="text-caption text-casa-muted">
                         {recipe.servings ? `${recipe.servings} servings` : 'Standard servings'}{recipe.cook_time ? ` · ${recipe.cook_time}` : ''}
@@ -5929,7 +5940,7 @@ export default function CookPage() {
                       )}
                       <div className="min-w-0 flex-1">
                         <p className="font-display text-body font-bold text-casa-navy truncate">
-                          {recipe.name}
+                          {formatRecipeTitle(recipe.name)}
                         </p>
                         <p className="text-caption text-casa-muted truncate">
                           {recipe.cook_time ? `${recipe.cook_time} · ` : ''}{recipe.servings ? `${recipe.servings} servings` : 'Standard'}

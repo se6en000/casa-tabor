@@ -42,6 +42,7 @@ export interface GroceryAisleGridProps {
   } | null
   dragOverCategory: string | null
   spotlightedItemId: string | null
+  isItemJustMoved?: (id: string) => boolean
   dismissingIds: Set<string>
   dismissingExitingIds: Set<string>
   onToggleItem: (id: string, checked: boolean) => void
@@ -63,6 +64,7 @@ export default function GroceryAisleGrid({
   dragState,
   dragOverCategory,
   spotlightedItemId,
+  isItemJustMoved,
   dismissingIds,
   dismissingExitingIds,
   onToggleItem,
@@ -156,6 +158,7 @@ export default function GroceryAisleGrid({
                             dismissPhase={dismissingExitingIds.has(item.id) ? 'exiting' : dismissingIds.has(item.id) ? 'queued' : 'none'}
                             isDragging={dragState?.itemId === item.id}
                             isSpotlighted={spotlightedItemId === item.id}
+                            isJustMoved={isItemJustMoved?.(item.id)}
                             onRequestReview={onRequestReview}
                             onToggle={onToggleItem}
                             onDelete={onDeleteItem}

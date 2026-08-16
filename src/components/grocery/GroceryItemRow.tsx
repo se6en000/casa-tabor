@@ -1,8 +1,19 @@
 import type { PointerEvent } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { GripVertical, Sparkles, X } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { GROCERY_CATEGORIES, type GroceryItem } from '../../hooks/useGroceryList'
-import { Checkbox, Chip, IconButton } from '../ui'
+import {
+  Checkbox,
+  Chip,
+  IconButton,
+  TactileSheenBeam,
+  TactileSwapBadge,
+} from '../ui'
+import {
+  TACTILE_SPRING_TRANSITION,
+  TACTILE_SWAP_SCALE_ANIMATION,
+} from '../ui/TactileSwap'
 
 export const LOW_CONFIDENCE_REVIEW_THRESHOLD = 0.82
 
@@ -16,6 +27,7 @@ export interface GroceryItemRowProps {
   dismissPhase?: 'queued' | 'exiting' | 'none'
   isDragging?: boolean
   isSpotlighted?: boolean
+  isJustMoved?: boolean
   onToggle: (id: string, checked: boolean) => void
   onDelete: (id: string) => void
   onRequestReview?: (id: string) => void
@@ -30,6 +42,7 @@ export default function GroceryItemRow({
   dismissPhase = 'none',
   isDragging = false,
   isSpotlighted = false,
+  isJustMoved = false,
   onToggle,
   onDelete,
   onRequestReview,
@@ -53,16 +66,22 @@ export default function GroceryItemRow({
     item.enhancement_confidence < LOW_CONFIDENCE_REVIEW_THRESHOLD
 
   return (
-    <div
+    <motion.div
+      layout
+      transition={TACTILE_SPRING_TRANSITION}
+      animate={isJustMoved ? TACTILE_SWAP_SCALE_ANIMATION : undefined}
       className={cn(
-        'flex items-start gap-3 px-4 py-3 hover:bg-casa-bg/60 transition-all duration-200 ease-out group will-change-transform',
+        'flex items-start gap-3 px-4 py-3 hover:bg-casa-bg/60 transition-all duration-200 ease-out group will-change-transform relative overflow-hidden',
         visualChecked && 'opacity-55',
         dismissPhase === 'queued' && 'bg-casa-gold/8',
         dismissPhase === 'exiting' && 'opacity-0 translate-y-1 scale-[0.985] max-h-0 py-0',
         isDragging && 'opacity-30',
-        isSpotlighted && 'ring-2 ring-casa-gold/60 bg-casa-gold/10',
+        isSpotlighted && 'ring-2 ring-inset ring-casa-gold/60 bg-casa-gold/10',
+        isJustMoved && 'ring-2 ring-inset ring-casa-gold/60 bg-casa-gold/10 shadow-sm',
       )}
     >
+      {/* Radiant Sheen Beam on Move */}
+      {isJustMoved && <TactileSheenBeam />}
       {onMovePointerDown && (
         <IconButton
           icon={<GripVertical size={16} />}
@@ -98,6 +117,9 @@ export default function GroceryItemRow({
                 {item.quantity}{item.unit ? ' ' + item.unit : ''}
               </span>
             )}
+            <AnimatePresence>
+              {isJustMoved && <TactileSwapBadge type="move" />}
+            </AnimatePresence>
           </div>
           {needsConfidenceReview && (
             <Chip
@@ -127,6 +149,6 @@ export default function GroceryItemRow({
         aria-label={`Delete ${item.name}`}
         className="-mr-2 flex-shrink-0 text-casa-muted/50 hover:text-casa-error hover:bg-casa-error/10"
       />
-    </div>
+    </motion.div>
   )
 }

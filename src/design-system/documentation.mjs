@@ -579,6 +579,30 @@ export const COMPONENT_MANIFEST = [
     responsive: 'Stacks full-width in reverse visual order on narrow screens and aligns right on wider screens.',
     example: '<WorkflowActions><Button variant="secondary">Cancel</Button><Button>Save</Button></WorkflowActions>',
   }),
+  component({
+    name: 'TactileSheenBeam',
+    category: 'feedback',
+    purpose: 'Radiant champagne-gold sheen wave that sweeps across cards on swap or move actions.',
+    useWhen: 'Use within reorderable lists or drag-and-drop cards when an item is swapped or moved.',
+    avoid: 'Do not use for continuous indeterminate spinners or non-transient UI states.',
+    variants: ['default'],
+    states: ['default', 'animating'],
+    accessibility: 'Marked aria-hidden="true" as a purely visual micro-celebration.',
+    responsive: 'Adapts to the bounding geometry of its parent relative container.',
+    example: '<TactileSheenBeam />',
+  }),
+  component({
+    name: 'TactileSwapBadge',
+    category: 'feedback',
+    purpose: 'Micro-badge celebrating a completed swap or move action with gold fill and spring enter animation.',
+    useWhen: 'Use on reordered list items to signal a completed swap or move.',
+    avoid: 'Do not use as static persistent text or interactive buttons.',
+    variants: ['type:swap', 'type:move'],
+    states: ['default', 'enter', 'exit'],
+    accessibility: 'Provides clear status text indicating whether the item was swapped or moved.',
+    responsive: 'Compact 2xs monospace typography with fluid alignment.',
+    example: '<TactileSwapBadge type="swap" />',
+  }),
 ]
 
 export const DESIGN_SYSTEM_CHANGELOG = [
