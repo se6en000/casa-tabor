@@ -278,7 +278,9 @@ function useEventsForRange(queryKey: readonly unknown[], start: Date, end: Date)
 
   const routineEventsInRange = useMemo<EventWithDetails[]>(() => {
     if (familyRoutines.length === 0 || familyMembers.length === 0) return []
-    const days = eachDayOfInterval({ start: startOfDay(start), end: startOfDay(end) })
+    const intervalEnd = new Date(end.getTime() - 1)
+    if (intervalEnd < start) return []
+    const days = eachDayOfInterval({ start: startOfDay(start), end: startOfDay(intervalEnd) })
     return days.flatMap((day) => {
       const rawEvents = generateConsolidatedRoutineActionEvents({
         routines: familyRoutines,
@@ -298,7 +300,7 @@ function useEventsForRange(queryKey: readonly unknown[], start: Date, end: Date)
         checklist: [],
         actions: [],
       }))
-    })
+    }).filter((event) => eventOverlapsRange(event, start, end))
   }, [familyRoutines, familyMembers, start, end])
 
   const events = useMemo(() => {
