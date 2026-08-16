@@ -82,6 +82,15 @@ export function useCompletePrepItem() {
   return useResolvePrepItem('done')
 }
 
+/** Completes multiple prep item IDs in parallel (e.g. for clustered email threads). */
+export function useCompletePrepItems() {
+  const completeOne = useCompletePrepItem()
+  return async (ids: string[]) => {
+    if (ids.length === 0) return
+    await Promise.all(ids.map((id) => completeOne(id)))
+  }
+}
+
 /** Permanently hides this action identity without completing its linked source. */
 export function useDismissPrepItem() {
   return useResolvePrepItem('dismissed')
@@ -99,6 +108,15 @@ export function useSnoozePrepItem() {
     if (error) throw error
     if (!data?.ok) throw new Error('Casa could not snooze this action.')
     qc.invalidateQueries({ queryKey: ['prep-items'] })
+  }
+}
+
+/** Snoozes multiple prep item IDs in parallel (e.g. for clustered email threads). */
+export function useSnoozePrepItems() {
+  const snoozeOne = useSnoozePrepItem()
+  return async (ids: string[], duration: SnoozeDuration = 'tomorrow', eventDateIso?: string | null) => {
+    if (ids.length === 0) return
+    await Promise.all(ids.map((id) => snoozeOne(id, duration, eventDateIso)))
   }
 }
 

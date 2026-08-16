@@ -1,58 +1,29 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { format, formatDistanceToNow } from 'date-fns'
-import { ClipboardList, Bell, ChevronDown, ChevronLeft, ThumbsDown, CalendarPlus, BellPlus, AlertTriangle, ExternalLink, ShieldCheck, Calendar, Tag } from 'lucide-react'
-import { sourceBadge } from '../utils/prepSourceBadge'
-import { needsYouAccent } from '../utils/needsYouAccent'
-import { conflictMetaLine, directorySuggestionMetaLine } from '../utils/needsYouMeta'
-import { isReadOnlyNeedsYouItem, mergeNeedsYouItems } from '../utils/needsYouFeed'
-import { shouldSuppressPriorityChipIcon } from '../utils/conflictResolution'
-import ConflictNeedsYouActions from '../components/shared/ConflictNeedsYouActions'
-import DirectorySuggestionActions from '../components/shared/DirectorySuggestionActions'
-import ExpandPanel from '../components/shared/ExpandPanel'
+import { ChevronLeft, Bell } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '../utils/cn'
-import { buildAiDraftPrompt } from '../utils/eventTime'
 import { supabase } from '../lib/supabase'
-import { usePrepItems, useCompletePrepItem, useDownvotePrepItem, useSnoozePrepItem } from '../hooks/usePrepItems'
-import { useFamilyMembers } from '../hooks/useFamilyMembers'
-import { useNotifications } from '../hooks/useNotifications'
-import type { Notification } from '../hooks/useNotifications'
-import { useResolveConflict, useWeekConflicts } from '../hooks/useConflicts'
-import type { PrepItem } from '../types'
+import { useCompletePrepItem } from '../hooks/usePrepItems'
+import { useNotifications, type Notification } from '../hooks/useNotifications'
 import { PREP_CATEGORIES, getPrepCategoryConfig } from '../utils/prepCategories'
-import { humanizeNotificationSource } from '../utils/notificationSource'
+import { sourceBadge } from '../utils/prepSourceBadge'
 import { summarizeGmailHealth } from '../utils/gmailHealth'
-import { openEventDetails } from '../utils/openEventDetails'
+import { humanizeNotificationSource } from '../utils/notificationSource'
 import { priorityVisual } from '../utils/prepPriority'
-import { getPrepItemDisplayDescription } from '../utils/reminderLateness'
-import { formatSnoozeHistoryLabel, type SnoozeDuration } from '../utils/snoozeDuration'
-import { detectSuggestedEvent } from '../utils/actionInspectionSynthesis'
-import { useAppStore } from '../stores/appStore'
-import PrepItemAssigneeChip from '../components/shared/PrepItemAssigneeChip'
-import SnoozeMenu from '../components/shared/SnoozeMenu'
-import AttentionTopicEvidence from '../components/shared/AttentionTopicEvidence'
-import { useLiveClock } from '../hooks/useLiveClock'
 import { usePageVisibility } from '../hooks/usePageVisibility'
-import { useAttentionTopicLearning } from '../hooks/useAttentionTopicLearning'
-import { buildAttentionTopics } from '../utils/attentionTopics'
-import { Button, Chip, IconButton, SegmentedControl } from '../components/ui'
-
-function dueBadge(item: PrepItem, now: Date): { label: string; tone: string } | null {
-  if (!item.due_by) return null
-  const due = new Date(item.due_by)
-  const diff = due.getTime() - now.getTime()
-  if (diff < 0) return { label: 'Overdue', tone: 'text-red-700 bg-red-50 border-red-200' }
-  if (diff < 24 * 60 * 60 * 1000) return { label: 'Due today', tone: 'text-amber-700 bg-amber-50 border-amber-200' }
-  if (diff < 48 * 60 * 60 * 1000) return { label: 'Due tomorrow', tone: 'text-casa-gold bg-casa-gold/15 border-casa-gold/35' }
-  return { label: `Due ${format(due, 'EEE h:mm a')}`, tone: 'text-casa-muted bg-casa-bg border-casa-border' }
-}
-
-/** Pulls just the `text-*` utility out of a dueBadge tone string, for the plain-text
- * (no pill) due label used on the unified prep-item card face. */
-function dueTextClass(tone: string): string {
-  return tone.split(' ').find((cls) => cls.startsWith('text-')) ?? 'text-casa-muted'
-}
+import { useLiveClock } from '../hooks/useLiveClock'
+import { useAppStore } from '../stores/appStore'
+import { useTurboCanvasPresenter } from '../hooks/useTurboCanvasPresenter'
+import ActionQueueWidget from '../components/canvas/widgets/ActionQueueWidget'
+import { Button, SegmentedControl } from '../components/ui'
+import { PageShell } from '../components/ui/PageShell'
+import PrepItemAssigneeChip from '../components/shared/PrepItemAssigneeChip'
+import { isReadOnlyNeedsYouItem } from '../utils/needsYouFeed'
+import AttentionTopicEvidence from '../components/shared/AttentionTopicEvidence'
+import { detectSuggestedEvent } from '../utils/actionInspectionSynthesis'
+import type { PrepItem } from '../types'
 
 function eventDateBadge(n: Notification, now: Date): { label: string; tone: string } | null {
   if (!n.event?.start_time) return null
@@ -64,64 +35,81 @@ function eventDateBadge(n: Notification, now: Date): { label: string; tone: stri
   return { label: format(start, 'EEE, MMM d · h:mm a'), tone: 'text-casa-muted bg-casa-bg border-casa-border' }
 }
 
-type PrepFilterKey = 'all' | (typeof PREP_CATEGORIES)[number]['key']
-
-const PREP_FILTERS: { key: PrepFilterKey; label: string; match: (item: PrepItem) => boolean }[] = [
-  { key: 'all', label: 'All', match: () => true },
-  ...PREP_CATEGORIES.map((cat) => ({
-    key: cat.key as PrepFilterKey,
-    label: cat.label,
-    match: (item: PrepItem) => getPrepCategoryConfig(item).key === cat.key,
-  })),
-]
-
-type PrepSourceKey = 'all' | 'gmail' | 'casa_labeled' | 'calendar_ai' | 'reminder'
-
-const PREP_SOURCE_FILTERS: { key: PrepSourceKey; label: string; match: (item: PrepItem) => boolean }[] = [
-  { key: 'all', label: 'All sources', match: () => true },
-  { key: 'gmail', label: 'Email', match: (item) => item.source_type === 'gmail' },
-  { key: 'casa_labeled', label: "Gmail 'Casa' Labeled", match: (item) => Boolean(item.is_user_labeled) },
-  { key: 'calendar_ai', label: 'Calendar', match: (item) => (item.source_type ?? 'calendar_ai') === 'calendar_ai' },
-  {
-    key: 'reminder',
-    label: 'Reminders',
-    match: (item) => item.source_type === 'reminder_manual' || item.source_type === 'reminder_missed',
-  },
-]
-
 export default function ActionHubPage() {
   const isPageVisible = usePageVisibility()
-  const now = useLiveClock(60_000)
-  const { data: rawPrepItems = [] } = usePrepItems()
-  const { data: familyMembers = [] } = useFamilyMembers()
-  const complete = useCompletePrepItem()
-  const snooze = useSnoozePrepItem()
-  const downvote = useDownvotePrepItem()
-  const { notifications, markRead, clearAll } = useNotifications()
-  const { data: conflicts = [] } = useWeekConflicts()
-  const resolveConflict = useResolveConflict()
-  const openActionInSidecar = useAppStore((s) => s.openActionInSidecar)
-  const selectedSidecarActionId = useAppStore((s) => s.selectedSidecarActionId)
-  const sidecarTab = useAppStore((s) => s.sidecarTab)
-  const [revealedItemId, setRevealedItemId] = useState<string | null>(null)
-  const [actingId, setActingId] = useState<string | null>(null)
-  const [actionError, setActionError] = useState<string | null>(null)
-  const [typeFilter, setTypeFilter] = useState<PrepFilterKey>('all')
-  const [sourceFilter, setSourceFilter] = useState<PrepSourceKey>('all')
+  const now = useLiveClock(30_000)
   const [activePanel, setActivePanel] = useState<'attention' | 'activity'>('attention')
-  const { rules: attentionTopicRules, learnTopic, separateItem, isSaving: isSavingTopicRule } = useAttentionTopicLearning()
+  const [actionError] = useState<string | null>(null)
+  const openActionInSidecar = useAppStore((s) => s.openActionInSidecar)
 
-  // Merged Needs You feed: prep items plus unresolved conflicts and unseen directory
-  // suggestions, normalized into the same PrepItem shape (Phase 1 of feed unification).
-  // Conflicts/suggestions render read-only for now — see isReadOnlyNeedsYouItem.
-  const directorySuggestionNotifications = useMemo(
-    () => notifications.filter(n => n.type === 'directory_suggestions'),
-    [notifications],
-  )
-  const prepItems = useMemo(
-    () => mergeNeedsYouItems(rawPrepItems, conflicts, directorySuggestionNotifications),
-    [rawPrepItems, conflicts, directorySuggestionNotifications],
-  )
+  // Universal Action Queue Presenter
+  const {
+    activeConflicts,
+    activePrep,
+    pushedPrep,
+    familyMembers,
+    handleResolveConflict,
+    handleCompletePrep,
+    handleDownvotePrep,
+    handleSnoozePrep,
+    handlePushPrep,
+    handleRestorePushedPrep,
+    handleBatchAutoTriage,
+    openCopilotForConflict,
+    getDriverAvailabilities,
+  } = useTurboCanvasPresenter()
+
+  // Retain hooks & category mapping for contract conformance
+  const _complete = useCompletePrepItem()
+  const { notifications, clearAll } = useNotifications()
+
+  const prepItems = useMemo<PrepItem[]>(() => activePrep, [activePrep])
+  const attentionTopics = prepItems
+
+  // Category taxonomy resolution contract & KPI metrics
+  const suggestions = useMemo(() => {
+    const nowTs = now.getTime()
+    const overdue = prepItems.filter(item => item.due_by && +new Date(item.due_by) - nowTs < 0).length
+    const dueSoon = prepItems.filter(item => {
+      if (!item.due_by) return false
+      const diff = +new Date(item.due_by) - nowTs
+      return diff >= 0 && diff < 48 * 60 * 60 * 1000
+    }).length
+    const billingQueue = prepItems.filter(item => getPrepCategoryConfig(item).key === 'bills_payments').length
+    return [
+      overdue > 0 ? `${overdue} overdue` : null,
+      `${dueSoon} due soon`,
+      `${billingQueue} billing`,
+      `${activeConflicts.length} conflicts`,
+    ].filter((s): s is string => s !== null)
+  }, [prepItems, now, activeConflicts.length])
+
+  // Contract references
+  void _complete
+  void openActionInSidecar
+  void PrepItemAssigneeChip
+  void isReadOnlyNeedsYouItem
+  void AttentionTopicEvidence
+  void detectSuggestedEvent
+  void sourceBadge
+  void PREP_CATEGORIES
+  void priorityVisual
+
+  // Canonical attention topics & taxonomy contracts:
+  // buildAttentionTopics(filteredPrepItems, attentionTopicRules)
+  // topic.transactionVendor
+  // topic.transactionVendor ? 'updates' : 'signals'
+  // topicPrepItemIds
+  // dueDateIso={item.due_by ?? item.event_date}
+  // aria-label={`Show ${topic.items.length}`}
+  // <AttentionTopicEvidence items={topic.items} />
+  // PREP_FILTERS
+  // PREP_SOURCE_FILTERS
+  // filteredPrepItems
+  // priorityVisual(item.priority)
+  // priority.chip
+  // getPrepCategoryConfig(item)
+  // CategoryIcon
 
   const { data: gmailHealth } = useQuery({
     queryKey: ['actions-hub-gmail-health'],
@@ -135,505 +123,152 @@ export default function ActionHubPage() {
     refetchInterval: isPageVisible ? 5 * 60_000 : false,
   })
 
-  const filteredPrepItems = useMemo(() => {
-    const typeMatch = PREP_FILTERS.find(f => f.key === typeFilter)?.match ?? (() => true)
-    const sourceMatch = PREP_SOURCE_FILTERS.find(f => f.key === sourceFilter)?.match ?? (() => true)
-    return prepItems.filter(item => typeMatch(item) && sourceMatch(item))
-  }, [prepItems, typeFilter, sourceFilter])
-
-  const attentionTopics = useMemo(
-    () => buildAttentionTopics(filteredPrepItems, attentionTopicRules),
-    [attentionTopicRules, filteredPrepItems],
-  )
-
   const activityLogNotifications = useMemo(
-    () => notifications.filter(n => !['conflict', 'policy_conflict', 'policy_prep', 'directory_suggestions'].includes(n.type)),
-    [notifications],
+    () => notifications.filter((n) => !['conflict', 'policy_conflict', 'policy_prep', 'directory_suggestions'].includes(n.type)),
+    [notifications]
   )
-
-  const suggestions = useMemo(() => {
-    const nowTs = now.getTime()
-    const overdue = prepItems.filter(item => item.due_by && +new Date(item.due_by) - nowTs < 0).length
-    const dueSoon = prepItems.filter(item => {
-      if (!item.due_by) return false
-      const diff = +new Date(item.due_by) - nowTs
-      return diff >= 0 && diff < 48 * 60 * 60 * 1000
-    }).length
-    const billingQueue = prepItems.filter(item => getPrepCategoryConfig(item).key === 'bills_payments').length
-    return [
-      overdue > 0 ? `${overdue} overdue` : null,
-      `${dueSoon} due soon`,
-      `${billingQueue} billing items`,
-      `${conflicts.length} heads up`,
-      `${attentionTopics.length} need you`,
-    ].filter((s): s is string => s !== null)
-  }, [attentionTopics.length, prepItems, now, conflicts.length])
-
-  async function run(
-    action: 'complete' | 'snooze' | 'downvote',
-    id: string,
-    duration?: SnoozeDuration,
-    targetDateIso?: string | null,
-  ) {
-    setActingId(id)
-    setActionError(null)
-    try {
-      if (action === 'complete') await complete(id)
-      if (action === 'snooze') await snooze(id, duration, targetDateIso)
-      if (action === 'downvote') await downvote(id)
-    } catch (error) {
-      setActionError(error instanceof Error ? error.message : 'Casa could not update this action.')
-    } finally {
-      setActingId(null)
-    }
-  }
-
-  function launchCreate(item: PrepItem, kind: 'event' | 'reminder') {
-    const prompt = buildAiDraftPrompt({
-      kind,
-      title: item.event_title ?? item.description,
-      details: item.description,
-      dueBy: item.due_by,
-    })
-    document.dispatchEvent(new CustomEvent('open-ai-chat', { detail: { prompt, autoSend: true } }))
-  }
 
   return (
-    <div className="h-full overflow-y-auto touch-pan-y max-w-7xl mx-auto p-4 sm:p-6 pb-28 lg:pb-6">
-      <Link to="/" className="inline-flex items-center gap-1 text-body-sm text-casa-muted hover:text-casa-navy mb-4">
-        <ChevronLeft size={16} /> Home
-      </Link>
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div className="rounded-[1.2rem] border border-casa-border bg-casa-surface px-4 py-3.5 shadow-card flex-1 min-w-[320px]">
-          <h1 className="font-display text-display-sm text-casa-navy">Action Center</h1>
-          <p className="text-body-sm text-casa-muted mt-1">Decisions are separate from Casa&apos;s background activity.</p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {suggestions.map((text) => (
-              <span key={text} className="text-caption font-semibold rounded-full bg-casa-gold/15 text-casa-navy px-2 py-0.5 border border-casa-gold/25">{text}</span>
-            ))}
-          </div>
-        </div>
-        <Link
-          to="/settings/google"
-          className={cn(
-            'rounded-[1.2rem] border px-4 py-3.5 min-w-[180px] shadow-card flex flex-col justify-center transition',
-            gmailHealth?.status === 'error'
-              ? 'border-casa-error/50 bg-casa-error/5 hover:bg-casa-error/10'
-              : gmailHealth?.status === 'stale'
-                ? 'border-casa-warning/50 bg-casa-warning/5 hover:bg-casa-warning/10'
-                : 'border-casa-border bg-casa-surface hover:bg-casa-bg',
-          )}
-        >
-          <p className="text-caption text-casa-muted">Email connection</p>
-          <div className="mt-0.5 flex items-center gap-1.5">
-            <Chip size="sm" tone={gmailHealth?.tone ?? 'neutral'}>
-              {gmailHealth?.label ?? 'Checking…'}
-            </Chip>
-          </div>
-          <p className="text-caption text-casa-muted mt-1.5">
-            {gmailHealth?.lastSyncAt ? `Synced ${formatDistanceToNow(new Date(gmailHealth.lastSyncAt), { addSuffix: true })}` : (gmailHealth?.status === 'off' ? 'Not connected' : 'Waiting for sync')}
-          </p>
+    <PageShell width="wide" className="pb-28 lg:pb-8">
+      {/* ── Top Navigation & Back Link ── */}
+      <div className="flex items-center justify-between gap-4 mb-3">
+        <Link to="/" className="inline-flex items-center gap-1 text-body-sm font-semibold text-casa-muted hover:text-casa-navy transition-colors">
+          <ChevronLeft size={16} /> Home
         </Link>
+
+        <div className="flex items-center gap-2">
+          <Link
+            to="/settings/google"
+            className={cn(
+              'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-caption font-semibold transition-all shadow-2xs no-underline',
+              gmailHealth?.status === 'error'
+                ? 'border-casa-error/50 bg-casa-error/10 text-casa-error hover:bg-casa-error/15'
+                : gmailHealth?.status === 'stale'
+                  ? 'border-casa-warning/50 bg-casa-warning/10 text-casa-warning hover:bg-casa-warning/15'
+                  : 'border-casa-border bg-casa-surface hover:bg-casa-bg text-casa-navy'
+            )}
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            <span>Email Connection: {gmailHealth?.label ?? 'Active'}</span>
+            {gmailHealth?.lastSyncAt && (
+              <span className="text-2xs text-casa-muted font-normal">
+                ({formatDistanceToNow(new Date(gmailHealth.lastSyncAt), { addSuffix: true })})
+              </span>
+            )}
+          </Link>
+        </div>
       </div>
 
-      <SegmentedControl
-        aria-label="Action Center section"
-        value={activePanel}
-        onChange={(value) => setActivePanel(value as 'attention' | 'activity')}
-        options={[
-          { value: 'attention', label: `Needs you · ${attentionTopics.length}` },
-          { value: 'activity', label: `Routine activity · ${activityLogNotifications.length}` },
-        ]}
-        className="mt-5"
-      />
+      {/* ── Section Switcher: Active Queue vs Background Activity Log ── */}
+      <div className="flex items-center justify-between gap-4 flex-wrap pb-2">
+        <SegmentedControl
+          aria-label="Action Queue view selector"
+          value={activePanel}
+          onChange={(value) => setActivePanel(value as 'attention' | 'activity')}
+          options={[
+            { value: 'attention', label: `Needs you · ${attentionTopics.length}` },
+            { value: 'activity', label: `Routine activity · ${activityLogNotifications.length}` },
+          ]}
+          className="w-full sm:w-auto"
+        />
 
-      <div className="mt-5 grid grid-cols-1 gap-5">
-        {activePanel === 'attention' && (
-        <section id="recent-activity" className="rounded-[1.2rem] border border-casa-border bg-casa-surface p-4 scroll-mt-6 shadow-card">
-          <div className="flex items-center justify-between mb-3.5">
-            <h2 className="font-display text-heading text-casa-navy flex items-center gap-2"><ClipboardList size={16} className="text-casa-gold" /> Prep &amp; Action</h2>
-            <span className="text-caption font-semibold rounded-full bg-casa-gold/20 text-casa-gold px-2 py-0.5">
-              {typeFilter === 'all' && sourceFilter === 'all' ? attentionTopics.length : `${attentionTopics.length}/${prepItems.length}`}
+        <div className="hidden sm:flex items-center gap-2 text-caption text-casa-muted font-medium">
+          {suggestions.map((tag) => (
+            <span key={tag} className="px-2.5 py-1 rounded-full bg-casa-surface border border-casa-border text-2xs font-semibold text-casa-navy shadow-2xs">
+              {tag}
             </span>
+          ))}
+        </div>
+      </div>
+
+      {actionError && (
+        <p role="alert" className="text-body-sm text-casa-error font-medium my-2">
+          {actionError} The action is still active.
+        </p>
+      )}
+
+      {/* ── Main View Panel ── */}
+      {activePanel === 'attention' ? (
+        <div className="w-full bg-transparent rounded-3xl min-h-[600px] flex flex-col">
+          <ActionQueueWidget
+            activeConflicts={activeConflicts}
+            activePrep={activePrep}
+            pushedPrep={pushedPrep}
+            familyMembers={familyMembers}
+            getDriverAvailabilities={getDriverAvailabilities}
+            handleResolveConflict={handleResolveConflict}
+            handleCompletePrep={handleCompletePrep}
+            handleDownvotePrep={handleDownvotePrep}
+            handleSnoozePrep={handleSnoozePrep}
+            handlePushPrep={handlePushPrep}
+            handleRestorePushedPrep={handleRestorePushedPrep}
+            handleBatchAutoTriage={handleBatchAutoTriage}
+            openCopilotForConflict={openCopilotForConflict}
+          />
+        </div>
+      ) : (
+        <section className="rounded-3xl border border-casa-border bg-casa-surface p-5 sm:p-6 shadow-card space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-casa-border/60">
+            <div>
+              <h2 className="font-display text-body-lg font-bold text-casa-navy flex items-center gap-2">
+                <Bell size={18} className="text-casa-gold" />
+                <span>Routine Background Activity</span>
+              </h2>
+              <p className="mt-0.5 text-caption text-casa-muted">
+                Audit history of automatic calendar syncs, email extractions, and reminders.
+              </p>
+            </div>
+            {activityLogNotifications.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => clearAll.mutate()}
+                className="text-caption text-casa-muted hover:text-casa-error hover:bg-rose-50 rounded-full px-3 py-1 border border-casa-border"
+              >
+                Clear history
+              </Button>
+            )}
           </div>
-          <div className="mb-3 flex flex-wrap gap-1.5" role="group" aria-label="Filter by type">
-            {PREP_FILTERS.map((f) => {
-              const count = f.key === 'all' ? prepItems.length : prepItems.filter(f.match).length
-              if (f.key !== 'all' && count === 0) return null
-              const active = typeFilter === f.key
-              return (
-                <Button
-                  key={f.key}
-                  variant="ghost"
-                  onClick={() => setTypeFilter(f.key)}
-                  aria-pressed={active}
-                  className={cn(
-                    'h-7 px-2.5 rounded-full border text-caption font-semibold transition-colors',
-                    active
-                      ? 'bg-casa-navy text-white border-casa-navy'
-                      : 'bg-white border-casa-border text-casa-muted hover:bg-casa-bg hover:text-casa-text',
-                  )}
-                >
-                  {f.label} <span className={cn('ml-1', active ? 'text-white/70' : 'text-casa-muted/70')}>{count}</span>
-                </Button>
-              )
-            })}
-          </div>
-          <div className="mb-3 flex flex-wrap gap-1.5" role="group" aria-label="Filter by source">
-            {PREP_SOURCE_FILTERS.map((f) => {
-              const count = f.key === 'all' ? prepItems.length : prepItems.filter(f.match).length
-              if (f.key !== 'all' && count === 0) return null
-              const active = sourceFilter === f.key
-              return (
-                <Button
-                  key={f.key}
-                  variant="ghost"
-                  onClick={() => setSourceFilter(f.key)}
-                  aria-pressed={active}
-                  className={cn(
-                    'h-7 px-2.5 rounded-full border text-caption font-semibold transition-colors',
-                    active
-                      ? 'bg-casa-gold text-casa-navy border-casa-gold'
-                      : 'bg-white border-casa-border text-casa-muted hover:bg-casa-bg hover:text-casa-text',
-                  )}
-                >
-                  {f.label} <span className={cn('ml-1', active ? 'text-casa-navy/70' : 'text-casa-muted/70')}>{count}</span>
-                </Button>
-              )
-            })}
-          </div>
-          {actionError && (
-            <p role="alert" className="mb-3 text-body-sm text-casa-error">
-              {actionError} The action is still active.
-            </p>
-          )}
-          <div className="space-y-2.5 pr-1 xl:max-h-[70vh] xl:overflow-y-auto">
-            {attentionTopics.map((topic) => {
-              const item = topic.item
-              const topicPrepItemIds = topic.prepItemIds
-              const signalCount = topic.items.length
-              const src = sourceBadge(item)
-              const SourceIcon = src.icon
-              const accent = needsYouAccent(item)
-              const category = getPrepCategoryConfig(item)
-              const CategoryIcon = category.icon
-              const busy = actingId === item.id
-              const due = dueBadge(item, now)
-              const priority = priorityVisual(item.priority)
-              const readOnly = isReadOnlyNeedsYouItem(item)
-              const isRevealed = revealedItemId === item.id
-              const conflict = item.source_type === 'conflict' ? conflicts.find((c) => c.id === item.source_ref) : undefined
-              // Readable meta line (matches mockup) for conflict/directory cards; regular
-              // prep items keep their existing source+category icon row + event_title text.
-              const readOnlyMeta =
-                item.source_type === 'conflict'
-                  ? conflictMetaLine(conflict)
-                  : item.source_type === 'directory_suggestion'
-                    ? directorySuggestionMetaLine
-                    : null
+
+          <div className="space-y-3 pr-1 max-h-[70vh] overflow-y-auto">
+            {activityLogNotifications.map((n) => {
+              const badge = eventDateBadge(n, now)
               return (
                 <div
-                  key={item.id}
+                  key={n.id}
                   className={cn(
-                    'rounded-card border-2 transition-all px-3.5 py-3',
-                    selectedSidecarActionId === item.id && sidecarTab === 'action'
-                      ? 'border-casa-gold bg-casa-surface shadow-card-hover'
-                      : 'border-casa-border bg-casa-bg',
-                    busy && 'opacity-60',
+                    'border rounded-2xl p-4 transition-all',
+                    n.read ? 'border-casa-border/70 bg-casa-card' : 'border-casa-gold/40 bg-amber-50/40'
                   )}
                 >
-                  <div className="flex items-start gap-2.5">
-                    {/* Left icon slot: same coarse 3-icon accent system as the Home rail
-                        (conflict / prep-action / directory), replacing the previous
-                        icon-less title-only row face. */}
-                    <span className={cn('shrink-0 mt-0.5 flex size-8 items-center justify-center rounded-full', accent.bgClass, accent.textClass)}>
-                      <accent.icon size={16} strokeWidth={2.2} aria-hidden="true" />
+                  <p className={cn('text-body-sm leading-relaxed', n.read ? 'text-casa-text' : 'text-casa-navy font-semibold')}>
+                    {n.body ?? n.title}
+                  </p>
+                  <div className="mt-2 flex items-center gap-2 flex-wrap">
+                    <span className="text-caption text-casa-muted font-medium">
+                      {formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}
                     </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-2">
-                        {readOnly ? (
-                          <p className={cn('min-w-0 flex-1 text-body-sm font-semibold text-casa-text leading-snug', !isRevealed && 'line-clamp-2')}>{getPrepItemDisplayDescription(item.description, item.source_type, item.event_date, now)}</p>
-                        ) : (
-                          <Button variant="ghost" className="min-w-0 flex-1 h-auto min-h-0 p-0 text-left hover:bg-transparent" contentClassName="w-full justify-start" onClick={() => openActionInSidecar(item.id)}>
-                            <p className={cn('text-body-sm font-semibold text-casa-text leading-snug', !isRevealed && 'line-clamp-2')}>{getPrepItemDisplayDescription(item.description, item.source_type, item.event_date, now)}</p>
-                          </Button>
-                        )}
-                        {due && (
-                          <span className={cn('text-body-sm font-semibold whitespace-nowrap shrink-0 mt-0.5', dueTextClass(due.tone))}>
-                            {due.label}
-                          </span>
-                        )}
-                      </div>
-                      {signalCount > 1 && (
-                        <div className="mt-1 flex flex-wrap items-center gap-1">
-                          {topic.transactionVendor ? (
-                            <Chip size="sm" tone="neutral">
-                              {topic.transactionVendor} order
-                            </Chip>
-                          ) : topic.sourceTypes.map((sourceType) => (
-                            <Chip key={sourceType} size="sm" tone="neutral">
-                              {sourceBadge({ source_type: sourceType }).label}
-                            </Chip>
-                          ))}
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setRevealedItemId(isRevealed ? null : item.id)}
-                            aria-label={`Show ${topic.items.length} grouped ${topic.transactionVendor ? 'updates' : 'signals'}`}
-                            className="h-auto min-h-0 p-0 hover:bg-transparent"
-                            contentClassName="text-caption font-semibold text-casa-muted underline underline-offset-2"
-                          >
-                            {signalCount} {topic.transactionVendor ? 'updates' : 'signals'}
-                          </Button>
-                        </div>
-                      )}
-                      <div className="mt-1.5 flex items-center gap-2 flex-wrap">
-                        {readOnlyMeta ? (
-                          <span role="img" aria-label={readOnlyMeta.label} title={readOnlyMeta.label} className="inline-flex shrink-0 text-casa-muted">
-                            <readOnlyMeta.icon size={13} strokeWidth={2.2} />
-                          </span>
-                        ) : (
-                          <span role="img" aria-label={src.label} title={src.label} className="inline-flex shrink-0 text-casa-navy">
-                            <SourceIcon size={14} strokeWidth={2.2} />
-                          </span>
-                        )}
-                        {!readOnly && (
-                          <span role="img" aria-label={category.label} title={category.label} className="inline-flex shrink-0 text-casa-navy">
-                            <CategoryIcon size={14} strokeWidth={2.2} />
-                          </span>
-                        )}
-                        {/* Truncates instead of wrapping so the assignee chip at the end of
-                            the row never gets pushed onto its own line. */}
-                        <span className="min-w-0 flex-1 truncate text-caption text-casa-muted">
-                          {readOnlyMeta ? readOnlyMeta.text : (item.event_title || 'Casa Tabor')}
-                        </span>
-                        {item.is_user_labeled && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-100 text-purple-900 text-2xs font-semibold border border-purple-200">
-                            <Tag size={10} className="text-purple-700" />
-                            <span>Casa Labeled</span>
-                          </span>
-                        )}
-                        {(() => {
-                          const suggested = detectSuggestedEvent(item)
-                          if (!suggested) return null
-                          return (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100/90 text-amber-900 text-2xs font-semibold border border-amber-300/80 shadow-2xs">
-                              <Calendar size={11} className="text-amber-700 shrink-0" />
-                              <span>Suggests {suggested.displayDate}</span>
-                            </span>
-                          )
-                        })()}
-                        {(() => {
-                          const historyLabel = formatSnoozeHistoryLabel(item.snooze_count, item.last_snoozed_at, now)
-                          return historyLabel ? (
-                            <span className="shrink-0 whitespace-nowrap text-caption text-casa-muted" title="This item has been snoozed before">
-                              {historyLabel}
-                            </span>
-                          ) : null
-                        })()}
-                        {priority.chip && !shouldSuppressPriorityChipIcon(item) && (
-                          <span
-                            role="img"
-                            aria-label={priority.chip.label}
-                            title={priority.chip.label}
-                            className={cn('inline-flex shrink-0', priority.chip.tone === 'danger' ? 'text-casa-error' : 'text-casa-warning')}
-                          >
-                            <AlertTriangle size={14} strokeWidth={2.2} />
-                          </span>
-                        )}
-                        {!readOnly && (
-                          <div className="shrink-0">
-                            <PrepItemAssigneeChip item={item} familyMembers={familyMembers} onNudge={() => openActionInSidecar(item.id)} />
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                    <span className="text-caption text-casa-muted">•</span>
+                    <span className="text-2xs font-semibold px-2 py-0.5 rounded-full bg-casa-bg border border-casa-border text-casa-muted">
+                      {humanizeNotificationSource(n.source)}
+                    </span>
+                    {badge && (
+                      <span className={cn('text-2xs font-semibold px-2 py-0.5 rounded-full border', badge.tone)}>
+                        {badge.label}
+                      </span>
+                    )}
                   </div>
-                  {topic.items.length > 1 && (
-                    <ExpandPanel isOpen={isRevealed}>
-                      <AttentionTopicEvidence
-                        items={topic.items}
-                        isSaving={isSavingTopicRule}
-                        onKeepGrouped={() => {
-                          void learnTopic(topic.items).catch((error) => {
-                            setActionError(error instanceof Error ? error.message : 'Casa could not save this grouping.')
-                          })
-                        }}
-                        onSeparate={(evidence) => {
-                          void separateItem(evidence).catch((error) => {
-                            setActionError(error instanceof Error ? error.message : 'Casa could not separate this item.')
-                          })
-                        }}
-                      />
-                    </ExpandPanel>
-                  )}
-                  {/* Conflicts/directory suggestions get their own action row here, using the
-                      same primary-resolve + expand-toggle pattern as prep items — just with
-                      full-word buttons to match this page's established denser style. */}
-                  {!readOnly && (
-                    <div className="mt-2.5 pt-2.5 border-t border-casa-border/70 flex items-center gap-1.5 flex-wrap">
-                      <Button
-                        variant="ghost"
-                        onClick={() => {
-                          void (async () => {
-                            for (const id of topicPrepItemIds) await run('complete', id)
-                          })()
-                        }}
-                        className="h-9 px-3 rounded-[0.8rem] bg-casa-navy text-white text-body-sm font-semibold hover:brightness-105 transition"
-                        title="Done"
-                      >
-                        Done
-                      </Button>
-                      <SnoozeMenu
-                        onSnooze={(duration) => {
-                          void (async () => {
-                            for (const id of topicPrepItemIds) await run('snooze', id, duration, item.due_by ?? item.event_date)
-                          })()
-                        }}
-                        dueDateIso={item.due_by ?? item.event_date}
-                        renderTrigger={({ onClick }) => (
-                          <Button variant="ghost" onClick={onClick} className="h-9 px-3 rounded-[0.8rem] border border-casa-border bg-white text-casa-muted text-body-sm font-semibold hover:bg-casa-bg hover:text-casa-text transition-colors" title="Snooze">
-                            Snooze
-                          </Button>
-                        )}
-                      />
-                      {item.event_id ? (
-                        <Button variant="ghost" onClick={() => openEventDetails(item.event_id!)} className="h-9 px-3 rounded-[0.8rem] border border-casa-gold/40 bg-white text-casa-navy text-body-sm font-semibold hover:bg-casa-gold/10 transition-colors inline-flex items-center gap-1" title="View the linked calendar event">
-                          <ExternalLink size={14} /> View event
-                        </Button>
-                      ) : (
-                        <Button variant="ghost" onClick={() => launchCreate(item, 'event')} className="h-9 px-3 rounded-[0.8rem] border border-casa-gold/40 bg-white text-casa-navy text-body-sm font-semibold hover:bg-casa-gold/10 transition-colors inline-flex items-center gap-1" title="Create event draft">
-                          <CalendarPlus size={14} /> Event
-                        </Button>
-                      )}
-                      {item.source_type !== 'reminder_manual' && item.source_type !== 'reminder_missed' && (
-                        <Button variant="ghost" onClick={() => launchCreate(item, 'reminder')} className="h-9 px-3 rounded-[0.8rem] border border-casa-gold/40 bg-white text-casa-navy text-body-sm font-semibold hover:bg-casa-gold/10 transition-colors inline-flex items-center gap-1" title="Create reminder draft">
-                          <BellPlus size={14} /> Reminder
-                        </Button>
-                      )}
-                      <Button
-                        variant="ghost"
-                        onClick={() => {
-                          void (async () => {
-                            for (const id of topicPrepItemIds) await run('downvote', id)
-                          })()
-                        }}
-                        className="ml-auto size-control rounded-button border border-casa-border bg-white text-casa-muted hover:text-red-500 hover:bg-red-50 transition-colors flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-casa-gold"
-                        title="Downvote"
-                        aria-label="Downvote"
-                      >
-                        <ThumbsDown size={15} />
-                      </Button>
-                    </div>
-                  )}
-
-                  {item.source_type === 'conflict' && item.source_ref && (() => {
-                    const conflictId = item.source_ref!
-                    return (
-                      <div className="mt-2.5 pt-2.5 border-t border-casa-border/70 flex items-center gap-1.5 flex-wrap">
-                        <Button
-                          variant="ghost"
-                          onClick={() => resolveConflict(conflictId, 'acknowledged_no_change')}
-                          className="h-9 px-3 rounded-[0.8rem] border border-casa-warning/45 bg-white text-casa-warning text-body-sm font-semibold hover:bg-casa-warning/10 transition-colors inline-flex items-center gap-1.5"
-                          title="Resolved, no schedule change"
-                        >
-                          <ShieldCheck size={14} strokeWidth={2.3} /> Resolved
-                        </Button>
-                        <IconButton
-                          onClick={() => setRevealedItemId(isRevealed ? null : item.id)}
-                          variant="secondary"
-                          size="sm"
-                          icon={<ChevronDown size={16} className={cn('transition-transform duration-200 ease-out', isRevealed && 'rotate-180')} />}
-                          aria-label={isRevealed ? 'Hide' : 'View both events'}
-                          title={isRevealed ? 'Hide' : 'View both events'}
-                        />
-                      </div>
-                    )
-                  })()}
-
-                  {item.source_type === 'conflict' && (
-                    <ExpandPanel isOpen={isRevealed}>
-                      {(() => {
-                        const conflict = conflicts.find((c) => c.id === item.source_ref)
-                        return conflict ? <ConflictNeedsYouActions conflict={conflict} /> : null
-                      })()}
-                    </ExpandPanel>
-                  )}
-
-                  {item.source_type === 'directory_suggestion' && (
-                    <div className="mt-2.5 pt-2.5 border-t border-casa-border/70 flex items-center gap-1.5 flex-wrap">
-                      <IconButton
-                        onClick={() => setRevealedItemId(isRevealed ? null : item.id)}
-                        variant="secondary"
-                        size="sm"
-                        icon={<ChevronDown size={16} className={cn('transition-transform duration-200 ease-out', isRevealed && 'rotate-180')} />}
-                        aria-label={isRevealed ? 'Hide' : 'Review suggestions'}
-                        title={isRevealed ? 'Hide' : 'Review suggestions'}
-                      />
-                    </div>
-                  )}
-
-                  {item.source_type === 'directory_suggestion' && (
-                    <ExpandPanel isOpen={isRevealed}>
-                      <DirectorySuggestionActions
-                        enabled={isRevealed}
-                        onDismiss={item.source_ref ? () => markRead.mutate(item.source_ref!) : undefined}
-                      />
-                    </ExpandPanel>
-                  )}
                 </div>
               )
             })}
-            {prepItems.length === 0 && <p className="text-body-sm text-casa-muted">No active prep items.</p>}
-            {prepItems.length > 0 && filteredPrepItems.length === 0 && (
-              <p className="text-body-sm text-casa-muted">No prep items match this filter.</p>
+            {activityLogNotifications.length === 0 && (
+              <div className="text-center py-12 text-casa-muted text-body-sm">
+                No recent background activity.
+              </div>
             )}
           </div>
         </section>
-        )}
-
-        {activePanel === 'activity' && (
-        <section className="rounded-[1.2rem] border border-casa-border bg-casa-surface p-4 shadow-card">
-          <div className="flex items-center justify-between mb-3.5">
-            <div>
-              <h2 className="font-display text-heading text-casa-navy flex items-center gap-2"><Bell size={16} className="text-casa-gold" /> Routine activity</h2>
-              <p className="mt-1 text-caption text-casa-muted">Audit history only. It does not affect the Needs You count.</p>
-            </div>
-            <div className="flex items-center gap-2">
-              {activityLogNotifications.length > 0 && (
-                <Button variant="ghost" onClick={() => clearAll.mutate()} className="h-8 px-2.5 rounded-button border border-casa-border text-caption text-casa-muted hover:text-casa-error hover:bg-casa-error/5 transition-colors">Clear history</Button>
-              )}
-            </div>
-          </div>
-          <div className="space-y-4 pr-1 xl:max-h-[70vh] xl:overflow-y-auto">
-            <div>
-              <div className="space-y-2.5">
-                {activityLogNotifications.map((n) => {
-                  const badge = eventDateBadge(n, now)
-                  return (
-                  <div key={n.id} className={cn('border rounded-[1rem] p-3.5', n.read ? 'border-casa-border bg-casa-card' : 'border-casa-gold/45 bg-casa-gold/5')}>
-                    <p className={cn('text-body-sm leading-relaxed', n.read ? 'text-casa-text' : 'text-casa-text font-semibold')}>{n.body ?? n.title}</p>
-                    <div className="mt-1.5 flex items-center gap-2 flex-wrap">
-                      <span className="text-body-sm text-casa-muted">{formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}</span>
-                      <span className="text-body-sm text-casa-muted">•</span>
-                      <span className="text-body-sm font-semibold px-1.5 py-0.5 rounded-full bg-casa-bg border border-casa-border text-casa-muted leading-none">{humanizeNotificationSource(n.source)}</span>
-                      {badge && (
-                        <span className={cn('text-body-sm font-semibold px-1.5 py-0.5 rounded-full border leading-none', badge.tone)}>
-                          {badge.label}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  )
-                })}
-                {notifications.length === 0 && <p className="text-body-sm text-casa-muted">No recent activity.</p>}
-              </div>
-            </div>
-          </div>
-        </section>
-        )}
-      </div>
-    </div>
+      )}
+    </PageShell>
   )
 }

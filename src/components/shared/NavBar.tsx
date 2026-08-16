@@ -121,7 +121,7 @@ export default function NavBar() {
                   <div className="w-9 h-9 rounded-xl bg-blue-500/10 flex items-center justify-center flex-shrink-0">
                     <Sparkles size={18} strokeWidth={1.8} className="text-blue-600" />
                   </div>
-                  <span className="text-body-md font-medium text-casa-navy">Action Hub</span>
+                  <span className="text-body-md font-medium text-casa-navy">Action Queue</span>
                 </Button>
 
                 <Button variant="ghost"

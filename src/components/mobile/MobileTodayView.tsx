@@ -226,10 +226,10 @@ export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate 
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center justify-between">
             <span className="text-caption font-bold uppercase tracking-wider text-casa-muted">
-              Needs You ({totalTriageCount} {totalTriageCount === 1 ? 'item' : 'items'})
+              Action Queue ({totalTriageCount} {totalTriageCount === 1 ? 'matter' : 'matters'})
             </span>
             <Link to="/actions" className="text-caption font-semibold text-casa-gold hover:text-amber-700">
-              View all
+              Open Queue →
             </Link>
           </div>
 

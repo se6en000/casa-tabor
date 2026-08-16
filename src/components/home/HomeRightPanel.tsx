@@ -436,13 +436,13 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem, 
         <section className="px-4 py-4">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
-              <Heading role="heading">Needs you</Heading>
+              <Heading role="heading">Action Queue</Heading>
               <p className="text-caption text-casa-muted mt-0.5 truncate">
                 {nextEvent ? `Up next: ${nextEvent.title}` : 'Nothing left today'}
               </p>
             </div>
             <Link to="/actions" className="text-caption font-semibold text-casa-gold whitespace-nowrap">
-              See all
+              Open Queue →
             </Link>
           </div>
           {gmailActivity?.gmailHealth && gmailActivity.gmailHealth.status !== 'healthy' && gmailActivity.gmailHealth.status !== 'off' && (

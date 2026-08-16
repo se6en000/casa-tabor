@@ -497,7 +497,7 @@ function transactionIdentity(action: InboxActionItem, sourceRef: string) {
   }
 }
 
-function parseDueDateOrFallback(due: string | undefined, receivedAtIso: string, eventStartIso?: string | null): string {
+function parseDueDateOrFallback(due: string | undefined, receivedAtIso: string, eventStartIso?: string | null): string | null {
   if (due) {
     const parsed = new Date(due)
     if (!isNaN(parsed.getTime())) return parsed.toISOString()
@@ -506,7 +506,7 @@ function parseDueDateOrFallback(due: string | undefined, receivedAtIso: string, 
     const parsedEvent = new Date(eventStartIso)
     if (!isNaN(parsedEvent.getTime())) return parsedEvent.toISOString()
   }
-  return new Date(new Date(receivedAtIso).getTime() + 72 * 60 * 60 * 1000).toISOString()
+  return null
 }
 
 function filterCurrentBackfillActions(actions: InboxActionItem[], now: Date): InboxActionItem[] {

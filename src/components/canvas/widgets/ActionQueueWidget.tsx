@@ -8,12 +8,18 @@ import {
   Clock,
   Car,
   ChevronDown,
-  ChevronUp,
-  RotateCcw,
   Calendar,
+  CalendarPlus,
   Moon,
   Sun,
   ExternalLink,
+  CreditCard,
+  FileText,
+  Package,
+  Layers,
+  Loader2,
+  Tag,
+  Mail,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button, IconButton, StatusDot } from '../../ui'
@@ -22,7 +28,10 @@ import type { PrepItem, Conflict, FamilyMember } from '../../../types'
 import type { SnoozeDuration } from '../../../utils/snoozeDuration'
 import type { DriverAvailability } from '../../../hooks/useTurboCanvasPresenter'
 import { sourceBadge } from '../../../utils/prepSourceBadge'
-import { detectSuggestedEvent } from '../../../utils/actionInspectionSynthesis'
+import { detectSuggestedEvent, type SuggestedEventPlan } from '../../../utils/actionInspectionSynthesis'
+import { clusterPrepItems, buildGmailWebUrl, type PrepItemCluster } from '../../../utils/prepItemClusters'
+import { useCreateSuggestedEvent } from '../../../hooks/useCreateSuggestedEvent'
+import { useAppStore } from '../../../stores/appStore'
 
 interface ActionQueueWidgetProps {
   activeConflicts: Conflict[]
@@ -46,15 +55,38 @@ function extractAmount(text?: string | null): string | null {
   return match ? match[0] : null
 }
 
-function resolveButtonLabel(item: PrepItem): string {
+function resolveButtonConfig(item: PrepItem): {
+  label: string
+  Icon: React.ComponentType<{ size?: number; className?: string; strokeWidth?: number }>
+} {
   const text = (item.description || item.event_title || '').toLowerCase()
-  if (extractAmount(item.description || item.event_title)) {
-    return 'Mark Paid & Done'
+  const amount = extractAmount(item.description || item.event_title)
+
+  if (amount || item.type === 'payment' || text.includes('payment') || text.includes('invoice') || text.includes('bill') || text.includes('premium')) {
+    return {
+      label: amount ? `Mark Paid (${amount})` : 'Mark Paid & Done',
+      Icon: CreditCard,
+    }
   }
-  if (text.includes('payment') || text.includes('invoice') || text.includes('premium')) {
-    return 'Mark Paid & Done'
+
+  if (item.type === 'forms' || text.includes('waiver') || text.includes('release') || text.includes('consent form') || text.includes('permission slip') || text.includes('aktivate')) {
+    return {
+      label: 'Mark Signed & Done',
+      Icon: FileText,
+    }
   }
-  return 'Mark Done'
+
+  if (item.type === 'delivery' || text.includes('delivered') || text.includes('delivery') || text.includes('package') || text.includes('shipped')) {
+    return {
+      label: 'Mark Received',
+      Icon: Package,
+    }
+  }
+
+  return {
+    label: 'Mark Done',
+    Icon: Check,
+  }
 }
 
 function shortTitle(raw?: string | null, maxLen = 22): string {
@@ -63,28 +95,28 @@ function shortTitle(raw?: string | null, maxLen = 22): string {
   return stripped.length > maxLen ? `${stripped.slice(0, maxLen - 1)}…` : stripped
 }
 
-import { useAppStore } from '../../../stores/appStore'
-
 export default function ActionQueueWidget({
   activeConflicts,
   activePrep,
-  pushedPrep,
+  pushedPrep: _pushedPrep,
   getDriverAvailabilities,
   handleResolveConflict,
   handleCompletePrep,
   handleDownvotePrep,
   handleSnoozePrep,
   handlePushPrep,
-  handleRestorePushedPrep,
+  handleRestorePushedPrep: _handleRestorePushedPrep,
   handleBatchAutoTriage,
   openCopilotForConflict,
 }: ActionQueueWidgetProps) {
   const { openActionInSidecar, selectedSidecarActionId, sidecarTab } = useAppStore()
-  const [pushedExpanded, setPushedExpanded] = useState(false)
   const [openSnoozeId, setOpenSnoozeId] = useState<string | null>(null)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [optimisticDismissedIds, setOptimisticDismissedIds] = useState<Set<string>>(new Set())
   const [spotlightItemId, setSpotlightItemId] = useState<string | null>(null)
+  const [eventAddedItemIds, setEventAddedItemIds] = useState<Set<string>>(new Set())
+
+  const { createSuggestedEvent, isCreating } = useCreateSuggestedEvent()
 
   // Instant 0ms client-side filter
   const visibleConflicts = useMemo(
@@ -97,57 +129,96 @@ export default function ActionQueueWidget({
     [activePrep, optimisticDismissedIds]
   )
 
-  const { heroItem, microItems } = useMemo(() => {
-    if (visiblePrep.length === 0) {
-      return { heroItem: null, microItems: [] }
+  // Smart Thread-Clustered Prep Items
+  const clusteredPrep = useMemo(() => clusterPrepItems(visiblePrep), [visiblePrep])
+
+  const { heroCluster, microClusters } = useMemo(() => {
+    if (clusteredPrep.length === 0) {
+      return { heroCluster: null, microClusters: [] }
     }
     const spotlightIndex = spotlightItemId
-      ? visiblePrep.findIndex((p) => p.id === spotlightItemId)
+      ? clusteredPrep.findIndex((c) => c.itemIds.includes(spotlightItemId))
       : -1
 
     if (spotlightIndex >= 0) {
-      const hero = visiblePrep[spotlightIndex]
-      const micro = visiblePrep.filter((_, idx) => idx !== spotlightIndex)
-      return { heroItem: hero, microItems: micro }
+      const hero = clusteredPrep[spotlightIndex]
+      const micro = clusteredPrep.filter((_, idx) => idx !== spotlightIndex)
+      return { heroCluster: hero, microClusters: micro }
     }
 
-    return { heroItem: visiblePrep[0], microItems: visiblePrep.slice(1) }
-  }, [visiblePrep, spotlightItemId])
+    return { heroCluster: clusteredPrep[0], microClusters: clusteredPrep.slice(1) }
+  }, [clusteredPrep, spotlightItemId])
+
+  const heroItem = heroCluster?.item ?? null
 
   const totalUrgent = visibleConflicts.length
-  const totalTasks = visiblePrep.length
+  const totalTasks = clusteredPrep.length
   const totalActionable = totalUrgent + totalTasks
 
-  const onInstantComplete = (item: PrepItem) => {
-    setOptimisticDismissedIds((prev) => new Set(prev).add(`prep-${item.id}`))
+  const onInstantCompleteCluster = (cluster: PrepItemCluster) => {
+    setOptimisticDismissedIds((prev) => {
+      const next = new Set(prev)
+      for (const id of cluster.itemIds) next.add(`prep-${id}`)
+      return next
+    })
     setOpenSnoozeId(null)
     setOpenMenuId(null)
-    handleCompletePrep(item)
+    for (const id of cluster.itemIds) {
+      const found = visiblePrep.find((p) => p.id === id) || cluster.item
+      handleCompletePrep(found)
+    }
   }
 
-  const onInstantSnooze = (item: PrepItem, period: SnoozeDuration) => {
-    setOptimisticDismissedIds((prev) => new Set(prev).add(`prep-${item.id}`))
+  const onInstantSnoozeCluster = (cluster: PrepItemCluster, period: SnoozeDuration) => {
+    setOptimisticDismissedIds((prev) => {
+      const next = new Set(prev)
+      for (const id of cluster.itemIds) next.add(`prep-${id}`)
+      return next
+    })
     setOpenSnoozeId(null)
     setOpenMenuId(null)
-    handleSnoozePrep(item.id, period)
+    for (const id of cluster.itemIds) {
+      handleSnoozePrep(id, period)
+    }
   }
 
-  const onInstantDownvote = (item: PrepItem) => {
-    setOptimisticDismissedIds((prev) => new Set(prev).add(`prep-${item.id}`))
+  const onInstantDownvoteCluster = (cluster: PrepItemCluster) => {
+    setOptimisticDismissedIds((prev) => {
+      const next = new Set(prev)
+      for (const id of cluster.itemIds) next.add(`prep-${id}`)
+      return next
+    })
     setOpenMenuId(null)
-    handleDownvotePrep(item)
+    for (const id of cluster.itemIds) {
+      const found = visiblePrep.find((p) => p.id === id) || cluster.item
+      handleDownvotePrep(found)
+    }
   }
 
-  const onInstantPush = (item: PrepItem, bucket: 'later_today' | 'tomorrow' | 'weekend') => {
-    setOptimisticDismissedIds((prev) => new Set(prev).add(`prep-${item.id}`))
+  const onInstantPushCluster = (cluster: PrepItemCluster, bucket: 'later_today' | 'tomorrow' | 'weekend') => {
+    setOptimisticDismissedIds((prev) => {
+      const next = new Set(prev)
+      for (const id of cluster.itemIds) next.add(`prep-${id}`)
+      return next
+    })
     setOpenSnoozeId(null)
     setOpenMenuId(null)
-    handlePushPrep(item, bucket)
+    for (const id of cluster.itemIds) {
+      const found = visiblePrep.find((p) => p.id === id) || cluster.item
+      handlePushPrep(found, bucket)
+    }
   }
 
   const onInstantResolveConflict = (conflict: Conflict, resolution: string) => {
     setOptimisticDismissedIds((prev) => new Set(prev).add(`conflict-${conflict.id}`))
     handleResolveConflict(conflict, resolution)
+  }
+
+  const handle1TapAddCalendar = async (item: PrepItem, plan: SuggestedEventPlan) => {
+    const res = await createSuggestedEvent(plan, item)
+    if (res.success) {
+      setEventAddedItemIds((prev) => new Set(prev).add(item.id))
+    }
   }
 
   return (
@@ -178,7 +249,7 @@ export default function ActionQueueWidget({
               variant="secondary"
               size="sm"
               onClick={handleBatchAutoTriage}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-casa-gold/15 hover:bg-casa-gold/25 text-casa-navy text-caption font-bold border border-casa-gold/30 transition-all shadow-xs min-h-[38px]"
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-casa-gold/15 hover:bg-casa-gold/25 text-casa-navy text-caption font-bold border border-casa-gold/30 transition-all shadow-xs min-h-[44px]"
               title="Automatically assign available drivers and optimize logistics"
             >
               <Sparkles size={13} className="text-casa-gold" />
@@ -188,7 +259,7 @@ export default function ActionQueueWidget({
 
           <span
             className={cn(
-              'text-caption font-mono font-bold px-3.5 py-1 rounded-full border shadow-2xs tracking-wide',
+              'text-caption font-mono font-bold px-3.5 py-1.5 rounded-full border shadow-2xs tracking-wide',
               totalActionable > 0
                 ? 'bg-casa-accent-subtle text-casa-top-pick-band border-casa-accent-subtle-border'
                 : 'bg-emerald-100/90 text-emerald-950 border-emerald-300/80'
@@ -269,7 +340,7 @@ export default function ActionQueueWidget({
                         title="Solve with Copilot"
                         aria-label="Solve with Copilot"
                         onClick={() => openCopilotForConflict(c)}
-                        className="p-2.5 rounded-xl text-casa-gold hover:bg-casa-gold/20 min-h-[44px] min-w-[44px] shrink-0 flex items-center justify-center"
+                        className="p-2.5 rounded-xl text-casa-gold hover:bg-casa-gold/20 min-h-[48px] min-w-[48px] shrink-0 flex items-center justify-center"
                         icon={<Sparkles size={16} />}
                       />
                     </div>
@@ -289,7 +360,7 @@ export default function ActionQueueWidget({
                                     `Assigned ${recommended.member.name} as driver`
                                   )
                                 }
-                                className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-caption font-bold shadow-sm transition-all min-h-[44px] flex items-center gap-2"
+                                className="px-3.5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-caption font-bold shadow-sm transition-all min-h-[48px] flex items-center gap-2"
                               >
                                 <Car size={15} />
                                 <span>Assign {recommended.member.name} (Recommended)</span>
@@ -300,7 +371,7 @@ export default function ActionQueueWidget({
                               size="sm"
                               variant="ghost"
                               onClick={() => openCopilotForConflict(c)}
-                              className="px-3.5 py-2 rounded-xl text-amber-900 hover:bg-amber-200/60 text-caption font-semibold transition-all min-h-[44px] flex items-center gap-1.5"
+                              className="px-3.5 py-2.5 rounded-xl text-amber-900 hover:bg-amber-200/60 text-caption font-semibold transition-all min-h-[48px] flex items-center gap-1.5"
                             >
                               <Sparkles size={14} className="text-amber-700" />
                               <span>Ask Copilot</span>
@@ -350,7 +421,7 @@ export default function ActionQueueWidget({
                             onClick={() =>
                               onInstantResolveConflict(c, 'Split transport: 2 drivers assigned')
                             }
-                            className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-caption font-bold shadow-sm transition-all min-h-[44px] flex items-center gap-1.5"
+                            className="px-3.5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-caption font-bold shadow-sm transition-all min-h-[48px] flex items-center gap-1.5"
                           >
                             <Car size={14} />
                             <span>Assign 2nd Driver</span>
@@ -363,7 +434,7 @@ export default function ActionQueueWidget({
                               onClick={() =>
                                 onInstantResolveConflict(c, `Kept: ${c.event_a?.title || 'Event A'}`)
                               }
-                              className="px-3 py-2 rounded-xl bg-casa-surface border border-casa-border hover:border-casa-navy text-casa-navy text-caption font-semibold transition-all min-h-[44px]"
+                              className="px-3 py-2 rounded-xl bg-casa-surface border border-casa-border hover:border-casa-navy text-casa-navy text-caption font-semibold transition-all min-h-[48px]"
                             >
                               Prioritize {shortTitle(c.event_a.title, 14)}
                             </Button>
@@ -373,7 +444,7 @@ export default function ActionQueueWidget({
                             size="sm"
                             variant="ghost"
                             onClick={() => openCopilotForConflict(c)}
-                            className="px-3.5 py-2 rounded-xl text-amber-900 hover:bg-amber-200/60 text-caption font-semibold transition-all min-h-[44px] flex items-center gap-1.5"
+                            className="px-3.5 py-2.5 rounded-xl text-amber-900 hover:bg-amber-200/60 text-caption font-semibold transition-all min-h-[48px] flex items-center gap-1.5"
                           >
                             <Sparkles size={14} className="text-amber-700" />
                             <span>Reschedule with Copilot</span>
@@ -383,7 +454,7 @@ export default function ActionQueueWidget({
                             size="sm"
                             variant="ghost"
                             onClick={() => onInstantResolveConflict(c, 'Acknowledged overlap')}
-                            className="px-3 py-2 rounded-xl text-casa-muted hover:text-casa-navy hover:bg-black/5 text-caption font-semibold transition-all min-h-[44px]"
+                            className="px-3 py-2 rounded-xl text-casa-muted hover:text-casa-navy hover:bg-black/5 text-caption font-semibold transition-all min-h-[48px]"
                           >
                             Acknowledge
                           </Button>
@@ -393,7 +464,7 @@ export default function ActionQueueWidget({
                           size="sm"
                           variant="primary"
                           onClick={() => onInstantResolveConflict(c, 'Resolved')}
-                          className="px-3.5 py-2 rounded-xl bg-amber-500 text-white hover:bg-amber-600 text-caption font-bold shadow-sm transition-all min-h-[44px] flex items-center gap-1.5"
+                          className="px-3.5 py-2.5 rounded-xl bg-amber-500 text-white hover:bg-amber-600 text-caption font-bold shadow-sm transition-all min-h-[48px] flex items-center gap-1.5"
                         >
                           <Check size={14} />
                           <span>Acknowledge & Clear</span>
@@ -410,19 +481,20 @@ export default function ActionQueueWidget({
         {/* ── SECTION 2: PALM BEACH TRAVERTINE PLINTH & SPOTLIGHT FOCUS ── */}
         <div className="space-y-3.5">
           <AnimatePresence mode="popLayout">
-            {heroItem && (
+            {heroCluster && heroItem && (
               (() => {
                 const heroBadge = sourceBadge(heroItem)
                 const HeroBadgeIcon = heroBadge.icon
                 const heroAmount = extractAmount(heroItem.description || heroItem.event_title)
-                const heroDoneLabel = resolveButtonLabel(heroItem)
+                const { label: heroDoneLabel, Icon: HeroDoneIcon } = resolveButtonConfig(heroItem)
                 const isHeroSnoozeOpen = openSnoozeId === heroItem.id
                 const isHeroMenuOpen = openMenuId === heroItem.id
                 const heroSuggestedEvent = detectSuggestedEvent(heroItem)
+                const isEventAdded = eventAddedItemIds.has(heroItem.id)
 
                 return (
                   <motion.div
-                    key={heroItem.id}
+                    key={heroCluster.itemIds.join('-')}
                     layout="position"
                     initial={{ opacity: 0, y: 12, scale: 0.98 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -449,15 +521,39 @@ export default function ActionQueueWidget({
                           <HeroBadgeIcon size={12} className="text-casa-gold shrink-0" />
                           <span>{heroBadge.label}</span>
                         </span>
+
+                        {heroCluster.relatedCount > 0 && (
+                          <span className="inline-flex items-center gap-1 text-caption font-semibold px-2.5 py-1 rounded-full bg-sky-100 text-sky-900 border border-sky-200">
+                            <Layers size={11} className="text-sky-700" />
+                            <span>{heroCluster.relatedCount + 1} thread updates</span>
+                          </span>
+                        )}
+
+                        {heroItem.is_user_labeled && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-purple-100 text-purple-900 text-caption font-semibold border border-purple-200">
+                            <Tag size={11} className="text-purple-700" />
+                            <span>Casa Labeled</span>
+                          </span>
+                        )}
+
                         <span className="inline-flex items-center gap-1 text-caption font-semibold px-2.5 py-1 rounded-full bg-casa-gold/15 text-casa-top-pick-band border border-casa-gold/30">
                           <Sparkles size={11} className="text-casa-gold" />
                           <span>Priority Focus</span>
                         </span>
-                        {heroSuggestedEvent && (
-                          <span className="inline-flex items-center gap-1.5 text-caption font-semibold px-2.5 py-1 rounded-full bg-amber-100/90 text-amber-900 border border-amber-300/80 shadow-2xs">
-                            <Calendar size={12} className="text-amber-700 shrink-0" />
-                            <span>Suggests {heroSuggestedEvent.displayDate}</span>
-                          </span>
+
+                        {(heroItem.source_type === 'gmail' || heroItem.source_ref?.startsWith('gmail:')) && (
+                          <a
+                            href={buildGmailWebUrl(heroItem)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-2xs font-bold text-red-900 bg-red-50 hover:bg-red-100 border border-red-200 px-2.5 py-1 rounded-full shadow-2xs transition-colors no-underline min-h-[28px]"
+                            title="Open email directly in Gmail"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Mail size={11} className="text-red-600 shrink-0" />
+                            <span>Open in Gmail</span>
+                            <ExternalLink size={10} className="text-red-500 shrink-0" />
+                          </a>
                         )}
                       </div>
 
@@ -468,7 +564,7 @@ export default function ActionQueueWidget({
                           </span>
                         ) : (
                           <span className="text-caption text-casa-muted font-mono font-medium">
-                            Receipt Match
+                            Pending Review
                           </span>
                         )}
 
@@ -482,18 +578,18 @@ export default function ActionQueueWidget({
                               e.stopPropagation()
                               openActionInSidecar(heroItem.id)
                             }}
-                            className="text-casa-muted hover:text-casa-navy transition-colors opacity-70 hover:opacity-100 min-h-[44px] min-w-[44px]"
+                            className="text-casa-muted hover:text-casa-navy transition-colors opacity-70 hover:opacity-100 min-h-[48px] min-w-[48px]"
                             icon={<ExternalLink size={15} />}
                           />
 
                           {/* Overflow / Downvote Menu */}
                           {isHeroMenuOpen && (
-                            <div className="absolute right-0 top-full mt-1 w-44 bg-casa-surface rounded-xl border border-casa-border shadow-modal p-1.5 z-40 flex flex-col gap-1 animate-in fade-in zoom-in-95 duration-150">
+                            <div className="absolute right-0 top-full mt-1 w-48 bg-casa-surface rounded-xl border border-casa-border shadow-modal p-1.5 z-40 flex flex-col gap-1 animate-in fade-in zoom-in-95 duration-150">
                               <Button
                                 variant="ghost"
                                 size="sm"
                                 align="start"
-                                onClick={() => onInstantDownvote(heroItem)}
+                                onClick={() => onInstantDownvoteCluster(heroCluster)}
                                 className="w-full text-caption text-casa-error hover:bg-rose-50 transition-colors font-medium min-h-[44px]"
                                 leadingIcon={<ThumbsDown size={13} />}
                               >
@@ -527,20 +623,50 @@ export default function ActionQueueWidget({
                         </span>
                       )}
                       <div className="flex items-center gap-1 text-caption text-casa-gold font-medium mt-0.5 opacity-80 group-hover:opacity-100 transition-opacity">
-                        <span>Tap to view email &amp; analysis</span>
+                        <span>Tap to view full thread details</span>
                         <span>›</span>
                       </div>
                     </div>
 
+                    {/* ── 1-Tap Proactive Card-Face Action Strip ── */}
+                    {heroSuggestedEvent && (
+                      <div className="p-3 rounded-2xl bg-amber-50/90 border border-amber-200 flex items-center justify-between gap-3 flex-wrap">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Calendar size={16} className="text-amber-700 shrink-0" />
+                          <span className="text-caption font-bold text-amber-950 truncate">
+                            Suggests: {heroSuggestedEvent.title} ({heroSuggestedEvent.displayDate})
+                          </span>
+                        </div>
+
+                        {isEventAdded ? (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-100 text-emerald-900 text-caption font-bold border border-emerald-200">
+                            <Check size={14} className="text-emerald-700" />
+                            <span>Added to Calendar</span>
+                          </span>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            disabled={isCreating}
+                            onClick={() => handle1TapAddCalendar(heroItem, heroSuggestedEvent)}
+                            className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-caption font-bold shadow-xs transition-all min-h-[44px] flex items-center gap-1.5 shrink-0"
+                          >
+                            {isCreating ? <Loader2 size={13} className="animate-spin" /> : <CalendarPlus size={14} />}
+                            <span>+ Add to Calendar ({heroSuggestedEvent.displayDate})</span>
+                          </Button>
+                        )}
+                      </div>
+                    )}
+
                     {/* ── Universal 2-Anchor Footer: [ Done ] vs [ Snooze ▾ ] ── */}
                     <div className="pt-3.5 border-t border-casa-border/60 flex items-center justify-between gap-2.5 flex-wrap">
-                      {/* Primary Anchor 1: Done (Navy strong action with guaranteed white text) */}
+                      {/* Primary Anchor 1: Contextual Done Button */}
                       <Button
                         size="sm"
                         variant="strong"
-                        onClick={() => onInstantComplete(heroItem)}
+                        onClick={() => onInstantCompleteCluster(heroCluster)}
                         className="px-4 sm:px-5 py-2.5 rounded-full min-h-[48px] text-body-sm font-bold shadow-card flex items-center gap-2 shrink-0 hover:brightness-110"
-                        leadingIcon={<Check size={16} strokeWidth={2.5} className="text-emerald-400" />}
+                        leadingIcon={<HeroDoneIcon size={16} strokeWidth={2.5} className="text-emerald-400" />}
                       >
                         <span>{heroDoneLabel}</span>
                       </Button>
@@ -550,7 +676,7 @@ export default function ActionQueueWidget({
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => onInstantSnooze(heroItem, 'tomorrow')}
+                          onClick={() => onInstantSnoozeCluster(heroCluster, 'tomorrow')}
                           className="px-3 sm:px-4 py-2 text-body-sm font-semibold text-casa-navy hover:text-casa-gold-hover transition-colors min-h-[48px] rounded-l-full rounded-r-none border-none flex items-center gap-1.5 sm:gap-2"
                           title="Snooze to tomorrow morning"
                           leadingIcon={<Clock size={14} className="text-casa-gold shrink-0" />}
@@ -590,8 +716,8 @@ export default function ActionQueueWidget({
                               variant="ghost"
                               size="sm"
                               align="start"
-                              onClick={() => onInstantSnooze(heroItem, '3h')}
-                              className="w-full px-3 py-2 rounded-xl bg-casa-surface hover:bg-casa-gold/15 border border-casa-border/70 text-caption text-casa-navy transition-colors font-medium min-h-[40px]"
+                              onClick={() => onInstantSnoozeCluster(heroCluster, '3h')}
+                              className="w-full px-3 py-2 rounded-xl bg-casa-surface hover:bg-casa-gold/15 border border-casa-border/70 text-caption text-casa-navy transition-colors font-medium min-h-[44px]"
                               leadingIcon={<Moon size={13} className="text-casa-gold" />}
                             >
                               <span className="flex-1 text-left text-caption font-semibold">Tonight (+3h)</span>
@@ -601,8 +727,8 @@ export default function ActionQueueWidget({
                               variant="ghost"
                               size="sm"
                               align="start"
-                              onClick={() => onInstantSnooze(heroItem, 'tomorrow')}
-                              className="w-full px-3 py-2 rounded-xl bg-casa-surface hover:bg-casa-gold/15 border border-casa-border/70 text-caption text-casa-navy transition-colors font-medium min-h-[40px]"
+                              onClick={() => onInstantSnoozeCluster(heroCluster, 'tomorrow')}
+                              className="w-full px-3 py-2 rounded-xl bg-casa-surface hover:bg-casa-gold/15 border border-casa-border/70 text-caption text-casa-navy transition-colors font-medium min-h-[44px]"
                               leadingIcon={<Sun size={13} className="text-casa-gold" />}
                             >
                               <span className="flex-1 text-left text-caption font-semibold">Tomorrow (9 AM)</span>
@@ -612,8 +738,8 @@ export default function ActionQueueWidget({
                               variant="ghost"
                               size="sm"
                               align="start"
-                              onClick={() => onInstantPush(heroItem, 'weekend')}
-                              className="w-full px-3 py-2 rounded-xl bg-casa-surface hover:bg-casa-gold/15 border border-casa-border/70 text-caption text-casa-navy transition-colors font-medium min-h-[40px]"
+                              onClick={() => onInstantPushCluster(heroCluster, 'weekend')}
+                              className="w-full px-3 py-2 rounded-xl bg-casa-surface hover:bg-casa-gold/15 border border-casa-border/70 text-caption text-casa-navy transition-colors font-medium min-h-[44px]"
                               leadingIcon={<Calendar size={13} className="text-casa-gold" />}
                             >
                               <span className="flex-1 text-left text-caption font-semibold">This Weekend</span>
@@ -629,11 +755,11 @@ export default function ActionQueueWidget({
           </AnimatePresence>
 
           {/* ── QUIET MINIMALIST MICRO-QUEUE: Subsequent Matters ── */}
-          {microItems.length > 0 && (
+          {microClusters.length > 0 && (
             <div className="p-4 sm:p-5 rounded-3xl bg-casa-surface border border-casa-border/80 shadow-sm space-y-2">
               <div className="flex items-center justify-between pb-2 border-b border-casa-border/50">
                 <span className="text-caption font-bold uppercase tracking-wider text-casa-muted">
-                  Queued Household Matters ({microItems.length})
+                  Queued Household Matters ({microClusters.length})
                 </span>
                 <span className="text-caption text-casa-gold font-medium">
                   Tap row to focus
@@ -641,15 +767,17 @@ export default function ActionQueueWidget({
               </div>
 
               <div className="divide-y divide-casa-border/40">
-                {microItems.map((item) => {
+                {microClusters.map((cluster) => {
+                  const item = cluster.item
                   const badge = sourceBadge(item)
                   const BadgeIcon = badge.icon
                   const amount = extractAmount(item.description || item.event_title)
                   const microSuggestedEvent = detectSuggestedEvent(item)
+                  const isMicroEventAdded = eventAddedItemIds.has(item.id)
 
                   return (
                     <div
-                      key={item.id}
+                      key={cluster.itemIds.join('-')}
                       role="button"
                       tabIndex={0}
                       data-tactile="true"
@@ -678,9 +806,9 @@ export default function ActionQueueWidget({
                           aria-label={`Mark ${item.description || item.event_title || 'item'} done`}
                           onClick={(e) => {
                             e.stopPropagation()
-                            onInstantComplete(item)
+                            onInstantCompleteCluster(cluster)
                           }}
-                          className="min-w-[44px] min-h-[44px] rounded-full border border-casa-border hover:border-casa-gold hover:bg-casa-bg flex items-center justify-center text-casa-muted hover:text-casa-gold shrink-0 transition-all shadow-2xs group-hover:border-casa-gold/60 mt-0.5"
+                          className="min-w-[48px] min-h-[48px] rounded-full border border-casa-border hover:border-casa-gold hover:bg-casa-bg flex items-center justify-center text-casa-muted hover:text-casa-gold shrink-0 transition-all shadow-2xs group-hover:border-casa-gold/60 mt-0.5"
                           icon={<Check size={16} strokeWidth={2.5} />}
                         />
 
@@ -693,19 +821,69 @@ export default function ActionQueueWidget({
                               <BadgeIcon size={12} className="text-casa-gold shrink-0" />
                               <span>{badge.label}</span>
                             </span>
-                            {microSuggestedEvent && (
+
+                            {cluster.relatedCount > 0 && (
                               <>
                                 <span>·</span>
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100/90 text-amber-900 text-2xs font-semibold border border-amber-300/80">
-                                  <Calendar size={10} className="text-amber-700 shrink-0" />
-                                  <span>Suggests {microSuggestedEvent.displayDate}</span>
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-100 text-sky-900 text-2xs font-semibold border border-sky-200">
+                                  <Layers size={9} className="text-sky-700" />
+                                  <span>{cluster.relatedCount + 1} updates</span>
                                 </span>
                               </>
                             )}
-                            <span>·</span>
-                            <span className="text-casa-error font-medium">
-                              {item.due_by ? 'Due Today' : 'Receipt Match'}
-                            </span>
+
+                            {microSuggestedEvent && (
+                              <>
+                                <span>·</span>
+                                {isMicroEventAdded ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 text-2xs font-semibold border border-emerald-200">
+                                    <Check size={9} className="text-emerald-700" />
+                                    <span>Added ({microSuggestedEvent.displayDate})</span>
+                                  </span>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handle1TapAddCalendar(item, microSuggestedEvent)
+                                    }}
+                                    className="h-auto p-0 hover:bg-transparent"
+                                  >
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100/90 text-amber-900 text-2xs font-semibold border border-amber-300/80 hover:bg-amber-200 transition-colors">
+                                      <CalendarPlus size={9} className="text-amber-700 shrink-0" />
+                                      <span>+ Add {microSuggestedEvent.displayDate}</span>
+                                    </span>
+                                  </Button>
+                                )}
+                              </>
+                            )}
+
+                            {item.due_by ? (
+                              <>
+                                <span>·</span>
+                                <span className="text-casa-error font-medium">Due Today</span>
+                              </>
+                            ) : null}
+
+                            {(item.source_type === 'gmail' || item.source_ref?.startsWith('gmail:')) && (
+                              <>
+                                <span>·</span>
+                                <a
+                                  href={buildGmailWebUrl(item)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-3xs font-bold text-red-900 bg-red-50 hover:bg-red-100 border border-red-200 px-1.5 py-0.5 rounded-full transition-colors no-underline"
+                                  title="Open original email in Gmail"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <Mail size={9} className="text-red-600 shrink-0" />
+                                  <span>Gmail</span>
+                                  <ExternalLink size={8} className="text-red-500 shrink-0" />
+                                </a>
+                              </>
+                            )}
+
                             {amount && (
                               <>
                                 <span>·</span>
@@ -722,9 +900,9 @@ export default function ActionQueueWidget({
                           variant="secondary"
                           onClick={(e) => {
                             e.stopPropagation()
-                            onInstantSnooze(item, 'tomorrow')
+                            onInstantSnoozeCluster(cluster, 'tomorrow')
                           }}
-                          className="px-3 py-1.5 text-caption font-semibold text-casa-navy hover:bg-casa-bg border border-casa-border/70 rounded-full min-h-[40px] flex items-center gap-1.5 shadow-2xs"
+                          className="px-3.5 py-2 text-caption font-semibold text-casa-navy hover:bg-casa-bg border border-casa-border/70 rounded-full min-h-[44px] flex items-center gap-1.5 shadow-2xs"
                           leadingIcon={<Clock size={12} className="text-casa-gold" />}
                         >
                           <span>Snooze</span>
@@ -737,7 +915,7 @@ export default function ActionQueueWidget({
             </div>
           )}
 
-          {visiblePrep.length === 0 && visibleConflicts.length === 0 && (
+          {clusteredPrep.length === 0 && visibleConflicts.length === 0 && (
             <div className="flex flex-col items-center justify-center h-48 text-center p-6 bg-emerald-50/50 rounded-2xl border border-emerald-200">
               <CheckCircle2 size={36} className="text-emerald-600 mb-2" />
               <h4 className="font-display text-body-lg font-bold text-emerald-900">
@@ -749,58 +927,6 @@ export default function ActionQueueWidget({
             </div>
           )}
         </div>
-
-        {/* ── SECTION 3: PUSHED TO LATER (BACKLOG DRAWER) ── */}
-        {pushedPrep.length > 0 && (
-          <div className="pt-2 border-t border-casa-border/40">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setPushedExpanded((p) => !p)}
-              className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-casa-bg/80 text-caption font-bold text-casa-muted hover:text-casa-navy transition-colors min-h-[44px]"
-            >
-              <div className="flex items-center gap-2">
-                <Clock size={14} />
-                <span>Pushed to Later ({pushedPrep.length})</span>
-              </div>
-              {pushedExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-            </Button>
-
-            <AnimatePresence>
-              {pushedExpanded && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="space-y-2 mt-2"
-                >
-                  {pushedPrep.map((item) => (
-                    <div
-                      key={item.id}
-                      className="p-3 rounded-xl bg-casa-surface border border-casa-border/60 flex items-center justify-between gap-3 text-caption"
-                    >
-                      <div className="min-w-0 flex-1 truncate">
-                        <span className="font-bold text-casa-navy">
-                          {item.description || item.event_title}
-                        </span>
-                        <span className="text-casa-muted block text-2xs">Deferred</span>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => handleRestorePushedPrep(item.id)}
-                        className="px-2.5 py-1 rounded-lg text-casa-navy hover:bg-casa-bg text-2xs font-bold border border-casa-border/60 flex items-center gap-1 min-h-[44px]"
-                      >
-                        <RotateCcw size={11} />
-                        <span>Move to Today</span>
-                      </Button>
-                    </div>
-                  ))}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        )}
       </div>
     </div>
   )

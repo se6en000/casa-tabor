@@ -40,6 +40,7 @@ import {
   type ExtractedActionDocument,
   type SuggestedEventPlan,
 } from '../../../utils/actionInspectionSynthesis'
+import { buildGmailWebUrl } from '../../../utils/prepItemClusters'
 import { useQueryClient } from '@tanstack/react-query'
 import { useFamilyMembers } from '../../../hooks/useFamilyMembers'
 import { useAppStore } from '../../../stores/appStore'
@@ -496,7 +497,129 @@ export default function ActionInspectionSidecar({
                 <span className="font-mono font-bold text-casa-gold-hover text-body-sm">{amount}</span>
               </>
             )}
+            {activeItem && (activeItem.source_type === 'gmail' || activeItem.source_ref?.startsWith('gmail:')) && (
+              <>
+                <span>·</span>
+                <a
+                  href={buildGmailWebUrl(activeItem, detailedItem?.gmailContext)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-2xs font-bold text-red-900 bg-red-50 hover:bg-red-100 border border-red-200 shadow-2xs transition-colors no-underline min-h-[32px]"
+                  title="Open original thread in Gmail"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Mail size={12} className="text-red-600 shrink-0" />
+                  <span>Open in Gmail</span>
+                  <ExternalLink size={10} className="text-red-500 shrink-0" />
+                </a>
+              </>
+            )}
           </div>
+        </div>
+
+        {/* ══════ 1. AI EXECUTIVE BRIEF (First Thing Glanceable in 3 Seconds) ══════ */}
+        <div className="p-4 sm:p-5 rounded-2xl bg-amber-50/70 border border-amber-300/80 shadow-xs space-y-3.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-amber-950 font-bold text-caption uppercase tracking-wider">
+              <Sparkles size={14} className="text-amber-600" />
+              <span>AI Executive Brief</span>
+            </div>
+            <span className="text-2xs font-mono font-semibold px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-900">
+              Verified by Casa AI
+            </span>
+          </div>
+
+          <ul className="space-y-2.5 text-body-sm text-amber-950 font-medium leading-snug">
+            <li className="flex items-start gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0" />
+              <span>
+                <strong>Urgency:</strong> {analysis.urgency}
+              </span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0" />
+              <span>
+                <strong>Required Action:</strong> {analysis.requiredAction}
+              </span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0" />
+              <span>
+                <strong>Household Impact:</strong> {analysis.householdImpact}
+              </span>
+            </li>
+          </ul>
+
+          {/* ══════ PROACTIVE ACTION PLAN: SUGGESTED EVENT ══════ */}
+          {analysis.suggestedEvent && (
+            <div className="pt-3 border-t border-amber-200/90 flex flex-col gap-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-caption font-bold text-amber-950 flex items-center gap-1.5">
+                  <Calendar size={13} className="text-amber-700" />
+                  <span>Suggested Event Action Plan</span>
+                </span>
+                <span className="text-3xs uppercase font-mono font-bold px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-900">
+                  Ready to Schedule
+                </span>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-white/90 border border-amber-300/80 flex flex-col gap-2.5 shadow-2xs">
+                <div className="space-y-1">
+                  <div className="text-body-sm font-bold text-casa-navy leading-snug">
+                    {analysis.suggestedEvent.title}
+                  </div>
+                  <div className="flex items-center gap-2 text-2xs text-casa-muted flex-wrap font-medium">
+                    <span className="inline-flex items-center gap-1 text-casa-navy font-semibold">
+                      <Calendar size={11} className="text-casa-gold" />
+                      {analysis.suggestedEvent.displayDate}
+                      {analysis.suggestedEvent.allDay ? ' · All Day' : ''}
+                    </span>
+                    {analysis.suggestedEvent.location && (
+                      <>
+                        <span>·</span>
+                        <span className="inline-flex items-center gap-1">
+                          <MapPin size={11} className="text-casa-muted" />
+                          {analysis.suggestedEvent.location}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {matchedCalendarEvent ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => handleOpenEventInSidecar(matchedCalendarEvent.id)}
+                    className="w-full min-h-[44px] sm:min-h-[48px] rounded-xl bg-emerald-50 hover:bg-emerald-100/90 border border-emerald-300/90 text-emerald-800 font-bold text-body-sm flex items-center justify-center gap-2 transition-all shadow-2xs"
+                  >
+                    <CalendarCheck size={16} className="text-emerald-600 shrink-0" />
+                    <span>Scheduled ({analysis.suggestedEvent.displayDate}) · View in Calendar</span>
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="strong"
+                    disabled={creatingEvent}
+                    onClick={() => handleCreateSuggestedEvent(analysis.suggestedEvent!)}
+                    className="w-full min-h-[44px] sm:min-h-[48px] rounded-xl text-body-sm font-bold shadow-card flex items-center justify-center gap-2 transition-all hover:brightness-110 active:scale-[0.99]"
+                  >
+                    {creatingEvent ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin text-casa-gold" />
+                        <span>Adding to Calendar...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CalendarPlus size={16} className="text-casa-gold shrink-0" />
+                        <span>Add to Calendar ({analysis.suggestedEvent.displayDate})</span>
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ══════ SIBLING CLUSTER ITEMS (Extracted from Same Email) ══════ */}
@@ -660,111 +783,6 @@ export default function ActionInspectionSidecar({
           )}
         </div>
 
-        {/* ══════ AI EXECUTIVE BRIEF (Glanceable in 3 Seconds) ══════ */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-amber-50/70 border border-amber-300/80 shadow-xs space-y-3.5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-amber-950 font-bold text-caption uppercase tracking-wider">
-              <Sparkles size={14} className="text-amber-600" />
-              <span>AI Executive Brief</span>
-            </div>
-            <span className="text-2xs font-mono font-semibold px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-900">
-              Verified by Casa AI
-            </span>
-          </div>
-
-          <ul className="space-y-2.5 text-body-sm text-amber-950 font-medium leading-snug">
-            <li className="flex items-start gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0" />
-              <span>
-                <strong>Urgency:</strong> {analysis.urgency}
-              </span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0" />
-              <span>
-                <strong>Required Action:</strong> {analysis.requiredAction}
-              </span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0" />
-              <span>
-                <strong>Household Impact:</strong> {analysis.householdImpact}
-              </span>
-            </li>
-          </ul>
-
-          {/* ══════ PROACTIVE ACTION PLAN: SUGGESTED EVENT ══════ */}
-          {analysis.suggestedEvent && (
-            <div className="pt-3 border-t border-amber-200/90 flex flex-col gap-2.5">
-              <div className="flex items-center justify-between">
-                <span className="text-caption font-bold text-amber-950 flex items-center gap-1.5">
-                  <Calendar size={13} className="text-amber-700" />
-                  <span>Suggested Event Action Plan</span>
-                </span>
-                <span className="text-3xs uppercase font-mono font-bold px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-900">
-                  Ready to Schedule
-                </span>
-              </div>
-
-              <div className="p-3.5 rounded-xl bg-white/90 border border-amber-300/80 flex flex-col gap-2.5 shadow-2xs">
-                <div className="space-y-1">
-                  <div className="text-body-sm font-bold text-casa-navy leading-snug">
-                    {analysis.suggestedEvent.title}
-                  </div>
-                  <div className="flex items-center gap-2 text-2xs text-casa-muted flex-wrap font-medium">
-                    <span className="inline-flex items-center gap-1 text-casa-navy font-semibold">
-                      <Calendar size={11} className="text-casa-gold" />
-                      {analysis.suggestedEvent.displayDate}
-                      {analysis.suggestedEvent.allDay ? ' · All Day' : ''}
-                    </span>
-                    {analysis.suggestedEvent.location && (
-                      <>
-                        <span>·</span>
-                        <span className="inline-flex items-center gap-1">
-                          <MapPin size={11} className="text-casa-muted" />
-                          {analysis.suggestedEvent.location}
-                        </span>
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                {matchedCalendarEvent ? (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleOpenEventInSidecar(matchedCalendarEvent.id)}
-                    className="w-full min-h-[44px] sm:min-h-[48px] rounded-xl bg-emerald-50 hover:bg-emerald-100/90 border border-emerald-300/90 text-emerald-800 font-bold text-body-sm flex items-center justify-center gap-2 transition-all shadow-2xs"
-                  >
-                    <CalendarCheck size={16} className="text-emerald-600 shrink-0" />
-                    <span>Scheduled ({analysis.suggestedEvent.displayDate}) · View in Calendar</span>
-                  </Button>
-                ) : (
-                  <Button
-                    size="sm"
-                    variant="strong"
-                    disabled={creatingEvent}
-                    onClick={() => handleCreateSuggestedEvent(analysis.suggestedEvent!)}
-                    className="w-full min-h-[44px] sm:min-h-[48px] rounded-xl text-body-sm font-bold shadow-card flex items-center justify-center gap-2 transition-all hover:brightness-110 active:scale-[0.99]"
-                  >
-                    {creatingEvent ? (
-                      <>
-                        <Loader2 size={16} className="animate-spin text-casa-gold" />
-                        <span>Adding to Calendar...</span>
-                      </>
-                    ) : (
-                      <>
-                        <CalendarPlus size={16} className="text-casa-gold shrink-0" />
-                        <span>Add to Calendar ({analysis.suggestedEvent.displayDate})</span>
-                      </>
-                    )}
-                  </Button>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-
         {/* ══════ EXTRACTED ATTACHMENTS & ACTIONABLE PORTALS ══════ */}
         <div className="space-y-2.5">
           <div className="text-caption font-bold uppercase tracking-wider text-casa-muted flex items-center gap-1.5">
@@ -815,6 +833,21 @@ export default function ActionInspectionSidecar({
             ) : (
               <div className="text-body-sm leading-relaxed space-y-3 text-casa-text whitespace-pre-line">
                 {detailedItem?.gmailContext?.email_body || analysis.emailBody}
+              </div>
+            )}
+
+            {activeItem && (activeItem.source_type === 'gmail' || activeItem.source_ref?.startsWith('gmail:')) && (
+              <div className="pt-2">
+                <a
+                  href={buildGmailWebUrl(activeItem, detailedItem?.gmailContext)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full min-h-[48px] rounded-xl bg-white hover:bg-red-50/70 border border-red-200 text-red-950 font-bold text-body-sm flex items-center justify-center gap-2 shadow-2xs transition-all no-underline"
+                >
+                  <Mail size={16} className="text-red-600" />
+                  <span>Open Full Thread in Gmail</span>
+                  <ExternalLink size={14} className="text-red-500" />
+                </a>
               </div>
             )}
           </div>

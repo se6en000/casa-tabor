@@ -620,7 +620,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                   onClick={() => navigateTo('/actions')}
                   className="text-caption font-bold text-casa-gold hover:underline min-h-[44px] px-2.5"
                 >
-                  <span>Full Hub</span>
+                  <span>Action Queue</span>
                   <ArrowRight size={13} className="ml-1" />
                 </Button>
               </div>
