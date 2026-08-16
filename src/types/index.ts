@@ -365,6 +365,7 @@ export interface DinnerPlan {
   title: string
   subtitle: string
   targetTime: string
+  recipeId?: string
   chefOrDriver?: string
   statusBadge?: string
   isPast?: boolean

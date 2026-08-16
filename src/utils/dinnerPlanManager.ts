@@ -40,7 +40,7 @@ export function calculateOrderOrPrepWindow(
 
     const startStr = formatTime(Math.floor(orderStartMins / 60), orderStartMins % 60)
     const endStr = formatTime(Math.floor(orderEndMins / 60), orderEndMins % 60)
-    const driver = driverOrChef || 'Luke'
+    const driver = driverOrChef || 'Jake'
 
     return {
       subtitle: `Pickup: ${driver} (on route) · Order window: ${startStr}–${endStr}`,
@@ -49,9 +49,9 @@ export function calculateOrderOrPrepWindow(
   }
 
   if (mode === 'cook') {
-    const chef = driverOrChef || 'Sarah & Luke'
+    const chef = driverOrChef || 'Jake & Kelly'
     return {
-      subtitle: `35m prep · Pantry stock confirmed · Chef: ${chef}`,
+      subtitle: `25m prep · Pantry stock confirmed · Chef: ${chef}`,
       statusBadge: 'Ingredients ready',
     }
   }
@@ -86,7 +86,8 @@ export function getDinnerPlanSuggestions(currentPlan: DinnerPlan): string[] {
   const mode = currentPlan.mode
   const targetTime = currentPlan.targetTime || '6:30 PM Target'
   const isSevenPmOrLater = /7:(?:00|15|30)\s*PM/i.test(targetTime)
-  const isSarahDriverOrChef = /sarah/i.test(currentPlan.chefOrDriver || currentPlan.subtitle)
+  const isKellyDriverOrChef = /kelly/i.test(currentPlan.chefOrDriver || currentPlan.subtitle)
+  const isJakeDriverOrChef = /jake/i.test(currentPlan.chefOrDriver || currentPlan.subtitle)
 
   if (mode === 'takeout') {
     const suggestions: string[] = []
@@ -97,11 +98,15 @@ export function getDinnerPlanSuggestions(currentPlan: DinnerPlan): string[] {
       suggestions.push('⏰ Push dinner to 7:30 PM')
     }
 
-    // Driver switch
-    if (isSarahDriverOrChef) {
-      suggestions.push('🚗 Luke picking up')
-    } else {
+    // Driver switch between real adult family members
+    if (/luke/i.test(currentPlan.chefOrDriver || currentPlan.subtitle)) {
       suggestions.push('🚗 Sarah picking up')
+    } else if (isJakeDriverOrChef) {
+      suggestions.push('🚗 Kelly picking up')
+    } else if (isKellyDriverOrChef) {
+      suggestions.push('🚗 Giselle picking up')
+    } else {
+      suggestions.push('🚗 Jake picking up')
     }
 
     // Status advances
@@ -119,18 +124,21 @@ export function getDinnerPlanSuggestions(currentPlan: DinnerPlan): string[] {
 
   if (mode === 'cook') {
     return [
+      '🥗 Cook with what we have (Pantry AI)',
+      '📖 Swap saved recipe',
       "🥡 Takeout from Flanigan's",
       '🍕 Pizza Night',
       '🍲 Reheat Leftovers',
       isSevenPmOrLater ? '⏰ Push dinner to 7:30 PM' : '⏰ Push dinner to 7:00 PM',
-      isSarahDriverOrChef ? '👨‍🍳 Luke is Chef tonight' : '👨‍🍳 Sarah is Chef tonight',
+      isJakeDriverOrChef ? '👩‍🍳 Kelly is Chef tonight' : '👨‍🍳 Jake is Chef tonight',
     ]
   }
 
   if (mode === 'leftovers') {
     return [
+      '🥗 Cook with what we have (Pantry AI)',
+      '📖 Swap saved recipe',
       "🥡 Takeout from Flanigan's",
-      '🍕 Pizza Night',
       '🍳 Switch to Cooking',
       isSevenPmOrLater ? '⏰ Push dinner to 7:30 PM' : '⏰ Push dinner to 7:00 PM',
       '🍽️ Dining Out',
@@ -143,13 +151,14 @@ export function getDinnerPlanSuggestions(currentPlan: DinnerPlan): string[] {
       '🍳 Switch to Cooking',
       '🍲 Reheat Leftovers',
       '⏰ Push dinner to 7:30 PM',
-      '🚗 Sarah is driving',
+      '🚗 Jake is driving',
     ]
   }
 
   return [
+    '🥗 Cook with what we have (Pantry AI)',
+    '📖 Swap saved recipe',
     "🥡 Takeout from Flanigan's",
-    '🍕 Pizza Night',
     '🍲 Reheat Leftovers',
     '⏰ Push dinner to 7:00 PM',
   ]
@@ -172,21 +181,48 @@ export function matchDinnerPlanIntent(
 } | null {
   const normalized = text.toLowerCase().trim()
 
-  // 1. Takeout: Flanigan's
+  // 1. Pantry AI generation trigger
+  if (
+    normalized.includes('cook with what we have') ||
+    normalized.includes('pantry ai') ||
+    normalized.includes('on hand') ||
+    normalized.includes('what we have') ||
+    normalized.includes('make from pantry')
+  ) {
+    return {
+      assistantReply: `Let's make something delicious with what's on hand in the pantry! 🥗\n\nI can draft a fast, family-friendly dinner using your current stock (e.g. seafood, pasta, vegetables, or proteins).\n\nTell me what ingredients you'd like to use (e.g. "Shrimp and pasta" or "Quick 20m high-protein meal"), and I'll generate the full step-by-step recipe ready for Tonight's Kitchen!`,
+      toolAction: undefined,
+    }
+  }
+
+  // 2. Swap recipe query
+  if (
+    normalized.includes('swap saved recipe') ||
+    normalized.includes('swap recipe') ||
+    normalized.includes('change recipe') ||
+    normalized.includes('switch recipe')
+  ) {
+    return {
+      assistantReply: `Here are popular recipes from your library you can switch tonight's dinner to:\n\n1. **Garlic Butter Shrimp Scampi** (25 min)\n2. **GLP-1 Friendly Garlicky Shrimp Couscous Bowls** (25 min)\n3. **Protein Pasta A La Vodka Sauce** (20 min)\n4. **One-Pan Bang Bang Salmon Potato Bake** (35 min)\n\nReply with the recipe name you'd like to make, or tell me a flavor profile!`,
+      toolAction: undefined,
+    }
+  }
+
+  // 3. Takeout: Flanigan's
   if (normalized.includes('flanigan')) {
     const target = currentPlan.targetTime || '6:30 PM Target'
-    const windowInfo = calculateOrderOrPrepWindow('takeout', target, 'Luke')
+    const windowInfo = calculateOrderOrPrepWindow('takeout', target, 'Jake')
     const newPlan: DinnerPlan = {
       mode: 'takeout',
       title: "Flanigan's Seafood Bar & Grill",
       subtitle: windowInfo.subtitle,
       targetTime: target,
-      chefOrDriver: 'Luke',
+      chefOrDriver: 'Jake',
       statusBadge: windowInfo.statusBadge,
     }
 
     return {
-      assistantReply: `I've drafted a pivot to **Flanigan's Seafood Bar & Grill (Takeout)** for tonight. Target time is **${target}**, and Luke is available for pickup. The order is marked **pending** so you can call it in when ready.`,
+      assistantReply: `I've drafted a pivot to **Flanigan's Seafood Bar & Grill (Takeout)** for tonight. Target time is **${target}**, and Jake is assigned for pickup. The order is marked **pending** so you can call it in when ready.`,
       toolAction: {
         tool: 'update_dinner_plan',
         status: 'pending',
@@ -196,21 +232,21 @@ export function matchDinnerPlanIntent(
     }
   }
 
-  // 2. Takeout: Pizza Night
+  // 4. Takeout: Pizza Night
   if (normalized.includes('pizza')) {
     const target = currentPlan.targetTime || '6:45 PM Target'
-    const windowInfo = calculateOrderOrPrepWindow('takeout', target, 'Sarah')
+    const windowInfo = calculateOrderOrPrepWindow('takeout', target, 'Kelly')
     const newPlan: DinnerPlan = {
       mode: 'takeout',
       title: 'Pizza Night (Takeout & Delivery)',
       subtitle: windowInfo.subtitle,
       targetTime: target,
-      chefOrDriver: 'Sarah',
+      chefOrDriver: 'Kelly',
       statusBadge: windowInfo.statusBadge,
     }
 
     return {
-      assistantReply: `I've drafted a **Pizza Night** pivot for **${target}**. Sarah is assigned for pickup/delivery, and the order is marked as **pending**.`,
+      assistantReply: `I've drafted a **Pizza Night** pivot for **${target}**. Kelly is assigned for pickup/delivery, and the order is marked as **pending**.`,
       toolAction: {
         tool: 'update_dinner_plan',
         status: 'pending',
@@ -220,7 +256,7 @@ export function matchDinnerPlanIntent(
     }
   }
 
-  // 3. Leftovers
+  // 5. Leftovers
   if (normalized.includes('leftover')) {
     const target = currentPlan.targetTime || '6:15 PM Target'
     const windowInfo = calculateOrderOrPrepWindow('leftovers', target)
@@ -244,7 +280,7 @@ export function matchDinnerPlanIntent(
     }
   }
 
-  // 4. Dining Out
+  // 6. Dining Out
   if (normalized.includes('din') && (normalized.includes('out') || normalized.includes('restaurant'))) {
     const target = '7:00 PM Target'
     const windowInfo = calculateOrderOrPrepWindow('dineout', target)
@@ -268,21 +304,23 @@ export function matchDinnerPlanIntent(
     }
   }
 
-  // 5. Cooking / Home cooked switch
+  // 7. Cooking / Home cooked switch
   if (normalized.includes('switch to cooking') || normalized.includes('cook a recipe') || normalized.includes('home cooked')) {
     const target = currentPlan.targetTime || '6:30 PM Target'
-    const windowInfo = calculateOrderOrPrepWindow('cook', target, 'Sarah & Luke')
+    const windowInfo = calculateOrderOrPrepWindow('cook', target, 'Jake & Kelly')
+    const currentTitle = currentPlan.mode === 'cook' ? currentPlan.title : 'Garlic Butter Shrimp Scampi'
     const newPlan: DinnerPlan = {
       mode: 'cook',
-      title: 'Herb-Roasted Chicken & Warm Farro',
+      title: currentTitle,
       subtitle: windowInfo.subtitle,
       targetTime: target,
-      chefOrDriver: 'Sarah & Luke',
+      recipeId: currentPlan.recipeId || '8cfa3cd2-a68f-4b73-912f-92865ba1ee6a',
+      chefOrDriver: 'Jake & Kelly',
       statusBadge: windowInfo.statusBadge,
     }
 
     return {
-      assistantReply: `Switched Tonight's Kitchen back to **Home Cooking**: Herb-Roasted Chicken & Warm Farro for **${target}**.`,
+      assistantReply: `Switched Tonight's Kitchen back to **Home Cooking**: **${currentTitle}** for **${target}**.`,
       toolAction: {
         tool: 'update_dinner_plan',
         status: 'pending',
@@ -292,7 +330,7 @@ export function matchDinnerPlanIntent(
     }
   }
 
-  // 6. Push time (7:00 PM or 7:30 PM or custom time)
+  // 8. Push time (7:00 PM or 7:30 PM or custom time)
   if (normalized.includes('push') || normalized.includes('later') || normalized.includes('reschedule') || /\b\d{1,2}(?::\d{2})?\s*(?:pm|am)\b/i.test(normalized)) {
     let newTargetTime = '7:00 PM Target'
     if (normalized.includes('7:30')) newTargetTime = '7:30 PM Target'
@@ -310,7 +348,7 @@ export function matchDinnerPlanIntent(
     }
 
     return {
-      assistantReply: `I've shifted the target time for **${currentPlan.title}** to **${newTargetTime}**. The pickup and order windows have been adjusted accordingly.`,
+      assistantReply: `I've shifted the target time for **${currentPlan.title}** to **${newTargetTime}**. The pickup and prep windows have been adjusted accordingly.`,
       toolAction: {
         tool: 'update_dinner_plan',
         status: 'pending',
@@ -320,46 +358,52 @@ export function matchDinnerPlanIntent(
     }
   }
 
-  // 7. Driver / Chef reassignment
-  if (normalized.includes('sarah') && (normalized.includes('pickup') || normalized.includes('picking up') || normalized.includes('driver') || normalized.includes('chef') || normalized.includes('cook'))) {
-    const windowInfo = calculateOrderOrPrepWindow(currentPlan.mode, currentPlan.targetTime, 'Sarah')
+  // 9. Driver / Chef reassignment with real household members or requested driver
+  if (
+    normalized.includes('pickup') ||
+    normalized.includes('picking up') ||
+    normalized.includes('driver') ||
+    normalized.includes('driving') ||
+    normalized.includes('chef') ||
+    normalized.includes('cook') ||
+    normalized.includes('sarah') ||
+    normalized.includes('jake') ||
+    normalized.includes('kelly') ||
+    normalized.includes('giselle') ||
+    normalized.includes('luke')
+  ) {
+    let name = 'Jake'
+    if (normalized.includes('sarah')) name = 'Sarah'
+    else if (normalized.includes('kelly')) name = 'Kelly'
+    else if (normalized.includes('giselle')) name = 'Giselle'
+    else if (normalized.includes('luke')) name = 'Luke'
+    else if (normalized.includes('jake')) name = 'Jake'
+    else {
+      const match = normalized.match(/([a-z]+)\s+(?:is\s+)?(?:picking up|pickup|driver|driving|chef|cook)/i)
+      if (match?.[1]) {
+        name = match[1].charAt(0).toUpperCase() + match[1].slice(1)
+      }
+    }
+
+    const windowInfo = calculateOrderOrPrepWindow(currentPlan.mode, currentPlan.targetTime, name)
     const newPlan: DinnerPlan = {
       ...currentPlan,
-      chefOrDriver: 'Sarah',
+      chefOrDriver: name,
       subtitle: windowInfo.subtitle,
     }
 
     return {
-      assistantReply: `Assigned **Sarah** for tonight's ${currentPlan.mode === 'takeout' ? 'pickup' : 'cooking'} duties for **${currentPlan.title}**.`,
+      assistantReply: `Assigned **${name}** for tonight's ${currentPlan.mode === 'takeout' ? 'pickup' : 'cooking'} duties for **${currentPlan.title}**.`,
       toolAction: {
         tool: 'update_dinner_plan',
         status: 'pending',
-        displayText: 'Assign Sarah for pickup',
+        displayText: `Assign ${name} for dinner duties`,
         args: newPlan,
       },
     }
   }
 
-  if (normalized.includes('luke') && (normalized.includes('pickup') || normalized.includes('picking up') || normalized.includes('driver') || normalized.includes('chef') || normalized.includes('cook'))) {
-    const windowInfo = calculateOrderOrPrepWindow(currentPlan.mode, currentPlan.targetTime, 'Luke')
-    const newPlan: DinnerPlan = {
-      ...currentPlan,
-      chefOrDriver: 'Luke',
-      subtitle: windowInfo.subtitle,
-    }
-
-    return {
-      assistantReply: `Assigned **Luke** for tonight's ${currentPlan.mode === 'takeout' ? 'pickup' : 'cooking'} duties for **${currentPlan.title}**.`,
-      toolAction: {
-        tool: 'update_dinner_plan',
-        status: 'pending',
-        displayText: 'Assign Luke for pickup',
-        args: newPlan,
-      },
-    }
-  }
-
-  // 8. Status advancement (Order placed, food ready)
+  // 10. Status advancement (Order placed, food ready)
   if (normalized.includes('order placed') || normalized.includes('placed the order') || normalized.includes('called in')) {
     const newPlan: DinnerPlan = {
       ...currentPlan,
@@ -394,13 +438,13 @@ export function matchDinnerPlanIntent(
     }
   }
 
-  // 9. Informational / Query fallback
+  // 11. Informational / Query fallback
   if (
     (normalized.includes('update') || normalized.includes('change') || normalized.includes('how do i update') || normalized.includes('what is')) &&
     (normalized.includes('dinner') || normalized.includes('kitchen') || normalized.includes('tonight'))
   ) {
     return {
-      assistantReply: `Currently, tonight's kitchen is planned for **${currentPlan.title}** (${currentPlan.targetTime || '6:30 PM Target'}, Status: *${currentPlan.statusBadge || 'Planned'}*).\n\nTap any quick option below to pivot to Takeout, Leftovers, adjust time, or change pickup drivers!`,
+      assistantReply: `Currently, tonight's kitchen is planned for **${currentPlan.title}** (${currentPlan.targetTime || '6:30 PM Target'}, Status: *${currentPlan.statusBadge || 'Planned'}*).\n\nTap any quick option below to pivot to Takeout, Leftovers, adjust time, generate a recipe from pantry, or change chef/driver assignments!`,
       toolAction: undefined,
     }
   }

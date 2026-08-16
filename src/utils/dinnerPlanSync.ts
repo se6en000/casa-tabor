@@ -41,6 +41,7 @@ export function normalizeDinnerPlan(raw: unknown, fallback?: DinnerPlan): Dinner
     title,
     subtitle: typeof r.subtitle === 'string' ? r.subtitle : (fallback?.subtitle ?? ''),
     targetTime: typeof r.targetTime === 'string' ? r.targetTime : (fallback?.targetTime ?? '6:30 PM Target'),
+    recipeId: typeof r.recipeId === 'string' ? r.recipeId : fallback?.recipeId,
     chefOrDriver: typeof r.chefOrDriver === 'string' ? r.chefOrDriver : undefined,
     statusBadge: typeof r.statusBadge === 'string' ? r.statusBadge : (fallback?.statusBadge ?? 'Ingredients ready'),
     isPast: typeof r.isPast === 'boolean' ? r.isPast : undefined,
@@ -103,10 +104,19 @@ function releaseDinnerRealtimeChannel() {
 }
 
 /**
- * Loads the current dinner plan from Supabase `settings` table.
+ * Loads the current dinner plan from Supabase `settings` table or `recipe_meal_plans`.
  */
 export async function fetchTonightDinnerPlan(): Promise<DinnerPlan | null> {
   try {
+    // Check if there is an active meal plan scheduled for tonight in recipe_meal_plans
+    const { data: tonightMeal } = await supabase
+      .from('recipe_meal_plans')
+      .select('recipe_id, slot, planned_for, recipes(id, name, cook_time, servings)')
+      .eq('slot', 'tonight')
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
     const { data, error } = await supabase
       .from('settings')
       .select('value, updated_at')
@@ -115,14 +125,35 @@ export async function fetchTonightDinnerPlan(): Promise<DinnerPlan | null> {
 
     if (error) {
       console.warn('[DinnerSync] Failed to fetch dinner plan from Supabase:', error.message)
-      return null
     }
 
-    if (!data || !data.value) return null
-    const plan = normalizeDinnerPlan({
-      ...(typeof data.value === 'object' ? data.value : {}),
-      updatedAt: data.updated_at,
-    })
+    let plan: DinnerPlan | null = null
+    if (data && data.value) {
+      plan = normalizeDinnerPlan({
+        ...(typeof data.value === 'object' ? data.value : {}),
+        updatedAt: data.updated_at,
+      })
+    }
+
+    // If settings has the legacy 'Herb-Roasted Chicken' or is missing, and we have a tonightMeal, use tonightMeal!
+    const isLegacyStalePlan = !plan || plan.title.toLowerCase().includes('herb-roasted chicken')
+    if (isLegacyStalePlan && tonightMeal && (tonightMeal as any).recipes) {
+      const rec = (tonightMeal as any).recipes
+      const prepTime = rec.cook_time ? `${rec.cook_time} prep` : '25m prep'
+      const activeRecipePlan: DinnerPlan = {
+        mode: 'cook',
+        title: rec.name,
+        subtitle: `${prepTime} · Pantry stock confirmed · Chef: Jake & Kelly`,
+        targetTime: '6:30 PM Target',
+        recipeId: rec.id,
+        chefOrDriver: 'Jake & Kelly',
+        statusBadge: 'Ingredients ready',
+        updatedAt: new Date().toISOString(),
+      }
+      void saveTonightDinnerPlan(activeRecipePlan)
+      return activeRecipePlan
+    }
+
     return plan
   } catch (err) {
     console.warn('[DinnerSync] Exception fetching dinner plan:', err)

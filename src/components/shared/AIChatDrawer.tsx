@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import type React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIcon, Camera, Mic, Keyboard, RotateCcw, MessagesSquare, Plus, Square, CalendarDays, ShoppingCart, ChefHat, Pencil, AlertTriangle, Clock3, Utensils, Bell, UserPlus, MapPin, Mail, Activity, ChevronRight, Navigation, ArrowRight, Rotate3d } from 'lucide-react'
+import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIcon, Camera, Mic, Keyboard, RotateCcw, MessagesSquare, Plus, Square, CalendarDays, ShoppingCart, ChefHat, Pencil, AlertTriangle, Clock3, Utensils, Bell, UserPlus, MapPin, Mail, Activity, ChevronRight, Navigation, ArrowRight, Rotate3d, BookOpen, ShoppingBag } from 'lucide-react'
 import { format } from 'date-fns'
 import { useNavigate } from 'react-router-dom'
 import { cn } from '../../utils/cn'
@@ -622,6 +622,25 @@ export default function AIChatDrawer({
     ])
   }, [loading, markUserInteraction, qc, sendTraced])
 
+  const quickSaveAndSetTonightRecipe = useCallback(async (recipeMessage: string) => {
+    if (loading) return
+    markUserInteraction()
+    const recipeExcerpt = recipeMessage.trim().slice(0, 3500)
+    const prompt = [
+      'Save this recipe to my Recipe Library AND schedule it as Tonight\'s Dinner.',
+      'Use your previous recipe details as the source of truth.',
+      'Include complete ingredients with quantities/units and full numbered cooking steps.',
+      'Update Tonight\'s Kitchen plan on the dashboard with this recipe so we are ready to cook immediately.',
+      recipeExcerpt ? `\nRecipe draft:\n${recipeExcerpt}` : '',
+    ].join('\n')
+    await sendTraced(prompt)
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ['cook-page-recipes'] }),
+      qc.invalidateQueries({ queryKey: ['cook-page-meal-plans'] }),
+      qc.invalidateQueries({ queryKey: ['recipe-library'] }),
+    ])
+  }, [loading, markUserInteraction, qc, sendTraced])
+
   useEffect(() => {
     if (!open) {
       activeTraceRef.current = null
@@ -890,7 +909,7 @@ export default function AIChatDrawer({
       const msg: AIMessage = {
         id: crypto.randomUUID(),
         role: 'assistant',
-        content: `🍽️ **Tonight's Kitchen Planning**\n\nCurrently planned: **${plan.title}** (${plan.targetTime || '6:30 PM Target'}).\n\nWhat's the pivot for tonight? Tap a quick option below or tell me what you'd like to switch to!`,
+        content: `**Tonight's Kitchen Planning**\n\nCurrently planned: **${plan.title}** (${plan.targetTime || '6:30 PM Target'}).\n\nWhat's the pivot for tonight? Tap a quick option below, generate an on-the-fly recipe from the pantry, or tell me what you'd like to switch to!`,
       }
       if (messages.length === 0) {
         primeMessages([msg])
@@ -903,7 +922,7 @@ export default function AIChatDrawer({
     const defaultChefMsg: AIMessage = {
       id: crypto.randomUUID(),
       role: 'assistant',
-      content: "Chef Agent online 👨‍🍳\n\nI can help you plan weeknight meals, optimize for budget/speed, build overlap-friendly grocery lists, and adapt dinners based on what's in your pantry.\n\nTry: “Plan 4 quick dinners under 30 minutes” or “Use what we already have and keep cost low.”",
+      content: "Chef Agent online.\n\nI can help you plan weeknight meals, generate custom recipes from what's in your pantry, optimize grocery lists, and manage tonight's dinner.\n\nTry: “Cook with what we have on hand” or “Plan 4 quick dinners under 30 minutes.”",
     }
     if (messages.length === 0) {
       primeMessages([defaultChefMsg])
@@ -1338,6 +1357,7 @@ export default function AIChatDrawer({
                       enableQuickSaveRecipe={page === 'cook' || launchContext?.agent === 'chef'}
                       editSeed={messages.slice(0, messageIndex).findLast((message) => message.role === 'user')?.content ?? ''}
                       onQuickSaveRecipe={quickSaveRecipeSuggestion}
+                      onQuickSaveAndSetTonight={quickSaveAndSetTonightRecipe}
                       onConfirmToolAction={async (messageId, tool, args) => {
                         if (tool === 'confirm_talk_plan_action_intent') {
                           updateMessageToolStatus(messageId, 'done')
@@ -1350,12 +1370,14 @@ export default function AIChatDrawer({
                         if (tool === 'update_dinner_plan') {
                           updateMessageToolStatus(messageId, 'loading')
                           try {
+                            const defaultDriverOrChef = (args.mode === 'takeout' || args.mode === 'dineout') ? 'Jake' : 'Jake & Kelly'
                             const plan: DinnerPlan = {
                               mode: (args.mode as DinnerMode) || 'takeout',
                               title: String(args.title || "Flanigan's Seafood Bar & Grill"),
-                              subtitle: String(args.subtitle || (args.mode === 'takeout' ? `Pickup: ${args.chefOrDriver || 'Luke'} · Order Window: 6:00–6:15 PM` : 'Quick dinner update')),
+                              subtitle: String(args.subtitle || (args.mode === 'takeout' ? `Pickup: ${args.chefOrDriver || 'Jake'} · Order Window: 6:00–6:15 PM` : '25m prep · Pantry stock confirmed · Chef: Jake & Kelly')),
                               targetTime: String(args.targetTime || '6:30 PM Target'),
-                              chefOrDriver: args.chefOrDriver ? String(args.chefOrDriver) : undefined,
+                              recipeId: args.recipeId ? String(args.recipeId) : undefined,
+                              chefOrDriver: args.chefOrDriver ? String(args.chefOrDriver) : defaultDriverOrChef,
                               statusBadge: args.statusBadge ? String(args.statusBadge) : (args.mode === 'takeout' ? 'Order ready for pickup' : 'Ingredients ready'),
                             }
                             useAppStore.getState().setDinnerPlan(plan)

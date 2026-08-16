@@ -4,10 +4,11 @@ import { saveTonightDinnerPlan, normalizeDinnerPlan } from '../utils/dinnerPlanS
 
 export const DEFAULT_DINNER_PLAN: DinnerPlan = {
   mode: 'cook',
-  title: 'Herb-Roasted Chicken & Warm Farro',
-  subtitle: '35m prep · Pantry stock confirmed · Chef: Sarah & Luke',
+  title: 'Garlic Butter Shrimp Scampi',
+  subtitle: '25m prep · Pantry stock confirmed · Chef: Jake & Kelly',
   targetTime: '6:30 PM Target',
-  chefOrDriver: 'Sarah & Luke',
+  recipeId: '8cfa3cd2-a68f-4b73-912f-92865ba1ee6a',
+  chefOrDriver: 'Jake & Kelly',
   statusBadge: 'Ingredients ready',
 }
 
