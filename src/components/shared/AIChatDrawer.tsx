@@ -1087,30 +1087,11 @@ export default function AIChatDrawer({
   const drawerBody = (
     <>
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-casa-border">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className={cn(
-            'w-7 h-7 rounded-full bg-casa-gold/10 flex items-center justify-center transition-all shrink-0',
-            loading && 'bg-casa-gold/20',
-          )}>
-            <Sparkles size={15} className={cn('text-casa-gold', loading && 'animate-pulse')} />
-          </div>
-          <div className="min-w-0 flex items-baseline gap-2">
-            <p className="font-display text-heading text-casa-navy truncate">
-              Casa AI
-            </p>
-            {loading && <span className="text-casa-gold text-caption font-normal animate-pulse">thinking…</span>}
-            {!loading && speech.listening && (
-              <span className="text-red-500 text-caption font-normal flex items-center gap-1 inline-flex">
-                <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse inline-block" />
-                listening
-              </span>
-            )}
-          </div>
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
+      <div className="py-3.5 px-5 flex items-center justify-between border-b border-slate-200 bg-white shrink-0 relative z-20">
+        <div className="flex items-center gap-2 min-w-0">
           {speech.supported && (
-            <Button variant="ghost"
+            <Button
+              variant="ghost"
               type="button"
               onClick={handleConversationToggle}
               aria-pressed={conversationMode}
@@ -1118,14 +1099,14 @@ export default function AIChatDrawer({
                 ? 'Hands-free ON — mic stays armed for back-and-forth. Tap to turn off.'
                 : 'Hands-free OFF — tap the microphone for each turn.'}
               className={cn(
-                'h-7 px-2.5 flex items-center gap-1 rounded-full text-caption font-medium transition-colors',
+                'min-h-[44px] px-3.5 flex items-center gap-1.5 rounded-full text-caption font-bold transition-all active:scale-95 border',
                 conversationMode
-                  ? 'bg-casa-gold text-white'
-                  : 'text-casa-muted hover:text-casa-navy hover:bg-casa-divider',
+                  ? 'bg-amber-50/80 text-amber-900 border-amber-300 shadow-2xs'
+                  : 'bg-white text-slate-700 hover:text-slate-900 border-slate-200 hover:border-amber-300 hover:bg-amber-50/40',
               )}
             >
-              <MessagesSquare size={13} />
-              {conversationMode && <span>Hands-free</span>}
+              <MessagesSquare size={14} className={conversationMode ? 'text-amber-700' : 'text-slate-500'} />
+              <span>{conversationMode ? 'Hands-free' : 'Push to talk'}</span>
             </Button>
           )}
           {Boolean(profile?.token || privateHistory.access) && (
@@ -1138,42 +1119,55 @@ export default function AIChatDrawer({
                 loadHistoryConversations()
               }}
               title={`Open ${profile?.memberName ?? 'your'} private conversation history`}
-              className="h-7 rounded-full bg-casa-gold/10 px-2.5 text-caption font-medium text-casa-gold transition-colors hover:bg-casa-gold/20"
+              className="min-h-[44px] rounded-full bg-amber-50/60 border border-amber-300/80 px-3.5 text-caption font-bold text-amber-800 transition-all hover:bg-amber-100/70 hover:border-amber-400 active:scale-95 shadow-2xs"
             >
               Private
             </Button>
           )}
+          {loading && (
+            <span className="text-casa-gold text-caption font-medium animate-pulse flex items-center gap-1 shrink-0 ml-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-casa-gold animate-pulse inline-block" />
+              thinking…
+            </span>
+          )}
+          {!loading && speech.listening && (
+            <span className="text-red-500 text-caption font-medium flex items-center gap-1 shrink-0 ml-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse inline-block" />
+              listening
+            </span>
+          )}
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex items-center gap-1.5 shrink-0">
           {onSwitchToEvent && (Boolean(focusedEvent) || Boolean(focusedAction)) && (
-            <Button
+            <IconButton
               variant="ghost"
-              type="button"
               onClick={onSwitchToEvent}
               title={`Flip to ${focusedEvent ? `event: ${focusedEvent.title}` : focusedAction ? `action: ${focusedAction.title}` : 'details'}`}
               aria-label="Flip to inspection details"
-              className="size-control flex items-center justify-center text-casa-muted hover:text-casa-navy rounded-button hover:bg-casa-divider outline-none transition-all group active:scale-95 focus-visible:ring-2 focus-visible:ring-casa-gold"
-            >
-              <Rotate3d size={16} className="text-casa-gold transition-transform duration-300 group-hover:rotate-180" />
-            </Button>
+              className="living-header-action-btn group"
+              icon={<Rotate3d size={16} className="text-amber-700 transition-transform duration-300 group-hover:rotate-180" />}
+            />
           )}
           {(hasSession || messages.length > 0) && (
-            <Button variant="ghost"
-              type="button"
+            <IconButton
+              variant="ghost"
               onClick={startFresh}
               title="New conversation"
-              className="size-control flex items-center justify-center text-casa-muted hover:text-casa-navy rounded-button hover:bg-casa-divider outline-none transition-colors focus-visible:ring-2 focus-visible:ring-casa-gold"
               aria-label="New conversation"
-            >
-              <RotateCcw size={14} />
-            </Button>
+              className="living-header-action-btn group"
+              icon={<RotateCcw size={16} className="text-slate-800 transition-transform duration-300 group-hover:-rotate-90" />}
+            />
           )}
-          <Button variant="ghost"
-            type="button"
+          <IconButton
+            variant="ghost"
             onClick={onClose}
-            className="size-control flex items-center justify-center text-casa-muted hover:text-casa-navy rounded-button hover:bg-casa-divider outline-none transition-colors focus-visible:ring-2 focus-visible:ring-casa-gold"
+            className="living-header-action-btn"
             aria-label="Close assistant"
-          >
-            <X size={18} />
-          </Button>
+            title="Close assistant"
+            icon={<X size={16} className="text-slate-800" />}
+          />
         </div>
       </div>
 

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { format, formatDistanceToNow } from 'date-fns'
-import { ClipboardList, Bell, ChevronDown, ChevronLeft, ThumbsDown, CalendarPlus, BellPlus, AlertTriangle, ExternalLink, ShieldCheck, Calendar } from 'lucide-react'
+import { ClipboardList, Bell, ChevronDown, ChevronLeft, ThumbsDown, CalendarPlus, BellPlus, AlertTriangle, ExternalLink, ShieldCheck, Calendar, Tag } from 'lucide-react'
 import { sourceBadge } from '../utils/prepSourceBadge'
 import { needsYouAccent } from '../utils/needsYouAccent'
 import { conflictMetaLine, directorySuggestionMetaLine } from '../utils/needsYouMeta'
@@ -75,11 +75,12 @@ const PREP_FILTERS: { key: PrepFilterKey; label: string; match: (item: PrepItem)
   })),
 ]
 
-type PrepSourceKey = 'all' | 'gmail' | 'calendar_ai' | 'reminder'
+type PrepSourceKey = 'all' | 'gmail' | 'casa_labeled' | 'calendar_ai' | 'reminder'
 
 const PREP_SOURCE_FILTERS: { key: PrepSourceKey; label: string; match: (item: PrepItem) => boolean }[] = [
   { key: 'all', label: 'All sources', match: () => true },
   { key: 'gmail', label: 'Email', match: (item) => item.source_type === 'gmail' },
+  { key: 'casa_labeled', label: "Gmail 'Casa' Labeled", match: (item) => Boolean(item.is_user_labeled) },
   { key: 'calendar_ai', label: 'Calendar', match: (item) => (item.source_type ?? 'calendar_ai') === 'calendar_ai' },
   {
     key: 'reminder',
@@ -407,6 +408,12 @@ export default function ActionHubPage() {
                         <span className="min-w-0 flex-1 truncate text-caption text-casa-muted">
                           {readOnlyMeta ? readOnlyMeta.text : (item.event_title || 'Casa Tabor')}
                         </span>
+                        {item.is_user_labeled && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-100 text-purple-900 text-2xs font-semibold border border-purple-200">
+                            <Tag size={10} className="text-purple-700" />
+                            <span>Casa Labeled</span>
+                          </span>
+                        )}
                         {(() => {
                           const suggested = detectSuggestedEvent(item)
                           if (!suggested) return null

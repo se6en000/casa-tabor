@@ -21,13 +21,19 @@ import {
   Calendar,
   MapPin,
   Loader2,
+  Tag,
+  BookmarkPlus,
+  CheckCheck,
+  ThumbsDown,
+  Undo2,
 } from 'lucide-react'
 import { Button, IconButton } from '../../ui'
 import { cn } from '../../../utils/cn'
 import type { PrepItem, Conflict } from '../../../types'
 import { sourceBadge } from '../../../utils/prepSourceBadge'
 import { type SnoozeDuration } from '../../../utils/snoozeDuration'
-import { usePrepItems, usePrepItemDetails } from '../../../hooks/usePrepItems'
+import { usePrepItems, usePrepItemDetails, useDownvotePrepItem } from '../../../hooks/usePrepItems'
+import { useHouseholdCaptureRules } from '../../../hooks/useHouseholdCaptureRules'
 import {
   synthesizeActionAnalysis,
   extractAmount,
@@ -81,6 +87,10 @@ export default function ActionInspectionSidecar({
   const [signedSuccess, setSignedSuccess] = useState(false)
   const [creatingEvent, setCreatingEvent] = useState(false)
   const [createdEventId, setCreatedEventId] = useState<string | null>(null)
+  const [trainedSuccess, setTrainedSuccess] = useState<string | null>(null)
+
+  const { rules: captureRules = [], saveRule: saveCaptureRule, removeRule: removeCaptureRule, isSaving: isSavingRule } = useHouseholdCaptureRules()
+  const downvote = useDownvotePrepItem()
 
   // Find target prep item
   const currentItem = useMemo(() => {
@@ -95,10 +105,33 @@ export default function ActionInspectionSidecar({
   const { data: detailedItem } = usePrepItemDetails(currentItem)
   const activeItem = detailedItem || currentItem
 
+  // Sibling items extracted from the same email
+  const siblingItems = useMemo(() => {
+    if (!activeItem) return []
+    return allPrep.filter(p => p.id !== activeItem.id && (
+      (activeItem.cluster_id && p.cluster_id === activeItem.cluster_id) ||
+      (activeItem.source_ref && p.source_ref === activeItem.source_ref)
+    ))
+  }, [activeItem, allPrep])
+
   // Dynamic Synthesis Engine
   const analysis = useMemo(() => {
     return synthesizeActionAnalysis(activeItem, detailedItem)
   }, [activeItem, detailedItem])
+
+  const senderDomain = useMemo(() => {
+    if (analysis.senderEmail.includes('@')) {
+      return analysis.senderEmail.split('@')[1].replace(/[>]/g, '').toLowerCase().trim()
+    }
+    return ''
+  }, [analysis.senderEmail])
+
+  const isAlreadyTrained = useMemo(() => {
+    return captureRules.some(r => r.active !== false && (
+      (senderDomain && r.pattern_type === 'domain' && r.pattern_value.toLowerCase() === senderDomain) ||
+      (r.pattern_type === 'sender' && r.pattern_value.toLowerCase() === analysis.senderEmail.toLowerCase().trim())
+    ))
+  }, [captureRules, senderDomain, analysis.senderEmail])
 
   // Check if suggested event is already in the calendar
   const matchedCalendarEvent = useMemo(() => {
@@ -400,8 +433,7 @@ export default function ActionInspectionSidecar({
           )}
 
           {/* 3D Flip to Copilot button */}
-          <Button
-            size="sm"
+          <IconButton
             variant="ghost"
             onClick={() => {
               onSwitchToAi({
@@ -416,23 +448,20 @@ export default function ActionInspectionSidecar({
                 emailBody: detailedItem?.gmailContext?.email_body || analysis.emailBody,
               })
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-casa-gold/15 hover:bg-casa-gold/25 border border-casa-gold/35 text-casa-navy font-bold text-caption transition-all min-h-[44px]"
+            className="living-header-action-btn group"
             title="Flip to Copilot (✨)"
             aria-label="Flip to Copilot"
-          >
-            <Rotate3d size={14} className="text-casa-gold shrink-0 transition-transform duration-300 group-hover:rotate-180" />
-            <span className="hidden sm:inline">Ask AI</span>
-          </Button>
+            icon={<Rotate3d size={16} className="text-amber-700 transition-transform duration-300 group-hover:rotate-180" />}
+          />
 
           {/* Close sidecar */}
           <IconButton
-            size="sm"
             variant="ghost"
             onClick={onClose}
             aria-label="Close details"
             title="Close details"
-            className="min-h-[44px] min-w-[44px] sm:min-h-[48px] sm:min-w-[48px] rounded-full text-casa-muted hover:text-casa-navy hover:bg-black/5"
-            icon={<X size={18} />}
+            className="living-header-action-btn"
+            icon={<X size={16} className="text-slate-800" />}
           />
         </div>
       </div>
@@ -452,6 +481,15 @@ export default function ActionInspectionSidecar({
             <span>From: <strong>{analysis.senderLabel}</strong></span>
             <span>·</span>
             <span>{analysis.receivedTime}</span>
+            {activeItem?.is_user_labeled && (
+              <>
+                <span>·</span>
+                <span className="px-2 py-0.5 rounded-full text-2xs font-mono font-bold bg-purple-100 text-purple-900 border border-purple-200 inline-flex items-center gap-1">
+                  <Tag size={10} />
+                  Gmail 'Casa' Labeled
+                </span>
+              </>
+            )}
             {amount && (
               <>
                 <span>·</span>
@@ -459,6 +497,167 @@ export default function ActionInspectionSidecar({
               </>
             )}
           </div>
+        </div>
+
+        {/* ══════ SIBLING CLUSTER ITEMS (Extracted from Same Email) ══════ */}
+        {siblingItems.length > 0 && (
+          <div className="p-3.5 rounded-2xl bg-white border border-casa-border/80 shadow-2xs space-y-2">
+            <div className="text-caption font-bold text-casa-navy flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <Sparkles size={13} className="text-casa-gold" />
+                <span>Other Actions from this Email ({siblingItems.length})</span>
+              </span>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              {siblingItems.map((sib) => (
+                <button
+                  key={sib.id}
+                  type="button"
+                  onClick={() => onSelectAction?.(sib.id)}
+                  className="text-left px-3 py-2 rounded-xl bg-casa-bg hover:bg-casa-gold/10 border border-casa-border/60 transition-colors flex items-center justify-between text-body-sm font-medium text-casa-text min-h-[44px]"
+                >
+                  <span className="truncate">{sib.description || sib.event_title}</span>
+                  <span className="text-caption text-casa-gold font-semibold shrink-0 ml-2">Inspect →</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ══════ TEACH CASA / TRAINING FEEDBACK SECTION ══════ */}
+        <div className="p-4 rounded-2xl bg-purple-50/70 border border-purple-200/80 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-purple-950 font-bold text-caption uppercase tracking-wider">
+              <Tag size={14} className="text-purple-600" />
+              <span>Teach Casa &amp; Training</span>
+            </div>
+            {activeItem?.is_user_labeled ? (
+              <span className="text-2xs font-mono font-semibold px-2 py-0.5 rounded-full bg-purple-200 text-purple-900 flex items-center gap-1">
+                <Check size={11} />
+                Gmail Label: Casa
+              </span>
+            ) : isAlreadyTrained ? (
+              <span className="text-2xs font-mono font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 flex items-center gap-1">
+                <Check size={11} />
+                Rule Active
+              </span>
+            ) : null}
+          </div>
+
+          <p className="text-body-sm text-purple-950/80 leading-snug">
+            {isAlreadyTrained
+              ? `Casa has learned to automatically capture and structure incoming emails from @${senderDomain || analysis.senderLabel}.`
+              : `Teach Casa to automatically recognize emails from @${senderDomain || analysis.senderLabel}, or untrain/thumbs-down if captured incorrectly.`}
+          </p>
+
+          {trainedSuccess ? (
+            <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-caption font-semibold flex items-center gap-2 animate-in fade-in">
+              <CheckCheck size={16} className="text-emerald-600 shrink-0" />
+              <span>{trainedSuccess}</span>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2 pt-1">
+              {/* Positive Capture Training */}
+              {senderDomain && !isAlreadyTrained && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={isSavingRule}
+                  onClick={async () => {
+                    await saveCaptureRule({
+                      pattern_type: 'domain',
+                      pattern_value: senderDomain,
+                      rule_directive: `Always capture actions and calendar events from @${senderDomain}.`,
+                      origin: 'manual_teach',
+                      confidence: 1.0,
+                    })
+                    setTrainedSuccess(`Learned: Always scan @${senderDomain}`)
+                    setTimeout(() => setTrainedSuccess(null), 5000)
+                  }}
+                  className="min-h-[44px] sm:min-h-[48px] rounded-xl bg-white hover:bg-purple-100/60 border border-purple-300 text-purple-900 font-bold text-caption flex items-center gap-1.5 shadow-2xs"
+                >
+                  <BookmarkPlus size={14} className="text-purple-600" />
+                  <span>Always Capture from @{senderDomain}</span>
+                </Button>
+              )}
+
+              {!isAlreadyTrained && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={isSavingRule}
+                  onClick={async () => {
+                    await saveCaptureRule({
+                      pattern_type: 'sender',
+                      pattern_value: analysis.senderEmail.toLowerCase().trim() || analysis.senderLabel.toLowerCase().trim(),
+                      rule_directive: `Always extract tasks, forms, and calendar events from ${analysis.senderLabel}.`,
+                      origin: 'manual_teach',
+                      confidence: 1.0,
+                    })
+                    setTrainedSuccess(`Learned: Always scan ${analysis.senderLabel}`)
+                    setTimeout(() => setTrainedSuccess(null), 5000)
+                  }}
+                  className="min-h-[44px] sm:min-h-[48px] rounded-xl bg-white hover:bg-purple-100/60 border border-purple-300 text-purple-900 font-bold text-caption flex items-center gap-1.5 shadow-2xs"
+                >
+                  <Sparkles size={14} className="text-purple-600" />
+                  <span>Always Capture from {analysis.senderLabel}</span>
+                </Button>
+              )}
+
+              {/* Negative Feedback / Untrain */}
+              {isAlreadyTrained ? (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={isSavingRule}
+                  onClick={async () => {
+                    if (senderDomain) {
+                      await removeCaptureRule({ pattern_type: 'domain', pattern_value: senderDomain })
+                    }
+                    await removeCaptureRule({
+                      pattern_type: 'sender',
+                      pattern_value: analysis.senderEmail.toLowerCase().trim() || analysis.senderLabel.toLowerCase().trim(),
+                    })
+                    setTrainedSuccess(`Untrained: Removed capture rules for @${senderDomain || analysis.senderLabel}`)
+                    setTimeout(() => setTrainedSuccess(null), 5000)
+                  }}
+                  className="min-h-[44px] sm:min-h-[48px] rounded-xl bg-white hover:bg-rose-50 border border-rose-200 text-rose-800 font-bold text-caption flex items-center gap-1.5 shadow-2xs"
+                >
+                  <Undo2 size={14} className="text-rose-600" />
+                  <span>Untrain @{senderDomain || analysis.senderLabel}</span>
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={isSavingRule}
+                  onClick={async () => {
+                    if (activeItem) {
+                      await downvote(activeItem.id)
+                    }
+                    if (senderDomain) {
+                      await saveCaptureRule({
+                        pattern_type: 'domain',
+                        pattern_value: senderDomain,
+                        rule_directive: `Ignore promotional and non-actionable emails from @${senderDomain}.`,
+                        origin: 'user_untrain',
+                        active: false,
+                      })
+                    }
+                    setTrainedSuccess('Dismissed & Learned: Casa will ignore similar items in future scans.')
+                    setTimeout(() => {
+                      setTrainedSuccess(null)
+                      onClose()
+                    }, 1800)
+                  }}
+                  className="min-h-[44px] sm:min-h-[48px] rounded-xl bg-white hover:bg-rose-50 border border-rose-200 text-rose-800 font-bold text-caption flex items-center gap-1.5 shadow-2xs"
+                >
+                  <ThumbsDown size={14} className="text-rose-600" />
+                  <span>Not Actionable (Thumbs Down)</span>
+                </Button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* ══════ AI EXECUTIVE BRIEF (Glanceable in 3 Seconds) ══════ */}

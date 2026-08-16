@@ -68,7 +68,8 @@ export default function LivingFlowHeader({
               aria-label="Flip to Copilot chat"
             />
           )}
-          <button
+          <IconButton
+            icon={<Link2 size={16} className="text-slate-800" />}
             onClick={() => {
               navigator.clipboard?.writeText(window.location.href)
               alert('Event link copied to clipboard!')
@@ -76,17 +77,14 @@ export default function LivingFlowHeader({
             className="living-header-action-btn"
             aria-label="Share event link"
             title="Share event link"
-          >
-            <Link2 size={16} />
-          </button>
-          <button
+          />
+          <IconButton
+            icon={<X size={16} className="text-slate-800" />}
             onClick={onClose}
             className="living-header-action-btn"
             aria-label="Close sidecar"
             title="Close sidecar"
-          >
-            <X size={16} />
-          </button>
+          />
         </div>
       </div>
 

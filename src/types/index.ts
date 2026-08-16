@@ -300,6 +300,8 @@ export interface PrepItem {
   snoozed_until?: string | null
   snooze_count?: number
   last_snoozed_at?: string | null
+  is_user_labeled?: boolean | null
+  cluster_id?: string | null
 }
 
 /**

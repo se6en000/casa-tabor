@@ -1,14 +1,15 @@
 /**
- * scan-gmail-inbox  v2
+ * scan-gmail-inbox  v3 — Casa Ingest & Learn Engine
  *
  * For each family member with gmail_scan_enabled:
- *   1. Fetch new inbox messages (incremental via historyId)
- *   2. Classify intent: new_event | update_event | travel_detail | skip
- *   2b. Extract non-calendar inbox actions: forms | payment | rsvp | deadline | delivery | renewal
- *   3. new_event    → fuzzy-dedup against existing events → create or skip
- *   4. update_event → patch existing event; surface conflict notification if times changed significantly
- *   5. travel_detail → hand off to scan-travel-emails pipeline inline
- *   6. Latest-email-wins for trips (compare source_email_received_at)
+ *   1. Fetch new inbox messages (incremental via historyId) + fetch messages labeled 'Casa'
+ *   2. Match & inject learned capture rules (household_capture_rules) into prompt context
+ *   3. Compound Decomposer: Extract ALL calendar events and ALL action items (forms, payment, rsvp, deadline, etc.)
+ *   4. new_event / compound events → fuzzy-dedup against existing events → create multiple events if present
+ *   5. update_event → patch existing event; surface conflict notification if times changed significantly
+ *   6. travel_detail → hand off to scan-travel-emails pipeline inline
+ *   7. If message was user-labeled 'Casa' → auto-train by creating/updating learned capture rule for sender domain
+ *   8. Latest-email-wins for trips (compare source_email_received_at)
  */
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
@@ -44,12 +45,86 @@ const TRAVEL_SENDER_DOMAINS = [
 const TRAVEL_KEYWORDS = /itinerary|e-ticket|eticket|boarding pass|flight confirmation|booking confirmation|reservation confirmed|hotel confirmation|your flight|trip receipt|travel itinerary|airline confirmation|ticket number|record locator|e-ticket and trip/i
 
 // Keywords that suggest calendar relevance
-const CALENDAR_KEYWORDS = /appointment|appt|booking|reservation|confirm|invite|invitation|reminder|rsvp|meeting|schedule|event|registration|playdate|dentist|doctor|physician|clinic|hospital|therapy|checkup|concert|show|performance|game|match|tournament|practice|party|birthday|celebration|dinner|lunch|brunch|flight|hotel|check-in|checkout|school|class|lesson|camp|workshop|conference|orientation|pickup|pick-up|drop-off|drop off|parent-teacher|parent teacher|field trip|volunteer|carpool|open house|spirit day|spirit week|pto|pta|picture day|book fair|curriculum night|back to school|meet the teacher/i
+const CALENDAR_KEYWORDS = /appointment|appt|booking|reservation|confirm|invite|invitation|reminder|rsvp|meeting|schedule|event|registration|playdate|dentist|doctor|physician|clinic|hospital|therapy|checkup|concert|show|performance|game|match|tournament|practice|party|birthday|celebration|dinner|lunch|brunch|flight|hotel|check-in|checkout|school|class|lesson|camp|workshop|conference|orientation|pickup|pick-up|drop-off|drop off|parent-teacher|parent teacher|field trip|volunteer|carpool|open house|spirit day|spirit week|pto|pta|picture day|school pictures?|book fair|curriculum night|back to school|meet the teacher/i
 
-// Keywords that suggest a family todo/action worth surfacing — deliberately broad so real
-// bills, forms, renewals, deliveries, and school/PTO matters don't fall through a "no keywords" gap. Extractable
-// action types are: forms | payment | rsvp | deadline | delivery | renewal | general.
+// Keywords that suggest a family todo/action worth surfacing
 const ACTION_KEYWORDS = /permission slip|consent form|waiver|paperwork|due date|deadline|invoice|payment due|payment reminder|pay by|pay \$|please pay|amount due|balance due|account balance|schoolcash|school cash|agenda sale|purchase an agenda|autopay|auto-pay|auto pay|past due|overdue|final notice|bill is ready|your bill|billing statement|statement is ready|statement (is )?ready|tuition|fee is due|late fee|rsvp|respond by|register by|register your ride|registration deadline|submit by|application|summer assignments|renew by|renewal|membership expir|subscription|expires (on|soon)|expiring soon|card expiring|order confirmation|shipping confirmation|shipped|out for delivery|delivered|track(ing)? (your |this )?(package|order|shipment)|delivery confirmation|return by|return window|refund|please complete|complete (the )?attached|complete this form|complete any forms|fill out|yellow folder|sign and return|signature required|action required|response required|please sign|approval needed|verify your|update your payment|please review and (sign|complete|submit)|pto|pta|spirit day|spirit week|dress up day|picture day|school pictures?|book fair|field day|open house|curriculum night|back to school|meet the teacher|early dismissal|half day|no school|teacher planning|teacher workday|early release|late start|school newsletter|class party|room parent|teacher appreciation|volunteers? needed|volunteer sign up|sign-up genius|signupgenius|bring to school|wear your|wear spirit|school shirt|uniform day|spirit wear|pto meeting|school event/i
+
+// ── Learned Capture Rules Interface ──────────────────────────────
+
+export interface HouseholdCaptureRule {
+  id?: string
+  pattern_type: 'domain' | 'sender' | 'subject'
+  pattern_value: string
+  rule_directive: string
+  origin?: 'user_label' | 'manual_teach' | 'learned_feedback'
+  confidence?: number
+  active?: boolean
+}
+
+async function fetchHouseholdCaptureRules(sb: ReturnType<typeof createClient>): Promise<HouseholdCaptureRule[]> {
+  try {
+    const { data, error } = await sb.from('household_capture_rules').select('*').eq('active', true)
+    if (!error && Array.isArray(data)) return data
+  } catch {}
+  try {
+    const { data: setting } = await sb.from('settings').select('value').eq('key', 'household_capture_rules').maybeSingle()
+    if (setting?.value && Array.isArray(setting.value)) return setting.value
+  } catch {}
+  return []
+}
+
+async function persistLearnedCaptureRule(
+  sb: ReturnType<typeof createClient>,
+  rule: HouseholdCaptureRule,
+): Promise<void> {
+  const normVal = rule.pattern_value.toLowerCase().trim()
+  try {
+    const { error } = await sb.from('household_capture_rules').upsert({
+      pattern_type: rule.pattern_type,
+      pattern_value: normVal,
+      rule_directive: rule.rule_directive,
+      origin: rule.origin ?? 'user_label',
+      confidence: rule.confidence ?? 1.0,
+      active: true,
+      last_matched_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'pattern_type,pattern_value' })
+    if (!error) return
+  } catch {}
+
+  // Fallback to settings table
+  try {
+    const { data: setting } = await sb.from('settings').select('value').eq('key', 'household_capture_rules').maybeSingle()
+    const current: HouseholdCaptureRule[] = Array.isArray(setting?.value) ? setting.value : []
+    const existingIdx = current.findIndex(r => r.pattern_type === rule.pattern_type && r.pattern_value.toLowerCase() === normVal)
+    if (existingIdx >= 0) {
+      current[existingIdx] = { ...current[existingIdx], ...rule }
+    } else {
+      current.push(rule)
+    }
+    await sb.from('settings').upsert({ key: 'household_capture_rules', value: current })
+  } catch {}
+}
+
+function filterMatchingCaptureRules(rules: HouseholdCaptureRule[], from: string, subject: string): HouseholdCaptureRule[] {
+  const fromLower = from.toLowerCase()
+  const subjLower = subject.toLowerCase()
+  return rules.filter((r) => {
+    if (!r.active && r.active !== undefined) return false
+    const val = r.pattern_value.toLowerCase()
+    if (r.pattern_type === 'domain') {
+      return fromLower.includes(`@${val}`) || fromLower.includes(val)
+    }
+    if (r.pattern_type === 'sender') {
+      return fromLower.includes(val)
+    }
+    if (r.pattern_type === 'subject') {
+      return subjLower.includes(val)
+    }
+    return false
+  })
+}
 
 // ── Gmail helpers ─────────────────────────────────────────────────
 
@@ -57,6 +132,17 @@ async function gmailFetch(path: string, token: string) {
   return fetch(`https://gmail.googleapis.com/gmail/v1${path}`, {
     headers: { Authorization: `Bearer ${token}` },
   })
+}
+
+async function getUserLabeledMessages(accessToken: string, labelQuery = 'Casa'): Promise<{ id: string }[]> {
+  try {
+    const res = await gmailFetch(`/users/me/messages?q=label:${encodeURIComponent(labelQuery)}&maxResults=50`, accessToken)
+    if (!res.ok) return []
+    const data = await res.json()
+    return data.messages ?? []
+  } catch {
+    return []
+  }
 }
 
 async function getRecentMessages(
@@ -114,6 +200,7 @@ async function getMessageDetails(msgId: string, accessToken: string) {
   const msg = await res.json()
   const headers: { name: string; value: string }[] = msg.payload?.headers ?? []
   const content = extractGmailMessageContent(msg.payload ?? {})
+  const labelIds: string[] = msg.labelIds ?? []
   return {
     subject: headers.find(h => h.name.toLowerCase() === 'subject')?.value ?? '',
     from:    headers.find(h => h.name.toLowerCase() === 'from')?.value ?? '',
@@ -124,6 +211,7 @@ async function getMessageDetails(msgId: string, accessToken: string) {
     body:    content.text,
     contentFormat: content.format,
     attachments: content.attachments,
+    labelIds,
   }
 }
 
@@ -162,7 +250,7 @@ async function callLLM(
     const res = await providerFetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], response_format: { type: 'json_object' }, temperature: 0.1, max_tokens: 500 }),
+      body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], response_format: { type: 'json_object' }, temperature: 0.1, max_tokens: 600 }),
     })
     if (!res.ok) throw new Error(`OpenAI ${res.status}`)
     const data = await res.json()
@@ -173,7 +261,7 @@ async function callLLM(
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 400, temperature: 0.1, responseMimeType: 'application/json' },
+        generationConfig: { maxOutputTokens: 600, temperature: 0.1, responseMimeType: 'application/json' },
       }),
     })
     if (!res.ok) throw new Error(`Gemini ${res.status}`)
@@ -186,10 +274,37 @@ async function callLLM(
   }
 }
 
-// ── Intent classification ─────────────────────────────────────────
+// ── Intent classification & Compound Decomposer ───────────────────
 
-interface EmailIntent {
+export interface ExtractedEventItem {
+  title: string
+  start_datetime: string   // ISO8601 or YYYY-MM-DD
+  end_datetime?: string
+  all_day?: boolean
+  location?: string
+  description?: string
+  assigned_member?: string  // family member name
+}
+
+export interface EmailIntent {
   intent: 'new_event' | 'update_event' | 'travel_detail' | 'skip'
+  // Compound events array (for newsletters / multi-event messages)
+  events?: ExtractedEventItem[]
+  // Single event backward-compatibility fields
+  title?: string
+  start_datetime?: string
+  end_datetime?: string
+  all_day?: boolean
+  location?: string
+  description?: string
+  assigned_member?: string
+  // update_event fields
+  updates_event_title?: string
+  updates_event_date?: string
+  change_summary?: string
+  // skip field
+  skip_reason?: string
+  // family evidence
   family_evidence?: {
     relevant: boolean
     category?: 'school' | 'athletics' | 'appointment' | 'medical' | 'forms' | 'payment' | 'insurance' | 'utilities' | 'order_delivery' | 'other_family_service'
@@ -200,23 +315,9 @@ interface EmailIntent {
     privacy_class?: 'standard' | 'sensitive' | 'excluded'
     confidence?: number
   }
-  // new_event / update_event fields
-  title?: string
-  start_datetime?: string   // ISO8601 or 'unknown'
-  end_datetime?: string
-  all_day?: boolean
-  location?: string
-  description?: string
-  assigned_member?: string  // family member name
-  // update_event fields
-  updates_event_title?: string   // title of the event this email is updating
-  updates_event_date?: string    // approximate date of event being updated
-  change_summary?: string        // human-readable summary of what changed
-  // skip field
-  skip_reason?: string
 }
 
-interface InboxActionItem {
+export interface InboxActionItem {
   type: 'forms' | 'payment' | 'rsvp' | 'deadline' | 'delivery' | 'renewal' | 'general'
   title: string
   description: string
@@ -235,41 +336,52 @@ async function classifyEmail(
   body: string,
   familyMembers: { id: string; name: string; role: string }[],
   llmConfig: { provider?: string; model?: string; api_key: string },
+  matchingRules: HouseholdCaptureRule[] = [],
   usage?: UsageAccumulator,
 ): Promise<EmailIntent | null> {
   const today = new Date().toISOString().slice(0, 10)
+  const rulesBlock = matchingRules.length > 0
+    ? `\nHOUSEHOLD LEARNED RULES FOR THIS SENDER:\n${matchingRules.map(r => `- [${r.pattern_type}: ${r.pattern_value}] ${r.rule_directive}`).join('\n')}\n`
+    : ''
+
   const prompt = `You are the inbox classifier for a family calendar app. Today is ${today}.
 Family members: ${familyMembers.map(m => `${m.name} (${m.role})`).join(', ')}
+${rulesBlock}
+Classify this email. Note: An email may contain ONE or MULTIPLE distinct family events/dates (for example: School Pictures, Grade 6 Open House, and Grades 7 & 8 Open House).
 
-Classify this email into ONE intent:
-- "new_event": A brand-new appointment, booking, event, meeting, class, etc. with a specific date/time
-- "update_event": An update, change, cancellation, or reminder for an EXISTING event (look for "updated", "changed", "rescheduled", "cancelled", "reminder for your upcoming", "your appointment has been moved")
-- "travel_detail": Flight confirmation, hotel booking, trip itinerary, e-ticket — travel logistics
-- "skip": Purely promotional, newsletter, shipping, no date, or already handled
-
-Separately decide whether it contains current operational family evidence worth
-remembering even when it is not an event or conventional due-date task. Eligible
-categories are school, athletics, appointment, medical logistics, forms,
-payment, insurance, utilities, order/delivery, and trusted family services.
-Exclude marketing, donations, optional opportunities, generic newsletters,
-routine receipts, credentials, identifiers, and sensitive medical details.
+Primary intent:
+- "new_event": Brand-new appointment, booking, school event, picture day, open house, meeting, game, tryout with specific dates/times. If multiple dates/events exist, return them ALL under "events".
+- "update_event": An update, change, cancellation, or reminder for an EXISTING event.
+- "travel_detail": Flight confirmation, hotel booking, trip itinerary, e-ticket.
+- "skip": Purely promotional, marketing without scheduled dates, or routine receipt.
 
 EMAIL:
 Subject: ${subject}
 From: ${from}
 Date: ${date}
-Body: ${body.slice(0, 3000)}
+Body: ${body.slice(0, 3500)}
 
 Reply ONLY with JSON:
 {
   "intent": "new_event|update_event|travel_detail|skip",
-  "title": "short event title (new_event/update_event only)",
-  "start_datetime": "ISO8601 with timezone offset or 'unknown'",
-  "end_datetime": "ISO8601 with timezone offset or 'unknown'",
+  "events": [
+    {
+      "title": "short event title",
+      "start_datetime": "ISO8601 with timezone offset or YYYY-MM-DD",
+      "end_datetime": "ISO8601 with timezone offset or YYYY-MM-DD",
+      "all_day": false,
+      "location": "venue/address or empty",
+      "description": "1-2 sentence summary",
+      "assigned_member": "family member name most likely attending, or empty"
+    }
+  ],
+  "title": "short event title (if single event)",
+  "start_datetime": "ISO8601 or YYYY-MM-DD (if single event)",
+  "end_datetime": "ISO8601 or YYYY-MM-DD",
   "all_day": false,
   "location": "venue/address or empty",
   "description": "1-2 sentence summary",
-  "assigned_member": "family member name most likely attending, or empty",
+  "assigned_member": "family member name",
   "updates_event_title": "title of event being updated (update_event only)",
   "updates_event_date": "YYYY-MM-DD of event being updated (update_event only)",
   "change_summary": "what changed: e.g. 'time moved from 2pm to 3pm' (update_event only)",
@@ -277,7 +389,7 @@ Reply ONLY with JSON:
   "family_evidence": {
     "relevant": false,
     "category": "school|athletics|appointment|medical|forms|payment|insurance|utilities|order_delivery|other_family_service",
-    "summary": "concise source-backed operational facts only, with no credentials or sensitive details",
+    "summary": "concise source-backed operational facts only",
     "entity_names": ["people, schools, providers, teams, or services explicitly named"],
     "effective_at": "ISO8601 or empty",
     "expires_at": "ISO8601 or empty",
@@ -299,25 +411,27 @@ async function extractInboxActions(
   body: string,
   familyMembers: { id: string; name: string; role: string }[],
   llmConfig: { provider?: string; model?: string; api_key: string },
+  matchingRules: HouseholdCaptureRule[] = [],
   usage?: UsageAccumulator,
 ): Promise<InboxActionItem[]> {
   const today = new Date().toISOString().slice(0, 10)
+  const rulesBlock = matchingRules.length > 0
+    ? `\nHOUSEHOLD LEARNED RULES FOR THIS SENDER:\n${matchingRules.map(r => `- [${r.pattern_type}: ${r.pattern_value}] ${r.rule_directive}`).join('\n')}\n`
+    : ''
+
   const prompt = `You extract actionable family inbox tasks. Today is ${today}.
 Family members: ${familyMembers.map(m => `${m.name} (${m.role})`).join(', ')}
+${rulesBlock}
+Return ALL tasks that require family follow-up:
+- forms (permission slips, waivers, bus transportation registrations like 'Register Your Ride', Student ID pickup, PTO forms, Adopt-A-Class)
+- payment (bill, statement, tuition, dues, membership fees, school donations/supplies)
+- rsvp (sports league registrations, fall registration, tryouts, confirmations)
+- deadline (order deadlines, picture orders, submit/apply by date)
+- delivery (package/order shipped, tracking)
+- renewal (subscriptions, memberships)
+- general (school dismissal adjustments, teacher notes requiring parent action)
 
-Return ONLY tasks that require action to avoid problems:
-- forms (permission slips, waivers, docs to complete/sign/return)
-- payment (bill, statement, balance due, invoice, tuition, fee, autopay notice)
-- rsvp (respond/confirm attendance)
-- deadline (submit/apply/register by date, general due-by task)
-- delivery (package/order shipped, out for delivery, delivery confirmation, return window)
-- renewal (subscription/membership/license/card renewing or expiring)
-- general (anything else actionable that doesn't fit the above)
-
-Do NOT invent an action from routine marketing, newsletters, or receipts that need no follow-up.
-Do NOT return conditional opportunities (such as optional benefits applications, donations, volunteering, or general maintenance notices) as tasks.
-When a task must be completed before a stated event or first day, use that event's exact date as due_datetime.
-Resolve relative dates (for example "Monday" or "next Friday") from the email's received date, not from today.
+When an email is a school newsletter or sports league announcement, extract each distinct form, fee, registration, or required supply item.
 
 EMAIL:
 Subject: ${subject}
@@ -336,7 +450,7 @@ Respond ONLY JSON:
       "assigned_member": "family member name or empty",
       "priority": 1,
       "vendor": "merchant or service name, or empty",
-      "transaction_id": "exact order/booking/account transaction identifier, or empty",
+      "transaction_id": "exact transaction identifier, or empty",
       "transaction_status": "confirmed|payment|shipped|out_for_delivery|delivered|problem, or empty"
     }
   ]
@@ -414,6 +528,8 @@ async function persistInboxActions(
   receivedAtIso: string,
   actions: InboxActionItem[],
   familyMembers: { id: string; name: string; role: string }[],
+  isUserLabeled = false,
+  clusterId: string | null = null,
 ): Promise<number> {
   if (actions.length === 0) return 0
   const rows = actions.map((a) => {
@@ -445,13 +561,22 @@ async function persistInboxActions(
       source_type: 'gmail',
       source_ref: sourceRef,
       source_pattern_key: `action:${a.type}`,
-      source_confidence: 1,
+      source_confidence: isUserLabeled ? 1 : 0.9,
       attention_thread_key: transaction.threadKey,
       attention_vendor: transaction.vendor,
       attention_stage: transaction.stage,
+      is_user_labeled: isUserLabeled,
+      cluster_id: clusterId,
     }
   })
-  const { data, error } = await sb.from('prep_items').insert(rows).select('id')
+  try {
+    const { data, error } = await sb.from('prep_items').insert(rows).select('id')
+    if (!error) return data?.length ?? 0
+  } catch {}
+
+  // Fallback without new columns if table migration is pending
+  const fallbackRows = rows.map(({ is_user_labeled: _u, cluster_id: _c, ...rest }) => rest)
+  const { data, error } = await sb.from('prep_items').insert(fallbackRows).select('id')
   if (error) throw error
   return data?.length ?? 0
 }
@@ -585,7 +710,6 @@ async function persistFamilyEmailEvidence(
 }
 
 // ── Fuzzy event dedup ─────────────────────────────────────────────
-// Returns existing event ID if we find a probable match; null if it looks new.
 
 function titleSimilarity(a: string, b: string): number {
   const words = (s: string) => new Set(s.toLowerCase().replace(/[^a-z0-9 ]/g, '').split(/\s+/).filter(w => w.length > 2))
@@ -623,14 +747,11 @@ async function findMatchingEvent(
   for (const row of events) {
     const ev = (row as { events: { id: string; title: string; start_time: string; end_time: string; location_name: string | null } }).events
     const sim = titleSimilarity(title, ev.title)
-    // Match if title 50%+ similar OR location matches
     const locMatch = location && ev.location_name && ev.location_name.toLowerCase().includes(location.toLowerCase().slice(0, 10))
     if (sim >= 0.5 || locMatch) return ev
   }
   return null
 }
-
-// ── Conflict detection ────────────────────────────────────────────
 
 function minutesDiff(a: string, b: string): number {
   return Math.abs(new Date(a).getTime() - new Date(b).getTime()) / 60000
@@ -645,9 +766,10 @@ async function handleGmailScan(req: Request): Promise<Response> {
   const clientId     = Deno.env.get('GOOGLE_CLIENT_ID')!
   const clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET')!
 
-  const [llmRes, familyRes] = await Promise.all([
+  const [llmRes, familyRes, learnedRules] = await Promise.all([
     sb.from('settings').select('value').eq('key', 'llm_config').single(),
     sb.from('family_members').select('id, name, role').order('sort_order'),
+    fetchHouseholdCaptureRules(sb),
   ])
   const llm = resolveBackgroundLlmConfig(llmRes.data?.value) as {
     api_key?: string
@@ -671,29 +793,6 @@ async function handleGmailScan(req: Request): Promise<Response> {
   const backfillBefore = typeof body.backfill_before === 'string' ? body.backfill_before : null
   const backfillActionsOnly = body.backfill_actions_only === true
   const backfillFamilyEvidenceOnly = body.backfill_family_evidence_only === true
-  if (backfillActionsOnly && !backfillSince) {
-    return new Response(JSON.stringify({ error: 'backfill_actions_only requires backfill_since' }), {
-      status: 400,
-      headers: { ...CORS, 'content-type': 'application/json' },
-    })
-  }
-  if (backfillFamilyEvidenceOnly && !backfillSince) {
-    return new Response(JSON.stringify({ error: 'backfill_family_evidence_only requires backfill_since' }), {
-      status: 400,
-      headers: { ...CORS, 'content-type': 'application/json' },
-    })
-  }
-  if (backfillFamilyEvidenceOnly && backfillSince) {
-    const requestedSince = new Date(backfillSince)
-    const earliestAllowed = new Date()
-    earliestAllowed.setUTCMonth(earliestAllowed.getUTCMonth() - 4)
-    if (isNaN(requestedSince.getTime()) || requestedSince < earliestAllowed) {
-      return new Response(JSON.stringify({ error: 'Family evidence backfill is limited to the rolling four-month window' }), {
-        status: 400,
-        headers: { ...CORS, 'content-type': 'application/json' },
-      })
-    }
-  }
 
   let query = sb.from('google_tokens')
     .select('family_member_id, google_email, refresh_token, access_token, expires_at, gmail_history_id')
@@ -727,423 +826,248 @@ async function handleGmailScan(req: Request): Promise<Response> {
         }).eq('family_member_id', memberId)
       }
 
-      const { messages, newHistoryId } = await getRecentMessages(accessToken, tok.gmail_history_id, backfillSince, backfillBefore)
+      // ── Dual-Pass: Recent Inbox + User-Labeled 'Casa' Messages ──
+      const [recentResult, labeledMessages] = await Promise.all([
+        getRecentMessages(accessToken, tok.gmail_history_id, backfillSince, backfillBefore),
+        getUserLabeledMessages(accessToken, 'Casa'),
+      ])
+      const { messages, newHistoryId } = recentResult
       if (newHistoryId) {
         await sb.from('google_tokens').update({ gmail_history_id: newHistoryId }).eq('family_member_id', memberId)
       }
 
+      // Merge messages; tag labeled ones
+      const messageMap = new Map<string, { id: string; isUserLabeled: boolean }>()
+      for (const m of labeledMessages) {
+        messageMap.set(m.id, { id: m.id, isUserLabeled: true })
+      }
+      for (const m of messages) {
+        if (!messageMap.has(m.id)) {
+          messageMap.set(m.id, { id: m.id, isUserLabeled: false })
+        }
+      }
+      const combinedMessages = Array.from(messageMap.values())
+
       let scanned = 0, created = 0, updated = 0, travel = 0, skipped = 0, conflicts = 0, actions = 0, evidence = 0
 
-      for (const { id: msgId } of messages) {
-      // Skip already-processed
-      const { data: alreadyDone } = await sb.from('gmail_processed_messages')
-        .select('id').eq('family_member_id', memberId).eq('gmail_message_id', msgId).maybeSingle()
-      if (!backfillSince && alreadyDone) continue
+      for (const { id: msgId, isUserLabeled } of combinedMessages) {
+        // Skip already-processed UNLESS this email was newly labeled 'Casa' by the user
+        const { data: alreadyDone } = await sb.from('gmail_processed_messages')
+          .select('id, is_user_labeled').eq('family_member_id', memberId).eq('gmail_message_id', msgId).maybeSingle()
+        if (!isUserLabeled) {
+          if (!backfillSince && alreadyDone) continue
+        }
 
-      const details = await getMessageDetails(msgId, accessToken)
-      if (!details) continue
-      scanned++
+        const details = await getMessageDetails(msgId, accessToken)
+        if (!details) continue
+        scanned++
 
-      const emailReceivedAt = details.date ? new Date(details.date).toISOString() : new Date().toISOString()
-      const canonicalKey = await canonicalEmailKey({
-        messageId: details.internetMessageId,
-        from: details.from,
-        subject: details.subject,
-        receivedAt: emailReceivedAt,
-        normalizedBody: details.body,
-      })
-      const contentFingerprint = await canonicalContentFingerprint(details.body)
-      const { data: canonicalEmail, error: canonicalEmailError } = await sb
-        .from('canonical_inbox_emails')
-        .upsert({
-          canonical_key: canonicalKey,
-          gmail_thread_id: details.threadId,
-          internet_message_id: details.internetMessageId,
-          from_email: details.from,
+        const emailReceivedAt = details.date ? new Date(details.date).toISOString() : new Date().toISOString()
+        const canonicalKey = await canonicalEmailKey({
+          messageId: details.internetMessageId,
+          from: details.from,
           subject: details.subject,
-          received_at: emailReceivedAt,
-          content_fingerprint: contentFingerprint,
-          content_format: details.contentFormat,
-          attachment_count: details.attachments.length,
-          last_seen_at: new Date().toISOString(),
-        }, { onConflict: 'canonical_key' })
-        .select('id')
-        .single()
-      if (canonicalEmailError || !canonicalEmail) {
-        throw new Error(`Could not canonicalize Gmail message: ${canonicalEmailError?.message ?? 'missing canonical row'}`)
-      }
-
-      if (backfillFamilyEvidenceOnly) {
-        const { data: existingFamilyDocument, error: familyDocumentLookupError } = await sb
-          .from('family_data_documents')
+          receivedAt: emailReceivedAt,
+          normalizedBody: details.body,
+        })
+        const contentFingerprint = await canonicalContentFingerprint(details.body)
+        const { data: canonicalEmail, error: canonicalEmailError } = await sb
+          .from('canonical_inbox_emails')
+          .upsert({
+            canonical_key: canonicalKey,
+            gmail_thread_id: details.threadId,
+            internet_message_id: details.internetMessageId,
+            from_email: details.from,
+            subject: details.subject,
+            received_at: emailReceivedAt,
+            content_fingerprint: contentFingerprint,
+            content_format: details.contentFormat,
+            attachment_count: details.attachments.length,
+            last_seen_at: new Date().toISOString(),
+          }, { onConflict: 'canonical_key' })
           .select('id')
-          .eq('source_type', 'email')
-          .eq('source_id', canonicalEmail.id)
-          .maybeSingle()
-        if (familyDocumentLookupError) throw familyDocumentLookupError
-        if (existingFamilyDocument) {
-          skipped++
-          continue
+          .single()
+        if (canonicalEmailError || !canonicalEmail) {
+          throw new Error(`Could not canonicalize Gmail message: ${canonicalEmailError?.message ?? 'missing canonical row'}`)
         }
-      }
 
-      const { data: existingCanonicalDelivery, error: duplicateLookupError } = await sb
-        .from('gmail_processed_messages')
-        .select('id')
-        .eq('canonical_email_id', canonicalEmail.id)
-        .limit(1)
-      if (duplicateLookupError) throw duplicateLookupError
-      if (existingCanonicalDelivery && existingCanonicalDelivery.length > 0 && !backfillFamilyEvidenceOnly) {
-        await sb.from('gmail_processed_messages').upsert({
-          family_member_id: memberId,
-          gmail_message_id: msgId,
-          canonical_email_id: canonicalEmail.id,
-          subject: details.subject,
-          email_subject: details.subject,
-          from_email: details.from,
-          received_at: emailReceivedAt,
-          intent: 'skip',
-          skipped_reason: 'duplicate delivery of canonical inbox email',
-          email_body: details.body.slice(0, 8000),
-        }, { onConflict: 'family_member_id,gmail_message_id' })
-        skipped++
-        continue
-      }
-
-      const searchText = `${details.subject}\n${details.snippet}\n${details.body}`
-      const isTravel = TRAVEL_KEYWORDS.test(searchText) || TRAVEL_SENDER_DOMAINS.some(d => details.from.toLowerCase().includes(d))
-      const isCalendar = CALENDAR_KEYWORDS.test(searchText)
-      const isActionCandidate = ACTION_KEYWORDS.test(searchText)
-      const familyEvidenceCandidate = classifyFamilyEvidenceCandidate({
-        subject: details.subject,
-        from: details.from,
-        body: details.body,
-      })
-
-      if (!isTravel && !isCalendar && !isActionCandidate && !familyEvidenceCandidate.eligible) {
-        await sb.from('gmail_processed_messages').upsert({
-          family_member_id: memberId, gmail_message_id: msgId,
-          canonical_email_id: canonicalEmail.id,
-          subject: details.subject, email_subject: details.subject,
-          from_email: details.from,
-          received_at: details.date ? new Date(details.date).toISOString() : null,
-          intent: 'skip', skipped_reason: 'no keywords',
-        }, { onConflict: 'family_member_id,gmail_message_id' })
-        skipped++
-        continue
-      }
-
-      // ── AI classification ──────────────────────────────────────
-      const [classified, extractedActions] = await Promise.all([
-        classifyEmail(
-          details.subject,
-          details.from,
-          details.date,
-          redactFamilyEvidenceText(details.body),
-          familyMembers,
-          llm,
-          llmUsage,
-        ),
-        isActionCandidate && !backfillFamilyEvidenceOnly
-          ? extractInboxActions(details.subject, details.from, details.date, details.body, familyMembers, llm, llmUsage)
-          : Promise.resolve([] as InboxActionItem[]),
-      ])
-      const resolvedTargetMember = resolveImmediateFamilyMember({
-        members: familyMembers,
-        preferredName: classified?.assigned_member ?? null,
-        entityNames: extractedActions
-          .map((action) => action.assigned_member)
-          .filter((name): name is string => typeof name === 'string' && name.trim().length > 0),
-        fallbackMemberId: tokenBelongsToImmediateFamily ? memberId : null,
-      })
-      const sourceOwnerMemberId = resolvedTargetMember?.id ?? null
-
-      const indexedFamilyEvidence = familyEvidenceCandidate.eligible
-        ? await persistFamilyEmailEvidence(
-          sb,
-          canonicalEmail.id,
-          details,
-          emailReceivedAt,
-          contentFingerprint,
-          classified?.family_evidence,
-          familyEvidenceCandidate.category,
-        )
-        : false
-      if (indexedFamilyEvidence) {
-        evidence++
-        indexedEvidenceTotal++
-      }
-      if (backfillFamilyEvidenceOnly) {
-        await sb.from('gmail_processed_messages').upsert({
-          family_member_id: memberId,
-          gmail_message_id: msgId,
-          canonical_email_id: canonicalEmail.id,
-          subject: details.subject,
-          email_subject: details.subject,
-          from_email: details.from,
-          received_at: emailReceivedAt,
-          intent: 'skip',
-          skipped_reason: indexedFamilyEvidence
-            ? 'backfill family evidence indexed'
-            : 'backfill family evidence excluded',
-        }, { onConflict: 'family_member_id,gmail_message_id' })
-        skipped++
-        continue
-      }
-      const currentActions = backfillActionsOnly
-        ? filterCurrentBackfillActions(extractedActions, new Date())
-        : extractedActions
-
-      const actionsFromEmail = await persistInboxActions(
-        sb,
-        sourceOwnerMemberId,
-        msgId,
-        details.subject,
-        null,
-        details.subject.slice(0, 80),
-        null,
-        emailReceivedAt,
-        currentActions,
-        familyMembers,
-      )
-      actions += actionsFromEmail
-      if (actionsFromEmail > 0) {
-        await persistEmailKnowledgeClaims(
-          sb,
-          canonicalEmail.id,
-          memberId,
-          msgId,
-          emailReceivedAt,
-        )
-      }
-      if (backfillActionsOnly) {
-        await sb.from('gmail_processed_messages').upsert({
-          family_member_id: memberId,
-          gmail_message_id: msgId,
-          canonical_email_id: canonicalEmail.id,
-          subject: details.subject,
-          email_subject: details.subject,
-          from_email: details.from,
-          received_at: emailReceivedAt,
-          intent: 'skip',
-          skipped_reason: actionsFromEmail > 0
-            ? 'backfill action-only import'
-            : 'backfill action-only import: no current explicit-due action',
-          email_body: details.body.slice(0, 8000),
-        }, { onConflict: 'family_member_id,gmail_message_id' })
-        skipped++
-        continue
-      }
-
-      if (!classified || classified.intent === 'skip') {
-        await sb.from('gmail_processed_messages').upsert({
-          family_member_id: memberId, gmail_message_id: msgId,
-          canonical_email_id: canonicalEmail.id,
-          subject: details.subject, email_subject: details.subject,
-          from_email: details.from,
-          received_at: details.date ? new Date(details.date).toISOString() : null,
-          intent: 'skip',
-          skipped_reason: actionsFromEmail > 0 ? 'non-calendar email with actionable tasks extracted' : (classified?.skip_reason ?? 'AI skipped'),
-          email_body: details.body.slice(0, 8000),
-        }, { onConflict: 'family_member_id,gmail_message_id' })
-        skipped++
-        continue
-      }
-
-      // ── INTENT: travel_detail ──────────────────────────────────
-      if (classified.intent === 'travel_detail' || isTravel) {
-        const travelMemberId = sourceOwnerMemberId
-        if (!travelMemberId) {
-          await sb.from('gmail_processed_messages').upsert({
-            family_member_id: memberId, gmail_message_id: msgId,
-            subject: details.subject, email_subject: details.subject,
-            from_email: details.from, received_at: emailReceivedAt,
-            intent: 'skip', skipped_reason: 'shared inbox travel email with no clear immediate family attribution',
-          }, { onConflict: 'family_member_id,gmail_message_id' })
-          skipped++
-          continue
-        }
-        // Check if a trip from this email already exists with newer data
-        const { data: existingTrip } = await sb.from('trips')
-          .select('id, source_email_received_at, gmail_message_ids')
-          .eq('family_member_id', travelMemberId)
-          .contains('gmail_message_ids', [msgId])
-          .maybeSingle()
-
-        if (existingTrip) {
-          // Already processed — check if this email is newer (shouldn't happen on first run but handles re-delivery)
-          if (existingTrip.source_email_received_at && new Date(emailReceivedAt) <= new Date(existingTrip.source_email_received_at)) {
+        if (backfillFamilyEvidenceOnly) {
+          const { data: existingFamilyDocument } = await sb
+            .from('family_data_documents')
+            .select('id')
+            .eq('source_type', 'email')
+            .eq('source_id', canonicalEmail.id)
+            .maybeSingle()
+          if (existingFamilyDocument) {
             await sb.from('gmail_processed_messages').upsert({
               family_member_id: memberId, gmail_message_id: msgId,
               canonical_email_id: canonicalEmail.id,
-              subject: details.subject, email_subject: details.subject,
-              from_email: details.from, received_at: emailReceivedAt,
-              intent: 'travel_detail', skipped_reason: 'older than existing trip record',
+              subject: details.subject,
+              email_subject: details.subject,
+              from_email: details.from,
+              received_at: emailReceivedAt,
+              intent: 'skip',
+              skipped_reason: 'backfill family evidence indexed',
+              is_user_labeled: isUserLabeled,
             }, { onConflict: 'family_member_id,gmail_message_id' })
             skipped++
             continue
           }
         }
 
-        // Invoke scan-travel-emails inline with raw_text mode
-        // Find a matching travel event for this member
-        const { data: matchEvt } = await sb
-          .from('event_members')
-          .select('events!inner(id, start_time)')
-          .eq('family_member_id', travelMemberId)
-          .limit(10)
-
-        // Find the closest upcoming travel event
-        const travelEventId = matchEvt
-          ? (matchEvt as { events: { id: string; start_time: string } }[])
-              .map(r => r.events)
-              .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
-              .find(e => new Date(e.start_time) > new Date())?.id
-          : undefined
-
-        const travelRes = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/scan-travel-emails`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-            'content-type': 'application/json',
-          },
-          body: JSON.stringify({
-            raw_text: details.body.slice(0, 20000),
-            source_subject: details.subject,
-            family_member_id: travelMemberId,
-            event_id: travelEventId,
-            existing_trip_id: existingTrip?.id,
-          }),
-        })
-        const travelResult = travelRes.ok ? await travelRes.json() : null
-
-        // Update source_email_received_at on the newly created/updated trip
-        if (travelResult?.ok) {
-          await sb.from('trips')
-            .update({ source_email_received_at: emailReceivedAt })
-            .eq('family_member_id', travelMemberId)
-            .contains('gmail_message_ids', [msgId])
+        const { data: existingCanonicalDelivery } = await sb
+          .from('gmail_processed_messages')
+          .select('id')
+          .eq('canonical_email_id', canonicalEmail.id)
+          .limit(1)
+        if (existingCanonicalDelivery && existingCanonicalDelivery.length > 0 && !backfillFamilyEvidenceOnly && !isUserLabeled) {
+          await sb.from('gmail_processed_messages').upsert({
+            family_member_id: memberId, gmail_message_id: msgId,
+            canonical_email_id: canonicalEmail.id,
+            subject: details.subject,
+            email_subject: details.subject,
+            from_email: details.from,
+            received_at: emailReceivedAt,
+            intent: 'skip',
+            skipped_reason: 'duplicate delivery of canonical inbox email',
+            email_body: details.body.slice(0, 8000),
+            is_user_labeled: isUserLabeled,
+          }, { onConflict: 'family_member_id,gmail_message_id' })
+          skipped++
+          continue
         }
 
-        await sb.from('gmail_processed_messages').upsert({
-          family_member_id: memberId, gmail_message_id: msgId,
-          canonical_email_id: canonicalEmail.id,
-          subject: details.subject, email_subject: details.subject,
-          from_email: details.from, received_at: emailReceivedAt,
-          intent: 'travel_detail',
-          email_body: details.body.slice(0, 8000),
-        }, { onConflict: 'family_member_id,gmail_message_id' })
-        travel++
-        continue
-      }
+        const matchingRules = filterMatchingCaptureRules(learnedRules, details.from, details.subject)
+        const searchText = `${details.subject}\n${details.snippet}\n${details.body}`
+        const isTravel = TRAVEL_KEYWORDS.test(searchText) || TRAVEL_SENDER_DOMAINS.some(d => details.from.toLowerCase().includes(d))
+        const isCalendar = CALENDAR_KEYWORDS.test(searchText) || matchingRules.length > 0
+        const isActionCandidate = ACTION_KEYWORDS.test(searchText) || matchingRules.length > 0
+        const familyEvidenceCandidate = classifyFamilyEvidenceCandidate({
+          subject: details.subject,
+          from: details.from,
+          body: details.body,
+        })
 
-      const isUnknown = (v?: string) => !v || v === 'unknown'
-      const startIso  = isUnknown(classified.start_datetime) ? null : classified.start_datetime!
-      const endIso    = isUnknown(classified.end_datetime)   ? null : classified.end_datetime!
-      const startTime = startIso ? new Date(startIso) : null
-      const endTime   = endIso   ? new Date(endIso)   : startTime ? new Date(startTime.getTime() + 3600_000) : null
-
-      // Resolve which family member this is for
-      const assignedMember = resolveImmediateFamilyMember({
-        members: familyMembers,
-        preferredName: classified.assigned_member ?? null,
-        entityNames: [classified.title, classified.location].filter((value): value is string => typeof value === 'string' && value.trim().length > 0),
-        fallbackMemberId: sourceOwnerMemberId ?? (tokenBelongsToImmediateFamily ? memberId : null),
-      }) ?? familyMembers[0]
-
-      // ── INTENT: update_event ───────────────────────────────────
-      if (classified.intent === 'update_event') {
-        // Find the event being updated
-        const searchTitle = classified.updates_event_title ?? classified.title ?? ''
-        const searchDate  = classified.updates_event_date ?? classified.start_datetime ?? 'unknown'
-        const matchedEvent = await findMatchingEvent(sb, assignedMember.id, searchTitle, searchDate, classified.location ?? '')
-
-        if (matchedEvent && startTime) {
-          const timeDiff = minutesDiff(matchedEvent.start_time, startTime.toISOString())
-          const locationChanged = classified.location && matchedEvent.location_name &&
-            !matchedEvent.location_name.toLowerCase().includes((classified.location ?? '').toLowerCase().slice(0, 8))
-
-          // Surface as conflict if time moved >15 min or location changed
-          if (timeDiff > 15 || locationChanged) {
-            await sb.from('email_conflicts').insert({
-              family_member_id: memberId,
-              gmail_message_id: msgId,
-              event_id: matchedEvent.id,
-              conflict_type: timeDiff > 15 ? 'time_change' : 'location_change',
-              field_name: timeDiff > 15 ? 'start_time' : 'location_name',
-              old_value: timeDiff > 15 ? matchedEvent.start_time : matchedEvent.location_name,
-              new_value: timeDiff > 15 ? startTime.toISOString() : classified.location,
-              email_subject: details.subject,
-              email_from: details.from,
-            })
-            conflicts++
-          }
-
-          // Apply update (email = source of truth)
-          const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
-          if (startTime) patch.start_time = startTime.toISOString()
-          if (endTime) patch.end_time = endTime.toISOString()
-          if (classified.location) patch.location_name = classified.location
-          if (classified.description) patch.description = classified.description
-          await sb.from('events').update(patch).eq('id', matchedEvent.id)
-
+        // Labeled emails bypass negative skip filters completely
+        if (!isUserLabeled && !isTravel && !isCalendar && !isActionCandidate && !familyEvidenceCandidate.eligible) {
           await sb.from('gmail_processed_messages').upsert({
             family_member_id: memberId, gmail_message_id: msgId,
             canonical_email_id: canonicalEmail.id,
             subject: details.subject, email_subject: details.subject,
-            from_email: details.from, received_at: emailReceivedAt,
-            intent: 'update_event', updated_event_id: matchedEvent.id,
-            email_body: details.body.slice(0, 8000),
+            from_email: details.from,
+            received_at: details.date ? new Date(details.date).toISOString() : null,
+            intent: 'skip', skipped_reason: 'no keywords',
+            is_user_labeled: false,
           }, { onConflict: 'family_member_id,gmail_message_id' })
-          updated++
-        } else {
-          // Can't find the event to update — treat as new
-          classified.intent = 'new_event'
-          // fall through to new_event below
+          skipped++
+          continue
         }
-        if (classified.intent === 'update_event') continue
-      }
 
-      // ── INTENT: new_event ──────────────────────────────────────
-      if (!startTime) {
-        await sb.from('gmail_processed_messages').upsert({
-          family_member_id: memberId, gmail_message_id: msgId,
-          canonical_email_id: canonicalEmail.id,
-          subject: details.subject, email_subject: details.subject,
-          from_email: details.from, received_at: emailReceivedAt,
-          intent: 'skip', skipped_reason: 'no parseable start time',
-        }, { onConflict: 'family_member_id,gmail_message_id' })
-        skipped++
-        continue
-      }
+        // ── AI Compound Decomposer Execution ────────────────────────
+        const [classified, extractedActions] = await Promise.all([
+          classifyEmail(
+            details.subject,
+            details.from,
+            details.date,
+            redactFamilyEvidenceText(details.body),
+            familyMembers,
+            llm,
+            matchingRules,
+            llmUsage,
+          ),
+          (isActionCandidate || isUserLabeled) && !backfillFamilyEvidenceOnly
+            ? extractInboxActions(details.subject, details.from, details.date, details.body, familyMembers, llm, matchingRules, llmUsage)
+            : Promise.resolve([] as InboxActionItem[]),
+        ])
 
-      // Dedup check — don't create if a similar event already exists
-      const existingMatch = await findMatchingEvent(sb, assignedMember.id, classified.title ?? '', startIso ?? '', classified.location ?? '')
-      if (existingMatch) {
-        await sb.from('gmail_processed_messages').upsert({
-          family_member_id: memberId, gmail_message_id: msgId,
-          canonical_email_id: canonicalEmail.id,
-          subject: details.subject, email_subject: details.subject,
-          from_email: details.from, received_at: emailReceivedAt,
-          intent: 'skip', skipped_reason: `duplicate of event: ${existingMatch.title}`,
-        }, { onConflict: 'family_member_id,gmail_message_id' })
-        skipped++
-        continue
-      }
+        // ── Auto-Train from User-Labeled 'Casa' Emails ───────────────
+        if (isUserLabeled) {
+          const senderDomain = details.from.includes('@')
+            ? details.from.split('@')[1].replace(/[>]/g, '').trim().toLowerCase()
+            : ''
+          if (senderDomain && !['gmail.com', 'yahoo.com', 'hotmail.com', 'icloud.com', 'outlook.com'].includes(senderDomain)) {
+            await persistLearnedCaptureRule(sb, {
+              pattern_type: 'domain',
+              pattern_value: senderDomain,
+              rule_directive: `Always scan emails from @${senderDomain} for calendar events, open houses, forms, deadlines, and parent/student action items.`,
+              origin: 'user_label',
+              confidence: 1.0,
+            })
+          } else if (details.from) {
+            const cleanFrom = details.from.replace(/.*<([^>]+)>.*/, '$1').trim().toLowerCase()
+            await persistLearnedCaptureRule(sb, {
+              pattern_type: 'sender',
+              pattern_value: cleanFrom,
+              rule_directive: `Always capture actions and calendar events from ${cleanFrom}.`,
+              origin: 'user_label',
+              confidence: 1.0,
+            })
+          }
+        }
 
-      // Create new event
-      const { data: newEvent } = await sb.from('events').insert({
-        title: classified.title ?? details.subject.slice(0, 60),
-        description: classified.description || `Imported from email: ${details.subject}`,
-        start_time: startTime.toISOString(),
-        end_time: (endTime ?? new Date(startTime.getTime() + 3600_000)).toISOString(),
-        all_day: classified.all_day ?? false,
-        location_name: classified.location || null,
-        source_member_id: assignedMember.id,
-      }).select('id').single()
+        const resolvedTargetMember = resolveImmediateFamilyMember({
+          members: familyMembers,
+          preferredName: classified?.assigned_member ?? null,
+          entityNames: extractedActions
+            .map((action) => action.assigned_member)
+            .filter((name): name is string => typeof name === 'string' && name.trim().length > 0),
+          fallbackMemberId: tokenBelongsToImmediateFamily ? memberId : null,
+        })
+        const sourceOwnerMemberId = resolvedTargetMember?.id ?? null
 
-      if (newEvent) {
-        await sb.from('event_members').insert({ event_id: newEvent.id, family_member_id: assignedMember.id, role: 'primary' })
+        const indexedFamilyEvidence = familyEvidenceCandidate.eligible
+          ? await persistFamilyEmailEvidence(
+            sb,
+            canonicalEmail.id,
+            details,
+            emailReceivedAt,
+            contentFingerprint,
+            classified?.family_evidence,
+            familyEvidenceCandidate.category,
+          )
+          : false
+        if (indexedFamilyEvidence) {
+          evidence++
+          indexedEvidenceTotal++
+        }
+
+        if (backfillFamilyEvidenceOnly) {
+          await sb.from('gmail_processed_messages').upsert({
+            family_member_id: memberId, gmail_message_id: msgId,
+            canonical_email_id: canonicalEmail.id,
+            subject: details.subject,
+            email_subject: details.subject,
+            from_email: details.from,
+            received_at: emailReceivedAt,
+            intent: 'skip',
+            skipped_reason: indexedFamilyEvidence
+              ? 'backfill family evidence indexed'
+              : 'backfill family evidence excluded',
+            is_user_labeled: isUserLabeled,
+          }, { onConflict: 'family_member_id,gmail_message_id' })
+          skipped++
+          continue
+        }
+
+        const currentActions = backfillActionsOnly
+          ? filterCurrentBackfillActions(extractedActions, new Date())
+          : extractedActions
+
+        const actionsFromEmail = await persistInboxActions(
+          sb,
+          sourceOwnerMemberId,
+          msgId,
+          details.subject,
+          null,
+          details.subject.slice(0, 80),
+          null,
+          emailReceivedAt,
+          currentActions,
+          familyMembers,
+          isUserLabeled,
+          canonicalEmail.id,
+        )
+        actions += actionsFromEmail
         if (actionsFromEmail > 0) {
           await persistEmailKnowledgeClaims(
             sb,
@@ -1151,30 +1075,255 @@ async function handleGmailScan(req: Request): Promise<Response> {
             memberId,
             msgId,
             emailReceivedAt,
-            newEvent.id,
           )
         }
 
-        // Use canonical create flow so DB + Google linkage stays consistent.
-        await sb.functions.invoke('create-google-event', {
-          body: { event_id: newEvent.id },
-        }).catch(console.error)
+        if (backfillActionsOnly) {
+          await sb.from('gmail_processed_messages').upsert({
+            family_member_id: memberId, gmail_message_id: msgId,
+            canonical_email_id: canonicalEmail.id,
+            subject: details.subject,
+            email_subject: details.subject,
+            from_email: details.from,
+            received_at: emailReceivedAt,
+            intent: 'skip',
+            skipped_reason: actionsFromEmail > 0
+              ? 'backfill action-only import'
+              : 'backfill action-only import: no current explicit-due action',
+            email_body: details.body.slice(0, 8000),
+            is_user_labeled: isUserLabeled,
+          }, { onConflict: 'family_member_id,gmail_message_id' })
+          skipped++
+          continue
+        }
 
-        // Trigger AI enrichment asynchronously
-        sb.functions.invoke('enrich-event', {
-          body: { event_id: newEvent.id },
-        }).catch(() => {})
+        // ── INTENT: travel_detail ──────────────────────────────────
+        if (classified?.intent === 'travel_detail' || isTravel) {
+          const travelMemberId = sourceOwnerMemberId
+          if (!travelMemberId) {
+            await sb.from('gmail_processed_messages').upsert({
+              family_member_id: memberId, gmail_message_id: msgId,
+              canonical_email_id: canonicalEmail.id,
+              subject: details.subject, email_subject: details.subject,
+              from_email: details.from, received_at: emailReceivedAt,
+              intent: 'skip', skipped_reason: 'shared inbox travel email with no clear immediate family attribution',
+              is_user_labeled: isUserLabeled,
+            }, { onConflict: 'family_member_id,gmail_message_id' })
+            skipped++
+            continue
+          }
+
+          const { data: existingTrip } = await sb.from('trips')
+            .select('id, source_email_received_at, gmail_message_ids')
+            .eq('family_member_id', travelMemberId)
+            .contains('gmail_message_ids', [msgId])
+            .maybeSingle()
+
+          if (existingTrip && existingTrip.source_email_received_at && new Date(emailReceivedAt) <= new Date(existingTrip.source_email_received_at)) {
+            await sb.from('gmail_processed_messages').upsert({
+              family_member_id: memberId, gmail_message_id: msgId,
+              canonical_email_id: canonicalEmail.id,
+              subject: details.subject, email_subject: details.subject,
+              from_email: details.from, received_at: emailReceivedAt,
+              intent: 'travel_detail', skipped_reason: 'older than existing trip record',
+              is_user_labeled: isUserLabeled,
+            }, { onConflict: 'family_member_id,gmail_message_id' })
+            skipped++
+            continue
+          }
+
+          const { data: matchEvt } = await sb
+            .from('event_members')
+            .select('events!inner(id, start_time)')
+            .eq('family_member_id', travelMemberId)
+            .limit(10)
+
+          const travelEventId = matchEvt
+            ? (matchEvt as { events: { id: string; start_time: string } }[])
+                .map(r => r.events)
+                .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+                .find(e => new Date(e.start_time) > new Date())?.id
+            : undefined
+
+          const travelRes = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/scan-travel-emails`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+              'content-type': 'application/json',
+            },
+            body: JSON.stringify({
+              raw_text: details.body.slice(0, 20000),
+              source_subject: details.subject,
+              family_member_id: travelMemberId,
+              event_id: travelEventId,
+              existing_trip_id: existingTrip?.id,
+            }),
+          })
+          const travelResult = travelRes.ok ? await travelRes.json() : null
+
+          if (travelResult?.ok) {
+            await sb.from('trips')
+              .update({ source_email_received_at: emailReceivedAt })
+              .eq('family_member_id', travelMemberId)
+              .contains('gmail_message_ids', [msgId])
+          }
+
+          await sb.from('gmail_processed_messages').upsert({
+            family_member_id: memberId, gmail_message_id: msgId,
+            canonical_email_id: canonicalEmail.id,
+            subject: details.subject, email_subject: details.subject,
+            from_email: details.from, received_at: emailReceivedAt,
+            intent: 'travel_detail',
+            email_body: details.body.slice(0, 8000),
+            is_user_labeled: isUserLabeled,
+          }, { onConflict: 'family_member_id,gmail_message_id' })
+          travel++
+          continue
+        }
+
+        const isUnknown = (v?: string) => !v || v === 'unknown'
+
+        // ── INTENT: update_event ───────────────────────────────────
+        if (classified?.intent === 'update_event') {
+          const searchTitle = classified.updates_event_title ?? classified.title ?? ''
+          const searchDate  = classified.updates_event_date ?? classified.start_datetime ?? 'unknown'
+          const assignedMember = resolveImmediateFamilyMember({
+            members: familyMembers,
+            preferredName: classified.assigned_member ?? null,
+            entityNames: [classified.title, classified.location].filter((value): value is string => typeof value === 'string' && value.trim().length > 0),
+            fallbackMemberId: sourceOwnerMemberId ?? (tokenBelongsToImmediateFamily ? memberId : null),
+          }) ?? familyMembers[0]
+
+          const matchedEvent = await findMatchingEvent(sb, assignedMember.id, searchTitle, searchDate, classified.location ?? '')
+          const startTime = classified.start_datetime && !isUnknown(classified.start_datetime) ? new Date(classified.start_datetime) : null
+          const endTime = classified.end_datetime && !isUnknown(classified.end_datetime) ? new Date(classified.end_datetime) : null
+
+          if (matchedEvent && startTime) {
+            const timeDiff = minutesDiff(matchedEvent.start_time, startTime.toISOString())
+            const locationChanged = classified.location && matchedEvent.location_name &&
+              !matchedEvent.location_name.toLowerCase().includes((classified.location ?? '').toLowerCase().slice(0, 8))
+
+            if (timeDiff > 15 || locationChanged) {
+              await sb.from('email_conflicts').insert({
+                family_member_id: memberId,
+                gmail_message_id: msgId,
+                event_id: matchedEvent.id,
+                conflict_type: timeDiff > 15 ? 'time_change' : 'location_change',
+                field_name: timeDiff > 15 ? 'start_time' : 'location_name',
+                old_value: timeDiff > 15 ? matchedEvent.start_time : matchedEvent.location_name,
+                new_value: timeDiff > 15 ? startTime.toISOString() : classified.location,
+                email_subject: details.subject,
+                email_from: details.from,
+              })
+              conflicts++
+            }
+
+            const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
+            if (startTime) patch.start_time = startTime.toISOString()
+            if (endTime) patch.end_time = endTime.toISOString()
+            if (classified.location) patch.location_name = classified.location
+            if (classified.description) patch.description = classified.description
+            await sb.from('events').update(patch).eq('id', matchedEvent.id)
+
+            await sb.from('gmail_processed_messages').upsert({
+              family_member_id: memberId, gmail_message_id: msgId,
+              canonical_email_id: canonicalEmail.id,
+              subject: details.subject, email_subject: details.subject,
+              from_email: details.from, received_at: emailReceivedAt,
+              intent: 'update_event', updated_event_id: matchedEvent.id,
+              email_body: details.body.slice(0, 8000),
+              is_user_labeled: isUserLabeled,
+            }, { onConflict: 'family_member_id,gmail_message_id' })
+            updated++
+            continue
+          }
+        }
+
+        // ── INTENT: new_event / Compound Multi-Event Creation ──────
+        const eventsToProcess: ExtractedEventItem[] = (classified?.events && classified.events.length > 0)
+          ? classified.events
+          : (classified?.title && classified.start_datetime && !isUnknown(classified.start_datetime))
+            ? [{
+                title: classified.title,
+                start_datetime: classified.start_datetime,
+                end_datetime: classified.end_datetime,
+                all_day: classified.all_day,
+                location: classified.location,
+                description: classified.description,
+                assigned_member: classified.assigned_member,
+              }]
+            : []
+
+        let createdCountForMessage = 0
+        let lastCreatedEventId: string | null = null
+
+        for (const evItem of eventsToProcess) {
+          const evStartIso = isUnknown(evItem.start_datetime) ? null : evItem.start_datetime
+          const evEndIso = isUnknown(evItem.end_datetime) ? null : evItem.end_datetime
+          const evStartTime = evStartIso ? new Date(evStartIso) : null
+          if (!evStartTime || isNaN(evStartTime.getTime())) continue
+
+          const evEndTime = evEndIso ? new Date(evEndIso) : new Date(evStartTime.getTime() + (evItem.all_day ? 24 * 3600_000 : 3600_000))
+          const evAssignedMember = resolveImmediateFamilyMember({
+            members: familyMembers,
+            preferredName: evItem.assigned_member ?? classified?.assigned_member ?? null,
+            entityNames: [evItem.title, evItem.location].filter((v): v is string => typeof v === 'string' && v.trim().length > 0),
+            fallbackMemberId: sourceOwnerMemberId ?? (tokenBelongsToImmediateFamily ? memberId : null),
+          }) ?? familyMembers[0]
+
+          const existingMatch = await findMatchingEvent(sb, evAssignedMember.id, evItem.title, evStartIso ?? '', evItem.location ?? '')
+          if (existingMatch) continue
+
+          const { data: newEvent } = await sb.from('events').insert({
+            title: evItem.title || details.subject.slice(0, 60),
+            description: evItem.description || `Imported from email: ${details.subject}`,
+            start_time: evStartTime.toISOString(),
+            end_time: evEndTime.toISOString(),
+            all_day: evItem.all_day ?? false,
+            location_name: evItem.location || null,
+            source_member_id: evAssignedMember.id,
+          }).select('id').single()
+
+          if (newEvent) {
+            lastCreatedEventId = newEvent.id
+            await sb.from('event_members').insert({ event_id: newEvent.id, family_member_id: evAssignedMember.id, role: 'primary' })
+            created++
+            createdCountForMessage++
+
+            // Dispatch Google Calendar creation & enrichment
+            await sb.functions.invoke('create-google-event', {
+              body: { event_id: newEvent.id },
+            }).catch(() => {})
+
+            sb.functions.invoke('enrich-event', {
+              body: { event_id: newEvent.id },
+            }).catch(() => {})
+          }
+        }
+
+        // Record processed message state
+        const skippedReason = (createdCountForMessage > 0 || actionsFromEmail > 0)
+          ? null
+          : (classified?.skip_reason ?? 'no events or actionable items found')
 
         await sb.from('gmail_processed_messages').upsert({
           family_member_id: memberId, gmail_message_id: msgId,
           canonical_email_id: canonicalEmail.id,
-          subject: details.subject, email_subject: details.subject,
-          from_email: details.from, received_at: emailReceivedAt,
-          intent: 'new_event', created_event_id: newEvent.id,
+          subject: details.subject,
+          email_subject: details.subject,
+          from_email: details.from,
+          received_at: emailReceivedAt,
+          intent: (createdCountForMessage > 0 || classified?.intent === 'new_event') ? 'new_event' : (actionsFromEmail > 0 ? 'skip' : (classified?.intent ?? 'skip')),
+          skipped_reason: skippedReason,
+          created_event_id: lastCreatedEventId,
           email_body: details.body.slice(0, 8000),
+          is_user_labeled: isUserLabeled,
+          training_source: isUserLabeled ? 'gmail_label_casa' : null,
         }, { onConflict: 'family_member_id,gmail_message_id' })
-        created++
-      }
+
+        if (createdCountForMessage === 0 && actionsFromEmail === 0) {
+          skipped++
+        }
       }
 
       await sb.from('google_tokens').update({
