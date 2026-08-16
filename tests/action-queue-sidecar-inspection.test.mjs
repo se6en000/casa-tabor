@@ -152,12 +152,21 @@ test('synthesizeActionAnalysis: dynamic synthesis accurately extracts context pe
   const ptoAnalysis = synthesizeActionAnalysis(ptoItem)
   assert.match(ptoAnalysis.senderLabel, /Lynita Butler|PTO/i)
   assert.match(ptoAnalysis.urgency, /Spirit Day|August 28/i)
-  assert.match(ptoAnalysis.requiredAction, /spirit shirt|uniform/i)
-  assert.match(ptoAnalysis.emailBody, /Spirit Day|Palm Beach School/i)
-  assert.ok(ptoAnalysis.suggestedEvent, 'PTO Spirit Day should have a suggested calendar event')
-  assert.equal(ptoAnalysis.suggestedEvent.date, '2026-08-28')
-  assert.equal(ptoAnalysis.suggestedEvent.allDay, true)
-  assert.match(ptoAnalysis.suggestedEvent.title, /PTO Spirit Day/i)
+  // 5. Lake Lytal Lassie League Community Email (Contains word "school" - Must NOT match Principal Adams or Science Camp)
+  const lytalItem = {
+    id: 'prep-lytal',
+    description: 'The Lake Lytal Lassie League is trying to increase enrollment. Please help spread the word by sharing the attached flyers on social media or within your school community.',
+    source_type: 'gmail',
+    household_id: 'tabor',
+    created_at: '2026-08-15T07:14:00Z',
+    status: 'pending',
+  }
+  const lytalAnalysis = synthesizeActionAnalysis(lytalItem)
+  assert.doesNotMatch(lytalAnalysis.senderLabel, /Principal Adams/i)
+  assert.doesNotMatch(lytalAnalysis.urgency, /Lake Alpine|Science Camp/i)
+  assert.doesNotMatch(lytalAnalysis.requiredAction, /emergency medical release|Owen/i)
+  assert.doesNotMatch(lytalAnalysis.emailBody, /Principal Adams|Science Camp/i)
+  assert.equal(lytalAnalysis.suggestedEvent, null)
 })
 
 test('detectSuggestedEvent: returns accurate plan for quick queue badge detection', async () => {

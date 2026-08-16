@@ -16,6 +16,15 @@ import {
   getMemberColorName,
   PROFILE_COLOR_OPTIONS,
 } from '../design-system/memberColors'
+import {
+  createSchoolRoutine,
+  createCampRoutine,
+  deserializeRoutineFromAvailabilityRules,
+  serializeRoutineToAvailabilityRules,
+  type FamilyRoutine,
+  type DayScheduleOverride,
+} from '../lib/familyRoutines'
+import SmartPlaceInput from '../components/calendar/SmartPlaceInput'
 
 const COLOR_OPTIONS = PROFILE_COLOR_OPTIONS
 
@@ -125,12 +134,40 @@ export default function FamilySettingsPage() {
   const [memberPinDrafts, setMemberPinDrafts] = useState<Record<string, string>>({})
   const [historySavingMemberId, setHistorySavingMemberId] = useState<string | null>(null)
   const [historyError, setHistoryError] = useState<string | null>(null)
+  const [routineDrafts, setRoutineDrafts] = useState<Record<string, FamilyRoutine>>({})
   const hydratedRef = useRef(false)
   const formatRoleLabel = (role?: string | null) => {
     if (!role) return 'Child'
     if (role === 'caregiver') return 'Care Giver'
     return role.charAt(0).toUpperCase() + role.slice(1)
   }
+
+  function patchRoutine(memberId: string, changes: Partial<FamilyRoutine>) {
+    setRoutineDrafts((prev) => {
+      const memberRules = rulesForMember(memberId)
+      const mem = members.find(x => x.id === memberId)
+      const base = prev[memberId] ?? deserializeRoutineFromAvailabilityRules(memberId, memberRules) ?? createSchoolRoutine(memberId, mem?.name)
+      return {
+        ...prev,
+        [memberId]: { ...base, ...changes },
+      }
+    })
+  }
+
+  useEffect(() => {
+    const pendingRoutineEntries = Object.entries(routineDrafts)
+    if (pendingRoutineEntries.length === 0) return
+    setSaved(false)
+    const timer = setTimeout(async () => {
+      for (const [memberId, r] of pendingRoutineEntries) {
+        await saveRoutineForMember(memberId, r)
+      }
+      setRoutineDrafts({})
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    }, 600)
+    return () => clearTimeout(timer)
+  }, [routineDrafts])
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -319,6 +356,49 @@ export default function FamilySettingsPage() {
     await qc.invalidateQueries({ queryKey: ['member-availability-exceptions'] })
   }
 
+  async function saveRoutineForMember(memberId: string, routine: FamilyRoutine) {
+    const memberRules = rulesForMember(memberId)
+    const existingRoutineRuleIds = memberRules
+      .filter((r) => {
+        try {
+          const parsed = JSON.parse(r.reason || '')
+          return parsed.type === 'school_routine'
+        } catch {
+          return false
+        }
+      })
+      .map((r) => r.id)
+
+    if (existingRoutineRuleIds.length > 0) {
+      const { error } = await supabase
+        .from('member_availability_rules')
+        .delete()
+        .in('id', existingRoutineRuleIds)
+      if (error) throw error
+    }
+
+    if (routine.enabled && routine.daysOfWeek.length > 0) {
+      const serialized = serializeRoutineToAvailabilityRules(routine)
+      const { error } = await supabase
+        .from('member_availability_rules')
+        .insert(serialized)
+      if (error) throw error
+    }
+
+    await qc.invalidateQueries({ queryKey: ['member-availability-rules'] })
+  }
+
+  async function applySchoolTemplate(memberId: string) {
+    const mem = members.find(x => x.id === memberId)
+    const defaultRoutine = createSchoolRoutine(memberId, mem?.name)
+    await saveRoutineForMember(memberId, defaultRoutine)
+  }
+
+  async function applyCampTemplate(memberId: string) {
+    const defaultCamp = createCampRoutine(memberId)
+    await saveRoutineForMember(memberId, defaultCamp)
+  }
+
   async function handleSave() {
     if (saving) return
     setSaveError(null)
@@ -422,9 +502,6 @@ export default function FamilySettingsPage() {
           const isNew = !!m._isNew
           const isExpanded = expandedId === id
           const colorHex = getDisplayMemberColor(m.color_hex ?? FALLBACK_PROFILE_COLOR)
-          const memberRules = m.id ? rulesForMember(m.id) : []
-          const memberExceptions = m.id ? exceptionsForMember(m.id) : []
-          const dayOffDraft = dayOffDraftByMember[id] ?? ''
 
           return (
             <div key={id} className="bg-casa-surface rounded-card border border-casa-border shadow-card overflow-hidden">
@@ -595,39 +672,539 @@ export default function FamilySettingsPage() {
                     </DisclosureSection>
                   )}
 
-                  {/* Driving + availability */}
-                  <div className="rounded-xl border border-casa-border p-3 space-y-3">
-                    <div>
-                      <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-2">Driving</p>
-                      <label className="flex items-center gap-3 cursor-pointer">
-                        <div
-                          onClick={() => isNew ? patchNew(m._tempId!, { can_drive: !m.can_drive }) : patch(m.id!, { can_drive: !m.can_drive })}
-                          className={cn(
-                            'relative w-10 h-5 rounded-full transition-colors shrink-0',
-                            m.can_drive ? 'bg-casa-gold' : 'bg-casa-border',
+                  {/* Driving & Availability Section (Adaptive by Role) */}
+                  {(() => {
+                    const isChild = (m.role ?? 'child') === 'child'
+                    const memberRules = m.id ? rulesForMember(m.id) : []
+                    const memberExceptions = m.id ? exceptionsForMember(m.id) : []
+                    const dayOffDraft = dayOffDraftByMember[id] ?? ''
+                    const availableDrivers = members.filter(mem => mem.can_drive || mem.role === 'parent' || mem.role === 'caregiver')
+
+                    if (isChild) {
+                      const baselineRoutine = m.id ? deserializeRoutineFromAvailabilityRules(m.id, memberRules) : null
+                      const routine = (m.id && routineDrafts[m.id]) ? routineDrafts[m.id] : baselineRoutine
+                      const currentRoutineType = !routine?.enabled ? 'paused' : (routine.routineType || 'school')
+
+                      return (
+                        <div className="rounded-xl border border-casa-border p-4 space-y-4 bg-surface-subtle/50">
+                          {/* Home sidebar visibility */}
+                          <div>
+                            <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-2">Home sidebar visibility</p>
+                            <Switch
+                              label="Show on homepage sidebar"
+                              checked={m.show_on_home_sidebar ?? true}
+                              onCheckedChange={(show_on_home_sidebar) => isNew
+                                ? patchNew(m._tempId!, { show_on_home_sidebar })
+                                : patch(m.id!, { show_on_home_sidebar })}
+                            />
+                          </div>
+
+                          {!isNew && m.id && (
+                            <>
+                              {/* Consolidated Child Routine Card */}
+                              <div className="pt-2 border-t border-casa-border/60 space-y-3">
+                                <div>
+                                  <p className="text-caption font-semibold text-casa-navy uppercase tracking-wide">Recurring Schedule & Routine</p>
+                                  <p className="text-caption text-casa-muted mt-0.5">
+                                    Configures daily school or summer camp times with automatic morning drop-off & afternoon pick-up events.
+                                  </p>
+                                </div>
+
+                                {/* Routine Presets: School Year vs Summer Camp vs Paused */}
+                                <div className="grid grid-cols-3 gap-2">
+                                  <Button
+                                    variant={currentRoutineType === 'school' ? 'strong' : 'secondary'}
+                                    size="sm"
+                                    onClick={() => {
+                                      const isOwen = m.name?.toLowerCase().includes('owen')
+                                      const defaultSchool = isOwen ? 'Palm Beach Public Elementary School' : 'Bak Middle School of the Arts'
+                                      const defaultAddress = isOwen ? '239 Cocoanut Row, Palm Beach, FL 33480' : '1725 Echo Lake Dr, West Palm Beach, FL'
+                                      const defaultStart = isOwen ? '08:15' : '08:00'
+                                      const defaultEnd = isOwen ? '15:00' : '15:30'
+
+                                      if (routine) {
+                                        const isCampVenue = routine.venueName.toLowerCase().includes('camp')
+                                        patchRoutine(m.id!, {
+                                          title: 'School Routine',
+                                          routineType: 'school',
+                                          venueName: isCampVenue ? defaultSchool : (routine.venueName || defaultSchool),
+                                          venueAddress: isCampVenue ? defaultAddress : (routine.venueAddress || defaultAddress),
+                                          startLocal: routine.startLocal || defaultStart,
+                                          endLocal: routine.endLocal || defaultEnd,
+                                          enabled: true,
+                                        })
+                                      } else {
+                                        void applySchoolTemplate(m.id!)
+                                      }
+                                    }}
+                                    className="font-semibold text-caption"
+                                  >
+                                    School Year
+                                  </Button>
+                                  <Button
+                                    variant={currentRoutineType === 'camp' ? 'strong' : 'secondary'}
+                                    size="sm"
+                                    onClick={() => {
+                                      if (routine) {
+                                        const isSchoolVenue = routine.venueName.toLowerCase().includes('school') || routine.venueName.toLowerCase().includes('bak')
+                                        patchRoutine(m.id!, {
+                                          title: 'Summer Camp',
+                                          routineType: 'camp',
+                                          venueName: isSchoolVenue ? 'Summer Day Camp' : (routine.venueName || 'Summer Day Camp'),
+                                          venueAddress: isSchoolVenue ? '1200 Lake Pavilion Way, West Palm Beach, FL' : (routine.venueAddress || '1200 Lake Pavilion Way, West Palm Beach, FL'),
+                                          startLocal: '09:00',
+                                          endLocal: '16:00',
+                                          enabled: true,
+                                        })
+                                      } else {
+                                        void applyCampTemplate(m.id!)
+                                      }
+                                    }}
+                                    className="font-semibold text-caption"
+                                  >
+                                    Summer Camp
+                                  </Button>
+                                  <Button
+                                    variant={currentRoutineType === 'paused' ? 'strong' : 'secondary'}
+                                    size="sm"
+                                    onClick={() => {
+                                      if (routine) {
+                                        patchRoutine(m.id!, { ...routine, enabled: false })
+                                      }
+                                    }}
+                                    className="font-semibold text-caption"
+                                  >
+                                    On Break
+                                  </Button>
+                                </div>
+
+                                {routine && routine.enabled ? (
+                                  <div className="rounded-xl border border-casa-border p-3.5 bg-white space-y-3 shadow-2xs">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                                      <div>
+                                        <label className="block text-caption font-semibold text-casa-muted uppercase tracking-wide mb-1">
+                                          {currentRoutineType === 'camp' ? 'Camp / Program' : 'School / Venue'}
+                                        </label>
+                                        <SmartPlaceInput
+                                          field="name"
+                                          label={currentRoutineType === 'camp' ? 'Camp / Program' : 'School / Venue'}
+                                          placeholder={currentRoutineType === 'camp' ? 'Summer Day Camp' : 'Search saved school (e.g. Palm Beach Public)…'}
+                                          value={{ name: routine.venueName || '', address: routine.venueAddress || '' }}
+                                          onChange={(place) => {
+                                            patchRoutine(m.id!, {
+                                              venueName: place.name,
+                                              venueAddress: place.address || (place.name ? routine.venueAddress : ''),
+                                            })
+                                          }}
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-caption font-semibold text-casa-muted uppercase tracking-wide mb-1">Address</label>
+                                        <SmartPlaceInput
+                                          field="address"
+                                          label="Address"
+                                          placeholder="1725 Echo Lake Dr or 239 Cocoanut Row…"
+                                          value={{ name: routine.venueName || '', address: routine.venueAddress || '' }}
+                                          onChange={(place) => {
+                                            patchRoutine(m.id!, {
+                                              venueName: place.name || routine.venueName,
+                                              venueAddress: place.address,
+                                            })
+                                          }}
+                                        />
+                                      </div>
+                                    </div>
+
+                                    {/* Days & Hours */}
+                                    <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-2 items-center pt-1">
+                                      <div className="flex flex-wrap gap-1">
+                                        {WEEKDAY_ROWS.map(({ day, label }) => {
+                                          const isDayActive = routine.daysOfWeek.includes(day)
+                                          return (
+                                            <Button
+                                              key={day}
+                                              variant={isDayActive ? 'strong' : 'secondary'}
+                                              size="sm"
+                                              className="h-8 px-2 text-caption font-bold"
+                                              onClick={() => {
+                                                const nextDays = isDayActive
+                                                  ? routine.daysOfWeek.filter(d => d !== day)
+                                                  : [...routine.daysOfWeek, day].sort()
+                                                patchRoutine(m.id!, { daysOfWeek: nextDays })
+                                              }}
+                                            >
+                                              {label}
+                                            </Button>
+                                          )
+                                        })}
+                                      </div>
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-caption text-casa-muted font-bold">Start:</span>
+                                        <Input
+                                          type="time"
+                                          value={routine.startLocal}
+                                          onChange={(e) => {
+                                            patchRoutine(m.id!, { startLocal: e.target.value })
+                                          }}
+                                          className="h-8 px-2 text-body-sm w-28 text-casa-navy"
+                                        />
+                                      </div>
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-caption text-casa-muted font-bold">End:</span>
+                                        <Input
+                                          type="time"
+                                          value={routine.endLocal}
+                                          onChange={(e) => {
+                                            patchRoutine(m.id!, { endLocal: e.target.value })
+                                          }}
+                                          className="h-8 px-2 text-body-sm w-28 text-casa-navy"
+                                        />
+                                      </div>
+                                    </div>
+
+                                    {/* Drivers */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1 border-t border-casa-border/40">
+                                      <div>
+                                        <label className="block text-caption font-semibold text-casa-muted uppercase tracking-wide mb-1">Morning Drop-Off Driver</label>
+                                        <select
+                                          value={routine.dropoffDriverName}
+                                          onChange={(e) => {
+                                            const driverName = e.target.value
+                                            const driverMember = availableDrivers.find(d => d.name === driverName)
+                                            patchRoutine(m.id!, {
+                                              dropoffDriverName: driverName,
+                                              dropoffDriverId: driverMember?.id || null,
+                                            })
+                                          }}
+                                          className="w-full h-9 px-2.5 rounded-lg border border-casa-border bg-white text-body-sm text-casa-navy font-semibold focus:outline-none focus:ring-2 focus:ring-casa-gold"
+                                        >
+                                          {availableDrivers.map((drv) => (
+                                            <option key={drv.id} value={drv.name}>{drv.name} (Driver)</option>
+                                          ))}
+                                          <option value="Carpool">Carpool / Bus</option>
+                                          <option value="None">None</option>
+                                        </select>
+                                      </div>
+
+                                      <div>
+                                        <label className="block text-caption font-semibold text-casa-muted uppercase tracking-wide mb-1">Afternoon Pick-Up Driver</label>
+                                        <select
+                                          value={routine.pickupDriverName}
+                                          onChange={(e) => {
+                                            const driverName = e.target.value
+                                            const driverMember = availableDrivers.find(d => d.name === driverName)
+                                            patchRoutine(m.id!, {
+                                              pickupDriverName: driverName,
+                                              pickupDriverId: driverMember?.id || null,
+                                            })
+                                          }}
+                                          className="w-full h-9 px-2.5 rounded-lg border border-casa-border bg-white text-body-sm text-casa-navy font-semibold focus:outline-none focus:ring-2 focus:ring-casa-gold"
+                                        >
+                                          {availableDrivers.map((drv) => (
+                                            <option key={drv.id} value={drv.name}>{drv.name} (Driver)</option>
+                                          ))}
+                                          <option value="Grandma">Grandma</option>
+                                          <option value="Carpool">Carpool / Bus</option>
+                                          <option value="None">None</option>
+                                        </select>
+                                      </div>
+                                    </div>
+
+                                    {/* Day-Specific Schedule Adjustments */}
+                                    <div className="pt-2.5 border-t border-casa-border/40 space-y-2">
+                                      <div className="flex items-center justify-between">
+                                        <div>
+                                          <span className="text-caption font-semibold text-casa-muted uppercase tracking-wide">
+                                            Day-Specific Adjustments (Optional)
+                                          </span>
+                                          <p className="text-caption text-casa-muted">
+                                            Early strings drop-offs, late clubs, early release days, or different drivers.
+                                          </p>
+                                        </div>
+                                      </div>
+
+                                      {/* Active Overrides */}
+                                      {(routine.dayOverrides || []).length > 0 && (
+                                        <div className="space-y-2">
+                                          {(routine.dayOverrides || []).map((override, oIdx) => {
+                                            const dayNames = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+                                            const dayLabel = dayNames[override.dayOfWeek] || `Day ${override.dayOfWeek}`
+
+                                            return (
+                                              <div key={override.dayOfWeek} className="p-2.5 rounded-lg border border-casa-border bg-casa-warm/40 space-y-2">
+                                                <div className="flex items-center justify-between">
+                                                  <span className="text-body-sm font-bold text-casa-navy">
+                                                    {dayLabel}
+                                                  </span>
+                                                  <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => {
+                                                      const updated = (routine.dayOverrides || []).filter((_, i) => i !== oIdx)
+                                                      patchRoutine(m.id!, { dayOverrides: updated })
+                                                    }}
+                                                    className="h-6 px-2 text-caption text-red-500 hover:text-red-700 font-semibold"
+                                                  >
+                                                    Remove
+                                                  </Button>
+                                                </div>
+
+                                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                                  <div>
+                                                    <label className="block text-caption font-bold text-casa-muted uppercase">Start Time</label>
+                                                    <Input
+                                                      type="time"
+                                                      value={override.startLocal || routine.startLocal}
+                                                      onChange={(e) => {
+                                                        const updated = [...(routine.dayOverrides || [])]
+                                                        updated[oIdx] = { ...updated[oIdx], startLocal: e.target.value }
+                                                        patchRoutine(m.id!, { dayOverrides: updated })
+                                                      }}
+                                                      className="h-8 px-1.5 text-body-sm text-casa-navy"
+                                                    />
+                                                  </div>
+                                                  <div>
+                                                    <label className="block text-caption font-bold text-casa-muted uppercase">End Time</label>
+                                                    <Input
+                                                      type="time"
+                                                      value={override.endLocal || routine.endLocal}
+                                                      onChange={(e) => {
+                                                        const updated = [...(routine.dayOverrides || [])]
+                                                        updated[oIdx] = { ...updated[oIdx], endLocal: e.target.value }
+                                                        patchRoutine(m.id!, { dayOverrides: updated })
+                                                      }}
+                                                      className="h-8 px-1.5 text-body-sm text-casa-navy"
+                                                    />
+                                                  </div>
+                                                  <div>
+                                                    <label className="block text-caption font-bold text-casa-muted uppercase">AM Driver</label>
+                                                    <select
+                                                      value={override.dropoffDriverName || routine.dropoffDriverName}
+                                                      onChange={(e) => {
+                                                        const drv = availableDrivers.find(d => d.name === e.target.value)
+                                                        const updated = [...(routine.dayOverrides || [])]
+                                                        updated[oIdx] = {
+                                                          ...updated[oIdx],
+                                                          dropoffDriverName: e.target.value,
+                                                          dropoffDriverId: drv?.id || null,
+                                                        }
+                                                        patchRoutine(m.id!, { dayOverrides: updated })
+                                                      }}
+                                                      className="w-full h-8 px-1.5 rounded border border-casa-border bg-white text-body-sm text-casa-navy font-semibold"
+                                                    >
+                                                      {availableDrivers.map((drv) => (
+                                                        <option key={drv.id} value={drv.name}>{drv.name}</option>
+                                                      ))}
+                                                      <option value="Carpool">Carpool</option>
+                                                      <option value="None">None</option>
+                                                    </select>
+                                                  </div>
+                                                  <div>
+                                                    <label className="block text-caption font-bold text-casa-muted uppercase">PM Driver</label>
+                                                    <select
+                                                      value={override.pickupDriverName || routine.pickupDriverName}
+                                                      onChange={(e) => {
+                                                        const drv = availableDrivers.find(d => d.name === e.target.value)
+                                                        const updated = [...(routine.dayOverrides || [])]
+                                                        updated[oIdx] = {
+                                                          ...updated[oIdx],
+                                                          pickupDriverName: e.target.value,
+                                                          pickupDriverId: drv?.id || null,
+                                                        }
+                                                        patchRoutine(m.id!, { dayOverrides: updated })
+                                                      }}
+                                                      className="w-full h-8 px-1.5 rounded border border-casa-border bg-white text-body-sm text-casa-navy font-semibold"
+                                                    >
+                                                      {availableDrivers.map((drv) => (
+                                                        <option key={drv.id} value={drv.name}>{drv.name}</option>
+                                                      ))}
+                                                      <option value="Grandma">Grandma</option>
+                                                      <option value="Carpool">Carpool</option>
+                                                      <option value="None">None</option>
+                                                    </select>
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            )
+                                          })}
+                                        </div>
+                                      )}
+
+                                      {/* Quick Day Adder */}
+                                      <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                                        <span className="text-caption font-semibold text-casa-muted">+ Customize Day:</span>
+                                        {[
+                                          { day: 1, label: 'Mon' },
+                                          { day: 2, label: 'Tue' },
+                                          { day: 3, label: 'Wed' },
+                                          { day: 4, label: 'Thu' },
+                                          { day: 5, label: 'Fri' },
+                                        ]
+                                          .filter((d) => !(routine.dayOverrides || []).some((o) => o.dayOfWeek === d.day))
+                                          .map((d) => (
+                                            <Button
+                                              key={d.day}
+                                              type="button"
+                                              variant="secondary"
+                                              size="sm"
+                                              onClick={() => {
+                                                const newOverride: DayScheduleOverride = {
+                                                  dayOfWeek: d.day,
+                                                  startLocal: routine.startLocal,
+                                                  endLocal: routine.endLocal,
+                                                  dropoffDriverName: routine.dropoffDriverName,
+                                                  dropoffDriverId: routine.dropoffDriverId || null,
+                                                  pickupDriverName: routine.pickupDriverName,
+                                                  pickupDriverId: routine.pickupDriverId || null,
+                                                  enabled: true,
+                                                }
+                                                patchRoutine(m.id!, {
+                                                  dayOverrides: [...(routine.dayOverrides || []), newOverride],
+                                                })
+                                              }}
+                                              className="h-7 px-2.5 text-caption font-semibold"
+                                            >
+                                              + {d.label}
+                                            </Button>
+                                          ))}
+                                      </div>
+                                    </div>
+
+                                    {/* Season / School Year Date Range */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-casa-border/40">
+                                      <div>
+                                        <label className="block text-caption font-semibold text-casa-muted uppercase tracking-wide mb-1">
+                                          {currentRoutineType === 'camp' ? 'Camp Start Date (Optional)' : 'School Year Start (Optional)'}
+                                        </label>
+                                        <Input
+                                          type="date"
+                                          value={routine.startDate || ''}
+                                          onChange={(e) => {
+                                            patchRoutine(m.id!, { startDate: e.target.value || null })
+                                          }}
+                                          className="h-9 px-2 text-body-sm text-casa-navy"
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-caption font-semibold text-casa-muted uppercase tracking-wide mb-1">
+                                          {currentRoutineType === 'camp' ? 'Camp End Date (Optional)' : 'School Year End (Optional)'}
+                                        </label>
+                                        <Input
+                                          type="date"
+                                          value={routine.endDate || ''}
+                                          onChange={(e) => {
+                                            patchRoutine(m.id!, { endDate: e.target.value || null })
+                                          }}
+                                          className="h-9 px-2 text-body-sm text-casa-navy"
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="rounded-xl border border-dashed border-casa-border p-4 text-center bg-white">
+                                    <p className="text-body-sm text-casa-muted mb-2">
+                                      {routine ? 'Routine is currently paused (e.g. for summer vacation or school break).' : 'No weekly routine configured.'}
+                                    </p>
+                                    <div className="flex items-center justify-center gap-2">
+                                      <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        onClick={() => { void applySchoolTemplate(m.id!) }}
+                                      >
+                                        + Set Up School Routine
+                                      </Button>
+                                      <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        onClick={() => { void applyCampTemplate(m.id!) }}
+                                      >
+                                        + Set Up Summer Camp
+                                      </Button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Day-Off Overrides for Child */}
+                              <div className="pt-2 border-t border-casa-border/60">
+                                <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-2">Day-off & holiday overrides</p>
+                                <div className="flex items-center gap-2">
+                                  <Input
+                                    type="date"
+                                    value={dayOffDraft}
+                                    onChange={(event) => setDayOffDraftByMember((prev) => ({ ...prev, [id]: event.target.value }))}
+                                    className="h-9 px-2 text-body-sm text-casa-navy"
+                                  />
+                                  <Button
+                                    type="button"
+                                    onClick={() => { void addDayOffException(m.id!, dayOffDraft) }}
+                                    disabled={!dayOffDraft}
+                                    className="h-9 px-3 rounded-button border border-casa-border text-body-sm font-medium text-casa-navy disabled:opacity-50"
+                                  >
+                                    Add day off
+                                  </Button>
+                                </div>
+                                <div className="mt-2 space-y-1.5">
+                                  {memberExceptions.length === 0 && (
+                                    <p className="text-caption text-casa-muted">No day-off overrides set.</p>
+                                  )}
+                                  {memberExceptions.map((exception) => (
+                                    <div key={exception.id} className="flex items-center justify-between gap-2 rounded-button border border-casa-border px-2.5 py-2 bg-white">
+                                      <div>
+                                        <p className="text-body-sm text-casa-navy font-medium">{exception.override_type.replace('_', ' ')}</p>
+                                        <p className="text-caption text-casa-muted">{formatExceptionWindow(exception)}</p>
+                                      </div>
+                                      <Button
+                                        type="button"
+                                        onClick={() => { void removeAvailabilityException(exception.id) }}
+                                        className="text-caption text-casa-error hover:underline"
+                                      >
+                                        Remove
+                                      </Button>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </>
                           )}
-                        >
-                          <span className={cn(
-                            'absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform',
-                            m.can_drive ? 'translate-x-5' : 'translate-x-0.5',
-                          )} />
                         </div>
-                        <span className="text-body-sm text-casa-navy">Can drive / cover transport</span>
-                      </label>
-                    </div>
+                      )
+                    }
 
-                    <div>
-                      <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-2">Home sidebar visibility</p>
-                      <Switch
-                        label="Show on homepage sidebar"
-                        checked={m.show_on_home_sidebar ?? true}
-                        onCheckedChange={(show_on_home_sidebar) => isNew
-                          ? patchNew(m._tempId!, { show_on_home_sidebar })
-                          : patch(m.id!, { show_on_home_sidebar })}
-                      />
-                    </div>
+                    // Adult / Parent View
+                    return (
+                      <div className="rounded-xl border border-casa-border p-4 space-y-4">
+                        <div>
+                          <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-2">Driving</p>
+                          <label className="flex items-center gap-3 cursor-pointer">
+                            <div
+                              onClick={() => isNew ? patchNew(m._tempId!, { can_drive: !m.can_drive }) : patch(m.id!, { can_drive: !m.can_drive })}
+                              className={cn(
+                                'relative w-10 h-5 rounded-full transition-colors shrink-0',
+                                m.can_drive ? 'bg-casa-gold' : 'bg-casa-border',
+                              )}
+                            >
+                              <span className={cn(
+                                'absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform',
+                                m.can_drive ? 'translate-x-5' : 'translate-x-0.5',
+                              )} />
+                            </div>
+                            <span className="text-body-sm text-casa-navy font-medium">Can drive / cover transport</span>
+                          </label>
+                        </div>
 
-                    <>
+                        <div>
+                          <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-2">Home sidebar visibility</p>
+                          <Switch
+                            label="Show on homepage sidebar"
+                            checked={m.show_on_home_sidebar ?? true}
+                            onCheckedChange={(show_on_home_sidebar) => isNew
+                              ? patchNew(m._tempId!, { show_on_home_sidebar })
+                              : patch(m.id!, { show_on_home_sidebar })}
+                          />
+                        </div>
+
                         <div>
                           <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide mb-2">Availability mode</p>
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
@@ -659,7 +1236,7 @@ export default function FamilySettingsPage() {
                           <>
                             <div>
                               <div className="flex items-center justify-between gap-2 mb-2">
-                                <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide">Weekly blocked hours</p>
+                                <p className="text-caption font-semibold text-casa-muted uppercase tracking-wide">Weekly work / blocked hours</p>
                                 <div className="flex items-center gap-2">
                                   <Button
                                     variant="secondary"
@@ -761,14 +1338,9 @@ export default function FamilySettingsPage() {
                             </div>
                           </>
                         )}
-
-                        {isNew && (
-                          <p className="text-caption text-casa-muted">
-                            Save this member first to configure recurring blocked hours and day-off overrides.
-                          </p>
-                        )}
-                    </>
-                  </div>
+                      </div>
+                    )
+                  })()}
 
                   {/* Admin toggle */}
                   <label className="flex items-center gap-3 cursor-pointer">

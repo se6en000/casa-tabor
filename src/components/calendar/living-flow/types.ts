@@ -1,5 +1,6 @@
 export type LivingFlowMode = 'event' | 'reminder'
-export type TravelBehavior = 'stay' | 'dropoff'
+export type LogisticsMode = 'stay' | 'dropoff_only' | 'pickup_only' | 'two_way' | 'none'
+export type TravelBehavior = 'stay' | 'dropoff' | 'dropoff_only' | 'pickup_only' | 'two_way' | 'none'
 export type RecurrenceScope = 'this' | 'all'
 
 export interface VenueInfo {

@@ -2,7 +2,7 @@
 import { useEffect, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
-import { startOfWeek, endOfWeek, addDays, startOfDay, startOfMonth, endOfMonth } from 'date-fns'
+import { startOfWeek, endOfWeek, addDays, startOfDay, startOfMonth, endOfMonth, eachDayOfInterval, format } from 'date-fns'
 import { eventOverlapsRange } from '../utils/eventTime'
 import { normalizePossessiveSuffixCasing } from '../utils/eventTitle'
 import type {
@@ -10,6 +10,13 @@ import type {
   EventLogistic, EventChecklistItem, EventActionItem,
 } from '../types'
 import type { EventTransportationPlan } from '../lib/eventTransportation'
+import { useFamilyMembers } from './useFamilyMembers'
+import { useMemberAvailability } from './useMemberAvailability'
+import {
+  deserializeRoutineFromAvailabilityRules,
+  generateConsolidatedRoutineActionEvents,
+  type FamilyRoutine,
+} from '../lib/familyRoutines'
 
 export interface EventWithDetails extends Omit<CalendarEvent, 'members' | 'enrichment'> {
   members: {
@@ -259,12 +266,47 @@ function useEventsForRange(queryKey: readonly unknown[], start: Date, end: Date)
     staleTime: 60_000,
   })
   const transportationQuery = useEventTransportationPlans(start)
+  const { data: familyMembers = [] } = useFamilyMembers()
+  const memberIds = useMemo(() => familyMembers.map((m) => m.id), [familyMembers])
+  const { rules: availabilityRules = [] } = useMemberAvailability(memberIds)
+
+  const familyRoutines = useMemo<FamilyRoutine[]>(() => {
+    return familyMembers
+      .map((m) => deserializeRoutineFromAvailabilityRules(m.id, availabilityRules))
+      .filter((r): r is FamilyRoutine => Boolean(r && r.enabled))
+  }, [familyMembers, availabilityRules])
+
+  const routineEventsInRange = useMemo<EventWithDetails[]>(() => {
+    if (familyRoutines.length === 0 || familyMembers.length === 0) return []
+    const days = eachDayOfInterval({ start: startOfDay(start), end: startOfDay(end) })
+    return days.flatMap((day) => {
+      const rawEvents = generateConsolidatedRoutineActionEvents({
+        routines: familyRoutines,
+        members: familyMembers,
+        date: day,
+      })
+      return rawEvents.map((ev): EventWithDetails => ({
+        ...ev,
+        members: (ev.members || []).map((m, idx) => ({
+          id: m.id || `m-${idx}`,
+          role: m.role || 'passenger',
+          family_member: m.family_member || familyMembers.find(f => f.id === m.family_member_id)!,
+        })).filter(m => Boolean(m.family_member)),
+        enrichment: ev.enrichment || null,
+        plan_override: (ev as any).plan_override || null,
+        logistics: [],
+        checklist: [],
+        actions: [],
+      }))
+    })
+  }, [familyRoutines, familyMembers, start, end])
+
   const events = useMemo(() => {
     if (!eventsQuery.data) return eventsQuery.data
     const plansByEventId = new Map(
       (transportationQuery.data ?? []).map((row) => [row.event_id, row.transportation_plan]),
     )
-    return eventsQuery.data.map((event) => {
+    const baseEvents = eventsQuery.data.map((event) => {
       const transportationPlan = plansByEventId.get(event.id)
       if (!transportationPlan) return event
       return {
@@ -284,7 +326,37 @@ function useEventsForRange(queryKey: readonly unknown[], start: Date, end: Date)
         },
       }
     })
-  }, [eventsQuery.data, transportationQuery.data])
+
+    const isDuplicateOrHandled = (re: EventWithDetails) => {
+      const reDate = format(new Date(re.start_time), 'yyyy-MM-dd')
+      const reTitle = (re.title || '').toLowerCase()
+      const isReDrop = reTitle.includes('drop off')
+      const isRePick = reTitle.includes('pick up') || reTitle.includes('picked up')
+
+      return baseEvents.some((be) => {
+        const beDate = format(new Date(be.start_time), 'yyyy-MM-dd')
+        if (beDate !== reDate) return false
+        const beTitle = (be.title || '').toLowerCase()
+        if (beTitle === reTitle) return true
+
+        if (isReDrop && (beTitle.includes('drop off') || beTitle.includes('dropped off'))) {
+          if ((reTitle.includes('palm beach') || reTitle.includes('pbp')) && (beTitle.includes('palm beach') || beTitle.includes('pbp'))) return true
+          if (reTitle.includes('bak') && beTitle.includes('bak')) return true
+        }
+        if (isRePick && (beTitle.includes('pick up') || beTitle.includes('picked up'))) {
+          if ((reTitle.includes('palm beach') || reTitle.includes('pbp')) && (beTitle.includes('palm beach') || beTitle.includes('pbp') || beTitle.includes('owen & emme'))) return true
+          if (reTitle.includes('bak') && beTitle.includes('bak')) return true
+        }
+        return false
+      })
+    }
+
+    const newRoutineEvents = routineEventsInRange.filter((re) => !isDuplicateOrHandled(re))
+
+    return [...baseEvents, ...newRoutineEvents].sort(
+      (a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime(),
+    )
+  }, [eventsQuery.data, transportationQuery.data, routineEventsInRange])
 
   const error = eventsQuery.error ?? transportationQuery.error
   return {

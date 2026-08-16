@@ -7,9 +7,17 @@ import { useWeekConflicts, useResolveConflict } from './useConflicts'
 import { usePrepItems, useCompletePrepItem } from './usePrepItems'
 import { useFamilyMembers } from './useFamilyMembers'
 import { useHomeWeather } from './useHomeWeather'
+import { useMemberAvailability } from './useMemberAvailability'
 import { useAppStore } from '../stores/appStore'
 import { inferEventMode, inferEventPlanKind } from '../lib/eventCommandCenter'
 import type { EventTransportationPlan, TransportationLeg } from '../lib/eventTransportation'
+import {
+  deserializeRoutineFromAvailabilityRules,
+  deriveAmbientRoutineStatus,
+  generateConsolidatedRoutineActionEvents,
+  type AmbientRoutineStatus,
+  type FamilyRoutine,
+} from '../lib/familyRoutines'
 import type { Conflict, PrepItem, FamilyMember } from '../types'
 
 export interface CalmKioskPresenterState {
@@ -33,6 +41,7 @@ export interface CalmKioskPresenterState {
   activeConflicts: Conflict[]
   activePrep: PrepItem[]
   familyMembers: FamilyMember[]
+  ambientRoutineStatuses: AmbientRoutineStatus[]
   handleResolveConflict: (conflict: Conflict, resolution: string) => void
   handleCompletePrep: (item: PrepItem) => void
   pickupsCount: number
@@ -91,6 +100,49 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
   }
 
   const totalAttentionCount = activeConflicts.length + activePrep.length
+
+  const memberIds = useMemo(() => familyMembers.map((m) => m.id), [familyMembers])
+  const { rules: availabilityRules = [] } = useMemberAvailability(memberIds)
+
+  const familyRoutines = useMemo<FamilyRoutine[]>(() => {
+    return familyMembers
+      .map((m) => deserializeRoutineFromAvailabilityRules(m.id, availabilityRules))
+      .filter((r): r is FamilyRoutine => Boolean(r && r.enabled))
+  }, [familyMembers, availabilityRules])
+
+  const ambientRoutineStatuses = useMemo<AmbientRoutineStatus[]>(() => {
+    return deriveAmbientRoutineStatus(familyRoutines, familyMembers, now)
+  }, [familyRoutines, familyMembers, now])
+
+  const routineTodayEvents = useMemo<EventWithDetails[]>(() => {
+    if (familyRoutines.length === 0 || familyMembers.length === 0) return []
+    const events = generateConsolidatedRoutineActionEvents({
+      routines: familyRoutines,
+      members: familyMembers,
+      date: now,
+    })
+    return events.map((ev): EventWithDetails => ({
+      ...ev,
+      members: (ev.members || []).map((m, idx) => ({
+        id: m.id || `m-${idx}`,
+        role: m.role || 'passenger',
+        family_member: m.family_member || familyMembers.find(f => f.id === m.family_member_id)!,
+      })).filter(m => Boolean(m.family_member)),
+      enrichment: ev.enrichment || null,
+      plan_override: (ev as any).plan_override || null,
+      logistics: [],
+      checklist: [],
+      actions: [],
+    }))
+  }, [familyRoutines, familyMembers, now])
+
+  const effectiveTodayEvents = useMemo<EventWithDetails[]>(() => {
+    const existingTitles = new Set(todayEvents.map((e) => (e.title || '').toLowerCase()))
+    const newRoutineEvents = routineTodayEvents.filter(
+      (re) => !existingTitles.has(re.title.toLowerCase())
+    )
+    return [...todayEvents, ...newRoutineEvents]
+  }, [todayEvents, routineTodayEvents])
 
   // Helper to test if an event is a meal (which is featured in Tonight's Kitchen)
   const isMealEvent = (e: EventWithDetails) => {
@@ -173,7 +225,7 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
 
   // Active candidates today (that haven't finished more than 15 mins ago)
   const activeCandidates = useMemo(() => {
-    return todayEvents.filter((e) => {
+    return effectiveTodayEvents.filter((e) => {
       if (e.all_day) return false
       if (isMealEvent(e)) return false
       try {
@@ -184,7 +236,7 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
         return false
       }
     })
-  }, [todayEvents, now])
+  }, [effectiveTodayEvents, now])
 
   // Multi-Event Detection & Priority Ranking
   const { primaryHeroEvent, concurrentEvents, activeHeroEvent } = useMemo(() => {
@@ -259,7 +311,7 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
 
   // Past events today (already ended, excluding meals)
   const pastEvents = useMemo(() => {
-    return todayEvents
+    return effectiveTodayEvents
       .filter((e) => {
         if (isMealEvent(e)) return false
         if (e.all_day) return false
@@ -277,11 +329,11 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
           return 0
         }
       })
-  }, [todayEvents, now])
+  }, [effectiveTodayEvents, now])
 
   // Upcoming / active appointment stream (happening now or later today, including hero, excluding meals)
   const upcomingAppointments = useMemo(() => {
-    return todayEvents
+    return effectiveTodayEvents
       .filter((e) => {
         if (isMealEvent(e)) return false
         if (e.all_day) return true
@@ -299,11 +351,11 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
           return 0
         }
       })
-  }, [todayEvents, now])
+  }, [effectiveTodayEvents, now])
 
   // Filter appointment stream (exclude meals, stale ended items)
   const appointmentEvents = useMemo(() => {
-    return todayEvents.filter((e) => {
+    return effectiveTodayEvents.filter((e) => {
       if (isMealEvent(e)) return false
       try {
         if (!e.all_day && parseISO(e.end_time).getTime() < now.getTime() - 30 * 60 * 1000) {
@@ -312,7 +364,7 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
       } catch {}
       return true
     })
-  }, [todayEvents, now])
+  }, [effectiveTodayEvents, now])
 
   const tomorrowEventsSorted = useMemo(() => {
     return tomorrowEvents
@@ -342,11 +394,11 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
   }, [hour])
 
   const pickupsCount = useMemo(() => {
-    return todayEvents.filter((e) => {
+    return effectiveTodayEvents.filter((e) => {
       const t = (e.title || '').toLowerCase()
       return t.includes('pickup') || t.includes('drop-off') || t.includes('carpool')
     }).length
-  }, [todayEvents])
+  }, [effectiveTodayEvents])
 
   const dailyBriefing = useMemo(() => {
     const weatherNote = weather
@@ -384,7 +436,7 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     }
 
     if (hour < 12) {
-      const count = todayEvents.length
+      const count = effectiveTodayEvents.length
       const scheduleSummary = count > 0 ? `${count} event${count > 1 ? 's' : ''} scheduled for today.` : 'Open morning with clear schedule.'
       const nextSummary = nextEvent ? ` First up: ${nextEvent.title} at ${format(parseISO(nextEvent.start_time), 'h:mm a')}.` : ''
       return `${weatherNote} ${scheduleSummary}${nextSummary}`
@@ -398,7 +450,7 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     const dinnerNote = isDinnerPast ? ' Dinner served.' : ' Dinner planned for 6:30 PM.'
 
     return `${weatherNote}${nextSummary}${dinnerNote}`
-  }, [isTodayDone, isEvening, hour, todayEvents, tomorrowEventsSorted, nextEvent, weather, isDinnerPast, now])
+  }, [isTodayDone, isEvening, hour, effectiveTodayEvents, tomorrowEventsSorted, nextEvent, weather, isDinnerPast, now])
 
   const minutesUntilNext = useMemo(() => {
     if (!nextEvent) return null
@@ -587,13 +639,14 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     appointmentEvents,
     pastEvents,
     upcomingAppointments,
-    todayEvents,
+    todayEvents: effectiveTodayEvents,
     tomorrowEvents: tomorrowEventsSorted,
     isTodayDone,
     firstTomorrowEvent,
     activeConflicts,
     activePrep,
     familyMembers,
+    ambientRoutineStatuses,
     handleResolveConflict,
     handleCompletePrep,
     pickupsCount,

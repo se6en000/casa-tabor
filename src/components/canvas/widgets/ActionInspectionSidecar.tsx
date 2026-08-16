@@ -1000,7 +1000,7 @@ export default function ActionInspectionSidecar({
           <div className="bg-casa-surface rounded-3xl border border-casa-gold/40 shadow-modal max-w-lg w-full p-6 space-y-4 animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between">
               <h3 className="font-display text-body-lg font-bold text-casa-navy">
-                Sign Camp Medical Release
+                Digital Authorization
               </h3>
               <IconButton
                 size="sm"
@@ -1012,7 +1012,7 @@ export default function ActionInspectionSidecar({
             </div>
 
             <p className="text-caption text-casa-muted">
-              I, parent/guardian of <strong>Owen Tabor</strong>, authorize emergency medical treatment for the Lake Alpine Science Camp.
+              I confirm digital signature and authorization for <strong>{activeItem?.description || activeItem?.event_title || 'this action item'}</strong>.
             </p>
 
             <div className="h-32 border-2 border-dashed border-casa-border rounded-2xl flex flex-col items-center justify-center bg-casa-bg text-casa-muted cursor-crosshair">

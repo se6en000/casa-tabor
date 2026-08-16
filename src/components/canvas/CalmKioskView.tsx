@@ -74,6 +74,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
     activeConflicts,
     activePrep,
     familyMembers,
+    ambientRoutineStatuses,
     handleResolveConflict,
     handleCompletePrep,
     setCanvasSubmode,
@@ -96,16 +97,26 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
 
   return (
     <div className="w-full h-full flex flex-col justify-start p-4 sm:p-6 lg:p-8 xl:p-10 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-8 overflow-y-auto scrollbar-hide">
-      {/* ── Top Section: Ambient Greeting & Clock ── */}
+      {/* ── Top Section: Ambient Greeting, Routines & Clock ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-casa-border/40 shrink-0">
         <div>
           <h1 className="font-display text-display-lg sm:text-display-xl text-casa-navy font-semibold tracking-tight leading-none">
             {greeting}, <span className="italic font-normal">Tabor Family</span>
           </h1>
-          <p className="text-body text-casa-text-secondary mt-2 font-medium">
-            {format(now, 'EEEE, MMMM d, yyyy')}
-            {weather && ` · ${weather.condition || 'Clear'}, ${weather.temp}°F`}
-          </p>
+          <div className="flex flex-wrap items-center gap-2 mt-2">
+            <p className="text-body text-casa-text-secondary font-medium">
+              {format(now, 'EEEE, MMMM d, yyyy')}
+              {weather && ` · ${weather.condition || 'Clear'}, ${weather.temp}°F`}
+            </p>
+            {ambientRoutineStatuses.map((status, idx) => (
+              <span
+                key={idx}
+                className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-900 text-caption font-semibold shadow-2xs"
+              >
+                <span>{status.text}</span>
+              </span>
+            ))}
+          </div>
         </div>
 
         <div className="flex items-center gap-3">

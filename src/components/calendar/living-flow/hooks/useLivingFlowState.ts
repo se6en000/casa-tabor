@@ -139,13 +139,28 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     return isLikelyReminderOrHome(initialEvent, initialEvent?.enrichment?.category) ? 'reminder' : 'event'
   }, [initialEvent])
 
+  const initialTravelBehavior = useMemo<TravelBehavior>(() => {
+    const plan = initialEvent?.plan_override?.transportation_plan
+    if (!plan || plan.legs.length === 0) {
+      return initialEvent?.plan_override?.waits === false ? 'two_way' : 'stay'
+    }
+    if (plan.legs.length === 1) {
+      if (plan.legs[0].purpose === 'dropoff') return 'dropoff_only'
+      if (plan.legs[0].purpose === 'pickup') return 'pickup_only'
+    }
+    if (plan.waitOnSite || initialEvent?.plan_override?.waits !== false) {
+      return 'stay'
+    }
+    return 'two_way'
+  }, [initialEvent?.plan_override])
+
   // Local State
   const [state, setState] = useState<LivingFlowState>({
     mode: initialMode,
     title: initialEvent?.title || 'New Event',
     category: normalizedCategory.label,
     categoryIcon: '',
-    travelBehavior: initialEvent?.plan_override?.waits === false ? 'dropoff' : 'stay',
+    travelBehavior: initialTravelBehavior,
     driverLeg1: initialDriverLeg1,
     driverLeg2: initialDriverLeg2,
     startDate: initialStartDate,
@@ -175,11 +190,11 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
       venue: initialVenue,
       selectedMemberIds: initialMemberIds,
       primaryMemberId: initialPrimaryId,
-      travelBehavior: initialEvent.plan_override?.waits === false ? 'dropoff' : 'stay',
+      travelBehavior: initialTravelBehavior,
       driverLeg1: initialDriverLeg1,
       driverLeg2: initialDriverLeg2,
     }))
-  }, [initialEvent, initialStartDate, initialEndDate, initialDuration, initialVenue, initialMemberIds, initialPrimaryId, initialDriverLeg1, initialDriverLeg2])
+  }, [initialEvent, initialStartDate, initialEndDate, initialDuration, initialVenue, initialMemberIds, initialPrimaryId, initialTravelBehavior, initialDriverLeg1, initialDriverLeg2])
 
   // Resolve live route ETA if event has destination address but missing computed driving metrics
   useEffect(() => {
@@ -233,13 +248,21 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     return () => { isMounted = false }
   }, [initialEvent?.id, initialEvent?.address, initialStartDate, familyMembers, queryClient])
 
-  // Computed Departure Time
+  // Computed Departure Time (Outbound / Drop-off)
   const departureDate = useMemo(() => {
     const totalPreMinutes = (state.venue.driveMinutes || 0) + state.bufferMinutes
     const base = !state.startDate || isNaN(new Date(state.startDate).getTime()) ? new Date() : new Date(state.startDate)
     base.setMinutes(base.getMinutes() - totalPreMinutes)
     return base
   }, [state.startDate, state.venue.driveMinutes, state.bufferMinutes])
+
+  // Computed Pickup Departure Time (Inbound Departure for Pickup)
+  const pickupDepartureDate = useMemo(() => {
+    const totalPreMinutes = (state.venue.driveMinutes || 0) + state.bufferMinutes
+    const base = !state.endDate || isNaN(new Date(state.endDate).getTime()) ? new Date() : new Date(state.endDate)
+    base.setMinutes(base.getMinutes() - totalPreMinutes)
+    return base
+  }, [state.endDate, state.venue.driveMinutes, state.bufferMinutes])
 
   // Computed Return Time
   const returnDate = useMemo(() => {
@@ -502,6 +525,7 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     state,
     familyMembers,
     departureDate,
+    pickupDepartureDate,
     returnDate,
     updateTitle,
     toggleMember,

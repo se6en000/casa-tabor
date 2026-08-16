@@ -49,15 +49,15 @@ function extractAccountNumber(text?: string | null): string | null {
 }
 
 /**
- * Fast helper to detect if an action item has a proactive calendar event suggestion
+ * Helper to detect if an action item has a proactive calendar event suggestion
  * without running full multi-document analysis. Used for glanceable queue card badges.
  */
 export function detectSuggestedEvent(item: PrepItem | null): SuggestedEventPlan | null {
   if (!item) return null
   const desc = (item.description || item.event_title || '').trim()
 
-  // 1. School PTO / Spirit Day (8/28/26)
-  if (/pto|pta|spirit day|spirit week|lynita|palm beach/i.test(desc)) {
+  // 1. School PTO / Spirit Day (8/28/26) - only if explicitly PTO spirit day
+  if (/(?=.*(?:pto|pta))(?=.*spirit\s*day)/i.test(desc)) {
     return {
       title: 'PTO Spirit Day - Palm Beach School (Wear Green & Gold)',
       date: '2026-08-28',
@@ -70,8 +70,8 @@ export function detectSuggestedEvent(item: PrepItem | null): SuggestedEventPlan 
     }
   }
 
-  // 2. Science Camp Trip / Medical Waiver (8/17/26 or upcoming Monday)
-  if (/science camp|lake alpine|camp waiver|principal adams/i.test(desc)) {
+  // 2. Science Camp Trip / Medical Waiver (8/17/26) - only if explicitly Science Camp waiver/trip
+  if (/(?=.*(?:science\s*camp|lake\s*alpine))(?=.*(?:waiver|release|medication|departure|camp))/i.test(desc)) {
     return {
       title: '5th Grade Science Camp Departure (Lake Alpine)',
       date: '2026-08-17',
@@ -126,15 +126,16 @@ export function synthesizeActionAnalysis(
   if (detailedItem?.gmailContext && detailedItem.gmailContext.subject) {
     const { subject, from_email, received_at, email_body } = detailedItem.gmailContext
     const fromName = from_email ? from_email.split('<')[0].replace(/"/g, '').trim() : 'Email Notification'
+    const cleanSubject = subject || desc || 'Email Action Item'
     
     return {
       senderLabel: fromName || 'Email Notification',
       senderEmail: from_email || 'notifications@service.com',
       receivedTime: received_at ? new Date(received_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : 'Today',
-      subject: subject || desc,
+      subject: cleanSubject,
       urgency: item?.due_by ? 'Scheduled for today — immediate review recommended.' : 'Information received — review at your convenience.',
-      requiredAction: `Review matter regarding "${subject}".`,
-      householdImpact: amount ? `Transaction amount: ${amount}` : 'Routine household update.',
+      requiredAction: desc ? `Review: "${desc.length > 90 ? desc.slice(0, 87) + '…' : desc}"` : `Review matter regarding "${cleanSubject}".`,
+      householdImpact: amount ? `Transaction amount: ${amount}` : 'Keeps family communications and actions organized.',
       documents: amount
         ? [{ id: 'doc-1', title: 'Payment Confirmation', subtitle: `${amount} Transaction Record`, type: 'payment', amount }]
         : [{ id: 'doc-1', title: 'Message Attachment', subtitle: 'View Full Reference', type: 'document' }],
@@ -143,10 +144,10 @@ export function synthesizeActionAnalysis(
     }
   }
 
-  // 2. Pattern Matching by Category
+  // 2. Pattern Matching by specific matter types (for demo / offline mock items only when explicitly matching exact matter)
 
-  // 2a. Bank / Loan / Vehicle / Mortgage / Credit Card / Financial Auto-Pay
-  if (/bank of america|loan|payment|vehicle|mortgage|credit card|chase|wells fargo|capital one|auto-pay|autopay|\$[\d,]+/i.test(desc)) {
+  // 2a. Bank of America / Vehicle Loan Auto-Pay (when explicitly bank of america / vehicle loan)
+  if (/bank of america/i.test(desc) || (/(?=.*vehicle\s*loan)(?=.*automatic\s*payment)/i.test(desc))) {
     const isBofa = /bank of america/i.test(desc)
     const senderName = isBofa ? 'Bank of America Auto Loans' : 'Financial Services Auto-Pay'
     const senderEmail = isBofa ? 'customer.service@bankofamerica.com' : 'billing-alerts@service.com'
@@ -183,24 +184,23 @@ export function synthesizeActionAnalysis(
     }
   }
 
-  // 2b. Grocery / Retail / Order / Delivery (Walmart, Costco, Amazon, Target)
-  if (/walmart|costco|target|amazon|grocery|delivery|order|pickup|instacart/i.test(desc)) {
-    const isWalmart = /walmart/i.test(desc)
-    const senderName = isWalmart ? 'Walmart Grocery & Delivery' : 'Retail Order Services'
-    const senderEmail = isWalmart ? 'orders@walmart.com' : 'orders@delivery.com'
+  // 2b. Grocery / Retail / Order / Delivery (when explicitly Walmart grocery or retail order)
+  if (/(?=.*walmart)(?=.*grocery)/i.test(desc) || (/walmart\s*grocery\s*order/i.test(desc))) {
+    const senderName = 'Walmart Grocery & Delivery'
+    const senderEmail = 'orders@walmart.com'
 
     return {
       senderLabel: senderName,
       senderEmail,
       receivedTime: 'Today, 8:15 AM',
-      subject: isWalmart ? 'Walmart Order: Weekly Household Groceries & Household Essentials' : 'Order Status & Pickup Confirmation',
+      subject: 'Walmart Order: Weekly Household Groceries & Household Essentials',
       urgency: 'Order cutoff approaching. Modifications lock 2 hours before scheduled fulfillment.',
       requiredAction: 'Confirm cart items, review recommended substitutions, and verify delivery address.',
       householdImpact: 'Provisions the household with weekly pantry staples, fresh produce, and school snacks.',
       documents: [
         {
           id: 'doc-cart',
-          title: isWalmart ? 'Walmart Cart (Order 9451)' : 'Active Shopping Cart',
+          title: 'Walmart Cart (Order 9451)',
           subtitle: 'Review 18 items · Delivery reservation',
           type: 'cart',
         },
@@ -211,13 +211,13 @@ export function synthesizeActionAnalysis(
           type: 'document',
         },
       ],
-      emailBody: `Hello Jake & Kelly,\n\nYour ${senderName} order is being assembled. Please review your cart items before the fulfillment cutoff window closes.\n\nOrder Overview:\n• Household Delivery Window: Today, 4:00 PM – 6:00 PM\n• Delivery Address: Tabor Residence\n• Reserved Items: Milk, bread, eggs, organic fruit, school snacks, household supplies.\n\nTrack your order status or add last-minute essentials anytime in your account portal.`,
+      emailBody: `Hello Jake & Kelly,\n\nYour Walmart order is being assembled. Please review your cart items before the fulfillment cutoff window closes.\n\nOrder Overview:\n• Household Delivery Window: Today, 4:00 PM – 6:00 PM\n• Delivery Address: Tabor Residence\n• Reserved Items: Milk, bread, eggs, organic fruit, school snacks, household supplies.\n\nTrack your order status or add last-minute essentials anytime in your account portal.`,
       suggestedEvent,
     }
   }
 
-  // 2c. School PTO / Spirit Day / School Events (Lynita Butler, Palm Beach School, PTO/PTA)
-  if (/pto|pta|spirit day|spirit week|lynita|butler|palm beach/i.test(desc)) {
+  // 2c. School PTO / Spirit Day / School Events (when explicitly PTO Spirit Day)
+  if (/(?=.*(?:pto|pta))(?=.*spirit\s*day)/i.test(desc)) {
     const isLynita = /lynita|butler|palm beach/i.test(desc)
     const senderName = isLynita ? 'Lynita Butler (Palm Beach School PTO)' : 'School PTO Committee'
     const senderEmail = isLynita ? 'pto@palmbeachschool.org' : 'pto@school.org'
@@ -258,8 +258,8 @@ export function synthesizeActionAnalysis(
     }
   }
 
-  // 2d. School / Medical / Release Waiver / Camps (Oakridge, Science Camp, Forms)
-  if (/waiver|release|permission|camp|school|oakridge|science|principal|adams/i.test(desc)) {
+  // 2d. Science Camp Medical Release Waiver (ONLY when explicitly science camp waiver)
+  if (/(?=.*science\s*camp)(?=.*(?:waiver|release|medication|lake\s*alpine))/i.test(desc)) {
     return {
       senderLabel: 'Principal Adams (Oakridge Elementary)',
       senderEmail: 'adams@oakridgeschool.edu',
@@ -298,24 +298,39 @@ export function synthesizeActionAnalysis(
     }
   }
 
-  // 2e. General / Household Tasks / Calendar Reminders
+  // 2e. General / Truthful Dynamic Synthesis (NO FAKE HALLUCINATIONS)
+  const isGmail = item?.source_type === 'gmail' || item?.source_ref?.startsWith('gmail:')
+  const derivedSubject = item?.event_title || (desc ? (desc.length > 70 ? desc.slice(0, 67) + '…' : desc) : 'Household Task')
+  const senderName = isGmail ? 'Email Notification' : 'Casa Household Assistant'
+  const senderEmail = isGmail ? 'notifications@household.local' : 'assistant@casatabor.local'
+
   return {
-    senderLabel: 'Casa Household Manager',
-    senderEmail: 'assistant@casatabor.local',
+    senderLabel: senderName,
+    senderEmail,
     receivedTime: 'Today',
-    subject: desc || 'Household Task Matter',
-    urgency: item?.due_by ? 'Action item due today for household schedule.' : 'Queued household matter for your review.',
-    requiredAction: `Complete or snooze: "${desc || 'Household matter'}"`,
-    householdImpact: amount ? `Estimated financial amount: ${amount}` : 'Keeps family logistics organized and up-to-date.',
-    documents: [
-      {
-        id: 'doc-generic',
-        title: 'Action Item Brief',
-        subtitle: 'Casa Tabor Logistics Center',
-        type: 'document',
-      },
-    ],
-    emailBody: `Household Action Record\n\nDescription: ${desc || 'Household action item'}\nSource: ${item?.source_type || 'household'}\nStatus: Active Queue\n\nLogistics summary automatically prepared for the Tabor family dashboard.`,
+    subject: derivedSubject,
+    urgency: item?.due_by ? 'Action item due today — immediate review recommended.' : 'Action queued for household review.',
+    requiredAction: desc ? (desc.length > 90 ? desc.slice(0, 87) + '…' : desc) : 'Review and complete household action.',
+    householdImpact: amount ? `Transaction amount: ${amount}` : 'Keeps family tasks and household schedule up to date.',
+    documents: amount
+      ? [
+          {
+            id: 'doc-payment',
+            title: 'Payment Record',
+            subtitle: `${amount} Transaction Record`,
+            type: 'payment',
+            amount,
+          },
+        ]
+      : [
+          {
+            id: 'doc-generic',
+            title: 'Action Item Details',
+            subtitle: isGmail ? 'Email Source Record' : 'Casa Tabor Action Center',
+            type: 'document',
+          },
+        ],
+    emailBody: desc || item?.event_title || 'No message content available.',
     suggestedEvent,
   }
 }

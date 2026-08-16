@@ -175,6 +175,8 @@ function resolveLinkedEventId(item: PrepItem): string | null {
   return null
 }
 
+const GMAIL_REF_RE = /^gmail:([^:]+):(.+)$/
+
 /** Fetches real source context for a single prep item: gmail body, linked-event snapshot, and attendee suggestions. */
 export function usePrepItemDetails(item: PrepItem | null) {
   return useQuery({
@@ -186,16 +188,28 @@ export function usePrepItemDetails(item: PrepItem | null) {
 
       let gmailContext: PrepItemGmailContext | null = null
       if (item.source_type === 'gmail' && item.source_ref) {
-        const match = /^gmail:([^:]+):(.+)$/.exec(item.source_ref)
+        const match = GMAIL_REF_RE.exec(item.source_ref)
         if (match) {
           const [, memberId, messageId] = match
-          const { data } = await supabase
-            .from('gmail_processed_messages')
-            .select('subject, from_email, received_at, email_body')
-            .eq('family_member_id', memberId)
-            .eq('gmail_message_id', messageId)
-            .maybeSingle()
-          gmailContext = data ?? null
+          if (UUID_RE.test(memberId)) {
+            const { data } = await supabase
+              .from('gmail_processed_messages')
+              .select('subject, from_email, received_at, email_body')
+              .eq('family_member_id', memberId)
+              .eq('gmail_message_id', messageId)
+              .maybeSingle()
+            gmailContext = data ?? null
+          }
+
+          if (!gmailContext) {
+            const { data } = await supabase
+              .from('gmail_processed_messages')
+              .select('subject, from_email, received_at, email_body')
+              .eq('gmail_message_id', messageId)
+              .limit(1)
+              .maybeSingle()
+            gmailContext = data ?? null
+          }
         }
       }
 

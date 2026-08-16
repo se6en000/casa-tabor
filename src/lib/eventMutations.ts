@@ -52,10 +52,10 @@ export function reconcileTransportationLegTimes(
   return {
     ...plan,
     legs: plan.legs.map((leg) => {
-      if (leg.timing === 'arrive_by' || leg.purpose === 'drive') {
+      if (leg.timing === 'arrive_by' || leg.purpose === 'drive' || leg.purpose === 'dropoff') {
         return { ...leg, time: startStr }
       }
-      if (leg.timing === 'depart_at' || leg.purpose === 'return') {
+      if (leg.timing === 'depart_at' || leg.purpose === 'return' || leg.purpose === 'pickup') {
         return { ...leg, time: endStr }
       }
       return leg
@@ -76,8 +76,8 @@ export function reconcileTransportationDestination(
     ...plan,
     legs: plan.legs.map((leg) => ({
       ...leg,
-      origin: leg.origin.kind === 'event' || leg.purpose === 'return' ? eventPlace : leg.origin,
-      destination: leg.destination.kind === 'event' || leg.purpose === 'drive' ? eventPlace : leg.destination,
+      origin: leg.origin.kind === 'event' || leg.purpose === 'return' || leg.purpose === 'pickup' ? eventPlace : leg.origin,
+      destination: leg.destination.kind === 'event' || leg.purpose === 'drive' || leg.purpose === 'dropoff' ? eventPlace : leg.destination,
     })),
   }
 }

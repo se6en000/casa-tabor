@@ -33,6 +33,7 @@ export default function LivingFlowSidecar({
     state,
     familyMembers,
     departureDate,
+    pickupDepartureDate,
     returnDate,
     updateTitle,
     toggleMember,
@@ -97,6 +98,7 @@ export default function LivingFlowSidecar({
               <LivingDepartureHero
                 departureDate={departureDate}
                 arrivalDate={state.startDate}
+                pickupDepartureDate={pickupDepartureDate}
                 venue={state.venue}
                 bufferMinutes={state.bufferMinutes}
                 travelBehavior={state.travelBehavior}
@@ -109,6 +111,7 @@ export default function LivingFlowSidecar({
               <LivingRouteTimeline
                 departureDate={departureDate}
                 arrivalDate={state.startDate}
+                pickupDepartureDate={pickupDepartureDate}
                 returnDate={returnDate}
                 durationMinutes={state.durationMinutes}
                 venue={state.venue}
