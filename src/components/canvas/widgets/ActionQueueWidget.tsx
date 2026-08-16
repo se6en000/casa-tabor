@@ -99,6 +99,7 @@ export default function ActionQueueWidget({
   activeConflicts,
   activePrep,
   pushedPrep: _pushedPrep,
+  familyMembers = [],
   getDriverAvailabilities,
   handleResolveConflict,
   handleCompletePrep,
@@ -543,7 +544,7 @@ export default function ActionQueueWidget({
 
                         {(heroItem.source_type === 'gmail' || heroItem.source_ref?.startsWith('gmail:')) && (
                           <a
-                            href={buildGmailWebUrl(heroItem)}
+                            href={buildGmailWebUrl(heroItem, null, familyMembers)}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-1.5 text-2xs font-bold text-red-900 bg-red-50 hover:bg-red-100 border border-red-200 px-2.5 py-1 rounded-full shadow-2xs transition-colors no-underline min-h-[28px]"
@@ -870,7 +871,7 @@ export default function ActionQueueWidget({
                               <>
                                 <span>·</span>
                                 <a
-                                  href={buildGmailWebUrl(item)}
+                                  href={buildGmailWebUrl(item, null, familyMembers)}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="inline-flex items-center gap-1 text-3xs font-bold text-red-900 bg-red-50 hover:bg-red-100 border border-red-200 px-1.5 py-0.5 rounded-full transition-colors no-underline"

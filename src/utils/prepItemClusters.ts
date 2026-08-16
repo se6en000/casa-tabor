@@ -154,13 +154,86 @@ export function clusterPrepItems(items: PrepItem[]): PrepItemCluster[] {
   return [...clusters.values()]
 }
 
+const KNOWN_MEMBER_EMAILS: Record<string, string> = {
+  '8bf81a21-f2b8-4232-91c6-5a5e9d5b9488': 'jacobrtabor@gmail.com',
+  '917b4b82-dd58-4a4b-a4fa-76065f62e33c': 'taborfamilyemail@gmail.com',
+  household: 'taborfamilyemail@gmail.com',
+}
+
 /**
- * Builds a direct, reliable Gmail web URL for any email action item.
+ * Resolves which Gmail account (e.g. taborfamilyemail@gmail.com vs jacobrtabor@gmail.com)
+ * the message was received on, so links open the correct Google account.
+ */
+export function resolveGmailAccountEmail(
+  item?: PrepItem | null,
+  gmailContext?: { subject?: string | null; from_email?: string | null; email_body?: string | null; family_member_id?: string | null } | null,
+  familyMembers?: { id: string; name?: string | null; email?: string | null }[] | null
+): string {
+  // 1. Explicit source_ref token check (e.g., gmail:household:... or gmail:<member_id>:...)
+  if (item?.source_ref?.startsWith('gmail:')) {
+    const parts = item.source_ref.split(':')
+    const token = (parts[1] || '').toLowerCase().trim()
+    if (token === 'household' || token.includes('taborfamily')) return 'taborfamilyemail@gmail.com'
+    if (token.includes('jacobrtabor') || token.includes('jake')) return 'jacobrtabor@gmail.com'
+    if (KNOWN_MEMBER_EMAILS[token]) return KNOWN_MEMBER_EMAILS[token]
+
+    if (familyMembers && familyMembers.length > 0) {
+      const match = familyMembers.find((m) => m.id === token)
+      if (match) {
+        if (match.email && match.email.includes('@')) return match.email.toLowerCase().trim()
+        if (match.name && /jake|jacob/i.test(match.name)) return 'jacobrtabor@gmail.com'
+        if (match.name && /tabor family|family/i.test(match.name)) return 'taborfamilyemail@gmail.com'
+      }
+    }
+  }
+
+  // 2. Gmail context inspection
+  if (gmailContext?.family_member_id) {
+    if (KNOWN_MEMBER_EMAILS[gmailContext.family_member_id]) {
+      return KNOWN_MEMBER_EMAILS[gmailContext.family_member_id]
+    }
+    if (familyMembers && familyMembers.length > 0) {
+      const match = familyMembers.find((m) => m.id === gmailContext.family_member_id)
+      if (match?.email && match.email.includes('@')) return match.email.toLowerCase().trim()
+    }
+  }
+
+  const body = (gmailContext?.email_body || '').toLowerCase()
+  if (body.includes('taborfamilyemail@gmail.com')) return 'taborfamilyemail@gmail.com'
+  if (body.includes('jacobrtabor@gmail.com') || /thanks for your.*order, jacob/i.test(body)) {
+    return 'jacobrtabor@gmail.com'
+  }
+
+  // 3. Content heuristics for personal vs household
+  const text = `${item?.event_title || ''} ${item?.description || ''}`.toLowerCase()
+  if (
+    text.includes('amazon developer') ||
+    text.includes('jacob tabor') ||
+    text.includes('order, jacob') ||
+    text.includes('appstore.amazon.com') ||
+    text.includes('model y lease') ||
+    text.includes('tesla') ||
+    text.includes('hellofresh')
+  ) {
+    return 'jacobrtabor@gmail.com'
+  }
+
+  // Default to shared household inbox
+  return 'taborfamilyemail@gmail.com'
+}
+
+/**
+ * Builds a direct, reliable Gmail web URL for any email action item targeted to the specific
+ * account (taborfamilyemail@gmail.com or jacobrtabor@gmail.com).
  */
 export function buildGmailWebUrl(
   item: PrepItem,
-  gmailContext?: { subject?: string | null; from_email?: string | null } | null
+  gmailContext?: { subject?: string | null; from_email?: string | null; email_body?: string | null; family_member_id?: string | null } | null,
+  familyMembers?: { id: string; name?: string | null; email?: string | null }[] | null
 ): string {
+  const accountEmail = resolveGmailAccountEmail(item, gmailContext, familyMembers)
+  const userSegment = encodeURIComponent(accountEmail)
+
   const subject = gmailContext?.subject || item.event_title || ''
   const cleanSubject = subject
     .replace(/^(\s*(re|fwd|fw|aw|vs|sv|antw)\s*:\s*)+/i, '')
@@ -168,16 +241,16 @@ export function buildGmailWebUrl(
     .trim()
 
   if (cleanSubject) {
-    return `https://mail.google.com/mail/u/0/#search/${encodeURIComponent(`subject:("${cleanSubject.slice(0, 50)}")`)}`
+    return `https://mail.google.com/mail/u/${userSegment}/#search/${encodeURIComponent(`subject:("${cleanSubject.slice(0, 50)}")`)}`
   }
 
   if (item.source_ref?.startsWith('gmail:')) {
     const parts = item.source_ref.split(':')
     const msgId = parts[2] || parts[1]
     if (msgId && /^[0-9a-f]+$/i.test(msgId)) {
-      return `https://mail.google.com/mail/u/0/#all/${msgId}`
+      return `https://mail.google.com/mail/u/${userSegment}/#all/${msgId}`
     }
   }
 
-  return `https://mail.google.com/mail/u/0/#inbox`
+  return `https://mail.google.com/mail/u/${userSegment}/#inbox`
 }

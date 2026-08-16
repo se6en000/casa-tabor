@@ -546,7 +546,7 @@ export default function ActionInspectionSidecar({
               <>
                 <span>·</span>
                 <a
-                  href={buildGmailWebUrl(activeItem, detailedItem?.gmailContext)}
+                  href={buildGmailWebUrl(activeItem, detailedItem?.gmailContext, familyMembers)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-2xs font-bold text-red-900 bg-red-50 hover:bg-red-100 border border-red-200 shadow-2xs transition-colors no-underline min-h-[32px]"
@@ -884,7 +884,7 @@ export default function ActionInspectionSidecar({
             {activeItem && (activeItem.source_type === 'gmail' || activeItem.source_ref?.startsWith('gmail:')) && (
               <div className="pt-2">
                 <a
-                  href={buildGmailWebUrl(activeItem, detailedItem?.gmailContext)}
+                  href={buildGmailWebUrl(activeItem, detailedItem?.gmailContext, familyMembers)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="w-full min-h-[48px] rounded-xl bg-white hover:bg-red-50/70 border border-red-200 text-red-950 font-bold text-body-sm flex items-center justify-center gap-2 shadow-2xs transition-all no-underline"

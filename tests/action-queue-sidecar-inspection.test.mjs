@@ -303,5 +303,61 @@ test('ActionInspectionSidecar: Snooze and Done buttons execute mutations and aut
   assert.match(sidecarCompanionCode, /queueItems=\{allPrep\}/, 'SidecarCompanion must pass queueItems')
 })
 
+test('buildGmailWebUrl & resolveGmailAccountEmail targets specific user account', async () => {
+  const { buildGmailWebUrl, resolveGmailAccountEmail } = await import('../src/utils/prepItemClusters.ts')
+
+  const familyMembers = [
+    { id: '8bf81a21-f2b8-4232-91c6-5a5e9d5b9488', name: 'Jake', email: 'jacobrtabor@gmail.com' },
+    { id: '917b4b82-dd58-4a4b-a4fa-76065f62e33c', name: 'Tabor Family', email: 'taborfamilyemail@gmail.com' },
+  ]
+
+  // 1. Strings Meeting / School item -> taborfamilyemail@gmail.com
+  const stringsItem = {
+    id: 'strings-1',
+    event_title: 'Re: Strings Meeting Information and Paperwork',
+    description: 'Place a note in their green folder for their teacher.',
+    source_type: 'gmail',
+    source_ref: 'gmail:household:19fed2dc206dca31',
+  }
+  assert.equal(resolveGmailAccountEmail(stringsItem, null, familyMembers), 'taborfamilyemail@gmail.com')
+  const stringsUrl = buildGmailWebUrl(stringsItem, null, familyMembers)
+  assert.match(stringsUrl, /mail\.google\.com\/mail\/u\/taborfamilyemail%40gmail\.com\/#search/i)
+
+  // 2. Lake Lytal item -> taborfamilyemail@gmail.com via member ID
+  const lytalItem = {
+    id: 'lytal-1',
+    event_title: 'Lake Lytal Needs Your Help',
+    source_type: 'gmail',
+    source_ref: 'gmail:917b4b82-dd58-4a4b-a4fa-76065f62e33c:19fe2336b8028922',
+  }
+  assert.equal(resolveGmailAccountEmail(lytalItem, null, familyMembers), 'taborfamilyemail@gmail.com')
+  const lytalUrl = buildGmailWebUrl(lytalItem, null, familyMembers)
+  assert.match(lytalUrl, /mail\.google\.com\/mail\/u\/taborfamilyemail%40gmail\.com\/#search/i)
+
+  // 3. Amazon Developer identity verification / personal item -> jacobrtabor@gmail.com
+  const amazonDevItem = {
+    id: 'amazon-1',
+    event_title: '[Reminder - Action Required] Verify your Amazon Developer Account',
+    description: 'Jake needs to verify his identity for the Amazon Appstore Developer Account.',
+    source_type: 'gmail',
+    source_ref: 'gmail:19edaa66ae4673d0:appstore.amazon.com',
+  }
+  assert.equal(resolveGmailAccountEmail(amazonDevItem, null, familyMembers), 'jacobrtabor@gmail.com')
+  const amazonDevUrl = buildGmailWebUrl(amazonDevItem, null, familyMembers)
+  assert.match(amazonDevUrl, /mail\.google\.com\/mail\/u\/jacobrtabor%40gmail\.com\/#search/i)
+
+  // 4. Personal item via Jake member ID -> jacobrtabor@gmail.com
+  const spcoItem = {
+    id: 'spco-1',
+    event_title: 'Your SPCO order has been received!',
+    source_type: 'gmail',
+    source_ref: 'gmail:8bf81a21-f2b8-4232-91c6-5a5e9d5b9488:19fadd04f4a9f47d',
+  }
+  assert.equal(resolveGmailAccountEmail(spcoItem, null, familyMembers), 'jacobrtabor@gmail.com')
+  const spcoUrl = buildGmailWebUrl(spcoItem, null, familyMembers)
+  assert.match(spcoUrl, /mail\.google\.com\/mail\/u\/jacobrtabor%40gmail\.com\/#search/i)
+})
+
+
 
 
