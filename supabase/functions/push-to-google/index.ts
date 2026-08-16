@@ -28,8 +28,20 @@ Deno.serve(async (req) => {
   if (evErr || !event) return new Response(JSON.stringify({ error: evErr?.message ?? 'event not found' }), { status: 404, headers: { ...CORS, 'content-type': 'application/json' } })
   if (!event.google_event_id) return new Response(JSON.stringify({ ok: true, skipped: 'no google_event_id' }), { headers: { ...CORS, 'content-type': 'application/json' } })
 
-  // Reminders stay in Casa only — never push to Google Calendar
-  if (event.event_type === 'reminder') return new Response(JSON.stringify({ ok: true, skipped: 'reminder' }), { headers: { ...CORS, 'content-type': 'application/json' } })
+  // Reminders stay in Casa only — never push to Google Calendar (delete from Google if previously linked)
+  if (event.event_type === 'reminder') {
+    if (event.google_event_id) {
+      await sb.functions.invoke('delete-google-event', { body: { event_id } }).catch(() => {})
+      await sb.from('events').update({
+        google_event_id: null,
+        google_calendar_id: null,
+        google_connection_id: null,
+        updated_at: new Date().toISOString(),
+      }).eq('id', event_id)
+      return new Response(JSON.stringify({ ok: true, deleted: event.google_event_id }), { headers: { ...CORS, 'content-type': 'application/json' } })
+    }
+    return new Response(JSON.stringify({ ok: true, skipped: 'reminder' }), { headers: { ...CORS, 'content-type': 'application/json' } })
+  }
 
   const { connection, accessToken } = await loadWritableGoogleConnection(sb)
 

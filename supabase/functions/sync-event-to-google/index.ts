@@ -39,6 +39,27 @@ Deno.serve(async (req) => {
   }
 
   if (event.event_type === 'reminder') {
+    if (event.google_event_id) {
+      const delRes = await sb.functions.invoke('delete-google-event', {
+        body: { event_id },
+      }).catch((err: Error) => ({ data: null, error: err }))
+      const delError = delRes?.error?.message ?? delRes?.data?.error ?? null
+      if (delError && !delError.includes('404')) {
+        console.warn(`[sync-event-to-google] delete-google-event notice for reminder ${event_id}:`, delError)
+      }
+      await sb.from('events').update({
+        google_event_id: null,
+        google_calendar_id: null,
+        google_connection_id: null,
+        updated_at: new Date().toISOString(),
+      }).eq('id', event_id)
+
+      return json({
+        ok: true,
+        sync_status: 'deleted_from_google',
+        skipped: 'reminder_deleted_from_google',
+      })
+    }
     return json({ ok: true, sync_status: 'not_needed', skipped: 'reminder' })
   }
   if (event.deleted_at) {

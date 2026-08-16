@@ -1182,7 +1182,13 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => navigateTo('/cook')}
+                    onClick={() => {
+                      if (dinnerPlan.recipeId) {
+                        navigateTo(`/cook?recipe=${encodeURIComponent(dinnerPlan.recipeId)}&autocook=true`)
+                      } else {
+                        navigateTo('/cook')
+                      }
+                    }}
                     className="text-body-sm font-bold text-casa-navy hover:text-casa-gold transition-colors flex items-center gap-1 min-h-[44px] px-3"
                   >
                     <span>Recipe</span>

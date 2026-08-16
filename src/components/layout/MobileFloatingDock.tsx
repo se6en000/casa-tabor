@@ -2,6 +2,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import {
   Home,
   Calendar,
+  ShoppingCart,
   ChefHat,
   Settings,
   Plus,
@@ -27,7 +28,7 @@ export default function MobileFloatingDock({ onOpenQuickCreate }: MobileFloating
     } catch {}
   }
 
-  // 4 Tabs in exact requested order: Today / Agenda / Cooking / More (NO BADGES)
+  // 5 Tabs in exact requested order: Today / Agenda / Grocery / Cooking / More (NO BADGES)
   const navTabs = [
     {
       to: '/',
@@ -48,6 +49,13 @@ export default function MobileFloatingDock({ onOpenQuickCreate }: MobileFloating
         triggerHaptic()
         setActiveView('today')
       },
+    },
+    {
+      to: '/grocery',
+      icon: ShoppingCart,
+      label: 'Grocery',
+      isActive: location.pathname.startsWith('/grocery'),
+      onClick: () => triggerHaptic(),
     },
     {
       to: '/cook',

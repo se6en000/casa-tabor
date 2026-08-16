@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import type React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIcon, Camera, Mic, Keyboard, RotateCcw, MessagesSquare, Plus, Square, CalendarDays, ShoppingCart, ChefHat, Pencil, AlertTriangle, Clock3, Utensils, Bell, UserPlus, MapPin, Mail, Activity, ChevronRight, Navigation, ArrowRight, Rotate3d, BookOpen, ShoppingBag } from 'lucide-react'
+import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIcon, Camera, Mic, Keyboard, RotateCcw, MessagesSquare, Plus, Square, CalendarDays, ShoppingCart, ChefHat, Pencil, AlertTriangle, Clock3, Utensils, Bell, UserPlus, MapPin, Mail, Activity, ChevronRight, Navigation, ArrowRight, Rotate3d, BookOpen } from 'lucide-react'
 import { format } from 'date-fns'
 import { useNavigate } from 'react-router-dom'
 import { cn } from '../../utils/cn'
@@ -30,6 +30,7 @@ import { linkAssistantEventMentions, parseAssistantEventHref, parseAssistantHref
 import { openEventDetails } from '../../utils/openEventDetails'
 import { buildCreatePreviewCopy, buildDeleteManyPreviewCopy, buildDeletePreviewCopy, buildUpdatePreviewCopy } from '../../utils/aiConfirmPreview'
 import { matchDinnerPlanIntent, getDinnerPlanSuggestions } from '../../utils/dinnerPlanManager'
+import { saveTonightDinnerPlan } from '../../utils/dinnerPlanSync'
 
 const LOW_CONFIDENCE_CONFIRM_PHRASES = /\b(yes|yeah|yep|ok|okay|use it|that one|correct|right|go ahead)\b/i
 const LOW_CONFIDENCE_REJECT_PHRASES = /\b(no|nope|try again|wrong|not that|cancel)\b/i
@@ -1381,6 +1382,9 @@ export default function AIChatDrawer({
                               statusBadge: args.statusBadge ? String(args.statusBadge) : (args.mode === 'takeout' ? 'Order ready for pickup' : 'Ingredients ready'),
                             }
                             useAppStore.getState().setDinnerPlan(plan)
+                            void saveTonightDinnerPlan(plan)
+                            qc.invalidateQueries({ queryKey: ['copilot-meal-plans'] })
+                            qc.invalidateQueries({ queryKey: ['recipe-meal-plans'] })
                             updateMessageToolStatus(messageId, 'done')
                             return true
                           } catch (err) {
@@ -2018,7 +2022,7 @@ export default function AIChatDrawer({
 
 const MAX_VISIBLE_SOURCES = 3
 
-function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, events, onOpenEventDetails, onLinkClick, onQuickSaveRecipe, onConfirmToolAction, onUndoToolAction, onCancelToolAction, onRefreshToolAction, registerPendingAction, onSelectSuggestion, onEditMessage }: {
+function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, events, onOpenEventDetails, onLinkClick, onQuickSaveRecipe, onQuickSaveAndSetTonight, onConfirmToolAction, onUndoToolAction, onCancelToolAction, onRefreshToolAction, registerPendingAction, onSelectSuggestion, onEditMessage }: {
   msg: AIMessage
   isActivePending: boolean
   enableQuickSaveRecipe?: boolean
@@ -2027,6 +2031,7 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
   onOpenEventDetails?: (eventId: string) => void
   onLinkClick?: (href: string) => void
   onQuickSaveRecipe?: (recipeMessage: string) => Promise<void>
+  onQuickSaveAndSetTonight?: (recipeMessage: string) => Promise<void>
   onConfirmToolAction: (messageId: string, tool: string, args: Record<string, unknown>) => Promise<boolean>
   onUndoToolAction: (messageId: string, actionId: string) => Promise<void>
   onCancelToolAction: (messageId: string) => void
@@ -2248,8 +2253,23 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
           </span>
         )}
         {showQuickSaveRecipe && (
-          <div className="mt-2">
-            <Button variant="ghost"
+          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+            <Button
+              variant="champagne"
+              type="button"
+              disabled={quickSaving}
+              onClick={() => {
+                if (!onQuickSaveAndSetTonight) return
+                setQuickSaving(true)
+                void onQuickSaveAndSetTonight(msg.content).finally(() => setQuickSaving(false))
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-button text-caption font-bold shadow-2xs"
+            >
+              {quickSaving ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+              Set as Tonight's Dinner & Save
+            </Button>
+            <Button
+              variant="secondary"
               type="button"
               disabled={quickSaving}
               onClick={() => {
@@ -2257,10 +2277,10 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
                 setQuickSaving(true)
                 void onQuickSaveRecipe(msg.content).finally(() => setQuickSaving(false))
               }}
-              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-button border border-casa-gold/40 bg-casa-gold/10 text-caption font-semibold text-casa-navy hover:bg-casa-gold/15 disabled:opacity-60"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-button text-caption font-semibold text-casa-navy hover:bg-casa-gold/15 disabled:opacity-60"
             >
-              {quickSaving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
-              Save to Recipe Library (2 servings)
+              {quickSaving ? <Loader2 size={13} className="animate-spin" /> : <BookOpen size={13} />}
+              Save to Library Only
             </Button>
           </div>
         )}
@@ -2803,7 +2823,7 @@ function ToolActionPreview({ tool, args, events }: { tool: string; args: Record<
           <div className="flex items-center justify-between gap-2">
             <span className="text-body font-bold text-casa-navy">{title}</span>
             <span className="text-caption font-semibold px-2.5 py-0.5 rounded-full bg-casa-surface border border-casa-border text-casa-navy shadow-2xs">
-              {mode === 'takeout' ? '🥡 Takeout' : mode === 'leftovers' ? '🍲 Leftovers' : mode === 'dineout' ? '🍽️ Dining Out' : '🍳 Cooking'}
+              {mode === 'takeout' ? 'Takeout' : mode === 'leftovers' ? 'Leftovers' : mode === 'dineout' ? 'Dining Out' : 'Cooking'}
             </span>
           </div>
           <div className="text-caption text-casa-text-secondary space-y-1">

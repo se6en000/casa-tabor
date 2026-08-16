@@ -479,9 +479,10 @@ export async function updateEventCategory(
 
   invalidateAllCalendarQueries(queryClient, eventId)
 
-  if (mode === 'event') {
-    triggerGoogleEventSync(supabase, eventId)
-  }
+  // Trigger Google sync:
+  // - For 'event': creates or updates the Google Calendar event
+  // - For 'reminder': deletes from Google Calendar if previously synced and clears Google IDs
+  triggerGoogleEventSync(supabase, eventId)
 }
 
 export async function snoozeEventOrReminder(

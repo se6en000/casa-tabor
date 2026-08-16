@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { AnimatePresence, motion } from 'framer-motion'
 import {
   CalendarPlus,
   Camera,
   CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
   Clock3,
+  GripVertical,
   Layers,
+  Plus,
   RotateCcw,
   Search,
   ShoppingCart,
@@ -18,7 +19,10 @@ import {
   Users,
   Utensils,
   X,
+  BookOpen,
 } from 'lucide-react'
+import { saveTonightDinnerPlan } from '../utils/dinnerPlanSync'
+import type { DinnerPlan } from '../types'
 import { supabase } from '../lib/supabase'
 import { formatSupabaseError } from '../lib/formatSupabaseError'
 import { inferCategoryFromName } from '../utils/groceryCategorization'
@@ -459,9 +463,19 @@ function RecipeImage({
 
 export default function CookPage() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const aiDrawerOpen = useAppStore((s) => s.aiDrawerOpen)
   const [cookRecipeId, setCookRecipeId] = useState<string | null>(null)
+  const [assigningDay, setAssigningDay] = useState<{ slot: 'tonight' | 'tomorrow' | 'this-week'; dateStr: string; dayLabel: string } | null>(null)
+  const [assignDaySearch, setAssignDaySearch] = useState('')
   const [recipeSearch, setRecipeSearch] = useState('')
+
+  useEffect(() => {
+    const recipeParam = searchParams.get('recipe')
+    if (recipeParam) {
+      setCookRecipeId(recipeParam)
+    }
+  }, [searchParams])
   const [cookLandingMode, setCookLandingMode] = useState<CookLandingMode>(() => {
     try {
       const raw = localStorage.getItem(COOK_LANDING_MODE_STORAGE_KEY)
@@ -585,10 +599,15 @@ export default function CookPage() {
   } | null>(null)
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Non-modal Inline Card Trays State
   const [activeGroceryRecipeId, setActiveGroceryRecipeId] = useState<string | null>(null)
   const [recipeGrocerySelections, setRecipeGrocerySelections] = useState<Record<string, Set<number>>>({})
-  const [activeSchedulePickerRecipeId, setActiveSchedulePickerRecipeId] = useState<string | null>(null)
+
+  // Drag-and-Drop Weekly Horizon State
+  const [draggingHorizonDateStr, setDraggingHorizonDateStr] = useState<string | null>(null)
+  const [dragOverHorizonDateStr, setDragOverHorizonDateStr] = useState<string | null>(null)
+  const [justSwappedDates, setJustSwappedDates] = useState<{ dates: [string, string]; type: 'swap' | 'move' } | null>(null)
+  const touchDragSourceDateStrRef = useRef<string | null>(null)
+  const swapAnimationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const importFileInputRef = useRef<HTMLInputElement>(null)
   const importCameraInputRef = useRef<HTMLInputElement>(null)
@@ -885,6 +904,62 @@ export default function CookPage() {
     () => new Set(plannedRecipes.map(({ recipe }) => recipe.id)),
     [plannedRecipes],
   )
+  const weekDays = useMemo(() => {
+    const days: Array<{
+      date: Date
+      dateStr: string
+      dayName: string
+      formattedDate: string
+      isToday: boolean
+      slot: 'tonight' | 'tomorrow' | 'this-week'
+    }> = []
+
+    const today = new Date()
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(today)
+      d.setDate(today.getDate() + i)
+      const dateStr = d.toISOString().split('T')[0]
+      const dayName = i === 0 ? 'Today' : d.toLocaleDateString('en-US', { weekday: 'short' })
+      const formattedDate = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      const slot: 'tonight' | 'tomorrow' | 'this-week' = i === 0 ? 'tonight' : i === 1 ? 'tomorrow' : 'this-week'
+      days.push({
+        date: d,
+        dateStr,
+        dayName,
+        formattedDate,
+        isToday: i === 0,
+        slot,
+      })
+    }
+    return days
+  }, [])
+
+  const weekDayMeals = useMemo(() => {
+    return weekDays.map((day, index) => {
+      let matched = plannedRecipes.find(
+        (p) =>
+          (day.isToday && p.plan.slot === 'tonight') ||
+          (index === 1 && p.plan.slot === 'tomorrow') ||
+          (p.plan.planned_for && p.plan.planned_for.startsWith(day.dateStr))
+      )
+
+      if (!matched && index > 1) {
+        const remainingThisWeek = plannedRecipes.filter(
+          (p) => p.plan.slot === 'this-week' && (!p.plan.planned_for || p.plan.planned_for === day.dateStr)
+        )
+        const offset = index - 2
+        if (remainingThisWeek[offset]) {
+          matched = remainingThisWeek[offset]
+        }
+      }
+
+      return {
+        day,
+        plan: matched?.plan ?? null,
+        recipe: matched?.recipe ?? null,
+      }
+    })
+  }, [weekDays, plannedRecipes])
   const recipesWithMoodInsights = useMemo<RecipeMoodInsight[]>(() => {
     const nowMs = Date.now()
     const isFancyRecipe = (nameLower: string) => /salmon|cod|barramundi|dijon|creamy|scampi|caesar|salsa/i.test(nameLower)
@@ -1256,6 +1331,11 @@ export default function CookPage() {
   function closeCookRecipe() {
     clearPhotoEditorPendingFile()
     setCookRecipeId(null)
+    setStepIndex(0)
+    setDirectionsViewMode('step')
+    if (searchParams.has('recipe') || searchParams.has('autocook')) {
+      setSearchParams({}, { replace: true })
+    }
   }
 
   function startRecipeEditing() {
@@ -1572,7 +1652,6 @@ export default function CookPage() {
     if (activeGroceryRecipeId === recipe.id) {
       setActiveGroceryRecipeId(null)
     } else {
-      setActiveSchedulePickerRecipeId(null)
       setActiveGroceryRecipeId(recipe.id)
       const recipeIngredients = ingredientsByRecipe.get(recipe.id) ?? []
       if (!recipeGrocerySelections[recipe.id]) {
@@ -1686,51 +1765,49 @@ export default function CookPage() {
     }
   }
 
-  function toggleSchedulePicker(recipe: Recipe) {
-    if (activeSchedulePickerRecipeId === recipe.id) {
-      setActiveSchedulePickerRecipeId(null)
-    } else {
-      setActiveGroceryRecipeId(null)
-      setActiveSchedulePickerRecipeId(recipe.id)
-    }
-  }
-
-  async function handleScheduleSlot(recipe: Recipe, targetSlot: (typeof SLOT_ORDER)[number]) {
-    const existingSlot = plannedRecipes.find((p) => p.recipe.id === recipe.id)?.plan.slot
-    const actionId = `quick-plan:${recipe.id}:${targetSlot}`
+  async function handleAssignRecipeToDay(recipe: Recipe) {
+    if (!assigningDay) return
+    const { slot, dateStr, dayLabel } = assigningDay
+    const actionId = `assign-day:${recipe.id}:${dateStr}`
     setPlannedMealActionId(actionId)
-    setActiveSchedulePickerRecipeId(null)
 
     try {
       const { error } = await supabase.from('recipe_meal_plans').upsert(
         [{
           recipe_id: recipe.id,
-          slot: targetSlot,
-          planned_for: new Date().toISOString(),
+          slot,
+          planned_for: dateStr,
           notes: null,
         }],
         { onConflict: 'recipe_id,slot' },
       )
       if (error) throw error
-      if (existingSlot && existingSlot !== targetSlot) {
-        await supabase
-          .from('recipe_meal_plans')
-          .delete()
-          .eq('recipe_id', recipe.id)
-          .eq('slot', existingSlot)
+
+      if (slot === 'tonight') {
+        const prepTime = recipe.cook_time ? `${recipe.cook_time} prep` : '25m prep'
+        const plan: DinnerPlan = {
+          mode: 'cook',
+          title: recipe.name,
+          subtitle: `${prepTime} · Pantry stock confirmed · Chef: Jake & Kelly`,
+          targetTime: '6:30 PM Target',
+          recipeId: recipe.id,
+          chefOrDriver: 'Jake & Kelly',
+          statusBadge: 'Ingredients ready',
+          updatedAt: new Date().toISOString(),
+        }
+        useAppStore.getState().setDinnerPlan(plan)
+        void saveTonightDinnerPlan(plan)
       }
+
       await refetchMealPlans()
+      setAssigningDay(null)
       showToast({
-        message: `Scheduled "${recipe.name}" for ${SLOT_LABELS[targetSlot]}.`,
+        message: `Assigned "${recipe.name}" for ${dayLabel}.`,
         tone: 'success',
-        actionLabel: 'Undo',
-        onAction: () => {
-          void undoScheduleMeal(recipe, targetSlot, existingSlot)
-        },
       })
     } catch (error) {
       showToast({
-        message: formatSupabaseError(error, 'Could not schedule meal'),
+        message: formatSupabaseError(error, 'Could not assign meal for day'),
         tone: 'danger',
       })
     } finally {
@@ -1774,27 +1851,203 @@ export default function CookPage() {
     }
   }
 
-  async function handleRemoveFromSchedule(recipe: Recipe) {
-    const plan = plannedRecipes.find((p) => p.recipe.id === recipe.id)?.plan
-    if (!plan) return
-    const previousSlot = plan.slot
-    setActiveSchedulePickerRecipeId(null)
+  async function moveOrSwapWeeklyMeal(sourceDateStr: string, targetDateStr: string) {
+    if (!sourceDateStr || !targetDateStr || sourceDateStr === targetDateStr) return
+
+    const sourceMeal = weekDayMeals.find((w) => w.day.dateStr === sourceDateStr)
+    const targetMeal = weekDayMeals.find((w) => w.day.dateStr === targetDateStr)
+    if (!sourceMeal || !sourceMeal.recipe) return
+
+    const actionId = `drag-reorder:${sourceDateStr}:${targetDateStr}`
+    setPlannedMealActionId(actionId)
+
+    const recipeA = sourceMeal.recipe
+    const recipeB = targetMeal?.recipe ?? null
 
     try {
-      await removePlannedMeal(plan, recipe)
-      showToast({
-        message: `Removed "${recipe.name}" from ${SLOT_LABELS[previousSlot]}.`,
-        tone: 'info',
-        actionLabel: 'Undo',
-        onAction: () => {
-          void handleScheduleSlot(recipe, previousSlot)
-        },
-      })
+      if (recipeB && targetMeal) {
+        // Swap recipeA and recipeB between the two days
+        await supabase
+          .from('recipe_meal_plans')
+          .delete()
+          .in('recipe_id', [recipeA.id, recipeB.id])
+
+        await supabase.from('recipe_meal_plans').upsert([
+          {
+            recipe_id: recipeA.id,
+            slot: targetMeal.day.slot,
+            planned_for: targetMeal.day.dateStr,
+            notes: null,
+          },
+          {
+            recipe_id: recipeB.id,
+            slot: sourceMeal.day.slot,
+            planned_for: sourceMeal.day.dateStr,
+            notes: null,
+          },
+        ])
+
+        if (targetMeal.day.isToday || targetMeal.day.slot === 'tonight') {
+          const prepTime = recipeA.cook_time ? `${recipeA.cook_time} prep` : '25m prep'
+          const plan: DinnerPlan = {
+            mode: 'cook',
+            title: recipeA.name,
+            subtitle: `${prepTime} · Pantry stock confirmed · Chef: Jake & Kelly`,
+            targetTime: '6:30 PM Target',
+            recipeId: recipeA.id,
+            chefOrDriver: 'Jake & Kelly',
+            statusBadge: 'Ingredients ready',
+            updatedAt: new Date().toISOString(),
+          }
+          useAppStore.getState().setDinnerPlan(plan)
+          void saveTonightDinnerPlan(plan)
+        } else if (sourceMeal.day.isToday || sourceMeal.day.slot === 'tonight') {
+          const prepTime = recipeB.cook_time ? `${recipeB.cook_time} prep` : '25m prep'
+          const plan: DinnerPlan = {
+            mode: 'cook',
+            title: recipeB.name,
+            subtitle: `${prepTime} · Pantry stock confirmed · Chef: Jake & Kelly`,
+            targetTime: '6:30 PM Target',
+            recipeId: recipeB.id,
+            chefOrDriver: 'Jake & Kelly',
+            statusBadge: 'Ingredients ready',
+            updatedAt: new Date().toISOString(),
+          }
+          useAppStore.getState().setDinnerPlan(plan)
+          void saveTonightDinnerPlan(plan)
+        }
+
+        if (swapAnimationTimeoutRef.current) clearTimeout(swapAnimationTimeoutRef.current)
+        setJustSwappedDates({ dates: [sourceDateStr, targetDateStr], type: 'swap' })
+        swapAnimationTimeoutRef.current = setTimeout(() => {
+          setJustSwappedDates(null)
+        }, 1600)
+
+        await refetchMealPlans()
+        showToast({
+          message: `Swapped "${recipeA.name}" and "${recipeB.name}".`,
+          tone: 'success',
+          actionLabel: 'Undo',
+          onAction: () => {
+            void moveOrSwapWeeklyMeal(targetDateStr, sourceDateStr)
+          },
+        })
+      } else if (targetMeal) {
+        // Move recipeA to the empty target day
+        await supabase
+          .from('recipe_meal_plans')
+          .delete()
+          .eq('recipe_id', recipeA.id)
+          .eq('slot', sourceMeal.day.slot)
+
+        await supabase.from('recipe_meal_plans').upsert([
+          {
+            recipe_id: recipeA.id,
+            slot: targetMeal.day.slot,
+            planned_for: targetMeal.day.dateStr,
+            notes: null,
+          },
+        ])
+
+        if (targetMeal.day.isToday || targetMeal.day.slot === 'tonight') {
+          const prepTime = recipeA.cook_time ? `${recipeA.cook_time} prep` : '25m prep'
+          const plan: DinnerPlan = {
+            mode: 'cook',
+            title: recipeA.name,
+            subtitle: `${prepTime} · Pantry stock confirmed · Chef: Jake & Kelly`,
+            targetTime: '6:30 PM Target',
+            recipeId: recipeA.id,
+            chefOrDriver: 'Jake & Kelly',
+            statusBadge: 'Ingredients ready',
+            updatedAt: new Date().toISOString(),
+          }
+          useAppStore.getState().setDinnerPlan(plan)
+          void saveTonightDinnerPlan(plan)
+        }
+
+        if (swapAnimationTimeoutRef.current) clearTimeout(swapAnimationTimeoutRef.current)
+        setJustSwappedDates({ dates: [sourceDateStr, targetDateStr], type: 'move' })
+        swapAnimationTimeoutRef.current = setTimeout(() => {
+          setJustSwappedDates(null)
+        }, 1600)
+
+        await refetchMealPlans()
+        showToast({
+          message: `Moved "${recipeA.name}" to ${targetMeal.day.dayName} (${targetMeal.day.formattedDate}).`,
+          tone: 'success',
+          actionLabel: 'Undo',
+          onAction: () => {
+            void moveOrSwapWeeklyMeal(targetDateStr, sourceDateStr)
+          },
+        })
+      }
     } catch (error) {
       showToast({
-        message: formatSupabaseError(error, 'Could not remove meal'),
+        message: formatSupabaseError(error, 'Could not move meal'),
         tone: 'danger',
       })
+    } finally {
+      setPlannedMealActionId(null)
+    }
+  }
+
+  function handleHorizonDragStart(e: React.DragEvent, dateStr: string, isAssigned: boolean) {
+    if (!isAssigned) return
+    e.dataTransfer.setData('text/plain', dateStr)
+    e.dataTransfer.effectAllowed = 'move'
+    setDraggingHorizonDateStr(dateStr)
+  }
+
+  function handleHorizonDragOver(e: React.DragEvent, dateStr: string) {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    if (dragOverHorizonDateStr !== dateStr) {
+      setDragOverHorizonDateStr(dateStr)
+    }
+  }
+
+  function handleHorizonDragLeave(_e: React.DragEvent, dateStr: string) {
+    if (dragOverHorizonDateStr === dateStr) {
+      setDragOverHorizonDateStr(null)
+    }
+  }
+
+  function handleHorizonDrop(e: React.DragEvent, targetDateStr: string) {
+    e.preventDefault()
+    const sourceDateStr = e.dataTransfer.getData('text/plain') || draggingHorizonDateStr
+    setDraggingHorizonDateStr(null)
+    setDragOverHorizonDateStr(null)
+    if (sourceDateStr && targetDateStr && sourceDateStr !== targetDateStr) {
+      void moveOrSwapWeeklyMeal(sourceDateStr, targetDateStr)
+    }
+  }
+
+  function handleHorizonTouchStart(dateStr: string, isAssigned: boolean) {
+    if (!isAssigned) return
+    touchDragSourceDateStrRef.current = dateStr
+    setDraggingHorizonDateStr(dateStr)
+  }
+
+  function handleHorizonTouchMove(e: React.TouchEvent) {
+    if (!touchDragSourceDateStrRef.current) return
+    const touch = e.touches[0]
+    if (!touch) return
+    const el = document.elementFromPoint(touch.clientX, touch.clientY)
+    const dayCard = el?.closest('[data-horizon-date]')
+    const targetDateStr = dayCard?.getAttribute('data-horizon-date')
+    if (targetDateStr && targetDateStr !== dragOverHorizonDateStr) {
+      setDragOverHorizonDateStr(targetDateStr)
+    }
+  }
+
+  function handleHorizonTouchEnd() {
+    const source = touchDragSourceDateStrRef.current
+    const target = dragOverHorizonDateStr
+    touchDragSourceDateStrRef.current = null
+    setDraggingHorizonDateStr(null)
+    setDragOverHorizonDateStr(null)
+    if (source && target && source !== target) {
+      void moveOrSwapWeeklyMeal(source, target)
     }
   }
 
@@ -2192,6 +2445,27 @@ export default function CookPage() {
         .from('recipe_meal_plans')
         .upsert(rows, { onConflict: 'recipe_id,slot' })
       if (error) throw error
+
+      const tonightRow = rows.find((r) => r.slot === 'tonight')
+      if (tonightRow) {
+        const rec = recipeById.get(tonightRow.recipe_id)
+        if (rec) {
+          const prepTime = rec.cook_time ? `${rec.cook_time} prep` : '25m prep'
+          const plan: DinnerPlan = {
+            mode: 'cook',
+            title: rec.name,
+            subtitle: `${prepTime} · Pantry stock confirmed · Chef: Jake & Kelly`,
+            targetTime: '6:30 PM Target',
+            recipeId: rec.id,
+            chefOrDriver: 'Jake & Kelly',
+            statusBadge: 'Ingredients ready',
+            updatedAt: new Date().toISOString(),
+          }
+          useAppStore.getState().setDinnerPlan(plan)
+          void saveTonightDinnerPlan(plan)
+        }
+      }
+
       await refetchMealPlans()
       setMealPlannerStatus('Queued planner meals in your meal slots.')
       await appendMealPlannerActionLog({
@@ -2232,6 +2506,83 @@ export default function CookPage() {
       setMealPlannerStatus('Captured this plan pattern as a preference for future drafts.')
     } catch (error) {
       setMealPlannerError(formatSupabaseError(error, 'Could not save plan preference'))
+    }
+  }
+
+  async function addRecipeToNextAvailableSlot(recipe: Recipe) {
+    const alreadyScheduled = weekDayMeals.find((w) => w.recipe?.id === recipe.id)
+    if (alreadyScheduled) {
+      if (alreadyScheduled.plan) {
+        await removePlannedMeal(alreadyScheduled.plan, recipe)
+        showToast({
+          message: `Removed "${recipe.name}" from ${alreadyScheduled.day.dayName} (${alreadyScheduled.day.formattedDate}).`,
+          tone: 'info',
+          actionLabel: 'Undo',
+          onAction: () => {
+            void addRecipeToNextAvailableSlot(recipe)
+          },
+        })
+      }
+      return
+    }
+
+    const nextAvailable = weekDayMeals.find((w) => !w.recipe)
+    if (!nextAvailable) {
+      showToast({
+        message: `All 7 days on the Weekly Horizon are filled. Use "Swap" on a day card to replace a meal.`,
+        tone: 'info',
+      })
+      return
+    }
+
+    const { day } = nextAvailable
+    const actionId = `quick-plan:${recipe.id}:${day.slot}:${day.dateStr}`
+    setPlannedMealActionId(actionId)
+
+    try {
+      const { error } = await supabase.from('recipe_meal_plans').upsert(
+        [{
+          recipe_id: recipe.id,
+          slot: day.slot,
+          planned_for: day.dateStr,
+          notes: null,
+        }],
+        { onConflict: 'recipe_id,slot' },
+      )
+      if (error) throw error
+
+      if (day.slot === 'tonight' || day.isToday) {
+        const prepTime = recipe.cook_time ? `${recipe.cook_time} prep` : '25m prep'
+        const plan: DinnerPlan = {
+          mode: 'cook',
+          title: recipe.name,
+          subtitle: `${prepTime} · Pantry stock confirmed · Chef: Jake & Kelly`,
+          targetTime: '6:30 PM Target',
+          recipeId: recipe.id,
+          chefOrDriver: 'Jake & Kelly',
+          statusBadge: 'Ingredients ready',
+          updatedAt: new Date().toISOString(),
+        }
+        useAppStore.getState().setDinnerPlan(plan)
+        void saveTonightDinnerPlan(plan)
+      }
+
+      await refetchMealPlans()
+      showToast({
+        message: `Added "${recipe.name}" to ${day.dayName} (${day.formattedDate}).`,
+        tone: 'success',
+        actionLabel: 'Undo',
+        onAction: () => {
+          void undoScheduleMeal(recipe, day.slot)
+        },
+      })
+    } catch (error) {
+      showToast({
+        message: formatSupabaseError(error, 'Could not schedule meal'),
+        tone: 'danger',
+      })
+    } finally {
+      setPlannedMealActionId(null)
     }
   }
 
@@ -2289,41 +2640,7 @@ export default function CookPage() {
     }
   }
 
-  async function shiftPlannedMealSlot(plan: RecipeMealPlan, recipe: Recipe, direction: -1 | 1) {
-    const currentIndex = SLOT_ORDER.indexOf(plan.slot)
-    if (currentIndex < 0) return
-    const targetIndex = currentIndex + direction
-    if (targetIndex < 0 || targetIndex >= SLOT_ORDER.length) return
-    const targetSlot = SLOT_ORDER[targetIndex]
-    const actionId = `${plan.slot}:${recipe.id}:shift:${targetSlot}`
-    setPlannedMealActionId(actionId)
-    setPlannedMealError(null)
-    setPlannedMealStatus(null)
-    try {
-      const { error } = await supabase.from('recipe_meal_plans').upsert(
-        [{
-          recipe_id: recipe.id,
-          slot: targetSlot,
-          planned_for: plan.planned_for ?? null,
-          notes: plan.notes ?? null,
-        }],
-        { onConflict: 'recipe_id,slot' },
-      )
-      if (error) throw error
-      const { error: deleteError } = await supabase
-        .from('recipe_meal_plans')
-        .delete()
-        .eq('recipe_id', recipe.id)
-        .eq('slot', plan.slot)
-      if (deleteError) throw deleteError
-      await refetchMealPlans()
-      setPlannedMealStatus(`Moved "${recipe.name}" to ${SLOT_LABELS[targetSlot]}.`)
-    } catch (error) {
-      setPlannedMealError(formatSupabaseError(error, 'Could not move planned meal'))
-    } finally {
-      setPlannedMealActionId(null)
-    }
-  }
+
 
   async function deleteRecipe(recipe: Recipe) {
     setLibraryActionError(null)
@@ -3157,7 +3474,23 @@ export default function CookPage() {
         initialStepIndex={stepIndex}
         onExit={closeCookRecipe}
         onEditRecipe={startRecipeEditing}
+        onDeleteRecipe={() => {
+          void deleteRecipe(cookRecipe)
+          closeCookRecipe()
+        }}
+        onSaveRating={(rating) => {
+          void appendMealPlannerActionLog({
+            action: 'cook_complete',
+            status: 'success',
+            detail: `Rated ${cookRecipe.name} with ${rating} stars.`,
+            trace_id: mealPlannerLastTraceId,
+          })
+        }}
         onCompleteMeal={() => {
+          const tonightPlan = mealPlans.find((m) => m.recipe_id === cookRecipe.id && m.slot === 'tonight')
+          if (tonightPlan) {
+            void markPlannedMealCooked(tonightPlan, cookRecipe)
+          }
           closeCookRecipe()
         }}
       />
@@ -3411,7 +3744,7 @@ export default function CookPage() {
 
               {/* ── RIGHT COLUMN (40%): OPEN AGENDA & RHYTHM SHORTLIST (No heavy outer cards) ── */}
               <div className="col-span-12 lg:col-span-5 xl:col-span-5 space-y-6">
-                {/* The Weekly Horizon: Open Menu List */}
+                {/* The Weekly Horizon: 7-Day Day-of-Week Schedule */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between gap-2 pb-2 border-b border-casa-border/50">
                     <div>
@@ -3419,12 +3752,23 @@ export default function CookPage() {
                         The Weekly Horizon
                       </Heading>
                       <p className="text-caption text-casa-text-secondary">
-                        Upcoming family dinner slots.
+                        7-day family dinner schedule.
                       </p>
                     </div>
-                    <span className="text-caption font-mono font-bold px-2.5 py-0.5 rounded-full bg-casa-surface border border-casa-border text-casa-navy shadow-2xs">
-                      {plannedRecipes.length} Planned
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setCookLandingMode('plan-week')}
+                        leadingIcon={<Sparkles size={13} className="text-casa-gold" />}
+                        className="text-caption font-bold text-casa-gold hover:text-amber-800 p-0"
+                      >
+                        AI Plan Week
+                      </Button>
+                      <span className="text-caption font-mono font-bold px-2.5 py-0.5 rounded-full bg-casa-surface border border-casa-border text-casa-navy shadow-2xs">
+                        {weekDayMeals.filter((w) => Boolean(w.recipe)).length} / 7 Set
+                      </span>
+                    </div>
                   </div>
 
                   {plannedMealError && (
@@ -3438,82 +3782,230 @@ export default function CookPage() {
                     </Alert>
                   )}
 
-                  {plannedRecipes.length === 0 ? (
-                    <div className="py-3 text-center space-y-1.5">
-                      <p className="text-caption text-casa-muted">No meal slots queued yet this week.</p>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setCookLandingMode('plan-week')}
-                        leadingIcon={<Sparkles size={13} className="text-casa-gold" />}
-                        className="text-caption font-bold text-casa-gold"
-                      >
-                        Launch AI Weekly Planner →
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="divide-y divide-casa-border/50">
-                      {plannedRecipes.slice(0, 6).map(({ plan, recipe }) => (
-                        <div
-                          key={`${plan.slot}-${recipe.id}`}
-                          className="py-2.5 px-1.5 flex items-center justify-between gap-2 hover:bg-casa-surface/60 rounded-xl transition-colors"
+                  <div className="space-y-2.5" onTouchMove={handleHorizonTouchMove}>
+                    {weekDayMeals.map(({ day, plan, recipe }) => {
+                      const isAssigned = Boolean(plan && recipe)
+                      const isToday = day.isToday
+                      const isDragging = draggingHorizonDateStr === day.dateStr
+                      const isDragOver = dragOverHorizonDateStr === day.dateStr && draggingHorizonDateStr !== day.dateStr
+                      const isJustSwapped = justSwappedDates?.dates.includes(day.dateStr)
+
+                      return (
+                        <motion.div
+                          layout
+                          key={day.dateStr}
+                          data-horizon-date={day.dateStr}
+                          draggable={isAssigned}
+                          onDragStartCapture={(e) => handleHorizonDragStart(e as unknown as React.DragEvent, day.dateStr, isAssigned)}
+                          onDragOverCapture={(e) => handleHorizonDragOver(e as unknown as React.DragEvent, day.dateStr)}
+                          onDragLeaveCapture={(e) => handleHorizonDragLeave(e as unknown as React.DragEvent, day.dateStr)}
+                          onDropCapture={(e) => handleHorizonDrop(e as unknown as React.DragEvent, day.dateStr)}
+                          onTouchEnd={handleHorizonTouchEnd}
+                          initial={false}
+                          animate={
+                            isJustSwapped
+                              ? {
+                                  scale: [1, 1.035, 0.985, 1],
+                                  transition: { duration: 0.7, ease: 'easeOut' },
+                                }
+                              : isDragging
+                              ? { scale: 0.96, opacity: 0.45 }
+                              : isDragOver
+                              ? { scale: 1.025 }
+                              : { scale: 1, opacity: 1 }
+                          }
+                          transition={{
+                            layout: { type: 'spring', stiffness: 350, damping: 26 },
+                          }}
+                          className={cn(
+                            'p-3 rounded-2xl border transition-colors duration-200 select-none relative overflow-hidden',
+                            isJustSwapped && 'border-casa-gold ring-2 ring-casa-gold/60 bg-casa-gold/10 shadow-md',
+                            isDragging && 'border-dashed border-casa-gold/60',
+                            isDragOver && 'border-casa-gold ring-2 ring-casa-gold/60 bg-casa-gold/15 shadow-card-hover',
+                            !isJustSwapped && !isDragging && !isDragOver && (
+                              isToday
+                                ? 'bg-casa-surface border-casa-gold/60 shadow-subtle ring-1 ring-casa-gold/30'
+                                : isAssigned
+                                ? 'bg-casa-surface/80 border-casa-border/80 hover:border-casa-border hover:shadow-2xs'
+                                : 'bg-casa-bg/60 border-dashed border-casa-border/70 hover:border-casa-gold/40'
+                            )
+                          )}
                         >
-                          <div className="min-w-0 flex-1">
-                            <span className="text-caption font-mono font-bold uppercase tracking-wider text-casa-gold block">
-                              {SLOT_LABELS[plan.slot]}
-                            </span>
-                            <p className="font-display text-body font-bold text-casa-navy truncate mt-0.5">
-                              {recipe.name}
-                            </p>
+                          {/* Radiant Sheen Beam on Swap */}
+                          {isJustSwapped && (
+                            <motion.div
+                              initial={{ x: '-100%' }}
+                              animate={{ x: '200%' }}
+                              transition={{ duration: 0.85, ease: 'easeInOut' }}
+                              className="absolute inset-0 bg-gradient-to-r from-transparent via-casa-gold/30 to-transparent pointer-events-none -skew-x-12 z-10"
+                            />
+                          )}
+
+                          <div className="flex items-center justify-between gap-2 mb-2 relative z-0">
+                            <div className="flex items-center gap-2">
+                              {isAssigned && (
+                                <div
+                                  onTouchStart={() => handleHorizonTouchStart(day.dateStr, isAssigned)}
+                                  className="touch-none cursor-grab active:cursor-grabbing p-1 -ml-1 text-casa-muted/60 hover:text-casa-navy transition-colors shrink-0 flex items-center justify-center"
+                                  title="Drag with finger or mouse to move or swap day"
+                                  aria-label="Drag recipe to reorder day"
+                                >
+                                  <GripVertical size={16} />
+                                </div>
+                              )}
+                              <span
+                                className={cn(
+                                  'text-caption font-mono font-bold px-2 py-0.5 rounded-md uppercase tracking-wider',
+                                  isToday
+                                    ? 'bg-casa-gold/20 text-casa-navy border border-casa-gold/40'
+                                    : 'bg-casa-surface border border-casa-border/60 text-casa-muted'
+                                )}
+                              >
+                                {isToday ? `Today · ${day.formattedDate}` : `${day.dayName} · ${day.formattedDate}`}
+                              </span>
+
+                              <AnimatePresence>
+                                {isJustSwapped && (
+                                  <motion.span
+                                    initial={{ opacity: 0, scale: 0.6, x: -6 }}
+                                    animate={{ opacity: 1, scale: 1, x: 0 }}
+                                    exit={{ opacity: 0, scale: 0.6, x: -6 }}
+                                    transition={{ duration: 0.25 }}
+                                    className="inline-flex items-center gap-1 text-2xs font-mono font-bold px-2 py-0.5 rounded-full bg-casa-gold text-white shadow-2xs"
+                                  >
+                                    {justSwappedDates?.type === 'swap' ? '⇄ Swapped' : '✓ Moved'}
+                                  </motion.span>
+                                )}
+                              </AnimatePresence>
+                            </div>
+                            {isAssigned && recipe?.cook_time && (
+                              <span className="inline-flex items-center gap-1 text-2xs font-mono text-casa-muted">
+                                <Clock3 size={11} className="text-casa-gold" />
+                                {recipe.cook_time}
+                              </span>
+                            )}
                           </div>
 
-                          <div className="flex items-center gap-1 shrink-0">
-                            <IconButton
-                              icon={<ChevronLeft size={13} />}
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => void shiftPlannedMealSlot(plan, recipe, -1)}
-                              disabled={plan.slot === 'tonight' || plannedMealActionId !== null}
-                              aria-label="Move earlier"
-                            />
-                            <IconButton
-                              icon={<ChevronRight size={13} />}
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => void shiftPlannedMealSlot(plan, recipe, 1)}
-                              disabled={plan.slot === 'this-week' || plannedMealActionId !== null}
-                              aria-label="Move later"
-                            />
-                            <Button
-                              variant="champagne"
-                              size="sm"
-                              onClick={() => openRecipeForCookMode(recipe.id)}
-                              className="font-bold min-h-[30px] px-2.5 text-caption"
-                            >
-                              Cook
-                            </Button>
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              onClick={() => void markPlannedMealCooked(plan, recipe)}
-                              disabled={plannedMealActionId !== null}
-                              className="font-semibold min-h-[30px] px-2 text-caption"
-                            >
-                              Done
-                            </Button>
-                            <IconButton
-                              icon={<Trash2 size={13} />}
-                              variant="danger"
-                              size="sm"
-                              onClick={() => void removePlannedMeal(plan, recipe)}
-                              disabled={plannedMealActionId === `${plan.slot}:${recipe.id}` || plannedMealActionId !== null}
-                              aria-label={`Remove ${recipe.name}`}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                          {isAssigned && recipe ? (
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                {recipe.image_url && (
+                                  <img
+                                    src={recipe.image_url}
+                                    alt={recipe.name}
+                                    className="w-11 h-11 rounded-xl object-cover border border-casa-border shrink-0"
+                                  />
+                                )}
+                                <div className="min-w-0 flex-1">
+                                  <p className="font-display text-body-sm font-bold text-casa-navy truncate">
+                                    {recipe.name}
+                                  </p>
+                                  <p className="text-2xs text-casa-muted truncate">
+                                    {recipe.servings ? `${recipe.servings} serv` : 'Family size'} · Chef: Jake & Kelly
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-1 shrink-0">
+                                {isToday ? (
+                                  <Button
+                                    variant="champagne"
+                                    size="sm"
+                                    onClick={() => openRecipeForCookMode(recipe.id)}
+                                    className="font-bold min-h-[32px] px-3 text-caption shadow-2xs"
+                                  >
+                                    Cook
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => openRecipeForCookMode(recipe.id)}
+                                    className="font-semibold min-h-[32px] px-2.5 text-caption text-casa-navy hover:text-casa-gold"
+                                  >
+                                    View
+                                  </Button>
+                                )}
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  onClick={() => plan && void markPlannedMealCooked(plan, recipe)}
+                                  disabled={plannedMealActionId !== null}
+                                  className="font-semibold min-h-[32px] px-2 text-caption"
+                                >
+                                  Done
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() =>
+                                    setAssigningDay({
+                                      slot: day.slot,
+                                      dateStr: day.dateStr,
+                                      dayLabel: `${day.dayName} (${day.formattedDate})`,
+                                    })
+                                  }
+                                  className="font-semibold min-h-[32px] px-2 text-caption text-casa-gold hover:text-amber-800"
+                                >
+                                  Swap
+                                </Button>
+                                <IconButton
+                                  icon={<Trash2 size={13} />}
+                                  variant="danger"
+                                  size="sm"
+                                  onClick={() => plan && void removePlannedMeal(plan, recipe)}
+                                  disabled={plannedMealActionId !== null}
+                                  aria-label={`Remove ${recipe.name}`}
+                                />
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-between gap-2 py-1">
+                              <span className="text-caption text-casa-muted italic">No dinner scheduled</span>
+                              <div className="flex items-center gap-1.5">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  leadingIcon={<Plus size={13} className="text-casa-gold" />}
+                                  onClick={() =>
+                                    setAssigningDay({
+                                      slot: day.slot,
+                                      dateStr: day.dateStr,
+                                      dayLabel: `${day.dayName} (${day.formattedDate})`,
+                                    })
+                                  }
+                                  className="text-caption font-bold text-casa-gold hover:text-amber-800 min-h-[30px] px-2.5"
+                                >
+                                  Assign
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  leadingIcon={<Sparkles size={12} className="text-casa-muted" />}
+                                  onClick={() =>
+                                    document.dispatchEvent(
+                                      new CustomEvent('open-ai-chat', {
+                                        detail: {
+                                          launchId: crypto.randomUUID(),
+                                          agent: 'chef',
+                                          source: 'tonights-kitchen',
+                                          prompt: `Suggest a delicious weeknight recipe for ${day.dayName} (${day.formattedDate}) using ingredients we already have in our pantry stock.`,
+                                          autoSend: true,
+                                        },
+                                      })
+                                    )
+                                  }
+                                  className="text-2xs font-semibold text-casa-muted hover:text-casa-navy min-h-[30px] px-2"
+                                >
+                                  AI Suggest
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                        </motion.div>
+                      )
+                    })}
+                  </div>
                 </div>
 
                 {/* Tonight's Rhythm & Shortlist Alternatives (Open Pill Section) */}
@@ -4160,9 +4652,10 @@ export default function CookPage() {
             >
               {filteredRecipes.slice(0, 32).map((recipe) => {
                 const focus = parseRecipeImageFocus(recipe.image_url)
-                const plannedSlot = plannedRecipes.find((p) => p.recipe.id === recipe.id)?.plan.slot
+                const matchedHorizon = weekDayMeals.find((w) => w.recipe?.id === recipe.id)
+                const isScheduled = Boolean(matchedHorizon)
+                const scheduledDayLabel = matchedHorizon ? (matchedHorizon.day.isToday ? 'Today' : `${matchedHorizon.day.dayName}, ${matchedHorizon.day.formattedDate}`) : null
                 const isGroceryDrawerOpen = activeGroceryRecipeId === recipe.id
-                const isSchedulePickerOpen = activeSchedulePickerRecipeId === recipe.id
                 const recipeIngredients = ingredientsByRecipe.get(recipe.id) ?? []
                 const selectedSet = recipeGrocerySelections[recipe.id] ?? new Set(recipeIngredients.map((_, i) => i))
                 const selectedCount = selectedSet.size
@@ -4174,7 +4667,7 @@ export default function CookPage() {
                     padding="none"
                     className={cn(
                       'overflow-hidden flex flex-col group transition-all shadow-card rounded-2xl cursor-pointer hover:shadow-card-hover border-casa-border',
-                      (isGroceryDrawerOpen || isSchedulePickerOpen) ? 'ring-2 ring-casa-gold/80 border-casa-gold' : 'hover:ring-2 hover:ring-casa-gold/50',
+                      isGroceryDrawerOpen ? 'ring-2 ring-casa-gold/80 border-casa-gold' : 'hover:ring-2 hover:ring-casa-gold/50',
                     )}
                     onClick={() => openRecipeForCookMode(recipe.id)}
                   >
@@ -4186,11 +4679,11 @@ export default function CookPage() {
                         focalY={focus.focalY}
                         className="h-44 w-full object-cover group-hover:scale-103 transition-transform duration-500"
                       />
-                      {plannedSlot && (
+                      {isScheduled && (
                         <div className="absolute top-2.5 left-2.5">
                           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-casa-gold/20 text-casa-navy text-caption font-mono font-bold border border-casa-gold/35 shadow-xs">
                             <Sparkles size={10} className="text-casa-navy" />
-                            {SLOT_LABELS[plannedSlot]}
+                            {scheduledDayLabel || 'Planned'}
                           </span>
                         </div>
                       )}
@@ -4231,14 +4724,14 @@ export default function CookPage() {
                           size="sm"
                           onClick={(event) => {
                             event.stopPropagation()
-                            toggleSchedulePicker(recipe)
+                            void addRecipeToNextAvailableSlot(recipe)
                           }}
                           disabled={plannedMealActionId !== null}
-                          title={plannedSlot ? `Currently scheduled for ${SLOT_LABELS[plannedSlot]} (Click to change slot)` : 'Schedule for dinner'}
-                          aria-label={`Schedule ${recipe.name}`}
+                          title={isScheduled ? `Scheduled for ${scheduledDayLabel} (Click to remove from schedule)` : 'Add to next available day on Weekly Horizon'}
+                          aria-label={isScheduled ? `Remove ${recipe.name} from weekly schedule` : `Add ${recipe.name} to weekly dinner horizon`}
                           className={cn(
-                            'shrink-0 min-h-control size-control bg-casa-surface border-casa-border hover:border-casa-gold',
-                            (plannedSlot || isSchedulePickerOpen) && 'border-casa-gold text-casa-gold bg-casa-gold/15',
+                            'shrink-0 min-h-control size-control bg-casa-surface border-casa-border hover:border-casa-gold transition-all',
+                            isScheduled && 'border-casa-gold text-casa-gold bg-casa-gold/15',
                           )}
                         />
                         <IconButton
@@ -4259,62 +4752,6 @@ export default function CookPage() {
                         />
                       </div>
                     </div>
-
-                    {/* Inline Schedule Slot Selector Tray (Modal-Free) */}
-                    {isSchedulePickerOpen && (
-                      <div
-                        className="p-3 bg-casa-bg border-t border-casa-border/80 space-y-2 rounded-b-2xl"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <div className="flex items-center justify-between gap-1 pb-1 border-b border-casa-border/50">
-                          <span className="text-caption font-mono font-bold uppercase tracking-wider text-casa-navy">
-                            Choose Dinner Slot
-                          </span>
-                          <IconButton
-                            icon={<X size={13} />}
-                            size="sm"
-                            variant="ghost"
-                            aria-label="Close schedule picker"
-                            onClick={() => setActiveSchedulePickerRecipeId(null)}
-                            className="size-6 p-0 min-h-0 min-w-0 text-casa-muted hover:text-casa-navy"
-                          />
-                        </div>
-
-                        <div className="grid grid-cols-3 gap-1.5">
-                          {SLOT_ORDER.map((slot) => {
-                            const isCurrent = plannedSlot === slot
-                            const slotLabel = slot === 'tonight' ? 'Tonight' : slot === 'tomorrow' ? 'Tomorrow' : 'This Week'
-                            return (
-                              <Button
-                                key={slot}
-                                variant={isCurrent ? 'champagne' : 'secondary'}
-                                size="sm"
-                                onClick={() => void handleScheduleSlot(recipe, slot)}
-                                className={cn(
-                                  'min-h-[36px] py-1 px-1 text-center font-bold text-caption uppercase tracking-wider font-mono',
-                                  isCurrent && 'shadow-xs border-casa-gold',
-                                )}
-                              >
-                                {slotLabel}
-                              </Button>
-                            )
-                          })}
-                        </div>
-
-                        {plannedSlot && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            fullWidth
-                            onClick={() => void handleRemoveFromSchedule(recipe)}
-                            leadingIcon={<Trash2 size={12} className="text-casa-error" />}
-                            className="text-caption font-bold text-casa-error hover:bg-casa-error/10 min-h-0 py-1"
-                          >
-                            Remove from schedule
-                          </Button>
-                        )}
-                      </div>
-                    )}
 
                     {/* Inline Grocery Ingredient Review Tray (Modal-Free) */}
                     {isGroceryDrawerOpen && (
@@ -5140,6 +5577,90 @@ export default function CookPage() {
               >
                 Save changes
               </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Assign Recipe to Day Modal */}
+      {assigningDay && (
+        <Modal
+          open={true}
+          onClose={() => setAssigningDay(null)}
+          title={`Assign Dinner for ${assigningDay.dayLabel}`}
+          size="lg"
+        >
+          <div className="space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-casa-border">
+              <div>
+                <span className="text-caption font-bold uppercase tracking-wider text-casa-gold">Weekly Horizon</span>
+                <Heading role="heading" className="font-display font-bold text-casa-navy text-heading">
+                  Assign Dinner for {assigningDay.dayLabel}
+                </Heading>
+              </div>
+              <IconButton
+                icon={<X size={16} />}
+                variant="ghost"
+                size="sm"
+                aria-label="Close"
+                onClick={() => setAssigningDay(null)}
+              />
+            </div>
+
+            <div className="relative">
+              <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-casa-muted pointer-events-none" />
+              <Input
+                placeholder="Search recipe library..."
+                value={assignDaySearch}
+                onChange={(e) => setAssignDaySearch(e.target.value)}
+                className="w-full pl-10"
+              />
+            </div>
+
+            <div className="max-h-[60vh] overflow-y-auto space-y-2 pr-1">
+              {recipes
+                .filter((r) => !assignDaySearch || r.name.toLowerCase().includes(assignDaySearch.toLowerCase()))
+                .map((recipe) => (
+                  <div
+                    key={recipe.id}
+                    onClick={() => void handleAssignRecipeToDay(recipe)}
+                    className="flex items-center justify-between gap-3 p-3 rounded-2xl border border-casa-border bg-casa-surface hover:border-casa-gold hover:bg-casa-gold/10 cursor-pointer transition-all duration-150 active:scale-[0.99]"
+                  >
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      {recipe.image_url ? (
+                        <img
+                          src={recipe.image_url}
+                          alt={recipe.name}
+                          className="w-12 h-12 rounded-xl object-cover border border-casa-border shrink-0"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 rounded-xl bg-casa-gold/15 flex items-center justify-center text-casa-gold shrink-0">
+                          <BookOpen size={20} />
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="font-display text-body font-bold text-casa-navy truncate">
+                          {recipe.name}
+                        </p>
+                        <p className="text-caption text-casa-muted truncate">
+                          {recipe.cook_time ? `${recipe.cook_time} · ` : ''}{recipe.servings ? `${recipe.servings} servings` : 'Standard'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <Button
+                      variant="champagne"
+                      size="sm"
+                      className="shrink-0 font-bold min-h-[32px] px-3 text-caption"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        void handleAssignRecipeToDay(recipe)
+                      }}
+                    >
+                      Assign
+                    </Button>
+                  </div>
+                ))}
             </div>
           </div>
         </Modal>

@@ -3,6 +3,8 @@ import {
   PartyPopper,
   RotateCcw,
   Star,
+  Trash2,
+  Check,
 } from 'lucide-react'
 import KitchenHeaderHUD, { type KitchenTimer } from './KitchenHeaderHUD'
 import KitchenMiseEnPlaceShelf, { type KitchenIngredientRow } from './KitchenMiseEnPlaceShelf'
@@ -41,6 +43,8 @@ interface ActiveKitchenWorkbenchProps {
   initialStepIndex?: number
   onExit: () => void
   onCompleteMeal?: (rating?: number) => void
+  onDeleteRecipe?: (recipe: ActiveKitchenRecipe) => void
+  onSaveRating?: (rating: number) => void
   onEditRecipe?: () => void
   className?: string
 }
@@ -52,6 +56,8 @@ export default function ActiveKitchenWorkbench({
   initialStepIndex = 0,
   onExit,
   onCompleteMeal,
+  onDeleteRecipe,
+  onSaveRating,
   onEditRecipe,
   className,
 }: ActiveKitchenWorkbenchProps) {
@@ -271,25 +277,46 @@ export default function ActiveKitchenWorkbench({
 
           <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
             <Button
+              variant="champagne"
+              size="lg"
+              onClick={() => {
+                if (mealRating && onSaveRating) onSaveRating(mealRating)
+                if (onCompleteMeal) onCompleteMeal(mealRating || undefined)
+                onExit()
+              }}
+              leadingIcon={<Check size={16} />}
+              className="w-full sm:w-auto font-bold min-h-control px-8 rounded-2xl shadow-sm"
+            >
+              Keep in Library & Complete
+            </Button>
+
+            {onDeleteRecipe && (
+              <Button
+                variant="danger"
+                size="lg"
+                onClick={() => {
+                  if (mealRating && onSaveRating) onSaveRating(mealRating)
+                  onDeleteRecipe(recipe)
+                  onExit()
+                }}
+                leadingIcon={<Trash2 size={16} />}
+                className="w-full sm:w-auto font-semibold min-h-control px-6 rounded-2xl"
+              >
+                Discard Experiment (Delete)
+              </Button>
+            )}
+
+            <Button
               variant="secondary"
               size="lg"
               onClick={() => {
                 setMealCompleted(false)
                 setStepIndex(0)
               }}
-              className="w-full sm:w-auto font-bold min-h-control px-6 rounded-2xl flex items-center justify-center gap-2"
+              className="w-full sm:w-auto font-semibold min-h-control px-5 rounded-2xl flex items-center justify-center gap-2"
             >
               <RotateCcw size={16} />
-              <span>Cook Again / Review Steps</span>
-            </Button>
-
-            <Button
-              variant="champagne"
-              size="lg"
-              onClick={onExit}
-              className="w-full sm:w-auto font-bold min-h-control px-8 rounded-2xl"
-            >
-              Back to Recipe Library
+              <span>Review Steps</span>
             </Button>
           </div>
         </Card>
