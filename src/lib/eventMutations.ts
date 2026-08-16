@@ -82,6 +82,23 @@ export function reconcileTransportationDestination(
   }
 }
 
+export function triggerGoogleEventSync(
+  supabase: SupabaseClient,
+  eventId: string,
+  options?: { titleOnly?: boolean },
+) {
+  if (!eventId) return
+  void supabase.functions.invoke('sync-event-to-google', {
+    body: {
+      event_id: eventId,
+      title_only: options?.titleOnly === true,
+      enqueue_on_failure: true,
+    },
+  }).catch((err) => {
+    console.warn('[eventMutations] Background sync-event-to-google notice:', err)
+  })
+}
+
 export function invalidateAllCalendarQueries(queryClient: QueryClient, eventId?: string) {
   void queryClient.invalidateQueries({ queryKey: ['events'] })
   void queryClient.invalidateQueries({ queryKey: ['today-events'] })
@@ -108,6 +125,7 @@ export async function updateEventTitle(
     .eq('id', eventId)
   if (error) throw error
   invalidateAllCalendarQueries(queryClient, eventId)
+  triggerGoogleEventSync(supabase, eventId, { titleOnly: true })
 }
 
 export async function updateEventSchedule(
@@ -178,6 +196,7 @@ export async function updateEventSchedule(
   }
 
   invalidateAllCalendarQueries(queryClient, event.id)
+  triggerGoogleEventSync(supabase, event.id)
 }
 
 export async function updateEventVenue(
@@ -370,6 +389,7 @@ export async function updateEventVenue(
   }
 
   invalidateAllCalendarQueries(queryClient, event.id)
+  triggerGoogleEventSync(supabase, event.id)
 }
 
 export async function toggleEventAttendee(
@@ -426,6 +446,7 @@ export async function toggleEventAttendee(
   }
 
   invalidateAllCalendarQueries(queryClient, event.id)
+  triggerGoogleEventSync(supabase, event.id)
 }
 
 export async function updateEventCategory(
@@ -457,6 +478,10 @@ export async function updateEventCategory(
     }, { onConflict: 'event_id' })
 
   invalidateAllCalendarQueries(queryClient, eventId)
+
+  if (mode === 'event') {
+    triggerGoogleEventSync(supabase, eventId)
+  }
 }
 
 export async function snoozeEventOrReminder(
@@ -546,6 +571,13 @@ export async function deleteCalendarEvent(
 ) {
   // 1. 0ms Evict from all cached queries
   evictEventFromAllCaches(queryClient, eventId)
+
+  // Trigger Google deletion asynchronously
+  void supabase.functions.invoke('delete-google-event', {
+    body: { event_id: eventId },
+  }).catch((err) => {
+    console.warn('[eventMutations] Background delete-google-event notice:', err)
+  })
 
   const { error } = await supabase
     .from('events')

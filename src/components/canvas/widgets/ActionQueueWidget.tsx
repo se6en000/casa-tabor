@@ -436,7 +436,7 @@ export default function ActionQueueWidget({
                       layout: { duration: 0.28, ease: [0.25, 1, 0.5, 1] },
                     }}
                     className={cn(
-                      'p-5 sm:p-6 rounded-3xl bg-casa-surface transition-all flex flex-col gap-4 relative border-2',
+                      'p-5 sm:p-6 rounded-3xl bg-casa-surface transition-all flex flex-col gap-4 relative border-2 overflow-hidden',
                       selectedSidecarActionId === heroItem.id && sidecarTab === 'action'
                         ? 'border-casa-gold shadow-card-hover'
                         : 'border-casa-gold/25 hover:border-casa-gold/60 shadow-card'
@@ -533,27 +533,27 @@ export default function ActionQueueWidget({
                     </div>
 
                     {/* ── Universal 2-Anchor Footer: [ Done ] vs [ Snooze ▾ ] ── */}
-                    <div className="pt-3.5 border-t border-casa-border/60 flex items-center justify-between gap-3 flex-wrap sm:flex-nowrap">
+                    <div className="pt-3.5 border-t border-casa-border/60 flex items-center justify-between gap-2.5 flex-wrap">
                       {/* Primary Anchor 1: Done (Navy strong action with guaranteed white text) */}
                       <Button
                         size="sm"
                         variant="strong"
                         onClick={() => onInstantComplete(heroItem)}
-                        className="px-5 py-2.5 rounded-full min-h-[48px] text-body-sm font-bold shadow-card flex items-center gap-2 shrink-0 hover:brightness-110"
+                        className="px-4 sm:px-5 py-2.5 rounded-full min-h-[48px] text-body-sm font-bold shadow-card flex items-center gap-2 shrink-0 hover:brightness-110"
                         leadingIcon={<Check size={16} strokeWidth={2.5} className="text-emerald-400" />}
                       >
                         <span>{heroDoneLabel}</span>
                       </Button>
 
                       {/* Primary Anchor 2: Split Snooze Pill with Expandable Presets */}
-                      <div className="inline-flex items-stretch rounded-full bg-casa-surface border border-casa-border hover:border-casa-gold transition-all shadow-xs shrink-0">
+                      <div className="inline-flex items-stretch rounded-full bg-casa-surface border border-casa-border hover:border-casa-gold transition-all shadow-xs shrink-0 max-w-full overflow-hidden">
                         <Button
                           size="sm"
                           variant="ghost"
                           onClick={() => onInstantSnooze(heroItem, 'tomorrow')}
-                          className="px-4 py-2 text-body-sm font-semibold text-casa-navy hover:text-casa-gold-hover transition-colors min-h-[48px] rounded-l-full rounded-r-none border-none flex items-center gap-2"
+                          className="px-3 sm:px-4 py-2 text-body-sm font-semibold text-casa-navy hover:text-casa-gold-hover transition-colors min-h-[48px] rounded-l-full rounded-r-none border-none flex items-center gap-1.5 sm:gap-2"
                           title="Snooze to tomorrow morning"
-                          leadingIcon={<Clock size={14} className="text-casa-gold" />}
+                          leadingIcon={<Clock size={14} className="text-casa-gold shrink-0" />}
                         >
                           <span>Snooze Tomorrow</span>
                         </Button>
@@ -564,7 +564,7 @@ export default function ActionQueueWidget({
                           onClick={() => setOpenSnoozeId(isHeroSnoozeOpen ? null : heroItem.id)}
                           aria-label="More snooze options"
                           title="More snooze options"
-                          className="px-3 border-l border-casa-border/70 text-casa-muted hover:text-casa-navy hover:bg-casa-gold/10 transition-colors rounded-r-full rounded-l-none min-h-[48px] min-w-[40px]"
+                          className="px-2.5 sm:px-3 border-l border-casa-border/70 text-casa-muted hover:text-casa-navy hover:bg-casa-gold/10 transition-colors rounded-r-full rounded-l-none min-h-[48px] min-w-[36px] sm:min-w-[40px] flex items-center justify-center shrink-0"
                           icon={
                             <ChevronDown
                               size={15}

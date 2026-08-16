@@ -23,6 +23,7 @@ import {
   snoozeEventOrReminder,
   completeEventOrReminder,
   deleteCalendarEvent,
+  triggerGoogleEventSync,
 } from '../../../../lib/eventMutations'
 
 const DEFAULT_VENUE: VenueInfo = {
@@ -299,6 +300,7 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     })
 
     invalidateCalendar()
+    triggerGoogleEventSync(supabase, initialEvent.id)
   }, [initialEvent, familyMembers, queryClient, invalidateCalendar])
 
   // Update Title
