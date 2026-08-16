@@ -282,20 +282,20 @@ export const COMPONENT_MANIFEST = [
   component({
     name: 'Heading',
     category: 'typography',
-    purpose: 'Renders semantic display and heading typography roles.',
-    useWhen: 'Use for page titles, section titles, and editorial display text.',
-    avoid: 'Do not apply arbitrary font-size utilities or choose a role only for visual size.',
+    purpose: 'Renders semantic display and heading typography roles across Editorial and Operational modes.',
+    useWhen: 'Use for page titles, section titles, and editorial display text. Follow the 3 core header archetypes: Display Hero (H1), Section Anchor (H2), and Entity Title (H3).',
+    avoid: 'Do not apply arbitrary font-size utilities or choose a role only for visual size. Never render entity titles in ALL-CAPS.',
     variants: ['display-xl', 'display-lg', 'display-md', 'display-sm', 'heading', 'tone:default', 'tone:on-dark'],
     states: ['default'],
     accessibility: 'Choose the semantic element separately when document hierarchy requires it.',
-    responsive: 'Each role scales through compact, touch, and kiosk density tokens.',
+    responsive: 'Each role scales through compact, touch, and kiosk density tokens. Distance-readable from 3–5 ft (kitchen) and 8 ft (kiosk).',
     example: '<Heading role="display-sm" tone="on-dark" as="h1">Daily briefing</Heading>',
   }),
   component({
     name: 'Text',
     category: 'typography',
     purpose: 'Renders semantic body, supporting, and caption text roles.',
-    useWhen: 'Use for prose, helper copy, metadata, and captions.',
+    useWhen: 'Use for prose, helper copy, metadata, and captions. Entity titles in cards use text-body/body-lg with Title Case.',
     avoid: 'Do not introduce arbitrary sizes or use muted text for essential instructions.',
     variants: ['body-lg', 'body', 'body-sm', 'caption'],
     states: ['default', 'muted'],
@@ -780,3 +780,43 @@ ${DESIGN_SYSTEM_CHANGELOG.map((release) => `## ${release.version} - ${release.da
 ${release.changes.map((change) => `- ${change}`).join('\n')}`).join('\n\n')}
 `
 }
+
+export const TYPOGRAPHY_ARCHETYPES = {
+  hero: {
+    role: 'Display Hero (H1)',
+    fontFamily: 'Cormorant Garamond',
+    weight: 'bold',
+    casing: 'Title Case',
+    desktopSize: '24px–28px (text-heading to text-display-xs)',
+    kioskSize: '28px–34px (text-display-xs to text-display-sm)',
+    lineHeight: '1.2–1.25',
+    usage: 'Singular featured entity or centerpiece display per primary visual pane.',
+  },
+  sectionAnchor: {
+    role: 'Section Anchor (H2)',
+    fontFamily: 'Cormorant Garamond (Editorial) / DM Sans (Operational)',
+    weight: 'bold',
+    casing: 'Title Case',
+    size: '18px–20px (text-lg to text-xl / text-body-lg)',
+    layout: 'Header with left title/subtitle and right action slot (e.g. Shuffle, AI Plan, counts).',
+    usage: 'Major functional sections, side-rail widgets, and workbench panels.',
+  },
+  entityTitle: {
+    role: 'Entity Title (H3)',
+    fontFamily: 'Cormorant Garamond / DM Sans',
+    weight: 'bold / semi-bold',
+    casing: 'Strictly Title Case (normalized via formatRecipeTitle or Title Case standard)',
+    size: '15px–16px (text-body)',
+    glanceability: 'Legible from 3–5 feet in kitchen or kiosk environments.',
+    usage: 'Primary interactive item titles in list rows, cards, drawers, and grids.',
+  },
+  eyebrow: {
+    role: 'Eyebrow / Overline & Status Badges',
+    fontFamily: 'JetBrains Mono / DM Sans',
+    weight: 'bold',
+    casing: 'ALL-CAPS with tracking (uppercase tracking-wider)',
+    size: '11px–12px (text-caption / text-2xs)',
+    usage: 'Category markers, date capsules, status pills, and active session indicators.',
+  },
+}
+
