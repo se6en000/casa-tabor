@@ -286,6 +286,7 @@ function useEventsForRange(queryKey: readonly unknown[], start: Date, end: Date)
         routines: familyRoutines,
         members: familyMembers,
         date: day,
+        filterBySyncMode: true,
       })
       return rawEvents.map((ev): EventWithDetails => ({
         ...ev,

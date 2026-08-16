@@ -182,6 +182,7 @@ export function generateConsolidatedRoutineActionEvents(options: {
   members: FamilyMember[]
   date: Date
   homeAddress?: string
+  filterBySyncMode?: boolean
   forExternalSync?: boolean
 }): CalendarEvent[] {
   const {
@@ -189,9 +190,11 @@ export function generateConsolidatedRoutineActionEvents(options: {
     members,
     date,
     homeAddress: _homeAddress = '3209 Washington Road, West Palm Beach, FL',
+    filterBySyncMode = false,
     forExternalSync = false,
   } = options
 
+  const shouldFilter = filterBySyncMode || forExternalSync
   const dateKey = format(date, 'yyyy-MM-dd')
   const dayOfWeek = date.getDay()
 
@@ -201,7 +204,7 @@ export function generateConsolidatedRoutineActionEvents(options: {
     if (routine.endDate && dateKey > routine.endDate) return false
     if (!routine.daysOfWeek.includes(dayOfWeek)) return false
 
-    if (forExternalSync) {
+    if (shouldFilter) {
       const mode: RoutineSyncMode = routine.syncMode ?? (routine.syncToGoogle === false ? 'none' : 'exceptions_only')
       if (mode === 'none') return false
       if (mode === 'exceptions_only') {
@@ -484,9 +487,10 @@ export function generateRoutineActionEvents(options: {
   homeAddress?: string
   driveMinutes?: number
   bufferMinutes?: number
+  filterBySyncMode?: boolean
   forExternalSync?: boolean
 }): CalendarEvent[] {
-  const { routine, child, date, homeAddress, driveMinutes, bufferMinutes: _bufferMinutes, forExternalSync } = options
+  const { routine, child, date, homeAddress, driveMinutes, bufferMinutes: _bufferMinutes, filterBySyncMode, forExternalSync } = options
   if (!routine.enabled) return []
 
   const events = generateConsolidatedRoutineActionEvents({
@@ -494,6 +498,7 @@ export function generateRoutineActionEvents(options: {
     members: [child],
     date,
     homeAddress,
+    filterBySyncMode,
     forExternalSync,
   })
 

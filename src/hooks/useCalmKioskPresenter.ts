@@ -120,6 +120,7 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
       routines: familyRoutines,
       members: familyMembers,
       date: now,
+      filterBySyncMode: true,
     })
     return events.map((ev): EventWithDetails => ({
       ...ev,
