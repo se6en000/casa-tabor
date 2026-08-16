@@ -105,3 +105,74 @@ test('routine events format cleanly for Google Calendar and Skylight sync pipeli
     assert.equal(ev.enrichment?.category, 'School')
   }
 })
+
+test('exceptions_only syncMode filters out normal routine days but syncs Tuesday Early Strings exception', () => {
+  const routineWithOverride = {
+    ...mockRoutine,
+    syncMode: 'exceptions_only',
+    dayOverrides: [
+      {
+        dayOfWeek: 2, // Tuesday
+        label: 'Early Strings',
+        startLocal: '07:00',
+        endLocal: '14:00',
+        enabled: true,
+      },
+    ],
+  }
+
+  // Wednesday (normal routine day, no override)
+  const wednesday = new Date('2026-08-19T10:00:00.000-04:00') // Wed = 3
+  const wednesdaySyncEvents = generateRoutineActionEvents({
+    routine: routineWithOverride,
+    child: mockChild,
+    date: wednesday,
+    forExternalSync: true,
+  })
+  assert.equal(wednesdaySyncEvents.length, 0, 'Normal routine day must not generate external sync noise')
+
+  // Tuesday (has Early Strings override)
+  const tuesday = new Date('2026-08-18T10:00:00.000-04:00') // Tue = 2
+  const tuesdaySyncEvents = generateRoutineActionEvents({
+    routine: routineWithOverride,
+    child: mockChild,
+    date: tuesday,
+    forExternalSync: true,
+  })
+  assert.equal(tuesdaySyncEvents.length, 2, 'Tuesday override must produce sync events')
+  assert.equal(tuesdaySyncEvents[0].title, 'Drop off Liv @ Bak Middle School · Early Strings')
+  const tuesdayDropStart = new Date(tuesdaySyncEvents[0].start_time)
+  assert.equal(tuesdayDropStart.getHours(), 6)
+  assert.equal(tuesdayDropStart.getMinutes(), 45) // 6:45 AM arrival for 7:00 AM start
+})
+
+test('none syncMode suppresses all external sync events', () => {
+  const routineNone = {
+    ...mockRoutine,
+    syncMode: 'none',
+  }
+  const wednesday = new Date('2026-08-19T10:00:00.000-04:00')
+  const syncEvents = generateRoutineActionEvents({
+    routine: routineNone,
+    child: mockChild,
+    date: wednesday,
+    forExternalSync: true,
+  })
+  assert.equal(syncEvents.length, 0)
+})
+
+test('all syncMode produces daily sync events for all enabled days', () => {
+  const routineAll = {
+    ...mockRoutine,
+    syncMode: 'all',
+  }
+  const wednesday = new Date('2026-08-19T10:00:00.000-04:00')
+  const syncEvents = generateRoutineActionEvents({
+    routine: routineAll,
+    child: mockChild,
+    date: wednesday,
+    forExternalSync: true,
+  })
+  assert.equal(syncEvents.length, 2)
+})
+

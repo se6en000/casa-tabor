@@ -1,6 +1,8 @@
 import { format, setHours, setMinutes, setSeconds, setMilliseconds } from 'date-fns'
 import type { CalendarEvent, FamilyMember, MemberAvailabilityRule } from '../types'
 
+export type RoutineSyncMode = 'none' | 'exceptions_only' | 'all'
+
 export interface DayScheduleOverride {
   dayOfWeek: number // 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat, 0=Sun
   label?: string // e.g. "Early Strings", "Late Pickup", "Early Dismissal"
@@ -30,6 +32,7 @@ export interface FamilyRoutine {
   dropoffDriverId?: string | null
   pickupDriverName: string // e.g. "Kelly"
   pickupDriverId?: string | null
+  syncMode?: RoutineSyncMode
   syncToGoogle?: boolean
   enabled: boolean
 }
@@ -55,6 +58,7 @@ export interface RoutinePayload {
   dropoffDriverId?: string | null
   pickupDriverName: string
   pickupDriverId?: string | null
+  syncMode?: RoutineSyncMode
   syncToGoogle?: boolean
   enabled: boolean
 }
@@ -82,6 +86,7 @@ export function createSchoolRoutine(
     endLocal: defaultEnd,
     dropoffDriverName: 'Jake',
     pickupDriverName: 'Kelly',
+    syncMode: 'exceptions_only',
     syncToGoogle: true,
     enabled: true,
   }
@@ -103,9 +108,34 @@ export function createCampRoutine(
     endLocal: '16:00',
     dropoffDriverName: 'Jake',
     pickupDriverName: 'Kelly',
+    syncMode: 'exceptions_only',
     syncToGoogle: true,
     enabled: true,
   }
+}
+
+/**
+ * Checks if a specific date has a custom schedule override or deviation for this routine.
+ */
+export function isRoutineExceptionForDate(routine: FamilyRoutine, date: Date): boolean {
+  const dayOfWeek = date.getDay()
+  if (!routine.daysOfWeek.includes(dayOfWeek)) return false
+
+  const override = routine.dayOverrides?.find(
+    (o) => o.dayOfWeek === dayOfWeek && o.enabled !== false,
+  )
+  if (!override) return false
+
+  // Check for any deviation from the base schedule
+  if (override.label && override.label.trim().length > 0) return true
+  if (override.startLocal && override.startLocal.slice(0, 5) !== routine.startLocal.slice(0, 5)) return true
+  if (override.endLocal && override.endLocal.slice(0, 5) !== routine.endLocal.slice(0, 5)) return true
+  if (override.dropoffDriverName && override.dropoffDriverName !== routine.dropoffDriverName) return true
+  if (override.pickupDriverName && override.pickupDriverName !== routine.pickupDriverName) return true
+  if (override.dropoffDriverId && override.dropoffDriverId !== routine.dropoffDriverId) return true
+  if (override.pickupDriverId && override.pickupDriverId !== routine.pickupDriverId) return true
+
+  return false
 }
 
 /**
@@ -152,12 +182,14 @@ export function generateConsolidatedRoutineActionEvents(options: {
   members: FamilyMember[]
   date: Date
   homeAddress?: string
+  forExternalSync?: boolean
 }): CalendarEvent[] {
   const {
     routines,
     members,
     date,
     homeAddress: _homeAddress = '3209 Washington Road, West Palm Beach, FL',
+    forExternalSync = false,
   } = options
 
   const dateKey = format(date, 'yyyy-MM-dd')
@@ -167,31 +199,44 @@ export function generateConsolidatedRoutineActionEvents(options: {
     if (!routine.enabled) return false
     if (routine.startDate && dateKey < routine.startDate) return false
     if (routine.endDate && dateKey > routine.endDate) return false
-    return routine.daysOfWeek.includes(dayOfWeek)
+    if (!routine.daysOfWeek.includes(dayOfWeek)) return false
+
+    if (forExternalSync) {
+      const mode: RoutineSyncMode = routine.syncMode ?? (routine.syncToGoogle === false ? 'none' : 'exceptions_only')
+      if (mode === 'none') return false
+      if (mode === 'exceptions_only') {
+        return isRoutineExceptionForDate(routine, date)
+      }
+      // 'all': proceed
+    }
+
+    return true
   })
 
   if (activeRoutines.length === 0) return []
 
   const events: CalendarEvent[] = []
 
-  // 1. Group Morning Drop-offs by (normalizedVenue + startLocal + dropoffDriverName)
+  // 1. Group Morning Drop-offs by (normalizedVenue + startLocal + dropoffDriverName + label)
   const dropoffGroups = new Map<string, {
     venueName: string
     venueAddress: string
     startLocal: string
     driverName: string
     driverId: string | null
+    label: string | null
     children: FamilyMember[]
     routineIds: string[]
   }>()
 
-  // 2. Group Afternoon Pick-ups by (normalizedVenue + endLocal + pickupDriverName)
+  // 2. Group Afternoon Pick-ups by (normalizedVenue + endLocal + pickupDriverName + label)
   const pickupGroups = new Map<string, {
     venueName: string
     venueAddress: string
     endLocal: string
     driverName: string
     driverId: string | null
+    label: string | null
     children: FamilyMember[]
     routineIds: string[]
   }>()
@@ -211,9 +256,10 @@ export function generateConsolidatedRoutineActionEvents(options: {
     const effDropDriverId = dayOverride?.dropoffDriverId !== undefined ? dayOverride.dropoffDriverId : (routine.dropoffDriverId || null)
     const effPickDriverName = dayOverride?.pickupDriverName || routine.pickupDriverName || 'Kelly'
     const effPickDriverId = dayOverride?.pickupDriverId !== undefined ? dayOverride.pickupDriverId : (routine.pickupDriverId || null)
+    const overrideLabel = dayOverride?.label?.trim() || null
 
     // Morning Dropoff Grouping
-    const dropKey = `${venueKey}|${effStartLocal}|${effDropDriverName}`
+    const dropKey = `${venueKey}|${effStartLocal}|${effDropDriverName}|${overrideLabel || ''}`
     if (!dropoffGroups.has(dropKey)) {
       dropoffGroups.set(dropKey, {
         venueName: routine.venueName,
@@ -221,6 +267,7 @@ export function generateConsolidatedRoutineActionEvents(options: {
         startLocal: effStartLocal,
         driverName: effDropDriverName,
         driverId: effDropDriverId,
+        label: overrideLabel,
         children: [child],
         routineIds: [routine.memberId],
       })
@@ -233,7 +280,7 @@ export function generateConsolidatedRoutineActionEvents(options: {
     }
 
     // Afternoon Pickup Grouping
-    const pickKey = `${venueKey}|${effEndLocal}|${effPickDriverName}`
+    const pickKey = `${venueKey}|${effEndLocal}|${effPickDriverName}|${overrideLabel || ''}`
     if (!pickupGroups.has(pickKey)) {
       pickupGroups.set(pickKey, {
         venueName: routine.venueName,
@@ -241,6 +288,7 @@ export function generateConsolidatedRoutineActionEvents(options: {
         endLocal: effEndLocal,
         driverName: effPickDriverName,
         driverId: effPickDriverId,
+        label: overrideLabel,
         children: [child],
         routineIds: [routine.memberId],
       })
@@ -264,11 +312,12 @@ export function generateConsolidatedRoutineActionEvents(options: {
 
     const driverMember = members.find((m) => m.id === group.driverId || m.name === group.driverName)
     const eventId = `routine-drop-${group.routineIds.sort().join('-')}-${dateKey}`
+    const labelTag = group.label ? ` · ${group.label}` : ''
 
     events.push({
       id: eventId,
-      title: `Drop off ${names} @ ${group.venueName}`,
-      description: `Morning school drop-off for ${names}. Arrival window: ${format(windowStartTime, 'h:mm a')} – ${format(schoolStartTime, 'h:mm a')}.`,
+      title: `Drop off ${names} @ ${group.venueName}${labelTag}`,
+      description: `Morning school drop-off for ${names}.${group.label ? ` Note: ${group.label}.` : ''} Arrival window: ${format(windowStartTime, 'h:mm a')} – ${format(schoolStartTime, 'h:mm a')}.`,
       start_time: windowStartTime.toISOString(),
       end_time: schoolStartTime.toISOString(),
       all_day: false,
@@ -348,11 +397,12 @@ export function generateConsolidatedRoutineActionEvents(options: {
 
     const driverMember = members.find((m) => m.id === group.driverId || m.name === group.driverName)
     const eventId = `routine-pick-${group.routineIds.sort().join('-')}-${dateKey}`
+    const labelTag = group.label ? ` · ${group.label}` : ''
 
     events.push({
       id: eventId,
-      title: `Pick up ${names} @ ${group.venueName}`,
-      description: `Afternoon school pickup for ${names}. Dismissal at ${format(schoolEndTime, 'h:mm a')}.`,
+      title: `Pick up ${names} @ ${group.venueName}${labelTag}`,
+      description: `Afternoon school pickup for ${names}.${group.label ? ` Note: ${group.label}.` : ''} Dismissal at ${format(schoolEndTime, 'h:mm a')}.`,
       start_time: schoolEndTime.toISOString(),
       end_time: windowEndTime.toISOString(),
       all_day: false,
@@ -434,8 +484,9 @@ export function generateRoutineActionEvents(options: {
   homeAddress?: string
   driveMinutes?: number
   bufferMinutes?: number
+  forExternalSync?: boolean
 }): CalendarEvent[] {
-  const { routine, child, date, homeAddress, driveMinutes, bufferMinutes: _bufferMinutes } = options
+  const { routine, child, date, homeAddress, driveMinutes, bufferMinutes: _bufferMinutes, forExternalSync } = options
   if (!routine.enabled) return []
 
   const events = generateConsolidatedRoutineActionEvents({
@@ -443,6 +494,7 @@ export function generateRoutineActionEvents(options: {
     members: [child],
     date,
     homeAddress,
+    forExternalSync,
   })
 
   // If custom driveMinutes was explicitly passed, update enrichment accordingly
@@ -515,6 +567,7 @@ export function deriveAmbientRoutineStatus(
  * Serializes a FamilyRoutine into member_availability_rules rows for persistence.
  */
 export function serializeRoutineToAvailabilityRules(routine: FamilyRoutine): Array<Omit<MemberAvailabilityRule, 'id' | 'created_at' | 'updated_at'>> {
+  const syncMode: RoutineSyncMode = routine.syncMode ?? (routine.syncToGoogle === false ? 'none' : 'exceptions_only')
   const payload: RoutinePayload = {
     type: 'school_routine',
     routineType: routine.routineType || 'school',
@@ -528,7 +581,8 @@ export function serializeRoutineToAvailabilityRules(routine: FamilyRoutine): Arr
     dropoffDriverId: routine.dropoffDriverId,
     pickupDriverName: routine.pickupDriverName,
     pickupDriverId: routine.pickupDriverId,
-    syncToGoogle: routine.syncToGoogle ?? true,
+    syncMode,
+    syncToGoogle: syncMode !== 'none',
     enabled: routine.enabled,
   }
 
@@ -579,6 +633,7 @@ export function deserializeRoutineFromAvailabilityRules(
     venueAddress: '',
     dropoffDriverName: 'Jake',
     pickupDriverName: 'Kelly',
+    syncMode: 'exceptions_only',
     syncToGoogle: true,
     enabled: true,
   }
@@ -590,6 +645,16 @@ export function deserializeRoutineFromAvailabilityRules(
   }
 
   const days = Array.from(new Set(routineRules.map((r) => r.day_of_week))).sort()
+
+  const rawSyncMode = payload.syncMode
+  let syncMode: RoutineSyncMode = 'exceptions_only'
+  if (rawSyncMode === 'none' || rawSyncMode === 'exceptions_only' || rawSyncMode === 'all') {
+    syncMode = rawSyncMode
+  } else if (payload.syncToGoogle === false) {
+    syncMode = 'none'
+  } else {
+    syncMode = 'exceptions_only'
+  }
 
   return {
     memberId,
@@ -607,7 +672,9 @@ export function deserializeRoutineFromAvailabilityRules(
     dropoffDriverId: payload.dropoffDriverId,
     pickupDriverName: payload.pickupDriverName || 'Kelly',
     pickupDriverId: payload.pickupDriverId,
-    syncToGoogle: payload.syncToGoogle ?? true,
+    syncMode,
+    syncToGoogle: syncMode !== 'none',
     enabled: payload.enabled ?? true,
   }
 }
+

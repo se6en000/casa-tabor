@@ -1025,6 +1025,20 @@ export default function FamilySettingsPage() {
                                                     </select>
                                                   </div>
                                                 </div>
+                                                <div>
+                                                  <label className="block text-caption font-bold text-casa-muted uppercase">Schedule Note / Reason (Optional)</label>
+                                                  <Input
+                                                    type="text"
+                                                    placeholder="e.g. Early Strings Orchestra, Half Day, Robotics Club…"
+                                                    value={override.label || ''}
+                                                    onChange={(e) => {
+                                                      const updated = [...(routine.dayOverrides || [])]
+                                                      updated[oIdx] = { ...updated[oIdx], label: e.target.value }
+                                                      patchRoutine(m.id!, { dayOverrides: updated })
+                                                    }}
+                                                    className="h-8 px-2 text-body-sm text-casa-navy w-full"
+                                                  />
+                                                </div>
                                               </div>
                                             )
                                           })}
@@ -1068,6 +1082,90 @@ export default function FamilySettingsPage() {
                                               + {d.label}
                                             </Button>
                                           ))}
+                                      </div>
+                                    </div>
+
+                                    {/* Google & Skylight Calendar Sync */}
+                                    <div className="pt-2.5 border-t border-casa-border/40 space-y-2">
+                                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                                        <div>
+                                          <span className="text-caption font-semibold text-casa-muted uppercase tracking-wide">
+                                            Google & Skylight Calendar Sync
+                                          </span>
+                                          <p className="text-caption text-casa-muted">
+                                            Controls how school drop-off & pick-up times appear on Google Calendar and Skylight hardware.
+                                          </p>
+                                        </div>
+                                      </div>
+                                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                        <Button
+                                          variant={(routine.syncMode === 'exceptions_only' || (!routine.syncMode && routine.syncToGoogle !== false)) ? 'strong' : 'secondary'}
+                                          align="start"
+                                          contentClassName="flex flex-col items-start w-full text-left"
+                                          className={cn(
+                                            'h-auto p-3 rounded-lg border transition-all text-left justify-start',
+                                            (routine.syncMode === 'exceptions_only' || (!routine.syncMode && routine.syncToGoogle !== false))
+                                              ? 'border-casa-gold bg-casa-gold/10 text-casa-navy ring-1 ring-casa-gold'
+                                              : 'border-casa-border bg-white text-casa-muted hover:border-casa-navy/30'
+                                          )}
+                                          onClick={() => patchRoutine(m.id!, { syncMode: 'exceptions_only', syncToGoogle: true })}
+                                        >
+                                          <div className="flex items-center justify-between w-full mb-1">
+                                            <span className="text-body-sm font-bold text-casa-navy">Exceptions Only</span>
+                                            <span className="text-caption uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-casa-gold/20 text-casa-navy">
+                                              Recommended
+                                            </span>
+                                          </div>
+                                          <p className="text-caption text-casa-muted leading-tight font-normal">
+                                            Only syncs unusual days (e.g. Early Strings, half days). Prevents Skylight wall scrolling.
+                                          </p>
+                                        </Button>
+
+                                        <Button
+                                          variant={routine.syncMode === 'none' || routine.syncToGoogle === false ? 'strong' : 'secondary'}
+                                          align="start"
+                                          contentClassName="flex flex-col items-start w-full text-left"
+                                          className={cn(
+                                            'h-auto p-3 rounded-lg border transition-all text-left justify-start',
+                                            routine.syncMode === 'none' || routine.syncToGoogle === false
+                                              ? 'border-casa-navy bg-casa-navy/5 text-casa-navy ring-1 ring-casa-navy'
+                                              : 'border-casa-border bg-white text-casa-muted hover:border-casa-navy/30'
+                                          )}
+                                          onClick={() => patchRoutine(m.id!, { syncMode: 'none', syncToGoogle: false })}
+                                        >
+                                          <div className="flex items-center justify-between w-full mb-1">
+                                            <span className="text-body-sm font-bold text-casa-navy">Casa Tabor Only</span>
+                                            <span className="text-caption uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-casa-warm text-casa-muted">
+                                              Off
+                                            </span>
+                                          </div>
+                                          <p className="text-caption text-casa-muted leading-tight font-normal">
+                                            Keeps external calendars 100% clean. Shows only in Casa Tabor ambient headers.
+                                          </p>
+                                        </Button>
+
+                                        <Button
+                                          variant={routine.syncMode === 'all' ? 'strong' : 'secondary'}
+                                          align="start"
+                                          contentClassName="flex flex-col items-start w-full text-left"
+                                          className={cn(
+                                            'h-auto p-3 rounded-lg border transition-all text-left justify-start',
+                                            routine.syncMode === 'all'
+                                              ? 'border-casa-navy bg-casa-navy/5 text-casa-navy ring-1 ring-casa-navy'
+                                              : 'border-casa-border bg-white text-casa-muted hover:border-casa-navy/30'
+                                          )}
+                                          onClick={() => patchRoutine(m.id!, { syncMode: 'all', syncToGoogle: true })}
+                                        >
+                                          <div className="flex items-center justify-between w-full mb-1">
+                                            <span className="text-body-sm font-bold text-casa-navy">Full Sync</span>
+                                            <span className="text-caption uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-casa-warm text-casa-muted">
+                                              Daily
+                                            </span>
+                                          </div>
+                                          <p className="text-caption text-casa-muted leading-tight font-normal">
+                                            Syncs every daily morning drop-off & afternoon pick-up event (2x/day per child).
+                                          </p>
+                                        </Button>
                                       </div>
                                     </div>
 

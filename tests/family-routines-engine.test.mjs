@@ -344,3 +344,29 @@ test('FamilySettingsPage and useCalendarEvents project consolidated routine acti
   assert.match(calendarEventsHook, /routineEventsInRange/)
   assert.match(calendarEventsHook, /newRoutineEvents/)
 })
+
+test('serialize and deserialize preserves syncMode options across none, exceptions_only, and all', () => {
+  for (const mode of ['none', 'exceptions_only', 'all']) {
+    const routine = {
+      ...mockLivSchoolRoutine,
+      syncMode: mode,
+      syncToGoogle: mode !== 'none',
+    }
+    const rules = serializeRoutineToAvailabilityRules(routine)
+    const reconstituted = deserializeRoutineFromAvailabilityRules(mockLiv.id, rules)
+    assert.equal(reconstituted?.syncMode, mode)
+    assert.equal(reconstituted?.syncToGoogle, mode !== 'none')
+  }
+})
+
+test('FamilySettingsPage provides Google & Skylight Calendar Sync controls with Exceptions Only default', () => {
+  const settingsContent = readFileSync(new URL('../src/pages/FamilySettingsPage.tsx', import.meta.url), 'utf8')
+  assert.match(settingsContent, /Google & Skylight Calendar Sync/)
+  assert.match(settingsContent, /Exceptions Only/)
+  assert.match(settingsContent, /Casa Tabor Only/)
+  assert.match(settingsContent, /Full Sync/)
+  assert.match(settingsContent, /syncMode:\s*'exceptions_only'/)
+  assert.match(settingsContent, /syncMode:\s*'none'/)
+  assert.match(settingsContent, /syncMode:\s*'all'/)
+})
+
