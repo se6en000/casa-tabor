@@ -69,4 +69,22 @@ test('LivingFlowSidecar & useLivingFlowState recurrence deletion and Google sync
       'deleteCalendarEvent must trigger delete-google-event function for connected Google events'
     )
   })
+
+  await t.test('SidecarCompanion auto-collapses on event deletion without flipping to AI', async () => {
+    const sidecarCompanionSrc = await fs.readFile(
+      path.join(root, 'src/components/shared/SidecarCompanion.tsx'),
+      'utf-8'
+    )
+    assert.match(
+      sidecarCompanionSrc,
+      /const isFlippedToAi = sidecarTab === 'ai'/,
+      'SidecarCompanion must only flip to AI when sidecarTab is explicitly "ai"'
+    )
+    assert.match(
+      sidecarCompanionSrc,
+      /closeSidecar\(\)/,
+      'SidecarCompanion must auto-close sidecar when deleted event is no longer present'
+    )
+  })
 })
+

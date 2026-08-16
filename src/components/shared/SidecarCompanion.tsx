@@ -72,7 +72,7 @@ export default function SidecarCompanion({
   }, [activePrepItem, activePrepDetails, focusedActionContext])
 
   // Fetch full details if event is from outside rolling horizon
-  const { data: fetchedEvent } = useQuery({
+  const { data: fetchedEvent, isFetching: isFetchingEvent } = useQuery({
     queryKey: ['event-details', selectedSidecarEventId],
     queryFn: () => selectedSidecarEventId ? fetchEventDetails(selectedSidecarEventId) : null,
     enabled: Boolean(selectedSidecarEventId),
@@ -96,6 +96,13 @@ export default function SidecarCompanion({
 
     return null
   }, [fetchedEvent, rollingEvents, selectedSidecarEventId, queryClient])
+
+  // Auto-close sidecar if the event was deleted / no longer exists
+  useEffect(() => {
+    if (sidecarTab === 'event' && selectedSidecarEventId && !selectedEvent && !isFetchingEvent) {
+      closeSidecar()
+    }
+  }, [sidecarTab, selectedSidecarEventId, selectedEvent, isFetchingEvent, closeSidecar])
 
   const [windowWidth, setWindowWidth] = useState(() => (typeof window !== 'undefined' ? window.innerWidth : 1280))
   const isMobile = windowWidth < 640
@@ -159,9 +166,8 @@ export default function SidecarCompanion({
   const snoozePrepItem = useSnoozePrepItem()
 
   const isActionView = sidecarTab === 'action' && Boolean(selectedSidecarActionId)
-  const isEventView = sidecarTab === 'event' && Boolean(selectedEvent)
-  const isFrontView = isActionView || isEventView
-  const isFlippedToAi = !isFrontView
+  const isFlippedToAi = sidecarTab === 'ai'
+  const isFrontView = !isFlippedToAi
 
   const sidecarContent = (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden relative w-full h-full sidecar-flip-viewport [perspective:1200px]">

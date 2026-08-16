@@ -559,9 +559,9 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     setDeleting(true)
     setDeleteError(null)
     try {
-      await deleteCalendarEvent(supabase, queryClient, initialEvent.id)
       setShowDeleteConfirm(false)
       onClose?.()
+      await deleteCalendarEvent(supabase, queryClient, initialEvent.id)
     } catch (err) {
       setDeleteError(err instanceof Error ? err.message : 'Could not delete this event.')
     } finally {
@@ -590,6 +590,8 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
       }
       const actionId = recurringDeleteActionIdRef.current ?? crypto.randomUUID()
       recurringDeleteActionIdRef.current = actionId
+      setShowDeleteScopeModal(false)
+      onClose?.()
       const result = await deleteRecurringEditorMutation({
         selected_event_id: initialEvent.id,
         action_id: actionId,
@@ -600,8 +602,6 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
       recurringDeleteActionIdRef.current = null
       invalidateCalendar()
       announceRecurringDelete({ ...result, title: initialEvent.title, scope })
-      setShowDeleteScopeModal(false)
-      onClose?.()
     } catch (err) {
       setDeleteError(err instanceof Error ? err.message : 'Could not delete the selected recurring events.')
     } finally {

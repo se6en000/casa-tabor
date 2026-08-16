@@ -26,9 +26,13 @@ export default function LivingFlowSidecar({
   const handleAnimatedClose = () => {
     if (isClosing) return
     setIsClosing(true)
-    setTimeout(() => {
+    if (embedded) {
       onClose()
-    }, 220)
+    } else {
+      setTimeout(() => {
+        onClose()
+      }, 220)
+    }
   }
 
   const {
