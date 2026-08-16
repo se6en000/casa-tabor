@@ -6,6 +6,8 @@ import {
   CalendarPlus,
   Camera,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Clock3,
   GripVertical,
   Layers,
@@ -603,6 +605,7 @@ export default function CookPage() {
   const [recipeGrocerySelections, setRecipeGrocerySelections] = useState<Record<string, Set<number>>>({})
 
   // Drag-and-Drop Weekly Horizon State
+  const [horizonExpanded, setHorizonExpanded] = useState(false)
   const [draggingHorizonDateStr, setDraggingHorizonDateStr] = useState<string | null>(null)
   const [dragOverHorizonDateStr, setDragOverHorizonDateStr] = useState<string | null>(null)
   const [justSwappedDates, setJustSwappedDates] = useState<{ dates: [string, string]; type: 'swap' | 'move' } | null>(null)
@@ -2033,6 +2036,9 @@ export default function CookPage() {
     const touch = e.touches[0]
     if (!touch) return
     const el = document.elementFromPoint(touch.clientX, touch.clientY)
+    if (el?.closest('[data-horizon-upcoming-drawer]')) {
+      setHorizonExpanded(true)
+    }
     const dayCard = el?.closest('[data-horizon-date]')
     const targetDateStr = dayCard?.getAttribute('data-horizon-date')
     if (targetDateStr && targetDateStr !== dragOverHorizonDateStr) {
@@ -3783,7 +3789,8 @@ export default function CookPage() {
                   )}
 
                   <div className="space-y-2.5" onTouchMove={handleHorizonTouchMove}>
-                    {weekDayMeals.map(({ day, plan, recipe }) => {
+                    {/* Primary Focus: Today & Tomorrow */}
+                    {weekDayMeals.slice(0, 2).map(({ day, plan, recipe }) => {
                       const isAssigned = Boolean(plan && recipe)
                       const isToday = day.isToday
                       const isDragging = draggingHorizonDateStr === day.dateStr
@@ -3805,13 +3812,11 @@ export default function CookPage() {
                           animate={
                             isJustSwapped
                               ? {
-                                  scale: [1, 1.035, 0.985, 1],
-                                  transition: { duration: 0.7, ease: 'easeOut' },
+                                  scale: [1, 1.015, 0.995, 1],
+                                  transition: { duration: 0.65, ease: 'easeOut' },
                                 }
                               : isDragging
-                              ? { scale: 0.96, opacity: 0.45 }
-                              : isDragOver
-                              ? { scale: 1.025 }
+                              ? { scale: 0.97, opacity: 0.45 }
                               : { scale: 1, opacity: 1 }
                           }
                           transition={{
@@ -3819,9 +3824,9 @@ export default function CookPage() {
                           }}
                           className={cn(
                             'p-3 rounded-2xl border transition-colors duration-200 select-none relative overflow-hidden',
-                            isJustSwapped && 'border-casa-gold ring-2 ring-casa-gold/60 bg-casa-gold/10 shadow-md',
+                            isJustSwapped && 'border-casa-gold ring-2 ring-inset ring-casa-gold/60 bg-casa-gold/10 shadow-sm',
                             isDragging && 'border-dashed border-casa-gold/60',
-                            isDragOver && 'border-casa-gold ring-2 ring-casa-gold/60 bg-casa-gold/15 shadow-card-hover',
+                            isDragOver && 'border-casa-gold ring-2 ring-inset ring-casa-gold/70 bg-casa-gold/15 shadow-sm',
                             !isJustSwapped && !isDragging && !isDragOver && (
                               isToday
                                 ? 'bg-casa-surface border-casa-gold/60 shadow-subtle ring-1 ring-casa-gold/30'
@@ -4005,6 +4010,290 @@ export default function CookPage() {
                         </motion.div>
                       )
                     })}
+
+                    {/* Collapsible 5-Day Upcoming Horizon */}
+                    {weekDayMeals.length > 2 && (
+                      <div
+                        data-horizon-upcoming-drawer="true"
+                        onDragOver={() => {
+                          if (!horizonExpanded) setHorizonExpanded(true)
+                        }}
+                        className="pt-1"
+                      >
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => setHorizonExpanded((prev) => !prev)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              setHorizonExpanded((prev) => !prev)
+                            }
+                          }}
+                          className={cn(
+                            'w-full flex items-center justify-between gap-2 p-2.5 rounded-xl border transition-all duration-200 text-left min-h-[44px] cursor-pointer select-none',
+                            horizonExpanded
+                              ? 'bg-casa-surface/90 border-casa-border text-casa-navy'
+                              : 'bg-casa-surface/60 border-dashed border-casa-border/80 hover:border-casa-gold/60 hover:bg-casa-surface text-casa-muted'
+                          )}
+                          aria-expanded={horizonExpanded}
+                        >
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <CalendarPlus size={13} className="text-casa-gold shrink-0" />
+                              <span className="font-display text-caption font-bold text-casa-navy">
+                                Upcoming Days (5)
+                              </span>
+                            </div>
+
+                            {/* Minimal single-letter counts */}
+                            <div className="flex items-center gap-1 shrink-0 ml-1 overflow-hidden">
+                              {weekDayMeals.slice(2).map(({ day, plan, recipe }) => {
+                                const isSet = Boolean(plan && recipe)
+                                const letter = day.dayName.charAt(0)
+                                return (
+                                  <span
+                                    key={day.dateStr}
+                                    title={`${day.dayName} (${day.formattedDate}): ${isSet ? recipe?.name : 'No meal scheduled'}`}
+                                    className={cn(
+                                      'inline-flex items-center justify-center gap-0.5 text-2xs font-mono font-bold px-1.5 py-0.5 rounded-md border',
+                                      isSet
+                                        ? 'bg-emerald-50 text-emerald-800 border-emerald-200/70'
+                                        : 'bg-casa-bg text-casa-muted/70 border-casa-border/60'
+                                    )}
+                                  >
+                                    <span>{letter}</span>
+                                    {isSet ? (
+                                      <CheckCircle2 size={9} className="text-emerald-600 shrink-0" />
+                                    ) : (
+                                      <Plus size={8} className="text-casa-muted/60 shrink-0" />
+                                    )}
+                                  </span>
+                                )
+                              })}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0 text-caption font-semibold text-casa-gold">
+                            <span className="text-2xs font-mono text-casa-muted">
+                              {weekDayMeals.slice(2).filter((m) => Boolean(m.plan && m.recipe)).length}/5 planned
+                            </span>
+                            {horizonExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                          </div>
+                        </div>
+
+                        <AnimatePresence>
+                          {horizonExpanded && (
+                            <motion.div
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: 'auto' }}
+                              exit={{ opacity: 0, height: 0 }}
+                              transition={{ duration: 0.3, ease: 'easeInOut' }}
+                              className="space-y-2.5 pt-2.5 px-0.5 -mx-0.5"
+                            >
+                              {weekDayMeals.slice(2).map(({ day, plan, recipe }) => {
+                                const isAssigned = Boolean(plan && recipe)
+                                const isDragging = draggingHorizonDateStr === day.dateStr
+                                const isDragOver = dragOverHorizonDateStr === day.dateStr && draggingHorizonDateStr !== day.dateStr
+                                const isJustSwapped = justSwappedDates?.dates.includes(day.dateStr)
+
+                                return (
+                                  <motion.div
+                                    layout
+                                    key={day.dateStr}
+                                    data-horizon-date={day.dateStr}
+                                    draggable={isAssigned}
+                                    onDragStartCapture={(e) => handleHorizonDragStart(e as unknown as React.DragEvent, day.dateStr, isAssigned)}
+                                    onDragOverCapture={(e) => handleHorizonDragOver(e as unknown as React.DragEvent, day.dateStr)}
+                                    onDragLeaveCapture={(e) => handleHorizonDragLeave(e as unknown as React.DragEvent, day.dateStr)}
+                                    onDropCapture={(e) => handleHorizonDrop(e as unknown as React.DragEvent, day.dateStr)}
+                                    onTouchEnd={handleHorizonTouchEnd}
+                                    initial={false}
+                                    animate={
+                                      isJustSwapped
+                                        ? {
+                                            scale: [1, 1.015, 0.995, 1],
+                                            transition: { duration: 0.65, ease: 'easeOut' },
+                                          }
+                                        : isDragging
+                                        ? { scale: 0.97, opacity: 0.45 }
+                                        : { scale: 1, opacity: 1 }
+                                    }
+                                    transition={{
+                                      layout: { type: 'spring', stiffness: 350, damping: 26 },
+                                    }}
+                                    className={cn(
+                                      'p-3 rounded-2xl border transition-colors duration-200 select-none relative overflow-hidden',
+                                      isJustSwapped && 'border-casa-gold ring-2 ring-inset ring-casa-gold/60 bg-casa-gold/10 shadow-sm',
+                                      isDragging && 'border-dashed border-casa-gold/60',
+                                      isDragOver && 'border-casa-gold ring-2 ring-inset ring-casa-gold/70 bg-casa-gold/15 shadow-sm',
+                                      !isJustSwapped && !isDragging && !isDragOver && (
+                                        isAssigned
+                                          ? 'bg-casa-surface/80 border-casa-border/80 hover:border-casa-border hover:shadow-2xs'
+                                          : 'bg-casa-bg/60 border-dashed border-casa-border/70 hover:border-casa-gold/40'
+                                      )
+                                    )}
+                                  >
+                                    {isJustSwapped && (
+                                      <motion.div
+                                        initial={{ x: '-100%' }}
+                                        animate={{ x: '200%' }}
+                                        transition={{ duration: 0.85, ease: 'easeInOut' }}
+                                        className="absolute inset-0 bg-gradient-to-r from-transparent via-casa-gold/30 to-transparent pointer-events-none -skew-x-12 z-10"
+                                      />
+                                    )}
+
+                                    <div className="flex items-center justify-between gap-2 mb-2 relative z-0">
+                                      <div className="flex items-center gap-2">
+                                        {isAssigned && (
+                                          <div
+                                            onTouchStart={() => handleHorizonTouchStart(day.dateStr, isAssigned)}
+                                            className="touch-none cursor-grab active:cursor-grabbing p-1 -ml-1 text-casa-muted/60 hover:text-casa-navy transition-colors shrink-0 flex items-center justify-center"
+                                            title="Drag with finger or mouse to move or swap day"
+                                            aria-label="Drag recipe to reorder day"
+                                          >
+                                            <GripVertical size={16} />
+                                          </div>
+                                        )}
+                                        <span className="text-caption font-mono font-bold px-2 py-0.5 rounded-md uppercase tracking-wider bg-casa-surface border border-casa-border/60 text-casa-muted">
+                                          {day.dayName} · {day.formattedDate}
+                                        </span>
+
+                                        <AnimatePresence>
+                                          {isJustSwapped && (
+                                            <motion.span
+                                              initial={{ opacity: 0, scale: 0.6, x: -6 }}
+                                              animate={{ opacity: 1, scale: 1, x: 0 }}
+                                              exit={{ opacity: 0, scale: 0.6, x: -6 }}
+                                              transition={{ duration: 0.25 }}
+                                              className="inline-flex items-center gap-1 text-2xs font-mono font-bold px-2 py-0.5 rounded-full bg-casa-gold text-white shadow-2xs"
+                                            >
+                                              {justSwappedDates?.type === 'swap' ? '⇄ Swapped' : '✓ Moved'}
+                                            </motion.span>
+                                          )}
+                                        </AnimatePresence>
+                                      </div>
+                                      {isAssigned && recipe?.cook_time && (
+                                        <span className="inline-flex items-center gap-1 text-2xs font-mono text-casa-muted">
+                                          <Clock3 size={11} className="text-casa-gold" />
+                                          {recipe.cook_time}
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    {isAssigned && recipe ? (
+                                      <div className="flex items-center justify-between gap-3">
+                                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                          {recipe.image_url && (
+                                            <img
+                                              src={recipe.image_url}
+                                              alt={recipe.name}
+                                              className="w-11 h-11 rounded-xl object-cover border border-casa-border shrink-0"
+                                            />
+                                          )}
+                                          <div className="min-w-0 flex-1">
+                                            <p className="font-display text-body-sm font-bold text-casa-navy truncate">
+                                              {recipe.name}
+                                            </p>
+                                            <p className="text-2xs text-casa-muted truncate">
+                                              {recipe.servings ? `${recipe.servings} serv` : 'Family size'} · Chef: Jake & Kelly
+                                            </p>
+                                          </div>
+                                        </div>
+
+                                        <div className="flex items-center gap-1 shrink-0">
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => openRecipeForCookMode(recipe.id)}
+                                            className="font-semibold min-h-[32px] px-2.5 text-caption text-casa-navy hover:text-casa-gold"
+                                          >
+                                            View
+                                          </Button>
+                                          <Button
+                                            variant="secondary"
+                                            size="sm"
+                                            onClick={() => plan && void markPlannedMealCooked(plan, recipe)}
+                                            disabled={plannedMealActionId !== null}
+                                            className="font-semibold min-h-[32px] px-2 text-caption"
+                                          >
+                                            Done
+                                          </Button>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() =>
+                                              setAssigningDay({
+                                                slot: day.slot,
+                                                dateStr: day.dateStr,
+                                                dayLabel: `${day.dayName} (${day.formattedDate})`,
+                                              })
+                                            }
+                                            className="font-semibold min-h-[32px] px-2 text-caption text-casa-gold hover:text-amber-800"
+                                          >
+                                            Swap
+                                          </Button>
+                                          <IconButton
+                                            icon={<Trash2 size={13} />}
+                                            variant="danger"
+                                            size="sm"
+                                            onClick={() => plan && void removePlannedMeal(plan, recipe)}
+                                            disabled={plannedMealActionId !== null}
+                                            aria-label={`Remove ${recipe.name}`}
+                                          />
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <div className="flex items-center justify-between gap-2 py-1">
+                                        <span className="text-caption text-casa-muted italic">No dinner scheduled</span>
+                                        <div className="flex items-center gap-1.5">
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            leadingIcon={<Plus size={13} className="text-casa-gold" />}
+                                            onClick={() =>
+                                              setAssigningDay({
+                                                slot: day.slot,
+                                                dateStr: day.dateStr,
+                                                dayLabel: `${day.dayName} (${day.formattedDate})`,
+                                              })
+                                            }
+                                            className="text-caption font-bold text-casa-gold hover:text-amber-800 min-h-[30px] px-2.5"
+                                          >
+                                            Assign
+                                          </Button>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            leadingIcon={<Sparkles size={12} className="text-casa-muted" />}
+                                            onClick={() =>
+                                              document.dispatchEvent(
+                                                new CustomEvent('open-ai-chat', {
+                                                  detail: {
+                                                    launchId: crypto.randomUUID(),
+                                                    agent: 'chef',
+                                                    source: 'tonights-kitchen',
+                                                    prompt: `Suggest a delicious weeknight recipe for ${day.dayName} (${day.formattedDate}) using ingredients we already have in our pantry stock.`,
+                                                    autoSend: true,
+                                                  },
+                                                })
+                                              )
+                                            }
+                                            className="text-2xs font-semibold text-casa-muted hover:text-casa-navy min-h-[30px] px-2"
+                                          >
+                                            AI Suggest
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </motion.div>
+                                )
+                              })}
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    )}
                   </div>
                 </div>
 

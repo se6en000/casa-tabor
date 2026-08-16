@@ -30,6 +30,7 @@ import { useGroceryList, GROCERY_CATEGORIES, type GroceryItem } from '../hooks/u
 import { inferCategoryFromName } from '../utils/groceryCategorization'
 import GroceryCommandBar from '../components/grocery/GroceryCommandBar'
 import GroceryAisleGrid from '../components/grocery/GroceryAisleGrid'
+import MobileGroceryView from '../components/mobile/MobileGroceryView'
 import { normalizeRecipeIngredientFields } from '../utils/recipeIngredientParsing'
 import { supabase } from '../lib/supabase'
 import { formatSupabaseError } from '../lib/formatSupabaseError'
@@ -1595,220 +1596,253 @@ export default function GroceryPage() {
     : null
 
   return (
-    <div className="h-full min-h-0 flex-1 overflow-y-auto overscroll-contain touch-pan-y bg-casa-bg">
-      <PageShell width="full" className="space-y-4 p-3 sm:p-4 lg:p-6 pb-36 lg:pb-16 text-casa-text">
-        <GroceryCommandBar
+    <div className="h-full min-h-0 flex-1 overflow-hidden bg-casa-bg">
+      {/* ── Mobile-Specific Simplified Shopping Checklist (< lg) ── */}
+      <div className="block lg:hidden h-full min-h-0 overflow-y-auto overscroll-contain touch-pan-y">
+        <MobileGroceryView
+          items={items}
+          activeCategories={activeItemsByCategory.map((cat) => ({
+            key: cat.key,
+            label: splitCategoryLabel(cat.label),
+            items: cat.items,
+            visual: CATEGORY_VISUAL_BY_KEY[cat.key] ?? DEFAULT_CATEGORY_VISUAL,
+          }))}
+          completedItems={items.filter((i) => i.checked && !visibleDismissIds.has(i.id))}
           uncheckedCount={uncheckedCount}
           checkedCount={checkedCount}
           syncStatusLabel={syncStatusLabel}
-          inputValue={inputValue}
-          inputRef={inputRef}
-          mergeSuggestion={mergeSuggestion}
-          onInputChange={setInputValue}
-          onInputKeyDown={handleKeyDown}
-          onAddItem={handleAddItem}
-          onQuickAdd={handleQuickAdd}
-          onSpotlightItem={(id) => window.setTimeout(() => spotlightItem(id), 120)}
-          onForceAddSuggestion={() => {
-            const nextName = inputValue.trim()
-            if (!nextName || !defaultListId) return
-            const category = inferCategoryFromName(nextName)
-            addItem.mutate({ list_id: defaultListId, name: nextName, quantity: null, unit: null, category, checked: false, notes: null })
-            setInputValue('')
-            inputRef.current?.focus()
-          }}
-          onClearChecked={() => void clearChecked.mutate()}
+          dismissingIds={dismissingIds}
+          dismissingExitingIds={dismissingExitingIds}
+          spotlightedItemId={spotlightedItemId}
+          onToggleItem={handleToggle}
+          onDeleteItem={(id) => deleteItem.mutate(id)}
+          onClearCompleted={() => void clearChecked.mutate()}
+          onAddItem={(name, options) =>
+            addItemByName(name, {
+              allowDuplicate: options?.allowDuplicate,
+              spotlightOnDuplicate: !options?.allowDuplicate,
+              clearInput: true,
+            })
+          }
         />
+      </div>
 
-        {syncError && <Alert tone="danger" title="Grocery sync failed" className="mb-3">{syncError}</Alert>}
-        {pantryReconcileError && <Alert tone="danger" title="Pantry restock failed" className="mb-3">{pantryReconcileError}</Alert>}
-        {!pantryReconcileError && pantryReconcileMessage && (
-          <Alert tone="success" title="Pantry restock updated" className="mb-3">{pantryReconcileMessage}</Alert>
-        )}
+      {/* ── Desktop & Touch Kiosk Multi-Column View (>= lg) ── */}
+      <div className="hidden lg:block h-full min-h-0 overflow-y-auto overscroll-contain touch-pan-y">
+        <PageShell width="full" className="space-y-4 p-3 sm:p-4 lg:p-6 pb-36 lg:pb-16 text-casa-text">
+          <GroceryCommandBar
+            uncheckedCount={uncheckedCount}
+            checkedCount={checkedCount}
+            syncStatusLabel={syncStatusLabel}
+            inputValue={inputValue}
+            inputRef={inputRef}
+            mergeSuggestion={mergeSuggestion}
+            onInputChange={setInputValue}
+            onInputKeyDown={handleKeyDown}
+            onAddItem={handleAddItem}
+            onQuickAdd={handleQuickAdd}
+            onSpotlightItem={(id) => window.setTimeout(() => spotlightItem(id), 120)}
+            onForceAddSuggestion={() => {
+              const nextName = inputValue.trim()
+              if (!nextName || !defaultListId) return
+              const category = inferCategoryFromName(nextName)
+              addItem.mutate({ list_id: defaultListId, name: nextName, quantity: null, unit: null, category, checked: false, notes: null })
+              setInputValue('')
+              inputRef.current?.focus()
+            }}
+            onClearChecked={() => void clearChecked.mutate()}
+          />
 
-        {/* Pantry Restock Review Draft */}
-        {pantryReconcileDraft && (
-          <div className="pb-3">
-            <Card padding="md" tone="surface" className="rounded-3xl border-casa-border shadow-widget">
-              <Text role="body-sm" className="font-display font-bold text-casa-navy">
-                Review pantry restock ({pantryReconcileDraft.rows.length} items)
-              </Text>
-              <Text role="caption" muted className="mt-0.5">
-                Adjust package counts before committing to pantry inventory.
-              </Text>
-              <div className="mt-3 max-h-60 space-y-2 overflow-y-auto pr-1">
-                {pantryReconcileRowsByCategory.map((group) => (
-                  <div key={`reconcile-group-${group.category}`} className="rounded-2xl border border-casa-border bg-casa-bg/60 p-3">
-                    <Text role="caption" muted className="font-mono font-bold uppercase tracking-wider text-2xs text-casa-navy">
-                      {GROCERY_CATEGORIES.find((category) => category.key === group.category)?.label ?? group.category}
-                    </Text>
-                    <div className="mt-2 grid grid-cols-1 gap-2 lg:grid-cols-4">
-                      {group.rows.map((row) => (
-                        <div key={`reconcile-draft-${row.item_id}`} className="rounded-xl border border-casa-border bg-casa-surface p-2.5 shadow-2xs">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <Text role="caption" className="truncate font-semibold text-casa-navy">{row.name}</Text>
-                              <Text role="caption" muted className="text-2xs">
-                                {row.package_unit || 'pack'}{row.package_size ? ` · ${row.package_size}` : ''}
-                              </Text>
-                            </div>
-                            <IconButton
-                              icon={<Trash2 size={13} />}
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => removePantryReconcileDraftRow(row.item_id)}
-                              aria-label={`Remove ${row.name} from pantry restock review`}
-                              className="text-casa-muted hover:text-casa-error hover:bg-casa-error/10 -mr-1 -mt-1"
-                              title="Remove from review"
-                            />
-                          </div>
-                          <div className="mt-2 grid grid-cols-3 gap-1">
-                            <Chip
-                              tone={row.review_status === 'out' ? 'danger' : 'neutral'}
-                              selected={row.review_status === 'out'}
-                              onClick={() => updatePantryReconcileRowStatus(row.item_id, 'out')}
-                              size="sm"
-                              className="justify-center"
-                            >
-                              Out
-                            </Chip>
-                            <Chip
-                              tone={row.review_status === 'low' ? 'warning' : 'neutral'}
-                              selected={row.review_status === 'low'}
-                              onClick={() => updatePantryReconcileRowStatus(row.item_id, 'low')}
-                              size="sm"
-                              className="justify-center"
-                            >
-                              Low
-                            </Chip>
-                            <Chip
-                              tone={row.review_status === 'ok' ? 'success' : 'neutral'}
-                              selected={row.review_status === 'ok'}
-                              onClick={() => updatePantryReconcileRowStatus(row.item_id, 'ok')}
-                              size="sm"
-                              className="justify-center"
-                            >
-                              OK
-                            </Chip>
-                          </div>
-                          {row.review_status === 'ok' && (
-                            <div className="mt-1.5">
-                              <Button
+          {syncError && <Alert tone="danger" title="Grocery sync failed" className="mb-3">{syncError}</Alert>}
+          {pantryReconcileError && <Alert tone="danger" title="Pantry restock failed" className="mb-3">{pantryReconcileError}</Alert>}
+          {!pantryReconcileError && pantryReconcileMessage && (
+            <Alert tone="success" title="Pantry restock updated" className="mb-3">{pantryReconcileMessage}</Alert>
+          )}
+
+          {/* Pantry Restock Review Draft */}
+          {pantryReconcileDraft && (
+            <div className="pb-3">
+              <Card padding="md" tone="surface" className="rounded-3xl border-casa-border shadow-widget">
+                <Text role="body-sm" className="font-display font-bold text-casa-navy">
+                  Review pantry restock ({pantryReconcileDraft.rows.length} items)
+                </Text>
+                <Text role="caption" muted className="mt-0.5">
+                  Adjust package counts before committing to pantry inventory.
+                </Text>
+                <div className="mt-3 max-h-60 space-y-2 overflow-y-auto pr-1">
+                  {pantryReconcileRowsByCategory.map((group) => (
+                    <div key={`reconcile-group-${group.category}`} className="rounded-2xl border border-casa-border bg-casa-bg/60 p-3">
+                      <Text role="caption" muted className="font-mono font-bold uppercase tracking-wider text-2xs text-casa-navy">
+                        {GROCERY_CATEGORIES.find((category) => category.key === group.category)?.label ?? group.category}
+                      </Text>
+                      <div className="mt-2 grid grid-cols-1 gap-2 lg:grid-cols-4">
+                        {group.rows.map((row) => (
+                          <div key={`reconcile-draft-${row.item_id}`} className="rounded-xl border border-casa-border bg-casa-surface p-2.5 shadow-2xs">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <Text role="caption" className="truncate font-semibold text-casa-navy">{row.name}</Text>
+                                <Text role="caption" muted className="text-2xs">
+                                  {row.package_unit || 'pack'}{row.package_size ? ` · ${row.package_size}` : ''}
+                                </Text>
+                              </div>
+                              <IconButton
+                                icon={<Trash2 size={13} />}
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => toggleReconcileQtyEditor(row.item_id)}
-                                className="text-2xs text-casa-muted hover:text-casa-navy px-1 py-0 min-h-0"
-                              >
-                                Qty: {row.package_count} {expandedReconcileQtyIds.has(row.item_id) ? '▲' : '▼'}
-                              </Button>
-                              {expandedReconcileQtyIds.has(row.item_id) && (
-                                <div className="mt-1.5 flex items-center gap-1">
-                                  <IconButton
-                                    icon={<Minus size={13} />}
-                                    variant="secondary"
-                                    size="sm"
-                                    onClick={() => updatePantryReconcileDraftRow(row.item_id, Math.max(0, row.package_count - 0.25))}
-                                    aria-label={`Decrease ${row.name} restock quantity`}
-                                  />
-                                  <Input
-                                    type="number"
-                                    min={0}
-                                    step={0.25}
-                                    value={row.package_count}
-                                    onChange={(event) => updatePantryReconcileDraftRow(row.item_id, Number(event.target.value))}
-                                    className="w-16 text-center text-caption py-1"
-                                    aria-label={`${row.name} restock quantity`}
-                                  />
-                                  <IconButton
-                                    icon={<Plus size={13} />}
-                                    variant="secondary"
-                                    size="sm"
-                                    onClick={() => updatePantryReconcileDraftRow(row.item_id, row.package_count + 0.25)}
-                                    aria-label={`Increase ${row.name} restock quantity`}
-                                  />
-                                </div>
-                              )}
+                                onClick={() => removePantryReconcileDraftRow(row.item_id)}
+                                aria-label={`Remove ${row.name} from pantry restock review`}
+                                className="text-casa-muted hover:text-casa-error hover:bg-casa-error/10 -mr-1 -mt-1"
+                                title="Remove from review"
+                              />
                             </div>
-                          )}
-                        </div>
-                      ))}
+                            <div className="mt-2 grid grid-cols-3 gap-1">
+                              <Chip
+                                tone={row.review_status === 'out' ? 'danger' : 'neutral'}
+                                selected={row.review_status === 'out'}
+                                onClick={() => updatePantryReconcileRowStatus(row.item_id, 'out')}
+                                size="sm"
+                                className="justify-center"
+                              >
+                                Out
+                              </Chip>
+                              <Chip
+                                tone={row.review_status === 'low' ? 'warning' : 'neutral'}
+                                selected={row.review_status === 'low'}
+                                onClick={() => updatePantryReconcileRowStatus(row.item_id, 'low')}
+                                size="sm"
+                                className="justify-center"
+                              >
+                                Low
+                              </Chip>
+                              <Chip
+                                tone={row.review_status === 'ok' ? 'success' : 'neutral'}
+                                selected={row.review_status === 'ok'}
+                                onClick={() => updatePantryReconcileRowStatus(row.item_id, 'ok')}
+                                size="sm"
+                                className="justify-center"
+                              >
+                                OK
+                              </Chip>
+                            </div>
+                            {row.review_status === 'ok' && (
+                              <div className="mt-1.5">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => toggleReconcileQtyEditor(row.item_id)}
+                                  className="text-2xs text-casa-muted hover:text-casa-navy px-1 py-0 min-h-0"
+                                >
+                                  Qty: {row.package_count} {expandedReconcileQtyIds.has(row.item_id) ? '▲' : '▼'}
+                                </Button>
+                                {expandedReconcileQtyIds.has(row.item_id) && (
+                                  <div className="mt-1.5 flex items-center gap-1">
+                                    <IconButton
+                                      icon={<Minus size={13} />}
+                                      variant="secondary"
+                                      size="sm"
+                                      onClick={() => updatePantryReconcileDraftRow(row.item_id, Math.max(0, row.package_count - 0.25))}
+                                      aria-label={`Decrease ${row.name} restock quantity`}
+                                    />
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      step={0.25}
+                                      value={row.package_count}
+                                      onChange={(event) => updatePantryReconcileDraftRow(row.item_id, Number(event.target.value))}
+                                      className="w-16 text-center text-caption py-1"
+                                      aria-label={`${row.name} restock quantity`}
+                                    />
+                                    <IconButton
+                                      icon={<Plus size={13} />}
+                                      variant="secondary"
+                                      size="sm"
+                                      onClick={() => updatePantryReconcileDraftRow(row.item_id, row.package_count + 0.25)}
+                                      aria-label={`Increase ${row.name} restock quantity`}
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-3 flex items-center gap-2">
-                <Button
-                  variant="champagne"
-                  size="sm"
-                  onClick={() => void handleReconcilePantryFromDone()}
-                  disabled={reconcilingPantry}
-                  loading={reconcilingPantry}
-                  className="font-bold"
-                >
-                  Confirm restock
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    setPantryReconcileDraft(null)
-                    setExpandedReconcileQtyIds(new Set())
-                  }}
-                  disabled={reconcilingPantry}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </Card>
-          </div>
-        )}
+                  ))}
+                </div>
+                <div className="mt-3 flex items-center gap-2">
+                  <Button
+                    variant="champagne"
+                    size="sm"
+                    onClick={() => void handleReconcilePantryFromDone()}
+                    disabled={reconcilingPantry}
+                    loading={reconcilingPantry}
+                    className="font-bold"
+                  >
+                    Confirm restock
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      setPantryReconcileDraft(null)
+                      setExpandedReconcileQtyIds(new Set())
+                    }}
+                    disabled={reconcilingPantry}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </Card>
+            </div>
+          )}
 
-        {/* Content Body */}
-        {isLoading ? (
-          <div className="pt-4 space-y-4">
-            {[...Array(3)].map((_, i) => (
-              <div key={i} className="animate-pulse space-y-2">
-                <div className="h-4 bg-casa-divider rounded w-32 mb-2" />
-                <div className="h-28 bg-casa-surface rounded-2xl border border-casa-border" />
-              </div>
-            ))}
-          </div>
-        ) : (
-          <GroceryAisleGrid
-            sections={activeItemsByCategory.map((cat) => ({
-              key: cat.key,
-              label: splitCategoryLabel(cat.label),
-              items: cat.items,
-              dropKey: cat.key,
-              visual: CATEGORY_VISUAL_BY_KEY[cat.key] ?? DEFAULT_CATEGORY_VISUAL,
-              reviewCount: cat.items.filter((item) =>
-                typeof item.enhancement_confidence === 'number' &&
-                item.enhancement_confidence < LOW_CONFIDENCE_REVIEW_THRESHOLD
-              ).length,
-            }))}
-            completedSections={completedItemsByCategory.map((cat) => ({
-              key: cat.key,
-              label: splitCategoryLabel(cat.label),
-              items: cat.items,
-            }))}
-            showCompletedArchive={showCompletedArchive}
-            onToggleCompletedArchive={() => setShowCompletedArchive((prev) => !prev)}
-            onClearCompleted={() => void clearChecked.mutate()}
-            dragState={dragState}
-            dragOverCategory={dragOverCategory}
-            spotlightedItemId={spotlightedItemId}
-            dismissingIds={dismissingIds}
-            dismissingExitingIds={dismissingExitingIds}
-            onToggleItem={handleToggle}
-            onDeleteItem={(id) => deleteItem.mutate(id)}
-            onRequestReview={setReviewingItemId}
-            onMovePointerDown={handleMovePointerDown}
-            onMovePointerMove={handleMovePointerMove}
-            onMovePointerUp={handleMovePointerUp}
-            onMovePointerCancel={handleMovePointerCancel}
-          />
-        )}
-      </PageShell>
+          {/* Content Body */}
+          {isLoading ? (
+            <div className="pt-4 space-y-4">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="animate-pulse space-y-2">
+                  <div className="h-4 bg-casa-divider rounded w-32 mb-2" />
+                  <div className="h-28 bg-casa-surface rounded-2xl border border-casa-border" />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <GroceryAisleGrid
+              sections={activeItemsByCategory.map((cat) => ({
+                key: cat.key,
+                label: splitCategoryLabel(cat.label),
+                items: cat.items,
+                dropKey: cat.key,
+                visual: CATEGORY_VISUAL_BY_KEY[cat.key] ?? DEFAULT_CATEGORY_VISUAL,
+                reviewCount: cat.items.filter((item) =>
+                  typeof item.enhancement_confidence === 'number' &&
+                  item.enhancement_confidence < LOW_CONFIDENCE_REVIEW_THRESHOLD
+                ).length,
+              }))}
+              completedSections={completedItemsByCategory.map((cat) => ({
+                key: cat.key,
+                label: splitCategoryLabel(cat.label),
+                items: cat.items,
+              }))}
+              showCompletedArchive={showCompletedArchive}
+              onToggleCompletedArchive={() => setShowCompletedArchive((prev) => !prev)}
+              onClearCompleted={() => void clearChecked.mutate()}
+              dragState={dragState}
+              dragOverCategory={dragOverCategory}
+              spotlightedItemId={spotlightedItemId}
+              dismissingIds={dismissingIds}
+              dismissingExitingIds={dismissingExitingIds}
+              onToggleItem={handleToggle}
+              onDeleteItem={(id) => deleteItem.mutate(id)}
+              onRequestReview={setReviewingItemId}
+              onMovePointerDown={handleMovePointerDown}
+              onMovePointerMove={handleMovePointerMove}
+              onMovePointerUp={handleMovePointerUp}
+              onMovePointerCancel={handleMovePointerCancel}
+            />
+          )}
+        </PageShell>
+      </div>
       <Modal
         open={reviewingItem !== null}
         onClose={() => setReviewingItemId(null)}
