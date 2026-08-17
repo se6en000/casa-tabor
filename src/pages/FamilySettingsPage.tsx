@@ -86,35 +86,170 @@ function formatExceptionWindow(exception: MemberAvailabilityException): string {
   return `${dateLabel} · ${startTime}–${endTime}`
 }
 
+export const DEFAULT_CASA_TABOR_MEMBERS: FamilyMember[] = [
+  {
+    id: 'member-jake',
+    name: 'Jake',
+    full_name: 'Jacob Tabor',
+    role: 'parent',
+    color_hex: PROFILE_COLOR_OPTIONS[0].hex,
+    color_name: 'Navy',
+    phone: '+1 (561) 555-0101',
+    email: 'jake@casatabor.com',
+    google_calendar_id: null,
+    can_drive: true,
+    availability_mode: 'flexible',
+    show_on_home_sidebar: true,
+    is_admin: true,
+    avatar_url: null,
+    sort_order: 0,
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+  },
+  {
+    id: 'member-kelly',
+    name: 'Kelly',
+    full_name: 'Kelly Tabor',
+    role: 'parent',
+    color_hex: PROFILE_COLOR_OPTIONS[2].hex,
+    color_name: 'Forest',
+    phone: '+1 (561) 555-0102',
+    email: 'kelly@casatabor.com',
+    google_calendar_id: null,
+    can_drive: true,
+    availability_mode: 'strict',
+    show_on_home_sidebar: true,
+    is_admin: true,
+    avatar_url: null,
+    sort_order: 1,
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+  },
+  {
+    id: 'member-olivia',
+    name: 'Olivia',
+    full_name: 'Olivia Tabor',
+    role: 'child',
+    color_hex: PROFILE_COLOR_OPTIONS[3].hex,
+    color_name: 'Purple',
+    phone: null,
+    email: null,
+    google_calendar_id: null,
+    can_drive: false,
+    availability_mode: 'strict',
+    show_on_home_sidebar: true,
+    is_admin: false,
+    avatar_url: null,
+    sort_order: 2,
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+  },
+  {
+    id: 'member-owen',
+    name: 'Owen',
+    full_name: 'Owen Tabor',
+    role: 'child',
+    color_hex: PROFILE_COLOR_OPTIONS[4].hex,
+    color_name: 'Blue',
+    phone: null,
+    email: null,
+    google_calendar_id: null,
+    can_drive: false,
+    availability_mode: 'strict',
+    show_on_home_sidebar: true,
+    is_admin: false,
+    avatar_url: null,
+    sort_order: 3,
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+  },
+  {
+    id: 'member-emme',
+    name: 'Emme',
+    full_name: 'Emme Tabor',
+    role: 'child',
+    color_hex: PROFILE_COLOR_OPTIONS[1].hex,
+    color_name: 'Gold',
+    phone: null,
+    email: null,
+    google_calendar_id: null,
+    can_drive: false,
+    availability_mode: 'strict',
+    show_on_home_sidebar: true,
+    is_admin: false,
+    avatar_url: null,
+    sort_order: 4,
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+  },
+  {
+    id: 'member-giselle',
+    name: 'Giselle',
+    full_name: 'Giselle (Nanny / Driver)',
+    role: 'caregiver',
+    color_hex: PROFILE_COLOR_OPTIONS[8].hex,
+    color_name: 'Slate',
+    phone: '+1 (561) 555-0109',
+    email: 'giselle@casatabor.com',
+    google_calendar_id: null,
+    can_drive: true,
+    availability_mode: 'strict',
+    show_on_home_sidebar: true,
+    is_admin: false,
+    avatar_url: null,
+    sort_order: 5,
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+  },
+]
+
 export default function FamilySettingsPage() {
   const qc = useQueryClient()
-  const { data: members = [], isLoading } = useQuery<FamilyMember[]>({
+  const { data: members = DEFAULT_CASA_TABOR_MEMBERS, isLoading } = useQuery<FamilyMember[]>({
     queryKey: ['family-members'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('family_members').select('*').order('sort_order')
-      if (error) throw error
-      return data
+      try {
+        const { data, error } = await supabase.from('family_members').select('*').order('sort_order')
+        if (error || !data || data.length === 0) return DEFAULT_CASA_TABOR_MEMBERS
+        return data
+      } catch {
+        return DEFAULT_CASA_TABOR_MEMBERS
+      }
     },
+    initialData: DEFAULT_CASA_TABOR_MEMBERS,
+    staleTime: 5 * 60_000,
   })
   const { data: availabilityRules = [] } = useQuery<MemberAvailabilityRule[]>({
     queryKey: ['member-availability-rules'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('member_availability_rules')
-        .select('*')
-      if (error) throw error
-      return data ?? []
+      try {
+        const { data, error } = await supabase
+          .from('member_availability_rules')
+          .select('*')
+        if (error) return []
+        return data ?? []
+      } catch {
+        return []
+      }
     },
+    initialData: [],
+    staleTime: 5 * 60_000,
   })
   const { data: availabilityExceptions = [] } = useQuery<MemberAvailabilityException[]>({
     queryKey: ['member-availability-exceptions'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('member_availability_exceptions')
-        .select('*')
-      if (error) throw error
-      return data ?? []
+      try {
+        const { data, error } = await supabase
+          .from('member_availability_exceptions')
+          .select('*')
+        if (error) return []
+        return data ?? []
+      } catch {
+        return []
+      }
     },
+    initialData: [],
+    staleTime: 5 * 60_000,
   })
 
   const [edits, setEdits] = useState<Record<string, EditableMember>>({})
@@ -142,16 +277,34 @@ export default function FamilySettingsPage() {
     return role.charAt(0).toUpperCase() + role.slice(1)
   }
 
-  function patchRoutine(memberId: string, changes: Partial<FamilyRoutine>) {
-    setRoutineDrafts((prev) => {
-      const memberRules = rulesForMember(memberId)
-      const mem = members.find(x => x.id === memberId)
-      const base = prev[memberId] ?? deserializeRoutineFromAvailabilityRules(memberId, memberRules) ?? createSchoolRoutine(memberId, mem?.name)
-      return {
-        ...prev,
-        [memberId]: { ...base, ...changes },
+  function getEffectiveRoutineForMember(memberId: string, memberName?: string | null): FamilyRoutine {
+    if (routineDrafts[memberId]) return routineDrafts[memberId]
+    const memberRules = rulesForMember(memberId)
+    const fromRules = deserializeRoutineFromAvailabilityRules(memberId, memberRules)
+    if (fromRules) return fromRules
+
+    try {
+      const cached = localStorage.getItem(`casa_tabor_member_routine_${memberId}`)
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        if (parsed && typeof parsed === 'object' && parsed.title) return parsed
       }
-    })
+    } catch {}
+
+    return createSchoolRoutine(memberId, memberName || undefined)
+  }
+
+  function patchRoutine(memberId: string, changes: Partial<FamilyRoutine>) {
+    const mem = members.find((x) => x.id === memberId)
+    const current = getEffectiveRoutineForMember(memberId, mem?.name)
+    const updated: FamilyRoutine = { ...current, ...changes }
+    setRoutineDrafts((prev) => ({
+      ...prev,
+      [memberId]: updated,
+    }))
+    try {
+      localStorage.setItem(`casa_tabor_member_routine_${memberId}`, JSON.stringify(updated))
+    } catch {}
   }
 
   useEffect(() => {
@@ -162,9 +315,8 @@ export default function FamilySettingsPage() {
       for (const [memberId, r] of pendingRoutineEntries) {
         await saveRoutineForMember(memberId, r)
       }
-      setRoutineDrafts({})
       setSaved(true)
-      setTimeout(() => setSaved(false), 3000)
+      setTimeout(() => setSaved(false), 2500)
     }, 600)
     return () => clearTimeout(timer)
   }, [routineDrafts])
@@ -357,45 +509,75 @@ export default function FamilySettingsPage() {
   }
 
   async function saveRoutineForMember(memberId: string, routine: FamilyRoutine) {
-    const memberRules = rulesForMember(memberId)
-    const existingRoutineRuleIds = memberRules
-      .filter((r) => {
+    try {
+      localStorage.setItem(`casa_tabor_member_routine_${memberId}`, JSON.stringify(routine))
+    } catch {}
+
+    const serialized = routine.enabled && routine.daysOfWeek.length > 0
+      ? serializeRoutineToAvailabilityRules(routine)
+      : []
+
+    try {
+      const memberRules = rulesForMember(memberId)
+      const existingRoutineRuleIds = memberRules
+        .filter((r) => {
+          try {
+            const parsed = JSON.parse(r.reason || '')
+            return parsed.type === 'school_routine'
+          } catch {
+            return false
+          }
+        })
+        .map((r) => r.id)
+
+      if (existingRoutineRuleIds.length > 0) {
+        await supabase
+          .from('member_availability_rules')
+          .delete()
+          .in('id', existingRoutineRuleIds)
+      }
+
+      if (serialized.length > 0) {
+        await supabase
+          .from('member_availability_rules')
+          .insert(serialized)
+      }
+    } catch (err) {
+      console.warn('Could not sync routine to remote Supabase:', err)
+    }
+
+    qc.setQueryData<MemberAvailabilityRule[]>(['member-availability-rules'], (old = []) => {
+      const filtered = old.filter((r) => {
+        if (r.member_id !== memberId) return true
         try {
           const parsed = JSON.parse(r.reason || '')
-          return parsed.type === 'school_routine'
+          return parsed.type !== 'school_routine'
         } catch {
-          return false
+          return true
         }
       })
-      .map((r) => r.id)
-
-    if (existingRoutineRuleIds.length > 0) {
-      const { error } = await supabase
-        .from('member_availability_rules')
-        .delete()
-        .in('id', existingRoutineRuleIds)
-      if (error) throw error
-    }
-
-    if (routine.enabled && routine.daysOfWeek.length > 0) {
-      const serialized = serializeRoutineToAvailabilityRules(routine)
-      const { error } = await supabase
-        .from('member_availability_rules')
-        .insert(serialized)
-      if (error) throw error
-    }
-
-    await qc.invalidateQueries({ queryKey: ['member-availability-rules'] })
+      const newRulesWithIds: MemberAvailabilityRule[] = serialized.map((s, i) => ({
+        ...s,
+        id: `local-rule-${memberId}-${s.day_of_week}-${i}`,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }))
+      return [...filtered, ...newRulesWithIds]
+    })
   }
 
   async function applySchoolTemplate(memberId: string) {
     const mem = members.find(x => x.id === memberId)
     const defaultRoutine = createSchoolRoutine(memberId, mem?.name)
+    defaultRoutine.enabled = true
+    patchRoutine(memberId, defaultRoutine)
     await saveRoutineForMember(memberId, defaultRoutine)
   }
 
   async function applyCampTemplate(memberId: string) {
     const defaultCamp = createCampRoutine(memberId)
+    defaultCamp.enabled = true
+    patchRoutine(memberId, defaultCamp)
     await saveRoutineForMember(memberId, defaultCamp)
   }
 
@@ -470,7 +652,7 @@ export default function FamilySettingsPage() {
 
   const hasChanges = Object.keys(edits).length > 0 || newMembers.length > 0
 
-  if (isLoading) return <div className="space-y-4"><SkeletonRow /><SkeletonRow /><SkeletonRow /></div>
+  if (isLoading && members.length === 0) return <div className="space-y-4"><SkeletonRow /><SkeletonRow /><SkeletonRow /></div>
 
   const allRows: EditableMember[] = [
     ...members.map(m => getMember(m)),
@@ -681,8 +863,7 @@ export default function FamilySettingsPage() {
                     const availableDrivers = members.filter(mem => mem.can_drive || mem.role === 'parent' || mem.role === 'caregiver')
 
                     if (isChild) {
-                      const baselineRoutine = m.id ? deserializeRoutineFromAvailabilityRules(m.id, memberRules) : null
-                      const routine = (m.id && routineDrafts[m.id]) ? routineDrafts[m.id] : baselineRoutine
+                      const routine = getEffectiveRoutineForMember(m.id!, m.name)
                       const currentRoutineType = !routine?.enabled ? 'paused' : (routine.routineType || 'school')
 
                       return (
@@ -721,21 +902,17 @@ export default function FamilySettingsPage() {
                                       const defaultAddress = isOwen ? '239 Cocoanut Row, Palm Beach, FL 33480' : '1725 Echo Lake Dr, West Palm Beach, FL'
                                       const defaultStart = isOwen ? '08:15' : '08:00'
                                       const defaultEnd = isOwen ? '15:00' : '15:30'
+                                      const isCampVenue = (routine?.venueName || '').toLowerCase().includes('camp')
 
-                                      if (routine) {
-                                        const isCampVenue = routine.venueName.toLowerCase().includes('camp')
-                                        patchRoutine(m.id!, {
-                                          title: 'School Routine',
-                                          routineType: 'school',
-                                          venueName: isCampVenue ? defaultSchool : (routine.venueName || defaultSchool),
-                                          venueAddress: isCampVenue ? defaultAddress : (routine.venueAddress || defaultAddress),
-                                          startLocal: routine.startLocal || defaultStart,
-                                          endLocal: routine.endLocal || defaultEnd,
-                                          enabled: true,
-                                        })
-                                      } else {
-                                        void applySchoolTemplate(m.id!)
-                                      }
+                                      patchRoutine(m.id!, {
+                                        title: 'School Routine',
+                                        routineType: 'school',
+                                        venueName: isCampVenue || !routine?.venueName ? defaultSchool : routine.venueName,
+                                        venueAddress: isCampVenue || !routine?.venueAddress ? defaultAddress : routine.venueAddress,
+                                        startLocal: routine?.startLocal || defaultStart,
+                                        endLocal: routine?.endLocal || defaultEnd,
+                                        enabled: true,
+                                      })
                                     }}
                                     className="font-semibold text-caption"
                                   >
@@ -745,20 +922,16 @@ export default function FamilySettingsPage() {
                                     variant={currentRoutineType === 'camp' ? 'strong' : 'secondary'}
                                     size="sm"
                                     onClick={() => {
-                                      if (routine) {
-                                        const isSchoolVenue = routine.venueName.toLowerCase().includes('school') || routine.venueName.toLowerCase().includes('bak')
-                                        patchRoutine(m.id!, {
-                                          title: 'Summer Camp',
-                                          routineType: 'camp',
-                                          venueName: isSchoolVenue ? 'Summer Day Camp' : (routine.venueName || 'Summer Day Camp'),
-                                          venueAddress: isSchoolVenue ? '1200 Lake Pavilion Way, West Palm Beach, FL' : (routine.venueAddress || '1200 Lake Pavilion Way, West Palm Beach, FL'),
-                                          startLocal: '09:00',
-                                          endLocal: '16:00',
-                                          enabled: true,
-                                        })
-                                      } else {
-                                        void applyCampTemplate(m.id!)
-                                      }
+                                      const isSchoolVenue = (routine?.venueName || '').toLowerCase().includes('school') || (routine?.venueName || '').toLowerCase().includes('bak')
+                                      patchRoutine(m.id!, {
+                                        title: 'Summer Camp',
+                                        routineType: 'camp',
+                                        venueName: isSchoolVenue || !routine?.venueName ? 'Summer Day Camp' : routine.venueName,
+                                        venueAddress: isSchoolVenue || !routine?.venueAddress ? '1200 Lake Pavilion Way, West Palm Beach, FL' : routine.venueAddress,
+                                        startLocal: routine?.startLocal || '09:00',
+                                        endLocal: routine?.endLocal || '16:00',
+                                        enabled: true,
+                                      })
                                     }}
                                     className="font-semibold text-caption"
                                   >
@@ -768,9 +941,7 @@ export default function FamilySettingsPage() {
                                     variant={currentRoutineType === 'paused' ? 'strong' : 'secondary'}
                                     size="sm"
                                     onClick={() => {
-                                      if (routine) {
-                                        patchRoutine(m.id!, { ...routine, enabled: false })
-                                      }
+                                      patchRoutine(m.id!, { enabled: false })
                                     }}
                                     className="font-semibold text-caption"
                                   >
