@@ -428,6 +428,9 @@ export default function WeekView() {
               return (
                 <button
                   key={ev.id}
+                  data-calendar-event
+                  data-sidecar-loadable="true"
+                  data-event-id={ev.id}
                   onClick={(e) => {
                     e.stopPropagation()
                     openEventInSidecar(ev.id)

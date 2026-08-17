@@ -451,6 +451,8 @@ function CompactReminderCard({ event, now = new Date(), isHighlighted = false, o
         past && !isHighlighted && 'opacity-45'
       )}
       data-calendar-event
+      data-sidecar-loadable="true"
+      data-event-id={event.id}
     >
       {/* Straight Amber Left Pillar */}
       <div className="p-2.5 bg-amber-100/70 text-amber-950 flex flex-col justify-between items-start border-r border-amber-200/60 border-l-4 border-l-amber-400 min-w-0 overflow-hidden">
@@ -603,6 +605,8 @@ function EventCard({ event, household, now = new Date(), isHighlighted = false, 
         )}
         style={{ borderLeftColor: color }}
         data-calendar-event
+        data-sidecar-loadable="true"
+        data-event-id={event.id}
       >
         {/* Left: Time + Divider + Title */}
         <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -696,6 +700,8 @@ function EventCard({ event, household, now = new Date(), isHighlighted = false, 
               : 'bg-casa-surface text-casa-navy border-casa-border/70 hover:shadow-card-hover hover:border-casa-gold/50'
       )}
       data-calendar-event
+      data-sidecar-loadable="true"
+      data-event-id={event.id}
     >
       {isBirthday && <BirthdayCardDecoration />}
 

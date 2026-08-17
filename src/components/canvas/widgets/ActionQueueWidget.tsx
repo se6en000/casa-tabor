@@ -575,6 +575,8 @@ export default function ActionQueueWidget({
                             size="sm"
                             aria-label="Inspect email & details in sidecar"
                             title="Inspect in sidecar"
+                            data-sidecar-trigger="true"
+                            data-sidecar-loadable="true"
                             onClick={(e) => {
                               e.stopPropagation()
                               openActionInSidecar(heroItem.id)
@@ -606,6 +608,9 @@ export default function ActionQueueWidget({
                     <div
                       role="button"
                       tabIndex={0}
+                      data-action-card="true"
+                      data-sidecar-loadable="true"
+                      data-action-id={heroItem.id}
                       onClick={() => openActionInSidecar(heroItem.id)}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
@@ -782,6 +787,9 @@ export default function ActionQueueWidget({
                       role="button"
                       tabIndex={0}
                       data-tactile="true"
+                      data-action-card="true"
+                      data-sidecar-loadable="true"
+                      data-action-id={item.id}
                       onClick={() => {
                         setSpotlightItemId(item.id)
                         openActionInSidecar(item.id)

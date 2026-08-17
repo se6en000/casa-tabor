@@ -117,6 +117,9 @@ export default function EventBlock({ event, onClick, onDoubleClick, columnCount 
   return (
       <motion.button
       data-event-block
+      data-calendar-event
+      data-sidecar-loadable="true"
+      data-event-id={event.id}
       layout
       initial={{ opacity: 0, scale: 0.96 }}
       animate={{ opacity: 1, scale: 1 }}

@@ -440,6 +440,9 @@ function CopilotAction() {
   return (
     <motion.button
       ref={btnRef}
+      data-sidecar-trigger="true"
+      data-ai-trigger="true"
+      data-sidecar-loadable="true"
       onClick={() => {
         if (aiDrawerOpen && sidecarTab === 'ai') {
           closeSidecar()

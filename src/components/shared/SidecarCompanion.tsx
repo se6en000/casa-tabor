@@ -121,6 +121,93 @@ export default function SidecarCompanion({
 
   const isCook = routePath.startsWith('/cook')
 
+  // Modeless Contextual Inspector Auto-Dismiss & Hot-Swap Engine
+  // Allows full-page scrolling while sidecar is open; dismisses only on outside taps of non-sidecar targets.
+  useEffect(() => {
+    if (!aiDrawerOpen || isCook) return
+
+    let pointerDownPos: { x: number; y: number; time: number } | null = null
+
+    const handlePointerDown = (e: PointerEvent) => {
+      pointerDownPos = { x: e.clientX, y: e.clientY, time: Date.now() }
+    }
+
+    const handleClickCapture = (e: MouseEvent) => {
+      // Disambiguate scroll/drag gestures vs intentional taps
+      if (pointerDownPos) {
+        const dx = e.clientX - pointerDownPos.x
+        const dy = e.clientY - pointerDownPos.y
+        const dist = Math.hypot(dx, dy)
+        const duration = Date.now() - pointerDownPos.time
+        pointerDownPos = null
+
+        // If user moved more than 8px, it was a drag-scroll/pan gesture — DO NOT CLOSE
+        if (dist > 8) return
+        // If user performed a long-press hold (> 450ms, e.g. slot create or context menu hold) — DO NOT CLOSE
+        if (duration > 450) return
+      }
+
+      const target = e.target as HTMLElement | null
+      if (!target) return
+
+      // 1. Clicks inside the Sidecar itself: Stay open
+      if (
+        target.closest('[data-sidecar-companion]') ||
+        target.closest('[data-sidecar-content]') ||
+        target.closest('.sidecar-flip-viewport') ||
+        target.closest('.sidecar-flip-card')
+      ) {
+        return
+      }
+
+      // 2. High-priority modals, overlays, virtual keyboard: Stay open / do not dismiss
+      if (
+        target.closest('[data-touch-keyboard]') ||
+        target.closest('[data-portal-modal]') ||
+        target.closest('[data-quick-create]') ||
+        target.closest('[data-popover-menu]') ||
+        target.closest('#pin-gate') ||
+        target.closest('.quick-create-sheet')
+      ) {
+        return
+      }
+
+      // 3. Sidecar-Loadable targets (calendar events, action items, Copilot button, prep items):
+      // Keep sidecar open so the element's click handler can hot-swap content in place!
+      const isSidecarLoadable = Boolean(
+        target.closest('[data-sidecar-loadable]') ||
+        target.closest('[data-sidecar-trigger]') ||
+        target.closest('[data-calendar-event]') ||
+        target.closest('[data-event-block]') ||
+        target.closest('[data-event-pill]') ||
+        target.closest('[data-event-chip]') ||
+        target.closest('[data-action-card]') ||
+        target.closest('[data-action-item]') ||
+        target.closest('[data-prep-item]') ||
+        target.closest('[data-open-sidecar]') ||
+        target.closest('[data-ai-trigger]') ||
+        target.closest('[data-open-ai]') ||
+        target.closest('.sidecar-loadable')
+      )
+
+      if (isSidecarLoadable) {
+        return
+      }
+
+      // 4. Outside tap on canvas background, empty time slots, day headers, or non-sidecar UI:
+      // Gracefully slide the sidecar closed
+      closeSidecar()
+    }
+
+    window.addEventListener('pointerdown', handlePointerDown, { capture: true, passive: true })
+    window.addEventListener('click', handleClickCapture, { capture: true })
+
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown, { capture: true })
+      window.removeEventListener('click', handleClickCapture, { capture: true })
+    }
+  }, [aiDrawerOpen, isCook, closeSidecar])
+
   useEffect(() => {
     if (aiDrawerOpen && !isMobile && !isCook) {
       document.documentElement.style.setProperty('--ai-sidecar-width', `${sidecarWidth}px`)
@@ -267,12 +354,25 @@ export default function SidecarCompanion({
         />
         <motion.div
           key="sidecar-mobile-sheet"
+          data-sidecar-companion="true"
           initial={{ y: '100%' }}
           animate={{ y: 0 }}
           exit={{ y: '100%' }}
+          drag="y"
+          dragConstraints={{ top: 0 }}
+          dragElastic={{ top: 0, bottom: 0.5 }}
+          onDragEnd={(_, info) => {
+            if (info.offset.y > 120 || info.velocity.y > 400) {
+              closeSidecar()
+            }
+          }}
           transition={{ type: 'spring', damping: 30, stiffness: 350 }}
           className="fixed inset-x-0 bottom-0 z-modal h-[88vh] max-h-[88vh] bg-casa-surface rounded-t-3xl shadow-2xl flex flex-col overflow-hidden sm:hidden border-t border-casa-border"
         >
+          {/* Mobile Drag Dismiss Handle */}
+          <div className="w-full flex items-center justify-center pt-2.5 pb-1 cursor-grab active:cursor-grabbing touch-none select-none shrink-0">
+            <div className="w-12 h-1.5 rounded-full bg-casa-muted/30" />
+          </div>
           {sidecarContent}
         </motion.div>
       </AnimatePresence>
@@ -282,6 +382,7 @@ export default function SidecarCompanion({
   return (
     <motion.aside
       key="sidecar-desktop-companion"
+      data-sidecar-companion="true"
       initial={{ width: 0, opacity: 0 }}
       animate={{ width: sidecarWidth, opacity: 1 }}
       exit={{ width: 0, opacity: 0 }}
@@ -290,7 +391,7 @@ export default function SidecarCompanion({
       data-panel-overlay
       data-touch-keyboard="ignore"
     >
-      <div className="h-full w-full flex flex-col flex-shrink-0">
+      <div className="h-full w-full flex flex-col flex-shrink-0" data-sidecar-content="true">
         {sidecarContent}
       </div>
     </motion.aside>

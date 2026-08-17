@@ -96,6 +96,8 @@ function DayPopover({ day, events, activeEventId, onClose, onSelectDay, onSelect
               tabIndex={0}
               data-tactile="true"
               data-calendar-event
+              data-sidecar-loadable="true"
+              data-event-id={event.id}
               data-active={isActive ? 'true' : undefined}
               className={cn(
                 'flex items-start gap-3 px-4 py-2.5 hover:bg-casa-surface cursor-pointer transition-all duration-150',
@@ -277,6 +279,8 @@ function DayCell({
                 key={event.id}
                 data-event-pill
                 data-calendar-event
+                data-sidecar-loadable="true"
+                data-event-id={event.id}
                 data-active={isActive ? 'true' : undefined}
                 className={cn(
                   'flex items-center gap-1.5 px-2 py-1 rounded-md text-body-sm font-medium leading-tight truncate cursor-pointer transition-all duration-150 relative select-none',

@@ -141,39 +141,39 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
 
         {/* ── Luxury Tonight's Kitchen Editorial Showcase (Aligned with Right Rail 5 Cols) ── */}
         <div className="hidden lg:flex lg:col-span-5 items-center">
-          <div className="w-full flex items-center justify-between gap-3 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-casa-surface to-amber-500/[0.08] border border-casa-gold/35 shadow-2xs transition-all hover:border-casa-gold/60">
+          <div className="w-full flex items-center justify-between gap-3 px-3.5 py-2 rounded-2xl bg-gradient-to-r from-casa-surface to-amber-500/[0.08] border border-casa-gold/35 shadow-2xs transition-all hover:border-casa-gold/60">
             <div className="flex items-center gap-3 min-w-0 flex-1">
               <div className="w-9 h-9 rounded-xl bg-casa-gold/20 text-casa-navy flex items-center justify-center font-bold shadow-2xs border border-casa-gold/30 shrink-0">
                 {dinnerPlan.mode === 'takeout' ? (
-                  <ShoppingBag size={16} className="text-amber-800" />
+                  <ShoppingBag size={17} className="text-amber-800" />
                 ) : dinnerPlan.mode === 'leftovers' ? (
-                  <Clock size={16} className="text-amber-800" />
+                  <Clock size={17} className="text-amber-800" />
                 ) : (
-                  <Utensils size={16} className="text-amber-800" />
+                  <Utensils size={17} className="text-amber-800" />
                 )}
               </div>
 
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-sans text-3xs font-bold uppercase tracking-wider text-amber-900/80">
+                <div className="flex items-center gap-1.5 mb-0.5 flex-nowrap overflow-hidden">
+                  <span className="font-sans text-3xs sm:text-2xs font-bold uppercase tracking-wider text-amber-900 whitespace-nowrap shrink-0">
                     {dinnerPlan.mode === 'takeout'
                       ? "Tonight's Takeout"
                       : dinnerPlan.mode === 'leftovers'
                       ? "Tonight's Leftovers"
                       : "Tonight's Kitchen"}
                   </span>
-                  <span className="text-casa-muted/60 text-3xs">·</span>
-                  <span className="text-3xs font-semibold text-casa-muted truncate">
+                  <span className="text-casa-muted/60 text-3xs shrink-0">·</span>
+                  <span className="text-3xs sm:text-2xs font-medium text-casa-text-secondary truncate shrink-0">
                     {isDinnerPast ? 'Dinner Completed' : dinnerPlan.targetTime || '6:30 PM Target'}
                   </span>
                 </div>
-                <h3 className="font-display text-body font-bold text-casa-navy truncate leading-snug">
+                <h3 className="font-display text-heading sm:text-body-lg lg:text-heading font-semibold text-casa-navy truncate leading-tight">
                   {dinnerPlan.title}
                 </h3>
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 pl-3 border-l border-casa-border/40 shrink-0">
+            <div className="flex items-center gap-1.5 pl-2.5 border-l border-casa-border/40 shrink-0">
               <Button
                 variant="ghost"
                 size="sm"
@@ -190,7 +190,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                     })
                   )
                 }}
-                className="text-caption font-semibold text-casa-muted hover:text-casa-navy transition-colors min-h-[36px] px-2.5 rounded-lg"
+                className="text-caption font-medium text-casa-muted hover:text-casa-navy transition-colors h-8 min-h-0 px-2 rounded-lg"
               >
                 <span>Change</span>
               </Button>
@@ -205,10 +205,10 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                       navigateTo('/cook')
                     }
                   }}
-                  className="text-caption font-bold bg-casa-navy text-white hover:bg-casa-navy-dark hover:text-casa-gold min-h-[36px] px-3.5 rounded-xl shadow-2xs flex items-center gap-1"
+                  className="text-caption font-bold bg-casa-navy text-white hover:bg-casa-navy-dark hover:text-casa-gold h-8 min-h-0 px-3 rounded-xl shadow-2xs flex items-center gap-1 shrink-0"
                 >
-                  <span>View Recipe</span>
-                  <ChevronRight size={13} />
+                  <span>Recipe</span>
+                  <ChevronRight size={12} />
                 </Button>
               )}
             </div>
@@ -293,6 +293,9 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
+              data-calendar-event
+              data-sidecar-loadable="true"
+              data-event-id={nextEvent.id}
               className={cn(
                 'w-full rounded-3xl p-6 sm:p-7 bg-gradient-to-br from-casa-navy via-slate-900 to-slate-950 text-white border border-white/10 shadow-xl relative overflow-hidden group cursor-pointer transition-all duration-300',
                 isLeaveNow
@@ -884,42 +887,42 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
           {/* 1. Today's To-Dos (if there are any) */}
           {todayReminders.length > 0 && (
             <div className={cn(
-              'flex-col justify-start pb-3.5 border-b border-casa-border/40 space-y-2.5 px-1',
+              'flex-col justify-start pb-3.5 border-b border-casa-border/50 space-y-1 px-1',
               mobileSubTab === 'schedule' ? 'flex' : 'hidden lg:flex'
             )}>
-              <div className="flex items-center justify-between px-1">
+              <div className="flex items-center justify-between px-1 mb-2">
                 <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-amber-500/15 text-amber-800 flex items-center justify-center font-bold">
-                    <Check size={15} strokeWidth={2.5} className="text-amber-700" />
+                  <div className="w-6 h-6 rounded-lg bg-amber-500/15 text-amber-800 flex items-center justify-center font-bold shrink-0">
+                    <Check size={13} strokeWidth={2.5} className="text-amber-700" />
                   </div>
-                  <h3 className="font-sans text-body font-bold text-casa-navy">
+                  <h3 className="font-sans text-body-sm font-bold text-casa-navy tracking-tight">
                     Today's To-Dos
                   </h3>
-                  <span className="px-2 py-0.5 rounded-full text-3xs font-bold bg-amber-500/10 text-amber-900 border border-amber-500/20">
+                  <span className="px-1.5 py-0.5 rounded-full text-3xs font-semibold bg-amber-500/10 text-amber-900 border border-amber-500/20">
                     {todayReminders.length}
                   </span>
                 </div>
-                <span className="text-3xs text-casa-muted font-semibold uppercase tracking-wider">1-tap to complete</span>
+                <span className="text-3xs text-casa-muted/80 font-medium uppercase tracking-wider">1-tap to complete</span>
               </div>
 
               {/* ── Concept A: Collapsible Overdue Fold ── */}
               {overdueReminders.length > 0 && (
-                <div className="mb-1">
+                <div className="mb-1.5">
                   <Button
                     variant="ghost"
                     size="sm"
                     fullWidth
                     align="between"
                     onClick={() => setShowOverdueTodos(!showOverdueTodos)}
-                    className="min-h-[36px] py-1 px-2.5 rounded-xl bg-amber-500/[0.08] hover:bg-amber-500/[0.14] text-caption text-amber-900 border border-amber-500/25 transition-colors"
+                    className="min-h-[30px] h-8 py-0.5 px-2 rounded-lg bg-amber-500/[0.07] hover:bg-amber-500/[0.14] text-caption text-amber-900 border border-amber-500/20 transition-colors"
                   >
-                    <span className="inline-flex items-center gap-1.5 font-semibold">
-                      <Clock size={13} className="text-amber-700" />
+                    <span className="inline-flex items-center gap-1.5 font-medium text-caption text-amber-900">
+                      <Clock size={12} className="text-amber-700 shrink-0" />
                       <span>
                         {overdueReminders.length} {overdueReminders.length === 1 ? 'item' : 'items'} pending from earlier today
                       </span>
                     </span>
-                    {showOverdueTodos ? <ChevronUp size={13} className="text-amber-800" /> : <ChevronDown size={13} className="text-amber-800" />}
+                    {showOverdueTodos ? <ChevronUp size={12} className="text-amber-800 shrink-0" /> : <ChevronDown size={12} className="text-amber-800 shrink-0" />}
                   </Button>
 
                   <AnimatePresence>
@@ -928,7 +931,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: 'auto' }}
                         exit={{ opacity: 0, height: 0 }}
-                        className="space-y-1 pt-1.5 overflow-hidden"
+                        className="space-y-0.5 pt-1 overflow-hidden"
                       >
                         {overdueReminders.map((evt) => {
                           const avatarPeople = evt.members.map((m) => ({
@@ -943,6 +946,9 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                               role="button"
                               tabIndex={0}
                               data-tactile="true"
+                              data-calendar-event
+                              data-sidecar-loadable="true"
+                              data-event-id={evt.id}
                               onClick={() => onOpenEvent(evt)}
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter' || e.key === ' ') {
@@ -950,9 +956,9 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                                   onOpenEvent(evt)
                                 }
                               }}
-                              className="w-full flex items-center justify-between py-2 px-3 rounded-2xl transition-all duration-150 cursor-pointer group gap-3 select-none active:scale-[0.99] min-h-[44px] bg-amber-500/[0.05] border border-amber-500/20 hover:bg-amber-500/[0.10]"
+                              className="w-full flex items-center justify-between py-1 px-2 rounded-xl transition-all duration-150 cursor-pointer group gap-2.5 select-none active:scale-[0.99] min-h-[36px] bg-amber-500/[0.04] border border-amber-500/15 hover:bg-amber-500/[0.08]"
                             >
-                              <div className="flex items-center gap-3 min-w-0 flex-1">
+                              <div className="flex items-center gap-2.5 min-w-0 flex-1">
                                 <IconButton
                                   size="sm"
                                   variant="ghost"
@@ -963,32 +969,30 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                                       [evt.id]: !prev[evt.id],
                                     }))
                                   }}
-                                  className="rounded-full shrink-0 transition-all duration-150 text-casa-muted hover:text-casa-navy hover:bg-casa-surface-subtle"
+                                  className="rounded-full shrink-0 transition-all duration-150 text-casa-muted hover:text-casa-navy hover:bg-casa-surface-subtle h-6 w-6 min-h-0 p-0"
                                   aria-label={`Mark ${evt.title} done`}
                                   icon={
-                                    <div className="w-5 h-5 rounded-full border-2 border-amber-400 hover:border-casa-navy bg-white" />
+                                    <div className="w-4.5 h-4.5 rounded-full border-[1.5px] border-amber-500 hover:border-casa-navy bg-white shadow-2xs" />
                                   }
                                 />
 
-                                <div className="flex items-center gap-1.5 shrink-0">
-                                  <span className="font-mono text-caption font-bold text-amber-900 shrink-0">
-                                    {format(parseISO(evt.start_time), 'h:mm a')}
-                                  </span>
-                                  <span className="px-1.5 py-0.5 rounded-full text-3xs font-bold bg-amber-500/15 text-amber-900 border border-amber-500/25 shrink-0">
-                                    Overdue
-                                  </span>
-                                </div>
+                                <span className="font-mono text-caption font-bold text-amber-950 shrink-0 tabular-nums">
+                                  {format(parseISO(evt.start_time), 'h:mm a')}
+                                </span>
+                                <span className="px-1.5 py-0.2 rounded text-3xs font-semibold bg-amber-500/20 text-amber-950 shrink-0">
+                                  Overdue
+                                </span>
 
-                                <span className="text-body-sm font-semibold truncate transition-colors flex-1 text-casa-navy group-hover:text-amber-900">
+                                <span className="text-body-sm font-medium text-casa-navy truncate transition-colors flex-1 group-hover:text-amber-900">
                                   {evt.title}
                                 </span>
                               </div>
 
-                              <div className="flex items-center gap-2 shrink-0">
-                                {avatarPeople.length > 0 && <PersonAvatarStack people={avatarPeople} size="md" max={2} />}
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {avatarPeople.length > 0 && <PersonAvatarStack people={avatarPeople} size="sm" max={2} />}
                                 <ChevronRight
-                                  size={16}
-                                  className="text-casa-muted/60 group-hover:text-casa-navy transition-transform group-hover:translate-x-0.5"
+                                  size={14}
+                                  className="text-casa-muted/40 group-hover:text-casa-navy transition-transform group-hover:translate-x-0.5"
                                 />
                               </div>
                             </div>
@@ -1002,7 +1006,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
 
               {/* ── Active & Upcoming To-Dos (Capped at 3 visible by default) ── */}
               {activeReminders.length > 0 && (
-                <div className="space-y-1">
+                <div className="space-y-0.5">
                   {(todosExpanded ? activeReminders : activeReminders.slice(0, 3)).map((evt) => {
                     const isDone = Boolean(completedItems[evt.id])
                     const avatarPeople = evt.members.map((m) => ({
@@ -1017,6 +1021,9 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                         role="button"
                         tabIndex={0}
                         data-tactile="true"
+                        data-calendar-event
+                        data-sidecar-loadable="true"
+                        data-event-id={evt.id}
                         onClick={() => onOpenEvent(evt)}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === ' ') {
@@ -1025,13 +1032,13 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                           }
                         }}
                         className={cn(
-                          'w-full flex items-center justify-between py-2 px-3 rounded-2xl transition-all duration-150 cursor-pointer group gap-3 select-none active:scale-[0.99] min-h-[44px]',
+                          'w-full flex items-center justify-between py-1 px-2 rounded-xl transition-all duration-150 cursor-pointer group gap-2.5 select-none active:scale-[0.99] min-h-[36px]',
                           isDone
                             ? 'bg-casa-surface-subtle/40 opacity-50'
                             : 'hover:bg-casa-surface hover:shadow-2xs'
                         )}
                       >
-                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
                           <IconButton
                             size="sm"
                             variant="ghost"
@@ -1043,7 +1050,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                               }))
                             }}
                             className={cn(
-                              'rounded-full shrink-0 transition-all duration-150',
+                              'rounded-full shrink-0 transition-all duration-150 h-6 w-6 min-h-0 p-0',
                               isDone
                                 ? 'text-emerald-700 bg-emerald-100/60 hover:bg-emerald-200'
                                 : 'text-casa-muted hover:text-casa-navy hover:bg-casa-surface-subtle'
@@ -1051,38 +1058,38 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                             aria-label={isDone ? `Mark ${evt.title} incomplete` : `Mark ${evt.title} done`}
                             icon={
                               isDone ? (
-                                <CheckCircle2 size={20} className="text-emerald-600" />
+                                <CheckCircle2 size={18} className="text-emerald-600" />
                               ) : (
-                                <div className="w-5 h-5 rounded-full border-2 border-casa-border hover:border-casa-navy bg-white" />
+                                <div className="w-4.5 h-4.5 rounded-full border-[1.5px] border-slate-300 hover:border-casa-navy bg-white shadow-2xs transition-colors" />
                               )
                             }
                           />
 
                           {evt.all_day ? (
-                            <span className="font-sans text-caption font-semibold text-casa-muted shrink-0">
+                            <span className="font-sans text-caption font-semibold text-casa-muted/80 shrink-0">
                               All Day
                             </span>
                           ) : (
-                            <span className="font-mono text-caption font-bold text-casa-navy/80 shrink-0">
+                            <span className="font-mono text-caption font-bold text-casa-navy shrink-0 tabular-nums">
                               {format(parseISO(evt.start_time), 'h:mm a')}
                             </span>
                           )}
 
                           <span
                             className={cn(
-                              'text-body-sm font-semibold truncate transition-colors flex-1',
-                              isDone ? 'line-through text-casa-muted' : 'text-casa-navy group-hover:text-amber-900'
+                              'text-body-sm truncate transition-colors flex-1',
+                              isDone ? 'line-through text-casa-muted' : 'font-normal text-casa-navy group-hover:text-casa-navy'
                             )}
                           >
                             {evt.title}
                           </span>
                         </div>
 
-                        <div className="flex items-center gap-2 shrink-0">
-                          {avatarPeople.length > 0 && <PersonAvatarStack people={avatarPeople} size="md" max={2} />}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {avatarPeople.length > 0 && <PersonAvatarStack people={avatarPeople} size="sm" max={2} />}
                           <ChevronRight
-                            size={16}
-                            className="text-casa-muted/60 group-hover:text-casa-navy transition-transform group-hover:translate-x-0.5"
+                            size={14}
+                            className="text-casa-muted/40 group-hover:text-casa-navy transition-transform group-hover:translate-x-0.5"
                           />
                         </div>
                       </div>
@@ -1094,17 +1101,17 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                       variant="ghost"
                       size="sm"
                       onClick={() => setTodosExpanded(!todosExpanded)}
-                      className="w-full flex items-center justify-center gap-1.5 py-1.5 text-caption font-bold text-casa-muted hover:text-casa-navy transition-colors min-h-[36px] rounded-xl hover:bg-casa-surface-subtle"
+                      className="w-full flex items-center justify-center gap-1 py-1 text-caption font-medium text-casa-muted hover:text-casa-navy transition-colors min-h-[30px] h-7 rounded-lg hover:bg-casa-surface-subtle mt-0.5"
                     >
                       {todosExpanded ? (
                         <>
                           <span>Show less</span>
-                          <ChevronUp size={14} />
+                          <ChevronUp size={13} />
                         </>
                       ) : (
                         <>
                           <span>+ {activeReminders.length - 3} more to-dos</span>
-                          <ChevronDown size={14} />
+                          <ChevronDown size={13} />
                         </>
                       )}
                     </Button>
@@ -1117,24 +1124,24 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
           {/* 3. Today's Schedule (Appointments + Past Completed Events) */}
           {(upcomingAppointments.length > 0 || pastEvents.length > 0) && (
             <div className={cn(
-              'flex-col justify-start pb-3.5 border-b border-casa-border/40 space-y-2 px-1',
+              'flex-col justify-start pt-3.5 pb-3.5 border-b border-casa-border/50 space-y-1 px-1',
               mobileSubTab === 'schedule' ? 'flex' : 'hidden lg:flex'
             )}>
-              <div className="flex items-center justify-between px-1">
+              <div className="flex items-center justify-between px-1 mb-2">
                 <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-casa-gold/20 text-casa-navy flex items-center justify-center font-bold">
-                    <Calendar size={15} className="text-casa-gold" />
+                  <div className="w-6 h-6 rounded-lg bg-casa-gold/20 text-casa-navy flex items-center justify-center font-bold shrink-0">
+                    <Calendar size={13} className="text-casa-gold" />
                   </div>
-                  <h3 className="font-sans text-body font-bold text-casa-navy">
+                  <h3 className="font-sans text-body-sm font-bold text-casa-navy tracking-tight">
                     Today's Schedule
                   </h3>
                   {upcomingAppointments.length > 0 ? (
-                    <span className="px-2 py-0.5 rounded-full text-3xs font-bold bg-casa-gold/15 text-casa-navy border border-casa-gold/30">
+                    <span className="px-1.5 py-0.5 rounded-full text-3xs font-semibold bg-casa-gold/15 text-casa-navy border border-casa-gold/30">
                       {upcomingAppointments.length}
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-3xs font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-800 border border-emerald-500/25">
-                      <Check size={10} className="stroke-[3]" />
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-3xs font-semibold uppercase tracking-wider bg-emerald-500/15 text-emerald-800 border border-emerald-500/25">
+                      <Check size={9} className="stroke-[3]" />
                       <span>Completed</span>
                     </span>
                   )}
@@ -1144,7 +1151,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                     variant="ghost"
                     size="sm"
                     onClick={() => setCanvasSubmode('turbo')}
-                    className="text-3xs font-bold text-casa-gold uppercase tracking-wider hover:underline min-h-[36px] px-2"
+                    className="text-3xs font-semibold text-casa-gold uppercase tracking-wider hover:underline min-h-[30px] h-7 px-1.5"
                   >
                     Expand All
                   </Button>
@@ -1153,20 +1160,20 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
 
               {/* Collapsible Past Events */}
               {pastEvents.length > 0 && (
-                <div className="mb-2">
+                <div className="mb-1.5">
                   <Button
                     variant="ghost"
                     size="sm"
                     fullWidth
                     align="between"
                     onClick={() => setShowPastEvents(!showPastEvents)}
-                    className="min-h-[36px] py-1 px-2.5 rounded-xl bg-casa-surface-subtle/80 hover:bg-casa-surface-subtle text-caption text-casa-muted hover:text-casa-navy border border-casa-border/30 transition-colors"
+                    className="min-h-[30px] h-8 py-0.5 px-2 rounded-lg bg-casa-surface-subtle/80 hover:bg-casa-surface-subtle text-caption text-casa-muted hover:text-casa-navy border border-casa-border/30 transition-colors"
                   >
-                    <span className="inline-flex items-center gap-1.5 font-medium">
-                      <CheckCircle2 size={13} className="text-emerald-600/80" />
+                    <span className="inline-flex items-center gap-1.5 font-normal">
+                      <CheckCircle2 size={12} className="text-emerald-600/80 shrink-0" />
                       <span>{pastEvents.length} completed earlier today</span>
                     </span>
-                    {showPastEvents ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                    {showPastEvents ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                   </Button>
 
                   <AnimatePresence>
@@ -1175,21 +1182,24 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: 'auto' }}
                         exit={{ opacity: 0, height: 0 }}
-                        className="space-y-1 pt-1 overflow-hidden"
+                        className="space-y-0.5 pt-0.5 overflow-hidden"
                       >
                         {pastEvents.map((evt) => (
                           <div
                             key={evt.id}
+                            data-calendar-event
+                            data-sidecar-loadable="true"
+                            data-event-id={evt.id}
                             onClick={() => onOpenEvent(evt)}
-                            className="flex items-center justify-between px-3 py-1.5 rounded-xl opacity-45 hover:opacity-85 transition-all cursor-pointer bg-casa-bg/30 text-caption border border-casa-border/20 group"
+                            className="flex items-center justify-between px-2 py-1 rounded-xl opacity-45 hover:opacity-85 transition-all cursor-pointer bg-casa-bg/30 text-caption border border-casa-border/20 group min-h-[32px]"
                           >
                             <div className="flex items-center gap-2 min-w-0">
                               {evt.all_day ? (
-                                <span className="font-sans text-caption font-semibold text-casa-muted shrink-0">
+                                <span className="font-sans text-caption font-normal text-casa-muted shrink-0">
                                   All Day
                                 </span>
                               ) : (
-                                <span className="font-mono text-xs font-semibold text-casa-muted shrink-0">
+                                <span className="font-mono text-xs font-semibold text-casa-muted shrink-0 tabular-nums">
                                   {format(parseISO(evt.start_time), 'h:mm a')}
                                 </span>
                               )}
@@ -1224,7 +1234,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
 
               {/* Upcoming Appointments List */}
               {upcomingAppointments.length > 0 && (
-                <div className="space-y-1">
+                <div className="space-y-0.5">
                   {upcomingAppointments.map((evt) => {
                     let isNow = false
                     try {
@@ -1257,6 +1267,8 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                         tabIndex={0}
                         data-tactile="true"
                         data-calendar-event
+                        data-sidecar-loadable="true"
+                        data-event-id={evt.id}
                         onClick={() => onOpenEvent(evt)}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === ' ') {
@@ -1265,7 +1277,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                           }
                         }}
                         className={cn(
-                          'w-full flex items-center justify-between py-2 px-3 rounded-2xl transition-all duration-150 cursor-pointer group gap-3 active:scale-[0.98] min-h-[44px]',
+                          'w-full flex items-center justify-between py-1 px-2 rounded-xl transition-all duration-150 cursor-pointer group gap-2.5 active:scale-[0.98] min-h-[36px]',
                           isNow
                             ? 'bg-emerald-500/8 hover:bg-emerald-500/12 border border-emerald-500/30'
                             : 'hover:bg-casa-surface hover:shadow-2xs'
@@ -1273,41 +1285,41 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                       >
                         <div className="flex items-center gap-2.5 min-w-0 flex-1">
                           {evt.all_day ? (
-                            <span className="font-sans text-caption font-semibold text-casa-muted shrink-0">
+                            <span className="font-sans text-caption font-semibold text-casa-muted/80 shrink-0">
                               All Day
                             </span>
                           ) : (
-                            <span className="font-mono text-body-sm font-semibold text-casa-navy shrink-0">
+                            <span className="font-mono text-caption font-bold text-casa-navy shrink-0 tabular-nums">
                               {format(parseISO(evt.start_time), 'h:mm a')}
                             </span>
                           )}
-                          <span className="text-body-sm font-semibold text-casa-navy truncate group-hover:text-casa-gold transition-colors">
+                          <span className="text-body-sm font-normal text-casa-navy truncate group-hover:text-casa-navy transition-colors">
                             {evt.title}
                           </span>
                           {evt.location_name && (
-                            <span className="text-caption text-casa-text-secondary truncate hidden md:inline">
+                            <span className="text-caption text-casa-muted font-normal truncate hidden md:inline">
                               · {evt.location_name}
                             </span>
                           )}
                           {isNow && (
-                            <span className="inline-flex items-center gap-1 text-3xs font-bold uppercase tracking-wider text-emerald-800 bg-emerald-500/20 px-2 py-0.5 rounded-full shrink-0">
+                            <span className="inline-flex items-center gap-1 text-3xs font-bold uppercase tracking-wider text-emerald-800 bg-emerald-500/20 px-1.5 py-0.2 rounded-full shrink-0">
                               <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
                               Now
                             </span>
                           )}
                         </div>
 
-                        <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex items-center gap-1.5 shrink-0">
                           {driverMember?.family_member?.name && (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-caption font-semibold bg-amber-500/10 text-amber-900 border border-amber-500/20 hidden sm:inline-flex">
-                              <Car size={12} className="text-amber-800" />
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-semibold bg-amber-500/10 text-amber-900 border border-amber-500/20 hidden sm:inline-flex">
+                              <Car size={11} className="text-amber-800 shrink-0" />
                               <span>{driverMember.family_member.name} drives</span>
                             </span>
                           )}
-                          <PersonAvatarStack people={avatarPeople} size="md" max={2} />
+                          <PersonAvatarStack people={avatarPeople} size="sm" max={2} />
                           <ChevronRight
-                            size={16}
-                            className="text-casa-muted group-hover:text-casa-navy transition-transform group-hover:translate-x-0.5"
+                            size={14}
+                            className="text-casa-muted/40 group-hover:text-casa-navy transition-transform group-hover:translate-x-0.5"
                           />
                         </div>
                       </div>
@@ -1320,18 +1332,18 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
 
           {/* 4. Tomorrow's Schedule Preview */}
           <div className={cn(
-            'flex-col justify-start space-y-2.5 px-1 py-1',
+            'flex-col justify-start pt-3.5 pb-1 space-y-1 px-1',
             mobileSubTab === 'schedule' ? 'flex' : 'hidden lg:flex'
           )}>
-            <div className="flex items-center justify-between px-1">
+            <div className="flex items-center justify-between px-1 mb-2">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-slate-500/10 text-slate-800 flex items-center justify-center font-bold">
-                  <Calendar size={15} className="text-slate-700" />
+                <div className="w-6 h-6 rounded-lg bg-slate-500/10 text-slate-800 flex items-center justify-center font-bold shrink-0">
+                  <Calendar size={13} className="text-slate-700" />
                 </div>
-                <h3 className="font-sans text-body font-bold text-casa-navy">
+                <h3 className="font-sans text-body-sm font-bold text-casa-navy tracking-tight">
                   Tomorrow's Schedule
                 </h3>
-                <span className="px-2 py-0.5 rounded-full text-3xs font-bold bg-slate-500/10 text-slate-800 border border-slate-500/20">
+                <span className="px-1.5 py-0.5 rounded-full text-3xs font-semibold bg-slate-500/10 text-slate-800 border border-slate-500/20">
                   {tomorrowEvents.length}
                 </span>
               </div>
@@ -1342,14 +1354,14 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                   setActiveView('stacked')
                   navigateTo('/calendar')
                 }}
-                className="text-3xs font-bold text-casa-gold uppercase tracking-wider hover:underline min-h-[36px] px-2"
+                className="text-3xs font-semibold text-casa-gold uppercase tracking-wider hover:underline min-h-[30px] h-7 px-1.5"
               >
                 Full Calendar
               </Button>
             </div>
 
             {tomorrowEvents.length > 0 ? (
-              <div className="space-y-1">
+              <div className="space-y-0.5">
                 {tomorrowEvents.map((evt) => {
                   const driverMember = evt.members.find(
                     (m) =>
@@ -1372,6 +1384,8 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                       tabIndex={0}
                       data-tactile="true"
                       data-calendar-event
+                      data-sidecar-loadable="true"
+                      data-event-id={evt.id}
                       onClick={() => onOpenEvent(evt)}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
@@ -1379,39 +1393,39 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                           onOpenEvent(evt)
                         }
                       }}
-                      className="w-full flex items-center justify-between py-2 px-3 rounded-2xl transition-all duration-150 cursor-pointer group gap-3 hover:bg-casa-surface hover:shadow-2xs active:scale-[0.98] min-h-[44px]"
+                      className="w-full flex items-center justify-between py-1 px-2 rounded-xl transition-all duration-150 cursor-pointer group gap-2.5 hover:bg-casa-surface hover:shadow-2xs active:scale-[0.98] min-h-[36px]"
                     >
                       <div className="flex items-center gap-2.5 min-w-0 flex-1">
                         {evt.all_day ? (
-                          <span className="font-sans text-caption font-semibold text-casa-muted shrink-0">
+                          <span className="font-sans text-caption font-semibold text-casa-muted/80 shrink-0">
                             All Day
                           </span>
                         ) : (
-                          <span className="font-mono text-body-sm font-semibold text-casa-navy shrink-0">
+                          <span className="font-mono text-caption font-bold text-casa-navy shrink-0 tabular-nums">
                             {format(parseISO(evt.start_time), 'h:mm a')}
                           </span>
                         )}
-                        <span className="text-body-sm font-semibold text-casa-navy truncate group-hover:text-casa-gold transition-colors">
+                        <span className="text-body-sm font-normal text-casa-navy truncate group-hover:text-casa-navy transition-colors">
                           {evt.title}
                         </span>
                         {evt.location_name && (
-                          <span className="text-caption text-casa-text-secondary truncate hidden md:inline">
+                          <span className="text-caption text-casa-muted font-normal truncate hidden md:inline">
                             · {evt.location_name}
                           </span>
                         )}
                       </div>
 
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-center gap-1.5 shrink-0">
                         {driverMember?.family_member?.name && (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-caption font-semibold bg-amber-500/10 text-amber-900 border border-amber-500/20 hidden sm:inline-flex">
-                            <Car size={12} className="text-amber-800" />
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-semibold bg-amber-500/10 text-amber-900 border border-amber-500/20 hidden sm:inline-flex">
+                            <Car size={11} className="text-amber-800 shrink-0" />
                             <span>{driverMember.family_member.name} drives</span>
                           </span>
                         )}
-                        <PersonAvatarStack people={avatarPeople} size="md" max={2} />
+                        <PersonAvatarStack people={avatarPeople} size="sm" max={2} />
                         <ChevronRight
-                          size={16}
-                          className="text-casa-muted group-hover:text-casa-navy transition-transform group-hover:translate-x-0.5"
+                          size={14}
+                          className="text-casa-muted/40 group-hover:text-casa-navy transition-transform group-hover:translate-x-0.5"
                         />
                       </div>
                     </div>
@@ -1419,7 +1433,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                 })}
               </div>
             ) : (
-              <div className="py-4 px-3 text-center text-caption text-casa-muted">
+              <div className="py-2.5 px-3 text-center text-caption text-casa-muted">
                 No appointments scheduled for tomorrow.
               </div>
             )}

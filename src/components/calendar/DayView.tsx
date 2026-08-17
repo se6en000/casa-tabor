@@ -216,6 +216,8 @@ export function DayEventCard({
         transition={{ duration: 0.3, delay: index * 0.04 }}
         className="cursor-pointer list-none"
         data-calendar-event
+        data-sidecar-loadable="true"
+        data-event-id={event.id}
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
         onClick={(e) => { e.stopPropagation(); onOpen() }}
@@ -313,6 +315,8 @@ export function DayEventCard({
         transition={{ duration: 0.2, delay: index * 0.02 }}
         className="cursor-pointer list-none"
         data-calendar-event
+        data-sidecar-loadable="true"
+        data-event-id={event.id}
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
         onClick={(e) => { e.stopPropagation(); onOpen() }}
@@ -406,6 +410,8 @@ export function DayEventCard({
       transition={{ duration: 0.3, delay: index * 0.04 }}
       className="cursor-pointer list-none"
       data-calendar-event
+      data-sidecar-loadable="true"
+      data-event-id={event.id}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       onClick={(e) => { e.stopPropagation(); onOpen() }}

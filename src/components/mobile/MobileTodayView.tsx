@@ -129,6 +129,8 @@ export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate 
           tabIndex={0}
           data-tactile="true"
           data-calendar-event
+          data-sidecar-loadable="true"
+          data-event-id={heroEvent.id}
           onClick={() => openEventDetails(heroEvent.id)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
@@ -362,6 +364,8 @@ export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate 
                   tabIndex={0}
                   data-tactile="true"
                   data-calendar-event
+                  data-sidecar-loadable="true"
+                  data-event-id={ev.id}
                   onClick={() => openEventDetails(ev.id)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
@@ -432,6 +436,8 @@ export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate 
                   tabIndex={0}
                   data-tactile="true"
                   data-calendar-event
+                  data-sidecar-loadable="true"
+                  data-event-id={ev.id}
                   onClick={() => openEventDetails(ev.id)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
