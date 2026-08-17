@@ -55,9 +55,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
     setSelectedHeroEventId,
     pastEvents,
     upcomingAppointments,
-    todayReminders,
     tomorrowEvents,
-    isEvening,
     isDinnerPast,
     totalAttentionCount,
     minutesUntilNext,
@@ -98,14 +96,6 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
       minutesUntilLeave !== null &&
       minutesUntilLeave > 0 &&
       minutesUntilLeave <= 15,
-  )
-  const isUnderway = Boolean(
-    minutesUntilNext !== null && minutesUntilNext <= 0 && minutesUntilNext > -180,
-  )
-  const isTrackerActive = Boolean(
-    (minutesUntilNext !== null && minutesUntilNext <= 60) ||
-      (isTravelEvent && minutesUntilLeave !== null && minutesUntilLeave <= 60) ||
-      isUnderway,
   )
 
   return (
@@ -253,8 +243,10 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
               <div>
                 <div className="flex items-center justify-between gap-2 mb-4">
                   {(() => {
-                    let statusLabel = 'UPCOMING TODAY'
-                    let dotClass = 'bg-casa-gold/80'
+                    let statusLabel = 'NEXT UP'
+                    let dotClass = 'bg-emerald-400'
+
+                    const isUnderway = minutesUntilNext !== null && minutesUntilNext <= 0 && minutesUntilNext > -60
 
                     if (nextEvent.all_day) {
                       statusLabel = 'ALL DAY EVENT'
@@ -281,19 +273,13 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                       } else if (minutesUntilLeave !== null && minutesUntilLeave <= 15) {
                         statusLabel = `PREPARE TO LEAVE · ${formatDurationLong(minutesUntilLeave)} BUFFER`
                         dotClass = 'bg-amber-400 animate-pulse'
-                      } else if (minutesUntilLeave !== null && minutesUntilLeave <= 60) {
+                      } else if (minutesUntilLeave !== null) {
                         statusLabel = `LEAVE IN ${formatDurationLong(minutesUntilLeave)}`
                         dotClass = 'bg-emerald-400'
-                      } else {
-                        statusLabel = 'UPCOMING TODAY'
-                        dotClass = 'bg-casa-gold/80'
                       }
-                    } else if (minutesUntilNext !== null && minutesUntilNext <= 60 && minutesUntilNext > 0) {
+                    } else if (minutesUntilNext !== null && minutesUntilNext > 0) {
                       statusLabel = `STARTS IN ${formatDurationLong(minutesUntilNext)}`
                       dotClass = 'bg-emerald-400'
-                    } else {
-                      statusLabel = 'UPCOMING TODAY'
-                      dotClass = 'bg-casa-gold/80'
                     }
 
                     return (
@@ -354,38 +340,21 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                   </div>
                 )}
 
-                {/* Dual-Phase Journey & Departure Bar (Option A — Active within 60m radar window; calm static schedule strip when > 60m) */}
-                {isTrackerActive ? (
-                  <div className="mt-5">
-                    <JourneyProgressBar
-                      now={now}
-                      leaveAt={isTravelEvent ? leaveAt : null}
-                      startTime={nextEvent.start_time}
-                      endTime={nextEvent.end_time}
-                      driveTimeMins={isTravelEvent ? driveTimeMins : null}
-                      isAllDay={Boolean(nextEvent.all_day)}
-                      showLabels={true}
-                      originName={originName}
-                      destinationName={destinationName}
-                      returnDestinationName={returnDestinationName}
-                    />
-                  </div>
-                ) : (
-                  <div className="mt-5 pt-3.5 border-t border-white/10 flex items-center justify-between text-caption text-white/75">
-                    <span className="flex items-center gap-1.5 text-casa-gold font-medium">
-                      <Clock size={13} />
-                      <span>Today at {format(parseISO(nextEvent.start_time), 'h:mm a')}{nextEvent.end_time ? ` – ${format(parseISO(nextEvent.end_time), 'h:mm a')}` : ''}</span>
-                    </span>
-                    {isTravelEvent && driveTimeMins ? (
-                      <span className="text-white/70 flex items-center gap-1">
-                        <Car size={12} className="text-casa-gold" />
-                        <span>{driveTimeMins}m drive</span>
-                      </span>
-                    ) : nextEvent.location_name ? (
-                      <span className="text-white/60 truncate">{nextEvent.location_name}</span>
-                    ) : null}
-                  </div>
-                )}
+                {/* Dual-Phase Journey & Departure Bar (Option A) */}
+                <div className="mt-5">
+                  <JourneyProgressBar
+                    now={now}
+                    leaveAt={isTravelEvent ? leaveAt : null}
+                    startTime={nextEvent.start_time}
+                    endTime={nextEvent.end_time}
+                    driveTimeMins={isTravelEvent ? driveTimeMins : null}
+                    isAllDay={Boolean(nextEvent.all_day)}
+                    showLabels={true}
+                    originName={originName}
+                    destinationName={destinationName}
+                    returnDestinationName={returnDestinationName}
+                  />
+                </div>
               </div>
 
               {/* Members and Logistics Footer */}
@@ -587,95 +556,12 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                 </div>
               )}
             </motion.div>
-          ) : !isEvening && !isDinnerPast ? (
-            /* Daytime All Clear / Afternoon Horizon Card */
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="w-full rounded-3xl p-6 sm:p-7 bg-gradient-to-br from-casa-navy via-slate-900 to-slate-950 text-white border border-white/10 shadow-xl relative overflow-hidden flex flex-col justify-between space-y-4"
-            >
-              <div className="absolute top-0 right-0 w-96 h-96 bg-casa-gold/10 rounded-full blur-3xl pointer-events-none" />
-
-              <div>
-                <div className="flex items-center justify-between gap-2 mb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-casa-gold/80" />
-                    <span className="text-caption font-bold uppercase tracking-widest text-casa-gold">
-                      AFTERNOON HORIZON
-                    </span>
-                  </div>
-                  <span className="text-caption text-white/70 font-mono bg-white/10 px-3 py-1 rounded-full border border-white/10">
-                    {format(now, 'EEEE, MMM d')}
-                  </span>
-                </div>
-
-                <h2 className="font-display text-display-sm sm:text-display-md font-bold text-white tracking-tight leading-tight">
-                  All Clear for the Afternoon
-                </h2>
-                <p className="text-white/75 text-body-sm mt-2 leading-relaxed">
-                  {pastEvents.length > 0
-                    ? `${pastEvents.length} appointment${pastEvents.length === 1 ? '' : 's'} completed earlier today. No further off-site appointments scheduled.`
-                    : 'No off-site appointments scheduled for today — open family flow.'}
-                </p>
-
-                {/* Highlight key family milestones */}
-                <div className="mt-4 pt-3.5 border-t border-white/10 grid grid-cols-1 sm:grid-cols-2 gap-3 text-caption text-white/80">
-                  {ambientRoutineStatuses.length > 0 && (
-                    <div className="flex items-start gap-2 bg-white/5 p-2.5 rounded-xl border border-white/10">
-                      <Sparkles size={14} className="text-emerald-400 shrink-0 mt-0.5" />
-                      <div className="min-w-0">
-                        <span className="font-semibold text-white block">School Dismissals</span>
-                        <span className="text-white/70 text-2xs">Pickups starting at 2:00 PM & 3:30 PM</span>
-                      </div>
-                    </div>
-                  )}
-                  {dinnerPlan.title && (
-                    <div className="flex items-start gap-2 bg-white/5 p-2.5 rounded-xl border border-white/10">
-                      <Utensils size={14} className="text-amber-400 shrink-0 mt-0.5" />
-                      <div className="min-w-0">
-                        <span className="font-semibold text-white block">Tonight's Kitchen</span>
-                        <span className="text-white/70 text-2xs truncate">
-                          {dinnerPlan.title} ({dinnerPlan.targetTime || '6:30 PM Target'})
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                  {todayReminders.length > 0 && (
-                    <div className="flex items-start gap-2 bg-white/5 p-2.5 rounded-xl border border-white/10 sm:col-span-2">
-                      <Bell size={14} className="text-casa-gold shrink-0 mt-0.5" />
-                      <div className="min-w-0">
-                        <span className="font-semibold text-white block">Evening Routines & Tasks</span>
-                        <span className="text-white/70 text-2xs">
-                          {todayReminders.length} reminder{todayReminders.length === 1 ? '' : 's'} scheduled ({todayReminders.map((r) => r.title).slice(0, 2).join(', ')})
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="pt-3 border-t border-white/10 flex items-center justify-between">
-                <span className="text-caption text-white/60">Complete schedule in calendar</span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setActiveView('stacked')
-                    navigateTo('/calendar')
-                  }}
-                  className="text-casa-gold hover:text-white text-caption font-bold flex items-center gap-1 min-h-0 h-8 px-3 rounded-xl bg-casa-gold/15 hover:bg-casa-gold/25 border border-casa-gold/30 cursor-pointer"
-                >
-                  <span>Full Calendar</span>
-                  <ArrowRight size={13} />
-                </Button>
-              </div>
-            </motion.div>
           ) : (
             <TomorrowPrepWidget now={now} />
           )}
 
-          {/* Stylized Ambient Daily Briefing Prose */}
-          {dailyBriefing && (
+          {/* Stylized Ambient Daily Briefing Prose (shown only during active daytime events) */}
+          {nextEvent && dailyBriefing && (
             <div className="px-1 py-1 flex items-start gap-3">
               <div className="p-1.5 rounded-xl bg-amber-500/15 text-casa-gold shrink-0 mt-0.5 border border-amber-500/20">
                 <Sparkles size={16} className="text-casa-gold animate-pulse" />
@@ -1204,112 +1090,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
             )}
           </div>
 
-          {/* 2. Today's Reminders & Chores (With suggested times and 1-tap completion) */}
-          {todayReminders.length > 0 && (
-            <div className={cn(
-              'rounded-3xl p-6 bg-casa-surface border border-casa-border/60 shadow-sm flex-col justify-start',
-              mobileSubTab === 'schedule' ? 'flex' : 'hidden lg:flex'
-            )}>
-              <div className="flex items-center justify-between mb-3.5">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-amber-500/15 text-amber-900 flex items-center justify-center font-bold">
-                    <Bell size={16} className="text-amber-700" />
-                  </div>
-                  <h3 className="font-display text-body-lg font-bold text-casa-navy">
-                    Today's Reminders & Tasks ({todayReminders.length})
-                  </h3>
-                </div>
-                <span className="text-2xs text-casa-muted font-medium">1-tap to mark done</span>
-              </div>
-
-              <div className="space-y-2">
-                {todayReminders.map((evt) => {
-                  const isDone = Boolean(completedItems[evt.id])
-                  const avatarPeople = evt.members.map((m) => ({
-                    id: m.family_member?.id || m.id,
-                    name: m.family_member?.name || 'Member',
-                    color: m.family_member?.color_hex || 'var(--color-casa-navy)',
-                  }))
-
-                  return (
-                    <div
-                      key={evt.id}
-                      role="button"
-                      tabIndex={0}
-                      data-tactile="true"
-                      onClick={() => onOpenEvent(evt)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault()
-                          onOpenEvent(evt)
-                        }
-                      }}
-                      className={cn(
-                        'flex items-center justify-between px-4 py-3 rounded-2xl border transition-all duration-150 cursor-pointer group gap-3 active:scale-[0.98]',
-                        isDone
-                          ? 'bg-casa-surface-subtle/50 border-casa-border/30 opacity-60'
-                          : 'bg-amber-500/8 hover:bg-amber-500/15 border-amber-500/25 shadow-2xs'
-                      )}
-                    >
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <Clock size={13} className="text-amber-700 shrink-0" />
-                          <span className="font-mono text-body-sm font-bold text-amber-900">
-                            {evt.all_day ? 'All Day' : format(parseISO(evt.start_time), 'h:mm a')}
-                          </span>
-                        </div>
-
-                        <span
-                          className={cn(
-                            'text-body-sm font-semibold truncate group-hover:text-amber-900 transition-colors',
-                            isDone ? 'line-through text-casa-muted' : 'text-casa-navy'
-                          )}
-                        >
-                          {evt.title}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-2.5 shrink-0">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          leadingIcon={
-                            isDone ? (
-                              <CheckCircle2 size={13} className="text-emerald-700" />
-                            ) : (
-                              <Check size={13} className="text-casa-navy" />
-                            )
-                          }
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setCompletedItems((prev) => ({
-                              ...prev,
-                              [evt.id]: !prev[evt.id],
-                            }))
-                          }}
-                          className={cn(
-                            'min-h-[34px] px-3 py-1 rounded-xl text-caption font-semibold transition-all',
-                            isDone
-                              ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
-                              : 'bg-casa-surface hover:bg-white text-casa-navy border-casa-border shadow-2xs'
-                          )}
-                        >
-                          <span>{isDone ? 'Done' : 'Mark Done'}</span>
-                        </Button>
-                        {avatarPeople.length > 0 && <PersonAvatarStack people={avatarPeople} size="sm" max={2} />}
-                        <ChevronRight
-                          size={14}
-                          className="text-casa-muted group-hover:text-casa-navy transition-transform group-hover:translate-x-0.5"
-                        />
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* 3. Tonight's Kitchen (Bottom) */}
+          {/* 2. Tonight's Kitchen (Bottom) */}
           <div className={cn(
             'rounded-3xl p-6 bg-gradient-to-br from-amber-500/10 via-casa-surface to-casa-surface border border-amber-500/20 shadow-sm flex-col justify-start',
             mobileSubTab === 'kitchen' ? 'flex' : 'hidden lg:flex'

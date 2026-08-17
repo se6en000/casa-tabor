@@ -263,7 +263,7 @@ function useEventsForRange(queryKey: readonly unknown[], start: Date, end: Date)
   const eventsQuery = useQuery({
     queryKey,
     queryFn: () => fetchEventsForRange(start, end),
-    staleTime: 5 * 60_000,
+    staleTime: 60_000,
   })
   const transportationQuery = useEventTransportationPlans(start)
   const { data: familyMembers = [] } = useFamilyMembers()
@@ -427,7 +427,6 @@ export function useWeekEventIndex(selectedDate: Date) {
  */
 let _realtimeSubscribers = 0
 let _realtimeChannel: ReturnType<typeof supabase.channel> | null = null
-let _hasInitialSubscribe = false
 const _invalidateCallbacks = new Set<() => void>()
 const _planInvalidateCallbacks = new Set<() => void>()
 const _queryClientInstances = new Set<ReturnType<typeof useQueryClient>>()
@@ -481,12 +480,9 @@ function _subscribeRealtimeChannel() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'event_checklist_items' }, _fireInvalidation)
     .subscribe((status, err) => {
       if (status === 'SUBSCRIBED') {
-        if (_hasInitialSubscribe) {
-          // Reconnection catch-up: only invalidate if we already had an active session
-          _fireInvalidation()
-          _firePlanInvalidation()
-        }
-        _hasInitialSubscribe = true
+        // Connected / reconnected: catch up on any missed updates
+        _fireInvalidation()
+        _firePlanInvalidation()
       } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
         console.warn('[CalendarRealtime] Channel status:', status, err?.message ?? '')
         if (_realtimeSubscribers > 0 && !_reconnectTimer) {

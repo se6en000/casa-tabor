@@ -14,7 +14,6 @@ import { useLiveClock } from '../../hooks/useLiveClock'
 import { useHomeWeather } from '../../hooks/useHomeWeather'
 import { useTodayEvents } from '../../hooks/useCalendarEvents'
 import { useNotifications } from '../../hooks/useNotifications'
-import { supabase } from '../../lib/supabase'
 import { cn } from '../../utils/cn'
 import { IconButton } from '../ui'
 import { useAppStore } from '../../stores/appStore'
@@ -321,12 +320,8 @@ function UtilityTrack({
 
   const handleRefresh = async () => {
     setIsSpinning(true)
-    try {
-      void supabase.functions.invoke('sync-calendars', { body: {} }).catch(() => {})
-      await queryClient.invalidateQueries()
-    } finally {
-      setTimeout(() => setIsSpinning(false), 600)
-    }
+    await queryClient.invalidateQueries()
+    setTimeout(() => setIsSpinning(false), 600)
   }
 
   const iconCn = (isActive = false) =>
