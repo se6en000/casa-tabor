@@ -1,7 +1,7 @@
 import { useMemo, useRef } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
-import { Cloud, Sparkles, ImageIcon, RefreshCw, Settings, Bell } from 'lucide-react'
+import { Cloud, Sparkles, Settings, Bell } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useLiveClock } from '../../hooks/useLiveClock'
 import { useHomeWeather } from '../../hooks/useHomeWeather'
@@ -50,7 +50,7 @@ export default function CanvasTopBar() {
   return (
     <header
       className={cn(
-        'app-topbar w-full h-14 flex items-center justify-between flex-shrink-0 z-sticky backdrop-blur-md px-4 sm:px-6 transition-colors duration-300',
+        'app-topbar w-full h-14 flex items-center justify-between flex-shrink-0 z-sticky backdrop-blur-md px-4 sm:px-6 transition-colors duration-300 font-sans',
         isCalm
           ? 'bg-casa-bg/90 border-b border-casa-border/40 text-casa-navy'
           : 'bg-casa-navy/95 border-b border-white/10 text-white'
@@ -63,12 +63,12 @@ export default function CanvasTopBar() {
           onClick={() => setCanvasSubmode('calm')}
           className="inline-flex items-center gap-2.5 group h-9"
         >
-          <span className="w-8 h-8 rounded-full bg-casa-gold/15 text-casa-gold border border-casa-gold/30 inline-flex items-center justify-center text-caption font-bold flex-shrink-0 shadow-2xs group-hover:scale-105 transition-transform leading-none">
+          <span className="w-8 h-8 rounded-full bg-casa-gold/15 text-casa-gold border border-casa-gold/30 inline-flex items-center justify-center font-sans text-caption font-bold flex-shrink-0 shadow-2xs group-hover:scale-105 transition-transform leading-none">
             CT
           </span>
           <span
             className={cn(
-              'font-display text-heading hidden sm:inline-block tracking-tight font-semibold leading-none',
+              'font-display text-heading hidden sm:inline-block tracking-[0.03em] font-semibold leading-none',
               isCalm ? 'text-casa-navy' : 'text-white'
             )}
           >
@@ -80,7 +80,7 @@ export default function CanvasTopBar() {
       {/* ── Center: Workspace Navigation Track (Unified Glass Track) ── */}
       <nav
         className={cn(
-          'hidden md:inline-flex items-center gap-1 p-1 rounded-full border',
+          'hidden md:inline-flex items-center gap-1 p-1 rounded-full border font-sans',
           isCalm
             ? 'bg-casa-surface/60 border-casa-border/50 shadow-2xs'
             : 'bg-white/5 border-white/10'
@@ -120,27 +120,27 @@ export default function CanvasTopBar() {
       </nav>
 
       {/* ── Right: Weather/Clock · Actions · Copilot ── */}
-      <div className="flex items-center gap-2.5 flex-shrink-0">
+      <div className="flex items-center gap-2.5 flex-shrink-0 font-sans">
 
         {/* Ambient Info: Show weather, date & time on non-home pages */}
         {!isHome && (
-          <div className="hidden lg:flex items-center gap-2 text-caption font-mono text-casa-muted">
+          <div className="hidden lg:flex items-center gap-2 text-caption font-sans font-medium text-casa-muted">
             {weather && (
               <>
                 <span className="inline-flex items-center gap-1">
                   <Cloud size={13} className="text-casa-gold" />
-                  {weather.temp}° {weather.city}
+                  <span className="tabular-nums font-semibold">{weather.temp}°</span> {weather.city}
                 </span>
                 <span>·</span>
               </>
             )}
             <span>{format(now, 'EEEE, MMMM d')}</span>
             <span>·</span>
-            <span>{format(now, 'h:mm a')}</span>
+            <span className="tabular-nums font-semibold">{format(now, 'h:mm a')}</span>
           </div>
         )}
 
-        {/* Unified Utility Action Track */}
+        {/* Unified Utility Action Track (Streamlined) */}
         <div
           className={cn(
             'flex items-center gap-1 p-1 rounded-full border transition-all',
@@ -149,34 +149,6 @@ export default function CanvasTopBar() {
               : 'bg-white/[0.06] border-white/[0.12] shadow-2xs backdrop-blur-md'
           )}
         >
-          <IconButton
-            icon={<RefreshCw size={19} strokeWidth={1.8} />}
-            aria-label="Refresh screen"
-            onClick={() => window.location.reload()}
-            title="Refresh screen"
-            variant="ghost"
-            className={cn(
-              'size-control rounded-full flex items-center justify-center transition-all duration-150',
-              isCalm
-                ? 'text-casa-text-secondary hover:text-casa-navy hover:bg-black/5 active:scale-95'
-                : 'text-white/70 hover:text-white hover:bg-white/10 active:scale-95'
-            )}
-          />
-
-          <IconButton
-            icon={<ImageIcon size={19} strokeWidth={1.8} />}
-            aria-label="Open Art Mode"
-            onClick={() => document.dispatchEvent(new CustomEvent('screensaver-on'))}
-            title="Art Mode"
-            variant="ghost"
-            className={cn(
-              'size-control rounded-full flex items-center justify-center transition-all duration-150',
-              isCalm
-                ? 'text-casa-text-secondary hover:text-casa-navy hover:bg-black/5 active:scale-95'
-                : 'text-white/70 hover:text-white hover:bg-white/10 active:scale-95'
-            )}
-          />
-
           {/* Triage Bell with Luxury Complication Badge */}
           <div className="relative inline-flex items-center justify-center">
             <IconButton
@@ -195,7 +167,7 @@ export default function CanvasTopBar() {
             {totalAttentionCount > 0 && (
               <span
                 className={cn(
-                  'absolute bottom-0.5 right-0.5 min-w-[16px] h-[16px] px-1 rounded-full font-bold text-2xs flex items-center justify-center leading-none pointer-events-none shadow-xs border',
+                  'absolute bottom-0.5 right-0.5 min-w-[16px] h-[16px] px-1 rounded-full font-sans font-bold text-2xs tabular-nums flex items-center justify-center leading-none pointer-events-none shadow-xs border',
                   isCalm
                     ? 'bg-casa-gold text-casa-navy border-casa-surface ring-1 ring-casa-gold/40'
                     : 'bg-casa-gold text-casa-navy border-casa-navy ring-1 ring-casa-gold/50'

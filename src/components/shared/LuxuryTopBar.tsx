@@ -1,11 +1,8 @@
 import { useMemo, useRef, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { useQueryClient } from '@tanstack/react-query'
 import { format, isAfter, isBefore } from 'date-fns'
 import {
   Sparkles,
-  ImageIcon,
-  RefreshCw,
   Settings,
   Bell,
 } from 'lucide-react'
@@ -24,15 +21,11 @@ import { WeatherIcon } from './WeatherIcon'
 import NotificationDrawer from './NotificationDrawer'
 
 /* ════════════════════════════════════════════════════════════════
-   LuxuryTopBar — Unified premium navigation bar
+   LuxuryTopBar — Unified premium navigation bar (Architectural Atelier)
    ════════════════════════════════════════════════════════════════
-   Replaces both TopBarC (Classic) and CanvasTopBar (Living Canvas)
-   with a single component that adapts based on experienceMode and
-   canvasSubmode.
-
    Zone Layout:
    ┌───────┬───────────┬─────────────┬──────────┬──────────┐
-   │ Brand │  NavRail  │ AmbientInfo │ Utility  │ Copilot  │
+   │ Brand │  NavRail  │ AmbientInfo │ Actions  │ Copilot  │
    │  (A)  │    (B)    │    (C)      │  (D)     │  (E)     │
    └───────┴───────────┴─────────────┴──────────┴──────────┘
    ═══════════════════════════════════════════════════════════════════ */
@@ -56,13 +49,13 @@ function BrandZone({ isWarm }: { isWarm: boolean }) {
       className="inline-flex items-center gap-2.5 group h-9 flex-shrink-0"
     >
       <span
-        className="topbar-monogram w-9 h-9 rounded-[10px] inline-flex items-center justify-center text-caption font-bold text-casa-gold flex-shrink-0 transition-transform duration-200 ease-[var(--transition-ease-emphasized)] group-hover:scale-[1.04] leading-none"
+        className="topbar-monogram w-9 h-9 rounded-[10px] inline-flex items-center justify-center font-sans text-caption font-bold text-casa-gold flex-shrink-0 transition-transform duration-200 ease-[var(--transition-ease-emphasized)] group-hover:scale-[1.04] leading-none"
       >
         CT
       </span>
       <span
         className={cn(
-          'font-display text-heading inline-block tracking-[0.02em] font-semibold leading-none',
+          'font-display text-heading inline-block tracking-[0.03em] font-semibold leading-none',
           isWarm ? 'text-casa-navy' : 'text-white',
         )}
       >
@@ -71,8 +64,6 @@ function BrandZone({ isWarm }: { isWarm: boolean }) {
     </NavLink>
   )
 }
-
-
 
 // ── Zone C: Navigation Rail ──────────────────────────────────────
 function NavRail({
@@ -87,7 +78,7 @@ function NavRail({
 
   return (
     <nav
-      className="hidden md:inline-flex items-center gap-0.5 relative"
+      className="hidden md:inline-flex items-center gap-0.5 relative font-sans"
       aria-label="Main navigation"
     >
       {NAV_TABS.map((tab) => {
@@ -180,21 +171,21 @@ function AmbientInfo({ isWarm, showEvents }: { isWarm: boolean; showEvents: bool
   const isNow = happeningNow.length > 0
 
   return (
-    <div className="flex items-center gap-2.5 flex-shrink-0">
+    <div className="flex items-center gap-2.5 flex-shrink-0 font-sans">
       {/* Weather */}
       {weather && (
         <div
           className={cn(
-            'hidden sm:flex items-center gap-1.5 text-caption',
+            'hidden sm:flex items-center gap-1.5 text-caption font-medium',
             isWarm ? 'text-casa-text-secondary' : 'text-white/70',
           )}
         >
           <WeatherIcon
             condition={weather.condition}
-            size={14}
+            size={15}
             className="text-casa-gold"
           />
-          <span className="font-mono tabular-nums">{weather.temp}°</span>
+          <span className="tabular-nums font-semibold">{weather.temp}°</span>
           <span
             className={cn(
               'hidden lg:inline',
@@ -207,10 +198,10 @@ function AmbientInfo({ isWarm, showEvents }: { isWarm: boolean; showEvents: bool
       )}
 
       {/* Date & Clock */}
-      <div className="flex items-center gap-2.5">
+      <div className="flex items-center gap-2">
         <span
           className={cn(
-            'hidden sm:inline font-mono text-body-sm font-medium tracking-[0.01em]',
+            'hidden sm:inline text-body-sm font-medium tracking-[0.01em]',
             isWarm ? 'text-casa-text-secondary' : 'text-white/80',
           )}
         >
@@ -221,14 +212,14 @@ function AmbientInfo({ isWarm, showEvents }: { isWarm: boolean; showEvents: bool
         {/* Clock */}
         <div
           className={cn(
-            'font-mono text-body font-semibold tabular-nums',
+            'text-body font-semibold tabular-nums flex items-baseline gap-0.5',
             isWarm ? 'text-casa-navy' : 'text-white',
           )}
         >
           {format(now, 'h:mm')}
           <span
             className={cn(
-              'text-caption ml-0.5',
+              'text-caption font-medium uppercase tracking-wider',
               isWarm ? 'text-casa-text-tertiary' : 'text-white/50',
             )}
           >
@@ -308,7 +299,7 @@ function AmbientInfo({ isWarm, showEvents }: { isWarm: boolean; showEvents: bool
   )
 }
 
-// ── Zone E: Utility Actions Track ────────────────────────────────
+// ── Zone E: Utility Actions Track (Streamlined) ───────────────────
 function UtilityTrack({
   isWarm,
 }: {
@@ -317,9 +308,7 @@ function UtilityTrack({
 }) {
   const navigate = useNavigate()
   const location = useLocation()
-  const queryClient = useQueryClient()
   const { canvasSubmode, setCanvasSubmode } = useAppStore()
-  const [isSpinning, setIsSpinning] = useState(false)
   const isSettings = location.pathname.startsWith('/settings')
 
   const { data: conflicts = [] } = useWeekConflicts()
@@ -339,12 +328,6 @@ function UtilityTrack({
     } else {
       setCanvasSubmode(canvasSubmode === 'turbo' ? 'calm' : 'turbo')
     }
-  }
-
-  const handleRefresh = async () => {
-    setIsSpinning(true)
-    await queryClient.invalidateQueries()
-    setTimeout(() => setIsSpinning(false), 600)
   }
 
   const iconCn = (isActive = false) =>
@@ -368,28 +351,6 @@ function UtilityTrack({
           : 'bg-white/[0.06] border-white/[0.12] shadow-2xs backdrop-blur-md'
       )}
     >
-      {/* Refresh Screen */}
-      <IconButton
-        icon={<RefreshCw size={19} strokeWidth={1.8} className={cn('transition-transform', isSpinning && 'animate-spin')} />}
-        aria-label="Refresh Data"
-        onClick={handleRefresh}
-        title="Refresh Data"
-        variant="ghost"
-        className={iconCn(false)}
-      />
-
-      {/* Art Mode / Screensaver */}
-      <IconButton
-        icon={<ImageIcon size={19} strokeWidth={1.8} />}
-        aria-label="Open Art Mode"
-        onClick={() =>
-          document.dispatchEvent(new CustomEvent('screensaver-on'))
-        }
-        title="Art Mode Screensaver"
-        variant="ghost"
-        className={iconCn(false)}
-      />
-
       {/* Triage Bell with Luxury Complication Badge */}
       <div className="relative inline-flex items-center justify-center">
         <IconButton
@@ -403,7 +364,7 @@ function UtilityTrack({
         {totalAttentionCount > 0 && (
           <span
             className={cn(
-              'absolute bottom-0.5 right-0.5 min-w-[16px] h-[16px] px-1 rounded-full font-bold text-2xs flex items-center justify-center leading-none pointer-events-none shadow-xs border',
+              'absolute bottom-0.5 right-0.5 min-w-[16px] h-[16px] px-1 rounded-full font-sans font-bold text-2xs tabular-nums flex items-center justify-center leading-none pointer-events-none shadow-xs border',
               isWarm
                 ? 'bg-casa-gold text-casa-navy border-casa-surface ring-1 ring-casa-gold/40'
                 : 'bg-casa-gold text-casa-navy border-casa-navy ring-1 ring-casa-gold/50'
