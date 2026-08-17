@@ -112,6 +112,119 @@ export function invalidateAllCalendarQueries(queryClient: QueryClient, eventId?:
   void queryClient.refetchQueries({ queryKey: ['events'], type: 'active' })
 }
 
+export async function materializeSyntheticRoutineEvent(
+  supabase: SupabaseClient,
+  queryClient: QueryClient,
+  syntheticEvent: EventWithDetails,
+  overrides?: {
+    title?: string
+    startDate?: Date
+    endDate?: Date
+    durationMinutes?: number
+    venue?: EventVenuePayload
+    selectedMemberIds?: string[]
+    category?: string
+    mode?: 'event' | 'reminder'
+  },
+  options?: {
+    familyMembers?: FamilyMember[]
+    homeAddress?: string
+  },
+): Promise<EventWithDetails> {
+  const newEventId = crypto.randomUUID()
+  const members = options?.familyMembers ?? []
+
+  const title = (overrides?.title ?? syntheticEvent.title ?? 'New Event').trim()
+  const startTime = overrides?.startDate ? overrides.startDate.toISOString() : (syntheticEvent.start_time || new Date().toISOString())
+  const endTime = overrides?.endDate ? overrides.endDate.toISOString() : (syntheticEvent.end_time || new Date(new Date(startTime).getTime() + 15 * 60000).toISOString())
+  const locationName = (overrides?.venue?.name ?? syntheticEvent.location_name ?? '').trim()
+  const address = (overrides?.venue?.address ?? syntheticEvent.address ?? '').trim()
+  const eventType = overrides?.mode ?? syntheticEvent.event_type ?? 'event'
+  const category = (overrides?.category ?? syntheticEvent.enrichment?.category ?? 'School').toLowerCase().replace(/\s+/g, '_')
+  const driveMins = overrides?.venue?.driveMinutes ?? syntheticEvent.enrichment?.drive_time_mins ?? (locationName.toLowerCase().includes('palm beach') ? 10 : 15)
+  const routeSummary = overrides?.venue?.routeSummary ?? syntheticEvent.enrichment?.route_summary ?? (driveMins ? `${driveMins} min drive` : null)
+
+  const depTimeIso = driveMins > 0
+    ? new Date(new Date(startTime).getTime() - (driveMins + 5) * 60000).toISOString()
+    : (syntheticEvent.enrichment?.departure_time ?? null)
+
+  const { error: evErr } = await supabase
+    .from('events')
+    .insert({
+      id: newEventId,
+      title,
+      description: syntheticEvent.description ?? null,
+      start_time: startTime,
+      end_time: endTime,
+      all_day: false,
+      event_type: eventType,
+      location_name: locationName || null,
+      address: address || null,
+      status: 'confirmed',
+      is_enriched: true,
+      is_exception: true,
+      record_kind: 'single',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+
+  if (evErr) throw evErr
+
+  const targetMemberIds = overrides?.selectedMemberIds ?? (syntheticEvent.members ?? []).map((m) => m.family_member?.id || m.id).filter(Boolean)
+  const memberInserts = targetMemberIds.map((mid) => {
+    const mem = members.find((m) => m.id === mid)
+    const isDriver = mem?.role === 'parent' || mem?.can_drive
+    return {
+      event_id: newEventId,
+      family_member_id: mid,
+      role: isDriver ? 'driver' : 'passenger',
+      rsvp_status: 'accepted',
+    }
+  })
+
+  if (memberInserts.length > 0) {
+    const { error: memErr } = await supabase.from('event_members').insert(memberInserts)
+    if (memErr) console.warn('[materializeSyntheticRoutineEvent] event_members error:', memErr)
+  }
+
+  const enrichmentPayload = {
+    id: crypto.randomUUID(),
+    event_id: newEventId,
+    category,
+    category_locked: true,
+    confidence: 'high' as const,
+    drive_time_mins: driveMins,
+    departure_time: depTimeIso,
+    route_summary: routeSummary,
+    what_to_bring: [],
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }
+  const { error: enrErr } = await supabase.from('event_enrichments').insert(enrichmentPayload)
+  if (enrErr) console.warn('[materializeSyntheticRoutineEvent] event_enrichments error:', enrErr)
+
+  invalidateAllCalendarQueries(queryClient, newEventId)
+  triggerGoogleEventSync(supabase, newEventId)
+
+  return {
+    ...syntheticEvent,
+    id: newEventId,
+    title,
+    start_time: startTime,
+    end_time: endTime,
+    location_name: locationName,
+    address,
+    event_type: eventType,
+    is_exception: true,
+    enrichment: enrichmentPayload as any,
+    members: memberInserts.map((mi) => ({
+      id: crypto.randomUUID(),
+      role: mi.role,
+      family_member: members.find((m) => m.id === mi.family_member_id)!,
+    })).filter((m) => Boolean(m.family_member)),
+  }
+}
+
 export async function updateEventTitle(
   supabase: SupabaseClient,
   queryClient: QueryClient,

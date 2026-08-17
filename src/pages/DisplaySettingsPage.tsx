@@ -1,14 +1,13 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CheckCircle, Monitor, Clock, Eye, Sunset, Sliders, Cpu, Palette, Image, RotateCcw, Type, Sparkles, LayoutGrid } from 'lucide-react'
+import { CheckCircle, Monitor, Clock, Eye, Sunset, Sliders, Cpu, Palette, Image, Type, Sparkles, LayoutGrid } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
 import { SettingsPageHeader, SettingsToggle as Toggle } from '../components/settings'
-import { Alert, Button, Card, DisclosureSection, IconButton, SegmentedControl, SectionHeader as SharedSectionHeader } from '../components/ui'
-import { useTheme, PRESETS, DEFAULTS, MIDNIGHT_GALLERY_DEFAULTS, type ThemeColors } from '../contexts/ThemeContext'
+import { Button, Card, SectionHeader as SharedSectionHeader } from '../components/ui'
+import { useTheme, PRESETS, type ThemeColors } from '../contexts/ThemeContext'
 import { DEFAULT_FONT_SCALE, MAX_FONT_SCALE, MIN_FONT_SCALE } from '../design-system/tokens.mjs'
-import { getThemeContrastIssues } from '../design-system/themeContrast.mjs'
 import { useAppStore } from '../stores/appStore'
 import {
   useRoomTone,
@@ -23,37 +22,6 @@ import { useScreensaverSettings } from '../hooks/useScreensaverSettings'
 
 // ── Shared sub-components ──────────────────────────────────────────
 
-const COLOR_FIELDS: { key: keyof ThemeColors; label: string; desc: string }[] = [
-  { key: 'casa-gold',    label: 'Accent Color',       desc: 'Icons, highlights, buttons, badges' },
-  { key: 'casa-navy',    label: 'Primary Color',      desc: 'Navigation, headers, dark elements' },
-  { key: 'casa-bg',      label: 'Background',         desc: 'Main page background' },
-  { key: 'casa-bg-2',    label: 'Background 2',       desc: 'Secondary rail background used by side panels' },
-  { key: 'casa-surface', label: 'Card / Panel',       desc: 'Cards, panels, input backgrounds' },
-  { key: 'casa-text',    label: 'Body Text',          desc: 'Primary text color' },
-  { key: 'casa-border',  label: 'Borders & Dividers', desc: 'Card borders, divider lines' },
-  { key: 'casa-error', label: 'Error Accent', desc: 'Errors, destructive actions, and critical status states' },
-  { key: 'casa-success', label: 'Success Accent', desc: 'General success highlights and completion confirmations' },
-  { key: 'casa-warning', label: 'Warning Accent', desc: 'Warnings, caution states, and timing urgency badges' },
-  { key: 'casa-surface-subtle', label: 'Subtle Surface', desc: 'Inset strips, secondary wells, low-emphasis panel fills' },
-  { key: 'casa-control-border', label: 'Control Border', desc: 'Inputs, segmented controls, and chip outlines' },
-  { key: 'casa-divider-strong', label: 'Strong Divider', desc: 'Section separators and structured content dividers' },
-  { key: 'casa-text-secondary', label: 'Secondary Text', desc: 'Supporting paragraph copy and helper labels' },
-  { key: 'casa-text-tertiary', label: 'Tertiary / Muted Text', desc: 'Metadata, timestamps, and subdued labels' },
-  { key: 'casa-text-faint', label: 'Faint Text', desc: 'Placeholder and de-emphasized text' },
-  { key: 'casa-accent-soft', label: 'Primary Soft Fill', desc: 'Primary warm action surfaces (peach-style fill)' },
-  { key: 'casa-accent-soft-border', label: 'Primary Soft Border', desc: 'Borders paired with primary soft fill components' },
-  { key: 'casa-accent-soft-hover', label: 'Primary Soft Hover', desc: 'Hover/press tint for warm primary actions' },
-  { key: 'casa-accent-subtle', label: 'Subtle Accent Fill', desc: 'Low-emphasis accent surfaces (secondary action backgrounds)' },
-  { key: 'casa-accent-subtle-border', label: 'Subtle Accent Border', desc: 'Borders for subtle accent surfaces' },
-  { key: 'casa-info', label: 'Info Accent', desc: 'Informational highlights and AI/cue accents' },
-  { key: 'casa-info-strong', label: 'Info Accent Strong', desc: 'Text/icons on informational chips and emphasis badges' },
-  { key: 'casa-info-soft', label: 'Info Accent Soft Fill', desc: 'Background fill for informational chips' },
-  { key: 'casa-success-strong', label: 'Success Accent Strong', desc: 'Positive text/icon emphasis' },
-  { key: 'casa-success-soft', label: 'Success Accent Soft Fill', desc: 'Positive pill/chip background fill' },
-  { key: 'casa-toggle-track', label: 'Toggle Track', desc: 'Segmented toggle and neutral track backgrounds' },
-  { key: 'casa-top-pick-band', label: 'Top-Pick Band Text', desc: 'Text color used on featured/top-pick band labels' },
-]
-
 function SectionHeader({ icon: Icon, label }: { icon: React.ElementType; label: string }) {
   return <SharedSectionHeader icon={Icon} title={label} compact className="mb-2" />
 }
@@ -61,11 +29,6 @@ function SectionHeader({ icon: Icon, label }: { icon: React.ElementType; label: 
 // ── Room Tone Preview ──────────────────────────────────────────────
 
 const ZONES_IN_ORDER: RoomToneZone[] = ['day', 'afternoon', 'evening', 'night', 'late-night']
-
-const PALETTE_TARGET_OPTIONS = [
-  { value: 'day', label: 'Day Palette' },
-  { value: 'midnight', label: 'Midnight Gallery' },
-] as const
 
 const ZONE_FILTER: Record<RoomToneZone, string> = {
   'day':        'sepia(0) brightness(1)',
@@ -202,20 +165,14 @@ export default function DisplaySettingsPage() {
   const { cfg: liveCfg, currentZone, sensorData } = useRoomTone()
   const { settings } = useScreensaverSettings()
   const {
-    colors,
     dayColors,
-    activeTarget,
     autoMidnight,
     forceMidnight,
     setAutoMidnight,
     setForceMidnight,
     fontScale,
     setFontScale,
-    setActiveTarget,
-    setColor,
     applyDayPreset,
-    resetToDefaults,
-    isDefault,
   } = useTheme()
   const { experienceMode, setExperienceMode } = useAppStore()
   const [config, setConfig] = useState<DisplayConfig>(DISPLAY_DEFAULTS)
@@ -223,7 +180,6 @@ export default function DisplaySettingsPage() {
   const [previewZone, setPreviewZone] = useState<RoomToneZone>('day')
   // Track whether config has been user-modified (vs just loaded from DB)
   const [dirty, setDirty] = useState(false)
-  const contrastIssues = getThemeContrastIssues(colors)
 
   useEffect(() => {
     setConfig({ ...DISPLAY_DEFAULTS, ...liveCfg })
@@ -463,111 +419,6 @@ export default function DisplaySettingsPage() {
             desc="Keep Midnight Gallery on all day until you turn this off."
           />
         </div>
-
-        <Card padding="none">
-          <DisclosureSection
-            title="Advanced Colors"
-            summary="Fine-tune semantic colors with live contrast checks"
-            icon={<Palette size={18} />}
-          >
-            <SegmentedControl
-              aria-label="Custom palette to edit"
-              value={activeTarget}
-              options={PALETTE_TARGET_OPTIONS}
-              onChange={setActiveTarget}
-              className="mb-4"
-            />
-            {contrastIssues.length > 0 && (
-              <Alert tone="warning" title="Some text may be difficult to read" className="mb-4">
-                Adjust: {contrastIssues.join(', ')}. Casa recommends WCAG AA contrast for all normal text.
-              </Alert>
-            )}
-            <div className="divide-y divide-casa-divider">
-            {COLOR_FIELDS.map(({ key, label, desc }) => (
-              <div key={key} className="flex items-center gap-4 px-0 py-3.5">
-                {/* Color swatch + picker */}
-                <label className="relative cursor-pointer flex-shrink-0">
-                  <div
-                    className="w-10 h-10 rounded-xl border-2 border-casa-border shadow-sm transition-transform hover:scale-105"
-                    style={{ background: colors[key] }}
-                  />
-                  <input
-                    type="color"
-                    value={colors[key]}
-                    onChange={e => setColor(key, e.target.value)}
-                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                  />
-                </label>
-
-                <div className="flex-1 min-w-0">
-                  <p className="text-body-sm font-semibold text-casa-navy leading-tight">{label}</p>
-                  <p className="text-caption text-casa-muted mt-0.5">{desc}</p>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <code className="text-caption font-mono text-casa-muted bg-casa-bg px-2 py-1 rounded-md">
-                    {colors[key].toUpperCase()}
-                  </code>
-                  {colors[key] !== (activeTarget === 'midnight' ? MIDNIGHT_GALLERY_DEFAULTS[key] : DEFAULTS[key]) && (
-                    <IconButton
-                      onClick={() => setColor(key, activeTarget === 'midnight' ? MIDNIGHT_GALLERY_DEFAULTS[key] : DEFAULTS[key])}
-                      variant="ghost"
-                      size="sm"
-                      icon={<RotateCcw size={13} />}
-                      aria-label="Reset this color"
-                      title="Reset this color"
-                    />
-                  )}
-                </div>
-              </div>
-            ))}
-            </div>
-          </DisclosureSection>
-        </Card>
-
-        {/* Live preview strip */}
-        <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
-          <SectionHeader icon={Eye} label="Preview" />
-          <div className="rounded-2xl overflow-hidden border border-casa-border shadow-sm">
-            {/* Header bar */}
-            <div className="px-4 py-3 flex items-center justify-between" style={{ background: colors['casa-navy'] }}>
-              <span className="font-display text-body-sm font-semibold text-white">Casa Tabor</span>
-              <div className="w-2 h-2 rounded-full" style={{ background: colors['casa-gold'] }} />
-            </div>
-            {/* Card */}
-            <div className="p-4" style={{ background: colors['casa-bg'] }}>
-              <div className="rounded-xl p-3 border" style={{ background: colors['casa-surface'], borderColor: colors['casa-border'] }}>
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-caption font-bold" style={{ background: colors['casa-gold'] }}>J</div>
-                  <span className="text-body-sm font-semibold" style={{ color: colors['casa-navy'] }}>Jake's Event</span>
-                </div>
-                <p className="text-caption" style={{ color: colors['casa-text'] }}>Thursday · 3:00 PM – 4:00 PM</p>
-                <div className="mt-2 pt-2 border-t" style={{ borderColor: colors['casa-border'] }}>
-                  <span className="text-caption font-semibold px-2 py-0.5 rounded-full text-white" style={{ background: colors['casa-gold'] }}>Work</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Reset to defaults */}
-        {!isDefault && (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 flex items-center justify-between">
-            <div>
-              <p className="text-body-sm font-semibold text-amber-800">Custom {activeTarget === 'midnight' ? 'Midnight Gallery' : 'day'} palette active</p>
-              <p className="text-caption text-amber-600 mt-0.5">
-                Restore original {activeTarget === 'midnight' ? 'Midnight Gallery' : 'Casa Tabor day'} colors
-              </p>
-            </div>
-            <Button
-              onClick={resetToDefaults}
-              variant="secondary"
-            >
-              <RotateCcw size={14} />
-              Reset palette defaults
-            </Button>
-          </div>
-        )}
 
         {/* ─────────────────────────────────────────────────────────────────── */}
         {/* 2. DISPLAY SETTINGS ────────────────────────────────────────────── */}

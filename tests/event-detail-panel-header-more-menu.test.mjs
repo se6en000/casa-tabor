@@ -14,7 +14,7 @@ function read(relPath) {
 test('LivingFlowSidecar renders quick actions for deletion and AI copilot', () => {
   const src = read('src/components/calendar/living-flow/LivingFlowSidecar.tsx')
   assert.match(src, /aria-label="Delete this event"/, 'Sidecar should render a delete trigger')
-  assert.match(src, /Ask Copilot about this…/, 'Sidecar should offer Copilot integration')
+  assert.match(src, /Ask (Copilot|Casa AI) about this…/, 'Sidecar should offer Casa AI integration')
   assert.match(src, /deleteEvent/, 'Sidecar should bind delete action')
 })
 

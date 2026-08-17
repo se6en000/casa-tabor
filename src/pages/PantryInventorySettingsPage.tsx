@@ -53,7 +53,7 @@ function sanitizeInventory(raw: unknown): PantryInventoryRow[] {
   return rows.sort((a, b) => a.name.localeCompare(b.name))
 }
 
-export default function PantryInventorySettingsPage() {
+export default function PantryInventorySettingsPage({ hideHeader = false }: { hideHeader?: boolean } = {}) {
   const [rows, setRows] = useState<PantryInventoryRow[]>([])
   const [baselineInventory, setBaselineInventory] = useState<Record<string, Omit<PantryInventoryRow, 'id'>>>({})
   const [auditLog, setAuditLog] = useState<PantryInventoryAuditEntry[]>([])
@@ -252,11 +252,13 @@ export default function PantryInventorySettingsPage() {
 
   return (
     <div className="space-y-6">
-      <SettingsPageHeader
-        icon={Layers}
-        title="Kitchen Pantry Inventory"
-        description="Track package on-hand counts and low-stock thresholds used for Meal Planner AI deduction and automated grocery replenishment."
-      />
+      {!hideHeader && (
+        <SettingsPageHeader
+          icon={Layers}
+          title="Kitchen Pantry Inventory"
+          description="Track package on-hand counts and low-stock thresholds used for Meal Planner AI deduction and automated grocery replenishment."
+        />
+      )}
 
       {error && (
         <Alert tone="danger" title="Could not save pantry inventory" className="shadow-sm">

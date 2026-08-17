@@ -1,8 +1,8 @@
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useEffect, useRef, useState, useMemo } from 'react'
 import {
-  Users, Sun, MessageSquare, Bot, Home, Activity,
-  BookmarkCheck, Layers, ChevronRight, Music2, LineChart, Bug, Brain,
+  Users, Sun, MessageSquare, Bot, Activity,
+  BookmarkCheck, Layers, ChevronRight, LineChart, Brain,
   Palette, ShoppingCart, Lock, LayoutGrid, ChevronLeft, ChefHat,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
@@ -23,15 +23,13 @@ const HOUSEHOLD_GROUPS = [
   {
     label: 'Home & Places',
     items: [
-      { to: '/settings/home',    icon: Home,          label: 'Home & Profile',      desc: 'Address, home screen layout' },
-      { to: '/settings/places',  icon: BookmarkCheck, label: 'Saved Places & Directory', desc: 'Locations, contacts & nicknames' },
+      { to: '/settings/places',  icon: BookmarkCheck, label: 'Places & Directory',  desc: 'Home address, places & contacts' },
     ],
   },
   {
     label: 'Kitchen & Food',
     items: [
-      { to: '/settings/food-profile', icon: ChefHat, label: 'Dietary & Meal Goals', desc: 'Allergies, preferences, budget' },
-      { to: '/settings/pantry-inventory', icon: ShoppingCart, label: 'Pantry Inventory', desc: 'Staples & low-stock alerts' },
+      { to: '/settings/food-profile', icon: ChefHat, label: 'Kitchen & Pantry',     desc: 'Dietary goals, budget & pantry stock' },
     ],
   },
   {
@@ -45,7 +43,6 @@ const HOUSEHOLD_GROUPS = [
     label: 'Connected Services',
     items: [
       { to: '/settings/google',  icon: Layers,        label: 'Google Services',     desc: 'Calendar sync + Gmail' },
-      { to: '/settings/music',   icon: Music2,        label: 'Spotify / Music',     desc: 'Audio playback setup' },
       { to: '/settings/sms',     icon: MessageSquare, label: 'Notifications',       desc: 'SMS briefings & alerts' },
     ],
   },
@@ -70,9 +67,8 @@ const ADVANCED_GROUPS = [
   {
     label: 'Developer & Diagnostics',
     items: [
-      { to: '/settings/bug-tracker', icon: Bug,       label: 'Bug Tracker',         desc: 'Capture & triage defects' },
-      { to: '/settings/admin-ops', icon: Lock,        label: 'Admin Operations',    desc: 'PIN-gated bulk operations' },
       { to: '/settings/design-system', icon: LayoutGrid, label: 'Design System Reference', desc: 'Component tokens & visual audits' },
+      { to: '/settings/admin-ops', icon: Lock,        label: 'Admin Operations',    desc: 'PIN-gated bulk operations' },
     ],
   },
 ]

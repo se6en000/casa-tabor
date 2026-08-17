@@ -66,8 +66,8 @@ export default function LivingFlowHeader({
               icon={<Rotate3d size={16} className="text-amber-700 transition-transform duration-300 group-hover:rotate-180" />}
               onClick={onSwitchToAi}
               className="living-header-action-btn group"
-              title="Flip to Copilot chat"
-              aria-label="Flip to Copilot chat"
+              title="Flip to Copilot"
+              aria-label="Flip to Copilot"
             />
           )}
           <IconButton

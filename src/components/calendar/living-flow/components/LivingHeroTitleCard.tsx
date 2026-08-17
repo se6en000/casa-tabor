@@ -5,7 +5,7 @@ import {
   ShoppingBag, Trophy, Stethoscope, PartyPopper,
   GraduationCap, Utensils, Plane, Church, Pill,
   ShoppingCart, BookOpen, Wrench, PawPrint, ClipboardList,
-  Check, Bell, X
+  Check, Bell, X, Pencil
 } from 'lucide-react'
 import type { LivingFlowMode } from '../types'
 
@@ -125,42 +125,49 @@ export default function LivingHeroTitleCard({
   return (
     <div className={`living-hero-title-card flex flex-col ${expandedSection ? 'has-expanded' : ''}`}>
       {/* In-Place Controlled Editable Title via Zero-Lag CSS Grid Auto-Sizing */}
-      <div className="grid grid-cols-1 grid-rows-1 relative w-full">
-        {/* Invisible shadow span that dictates the exact container height without white-space gaps */}
-        <span
-          aria-hidden="true"
-          className="invisible col-start-1 row-start-1 living-event-title px-1 -mx-1 whitespace-pre-wrap select-none pointer-events-none"
-        >
-          {localTitle || 'Event title…'}
-        </span>
+      <div className="group relative w-full">
+        <div className="grid grid-cols-1 grid-rows-1 relative w-full">
+          {/* Invisible shadow span that dictates the exact container height without white-space gaps */}
+          <span
+            aria-hidden="true"
+            className="invisible col-start-1 row-start-1 living-event-title px-1.5 -mx-1.5 whitespace-pre-wrap select-none pointer-events-none pr-7"
+          >
+            {localTitle || 'Event title…'}
+          </span>
 
-        {/* Textarea that fills the grid cell exactly */}
-        <textarea
-          rows={1}
-          value={localTitle}
-          onFocus={() => {
-            isEditingRef.current = true
-          }}
-          onChange={(e) => {
-            setLocalTitle(e.target.value)
-          }}
-          onBlur={(e) => {
-            isEditingRef.current = false
-            const text = e.target.value.trim() || 'Untitled'
-            setLocalTitle(text)
-            if (text !== title) {
-              onUpdateTitle(text)
-            }
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              e.currentTarget.blur()
-            }
-          }}
-          placeholder="Event title…"
-          className="col-start-1 row-start-1 living-event-title cursor-text hover:bg-slate-50/50 focus:bg-white/80 rounded px-1 -mx-1 transition-colors resize-none overflow-hidden"
-        />
+          {/* Textarea that fills the grid cell exactly */}
+          <textarea
+            rows={1}
+            value={localTitle}
+            onFocus={() => {
+              isEditingRef.current = true
+            }}
+            onChange={(e) => {
+              setLocalTitle(e.target.value)
+            }}
+            onBlur={(e) => {
+              isEditingRef.current = false
+              const text = e.target.value.trim() || 'Untitled'
+              setLocalTitle(text)
+              if (text !== title) {
+                onUpdateTitle(text)
+              }
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                e.currentTarget.blur()
+              }
+            }}
+            placeholder="Event title…"
+            aria-label="Event title"
+            className="col-start-1 row-start-1 living-event-title cursor-text hover:bg-slate-50/70 focus:bg-amber-50/40 rounded px-1.5 -mx-1.5 transition-all resize-none overflow-hidden pr-7 select-text"
+          />
+
+          <div className="absolute right-0 top-1.5 opacity-40 hover:opacity-100 transition-opacity pointer-events-none flex items-center gap-1 text-slate-400">
+            <Pencil size={13} />
+          </div>
+        </div>
       </div>
 
       {/* Meta Pills Cluster */}

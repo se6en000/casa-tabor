@@ -20,7 +20,7 @@ interface HomeScreenLayout {
   show_prep: boolean
 }
 
-export default function HomeSettingsPage() {
+export default function HomeSettingsPage({ hideHeader = false }: { hideHeader?: boolean } = {}) {
   const [home, setHome] = useState<HomeConfig>({ address: '', city: '', state: '', zip: '' })
   const [homeScreenLayout, setHomeScreenLayout] = useState<HomeScreenLayout>({
     show_home_hero: true,
@@ -109,11 +109,13 @@ export default function HomeSettingsPage() {
 
   return (
     <>
-      <SettingsPageHeader
-        icon={Home}
-        title="Home & Profile"
-        description="Your address powers drive times, AI enrichment, and travel planning. Choose what appears on Home below."
-      />
+      {!hideHeader && (
+        <SettingsPageHeader
+          icon={Home}
+          title="Home & Profile"
+          description="Your address powers drive times, AI enrichment, and travel planning. Choose what appears on Home below."
+        />
+      )}
 
       <div className="mt-6 space-y-4">
 

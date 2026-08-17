@@ -17,6 +17,7 @@ import { Button, Checkbox, Combobox, IconButton, SegmentedControl, Input, Textar
 import { SettingsPageHeader } from '../components/settings'
 import DirectoryPlaceInput from '../components/shared/DirectoryPlaceInput'
 import GoogleAddressSearchInput from '../components/shared/GoogleAddressSearchInput'
+import HomeSettingsPage from './HomeSettingsPage'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -794,13 +795,13 @@ function PossibleDuplicateConnectionsPanel({ contacts, places, onKeep, onNotDupl
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-type Tab = 'places' | 'people' | 'connections' | 'family'
+type Tab = 'home' | 'places' | 'people' | 'connections' | 'family'
 type PlaceMode = { type: 'list' } | { type: 'add' } | { type: 'edit'; place: SavedPlace }
 type ContactMode = { type: 'list' } | { type: 'add' } | { type: 'edit'; contact: SavedContact }
 
-export default function SavedPlacesSettingsPage() {
+export default function SavedPlacesSettingsPage({ initialTab = 'places' }: { initialTab?: Tab } = {}) {
   const qc = useQueryClient()
-  const [tab, setTab] = useState<Tab>('places')
+  const [tab, setTab] = useState<Tab>(initialTab)
   const [placeMode, setPlaceMode] = useState<PlaceMode>({ type: 'list' })
   const [contactMode, setContactMode] = useState<ContactMode>({ type: 'list' })
   const [search, setSearch] = useState('')
@@ -1332,19 +1333,21 @@ export default function SavedPlacesSettingsPage() {
     ].some(value => value.toLowerCase().includes(needle))
   })
 
-  const isAdding = tab === 'places'
-    ? placeMode.type !== 'list'
-    : tab === 'people'
-      ? contactMode.type !== 'list'
-      : tab === 'connections'
-        ? connectionMode !== 'list'
-        : familyLinkMode !== 'list'
+  const isAdding = tab === 'home'
+    ? true
+    : tab === 'places'
+      ? placeMode.type !== 'list'
+      : tab === 'people'
+        ? contactMode.type !== 'list'
+        : tab === 'connections'
+          ? connectionMode !== 'list'
+          : familyLinkMode !== 'list'
 
   return (
     <>
         {/* Header */}
         <div className="flex items-center gap-3 mb-6">
-          <SettingsPageHeader title="Household Directory" description="Places are destinations. People are contacts or providers who can be connected to a place." />
+          <SettingsPageHeader title="Places & Household Directory" description="Home address, widget display preferences, saved places, and family contacts." />
           {!isAdding && (
             <Button
               onClick={() => {
@@ -1363,17 +1366,23 @@ export default function SavedPlacesSettingsPage() {
         {/* Tabs */}
         <SegmentedControl
           value={tab}
-          onChange={value => { setTab(value); setSearch('') }}
+          onChange={value => { setTab(value as Tab); setSearch('') }}
           aria-label="Household Directory view"
           fullWidth
           className="mb-6"
           options={[
+            { value: 'home', label: 'Home & Widgets', icon: <Home size={15} /> },
             { value: 'places', label: `Places (${places.filter(p => p.confirmed).length})`, icon: <BookmarkCheck size={15} /> },
             { value: 'people', label: `People (${contacts.filter(c => c.confirmed).length})`, icon: <Users size={15} /> },
             { value: 'connections', label: `Connections (${connections.length})`, icon: <Link2 size={15} /> },
             { value: 'family', label: `Family Links (${familyLinks.length})`, icon: <UserCheck size={15} /> },
           ]}
         />
+
+        {/* ── HOME & WIDGETS TAB ── */}
+        {tab === 'home' && (
+          <HomeSettingsPage hideHeader />
+        )}
 
         {/* ── PLACES TAB ── */}
         {tab === 'places' && (

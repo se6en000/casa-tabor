@@ -123,12 +123,12 @@ export default function UnifiedScheduleWidget({
               )}
             </div>
 
-            {/* Proactive Copilot Insight */}
+            {/* Proactive Casa AI Insight */}
             {copilotTip && (
               <div className="p-3 rounded-2xl bg-casa-gold/10 border border-casa-gold/30 flex items-start gap-2.5">
                 <Sparkles size={14} className="text-casa-gold shrink-0 mt-0.5" />
                 <p className="text-caption text-casa-navy leading-relaxed font-medium">
-                  <span className="font-bold text-casa-navy mr-1">Copilot Insight:</span>
+                  <span className="font-bold text-casa-navy mr-1">Casa AI Insight:</span>
                   {copilotTip}
                 </p>
               </div>

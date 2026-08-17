@@ -338,8 +338,8 @@ export default function ActionQueueWidget({
                       <IconButton
                         variant="ghost"
                         size="sm"
-                        title="Solve with Copilot"
-                        aria-label="Solve with Copilot"
+                        title="Solve with Casa AI"
+                        aria-label="Solve with Casa AI"
                         onClick={() => openCopilotForConflict(c)}
                         className="p-2.5 rounded-xl text-casa-gold hover:bg-casa-gold/20 min-h-[48px] min-w-[48px] shrink-0 flex items-center justify-center"
                         icon={<Sparkles size={16} />}
@@ -375,7 +375,7 @@ export default function ActionQueueWidget({
                               className="px-3.5 py-2.5 rounded-xl text-amber-900 hover:bg-amber-200/60 text-caption font-semibold transition-all min-h-[48px] flex items-center gap-1.5"
                             >
                               <Sparkles size={14} className="text-amber-700" />
-                              <span>Ask Copilot</span>
+                              <span>Ask Casa AI</span>
                             </Button>
                           </div>
 
@@ -448,7 +448,7 @@ export default function ActionQueueWidget({
                             className="px-3.5 py-2.5 rounded-xl text-amber-900 hover:bg-amber-200/60 text-caption font-semibold transition-all min-h-[48px] flex items-center gap-1.5"
                           >
                             <Sparkles size={14} className="text-amber-700" />
-                            <span>Reschedule with Copilot</span>
+                            <span>Reschedule with Casa AI</span>
                           </Button>
 
                           <Button

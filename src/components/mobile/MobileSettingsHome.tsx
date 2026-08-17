@@ -4,12 +4,9 @@ import {
   Users,
   MapPin,
   RefreshCw,
-  Package,
   ChevronRight,
   Sun,
   Palette,
-  Music,
-  Home,
   Brain,
   MessageSquare,
   ChefHat,
@@ -156,42 +153,6 @@ export default function MobileSettingsHome() {
             <div className="flex items-center gap-3 min-w-0">
               <Palette size={17} className="text-purple-500 shrink-0" />
               <span className="text-body-sm font-semibold text-casa-navy truncate">Art Mode & Frames</span>
-            </div>
-            <ChevronRight size={16} className="text-casa-muted shrink-0" />
-          </Button>
-
-          <Button
-            variant="ghost"
-            onClick={() => navigate('/settings/home')}
-            className="w-full flex items-center justify-between p-3.5 hover:bg-casa-bg active:bg-casa-bg transition-colors text-left rounded-none"
-          >
-            <div className="flex items-center gap-3 min-w-0">
-              <Home size={17} className="text-casa-gold shrink-0" />
-              <span className="text-body-sm font-semibold text-casa-navy truncate">Home Address & Widgets</span>
-            </div>
-            <ChevronRight size={16} className="text-casa-muted shrink-0" />
-          </Button>
-
-          <Button
-            variant="ghost"
-            onClick={() => navigate('/settings/pantry-inventory')}
-            className="w-full flex items-center justify-between p-3.5 hover:bg-casa-bg active:bg-casa-bg transition-colors text-left rounded-none"
-          >
-            <div className="flex items-center gap-3 min-w-0">
-              <Package size={17} className="text-emerald-500 shrink-0" />
-              <span className="text-body-sm font-semibold text-casa-navy truncate">Pantry Inventory & Low Stock</span>
-            </div>
-            <ChevronRight size={16} className="text-casa-muted shrink-0" />
-          </Button>
-
-          <Button
-            variant="ghost"
-            onClick={() => navigate('/settings/music')}
-            className="w-full flex items-center justify-between p-3.5 hover:bg-casa-bg active:bg-casa-bg transition-colors text-left rounded-none"
-          >
-            <div className="flex items-center gap-3 min-w-0">
-              <Music size={17} className="text-blue-500 shrink-0" />
-              <span className="text-body-sm font-semibold text-casa-navy truncate">Spotify & Sonos Audio</span>
             </div>
             <ChevronRight size={16} className="text-casa-muted shrink-0" />
           </Button>

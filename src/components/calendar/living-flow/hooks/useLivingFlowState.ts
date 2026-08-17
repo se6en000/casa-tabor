@@ -25,6 +25,7 @@ import {
   type RecurringEditorContext,
 } from '../../../../lib/recurringEventEditor'
 import {
+  materializeSyntheticRoutineEvent,
   updateEventTitle,
   updateEventSchedule,
   updateEventVenue,
@@ -229,12 +230,14 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
   }, [initialEvent?.id, isCanonicalOccurrence])
 
   const currentEventIdRef = useRef(initialEvent?.id)
+  const activeEventRef = useRef<EventWithDetails | null>(initialEvent)
 
   // Sync state whenever event prop changes
   useEffect(() => {
     if (!initialEvent) return
     const isNewEvent = initialEvent.id !== currentEventIdRef.current
     currentEventIdRef.current = initialEvent.id
+    activeEventRef.current = initialEvent
 
     const cat = normalizeCategoryName(initialEvent.enrichment?.category)
     const mode = isLikelyReminderOrHome(initialEvent, initialEvent.enrichment?.category) ? 'reminder' : 'event'
@@ -514,16 +517,31 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
   const updateTitle = useCallback(async (newTitle: string) => {
     const trimmed = newTitle.trim() || 'Untitled'
     setState(prev => ({ ...prev, title: trimmed }))
-    if (!initialEvent?.id) return
+    const currentEvent = activeEventRef.current || initialEvent
+    if (!currentEvent?.id) return
+
     try {
+      if (currentEvent.id.startsWith('routine-')) {
+        const materialized = await materializeSyntheticRoutineEvent(
+          supabase,
+          queryClient,
+          currentEvent,
+          { title: trimmed },
+          { familyMembers },
+        )
+        activeEventRef.current = materialized
+        currentEventIdRef.current = materialized.id
+        return
+      }
+
       const handled = await persistRecurringFieldMutation('title', { title: trimmed })
       if (!handled) {
-        await updateEventTitle(supabase, queryClient, initialEvent.id, trimmed)
+        await updateEventTitle(supabase, queryClient, currentEvent.id, trimmed)
       }
     } catch (err) {
       console.error('[LivingFlow] Failed to update event title:', err)
     }
-  }, [initialEvent?.id, persistRecurringFieldMutation, queryClient])
+  }, [initialEvent, persistRecurringFieldMutation, queryClient, familyMembers])
 
   // Toggle Attendee
   const toggleMember = useCallback(async (memberId: string) => {
@@ -533,12 +551,26 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
       : [...state.selectedMemberIds, memberId]
 
     setState(prev => ({ ...prev, selectedMemberIds: nextIds }))
+    const currentEvent = activeEventRef.current || initialEvent
+    if (!currentEvent?.id) return
 
-    if (!initialEvent?.id) return
     try {
+      if (currentEvent.id.startsWith('routine-')) {
+        const materialized = await materializeSyntheticRoutineEvent(
+          supabase,
+          queryClient,
+          currentEvent,
+          { selectedMemberIds: nextIds },
+          { familyMembers },
+        )
+        activeEventRef.current = materialized
+        currentEventIdRef.current = materialized.id
+        return
+      }
+
       const handled = await persistRecurringFieldMutation('attendees', { selectedMemberIds: nextIds })
       if (!handled) {
-        await toggleEventAttendee(supabase, queryClient, initialEvent, memberId, !isSelected, familyMembers)
+        await toggleEventAttendee(supabase, queryClient, currentEvent, memberId, !isSelected, familyMembers)
       }
     } catch (err) {
       console.error('[LivingFlow] Failed to toggle member:', err)
@@ -582,7 +614,8 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
       isCalculatingRoute: !isHome && !venue.driveMinutes,
     }))
 
-    if (!initialEvent?.id) return
+    const currentEvent = activeEventRef.current || initialEvent
+    if (!currentEvent?.id) return
 
     let calculatedVenue = { ...venue }
 
@@ -618,9 +651,30 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     }
 
     try {
+      if (currentEvent.id.startsWith('routine-')) {
+        const materialized = await materializeSyntheticRoutineEvent(
+          supabase,
+          queryClient,
+          currentEvent,
+          {
+            venue: {
+              name: calculatedVenue.name,
+              address: calculatedVenue.address,
+              driveMinutes: calculatedVenue.driveMinutes,
+              distanceMiles: calculatedVenue.distanceMiles,
+              routeSummary: calculatedVenue.routeSummary ?? undefined,
+            },
+          },
+          { familyMembers },
+        )
+        activeEventRef.current = materialized
+        currentEventIdRef.current = materialized.id
+        return
+      }
+
       const handled = await persistRecurringFieldMutation('venue', { venue: calculatedVenue })
       if (!handled) {
-        await updateEventVenue(supabase, queryClient, initialEvent, {
+        await updateEventVenue(supabase, queryClient, currentEvent, {
           name: calculatedVenue.name,
           address: calculatedVenue.address,
           driveMinutes: calculatedVenue.driveMinutes,
@@ -645,16 +699,31 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
       durationMinutes: durationMins
     }))
 
-    if (!initialEvent?.id) return
+    const currentEvent = activeEventRef.current || initialEvent
+    if (!currentEvent?.id) return
+
     try {
+      if (currentEvent.id.startsWith('routine-')) {
+        const materialized = await materializeSyntheticRoutineEvent(
+          supabase,
+          queryClient,
+          currentEvent,
+          { startDate, endDate, durationMinutes: durationMins },
+          { familyMembers },
+        )
+        activeEventRef.current = materialized
+        currentEventIdRef.current = materialized.id
+        return
+      }
+
       const handled = await persistRecurringFieldMutation('schedule', { startDate, endDate, durationMinutes: durationMins })
       if (!handled) {
-        await updateEventSchedule(supabase, queryClient, initialEvent, startDate, endDate)
+        await updateEventSchedule(supabase, queryClient, currentEvent, startDate, endDate)
       }
     } catch (err) {
       console.error('[LivingFlow] Failed to update event timing:', err)
     }
-  }, [initialEvent, persistRecurringFieldMutation, queryClient])
+  }, [initialEvent, persistRecurringFieldMutation, queryClient, familyMembers])
 
   // Nudge Time (+/- 15m)
   const nudgeMinutes = useCallback((mins: number) => {
@@ -669,16 +738,31 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
   // Set Category & Mode
   const setCategory = useCallback(async (catName: string, icon: string, mode: LivingFlowMode = 'event') => {
     setState(prev => ({ ...prev, category: catName, categoryIcon: icon, mode }))
-    if (!initialEvent?.id) return
+    const currentEvent = activeEventRef.current || initialEvent
+    if (!currentEvent?.id) return
+
     try {
+      if (currentEvent.id.startsWith('routine-')) {
+        const materialized = await materializeSyntheticRoutineEvent(
+          supabase,
+          queryClient,
+          currentEvent,
+          { category: catName, mode },
+          { familyMembers },
+        )
+        activeEventRef.current = materialized
+        currentEventIdRef.current = materialized.id
+        return
+      }
+
       const handled = await persistRecurringFieldMutation('category', { category: catName, mode })
       if (!handled) {
-        await updateEventCategory(supabase, queryClient, initialEvent.id, catName, mode)
+        await updateEventCategory(supabase, queryClient, currentEvent.id, catName, mode)
       }
     } catch (err) {
       console.error('[LivingFlow] Failed to update category:', err)
     }
-  }, [initialEvent?.id, persistRecurringFieldMutation, queryClient])
+  }, [initialEvent, persistRecurringFieldMutation, queryClient, familyMembers])
 
   // Delete Request Entrypoint
   const requestDelete = useCallback(() => {

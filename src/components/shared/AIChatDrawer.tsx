@@ -1106,52 +1106,65 @@ export default function AIChatDrawer({
 
   const drawerBody = (
     <>
-      {/* Header */}
-      <div className="py-3.5 px-5 flex items-center justify-between border-b border-slate-200 bg-white shrink-0 relative z-20">
-        <div className="flex items-center gap-2 min-w-0">
-          {speech.supported && (
-            <Button
-              variant="ghost"
-              type="button"
-              onClick={handleConversationToggle}
-              aria-pressed={conversationMode}
-              title={conversationMode
-                ? 'Hands-free ON — mic stays armed for back-and-forth. Tap to turn off.'
-                : 'Hands-free OFF — tap the microphone for each turn.'}
-              className={cn(
-                'min-h-[44px] px-3.5 flex items-center gap-1.5 rounded-full text-caption font-bold transition-all active:scale-95 border',
-                conversationMode
-                  ? 'bg-amber-50/80 text-amber-900 border-amber-300 shadow-2xs'
-                  : 'bg-white text-slate-700 hover:text-slate-900 border-slate-200 hover:border-amber-300 hover:bg-amber-50/40',
-              )}
-            >
-              <MessagesSquare size={14} className={conversationMode ? 'text-amber-700' : 'text-slate-500'} />
-              <span>{conversationMode ? 'Hands-free' : 'Push to talk'}</span>
-            </Button>
-          )}
-          {Boolean(profile?.token || privateHistory.access) && (
-            <Button
-              variant="ghost"
-              type="button"
-              onClick={() => {
-                setHistoryUnlockError(null)
-                setHistoryModalOpen(true)
-                loadHistoryConversations()
-              }}
-              title={`Open ${profile?.memberName ?? 'your'} private conversation history`}
-              className="min-h-[44px] rounded-full bg-amber-50/60 border border-amber-300/80 px-3.5 text-caption font-bold text-amber-800 transition-all hover:bg-amber-100/70 hover:border-amber-400 active:scale-95 shadow-2xs"
-            >
-              Private
-            </Button>
-          )}
+      {/* Luxury Casa AI Header */}
+      <div className="py-3 px-4 sm:px-5 flex items-center justify-between border-b border-casa-gold/20 bg-gradient-to-r from-casa-surface via-casa-bg to-casa-surface shrink-0 relative z-20 shadow-2xs">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-100 via-casa-gold to-amber-700 flex items-center justify-center text-white shadow-xs shrink-0">
+            <Sparkles size={15} />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 leading-none">
+              <span className="font-bold text-body-sm tracking-tight text-casa-navy">Casa AI</span>
+              <span className="text-2xs uppercase tracking-widest font-bold px-1.5 py-0.5 rounded-full bg-casa-gold/15 text-casa-gold-hover border border-casa-gold/30">Concierge</span>
+            </div>
+          </div>
+
+          <div className="hidden sm:flex items-center gap-1.5 ml-2">
+            {speech.supported && (
+              <Button
+                variant="ghost"
+                type="button"
+                onClick={handleConversationToggle}
+                aria-pressed={conversationMode}
+                title={conversationMode
+                  ? 'Hands-free ON — mic stays armed for back-and-forth. Tap to turn off.'
+                  : 'Hands-free OFF — tap the microphone for each turn.'}
+                className={cn(
+                  'min-h-[36px] px-3 flex items-center gap-1.5 rounded-full text-caption font-bold transition-all active:scale-95 border',
+                  conversationMode
+                    ? 'bg-amber-50 text-amber-900 border-amber-300 shadow-2xs'
+                    : 'bg-white text-slate-700 hover:text-slate-900 border-slate-200 hover:border-amber-300 hover:bg-amber-50/40',
+                )}
+              >
+                <MessagesSquare size={13} className={conversationMode ? 'text-amber-700' : 'text-slate-500'} />
+                <span>{conversationMode ? 'Hands-free' : 'Push to talk'}</span>
+              </Button>
+            )}
+            {Boolean(profile?.token || privateHistory.access) && (
+              <Button
+                variant="ghost"
+                type="button"
+                onClick={() => {
+                  setHistoryUnlockError(null)
+                  setHistoryModalOpen(true)
+                  loadHistoryConversations()
+                }}
+                title={`Open ${profile?.memberName ?? 'your'} private conversation history`}
+                className="min-h-[36px] rounded-full bg-amber-50/70 border border-amber-300/80 px-3 text-caption font-bold text-amber-900 transition-all hover:bg-amber-100 hover:border-amber-400 active:scale-95 shadow-2xs"
+              >
+                Private
+              </Button>
+            )}
+          </div>
+
           {loading && (
-            <span className="text-casa-gold text-caption font-medium animate-pulse flex items-center gap-1 shrink-0 ml-1">
+            <span className="text-casa-gold text-caption font-semibold animate-pulse flex items-center gap-1 shrink-0 ml-1">
               <span className="w-1.5 h-1.5 rounded-full bg-casa-gold animate-pulse inline-block" />
               thinking…
             </span>
           )}
           {!loading && speech.listening && (
-            <span className="text-red-500 text-caption font-medium flex items-center gap-1 shrink-0 ml-1">
+            <span className="text-red-500 text-caption font-semibold flex items-center gap-1 shrink-0 ml-1">
               <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse inline-block" />
               listening
             </span>
@@ -1290,35 +1303,57 @@ export default function AIChatDrawer({
                 </div>
               )}
 
+              {/* Editorial Proactive Welcome & Travertine Plinths */}
               {messages.length === 0 && (
-                <div className="flex flex-col items-center gap-3 py-8 px-2 text-center">
-                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-casa-gold/20 via-casa-gold/10 to-transparent border border-casa-gold/30 flex items-center justify-center shadow-subtle">
-                    <Sparkles size={24} className="text-casa-gold" />
+                <div className="flex flex-col gap-3 py-2 text-left">
+                  {/* Salutation Card */}
+                  <div className="rounded-2xl bg-gradient-to-br from-casa-bg via-casa-surface-subtle to-casa-bg-2 border border-casa-gold/30 p-4 shadow-subtle space-y-1">
+                    <div className="flex items-center gap-1.5 text-2xs font-bold uppercase tracking-wider text-casa-gold-hover">
+                      <Sparkles size={13} className="text-casa-gold" />
+                      <span>Estate Intelligence</span>
+                    </div>
+                    <h3 className="text-body font-bold text-casa-navy leading-snug">
+                      {format(new Date(), 'EEEE, MMMM d')}
+                    </h3>
+                    <p className="text-caption text-casa-muted leading-relaxed">
+                      Schedules, meal planning, grocery coordination, and proactive family assistance.
+                    </p>
                   </div>
-                  <div>
-                    <p className="text-body font-semibold text-casa-navy">What can I help with?</p>
-                    <p className="text-caption text-casa-muted mt-0.5">Manage schedules, meals, groceries, or plan ahead.</p>
-                  </div>
+
+                  {/* Travertine Hero Plinth for Proactive Nudge */}
                   {proactiveNudge && !nudgeDismissed && (
-                    <div className="w-full flex items-start gap-2.5 px-3.5 py-2.5 rounded-2xl bg-casa-gold/10 border border-casa-gold/30 text-left mt-2 shadow-subtle">
-                      <Sparkles size={14} className="text-casa-gold flex-shrink-0 mt-0.5" />
-                      <Button variant="ghost"
+                    <div className="rounded-2xl bg-casa-accent-subtle border border-casa-gold/45 p-4 shadow-card space-y-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 text-caption font-bold uppercase tracking-wide text-amber-900">
+                          <AlertTriangle size={15} className="text-casa-gold" />
+                          <span>Attention Recommended</span>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          type="button"
+                          onClick={() => setNudgeDismissed(true)}
+                          aria-label="Dismiss notification"
+                          className="text-casa-muted hover:text-casa-navy p-1 rounded-full hover:bg-black/5"
+                        >
+                          <X size={14} />
+                        </Button>
+                      </div>
+                      <p className="text-body-sm font-semibold text-casa-navy leading-snug">
+                        {proactiveNudge.text}
+                      </p>
+                      <Button
+                        variant="ghost"
                         type="button"
                         onClick={() => { markUserInteraction(); sendCurrentInput(proactiveNudge.prompt) }}
-                        className="flex-1 text-caption text-casa-navy leading-snug hover:underline text-left"
+                        className="w-full min-h-[44px] flex items-center justify-center gap-2 rounded-xl bg-white border border-casa-gold/40 text-casa-navy text-caption font-bold shadow-xs hover:bg-casa-gold/10 active:scale-[0.99] transition-all"
                       >
-                        {proactiveNudge.text}
-                      </Button>
-                      <Button variant="ghost"
-                        type="button"
-                        onClick={() => setNudgeDismissed(true)}
-                        aria-label="Dismiss"
-                        className="flex-shrink-0 text-casa-muted hover:text-casa-navy p-0.5"
-                      >
-                        <X size={13} />
+                        <Sparkles size={14} className="text-casa-gold" />
+                        <span>Review with Casa AI</span>
                       </Button>
                     </div>
                   )}
+
+                  {/* Ambient Glance Cards */}
                   <AmbientGlanceCards
                     events={events}
                     onPromptSelect={(prompt) => {
@@ -1326,17 +1361,23 @@ export default function AIChatDrawer({
                       sendCurrentInput(prompt)
                     }}
                   />
-                    <div className="flex flex-wrap justify-center gap-2 mt-2">
-                    {dynamicSuggestions.map(s => (
-                      <Button variant="ghost"
-                        key={s}
-                        type="button"
-                        onClick={() => { markUserInteraction(); sendCurrentInput(s) }}
-                        className="px-3 py-1.5 rounded-full border border-casa-border bg-casa-bg text-caption text-casa-muted hover:bg-casa-card hover:text-casa-navy hover:border-casa-gold/40 transition-all shadow-subtle"
-                      >
-                        {s}
-                      </Button>
-                    ))}
+
+                  {/* Dynamic Suggestion Pills */}
+                  <div className="space-y-1.5 pt-1">
+                    <p className="text-2xs uppercase tracking-widest font-bold text-casa-muted px-1">Suggested inquiries</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {dynamicSuggestions.map(s => (
+                        <Button
+                          variant="ghost"
+                          key={s}
+                          type="button"
+                          onClick={() => { markUserInteraction(); sendCurrentInput(s) }}
+                          className="min-h-[38px] px-3.5 py-1.5 rounded-full border border-casa-gold/30 bg-casa-bg text-caption font-semibold text-casa-navy hover:bg-white hover:border-casa-gold/60 transition-all shadow-2xs"
+                        >
+                          {s}
+                        </Button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               )}
@@ -1675,7 +1716,7 @@ export default function AIChatDrawer({
 
               <div
                 className={cn(
-                  'ai-presence-composer relative overflow-hidden bg-casa-bg rounded-2xl border border-casa-border transition-all duration-300 shadow-sm focus-within:border-casa-gold/60 focus-within:ring-2 focus-within:ring-casa-gold/15',
+                  'ai-presence-composer relative overflow-hidden bg-casa-bg rounded-2xl border border-casa-gold/30 transition-all duration-300 shadow-subtle focus-within:border-casa-gold focus-within:ring-2 focus-within:ring-casa-gold/20',
                   voiceComposerActive ? 'p-4' : 'p-3',
                   aiPresence === 'listening' && 'ai-presence-listening',
                   aiPresence === 'voice_active' && 'ai-presence-voice',
@@ -1702,7 +1743,7 @@ export default function AIChatDrawer({
                         variant="subtle"
                         type="button"
                         onClick={handleTypeInstead}
-                        className="min-h-control gap-2"
+                        className="min-h-control gap-2 rounded-xl border border-casa-gold/30 bg-white text-casa-navy font-semibold hover:bg-casa-gold/10"
                       >
                         <Keyboard size={16} />
                         Type instead
@@ -1711,7 +1752,7 @@ export default function AIChatDrawer({
                         variant="secondary"
                         type="button"
                         onClick={() => { markUserInteraction(); speech.finish() }}
-                        className="min-h-control gap-2"
+                        className="min-h-control gap-2 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 font-bold hover:bg-amber-100"
                       >
                         <Square size={14} />
                         Stop
@@ -1736,7 +1777,7 @@ export default function AIChatDrawer({
                               setAttachmentMenuOpen(false)
                               fileInputRef.current?.click()
                             }}
-                            className="min-h-control flex-1 gap-2 text-body-sm"
+                            className="min-h-control flex-1 gap-2 text-body-sm rounded-xl border border-casa-gold/30 bg-white text-casa-navy font-semibold hover:bg-casa-gold/10"
                           >
                             <Paperclip size={16} /> Attach image
                           </Button>
@@ -1747,7 +1788,7 @@ export default function AIChatDrawer({
                               setAttachmentMenuOpen(false)
                               cameraInputRef.current?.click()
                             }}
-                            className="min-h-control flex-1 gap-2 text-body-sm"
+                            className="min-h-control flex-1 gap-2 text-body-sm rounded-xl border border-casa-gold/30 bg-white text-casa-navy font-semibold hover:bg-casa-gold/10"
                           >
                             <Camera size={16} /> Take photo
                           </Button>
@@ -1762,22 +1803,22 @@ export default function AIChatDrawer({
                         value={input}
                         onChange={e => handleInputChange(e.target.value)}
                         onKeyDown={handleKeyDown}
-                        placeholder={attachedImage ? 'Ask about this image…' : 'Ask Casa anything…'}
+                        placeholder={attachedImage ? 'Ask Casa AI about this image…' : 'Ask Casa anything or speak…'}
                         rows={2}
                         aria-label="Assistant message"
-                        className="w-full min-h-[44px] max-h-[160px] bg-transparent text-body text-casa-navy placeholder:text-casa-muted outline-none resize-none leading-relaxed px-1 py-0.5"
+                        className="w-full min-h-[44px] max-h-[160px] bg-transparent text-body text-casa-navy placeholder:text-casa-muted/80 outline-none resize-none leading-relaxed px-1 py-0.5 font-medium"
                       />
                     </div>
 
                     {/* Bottom: Dedicated Action Toolbar */}
-                    <div className="flex items-center justify-between pt-1.5 border-t border-casa-divider/40">
+                    <div className="flex items-center justify-between pt-1.5 border-t border-casa-gold/15">
                       <div className="flex items-center gap-1.5">
                         <Button
                           variant="ghost"
                           type="button"
                           onClick={() => setAttachmentMenuOpen(value => !value)}
                           title="Add attachment"
-                          className="size-control rounded-button text-casa-muted hover:text-casa-navy outline-none transition-colors shrink-0 focus-visible:ring-2 focus-visible:ring-casa-gold"
+                          className="size-control rounded-full text-casa-muted hover:text-casa-navy hover:bg-black/5 outline-none transition-colors shrink-0 focus-visible:ring-2 focus-visible:ring-casa-gold"
                           aria-label="Add attachment"
                           aria-expanded={attachmentMenuOpen}
                           aria-controls="assistant-attachment-actions"
@@ -1785,7 +1826,7 @@ export default function AIChatDrawer({
                           <Plus size={18} />
                         </Button>
                         {attachedImage && (
-                          <span className="text-caption text-casa-gold font-semibold truncate max-w-[120px]">
+                          <span className="text-caption text-casa-gold-hover font-semibold truncate max-w-[120px]">
                             1 image attached
                           </span>
                         )}
@@ -1802,10 +1843,10 @@ export default function AIChatDrawer({
                               speech.start()
                             }}
                             title="Start voice input"
-                            className="min-h-control px-3 rounded-button flex items-center justify-center gap-1.5 outline-none transition-all shrink-0 focus-visible:ring-2 focus-visible:ring-casa-gold bg-casa-divider text-casa-navy hover:text-casa-gold hover:bg-casa-divider text-body-sm font-medium"
+                            className="min-h-control px-3 rounded-full flex items-center justify-center gap-1.5 outline-none transition-all shrink-0 focus-visible:ring-2 focus-visible:ring-casa-gold bg-gradient-to-r from-amber-50 to-amber-100/80 border border-amber-300 text-amber-900 hover:border-casa-gold hover:bg-amber-100 text-body-sm font-bold shadow-2xs active:scale-95"
                             aria-label="Start voice input"
                           >
-                            <Mic size={15} />
+                            <Mic size={15} className="text-amber-700" />
                             <span>Speak</span>
                           </Button>
                         )}
@@ -1814,7 +1855,7 @@ export default function AIChatDrawer({
                           type="button"
                           onClick={handleKeyboardToggle}
                           title="Toggle on-screen keyboard"
-                          className="ai-composer-kiosk-only size-control rounded-button items-center justify-center outline-none transition-all shrink-0 bg-casa-divider text-casa-muted hover:text-casa-gold focus-visible:ring-2 focus-visible:ring-casa-gold"
+                          className="ai-composer-kiosk-only size-control rounded-full items-center justify-center outline-none transition-all shrink-0 bg-casa-surface border border-casa-gold/30 text-casa-muted hover:text-casa-navy focus-visible:ring-2 focus-visible:ring-casa-gold"
                           aria-label="Toggle on-screen keyboard"
                         >
                           <Keyboard size={15} />
@@ -1825,10 +1866,10 @@ export default function AIChatDrawer({
                           onClick={handleSend}
                           disabled={(!input.trim() && !attachedImage) || loading}
                           className={cn(
-                            'size-control rounded-button flex items-center justify-center outline-none transition-all shrink-0 focus-visible:ring-2 focus-visible:ring-casa-gold',
+                            'size-control rounded-full flex items-center justify-center outline-none transition-all shrink-0 focus-visible:ring-2 focus-visible:ring-casa-gold',
                             (input.trim() || attachedImage) && !loading
-                              ? 'bg-casa-gold text-white hover:brightness-110 shadow-sm'
-                              : 'bg-casa-divider text-casa-muted'
+                              ? 'bg-gradient-to-r from-casa-gold to-amber-600 text-white hover:brightness-105 shadow-xs active:scale-95'
+                              : 'bg-casa-divider text-casa-muted opacity-50'
                           )}
                           aria-label="Send message"
                         >
@@ -2117,10 +2158,10 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
     <div className={cn('flex', isUser ? 'justify-end' : 'justify-start')}>
       <div
         className={cn(
-          'max-w-[85%] rounded-2xl px-4 py-2.5 text-body-sm leading-relaxed',
+          'max-w-[85%] rounded-2xl px-4 py-3 text-body-sm leading-relaxed',
           isUser
-            ? 'bg-casa-navy text-white rounded-br-sm'
-            : 'bg-casa-bg border border-casa-border text-casa-navy rounded-bl-sm',
+            ? 'bg-casa-navy text-white rounded-br-sm shadow-xs border border-white/10'
+            : 'bg-casa-bg border border-casa-gold/30 text-casa-navy rounded-bl-sm shadow-subtle',
           canEdit && 'cursor-pointer hover:brightness-110 transition',
         )}
         onClick={canEdit ? () => onEditMessage?.(msg.content) : undefined}
@@ -3499,25 +3540,25 @@ function AmbientGlanceCards({
   }, [events, nowMs, todayEnd])
 
   return (
-    <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 text-left">
+    <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-2 text-left">
       <Button
         variant="ghost"
         type="button"
         onClick={() => onPromptSelect(nextEvent ? `Prep me for "${nextEvent.title}"` : "What's on our schedule today?")}
-        className="group flex items-start gap-2.5 p-2.5 h-auto rounded-xl border border-casa-border bg-casa-surface/80 hover:bg-casa-surface hover:border-casa-gold/50 transition-all shadow-xs cursor-pointer text-left whitespace-normal justify-start"
+        className="group flex items-start gap-3 p-3 min-h-[64px] rounded-2xl border border-casa-gold/35 bg-casa-bg hover:bg-white hover:border-casa-gold/60 transition-all shadow-subtle cursor-pointer text-left whitespace-normal justify-start active:scale-[0.99]"
       >
-        <div className="p-2 rounded-lg bg-casa-gold/15 text-casa-gold shrink-0 group-hover:scale-105 transition-transform">
-          <CalendarDays size={15} />
+        <div className="p-2 rounded-xl bg-casa-gold/15 text-casa-gold shrink-0 group-hover:scale-105 transition-transform">
+          <CalendarDays size={16} />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-caption font-semibold text-casa-muted uppercase tracking-wider">
+          <p className="text-2xs font-bold text-casa-gold-hover uppercase tracking-wider">
             {nextEvent ? 'Next Up' : 'Schedule'}
           </p>
-          <p className="text-body-sm font-medium text-casa-navy truncate">
+          <p className="text-body-sm font-semibold text-casa-navy truncate">
             {nextEvent ? nextEvent.title : 'Free for today'}
           </p>
           {nextEvent && (
-            <p className="text-caption text-casa-gold font-medium">
+            <p className="text-caption text-casa-muted font-medium">
               {format(new Date(nextEvent.start_time), 'h:mm a')}
             </p>
           )}
@@ -3528,14 +3569,14 @@ function AmbientGlanceCards({
         variant="ghost"
         type="button"
         onClick={() => onPromptSelect('Plan a quick weeknight dinner for tonight')}
-        className="group flex items-start gap-2.5 p-2.5 h-auto rounded-xl border border-casa-border bg-casa-surface/80 hover:bg-casa-surface hover:border-casa-gold/50 transition-all shadow-xs cursor-pointer text-left whitespace-normal justify-start"
+        className="group flex items-start gap-3 p-3 min-h-[64px] rounded-2xl border border-casa-gold/35 bg-casa-bg hover:bg-white hover:border-casa-gold/60 transition-all shadow-subtle cursor-pointer text-left whitespace-normal justify-start active:scale-[0.99]"
       >
-        <div className="p-2 rounded-lg bg-amber-500/15 text-amber-600 shrink-0 group-hover:scale-105 transition-transform">
-          <Utensils size={15} />
+        <div className="p-2 rounded-xl bg-amber-500/15 text-amber-700 shrink-0 group-hover:scale-105 transition-transform">
+          <Utensils size={16} />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-caption font-semibold text-casa-muted uppercase tracking-wider">Tonight's Meal</p>
-          <p className="text-body-sm font-medium text-casa-navy truncate">Dinner Plan</p>
+          <p className="text-2xs font-bold text-amber-800 uppercase tracking-wider">Tonight's Meal</p>
+          <p className="text-body-sm font-semibold text-casa-navy truncate">Dinner Plan</p>
           <p className="text-caption text-casa-muted">Pantry-friendly & fast</p>
         </div>
       </Button>

@@ -123,7 +123,7 @@ export default function BriefingWidget({
           <div className="flex items-center justify-between gap-2 mb-1.5">
             <div className="flex items-center gap-2">
               <Sparkles size={14} className="text-casa-gold" />
-              <span className="text-caption font-bold text-casa-navy">Copilot Insight</span>
+              <span className="text-caption font-bold text-casa-navy">Casa AI Insight</span>
             </div>
             {weather && (
               <span className="inline-flex items-center gap-1 text-caption text-casa-muted font-mono bg-casa-surface/60 px-2 py-0.5 rounded-full border border-casa-border/40">

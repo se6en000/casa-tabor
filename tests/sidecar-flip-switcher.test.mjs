@@ -40,7 +40,7 @@ test('LivingFlowHeader component source contract: Rotate3d icon and onSwitchToAi
 
   assert.match(content, /Rotate3d/, 'LivingFlowHeader must import and render Rotate3d icon')
   assert.match(content, /onSwitchToAi/, 'LivingFlowHeader must accept onSwitchToAi prop')
-  assert.match(content, /Flip to Copilot|Switch to Copilot/i, 'LivingFlowHeader must have accessible label/title for the flip button')
+  assert.match(content, /Flip to (Copilot|Casa AI)|Switch to (Copilot|Casa AI)/i, 'LivingFlowHeader must have accessible label/title for the flip button')
 })
 
 test('AIChatDrawer component source contract: Rotate3d icon and onSwitchToEvent support', () => {

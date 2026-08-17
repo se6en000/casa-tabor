@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
-import { ChefHat, Save, Users } from 'lucide-react'
+import { ChefHat, Save, Users, PackageCheck } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { DEFAULT_FOOD_PROFILE, normalizeFoodProfile, type FoodProfile } from '../lib/foodProfile'
 import { formatSupabaseError } from '../lib/formatSupabaseError'
-import { Alert, Button, Card, Field, Heading, Input, SkeletonRow, Textarea } from '../components/ui'
+import { Alert, Button, Card, Field, Heading, Input, SegmentedControl, SkeletonRow, Textarea } from '../components/ui'
 import { SettingsPageHeader } from '../components/settings'
+import PantryInventorySettingsPage from './PantryInventorySettingsPage'
 
-export default function FoodProfileSettingsPage() {
+export default function FoodProfileSettingsPage({ initialTab = 'diet' }: { initialTab?: 'diet' | 'pantry' } = {}) {
+  const [tab, setTab] = useState<'diet' | 'pantry'>(initialTab)
   const [profile, setProfile] = useState<FoodProfile>(DEFAULT_FOOD_PROFILE)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -71,33 +73,48 @@ export default function FoodProfileSettingsPage() {
     <div className="space-y-6">
       <SettingsPageHeader
         icon={ChefHat}
-        title="Food Profile & Dietary Memory"
-        description="Core household dietary preferences, weekly budget targets, and pantry staples used by Meal Planner AI."
+        title="Kitchen & Pantry Logistics"
+        description="Dietary preferences, weekly budget targets, and pantry inventory used by Meal Planner AI."
       />
 
-      {error && (
-        <Alert tone="danger" title="Could not save food profile" className="shadow-sm">
-          {error}
-        </Alert>
-      )}
-      {!error && status && (
-        <Alert tone="success" title={status} className="shadow-sm" />
-      )}
+      <SegmentedControl
+        value={tab}
+        onChange={(v) => setTab(v as 'diet' | 'pantry')}
+        aria-label="Kitchen configuration view"
+        fullWidth
+        options={[
+          { value: 'diet', label: 'Dietary & Meal Goals', icon: <ChefHat size={15} /> },
+          { value: 'pantry', label: 'Tracked Pantry Stock', icon: <PackageCheck size={15} /> },
+        ]}
+      />
 
-      {/* Household & Budget Metrics */}
-      <Card tone="surface" padding="lg" className="space-y-4">
-        <div className="flex items-center gap-2 pb-2 border-b border-casa-border/60">
-          <Users size={18} className="text-casa-gold" />
-          <Heading role="heading" className="font-display text-heading font-bold text-casa-navy">
-            Household & Weeknight Planning
-          </Heading>
-        </div>
+      {tab === 'pantry' ? (
+        <PantryInventorySettingsPage hideHeader />
+      ) : (
+        <>
+          {error && (
+            <Alert tone="danger" title="Could not save food profile" className="shadow-sm">
+              {error}
+            </Alert>
+          )}
+          {!error && status && (
+            <Alert tone="success" title={status} className="shadow-sm" />
+          )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Field label="Household size" hint="Portion baseline">
-            <Input
-              type="number"
-              min={1}
+          {/* Household & Budget Metrics */}
+          <Card tone="surface" padding="lg" className="space-y-4">
+            <div className="flex items-center gap-2 pb-2 border-b border-casa-border/60">
+              <Users size={18} className="text-casa-gold" />
+              <Heading role="heading" className="font-display text-heading font-bold text-casa-navy">
+                Household & Weeknight Planning
+              </Heading>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <Field label="Household size" hint="Portion baseline">
+                <Input
+                  type="number"
+                  min={1}
               max={12}
               value={profile.householdSize}
               onChange={(event) =>
@@ -222,6 +239,8 @@ export default function FoodProfileSettingsPage() {
           Save food profile
         </Button>
       </div>
+        </>
+      )}
     </div>
   )
 }
