@@ -509,7 +509,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                           </span>
                           {driveTimeMins ? (
                             <span className="text-2xs font-mono font-bold px-2 py-0.5 rounded-full bg-white/10 text-casa-gold border border-white/10">
-                              ~{driveTimeMins}m drive
+                              ~{driveTimeMins} min
                             </span>
                           ) : null}
                         </div>
@@ -539,46 +539,16 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                     return (
                       <span
                         key={m.id}
-                        className={cn(
-                          'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-caption font-semibold transition-all',
-                          isDriver
-                            ? 'bg-casa-gold/25 text-casa-gold border border-casa-gold/50 shadow-sm ring-1 ring-casa-gold/30'
-                            : 'bg-white/10 text-white',
-                        )}
+                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-caption font-semibold bg-white/10 text-white border border-white/10 transition-all"
                         style={{
-                          borderLeft: isDriver
-                            ? undefined
-                            : `3px solid ${m.family_member?.color_hex ?? 'var(--color-casa-gold)'}`,
+                          borderLeft: `3px solid ${m.family_member?.color_hex ?? 'var(--color-casa-gold)'}`,
                         }}
                       >
-                        {isDriver && <Car size={12} className="text-casa-gold shrink-0 animate-pulse" />}
+                        {isDriver && <Car size={13} className="text-casa-gold shrink-0" />}
                         <span>{m.family_member?.name}</span>
-                        {isDriver && (
-                          <span className="text-2xs uppercase tracking-wider font-bold opacity-80">
-                            (Driver)
-                          </span>
-                        )}
                       </span>
                     )
                   })}
-                  {isTravelEvent && driveTimeMins && (
-                    <span className="inline-flex items-center gap-1.5 text-caption text-white/80 bg-white/10 px-3 py-1 rounded-full border border-white/10">
-                      <Car size={13} className="text-casa-gold shrink-0" />
-                      {driverName && <span>{driverName} driving · </span>}
-                      {minutesUntilNext !== null && minutesUntilNext <= 0 ? (
-                        <span>{driveTimeMins}m return drive</span>
-                      ) : (
-                        <>
-                          <span>{driveTimeMins}m drive</span>
-                          {leaveAt && (
-                            <span className="text-casa-gold font-bold">
-                              · Leave {format(leaveAt, 'h:mm a')}
-                            </span>
-                          )}
-                        </>
-                      )}
-                    </span>
-                  )}
                   {isTravelEvent && (nextEvent.address || nextEvent.location_name) && (
                     <Button
                       variant="ghost"

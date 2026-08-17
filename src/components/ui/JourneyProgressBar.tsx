@@ -276,7 +276,7 @@ export function JourneyProgressBar({
               ) : isLeaveNow ? (
                 <span>LEAVE NOW ({parsedLeave ? format(parsedLeave, 'h:mm a') : ''})</span>
               ) : isEnRoute ? (
-                <span>En Route · {driveTimeMins}m Drive</span>
+                <span>En Route · {driveTimeMins} min</span>
               ) : (
                 <span>At Event</span>
               )}
@@ -375,7 +375,7 @@ export function JourneyProgressBar({
           {driveTimeMins && driveTimeMins > 0 && (
             <div className="flex items-center gap-1 text-casa-gold/90 font-mono text-3xs bg-white/5 px-2 py-0.5 rounded-md border border-white/5 shrink-0">
               <Car size={10} className="shrink-0" />
-              <span>{driveTimeMins}m Drive</span>
+              <span>{driveTimeMins} min</span>
             </div>
           )}
           <div className="flex items-center gap-1.5 justify-end shrink-0 max-w-[45%] text-right">

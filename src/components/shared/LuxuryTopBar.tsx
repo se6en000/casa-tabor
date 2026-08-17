@@ -395,18 +395,18 @@ function UtilityTrack({
       {/* Triage Bell with Luxury Complication Badge */}
       <div className="relative inline-flex items-center justify-center">
         <IconButton
-          icon={<Bell size={14} strokeWidth={1.8} className={isTriageActive ? undefined : totalAttentionCount > 0 ? (isWarm ? 'text-amber-800' : 'text-casa-gold') : undefined} />}
+          icon={<Bell size={14} strokeWidth={1.8} className={isTriageActive ? (isWarm ? 'text-amber-800' : 'text-casa-gold') : totalAttentionCount > 0 ? (isWarm ? 'text-amber-800' : 'text-casa-gold') : undefined} />}
           aria-label={totalAttentionCount > 0 ? `${totalAttentionCount} Triage Items` : 'Triage Items'}
           onClick={handleTriageClick}
           title={totalAttentionCount > 0 ? `${totalAttentionCount} Triage Items` : 'Triage Items'}
           size="sm"
           variant="ghost"
-          className={iconCn(isTriageActive)}
+          className={iconCn(false)}
         />
         {totalAttentionCount > 0 && (
           <span
             className={cn(
-              'absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full font-bold text-3xs flex items-center justify-center leading-none pointer-events-none shadow-xs border',
+              'absolute bottom-0.5 right-0.5 min-w-[14px] h-[14px] px-0.5 rounded-full font-bold text-3xs flex items-center justify-center leading-none pointer-events-none shadow-xs border',
               isWarm
                 ? 'bg-casa-gold text-casa-navy border-casa-surface ring-1 ring-casa-gold/40'
                 : 'bg-casa-gold text-casa-navy border-casa-navy ring-1 ring-casa-gold/50'
