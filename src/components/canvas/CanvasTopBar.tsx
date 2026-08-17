@@ -143,21 +143,20 @@ export default function CanvasTopBar() {
         {/* Unified Utility Action Track */}
         <div
           className={cn(
-            'inline-flex items-center p-1 rounded-full border gap-1 transition-all',
+            'flex items-center gap-1 p-1 rounded-full border transition-all',
             isCalm
               ? 'bg-casa-surface/60 border-casa-border/50 shadow-2xs'
               : 'bg-white/[0.06] border-white/[0.12] shadow-2xs backdrop-blur-md'
           )}
         >
           <IconButton
-            icon={<RefreshCw size={14} strokeWidth={1.8} />}
+            icon={<RefreshCw size={19} strokeWidth={1.8} />}
             aria-label="Refresh screen"
             onClick={() => window.location.reload()}
             title="Refresh screen"
-            size="sm"
             variant="ghost"
             className={cn(
-              'rounded-full w-8 h-8 flex items-center justify-center transition-all duration-150',
+              'size-control rounded-full flex items-center justify-center transition-all duration-150',
               isCalm
                 ? 'text-casa-text-secondary hover:text-casa-navy hover:bg-black/5 active:scale-95'
                 : 'text-white/70 hover:text-white hover:bg-white/10 active:scale-95'
@@ -165,14 +164,13 @@ export default function CanvasTopBar() {
           />
 
           <IconButton
-            icon={<ImageIcon size={14} strokeWidth={1.8} />}
+            icon={<ImageIcon size={19} strokeWidth={1.8} />}
             aria-label="Open Art Mode"
             onClick={() => document.dispatchEvent(new CustomEvent('screensaver-on'))}
             title="Art Mode"
-            size="sm"
             variant="ghost"
             className={cn(
-              'rounded-full w-8 h-8 flex items-center justify-center transition-all duration-150',
+              'size-control rounded-full flex items-center justify-center transition-all duration-150',
               isCalm
                 ? 'text-casa-text-secondary hover:text-casa-navy hover:bg-black/5 active:scale-95'
                 : 'text-white/70 hover:text-white hover:bg-white/10 active:scale-95'
@@ -182,14 +180,13 @@ export default function CanvasTopBar() {
           {/* Triage Bell with Luxury Complication Badge */}
           <div className="relative inline-flex items-center justify-center">
             <IconButton
-              icon={<Bell size={14} strokeWidth={1.8} className={isTriageActive ? (isCalm ? 'text-amber-800' : 'text-casa-gold') : totalAttentionCount > 0 ? (isCalm ? 'text-amber-800' : 'text-casa-gold') : undefined} />}
+              icon={<Bell size={19} strokeWidth={1.8} className={isTriageActive ? (isCalm ? 'text-amber-800' : 'text-casa-gold') : totalAttentionCount > 0 ? (isCalm ? 'text-amber-800' : 'text-casa-gold') : undefined} />}
               aria-label={totalAttentionCount > 0 ? `${totalAttentionCount} Triage Items` : 'Triage Items'}
               onClick={handleTriageClick}
               title={totalAttentionCount > 0 ? `${totalAttentionCount} Triage Items` : 'Triage Items'}
-              size="sm"
               variant="ghost"
               className={cn(
-                'rounded-full w-8 h-8 flex items-center justify-center transition-all duration-150',
+                'size-control rounded-full flex items-center justify-center transition-all duration-150',
                 isCalm
                   ? 'text-casa-text-secondary hover:text-casa-navy hover:bg-black/5 active:scale-95'
                   : 'text-white/70 hover:text-white hover:bg-white/10 active:scale-95'
@@ -198,7 +195,7 @@ export default function CanvasTopBar() {
             {totalAttentionCount > 0 && (
               <span
                 className={cn(
-                  'absolute bottom-0.5 right-0.5 min-w-[14px] h-[14px] px-0.5 rounded-full font-bold text-3xs flex items-center justify-center leading-none pointer-events-none shadow-xs border',
+                  'absolute bottom-0.5 right-0.5 min-w-[16px] h-[16px] px-1 rounded-full font-bold text-2xs flex items-center justify-center leading-none pointer-events-none shadow-xs border',
                   isCalm
                     ? 'bg-casa-gold text-casa-navy border-casa-surface ring-1 ring-casa-gold/40'
                     : 'bg-casa-gold text-casa-navy border-casa-navy ring-1 ring-casa-gold/50'
@@ -210,14 +207,13 @@ export default function CanvasTopBar() {
           </div>
 
           <IconButton
-            icon={<Settings size={14} strokeWidth={2} />}
+            icon={<Settings size={19} strokeWidth={1.8} />}
             aria-label="Settings"
             onClick={() => navigate('/settings')}
             title="Settings"
-            size="sm"
             variant="ghost"
             className={cn(
-              'rounded-full w-8 h-8 flex items-center justify-center',
+              'size-control rounded-full flex items-center justify-center',
               location.pathname.startsWith('/settings')
                 ? isCalm
                   ? 'bg-casa-navy/15 text-casa-navy'

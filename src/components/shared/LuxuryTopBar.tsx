@@ -349,7 +349,7 @@ function UtilityTrack({
 
   const iconCn = (isActive = false) =>
     cn(
-      'w-8 h-8 rounded-full flex items-center justify-center transition-all duration-150',
+      'size-control rounded-full flex items-center justify-center transition-all duration-150',
       isActive
         ? isWarm
           ? 'bg-casa-navy/12 text-casa-navy ring-1 ring-casa-gold/50 shadow-2xs font-semibold'
@@ -370,24 +370,22 @@ function UtilityTrack({
     >
       {/* Refresh Screen */}
       <IconButton
-        icon={<RefreshCw size={14} strokeWidth={1.8} className={cn('transition-transform', isSpinning && 'animate-spin')} />}
+        icon={<RefreshCw size={19} strokeWidth={1.8} className={cn('transition-transform', isSpinning && 'animate-spin')} />}
         aria-label="Refresh Data"
         onClick={handleRefresh}
         title="Refresh Data"
-        size="sm"
         variant="ghost"
         className={iconCn(false)}
       />
 
       {/* Art Mode / Screensaver */}
       <IconButton
-        icon={<ImageIcon size={14} strokeWidth={1.8} />}
+        icon={<ImageIcon size={19} strokeWidth={1.8} />}
         aria-label="Open Art Mode"
         onClick={() =>
           document.dispatchEvent(new CustomEvent('screensaver-on'))
         }
         title="Art Mode Screensaver"
-        size="sm"
         variant="ghost"
         className={iconCn(false)}
       />
@@ -395,18 +393,17 @@ function UtilityTrack({
       {/* Triage Bell with Luxury Complication Badge */}
       <div className="relative inline-flex items-center justify-center">
         <IconButton
-          icon={<Bell size={14} strokeWidth={1.8} className={isTriageActive ? (isWarm ? 'text-amber-800' : 'text-casa-gold') : totalAttentionCount > 0 ? (isWarm ? 'text-amber-800' : 'text-casa-gold') : undefined} />}
+          icon={<Bell size={19} strokeWidth={1.8} className={isTriageActive ? (isWarm ? 'text-amber-800' : 'text-casa-gold') : totalAttentionCount > 0 ? (isWarm ? 'text-amber-800' : 'text-casa-gold') : undefined} />}
           aria-label={totalAttentionCount > 0 ? `${totalAttentionCount} Triage Items` : 'Triage Items'}
           onClick={handleTriageClick}
           title={totalAttentionCount > 0 ? `${totalAttentionCount} Triage Items` : 'Triage Items'}
-          size="sm"
           variant="ghost"
           className={iconCn(false)}
         />
         {totalAttentionCount > 0 && (
           <span
             className={cn(
-              'absolute bottom-0.5 right-0.5 min-w-[14px] h-[14px] px-0.5 rounded-full font-bold text-3xs flex items-center justify-center leading-none pointer-events-none shadow-xs border',
+              'absolute bottom-0.5 right-0.5 min-w-[16px] h-[16px] px-1 rounded-full font-bold text-2xs flex items-center justify-center leading-none pointer-events-none shadow-xs border',
               isWarm
                 ? 'bg-casa-gold text-casa-navy border-casa-surface ring-1 ring-casa-gold/40'
                 : 'bg-casa-gold text-casa-navy border-casa-navy ring-1 ring-casa-gold/50'
@@ -419,11 +416,10 @@ function UtilityTrack({
 
       {/* Settings */}
       <IconButton
-        icon={<Settings size={14} strokeWidth={1.8} />}
+        icon={<Settings size={19} strokeWidth={1.8} />}
         aria-label="Settings"
         onClick={() => navigate('/settings')}
         title="Settings"
-        size="sm"
         variant="ghost"
         className={iconCn(isSettings)}
       />
