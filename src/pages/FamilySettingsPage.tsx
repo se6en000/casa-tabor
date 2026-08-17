@@ -17,12 +17,13 @@ import {
   PROFILE_COLOR_OPTIONS,
 } from '../design-system/memberColors'
 import {
-  createSchoolRoutine,
-  createCampRoutine,
   deserializeRoutineFromAvailabilityRules,
   serializeRoutineToAvailabilityRules,
+  syncMemberRoutineExceptions,
   type FamilyRoutine,
   type DayScheduleOverride,
+  createSchoolRoutine,
+  createCampRoutine,
 } from '../lib/familyRoutines'
 import SmartPlaceInput from '../components/calendar/SmartPlaceInput'
 
@@ -541,6 +542,8 @@ export default function FamilySettingsPage() {
         await supabase
           .from('member_availability_rules')
           .insert(serialized)
+
+        void syncMemberRoutineExceptions(supabase, memberId, routine, members)
       }
     } catch (err) {
       console.warn('Could not sync routine to remote Supabase:', err)

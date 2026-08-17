@@ -730,3 +730,184 @@ export function deserializeRoutineFromAvailabilityRules(
   }
 }
 
+const DAY_CODES = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA']
+
+export async function syncMemberRoutineExceptions(
+  supabase: any,
+  memberId: string,
+  routine: FamilyRoutine,
+  members: FamilyMember[] = [],
+): Promise<void> {
+  if (!routine.enabled || !routine.dayOverrides || routine.dayOverrides.length === 0) {
+    return
+  }
+
+  const child = members.find((m) => m.id === memberId)
+  const childName = child?.name || 'Child'
+
+  for (const override of routine.dayOverrides) {
+    if (override.enabled === false) continue
+
+    const dayCode = DAY_CODES[override.dayOfWeek]
+    const dayLabel = override.label?.trim() || null
+
+    const isDropException = Boolean(
+      (override.startLocal && override.startLocal.slice(0, 5) !== routine.startLocal.slice(0, 5)) ||
+      (override.dropoffDriverName && override.dropoffDriverName !== routine.dropoffDriverName) ||
+      (dayLabel && (!override.endLocal || override.endLocal.slice(0, 5) === routine.endLocal.slice(0, 5)))
+    )
+
+    const isPickException = Boolean(
+      (override.endLocal && override.endLocal.slice(0, 5) !== routine.endLocal.slice(0, 5)) ||
+      (override.pickupDriverName && override.pickupDriverName !== routine.pickupDriverName) ||
+      (dayLabel && (!override.startLocal || override.startLocal.slice(0, 5) === routine.startLocal.slice(0, 5)))
+    )
+
+    const driveMinutes = getEstimatedDriveMinutes(routine.venueName, routine.venueAddress)
+    const untilDate = routine.endDate ? `${routine.endDate.replace(/-/g, '')}T235959Z` : '20270528T235959Z'
+    const rrule = `FREQ=WEEKLY;BYDAY=${dayCode};UNTIL=${untilDate}`
+
+    // 1. Morning Dropoff Series Sync
+    if (isDropException) {
+      const dropTime = (override.startLocal || routine.startLocal).slice(0, 5)
+      const labelTag = dayLabel ? ` · ${dayLabel}` : ''
+      const title = `Drop off ${childName} @ ${routine.venueName}${labelTag}`
+      const driverName = override.dropoffDriverName || routine.dropoffDriverName || 'Jake'
+      const driverMember = members.find((m) => m.id === override.dropoffDriverId || m.name === driverName)
+
+      const { data: existing } = await supabase
+        .from('events')
+        .select('id, rrule, is_exception, deleted_at')
+        .is('deleted_at', null)
+        .ilike('title', `%Drop off ${childName}%`)
+        .eq('rrule', rrule)
+        .limit(1)
+
+      if (!existing || existing.length === 0) {
+        const eventId = crypto.randomUUID()
+        const [hStr, mStr] = dropTime.split(':')
+        const h = parseInt(hStr, 10) || 8
+        const m = parseInt(mStr, 10) || 0
+        const start = new Date()
+        start.setHours(h, m - 15, 0, 0)
+        const end = new Date()
+        end.setHours(h, m, 0, 0)
+        const dep = new Date(start.getTime() - (driveMinutes + 5) * 60000)
+
+        const { error: evErr } = await supabase.from('events').insert({
+          id: eventId,
+          title,
+          description: `Morning school drop-off for ${childName}.${dayLabel ? ` Note: ${dayLabel}.` : ''} Arrival window: ${dropTime}.`,
+          start_time: start.toISOString(),
+          end_time: end.toISOString(),
+          all_day: false,
+          event_type: 'event',
+          location_name: routine.venueName,
+          address: routine.venueAddress,
+          status: 'confirmed',
+          is_enriched: true,
+          is_exception: true,
+          rrule,
+          record_kind: 'single',
+          source_member_id: driverMember?.id || null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+
+        if (!evErr) {
+          if (driverMember) {
+            await supabase.from('event_members').insert([
+              { event_id: eventId, family_member_id: driverMember.id, role: 'driver', rsvp_status: 'accepted' },
+              { event_id: eventId, family_member_id: memberId, role: 'passenger', rsvp_status: 'accepted' },
+            ])
+          }
+          await supabase.from('event_enrichments').insert({
+            id: crypto.randomUUID(),
+            event_id: eventId,
+            category: 'school',
+            category_locked: true,
+            confidence: 'high',
+            drive_time_mins: driveMinutes,
+            departure_time: dep.toISOString(),
+            route_summary: `${driveMinutes} min drive`,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          void supabase.functions.invoke('sync-event-to-google', { body: { event_id: eventId, enqueue_on_failure: true } })
+        }
+      }
+    }
+
+    // 2. Afternoon Pickup Series Sync
+    if (isPickException) {
+      const pickTime = (override.endLocal || routine.endLocal).slice(0, 5)
+      const labelTag = dayLabel ? ` · ${dayLabel}` : ''
+      const title = `Pick up ${childName} @ ${routine.venueName}${labelTag}`
+      const driverName = override.pickupDriverName || routine.pickupDriverName || 'Kelly'
+      const driverMember = members.find((m) => m.id === override.pickupDriverId || m.name === driverName)
+
+      const { data: existing } = await supabase
+        .from('events')
+        .select('id, rrule, is_exception, deleted_at')
+        .is('deleted_at', null)
+        .ilike('title', `%Pick up ${childName}%`)
+        .eq('rrule', rrule)
+        .limit(1)
+
+      if (!existing || existing.length === 0) {
+        const eventId = crypto.randomUUID()
+        const [hStr, mStr] = pickTime.split(':')
+        const h = parseInt(hStr, 10) || 15
+        const m = parseInt(mStr, 10) || 0
+        const start = new Date()
+        start.setHours(h, m, 0, 0)
+        const end = new Date()
+        end.setHours(h, m + 15, 0, 0)
+        const dep = new Date(start.getTime() - (driveMinutes + 5) * 60000)
+
+        const { error: evErr } = await supabase.from('events').insert({
+          id: eventId,
+          title,
+          description: `Afternoon school pickup for ${childName}.${dayLabel ? ` Note: ${dayLabel}.` : ''} Dismissal at ${pickTime}.`,
+          start_time: start.toISOString(),
+          end_time: end.toISOString(),
+          all_day: false,
+          event_type: 'event',
+          location_name: routine.venueName,
+          address: routine.venueAddress,
+          status: 'confirmed',
+          is_enriched: true,
+          is_exception: true,
+          rrule,
+          record_kind: 'single',
+          source_member_id: driverMember?.id || null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+
+        if (!evErr) {
+          if (driverMember) {
+            await supabase.from('event_members').insert([
+              { event_id: eventId, family_member_id: driverMember.id, role: 'driver', rsvp_status: 'accepted' },
+              { event_id: eventId, family_member_id: memberId, role: 'passenger', rsvp_status: 'accepted' },
+            ])
+          }
+          await supabase.from('event_enrichments').insert({
+            id: crypto.randomUUID(),
+            event_id: eventId,
+            category: 'school',
+            category_locked: true,
+            confidence: 'high',
+            drive_time_mins: driveMinutes,
+            departure_time: dep.toISOString(),
+            route_summary: `${driveMinutes} min drive`,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          void supabase.functions.invoke('sync-event-to-google', { body: { event_id: eventId, enqueue_on_failure: true } })
+        }
+      }
+    }
+  }
+}
+
