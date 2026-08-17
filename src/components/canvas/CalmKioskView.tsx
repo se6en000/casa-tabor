@@ -28,6 +28,8 @@ import { cn } from '../../utils/cn'
 import { formatDurationLong } from '../../utils/eventTime'
 import { Button, PersonAvatarStack, JourneyProgressBar } from '../ui'
 import TomorrowPrepWidget from './widgets/TomorrowPrepWidget'
+import MorningLaunchpadWidget from './widgets/MorningLaunchpadWidget'
+import { useFamilyRoutineIntelligence } from '../../hooks/useFamilyRoutineIntelligence'
 
 interface CalmKioskViewProps {
   onOpenEvent: (event: EventWithDetails) => void
@@ -77,6 +79,10 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
     setCanvasSubmode,
     navigateTo,
   } = useCalmKioskPresenter()
+
+  const routineIntel = useFamilyRoutineIntelligence(now)
+  const isNextEventFarAway = !nextEvent || (minutesUntilNext !== null && minutesUntilNext > 90)
+  const showMorningLaunchpad = routineIntel.isMorning && routineIntel.hasTodayDepartures && isNextEventFarAway
 
   const isLeaveNow = Boolean(
     isTravelEvent &&
@@ -215,7 +221,9 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
           'lg:col-span-7 flex-col justify-start space-y-4',
           mobileSubTab === 'triage' ? 'hidden lg:flex' : 'flex'
         )}>
-          {nextEvent ? (
+          {showMorningLaunchpad ? (
+            <MorningLaunchpadWidget now={now} />
+          ) : nextEvent ? (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}

@@ -438,8 +438,10 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
 
     if (hour < 12) {
       const count = effectiveTodayEvents.length
-      const scheduleSummary = count > 0 ? `${count} event${count > 1 ? 's' : ''} scheduled for today.` : 'Open morning with clear schedule.'
-      const nextSummary = nextEvent ? ` First up: ${nextEvent.title} at ${format(parseISO(nextEvent.start_time), 'h:mm a')}.` : ''
+      const minsToNext = nextEvent ? differenceInMinutes(parseISO(nextEvent.start_time), now) : null
+      const isNextSoon = minsToNext !== null && minsToNext <= 90
+      const scheduleSummary = count > 0 ? `${count} calendar event${count > 1 ? 's' : ''} today.` : 'Open morning with clear schedule.'
+      const nextSummary = isNextSoon && nextEvent ? ` First up: ${nextEvent.title} at ${format(parseISO(nextEvent.start_time), 'h:mm a')}.` : ''
       return `${weatherNote} ${scheduleSummary}${nextSummary}`
     }
 

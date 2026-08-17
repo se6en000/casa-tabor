@@ -1,5 +1,5 @@
-import { useMemo, useState, useEffect, useCallback } from 'react'
-import { addDays, format } from 'date-fns'
+import { useMemo, useState, useCallback } from 'react'
+import { addDays, format, differenceInMinutes } from 'date-fns'
 import { useFamilyMembers } from './useFamilyMembers'
 import { useMemberAvailability } from './useMemberAvailability'
 import {
@@ -14,7 +14,7 @@ import {
 } from '../lib/familyRoutines'
 import type { FamilyMember } from '../types'
 
-export interface TomorrowDeparture {
+export interface DepartureItem {
   id: string
   venueName: string
   venueAddress: string
@@ -22,6 +22,7 @@ export interface TomorrowDeparture {
   schoolStartTime: string
   departureTime: string
   leaveByTimeFormatted: string
+  minutesUntilLeave: number
   driveMinutes: number
   driverName: string
   driverMember: FamilyMember | null
@@ -29,7 +30,13 @@ export interface TomorrowDeparture {
   childNamesFormatted: string
   isException: boolean
   exceptionLabel: string | null
+  isLeaveNow: boolean
+  isPrepUrgent: boolean
+  isUpcoming: boolean
+  isCompleted: boolean
 }
+
+export type TomorrowDeparture = DepartureItem
 
 export interface BedtimePrepItem {
   id: string
@@ -45,12 +52,19 @@ export interface FamilyRoutineIntelligence {
   isMorning: boolean
   isDaytime: boolean
   targetDate: Date
+  todayDayName: string
+  todayFormattedDate: string
+  todayDepartures: DepartureItem[]
+  hasTodayDepartures: boolean
+  nextTodayDeparture: DepartureItem | null
+  todayPrepChecklist: BedtimePrepItem[]
+  toggleTodayPrepItem: (id: string) => void
   tomorrowDate: Date
   tomorrowDayName: string
   tomorrowFormattedDate: string
-  tomorrowDepartures: TomorrowDeparture[]
+  tomorrowDepartures: DepartureItem[]
   hasTomorrowExceptions: boolean
-  primaryTomorrowException: TomorrowDeparture | null
+  primaryTomorrowException: DepartureItem | null
   prepChecklist: BedtimePrepItem[]
   togglePrepItem: (id: string) => void
   completedCount: number
@@ -61,6 +75,177 @@ export interface FamilyRoutineIntelligence {
 }
 
 const STORAGE_PREFIX = 'casa_bedtime_prep_'
+
+function deriveDeparturesForDate(
+  targetDate: Date,
+  now: Date,
+  familyRoutines: FamilyRoutine[],
+  familyMembers: FamilyMember[],
+): DepartureItem[] {
+  if (familyRoutines.length === 0 || familyMembers.length === 0) return []
+
+  const dateKey = format(targetDate, 'yyyy-MM-dd')
+  const dayOfWeek = targetDate.getDay()
+
+  const activeRoutines = familyRoutines.filter((r) => {
+    if (!r.enabled) return false
+    if (r.startDate && dateKey < r.startDate) return false
+    if (r.endDate && dateKey > r.endDate) return false
+    if (!r.daysOfWeek.includes(dayOfWeek)) return false
+    return true
+  })
+
+  if (activeRoutines.length === 0) return []
+
+  const groups = new Map<string, {
+    venueName: string
+    venueAddress: string
+    startLocal: string
+    driverName: string
+    driverId: string | null
+    label: string | null
+    children: FamilyMember[]
+    isException: boolean
+  }>()
+
+  for (const routine of activeRoutines) {
+    const child = familyMembers.find((m) => m.id === routine.memberId)
+    if (!child) continue
+
+    const dayOverride = routine.dayOverrides?.find(
+      (o) => o.dayOfWeek === dayOfWeek && o.enabled !== false,
+    )
+
+    const effStartLocal = (dayOverride?.startLocal || routine.startLocal).slice(0, 5)
+    const effDropDriverName = dayOverride?.dropoffDriverName || routine.dropoffDriverName || 'Jake'
+    const effDropDriverId = dayOverride?.dropoffDriverId !== undefined ? dayOverride.dropoffDriverId : (routine.dropoffDriverId || null)
+    const overrideLabel = dayOverride?.label?.trim() || null
+    const isException = isRoutineDropoffException(routine, targetDate)
+
+    const venueKey = routine.venueName.trim().toLowerCase()
+    const dropKey = `${venueKey}|${effStartLocal}|${effDropDriverName}|${overrideLabel || ''}`
+
+    if (!groups.has(dropKey)) {
+      groups.set(dropKey, {
+        venueName: routine.venueName,
+        venueAddress: routine.venueAddress,
+        startLocal: effStartLocal,
+        driverName: effDropDriverName,
+        driverId: effDropDriverId,
+        label: overrideLabel,
+        children: [child],
+        isException,
+      })
+    } else {
+      const g = groups.get(dropKey)!
+      if (!g.children.some((c) => c.id === child.id)) {
+        g.children.push(child)
+      }
+      if (isException) g.isException = true
+    }
+  }
+
+  const departures: DepartureItem[] = []
+  for (const [key, group] of groups.entries()) {
+    const driveMinutes = getEstimatedDriveMinutes(group.venueName, group.venueAddress)
+    const schoolStartTime = applyTimeToDate(targetDate, group.startLocal)
+    const windowStartTime = new Date(schoolStartTime.getTime() - 15 * 60000)
+    const departureTime = new Date(windowStartTime.getTime() - driveMinutes * 60000)
+
+    const driverMember = familyMembers.find(
+      (m) => m.id === group.driverId || m.name.toLowerCase() === group.driverName.toLowerCase(),
+    ) || null
+
+    const minutesUntilLeave = differenceInMinutes(departureTime, now)
+    const isLeaveNow = minutesUntilLeave <= 0 && minutesUntilLeave >= -20
+    const isPrepUrgent = minutesUntilLeave > 0 && minutesUntilLeave <= 15
+    const isUpcoming = minutesUntilLeave > 15
+    const isCompleted = minutesUntilLeave < -20
+
+    departures.push({
+      id: `departure-${key}-${dateKey}`,
+      venueName: group.venueName,
+      venueAddress: group.venueAddress,
+      arrivalWindow: `${format(windowStartTime, 'h:mm a')} – ${format(schoolStartTime, 'h:mm a')}`,
+      schoolStartTime: format(schoolStartTime, 'h:mm a'),
+      departureTime: departureTime.toISOString(),
+      leaveByTimeFormatted: format(departureTime, 'h:mm a'),
+      minutesUntilLeave,
+      driveMinutes,
+      driverName: group.driverName,
+      driverMember,
+      children: group.children,
+      childNamesFormatted: formatChildNames(group.children),
+      isException: group.isException,
+      exceptionLabel: group.label,
+      isLeaveNow,
+      isPrepUrgent,
+      isUpcoming,
+      isCompleted,
+    })
+  }
+
+  return departures.sort((a, b) => new Date(a.departureTime).getTime() - new Date(b.departureTime).getTime())
+}
+
+function derivePrepChecklist(
+  departures: DepartureItem[],
+  dateKey: string,
+  completedMap: Record<string, boolean>,
+): BedtimePrepItem[] {
+  if (departures.length === 0) return []
+
+  const items: BedtimePrepItem[] = []
+
+  for (const dep of departures) {
+    const label = (dep.exceptionLabel || '').toLowerCase()
+    if (label.includes('string') || label.includes('music') || label.includes('violin') || label.includes('instrument')) {
+      const id = `item-music-${dateKey}`
+      items.push({
+        id,
+        label: `${dep.childNamesFormatted}: Pack instrument & sheet music folder`,
+        completed: Boolean(completedMap[id]),
+        childName: dep.childNamesFormatted,
+        iconType: 'music',
+      })
+    } else if (label.includes('sport') || label.includes('pe') || label.includes('gym')) {
+      const id = `item-sports-${dateKey}`
+      items.push({
+        id,
+        label: `${dep.childNamesFormatted}: Stage athletic uniform & shoes`,
+        completed: Boolean(completedMap[id]),
+        childName: dep.childNamesFormatted,
+        iconType: 'sports',
+      })
+    }
+  }
+
+  const idBackpacks = `item-backpacks-${dateKey}`
+  items.push({
+    id: idBackpacks,
+    label: 'Backpacks & homework folders packed',
+    completed: Boolean(completedMap[idBackpacks]),
+    iconType: 'backpack',
+  })
+
+  const idBottles = `item-bottles-${dateKey}`
+  items.push({
+    id: idBottles,
+    label: 'Water bottles filled & chilled',
+    completed: Boolean(completedMap[idBottles]),
+    iconType: 'bottle',
+  })
+
+  const idLunch = `item-lunch-${dateKey}`
+  items.push({
+    id: idLunch,
+    label: 'Lunchboxes & morning snacks staged',
+    completed: Boolean(completedMap[idLunch]),
+    iconType: 'lunch',
+  })
+
+  return items
+}
 
 export function useFamilyRoutineIntelligence(now: Date = new Date()): FamilyRoutineIntelligence {
   const { data: familyMembers = [] } = useFamilyMembers()
@@ -93,106 +278,24 @@ export function useFamilyRoutineIntelligence(now: Date = new Date()): FamilyRout
   const isMorning = phase === 'morning_action'
   const isDaytime = phase === 'daytime_whereabouts'
 
+  const todayKey = useMemo(() => format(now, 'yyyy-MM-dd'), [now])
   const tomorrowDate = useMemo(() => addDays(now, 1), [now])
   const tomorrowKey = useMemo(() => format(tomorrowDate, 'yyyy-MM-dd'), [tomorrowDate])
-  const tomorrowDayOfWeek = tomorrowDate.getDay()
 
-  // Derive tomorrow's morning routine departures
-  const tomorrowDepartures = useMemo<TomorrowDeparture[]>(() => {
-    if (familyRoutines.length === 0 || familyMembers.length === 0) return []
+  // Derive TODAY's morning routine departures
+  const todayDepartures = useMemo<DepartureItem[]>(() => {
+    return deriveDeparturesForDate(now, now, familyRoutines, familyMembers as FamilyMember[])
+  }, [now, familyRoutines, familyMembers])
 
-    // Group active routines for tomorrow
-    const activeForTomorrow = familyRoutines.filter((r) => {
-      if (!r.enabled) return false
-      if (r.startDate && tomorrowKey < r.startDate) return false
-      if (r.endDate && tomorrowKey > r.endDate) return false
-      if (!r.daysOfWeek.includes(tomorrowDayOfWeek)) return false
-      return true
-    })
+  const hasTodayDepartures = todayDepartures.length > 0
+  const nextTodayDeparture = useMemo(() => {
+    return todayDepartures.find((d) => !d.isCompleted) || todayDepartures[0] || null
+  }, [todayDepartures])
 
-    if (activeForTomorrow.length === 0) return []
-
-    // Consolidated morning dropoff groups
-    const groups = new Map<string, {
-      venueName: string
-      venueAddress: string
-      startLocal: string
-      driverName: string
-      driverId: string | null
-      label: string | null
-      children: FamilyMember[]
-      isException: boolean
-    }>()
-
-    for (const routine of activeForTomorrow) {
-      const child = (familyMembers as FamilyMember[]).find((m: FamilyMember) => m.id === routine.memberId)
-      if (!child) continue
-
-      const dayOverride = routine.dayOverrides?.find(
-        (o) => o.dayOfWeek === tomorrowDayOfWeek && o.enabled !== false,
-      )
-
-      const effStartLocal = (dayOverride?.startLocal || routine.startLocal).slice(0, 5)
-      const effDropDriverName = dayOverride?.dropoffDriverName || routine.dropoffDriverName || 'Jake'
-      const effDropDriverId = dayOverride?.dropoffDriverId !== undefined ? dayOverride.dropoffDriverId : (routine.dropoffDriverId || null)
-      const overrideLabel = dayOverride?.label?.trim() || null
-      const isException = isRoutineDropoffException(routine, tomorrowDate)
-
-      const venueKey = routine.venueName.trim().toLowerCase()
-      const dropKey = `${venueKey}|${effStartLocal}|${effDropDriverName}|${overrideLabel || ''}`
-
-      if (!groups.has(dropKey)) {
-        groups.set(dropKey, {
-          venueName: routine.venueName,
-          venueAddress: routine.venueAddress,
-          startLocal: effStartLocal,
-          driverName: effDropDriverName,
-          driverId: effDropDriverId,
-          label: overrideLabel,
-          children: [child],
-          isException,
-        })
-      } else {
-        const g = groups.get(dropKey)!
-        if (!g.children.some((c) => c.id === child.id)) {
-          g.children.push(child)
-        }
-        if (isException) g.isException = true
-      }
-    }
-
-    const departures: TomorrowDeparture[] = []
-    for (const [key, group] of groups.entries()) {
-      const driveMinutes = getEstimatedDriveMinutes(group.venueName, group.venueAddress)
-      const schoolStartTime = applyTimeToDate(tomorrowDate, group.startLocal)
-      const windowStartTime = new Date(schoolStartTime.getTime() - 15 * 60000)
-      const departureTime = new Date(windowStartTime.getTime() - driveMinutes * 60000)
-
-      const driverMember = (familyMembers as FamilyMember[]).find(
-        (m: FamilyMember) => m.id === group.driverId || m.name.toLowerCase() === group.driverName.toLowerCase(),
-      ) || null
-
-      departures.push({
-        id: `departure-${key}-${tomorrowKey}`,
-        venueName: group.venueName,
-        venueAddress: group.venueAddress,
-        arrivalWindow: `${format(windowStartTime, 'h:mm a')} – ${format(schoolStartTime, 'h:mm a')}`,
-        schoolStartTime: format(schoolStartTime, 'h:mm a'),
-        departureTime: departureTime.toISOString(),
-        leaveByTimeFormatted: format(departureTime, 'h:mm a'),
-        driveMinutes,
-        driverName: group.driverName,
-        driverMember,
-        children: group.children,
-        childNamesFormatted: formatChildNames(group.children),
-        isException: group.isException,
-        exceptionLabel: group.label,
-      })
-    }
-
-    // Sort earliest departure first
-    return departures.sort((a, b) => new Date(a.departureTime).getTime() - new Date(b.departureTime).getTime())
-  }, [familyRoutines, familyMembers, tomorrowDate, tomorrowKey, tomorrowDayOfWeek])
+  // Derive TOMORROW's morning routine departures
+  const tomorrowDepartures = useMemo<DepartureItem[]>(() => {
+    return deriveDeparturesForDate(tomorrowDate, now, familyRoutines, familyMembers as FamilyMember[])
+  }, [tomorrowDate, now, familyRoutines, familyMembers])
 
   const hasTomorrowExceptions = useMemo(() => {
     return tomorrowDepartures.some((d) => d.isException)
@@ -202,25 +305,29 @@ export function useFamilyRoutineIntelligence(now: Date = new Date()): FamilyRout
     return tomorrowDepartures.find((d) => d.isException) || null
   }, [tomorrowDepartures])
 
-  // Bedtime Prep Checklist generation & state persistence
+  // Bedtime & Morning Prep Checklist state management
   const [completedItems, setCompletedItems] = useState<Record<string, boolean>>(() => {
     try {
-      const stored = localStorage.getItem(`${STORAGE_PREFIX}${tomorrowKey}`)
-      return stored ? JSON.parse(stored) : {}
+      const stored = localStorage.getItem(`${STORAGE_PREFIX}${todayKey}`)
+      const tomorrowStored = localStorage.getItem(`${STORAGE_PREFIX}${tomorrowKey}`)
+      return {
+        ...(stored ? JSON.parse(stored) : {}),
+        ...(tomorrowStored ? JSON.parse(tomorrowStored) : {}),
+      }
     } catch {
       return {}
     }
   })
 
-  // Keep storage in sync when date rolls over
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(`${STORAGE_PREFIX}${tomorrowKey}`)
-      setCompletedItems(stored ? JSON.parse(stored) : {})
-    } catch {
-      setCompletedItems({})
-    }
-  }, [tomorrowKey])
+  const toggleTodayPrepItem = useCallback((id: string) => {
+    setCompletedItems((prev) => {
+      const next = { ...prev, [id]: !prev[id] }
+      try {
+        localStorage.setItem(`${STORAGE_PREFIX}${todayKey}`, JSON.stringify(next))
+      } catch {}
+      return next
+    })
+  }, [todayKey])
 
   const togglePrepItem = useCallback((id: string) => {
     setCompletedItems((prev) => {
@@ -232,61 +339,12 @@ export function useFamilyRoutineIntelligence(now: Date = new Date()): FamilyRout
     })
   }, [tomorrowKey])
 
+  const todayPrepChecklist = useMemo<BedtimePrepItem[]>(() => {
+    return derivePrepChecklist(todayDepartures, todayKey, completedItems)
+  }, [todayDepartures, todayKey, completedItems])
+
   const prepChecklist = useMemo<BedtimePrepItem[]>(() => {
-    if (tomorrowDepartures.length === 0) return []
-
-    const items: BedtimePrepItem[] = []
-
-    // 1. Check if any departure has a special label (e.g. Early Strings, Violin, Music, Art)
-    for (const dep of tomorrowDepartures) {
-      const label = (dep.exceptionLabel || '').toLowerCase()
-      if (label.includes('string') || label.includes('music') || label.includes('violin') || label.includes('instrument')) {
-        const id = `item-music-${tomorrowKey}`
-        items.push({
-          id,
-          label: `${dep.childNamesFormatted}: Pack instrument & sheet music folder`,
-          completed: Boolean(completedItems[id]),
-          childName: dep.childNamesFormatted,
-          iconType: 'music',
-        })
-      } else if (label.includes('sport') || label.includes('pe') || label.includes('gym')) {
-        const id = `item-sports-${tomorrowKey}`
-        items.push({
-          id,
-          label: `${dep.childNamesFormatted}: Stage athletic uniform & shoes`,
-          completed: Boolean(completedItems[id]),
-          childName: dep.childNamesFormatted,
-          iconType: 'sports',
-        })
-      }
-    }
-
-    // 2. Standard essential readiness items
-    const idBackpacks = `item-backpacks-${tomorrowKey}`
-    items.push({
-      id: idBackpacks,
-      label: 'Backpacks & homework folders packed',
-      completed: Boolean(completedItems[idBackpacks]),
-      iconType: 'backpack',
-    })
-
-    const idBottles = `item-bottles-${tomorrowKey}`
-    items.push({
-      id: idBottles,
-      label: 'Water bottles filled & chilled',
-      completed: Boolean(completedItems[idBottles]),
-      iconType: 'bottle',
-    })
-
-    const idLunch = `item-lunch-${tomorrowKey}`
-    items.push({
-      id: idLunch,
-      label: 'Lunchboxes & morning snacks staged',
-      completed: Boolean(completedItems[idLunch]),
-      iconType: 'lunch',
-    })
-
-    return items
+    return derivePrepChecklist(tomorrowDepartures, tomorrowKey, completedItems)
   }, [tomorrowDepartures, tomorrowKey, completedItems])
 
   const completedCount = useMemo(() => {
@@ -307,6 +365,13 @@ export function useFamilyRoutineIntelligence(now: Date = new Date()): FamilyRout
     isMorning,
     isDaytime,
     targetDate: now,
+    todayDayName: format(now, 'EEEE'),
+    todayFormattedDate: format(now, 'MMMM d'),
+    todayDepartures,
+    hasTodayDepartures,
+    nextTodayDeparture,
+    todayPrepChecklist,
+    toggleTodayPrepItem,
     tomorrowDate,
     tomorrowDayName: format(tomorrowDate, 'EEEE'),
     tomorrowFormattedDate: format(tomorrowDate, 'MMMM d'),

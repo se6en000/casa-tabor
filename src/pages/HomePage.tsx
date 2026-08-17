@@ -21,6 +21,7 @@ import { usePullToRefresh } from '../hooks/usePullToRefresh'
 import { WeatherIcon } from '../components/shared/WeatherIcon'
 import { LeaveByCard } from '../components/shared/LeaveByCard'
 import TomorrowPrepCard from '../components/home/TomorrowPrepCard'
+import MorningLaunchpadCard from '../components/home/MorningLaunchpadCard'
 import { BirthdayCardDecoration } from '../components/shared/BirthdayCardDecoration'
 import { useTravelEta, type TravelEtaResult } from '../hooks/useTravelEta'
 import { useReminderNeedsYouActions } from '../hooks/useReminderNeedsYouActions'
@@ -467,7 +468,10 @@ export default function HomePage() {
           </div>
         )}
 
-        {/* ── Tomorrow Morning Prep (Contextual evening / readiness card) ── */}
+        {/* ── Active Morning Launchpad (Morning Action 6:00 AM – 9:30 AM) ── */}
+        <MorningLaunchpadCard now={now} className="mt-3 mb-3" />
+
+        {/* ── Tomorrow Morning Prep (Contextual evening / readiness card 5:30 PM – 11:00 PM) ── */}
         <TomorrowPrepCard now={now} className="mt-3 mb-3" />
 
         {/* ── Today's timeline — first, front and center ──── */}
