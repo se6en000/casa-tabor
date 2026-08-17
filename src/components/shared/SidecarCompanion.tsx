@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAppStore } from '../../stores/appStore'
@@ -10,6 +10,30 @@ import { cn } from '../../utils/cn'
 import LivingFlowSidecar from '../calendar/living-flow/LivingFlowSidecar'
 import ActionInspectionSidecar from '../canvas/widgets/ActionInspectionSidecar'
 import AIChatDrawer from './AIChatDrawer'
+
+// Chronological Time-Reel Animation Variants (Concept 1)
+const timeReelVariants = {
+  enter: (direction: 'forward' | 'backward') => ({
+    y: direction === 'forward' ? 14 : -14,
+    opacity: 0,
+    filter: 'blur(1px)',
+  }),
+  center: {
+    y: 0,
+    opacity: 1,
+    filter: 'blur(0px)',
+  },
+  exit: (direction: 'forward' | 'backward') => ({
+    y: direction === 'forward' ? -10 : 10,
+    opacity: 0,
+    filter: 'blur(1px)',
+  }),
+}
+
+const timeReelTransition = {
+  duration: 0.18,
+  ease: [0.22, 1, 0.36, 1] as const,
+}
 
 import { usePrepItems, usePrepItemDetails, useCompletePrepItem, useSnoozePrepItem } from '../../hooks/usePrepItems'
 import { synthesizeActionAnalysis, extractAmount } from '../../utils/actionInspectionSynthesis'
@@ -219,6 +243,28 @@ export default function SidecarCompanion({
     }
   }, [aiDrawerOpen, isMobile, isCook, sidecarWidth])
 
+  const completePrepItem = useCompletePrepItem()
+  const snoozePrepItem = useSnoozePrepItem()
+
+  const prevEventTimeRef = useRef<number | null>(null)
+  const prevActionIdRef = useRef<string | null>(null)
+  const [transitionDirection, setTransitionDirection] = useState<'forward' | 'backward'>('forward')
+
+  useEffect(() => {
+    if (sidecarTab === 'event' && selectedEvent?.start_time) {
+      const currTime = new Date(selectedEvent.start_time).getTime()
+      if (prevEventTimeRef.current !== null && prevEventTimeRef.current !== currTime) {
+        setTransitionDirection(currTime >= prevEventTimeRef.current ? 'forward' : 'backward')
+      }
+      prevEventTimeRef.current = currTime
+    } else if (sidecarTab === 'action' && selectedSidecarActionId) {
+      if (prevActionIdRef.current && prevActionIdRef.current !== selectedSidecarActionId) {
+        setTransitionDirection('forward')
+      }
+      prevActionIdRef.current = selectedSidecarActionId
+    }
+  }, [sidecarTab, selectedEvent?.start_time, selectedSidecarActionId])
+
   if (!aiDrawerOpen || isCook) return null
 
   const handleAskAiAboutEvent = (promptText?: string) => {
@@ -249,9 +295,6 @@ export default function SidecarCompanion({
     }
   }
 
-  const completePrepItem = useCompletePrepItem()
-  const snoozePrepItem = useSnoozePrepItem()
-
   const isActionView = sidecarTab === 'action' && Boolean(selectedSidecarActionId)
   const isFlippedToAi = sidecarTab === 'ai'
   const isFrontView = !isFlippedToAi
@@ -272,36 +315,65 @@ export default function SidecarCompanion({
           )}
           aria-hidden={!isFrontView}
         >
-          {isActionView ? (
-            <ActionInspectionSidecar
-              actionId={selectedSidecarActionId}
-              onClose={closeSidecar}
-              embedded={true}
-              onSwitchToAi={handleAskAiAboutAction}
-              onCompleteAction={async (item) => {
-                await completePrepItem(item.id)
-              }}
-              onSnoozeAction={async (item, period) => {
-                await snoozePrepItem(item.id, period, item.due_by)
-              }}
-              onSelectAction={(id) => openActionInSidecar(id)}
-              queueItems={allPrep}
-            />
-          ) : selectedEvent && selectedEvent.start_time ? (
-            <LivingFlowSidecar
-              key={selectedEvent.id}
-              event={selectedEvent}
-              onClose={closeSidecar}
-              embedded={true}
-              onAskAi={handleAskAiAboutEvent}
-              onSwitchToAi={() => setSidecarTab('ai')}
-            />
-          ) : selectedSidecarEventId ? (
-            <div className="flex flex-col items-center justify-center h-full p-8 text-center text-casa-muted gap-3">
-              <div className="w-8 h-8 rounded-full border-2 border-casa-gold border-t-transparent animate-spin" />
-              <p className="text-body-sm font-semibold text-casa-navy">Loading event details…</p>
-            </div>
-          ) : null}
+          <AnimatePresence mode="wait" initial={false} custom={transitionDirection}>
+            {isActionView ? (
+              <motion.div
+                key={`action-${selectedSidecarActionId}`}
+                custom={transitionDirection}
+                variants={timeReelVariants}
+                initial="enter"
+                animate="center"
+                exit="exit"
+                transition={timeReelTransition}
+                className="w-full h-full flex flex-col flex-1 min-h-0 overflow-hidden"
+              >
+                <ActionInspectionSidecar
+                  actionId={selectedSidecarActionId}
+                  onClose={closeSidecar}
+                  embedded={true}
+                  onSwitchToAi={handleAskAiAboutAction}
+                  onCompleteAction={async (item) => {
+                    await completePrepItem(item.id)
+                  }}
+                  onSnoozeAction={async (item, period) => {
+                    await snoozePrepItem(item.id, period, item.due_by)
+                  }}
+                  onSelectAction={(id) => openActionInSidecar(id)}
+                  queueItems={allPrep}
+                />
+              </motion.div>
+            ) : selectedEvent && selectedEvent.start_time ? (
+              <motion.div
+                key={`event-${selectedEvent.id}`}
+                custom={transitionDirection}
+                variants={timeReelVariants}
+                initial="enter"
+                animate="center"
+                exit="exit"
+                transition={timeReelTransition}
+                className="w-full h-full flex flex-col flex-1 min-h-0 overflow-hidden"
+              >
+                <LivingFlowSidecar
+                  event={selectedEvent}
+                  onClose={closeSidecar}
+                  embedded={true}
+                  onAskAi={handleAskAiAboutEvent}
+                  onSwitchToAi={() => setSidecarTab('ai')}
+                />
+              </motion.div>
+            ) : selectedSidecarEventId ? (
+              <motion.div
+                key="event-loading"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="flex flex-col items-center justify-center h-full p-8 text-center text-casa-muted gap-3"
+              >
+                <div className="w-8 h-8 rounded-full border-2 border-casa-gold border-t-transparent animate-spin" />
+                <p className="text-body-sm font-semibold text-casa-navy">Loading event details…</p>
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
         </div>
 
         {/* Face 2: Casa AI Copilot View (Back Face) */}
