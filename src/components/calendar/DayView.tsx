@@ -510,19 +510,19 @@ export function DayEventCard({
           <div className="pt-3 border-t border-casa-divider/70 flex flex-wrap items-center justify-between gap-2">
             {responsibility.responsible ? (
               <div
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-casa-bg border border-casa-border/80 text-caption font-medium"
+                className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-casa-bg border border-casa-border/80 text-caption font-medium"
                 title={`${responsibility.responsible.name} (${responsibility.roleBadge === 'drive' ? 'Driver assigned' : isHosted ? 'Hosting' : 'Supervising'})`}
               >
                 <div className="relative inline-flex shrink-0">
                   <span
-                    className="w-5 h-5 rounded-full text-white flex items-center justify-center text-caption font-bold leading-none"
+                    className="w-7 h-7 rounded-full text-white flex items-center justify-center text-caption font-bold leading-none shadow-card border-2 border-casa-surface"
                     style={{ backgroundColor: responsibility.responsible?.color ?? 'var(--color-casa-gold)' }}
                   >
                     {responsibility.responsible?.initial ?? '?'}
                   </span>
                   <span
                     className={cn(
-                      'absolute -bottom-1 -right-1 w-3 h-3 rounded-full border border-casa-surface flex items-center justify-center',
+                      'absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border border-casa-surface flex items-center justify-center',
                       responsibility.roleBadge === 'drive' ? 'bg-casa-navy' : 'bg-casa-success-strong'
                     )}
                     aria-label={responsibility.roleBadge === 'drive' ? 'Drives' : isHosted ? 'Hosting' : 'Supervising'}
@@ -549,7 +549,7 @@ export function DayEventCard({
                     color: m.family_member?.color_hex ?? SHARED_GOLD,
                   }))}
                   max={4}
-                  size="sm"
+                  size="md"
                   className="shrink-0"
                 />
               </div>

@@ -985,9 +985,9 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                               </div>
 
                               <div className="flex items-center gap-2 shrink-0">
-                                {avatarPeople.length > 0 && <PersonAvatarStack people={avatarPeople} size="xs" max={2} />}
+                                {avatarPeople.length > 0 && <PersonAvatarStack people={avatarPeople} size="md" max={2} />}
                                 <ChevronRight
-                                  size={14}
+                                  size={16}
                                   className="text-casa-muted/60 group-hover:text-casa-navy transition-transform group-hover:translate-x-0.5"
                                 />
                               </div>
@@ -1079,9 +1079,9 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                         </div>
 
                         <div className="flex items-center gap-2 shrink-0">
-                          {avatarPeople.length > 0 && <PersonAvatarStack people={avatarPeople} size="xs" max={2} />}
+                          {avatarPeople.length > 0 && <PersonAvatarStack people={avatarPeople} size="md" max={2} />}
                           <ChevronRight
-                            size={14}
+                            size={16}
                             className="text-casa-muted/60 group-hover:text-casa-navy transition-transform group-hover:translate-x-0.5"
                           />
                         </div>
@@ -1299,14 +1299,14 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
 
                         <div className="flex items-center gap-2 shrink-0">
                           {driverMember?.family_member?.name && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-3xs font-semibold bg-amber-500/10 text-amber-900 border border-amber-500/20 hidden sm:inline-flex">
-                              <Car size={10} className="text-amber-800" />
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-caption font-semibold bg-amber-500/10 text-amber-900 border border-amber-500/20 hidden sm:inline-flex">
+                              <Car size={12} className="text-amber-800" />
                               <span>{driverMember.family_member.name} drives</span>
                             </span>
                           )}
-                          <PersonAvatarStack people={avatarPeople} size="sm" max={2} />
+                          <PersonAvatarStack people={avatarPeople} size="md" max={2} />
                           <ChevronRight
-                            size={14}
+                            size={16}
                             className="text-casa-muted group-hover:text-casa-navy transition-transform group-hover:translate-x-0.5"
                           />
                         </div>
@@ -1403,14 +1403,14 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
 
                       <div className="flex items-center gap-2 shrink-0">
                         {driverMember?.family_member?.name && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-3xs font-semibold bg-amber-500/10 text-amber-900 border border-amber-500/20 hidden sm:inline-flex">
-                            <Car size={10} className="text-amber-800" />
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-caption font-semibold bg-amber-500/10 text-amber-900 border border-amber-500/20 hidden sm:inline-flex">
+                            <Car size={12} className="text-amber-800" />
                             <span>{driverMember.family_member.name} drives</span>
                           </span>
                         )}
-                        <PersonAvatarStack people={avatarPeople} size="sm" max={2} />
+                        <PersonAvatarStack people={avatarPeople} size="md" max={2} />
                         <ChevronRight
-                          size={14}
+                          size={16}
                           className="text-casa-muted group-hover:text-casa-navy transition-transform group-hover:translate-x-0.5"
                         />
                       </div>

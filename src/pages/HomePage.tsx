@@ -1497,7 +1497,7 @@ function TimelineRow({
                     color: m.family_member?.color_hex ?? SHARED_GOLD,
                   }))}
                   max={3}
-                  size="sm"
+                  size="md"
                   className="shrink-0"
                 />
               )}
