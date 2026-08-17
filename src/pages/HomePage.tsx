@@ -20,6 +20,7 @@ import SwipeableReminderPill from '../components/shared/SwipeableReminderPill'
 import { usePullToRefresh } from '../hooks/usePullToRefresh'
 import { WeatherIcon } from '../components/shared/WeatherIcon'
 import { LeaveByCard } from '../components/shared/LeaveByCard'
+import TomorrowPrepCard from '../components/home/TomorrowPrepCard'
 import { BirthdayCardDecoration } from '../components/shared/BirthdayCardDecoration'
 import { useTravelEta, type TravelEtaResult } from '../hooks/useTravelEta'
 import { useReminderNeedsYouActions } from '../hooks/useReminderNeedsYouActions'
@@ -465,6 +466,9 @@ export default function HomePage() {
             </Link>
           </div>
         )}
+
+        {/* ── Tomorrow Morning Prep (Contextual evening / readiness card) ── */}
+        <TomorrowPrepCard now={now} className="mt-3 mb-3" />
 
         {/* ── Today's timeline — first, front and center ──── */}
         <section className="mt-2">

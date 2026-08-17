@@ -27,6 +27,7 @@ import { useCalendarStore } from '../../stores/calendarStore'
 import { cn } from '../../utils/cn'
 import { formatDurationLong } from '../../utils/eventTime'
 import { Button, PersonAvatarStack, JourneyProgressBar } from '../ui'
+import TomorrowPrepWidget from './widgets/TomorrowPrepWidget'
 
 interface CalmKioskViewProps {
   onOpenEvent: (event: EventWithDetails) => void
@@ -714,6 +715,9 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
               )}
             </div>
           )}
+
+          {/* ── Tomorrow Morning Readiness & Exceptions Widget ── */}
+          <TomorrowPrepWidget now={now} />
 
           {/* 1. Today's Appointments & Reminders (Top) / Tomorrow Preview */}
           <div className={cn(
