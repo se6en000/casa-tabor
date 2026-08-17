@@ -612,10 +612,6 @@ test('every Settings route is covered by the shared Settings surface contract', 
     assert.doesNotMatch(source, /<button\b/, `${file} must use shared button primitives`)
   }
 
-  for (const file of ['CalendarsSettingsPage.tsx', 'GmailScanPage.tsx']) {
-    const source = readFileSync(resolve('src/pages', file), 'utf8')
-    assert.doesNotMatch(source, /<button\b/, `${file} must keep legacy Settings controls on shared primitives`)
-  }
   assert.doesNotMatch(shell, /<button\b/, 'SettingsShell must use the shared Button primitive')
 })
 
@@ -663,7 +659,7 @@ test('Settings selection controls do not repaint default primary buttons', () =>
   const art = readFileSync(resolve('src/pages/ArtModeSettingsPage.tsx'), 'utf8')
   const display = readFileSync(resolve('src/pages/DisplaySettingsPage.tsx'), 'utf8')
   const family = readFileSync(resolve('src/pages/FamilySettingsPage.tsx'), 'utf8')
-  const calendars = readFileSync(resolve('src/pages/CalendarsSettingsPage.tsx'), 'utf8')
+  const google = readFileSync(resolve('src/pages/GoogleServicesPage.tsx'), 'utf8')
 
   assert.match(art, /aria-label="Art feed mode"/)
   assert.match(art, /variant="strong"[\s\S]*?onClick=\{applyCoastalStarterTheme\}/)
@@ -672,7 +668,7 @@ test('Settings selection controls do not repaint default primary buttons', () =>
   assert.match(family, /label="Show on homepage sidebar"/)
   assert.match(family, /<SegmentedControl[\s\S]*?role`}/)
   assert.match(family, /variant=\{\(m\.availability_mode \?\? 'strict'\) === option\.value \? 'strong' : 'secondary'\}/)
-  assert.match(calendars, /variant="strong"[\s\S]*?onClick=\{onConnect\}/)
+  assert.match(google, /variant="subtle"[\s\S]*?onClick=\{handleSyncAll\}/)
 
   const settingsPages = readdirSync(resolve('src/pages'))
     .filter((file) => file.endsWith('SettingsPage.tsx'))

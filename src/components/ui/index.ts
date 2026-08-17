@@ -55,3 +55,4 @@ export {
   type ThreeRailLayoutProps,
   type WorkflowActionsProps,
 } from './Patterns'
+export { JewelCapsuleCopilot, type JewelCapsuleCopilotProps } from './JewelCapsuleCopilot'

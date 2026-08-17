@@ -82,9 +82,7 @@ export default function AnimatedRoutes() {
           <Route path="status"     element={<StatusDashboardPage />} />
           <Route path="analytics"  element={<DataAnalyticsPage />} />
           <Route path="grocery-intelligence" element={<GroceryIntelligenceSettingsPage />} />
-          {/* Back-compat: old plural path still resolves */}
-          <Route path="groceries-intelligence" element={<Navigate to="/settings/grocery-intelligence" replace />} />
-          <Route path="food-profile" element={<Navigate to="/settings/memory/food-profile" replace />} />
+          <Route path="food-profile" element={<FoodProfileSettingsPage />} />
           <Route path="pantry-inventory" element={<PantryInventorySettingsPage />} />
           <Route path="admin-ops" element={<AdminOpsPage />} />
           {/* Design-system gallery is available from Settings in every build. */}

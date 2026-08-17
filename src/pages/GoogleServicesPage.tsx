@@ -19,7 +19,7 @@ import {
   Alert, Button, Chip, ConfirmationDialog, Modal,
   Switch, Checkbox,
 } from '../components/ui'
-import { SettingsPageHeader } from '../components/settings'
+import { SettingsPageHeader, RecurrenceOperationsCard } from '../components/settings'
 import { formatDistanceToNow } from 'date-fns'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
@@ -410,6 +410,9 @@ export default function GoogleServicesPage() {
               </div>
             </div>
           )}
+
+          {/* ── Recurrence & Synchronization Engine Health ── */}
+          <RecurrenceOperationsCard />
         </div>
       )}
 

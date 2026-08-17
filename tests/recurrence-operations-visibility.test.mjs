@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs'
 const migration = readFileSync('supabase/migrations/20260715241000_recurrence_operations_visibility.sql', 'utf8')
 const hook = readFileSync('src/hooks/useRecurrenceOperations.ts', 'utf8')
 const card = readFileSync('src/components/settings/RecurrenceOperationsCard.tsx', 'utf8')
-const page = readFileSync('src/pages/CalendarsSettingsPage.tsx', 'utf8')
+const page = readFileSync('src/pages/GoogleServicesPage.tsx', 'utf8')
 
 test('operations visibility includes sync, conflicts, tombstones, imports, and anomalies', () => {
   for (const field of [

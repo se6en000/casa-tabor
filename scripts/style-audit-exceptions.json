@@ -196,10 +196,6 @@
         "reason": "Briefing schedule markers bind persisted household member colors."
       },
       {
-        "path": "src/pages/CalendarsSettingsPage.tsx",
-        "reason": "Calendar connection avatars bind persisted household member colors."
-      },
-      {
         "path": "src/pages/CookPage.tsx",
         "reason": "Recipe image focal points are user-selected runtime values; modal footer padding follows the device safe-area inset.",
         "snippets": [
@@ -219,10 +215,6 @@
       {
         "path": "src/pages/FamilySettingsPage.tsx",
         "reason": "Family profile previews and the color picker bind persisted or user-selected member colors."
-      },
-      {
-        "path": "src/pages/GmailScanPage.tsx",
-        "reason": "Gmail member avatars bind persisted household member colors."
       },
       {
         "path": "src/pages/GoogleServicesPage.tsx",

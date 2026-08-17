@@ -1,15 +1,14 @@
 import { useMemo, useRef } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
-import { Cloud, Sparkles, Settings, Bell } from 'lucide-react'
-import { motion } from 'framer-motion'
+import { Cloud, Settings, Bell } from 'lucide-react'
 import { useLiveClock } from '../../hooks/useLiveClock'
 import { useHomeWeather } from '../../hooks/useHomeWeather'
 import { useWeekConflicts } from '../../hooks/useConflicts'
 import { usePrepItems } from '../../hooks/usePrepItems'
 import { clusterPrepItems } from '../../utils/prepItemClusters'
 import { cn } from '../../utils/cn'
-import { IconButton } from '../ui'
+import { IconButton, JewelCapsuleCopilot } from '../ui'
 import { useAppStore } from '../../stores/appStore'
 
 export default function CanvasTopBar() {
@@ -198,8 +197,9 @@ export default function CanvasTopBar() {
         </div>
 
         {/* AI Copilot Primary Action */}
-        <motion.button
+        <JewelCapsuleCopilot
           ref={btnRef}
+          isActive={aiDrawerOpen}
           onClick={() => {
             if (aiDrawerOpen) {
               setAiDrawerOpen(false)
@@ -212,28 +212,7 @@ export default function CanvasTopBar() {
               )
             }
           }}
-          animate={{
-            boxShadow: aiDrawerOpen
-              ? '0 0 16px rgba(201,169,110,0.6)'
-              : [
-                  '0 0 5px rgba(201,169,110,0.2)',
-                  '0 0 10px rgba(201,169,110,0.35)',
-                  '0 0 5px rgba(201,169,110,0.2)',
-                ],
-          }}
-          transition={{ duration: 3.4, repeat: aiDrawerOpen ? 0 : Infinity, ease: 'easeInOut' }}
-          className={cn(
-            'inline-flex items-center justify-center gap-1.5 px-3.5 min-h-[32px] rounded-full transition-all font-semibold text-caption leading-none',
-            aiDrawerOpen
-              ? 'bg-casa-gold text-casa-navy ring-2 ring-casa-gold/80 shadow-xs'
-              : 'bg-casa-gold text-casa-navy hover:bg-amber-400 shadow-2xs'
-          )}
-          title={aiDrawerOpen ? 'Close Copilot' : 'Open AI Copilot'}
-          aria-label={aiDrawerOpen ? 'Close Copilot' : 'Open AI Copilot'}
-        >
-          <Sparkles size={14} strokeWidth={2.2} className="shrink-0" />
-          <span className="hidden sm:inline leading-none">Copilot</span>
-        </motion.button>
+        />
       </div>
     </header>
   )

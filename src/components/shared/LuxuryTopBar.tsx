@@ -2,7 +2,6 @@ import { useMemo, useRef, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { format, isAfter, isBefore } from 'date-fns'
 import {
-  Sparkles,
   Settings,
   Bell,
 } from 'lucide-react'
@@ -15,7 +14,7 @@ import { useWeekConflicts } from '../../hooks/useConflicts'
 import { usePrepItems } from '../../hooks/usePrepItems'
 import { clusterPrepItems } from '../../utils/prepItemClusters'
 import { cn } from '../../utils/cn'
-import { IconButton } from '../ui'
+import { IconButton, JewelCapsuleCopilot } from '../ui'
 import { useAppStore } from '../../stores/appStore'
 import { WeatherIcon } from './WeatherIcon'
 import NotificationDrawer from './NotificationDrawer'
@@ -395,11 +394,9 @@ function CopilotAction() {
   const isAiActive = aiDrawerOpen && sidecarTab === 'ai'
 
   return (
-    <motion.button
+    <JewelCapsuleCopilot
       ref={btnRef}
-      data-sidecar-trigger="true"
-      data-ai-trigger="true"
-      data-sidecar-loadable="true"
+      isActive={isAiActive}
       onClick={() => {
         if (aiDrawerOpen && sidecarTab === 'ai') {
           closeSidecar()
@@ -409,35 +406,7 @@ function CopilotAction() {
           openAiInSidecar()
         }
       }}
-      animate={{
-        boxShadow: isAiActive
-          ? '0 0 16px rgba(201,169,110,0.6)'
-          : [
-              '0 0 5px rgba(201,169,110,0.18)',
-              '0 0 12px rgba(201,169,110,0.38)',
-              '0 0 5px rgba(201,169,110,0.18)',
-            ],
-      }}
-      transition={{
-        duration: 3.4,
-        repeat: isAiActive ? 0 : Infinity,
-        ease: 'easeInOut',
-      }}
-      className={cn(
-        'inline-flex items-center justify-center gap-1.5 px-4 min-h-[44px] rounded-full transition-all font-bold text-caption leading-none tracking-[0.03em]',
-        isAiActive
-          ? 'bg-casa-gold text-casa-navy ring-2 ring-casa-gold/80 shadow-xs'
-          : 'bg-casa-gold text-casa-navy hover:bg-amber-400 shadow-2xs',
-      )}
-      title={isAiActive ? 'Close Copilot' : 'Open AI Copilot'}
-      aria-label={isAiActive ? 'Close Copilot' : 'Open AI Copilot'}
-      aria-expanded={isAiActive}
-    >
-      <Sparkles size={14} strokeWidth={2.2} className="shrink-0" />
-      <span className="hidden sm:inline leading-none">
-        {isAiActive ? 'Close' : 'Copilot'}
-      </span>
-    </motion.button>
+    />
   )
 }
 

@@ -112,6 +112,18 @@ export const COMPONENT_MANIFEST = [
     example: '<Button variant="primary" align="start" fullWidth loading={saving}>Save changes</Button>',
   }),
   component({
+    name: 'JewelCapsuleCopilot',
+    category: 'action',
+    purpose: 'Haute luxury Copilot AI trigger with 3D liquid fluid orb physics and hairline gold bezel.',
+    useWhen: 'Use as the primary ambient AI Copilot invocation trigger across navigation bars.',
+    avoid: 'Do not use for generic submission buttons or non-AI actions.',
+    variants: ['default', 'active', 'proactive'],
+    states: ['default', 'active', 'proactive', 'hover'],
+    accessibility: 'Exposes aria-label, aria-expanded, and data-ai-trigger for full assistive navigation.',
+    responsive: 'Maintains 44px+ touch targets on mobile and 48px+ on wall kiosks.',
+    example: '<JewelCapsuleCopilot isActive={isAiOpen} onClick={toggleAi} />',
+  }),
+  component({
     name: 'IconButton',
     category: 'action',
     purpose: 'Runs a compact action represented by one familiar icon.',
