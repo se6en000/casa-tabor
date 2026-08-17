@@ -131,7 +131,7 @@ test('exceptions_only syncMode filters out normal routine days but syncs Tuesday
   })
   assert.equal(wednesdaySyncEvents.length, 0, 'Normal routine day must not generate external sync noise')
 
-  // Tuesday (has Early Strings override)
+  // Tuesday (has Early Strings override for drop-off ONLY)
   const tuesday = new Date('2026-08-18T10:00:00.000-04:00') // Tue = 2
   const tuesdaySyncEvents = generateRoutineActionEvents({
     routine: routineWithOverride,
@@ -139,7 +139,7 @@ test('exceptions_only syncMode filters out normal routine days but syncs Tuesday
     date: tuesday,
     forExternalSync: true,
   })
-  assert.equal(tuesdaySyncEvents.length, 2, 'Tuesday override must produce sync events')
+  assert.equal(tuesdaySyncEvents.length, 1, 'Tuesday early dropoff must produce only the morning exception event')
   assert.equal(tuesdaySyncEvents[0].title, 'Drop off Liv @ Bak Middle School · Early Strings')
   const tuesdayDropStart = new Date(tuesdaySyncEvents[0].start_time)
   assert.equal(tuesdayDropStart.getHours(), 6)

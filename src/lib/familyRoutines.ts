@@ -117,7 +117,10 @@ export function createCampRoutine(
 /**
  * Checks if a specific date has a custom schedule override or deviation for this routine.
  */
-export function isRoutineExceptionForDate(routine: FamilyRoutine, date: Date): boolean {
+/**
+ * Checks if a specific date has a custom schedule override or deviation specifically for morning drop-off.
+ */
+export function isRoutineDropoffException(routine: FamilyRoutine, date: Date): boolean {
   const dayOfWeek = date.getDay()
   if (!routine.daysOfWeek.includes(dayOfWeek)) return false
 
@@ -126,16 +129,57 @@ export function isRoutineExceptionForDate(routine: FamilyRoutine, date: Date): b
   )
   if (!override) return false
 
-  // Check for any deviation from the base schedule
-  if (override.label && override.label.trim().length > 0) return true
-  if (override.startLocal && override.startLocal.slice(0, 5) !== routine.startLocal.slice(0, 5)) return true
-  if (override.endLocal && override.endLocal.slice(0, 5) !== routine.endLocal.slice(0, 5)) return true
-  if (override.dropoffDriverName && override.dropoffDriverName !== routine.dropoffDriverName) return true
-  if (override.pickupDriverName && override.pickupDriverName !== routine.pickupDriverName) return true
-  if (override.dropoffDriverId && override.dropoffDriverId !== routine.dropoffDriverId) return true
-  if (override.pickupDriverId && override.pickupDriverId !== routine.pickupDriverId) return true
+  const startDiffers = Boolean(override.startLocal && override.startLocal.slice(0, 5) !== routine.startLocal.slice(0, 5))
+  const driverDiffers = Boolean(
+    (override.dropoffDriverName && override.dropoffDriverName !== routine.dropoffDriverName) ||
+    (override.dropoffDriverId && override.dropoffDriverId !== routine.dropoffDriverId)
+  )
+
+  if (startDiffers || driverDiffers) return true
+
+  // If label exists and afternoon dismissal did NOT change, label applies to morning
+  const endDiffers = Boolean(override.endLocal && override.endLocal.slice(0, 5) !== routine.endLocal.slice(0, 5))
+  if (override.label && override.label.trim().length > 0 && !endDiffers) {
+    return true
+  }
 
   return false
+}
+
+/**
+ * Checks if a specific date has a custom schedule override or deviation specifically for afternoon pickup.
+ */
+export function isRoutinePickupException(routine: FamilyRoutine, date: Date): boolean {
+  const dayOfWeek = date.getDay()
+  if (!routine.daysOfWeek.includes(dayOfWeek)) return false
+
+  const override = routine.dayOverrides?.find(
+    (o) => o.dayOfWeek === dayOfWeek && o.enabled !== false,
+  )
+  if (!override) return false
+
+  const endDiffers = Boolean(override.endLocal && override.endLocal.slice(0, 5) !== routine.endLocal.slice(0, 5))
+  const driverDiffers = Boolean(
+    (override.pickupDriverName && override.pickupDriverName !== routine.pickupDriverName) ||
+    (override.pickupDriverId && override.pickupDriverId !== routine.pickupDriverId)
+  )
+
+  if (endDiffers || driverDiffers) return true
+
+  // If label exists and morning arrival did NOT change, label applies to afternoon
+  const startDiffers = Boolean(override.startLocal && override.startLocal.slice(0, 5) !== routine.startLocal.slice(0, 5))
+  if (override.label && override.label.trim().length > 0 && !startDiffers) {
+    return true
+  }
+
+  return false
+}
+
+/**
+ * Checks if a specific date has any custom schedule override or deviation for this routine.
+ */
+export function isRoutineExceptionForDate(routine: FamilyRoutine, date: Date): boolean {
+  return isRoutineDropoffException(routine, date) || isRoutinePickupException(routine, date)
 }
 
 /**
@@ -203,16 +247,6 @@ export function generateConsolidatedRoutineActionEvents(options: {
     if (routine.startDate && dateKey < routine.startDate) return false
     if (routine.endDate && dateKey > routine.endDate) return false
     if (!routine.daysOfWeek.includes(dayOfWeek)) return false
-
-    if (shouldFilter) {
-      const mode: RoutineSyncMode = routine.syncMode ?? (routine.syncToGoogle === false ? 'none' : 'exceptions_only')
-      if (mode === 'none') return false
-      if (mode === 'exceptions_only') {
-        return isRoutineExceptionForDate(routine, date)
-      }
-      // 'all': proceed
-    }
-
     return true
   })
 
@@ -248,6 +282,15 @@ export function generateConsolidatedRoutineActionEvents(options: {
     const child = members.find((m) => m.id === routine.memberId)
     if (!child) continue
 
+    const mode: RoutineSyncMode = routine.syncMode ?? (routine.syncToGoogle === false ? 'none' : 'exceptions_only')
+
+    const includeDropoff = !shouldFilter || mode === 'all' || (mode === 'exceptions_only' && isRoutineDropoffException(routine, date))
+    const includePickup = !shouldFilter || mode === 'all' || (mode === 'exceptions_only' && isRoutinePickupException(routine, date))
+
+    if (!includeDropoff && !includePickup) {
+      continue
+    }
+
     const venueKey = routine.venueName.trim().toLowerCase()
     const dayOverride = routine.dayOverrides?.find(
       (o) => o.dayOfWeek === dayOfWeek && o.enabled !== false,
@@ -262,44 +305,48 @@ export function generateConsolidatedRoutineActionEvents(options: {
     const overrideLabel = dayOverride?.label?.trim() || null
 
     // Morning Dropoff Grouping
-    const dropKey = `${venueKey}|${effStartLocal}|${effDropDriverName}|${overrideLabel || ''}`
-    if (!dropoffGroups.has(dropKey)) {
-      dropoffGroups.set(dropKey, {
-        venueName: routine.venueName,
-        venueAddress: routine.venueAddress,
-        startLocal: effStartLocal,
-        driverName: effDropDriverName,
-        driverId: effDropDriverId,
-        label: overrideLabel,
-        children: [child],
-        routineIds: [routine.memberId],
-      })
-    } else {
-      const g = dropoffGroups.get(dropKey)!
-      if (!g.children.some((c) => c.id === child.id)) {
-        g.children.push(child)
-        g.routineIds.push(routine.memberId)
+    if (includeDropoff) {
+      const dropKey = `${venueKey}|${effStartLocal}|${effDropDriverName}|${overrideLabel || ''}`
+      if (!dropoffGroups.has(dropKey)) {
+        dropoffGroups.set(dropKey, {
+          venueName: routine.venueName,
+          venueAddress: routine.venueAddress,
+          startLocal: effStartLocal,
+          driverName: effDropDriverName,
+          driverId: effDropDriverId,
+          label: overrideLabel,
+          children: [child],
+          routineIds: [routine.memberId],
+        })
+      } else {
+        const g = dropoffGroups.get(dropKey)!
+        if (!g.children.some((c) => c.id === child.id)) {
+          g.children.push(child)
+          g.routineIds.push(routine.memberId)
+        }
       }
     }
 
     // Afternoon Pickup Grouping
-    const pickKey = `${venueKey}|${effEndLocal}|${effPickDriverName}|${overrideLabel || ''}`
-    if (!pickupGroups.has(pickKey)) {
-      pickupGroups.set(pickKey, {
-        venueName: routine.venueName,
-        venueAddress: routine.venueAddress,
-        endLocal: effEndLocal,
-        driverName: effPickDriverName,
-        driverId: effPickDriverId,
-        label: overrideLabel,
-        children: [child],
-        routineIds: [routine.memberId],
-      })
-    } else {
-      const g = pickupGroups.get(pickKey)!
-      if (!g.children.some((c) => c.id === child.id)) {
-        g.children.push(child)
-        g.routineIds.push(routine.memberId)
+    if (includePickup) {
+      const pickKey = `${venueKey}|${effEndLocal}|${effPickDriverName}|${overrideLabel || ''}`
+      if (!pickupGroups.has(pickKey)) {
+        pickupGroups.set(pickKey, {
+          venueName: routine.venueName,
+          venueAddress: routine.venueAddress,
+          endLocal: effEndLocal,
+          driverName: effPickDriverName,
+          driverId: effPickDriverId,
+          label: overrideLabel,
+          children: [child],
+          routineIds: [routine.memberId],
+        })
+      } else {
+        const g = pickupGroups.get(pickKey)!
+        if (!g.children.some((c) => c.id === child.id)) {
+          g.children.push(child)
+          g.routineIds.push(routine.memberId)
+        }
       }
     }
   }
