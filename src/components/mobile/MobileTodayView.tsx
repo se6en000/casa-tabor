@@ -19,6 +19,7 @@ import { useTravelEta } from '../../hooks/useTravelEta'
 import { useAppStore } from '../../stores/appStore'
 import { useLiveClock } from '../../hooks/useLiveClock'
 import { inferEventMode, inferEventPlanKind } from '../../lib/eventCommandCenter'
+import { isReminderOrChore } from '../../lib/heroFocus.mjs'
 import { openEventDetails } from '../../utils/openEventDetails'
 import { Button } from '../ui'
 
@@ -37,16 +38,16 @@ export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate 
 
   const [snoozedEventMinutes, setSnoozedEventMinutes] = useState<number | null>(null)
 
-  // Filter Today & Tomorrow Events
+  // Filter Today & Tomorrow Events (Excluding chores and reminders from hero candidates)
   const todayEvents = useMemo(() => {
     return rollingEvents
-      .filter((ev) => eventOverlapsDay(ev, now) && ev.event_type !== 'reminder')
+      .filter((ev) => eventOverlapsDay(ev, now) && !isReminderOrChore(ev))
       .sort((a, b) => getEventStartDate(a).getTime() - getEventStartDate(b).getTime())
   }, [rollingEvents, now])
 
   const tomorrowEvents = useMemo(() => {
     return rollingEvents
-      .filter((ev) => eventOverlapsDay(ev, tomorrow) && ev.event_type !== 'reminder')
+      .filter((ev) => eventOverlapsDay(ev, tomorrow) && !isReminderOrChore(ev))
       .sort((a, b) => getEventStartDate(a).getTime() - getEventStartDate(b).getTime())
   }, [rollingEvents, tomorrow])
 
@@ -147,8 +148,10 @@ export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate 
                 <span>First Up Tomorrow · {format(getEventStartDate(heroEvent), 'h:mm a')}</span>
               ) : (
                 <span>
-                  {isHeroTravel && heroTravelEta.data?.leave_by
+                  {isHeroTravel && heroTravelEta.data?.leave_by && differenceInMinutes(new Date(heroTravelEta.data.leave_by), now) <= 90
                     ? `Leave at ${format(new Date(heroTravelEta.data.leave_by), 'h:mm a')} · On Track`
+                    : differenceInMinutes(getEventStartDate(heroEvent), now) > 60
+                    ? `Today at ${format(getEventStartDate(heroEvent), 'h:mm a')}`
                     : `Starts in ${Math.max(1, differenceInMinutes(getEventStartDate(heroEvent), now))} min`}
                 </span>
               )}

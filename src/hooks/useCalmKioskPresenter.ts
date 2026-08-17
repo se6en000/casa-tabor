@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { format, parseISO, differenceInMinutes, subMinutes } from 'date-fns'
 import { useLiveClock, greetingFor } from './useLiveClock'
@@ -7,6 +7,7 @@ import { useWeekConflicts, useResolveConflict } from './useConflicts'
 import { usePrepItems, useCompletePrepItem } from './usePrepItems'
 import { useFamilyMembers } from './useFamilyMembers'
 import { useHomeWeather } from './useHomeWeather'
+import { useReminderNeedsYouActions } from './useReminderNeedsYouActions'
 import { useMemberAvailability } from './useMemberAvailability'
 import { useAppStore } from '../stores/appStore'
 import { inferEventMode, inferEventPlanKind } from '../lib/eventCommandCenter'
@@ -18,6 +19,8 @@ import {
   type AmbientRoutineStatus,
   type FamilyRoutine,
 } from '../lib/familyRoutines'
+import { isReminderOrChore } from '../lib/heroFocus.mjs'
+import { clusterPrepItems } from '../utils/prepItemClusters'
 import type { Conflict, PrepItem, FamilyMember } from '../types'
 
 export interface CalmKioskPresenterState {
@@ -34,6 +37,7 @@ export interface CalmKioskPresenterState {
   appointmentEvents: EventWithDetails[]
   pastEvents: EventWithDetails[]
   upcomingAppointments: EventWithDetails[]
+  todayReminders: EventWithDetails[]
   todayEvents: EventWithDetails[]
   tomorrowEvents: EventWithDetails[]
   isTodayDone: boolean
@@ -80,6 +84,13 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
 
   const resolveConflict = useResolveConflict()
   const completePrep = useCompletePrepItem()
+  const { queueMissedReminders } = useReminderNeedsYouActions()
+
+  useEffect(() => {
+    if (todayEvents.length > 0) {
+      void queueMissedReminders(todayEvents, now).catch(() => {})
+    }
+  }, [todayEvents, now, queueMissedReminders])
 
   const activeConflicts = useMemo(
     () => conflicts.filter((c) => !c.resolved),
@@ -99,7 +110,8 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     void completePrep(item.id)
   }
 
-  const totalAttentionCount = activeConflicts.length + activePrep.length
+  const clusteredPrep = useMemo(() => clusterPrepItems(activePrep), [activePrep])
+  const totalAttentionCount = activeConflicts.length + clusteredPrep.length
 
   const memberIds = useMemo(() => familyMembers.map((m) => m.id), [familyMembers])
   const { rules: availabilityRules = [] } = useMemberAvailability(memberIds)
@@ -224,11 +236,12 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     return score
   }
 
-  // Active candidates today (that haven't finished more than 15 mins ago)
+  // Active candidates today (Hard events only — chores/reminders never take hero focus)
   const activeCandidates = useMemo(() => {
     return effectiveTodayEvents.filter((e) => {
       if (e.all_day) return false
       if (isMealEvent(e)) return false
+      if (isReminderOrChore(e)) return false
       try {
         const start = parseISO(e.start_time)
         const end = parseISO(e.end_time)
@@ -310,11 +323,12 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
 
   const nextEvent = activeHeroEvent
 
-  // Past events today (already ended, excluding meals)
+  // Past events today (already ended, excluding meals and chores)
   const pastEvents = useMemo(() => {
     return effectiveTodayEvents
       .filter((e) => {
         if (isMealEvent(e)) return false
+        if (isReminderOrChore(e)) return false
         if (e.all_day) return false
         try {
           const end = parseISO(e.end_time)
@@ -332,11 +346,12 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
       })
   }, [effectiveTodayEvents, now])
 
-  // Upcoming / active appointment stream (happening now or later today, including hero, excluding meals)
+  // Upcoming / active appointment stream (Hard appointments only, excluding meals and chores/reminders)
   const upcomingAppointments = useMemo(() => {
     return effectiveTodayEvents
       .filter((e) => {
         if (isMealEvent(e)) return false
+        if (isReminderOrChore(e)) return false
         if (e.all_day) return true
         try {
           const end = parseISO(e.end_time)
@@ -353,6 +368,22 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
         }
       })
   }, [effectiveTodayEvents, now])
+
+  // Today's chores & reminders with suggested times (never hero)
+  const todayReminders = useMemo(() => {
+    return effectiveTodayEvents
+      .filter((e) => {
+        if (isMealEvent(e)) return false
+        return isReminderOrChore(e)
+      })
+      .sort((a, b) => {
+        try {
+          return parseISO(a.start_time).getTime() - parseISO(b.start_time).getTime()
+        } catch {
+          return 0
+        }
+      })
+  }, [effectiveTodayEvents])
 
   // Filter appointment stream (exclude meals, stale ended items)
   const appointmentEvents = useMemo(() => {
@@ -539,20 +570,30 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
   const leaveAt = useMemo(() => {
     if (!nextEvent || nextEvent.all_day || !isTravelEvent) return null
     try {
+      const start = parseISO(nextEvent.start_time)
+      const drive = driveTimeMins && driveTimeMins > 0 ? driveTimeMins : 10
+
       if (nextEvent.enrichment?.departure_time) {
-        return new Date(nextEvent.enrichment.departure_time)
+        const dep = new Date(nextEvent.enrichment.departure_time)
+        // Guard against stale dates/times: departure must be on same day, before/at start, within 3h
+        if (
+          !isNaN(dep.getTime()) &&
+          dep.toDateString() === start.toDateString() &&
+          dep.getTime() <= start.getTime() &&
+          differenceInMinutes(start, dep) <= 180
+        ) {
+          return dep
+        }
       }
       if (outboundLeg?.time && outboundLeg.timing === 'depart_at') {
         const [hh, mm] = outboundLeg.time.split(':').map(Number)
-        const d = parseISO(nextEvent.start_time)
+        const d = new Date(start.getTime())
         d.setHours(hh, mm, 0, 0)
-        return d
+        if (d.getTime() <= start.getTime() && differenceInMinutes(start, d) <= 180) {
+          return d
+        }
       }
-      const start = parseISO(nextEvent.start_time)
-      if (driveTimeMins && driveTimeMins > 0) {
-        return subMinutes(start, driveTimeMins)
-      }
-      return null
+      return subMinutes(start, drive)
     } catch {
       return null
     }
@@ -642,6 +683,7 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     appointmentEvents,
     pastEvents,
     upcomingAppointments,
+    todayReminders,
     todayEvents: effectiveTodayEvents,
     tomorrowEvents: tomorrowEventsSorted,
     isTodayDone,

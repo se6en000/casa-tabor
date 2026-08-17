@@ -228,28 +228,33 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     return () => { cancelled = true }
   }, [initialEvent?.id, isCanonicalOccurrence])
 
+  const currentEventIdRef = useRef(initialEvent?.id)
+
   // Sync state whenever event prop changes
   useEffect(() => {
     if (!initialEvent) return
+    const isNewEvent = initialEvent.id !== currentEventIdRef.current
+    currentEventIdRef.current = initialEvent.id
+
     const cat = normalizeCategoryName(initialEvent.enrichment?.category)
     const mode = isLikelyReminderOrHome(initialEvent, initialEvent.enrichment?.category) ? 'reminder' : 'event'
 
     setState(prev => ({
       ...prev,
       mode,
-      title: initialEvent.title || prev.title,
+      title: isNewEvent ? (initialEvent.title || 'New Event') : (prev.title || initialEvent.title),
       category: cat.label,
-      startDate: initialStartDate,
-      endDate: initialEndDate,
-      durationMinutes: initialDuration,
-      venue: initialVenue,
-      selectedMemberIds: initialMemberIds,
-      primaryMemberId: initialPrimaryId,
-      travelBehavior: initialTravelBehavior,
-      driverLeg1: initialDriverLeg1,
-      driverLeg2: initialDriverLeg2,
+      startDate: isNewEvent ? initialStartDate : prev.startDate,
+      endDate: isNewEvent ? initialEndDate : prev.endDate,
+      durationMinutes: isNewEvent ? initialDuration : prev.durationMinutes,
+      venue: isNewEvent ? initialVenue : prev.venue,
+      selectedMemberIds: isNewEvent ? initialMemberIds : prev.selectedMemberIds,
+      primaryMemberId: isNewEvent ? initialPrimaryId : prev.primaryMemberId,
+      travelBehavior: isNewEvent ? initialTravelBehavior : prev.travelBehavior,
+      driverLeg1: isNewEvent ? initialDriverLeg1 : prev.driverLeg1,
+      driverLeg2: isNewEvent ? initialDriverLeg2 : prev.driverLeg2,
     }))
-  }, [initialEvent, initialStartDate, initialEndDate, initialDuration, initialVenue, initialMemberIds, initialPrimaryId, initialTravelBehavior, initialDriverLeg1, initialDriverLeg2])
+  }, [initialEvent?.id, initialStartDate, initialEndDate, initialDuration, initialVenue, initialMemberIds, initialPrimaryId, initialTravelBehavior, initialDriverLeg1, initialDriverLeg2])
 
   // Resolve live route ETA if event has destination address but missing computed driving metrics
   useEffect(() => {
@@ -507,12 +512,13 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
 
   // Update Title
   const updateTitle = useCallback(async (newTitle: string) => {
-    setState(prev => ({ ...prev, title: newTitle }))
+    const trimmed = newTitle.trim() || 'Untitled'
+    setState(prev => ({ ...prev, title: trimmed }))
     if (!initialEvent?.id) return
     try {
-      const handled = await persistRecurringFieldMutation('title', { title: newTitle })
+      const handled = await persistRecurringFieldMutation('title', { title: trimmed })
       if (!handled) {
-        await updateEventTitle(supabase, queryClient, initialEvent.id, newTitle)
+        await updateEventTitle(supabase, queryClient, initialEvent.id, trimmed)
       }
     } catch (err) {
       console.error('[LivingFlow] Failed to update event title:', err)

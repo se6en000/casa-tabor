@@ -1,10 +1,13 @@
-import { useRef } from 'react'
+import { useMemo, useRef } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
-import { Cloud, Sparkles, ImageIcon, RefreshCw, Settings } from 'lucide-react'
+import { Cloud, Sparkles, ImageIcon, RefreshCw, Settings, Bell } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useLiveClock } from '../../hooks/useLiveClock'
 import { useHomeWeather } from '../../hooks/useHomeWeather'
+import { useWeekConflicts } from '../../hooks/useConflicts'
+import { usePrepItems } from '../../hooks/usePrepItems'
+import { clusterPrepItems } from '../../utils/prepItemClusters'
 import { cn } from '../../utils/cn'
 import { IconButton } from '../ui'
 import { useAppStore } from '../../stores/appStore'
@@ -23,8 +26,26 @@ export default function CanvasTopBar() {
   const { data: weather } = useHomeWeather()
   const btnRef = useRef<HTMLButtonElement>(null)
 
+  const { data: conflicts = [] } = useWeekConflicts()
+  const { data: prepItems = [] } = usePrepItems()
+
+  const activeConflicts = useMemo(() => conflicts.filter((c) => !c.resolved), [conflicts])
+  const activePrep = useMemo(() => prepItems.filter((p) => !p.dismissed), [prepItems])
+  const clusteredPrep = useMemo(() => clusterPrepItems(activePrep), [activePrep])
+  const totalAttentionCount = activeConflicts.length + clusteredPrep.length
+
   const isHome = location.pathname === '/'
   const isCalm = canvasSubmode === 'calm'
+  const isTriageActive = isHome && canvasSubmode === 'turbo'
+
+  const handleTriageClick = () => {
+    if (!isHome) {
+      navigate('/')
+      setCanvasSubmode('turbo')
+    } else {
+      setCanvasSubmode(canvasSubmode === 'turbo' ? 'calm' : 'turbo')
+    }
+  }
 
   return (
     <header
@@ -122,39 +143,75 @@ export default function CanvasTopBar() {
         {/* Unified Utility Action Track */}
         <div
           className={cn(
-            'inline-flex items-center p-0.5 rounded-full border gap-1',
-            isCalm ? 'bg-casa-surface/40 border-casa-border/40' : 'bg-white/5 border-white/10'
+            'inline-flex items-center p-1 rounded-full border gap-1 transition-all',
+            isCalm
+              ? 'bg-casa-surface/60 border-casa-border/50 shadow-2xs'
+              : 'bg-white/[0.06] border-white/[0.12] shadow-2xs backdrop-blur-md'
           )}
         >
           <IconButton
-            icon={<RefreshCw size={14} strokeWidth={2} />}
+            icon={<RefreshCw size={14} strokeWidth={1.8} />}
             aria-label="Refresh screen"
             onClick={() => window.location.reload()}
             title="Refresh screen"
             size="sm"
             variant="ghost"
             className={cn(
-              'rounded-full w-8 h-8 flex items-center justify-center',
+              'rounded-full w-8 h-8 flex items-center justify-center transition-all duration-150',
               isCalm
-                ? 'text-casa-muted hover:text-casa-navy hover:bg-black/5'
-                : 'text-white/70 hover:text-white hover:bg-white/10'
+                ? 'text-casa-text-secondary hover:text-casa-navy hover:bg-black/5 active:scale-95'
+                : 'text-white/70 hover:text-white hover:bg-white/10 active:scale-95'
             )}
           />
 
           <IconButton
-            icon={<ImageIcon size={14} strokeWidth={2} />}
+            icon={<ImageIcon size={14} strokeWidth={1.8} />}
             aria-label="Open Art Mode"
             onClick={() => document.dispatchEvent(new CustomEvent('screensaver-on'))}
             title="Art Mode"
             size="sm"
             variant="ghost"
             className={cn(
-              'rounded-full w-8 h-8 flex items-center justify-center',
+              'rounded-full w-8 h-8 flex items-center justify-center transition-all duration-150',
               isCalm
-                ? 'text-casa-muted hover:text-casa-navy hover:bg-black/5'
-                : 'text-white/70 hover:text-white hover:bg-white/10'
+                ? 'text-casa-text-secondary hover:text-casa-navy hover:bg-black/5 active:scale-95'
+                : 'text-white/70 hover:text-white hover:bg-white/10 active:scale-95'
             )}
           />
+
+          {/* Triage Bell with Luxury Complication Badge */}
+          <div className="relative inline-flex items-center justify-center">
+            <IconButton
+              icon={<Bell size={14} strokeWidth={1.8} className={isTriageActive ? undefined : totalAttentionCount > 0 ? (isCalm ? 'text-amber-800' : 'text-casa-gold') : undefined} />}
+              aria-label={totalAttentionCount > 0 ? `${totalAttentionCount} Triage Items` : 'Triage Items'}
+              onClick={handleTriageClick}
+              title={totalAttentionCount > 0 ? `${totalAttentionCount} Triage Items` : 'Triage Items'}
+              size="sm"
+              variant="ghost"
+              className={cn(
+                'rounded-full w-8 h-8 flex items-center justify-center transition-all duration-150',
+                isTriageActive
+                  ? isCalm
+                    ? 'bg-casa-navy/12 text-casa-navy ring-1 ring-casa-gold/50 shadow-2xs font-semibold'
+                    : 'bg-casa-gold/20 text-casa-gold ring-1 ring-casa-gold/40 shadow-2xs font-semibold'
+                  : isCalm
+                  ? 'text-casa-text-secondary hover:text-casa-navy hover:bg-black/5 active:scale-95'
+                  : 'text-white/70 hover:text-white hover:bg-white/10 active:scale-95'
+              )}
+            />
+            {totalAttentionCount > 0 && (
+              <span
+                className={cn(
+                  'absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full font-bold text-3xs flex items-center justify-center leading-none pointer-events-none shadow-xs border',
+                  isCalm
+                    ? 'bg-casa-gold text-casa-navy border-casa-surface ring-1 ring-casa-gold/40'
+                    : 'bg-casa-gold text-casa-navy border-casa-navy ring-1 ring-casa-gold/50'
+                )}
+              >
+                {totalAttentionCount}
+              </span>
+            )}
+          </div>
 
           <IconButton
             icon={<Settings size={14} strokeWidth={2} />}

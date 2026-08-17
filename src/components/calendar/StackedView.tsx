@@ -13,7 +13,6 @@ import { useAppStore } from '../../stores/appStore'
 import { useRollingEvents } from '../../hooks/useCalendarEvents'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
-import EventDetailPanel from './EventDetailPanel'
 import EventEditSheet from './EventEditSheet'
 import { isReminder, isAllDayReminder, isTimedReminder } from '../../utils/holidays'
 import EventContextMenu from '../shared/EventContextMenu'
@@ -29,7 +28,6 @@ import QuickCreateSheet from '../shared/QuickCreateSheet'
 import { useReminderNeedsYouActions } from '../../hooks/useReminderNeedsYouActions'
 
 const SHARED_COLOR = 'var(--color-casa-gold)'
-const IDLE_RESET_TIMEOUT_MS = 30_000 // 30 seconds idle before returning to Today
 
 function formatCompactDuration(minutes: number): string {
   if (minutes <= 0 || minutes >= 1440) return ''
@@ -91,7 +89,8 @@ export default function StackedView() {
   const { selectedSidecarEventId, aiDrawerOpen, sidecarTab, openEventInSidecar } = useAppStore()
   const { data: householdData } = useFamilyMembers()
   // Anchor the 8-day window to the shared calendar selectedDate
-  const anchor = startOfDay(selectedDate)
+  const anchorTime = startOfDay(selectedDate).getTime()
+  const anchor = useMemo(() => new Date(anchorTime), [anchorTime])
   // 8 days in a single horizontal ribbon: anchor → anchor+7
   const days = useMemo(() => Array.from({ length: 8 }, (_, i) => addDays(anchor, i)), [anchor])
 
@@ -99,7 +98,6 @@ export default function StackedView() {
   const household = householdData ?? []
 
   const activeEventId = aiDrawerOpen && sidecarTab === 'event' ? selectedSidecarEventId : null
-  const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [editEventId,     setEditEventId]     = useState<string | null>(null)
   const [deleteIntentEventId, setDeleteIntentEventId] = useState<string | null>(null)
   const [contextMenu, setContextMenu] = useState<{ event: EventWithDetails; x: number; y: number } | null>(null)
@@ -107,9 +105,8 @@ export default function StackedView() {
 
   const ribbonRef = useRef<HTMLDivElement>(null)
   const columnScrollRefs = useRef<(HTMLDivElement | null)[]>([])
-  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Reset ribbon & column vertical scrolls back to Today/Anchor
+  // Reset ribbon & column vertical scrolls back to Today/Anchor (manual user action only)
   const resetToToday = useCallback(() => {
     if (ribbonRef.current) {
       ribbonRef.current.scrollTo({ left: 0, behavior: 'smooth' })
@@ -118,30 +115,6 @@ export default function StackedView() {
       colEl?.scrollTo({ top: 0, behavior: 'smooth' })
     })
   }, [])
-
-  // Inactivity / Idle reset logic
-  const handleUserActivity = useCallback(() => {
-    if (idleTimerRef.current) {
-      clearTimeout(idleTimerRef.current)
-    }
-    idleTimerRef.current = setTimeout(() => {
-      resetToToday()
-    }, IDLE_RESET_TIMEOUT_MS)
-  }, [resetToToday])
-
-  // Reset to today on mount and when anchor/selectedDate changes
-  useEffect(() => {
-    if (ribbonRef.current) {
-      ribbonRef.current.scrollTo({ left: 0, behavior: 'instant' })
-    }
-    columnScrollRefs.current.forEach(colEl => {
-      colEl?.scrollTo({ top: 0, behavior: 'instant' })
-    })
-    handleUserActivity()
-    return () => {
-      if (idleTimerRef.current) clearTimeout(idleTimerRef.current)
-    }
-  }, [anchor, handleUserActivity])
 
   const quickCreateGesture = useCalendarQuickCreateGesture<Date>({
     resolveStart: (day) => {
@@ -156,8 +129,7 @@ export default function StackedView() {
     isReminder(e) || visibleMembers.length === 0 || e.members.some(m => visibleMembers.includes(m.family_member?.id ?? ''))
   )
 
-  const selectedEvent = selectedEventId ? (events.find(e => e.id === selectedEventId) ?? null) : null
-  const editEvent     = editEventId     ? (events.find(e => e.id === editEventId)     ?? null) : null
+  const editEvent = editEventId ? (events.find(e => e.id === editEventId) ?? null) : null
 
   const { completeReminder } = useReminderNeedsYouActions()
 
@@ -167,16 +139,10 @@ export default function StackedView() {
   }, [])
 
   return (
-    <div
-      className="relative h-full w-full overflow-hidden flex flex-col select-none"
-      onClick={() => setSelectedEventId(null)}
-      onPointerDown={handleUserActivity}
-      onTouchStart={handleUserActivity}
-    >
+    <div className="relative h-full w-full overflow-hidden flex flex-col select-none">
       {/* ── Single-Row 8-Day Horizontal Ribbon with Crisp Outer Padding ── */}
       <div
         ref={ribbonRef}
-        onScroll={handleUserActivity}
         className="flex-1 overflow-x-auto overflow-y-hidden overscroll-x-contain touch-pan-x scrollbar-none"
       >
         <div className="flex flex-row gap-4 px-6 py-2 w-max min-w-full h-full items-stretch">
@@ -229,7 +195,6 @@ export default function StackedView() {
                 {/* Scrollable Events container for busy days (Vertical Scroll) */}
                 <div
                   ref={el => { columnScrollRefs.current[idx] = el }}
-                  onScroll={handleUserActivity}
                   className="flex-1 overflow-y-auto overscroll-y-contain space-y-2 pr-0.5 pb-28 md:pb-8 scrollbar-none"
                 >
                   {/* All-day reminders & all-day events */}
@@ -240,11 +205,8 @@ export default function StackedView() {
                           event={r}
                           now={new Date()}
                           isHighlighted={activeEventId === r.id}
-                          onClick={() => {
-                            openEventInSidecar(r.id)
-                            setSelectedEventId(r.id)
-                          }}
-                          onDoubleClick={() => { setSelectedEventId(null); setEditEventId(r.id) }}
+                          onClick={() => openEventInSidecar(r.id)}
+                          onDoubleClick={() => setEditEventId(r.id)}
                           onLongPress={(ev, x, y) => setContextMenu({ event: ev, x, y })}
                         />
                       </div>
@@ -255,11 +217,8 @@ export default function StackedView() {
                           household={household}
                           now={new Date()}
                           isHighlighted={activeEventId === r.id}
-                          onClick={() => {
-                            openEventInSidecar(r.id)
-                            setSelectedEventId(r.id)
-                          }}
-                          onDoubleClick={() => { setSelectedEventId(null); setEditEventId(r.id) }}
+                          onClick={() => openEventInSidecar(r.id)}
+                          onDoubleClick={() => setEditEventId(r.id)}
                           onLongPress={(ev, x, y) => setContextMenu({ event: ev, x, y })}
                         />
                       </div>
@@ -284,11 +243,8 @@ export default function StackedView() {
                             event={event}
                             now={new Date()}
                             isHighlighted={activeEventId === event.id}
-                            onClick={() => {
-                              openEventInSidecar(event.id)
-                              setSelectedEventId(event.id)
-                            }}
-                            onDoubleClick={() => { setSelectedEventId(null); setEditEventId(event.id) }}
+                            onClick={() => openEventInSidecar(event.id)}
+                            onDoubleClick={() => setEditEventId(event.id)}
                             onLongPress={(ev, x, y) => setContextMenu({ event: ev, x, y })}
                           />
                         </motion.div>
@@ -299,11 +255,8 @@ export default function StackedView() {
                           household={household}
                           now={new Date()}
                           isHighlighted={activeEventId === event.id}
-                          onClick={() => {
-                            openEventInSidecar(event.id)
-                            setSelectedEventId(event.id)
-                          }}
-                          onDoubleClick={() => { setSelectedEventId(null); setEditEventId(event.id) }}
+                          onClick={() => openEventInSidecar(event.id)}
+                          onDoubleClick={() => setEditEventId(event.id)}
                           onLongPress={(ev, x, y) => setContextMenu({ event: ev, x, y })}
                         />
                       ))
@@ -349,9 +302,6 @@ export default function StackedView() {
           </div>
         </div>
       </div>
-
-      {/* Detail panel */}
-      <EventDetailPanel event={selectedEvent} onClose={() => setSelectedEventId(null)} />
 
       {editEvent && (
         <EventEditSheet

@@ -5,6 +5,7 @@ import { cn } from '../../../utils/cn'
 import type { PrepItem, Conflict, FamilyMember } from '../../../types'
 import type { SnoozeDuration } from '../../../utils/snoozeDuration'
 import { sourceBadge } from '../../../utils/prepSourceBadge'
+import { clusterPrepItems } from '../../../utils/prepItemClusters'
 
 interface AttentionHubWidgetProps {
   activeConflicts: Conflict[]
@@ -36,6 +37,8 @@ export default function AttentionHubWidget({
     (m) => m.can_drive || m.role === 'parent' || m.role === 'caregiver'
   )
   const availableDrivers = candidateDrivers.length > 0 ? candidateDrivers : familyMembers
+  const clusteredPrep = clusterPrepItems(activePrep)
+  const totalActionable = activeConflicts.length + clusteredPrep.length
 
   return (
     <div className="lg:col-span-5 xl:col-span-4 flex flex-col rounded-3xl bg-casa-surface border border-casa-border/60 shadow-sm p-5 overflow-hidden">
@@ -47,7 +50,7 @@ export default function AttentionHubWidget({
           </h2>
         </div>
         <span className="text-caption font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900">
-          {activeConflicts.length + activePrep.length} Actionable
+          {totalActionable} Actionable
         </span>
       </div>
 

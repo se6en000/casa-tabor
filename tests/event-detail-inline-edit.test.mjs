@@ -16,7 +16,7 @@ const editSource = readFileSync(
 )
 
 test('Living Flow supports in-place title, time, and category inline editing', () => {
-  assert.match(titleCard, /contentEditable/)
+  assert.match(titleCard, /textarea|input|contentEditable/)
   assert.match(titleCard, /onUpdateTitle/)
   assert.match(titleCard, /onSetStartAndDuration/)
   assert.match(titleCard, /onSelectCategory/)

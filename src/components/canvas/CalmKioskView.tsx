@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { format, parseISO, differenceInMinutes, addDays } from 'date-fns'
+import { useState, useMemo } from 'react'
+import { format, parseISO, differenceInMinutes, subMinutes } from 'date-fns'
 import {
   MapPin,
   Car,
@@ -16,7 +16,6 @@ import {
   CheckCircle2,
   Navigation,
   ArrowRight,
-  Bell,
   Gift,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -26,7 +25,7 @@ import { useAppStore } from '../../stores/appStore'
 import { useCalendarStore } from '../../stores/calendarStore'
 import { cn } from '../../utils/cn'
 import { formatDurationLong } from '../../utils/eventTime'
-import { Button, PersonAvatarStack, JourneyProgressBar } from '../ui'
+import { Button, IconButton, PersonAvatarStack, JourneyProgressBar } from '../ui'
 import TomorrowPrepWidget from './widgets/TomorrowPrepWidget'
 import MorningLaunchpadWidget from './widgets/MorningLaunchpadWidget'
 import { useFamilyRoutineIntelligence } from '../../hooks/useFamilyRoutineIntelligence'
@@ -39,7 +38,9 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
   const dinnerPlan = useAppStore((s) => s.dinnerPlan)
   const setActiveView = useCalendarStore((s) => s.setActiveView)
   const [showPastEvents, setShowPastEvents] = useState(false)
+  const [showOverdueTodos, setShowOverdueTodos] = useState(false)
   const [completedItems, setCompletedItems] = useState<Record<string, boolean>>({})
+  const [todosExpanded, setTodosExpanded] = useState(false)
   const [mobileSubTab, setMobileSubTab] = useState<'schedule' | 'triage' | 'kitchen'>('schedule')
 
   const {
@@ -55,6 +56,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
     setSelectedHeroEventId,
     pastEvents,
     upcomingAppointments,
+    todayReminders,
     tomorrowEvents,
     isDinnerPast,
     totalAttentionCount,
@@ -89,20 +91,35 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
       minutesUntilLeave !== null &&
       minutesUntilLeave <= 0 &&
       minutesUntilNext !== null &&
-      minutesUntilNext > 0,
+      minutesUntilNext > 0 &&
+      minutesUntilNext <= 60,
   )
   const isPrepUrgent = Boolean(
     isTravelEvent &&
       minutesUntilLeave !== null &&
       minutesUntilLeave > 0 &&
-      minutesUntilLeave <= 15,
+      minutesUntilLeave <= 15 &&
+      minutesUntilNext !== null &&
+      minutesUntilNext <= 75,
   )
+
+  const overdueReminders = useMemo(() => {
+    return todayReminders.filter(
+      (evt) => !evt.all_day && !completedItems[evt.id] && parseISO(evt.start_time).getTime() < now.getTime()
+    )
+  }, [todayReminders, completedItems, now])
+
+  const activeReminders = useMemo(() => {
+    return todayReminders.filter(
+      (evt) => evt.all_day || completedItems[evt.id] || parseISO(evt.start_time).getTime() >= now.getTime()
+    )
+  }, [todayReminders, completedItems, now])
 
   return (
     <div className="w-full h-full flex flex-col justify-start p-4 sm:p-6 lg:p-8 xl:p-10 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-8 overflow-y-auto scrollbar-hide">
-      {/* ── Top Section: Ambient Greeting, Routines & Clock ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-casa-border/40 shrink-0">
-        <div>
+      {/* ── Top Section: 12-Col Grid Alignment (7 cols Greeting, 5 cols Tonight's Kitchen) ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 xl:gap-10 pb-5 border-b border-casa-border/40 shrink-0 items-center">
+        <div className="lg:col-span-7">
           <h1 className="font-display text-display-lg sm:text-display-xl text-casa-navy font-semibold tracking-tight leading-none">
             {greeting}, <span className="italic font-normal">Tabor Family</span>
           </h1>
@@ -122,31 +139,80 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* Notification Bell Badge for quick triage jump */}
-          {totalAttentionCount > 0 ? (
-            <Button
-              variant="secondary"
-              onClick={() => setCanvasSubmode('turbo')}
-              className="flex items-center gap-2.5 px-4 py-2.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-900 hover:bg-amber-500/20 transition-all text-body-sm font-semibold shadow-2xs min-h-control"
-              aria-label={`View ${totalAttentionCount} triage items in Turbo Canvas`}
-            >
-              <div className="relative flex items-center justify-center">
-                <Bell size={16} className="text-amber-600" />
-                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+        {/* ── Luxury Tonight's Kitchen Editorial Showcase (Aligned with Right Rail 5 Cols) ── */}
+        <div className="hidden lg:flex lg:col-span-5 items-center">
+          <div className="w-full flex items-center justify-between gap-3 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-casa-surface to-amber-500/[0.08] border border-casa-gold/35 shadow-2xs transition-all hover:border-casa-gold/60">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <div className="w-9 h-9 rounded-xl bg-casa-gold/20 text-casa-navy flex items-center justify-center font-bold shadow-2xs border border-casa-gold/30 shrink-0">
+                {dinnerPlan.mode === 'takeout' ? (
+                  <ShoppingBag size={16} className="text-amber-800" />
+                ) : dinnerPlan.mode === 'leftovers' ? (
+                  <Clock size={16} className="text-amber-800" />
+                ) : (
+                  <Utensils size={16} className="text-amber-800" />
+                )}
               </div>
-              <span>{totalAttentionCount} Triage Items</span>
-            </Button>
-          ) : (
-            <Button
-              variant="secondary"
-              onClick={() => setCanvasSubmode('turbo')}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-casa-surface border border-casa-border hover:border-casa-navy text-casa-navy text-body-sm font-semibold transition-all shadow-2xs min-h-control"
-            >
-              <Zap size={15} className="text-amber-500" />
-              <span>Turbo Canvas</span>
-            </Button>
-          )}
+
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-sans text-3xs font-bold uppercase tracking-wider text-amber-900/80">
+                    {dinnerPlan.mode === 'takeout'
+                      ? "Tonight's Takeout"
+                      : dinnerPlan.mode === 'leftovers'
+                      ? "Tonight's Leftovers"
+                      : "Tonight's Kitchen"}
+                  </span>
+                  <span className="text-casa-muted/60 text-3xs">·</span>
+                  <span className="text-3xs font-semibold text-casa-muted truncate">
+                    {isDinnerPast ? 'Dinner Completed' : dinnerPlan.targetTime || '6:30 PM Target'}
+                  </span>
+                </div>
+                <h3 className="font-display text-body font-bold text-casa-navy truncate leading-snug">
+                  {dinnerPlan.title}
+                </h3>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 pl-3 border-l border-casa-border/40 shrink-0">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  document.dispatchEvent(
+                    new CustomEvent('open-ai-chat', {
+                      detail: {
+                        launchId: crypto.randomUUID(),
+                        agent: 'chef',
+                        source: 'tonights-kitchen',
+                        prompt: undefined,
+                        autoSend: false,
+                      },
+                    })
+                  )
+                }}
+                className="text-caption font-semibold text-casa-muted hover:text-casa-navy transition-colors min-h-[36px] px-2.5 rounded-lg"
+              >
+                <span>Change</span>
+              </Button>
+              {dinnerPlan.mode === 'cook' && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    if (dinnerPlan.recipeId) {
+                      navigateTo(`/cook?recipe=${encodeURIComponent(dinnerPlan.recipeId)}&autocook=true`)
+                    } else {
+                      navigateTo('/cook')
+                    }
+                  }}
+                  className="text-caption font-bold bg-casa-navy text-white hover:bg-casa-navy-dark hover:text-casa-gold min-h-[36px] px-3.5 rounded-xl shadow-2xs flex items-center gap-1"
+                >
+                  <span>View Recipe</span>
+                  <ChevronRight size={13} />
+                </Button>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -244,9 +310,11 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                 <div className="flex items-center justify-between gap-2 mb-4">
                   {(() => {
                     let statusLabel = 'NEXT UP'
-                    let dotClass = 'bg-emerald-400'
+                    let dotClass = 'bg-casa-gold'
 
-                    const isUnderway = minutesUntilNext !== null && minutesUntilNext <= 0 && minutesUntilNext > -60
+                    const isUnderway = minutesUntilNext !== null && minutesUntilNext <= 0 && minutesUntilNext > -180
+                    const effectiveMinsToLeave = minutesUntilLeave !== null ? minutesUntilLeave : (minutesUntilNext !== null ? minutesUntilNext - 10 : null)
+                    const isAmbient = !isUnderway && ((effectiveMinsToLeave !== null && effectiveMinsToLeave > 60) || (minutesUntilNext !== null && minutesUntilNext > 60))
 
                     if (nextEvent.all_day) {
                       statusLabel = 'ALL DAY EVENT'
@@ -266,16 +334,28 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                         statusLabel = 'HAPPENING NOW'
                         dotClass = 'bg-emerald-400 animate-pulse'
                       }
+                    } else if (isAmbient) {
+                      // Ambient Mode (More than 60 minutes away) — Peaceful, quiet, no anxiety
+                      try {
+                        statusLabel = `TODAY AT ${format(parseISO(nextEvent.start_time), 'h:mm a')}`
+                      } catch {
+                        statusLabel = 'NEXT UP'
+                      }
+                      dotClass = 'bg-casa-gold/80'
                     } else if (isTravelEvent) {
+                      // Active Departure Window (≤ 60m away)
                       if (minutesUntilLeave !== null && minutesUntilLeave <= 0) {
                         statusLabel = minutesUntilLeave >= -5 ? 'TIME TO LEAVE NOW' : `EN ROUTE · ${driveTimeMins ? `${driveTimeMins}M DRIVE` : 'IN TRANSIT'}`
                         dotClass = 'bg-amber-400 animate-pulse'
                       } else if (minutesUntilLeave !== null && minutesUntilLeave <= 15) {
                         statusLabel = `PREPARE TO LEAVE · ${formatDurationLong(minutesUntilLeave)} BUFFER`
                         dotClass = 'bg-amber-400 animate-pulse'
-                      } else if (minutesUntilLeave !== null) {
+                      } else if (minutesUntilLeave !== null && minutesUntilLeave <= 60) {
                         statusLabel = `LEAVE IN ${formatDurationLong(minutesUntilLeave)}`
                         dotClass = 'bg-emerald-400'
+                      } else {
+                        statusLabel = `TODAY AT ${format(parseISO(nextEvent.start_time), 'h:mm a')}`
+                        dotClass = 'bg-casa-gold/80'
                       }
                     } else if (minutesUntilNext !== null && minutesUntilNext > 0) {
                       statusLabel = `STARTS IN ${formatDurationLong(minutesUntilNext)}`
@@ -340,20 +420,54 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                   </div>
                 )}
 
-                {/* Dual-Phase Journey & Departure Bar (Option A) */}
+                {/* Logistics Bar: Live Journey Tracker (≤ 60m) vs Peaceful Ambient Route Preview (> 60m) */}
                 <div className="mt-5">
-                  <JourneyProgressBar
-                    now={now}
-                    leaveAt={isTravelEvent ? leaveAt : null}
-                    startTime={nextEvent.start_time}
-                    endTime={nextEvent.end_time}
-                    driveTimeMins={isTravelEvent ? driveTimeMins : null}
-                    isAllDay={Boolean(nextEvent.all_day)}
-                    showLabels={true}
-                    originName={originName}
-                    destinationName={destinationName}
-                    returnDestinationName={returnDestinationName}
-                  />
+                  {(() => {
+                    const isUnderway = minutesUntilNext !== null && minutesUntilNext <= 0 && minutesUntilNext > -180
+                    const effectiveMinsToLeave = minutesUntilLeave !== null ? minutesUntilLeave : (minutesUntilNext !== null ? minutesUntilNext - 10 : null)
+                    const isAmbient = !isUnderway && ((effectiveMinsToLeave !== null && effectiveMinsToLeave > 60) || (minutesUntilNext !== null && minutesUntilNext > 60))
+
+                    if (!isAmbient) {
+                      return (
+                        <JourneyProgressBar
+                          now={now}
+                          leaveAt={isTravelEvent ? leaveAt : null}
+                          startTime={nextEvent.start_time}
+                          endTime={nextEvent.end_time}
+                          driveTimeMins={isTravelEvent ? driveTimeMins : null}
+                          isAllDay={Boolean(nextEvent.all_day)}
+                          showLabels={true}
+                          originName={originName}
+                          destinationName={destinationName}
+                          returnDestinationName={returnDestinationName}
+                        />
+                      )
+                    }
+
+                    return (
+                      <div className="flex flex-wrap items-center justify-between gap-3 py-2.5 px-4 rounded-2xl bg-white/[0.04] border border-white/10 text-caption text-white/70">
+                        <div className="flex items-center gap-2">
+                          <Car size={14} className="text-casa-gold" />
+                          <span className="font-medium text-white/90">
+                            {originName} → {destinationName}
+                          </span>
+                          {driveTimeMins ? (
+                            <span className="text-2xs font-mono font-bold px-2 py-0.5 rounded-full bg-white/10 text-casa-gold border border-white/10">
+                              ~{driveTimeMins}m drive
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="flex items-center gap-1.5 text-2xs font-medium text-white/50">
+                          <Clock size={12} className="text-casa-gold/70" />
+                          <span>
+                            {leaveAt
+                              ? `Live tracking begins at ${format(subMinutes(leaveAt, 60), 'h:mm a')}`
+                              : 'Live tracking activates 60m before departure'}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })()}
                 </div>
               </div>
 
@@ -687,159 +801,455 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
             </div>
           )}
 
-          {/* 1. Today's Appointments & Reminders (Top) / Tomorrow Preview */}
-          <div className={cn(
-            'rounded-3xl p-6 bg-casa-surface border border-casa-border/60 shadow-sm flex-col justify-start',
-            mobileSubTab === 'schedule' ? 'flex' : 'hidden lg:flex'
-          )}>
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-casa-gold/20 text-casa-navy flex items-center justify-center font-bold">
-                  {upcomingAppointments.length > 0 ? (
-                    <Calendar size={18} className="text-casa-gold" />
-                  ) : (
-                    <Sparkles size={18} className="text-casa-gold" />
-                  )}
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-display text-body-lg font-bold text-casa-navy">
-                      {upcomingAppointments.length > 0
-                        ? `Today's Appointments (${upcomingAppointments.length})`
-                        : `Tomorrow's Preview (${tomorrowEvents.length})`}
-                    </h3>
-                    {upcomingAppointments.length === 0 && pastEvents.length > 0 && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-3xs font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-800 border border-emerald-500/25">
-                        <Check size={10} className="stroke-[3]" />
-                        <span>Done Today</span>
-                      </span>
+          {/* Mobile Kitchen Card (Visible on mobile when kitchen subtab is active) */}
+          {mobileSubTab === 'kitchen' && (
+            <div className="lg:hidden flex flex-col justify-start pb-3.5 border-b border-casa-border/40 px-1 space-y-2.5">
+              <div className="flex items-center justify-between px-1">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-amber-500/15 text-amber-800 flex items-center justify-center font-bold">
+                    {dinnerPlan.mode === 'takeout' ? (
+                      <ShoppingBag size={15} />
+                    ) : dinnerPlan.mode === 'leftovers' ? (
+                      <Clock size={15} />
+                    ) : (
+                      <Utensils size={15} />
                     )}
                   </div>
+                  <h3 className="font-sans text-body font-bold text-casa-navy">
+                    {dinnerPlan.mode === 'takeout'
+                      ? "Tonight's Takeout"
+                      : dinnerPlan.mode === 'leftovers'
+                      ? "Tonight's Leftovers"
+                      : "Tonight's Kitchen"}
+                  </h3>
+                </div>
+                <span className="text-caption font-semibold text-casa-muted">
+                  {isDinnerPast ? 'Dinner Completed' : dinnerPlan.targetTime || '6:30 PM Target'}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between gap-4 px-1">
+                <div className="min-w-0 flex-1">
+                  <h4 className="font-display text-body-lg font-bold text-casa-navy truncate">
+                    {dinnerPlan.title}
+                  </h4>
+                  <p className="text-caption text-casa-text-secondary truncate mt-0.5">
+                    {isDinnerPast ? 'Dinner served · Kitchen closed' : dinnerPlan.subtitle}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      document.dispatchEvent(
+                        new CustomEvent('open-ai-chat', {
+                          detail: {
+                            launchId: crypto.randomUUID(),
+                            agent: 'chef',
+                            source: 'tonights-kitchen',
+                            prompt: undefined,
+                            autoSend: false,
+                          },
+                        })
+                      )
+                    }}
+                    className="text-caption font-semibold text-casa-muted hover:text-casa-navy transition-colors min-h-[36px] px-2"
+                  >
+                    <span>Change</span>
+                  </Button>
+                  {dinnerPlan.mode === 'cook' && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        if (dinnerPlan.recipeId) {
+                          navigateTo(`/cook?recipe=${encodeURIComponent(dinnerPlan.recipeId)}&autocook=true`)
+                        } else {
+                          navigateTo('/cook')
+                        }
+                      }}
+                      className="text-caption font-bold text-casa-navy hover:text-casa-gold min-h-[36px] px-3 shadow-2xs"
+                    >
+                      <span>View Recipe</span>
+                      <ChevronRight size={13} className="ml-0.5" />
+                    </Button>
+                  )}
                 </div>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  if (upcomingAppointments.length > 0) {
-                    setCanvasSubmode('turbo')
-                  } else {
-                    setActiveView('stacked')
-                    navigateTo('/calendar')
-                  }
-                }}
-                className="text-caption font-bold text-casa-gold hover:underline min-h-[44px] px-3"
-              >
-                {upcomingAppointments.length > 0 ? 'Expand All' : 'Full Calendar'}
-              </Button>
             </div>
+          )}
 
-            {/* Collapsible Past Events (Ghost rows) */}
-            {pastEvents.length > 0 && (
-              <div className="mb-3">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  fullWidth
-                  align="between"
-                  onClick={() => setShowPastEvents(!showPastEvents)}
-                  className="min-h-[36px] py-1.5 px-3 rounded-xl bg-casa-surface-subtle/80 hover:bg-casa-surface-subtle text-caption text-casa-muted hover:text-casa-navy border border-casa-border/30 transition-colors"
-                >
-                  <span className="inline-flex items-center gap-2 font-medium">
-                    <CheckCircle2 size={13} className="text-emerald-600/80" />
-                    <span>{pastEvents.length} completed earlier today</span>
+          {/* 1. Today's To-Dos (if there are any) */}
+          {todayReminders.length > 0 && (
+            <div className={cn(
+              'flex-col justify-start pb-3.5 border-b border-casa-border/40 space-y-2.5 px-1',
+              mobileSubTab === 'schedule' ? 'flex' : 'hidden lg:flex'
+            )}>
+              <div className="flex items-center justify-between px-1">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-amber-500/15 text-amber-800 flex items-center justify-center font-bold">
+                    <Check size={15} strokeWidth={2.5} className="text-amber-700" />
+                  </div>
+                  <h3 className="font-sans text-body font-bold text-casa-navy">
+                    Today's To-Dos
+                  </h3>
+                  <span className="px-2 py-0.5 rounded-full text-3xs font-bold bg-amber-500/10 text-amber-900 border border-amber-500/20">
+                    {todayReminders.length}
                   </span>
-                  {showPastEvents ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                </Button>
-
-                <AnimatePresence>
-                  {showPastEvents && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="space-y-1.5 pt-1.5 overflow-hidden"
-                    >
-                      {pastEvents.map((evt) => (
-                        <div
-                          key={evt.id}
-                          onClick={() => onOpenEvent(evt)}
-                          className="flex items-center justify-between px-3 py-2 rounded-xl opacity-45 hover:opacity-85 transition-all cursor-pointer bg-casa-bg/30 text-caption border border-casa-border/20 group"
-                        >
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="font-mono text-xs font-semibold text-casa-muted shrink-0">
-                              {evt.all_day ? 'All Day' : format(parseISO(evt.start_time), 'h:mm a')}
-                            </span>
-                            <span className="truncate line-through text-casa-muted group-hover:text-casa-navy">
-                              {evt.title}
-                            </span>
-                            {evt.location_name && (
-                              <span className="text-2xs text-casa-muted truncate hidden sm:inline">
-                                · {evt.location_name}
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1 shrink-0">
-                            {evt.members.map((m) => (
-                              <span
-                                key={m.id}
-                                className="w-2 h-2 rounded-full"
-                                style={{
-                                  backgroundColor: m.family_member?.color_hex || 'var(--color-casa-muted)',
-                                }}
-                                title={m.family_member?.name}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                </div>
+                <span className="text-3xs text-casa-muted font-semibold uppercase tracking-wider">1-tap to complete</span>
               </div>
-            )}
 
-            {/* Active & Upcoming Appointments Stream (or Tomorrow Preview Stream) */}
-            {upcomingAppointments.length > 0 ? (
-              <div className="space-y-2 overflow-y-auto max-h-80 pr-1">
-                {upcomingAppointments.map((evt) => {
-                  let isNow = false
-                  try {
-                    const start = parseISO(evt.start_time).getTime()
-                    const end = parseISO(evt.end_time).getTime()
-                    const currentTime = now.getTime()
-                    isNow = !evt.all_day && currentTime >= start && currentTime <= end
-                  } catch {
-                    // Ignore parse errors
-                  }
+              {/* ── Concept A: Collapsible Overdue Fold ── */}
+              {overdueReminders.length > 0 && (
+                <div className="mb-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    fullWidth
+                    align="between"
+                    onClick={() => setShowOverdueTodos(!showOverdueTodos)}
+                    className="min-h-[36px] py-1 px-2.5 rounded-xl bg-amber-500/[0.08] hover:bg-amber-500/[0.14] text-caption text-amber-900 border border-amber-500/25 transition-colors"
+                  >
+                    <span className="inline-flex items-center gap-1.5 font-semibold">
+                      <Clock size={13} className="text-amber-700" />
+                      <span>
+                        {overdueReminders.length} {overdueReminders.length === 1 ? 'item' : 'items'} pending from earlier today
+                      </span>
+                    </span>
+                    {showOverdueTodos ? <ChevronUp size={13} className="text-amber-800" /> : <ChevronDown size={13} className="text-amber-800" />}
+                  </Button>
 
-                  const cat = (evt.enrichment?.category || (evt as any).category || '').toLowerCase()
-                  const titleLower = (evt.title || '').toLowerCase()
-                  const isReminder =
-                    cat.includes('reminder') ||
-                    cat.includes('med') ||
-                    titleLower.includes('reminder') ||
-                    titleLower.includes('meds') ||
-                    titleLower.includes('routine') ||
-                    titleLower.includes('pill')
-                  const isDone = Boolean(completedItems[evt.id])
+                  <AnimatePresence>
+                    {showOverdueTodos && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="space-y-1 pt-1.5 overflow-hidden"
+                      >
+                        {overdueReminders.map((evt) => {
+                          const avatarPeople = evt.members.map((m) => ({
+                            id: m.family_member?.id || m.id,
+                            name: m.family_member?.name || 'Member',
+                            color: m.family_member?.color_hex || 'var(--color-casa-navy)',
+                          }))
 
-                  // Detect driver
-                  const driverMember = evt.members.find(
-                    (m) =>
-                      m.family_member?.name &&
-                      (evt.title.toLowerCase().includes(m.family_member.name.toLowerCase() + ' drives') ||
-                        evt.title.toLowerCase().includes('picked up by ' + m.family_member.name.toLowerCase()) ||
-                        m.role?.toLowerCase() === 'driver')
-                  )
+                          return (
+                            <div
+                              key={evt.id}
+                              role="button"
+                              tabIndex={0}
+                              data-tactile="true"
+                              onClick={() => onOpenEvent(evt)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault()
+                                  onOpenEvent(evt)
+                                }
+                              }}
+                              className="w-full flex items-center justify-between py-2 px-3 rounded-2xl transition-all duration-150 cursor-pointer group gap-3 select-none active:scale-[0.99] min-h-[44px] bg-amber-500/[0.05] border border-amber-500/20 hover:bg-amber-500/[0.10]"
+                            >
+                              <div className="flex items-center gap-3 min-w-0 flex-1">
+                                <IconButton
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setCompletedItems((prev) => ({
+                                      ...prev,
+                                      [evt.id]: !prev[evt.id],
+                                    }))
+                                  }}
+                                  className="rounded-full shrink-0 transition-all duration-150 text-casa-muted hover:text-casa-navy hover:bg-casa-surface-subtle"
+                                  aria-label={`Mark ${evt.title} done`}
+                                  icon={
+                                    <div className="w-5 h-5 rounded-full border-2 border-amber-400 hover:border-casa-navy bg-white" />
+                                  }
+                                />
 
-                  const avatarPeople = evt.members.map((m) => ({
-                    id: m.family_member?.id || m.id,
-                    name: m.family_member?.name || 'Member',
-                    color: m.family_member?.color_hex || 'var(--color-casa-navy)',
-                  }))
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <span className="font-mono text-caption font-bold text-amber-900 shrink-0">
+                                    {format(parseISO(evt.start_time), 'h:mm a')}
+                                  </span>
+                                  <span className="px-1.5 py-0.5 rounded-full text-3xs font-bold bg-amber-500/15 text-amber-900 border border-amber-500/25 shrink-0">
+                                    Overdue
+                                  </span>
+                                </div>
 
-                  if (isReminder) {
+                                <span className="text-body-sm font-semibold truncate transition-colors flex-1 text-casa-navy group-hover:text-amber-900">
+                                  {evt.title}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-2 shrink-0">
+                                {avatarPeople.length > 0 && <PersonAvatarStack people={avatarPeople} size="xs" max={2} />}
+                                <ChevronRight
+                                  size={14}
+                                  className="text-casa-muted/60 group-hover:text-casa-navy transition-transform group-hover:translate-x-0.5"
+                                />
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
+
+              {/* ── Active & Upcoming To-Dos (Capped at 3 visible by default) ── */}
+              {activeReminders.length > 0 && (
+                <div className="space-y-1">
+                  {(todosExpanded ? activeReminders : activeReminders.slice(0, 3)).map((evt) => {
+                    const isDone = Boolean(completedItems[evt.id])
+                    const avatarPeople = evt.members.map((m) => ({
+                      id: m.family_member?.id || m.id,
+                      name: m.family_member?.name || 'Member',
+                      color: m.family_member?.color_hex || 'var(--color-casa-navy)',
+                    }))
+
+                    return (
+                      <div
+                        key={evt.id}
+                        role="button"
+                        tabIndex={0}
+                        data-tactile="true"
+                        onClick={() => onOpenEvent(evt)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            onOpenEvent(evt)
+                          }
+                        }}
+                        className={cn(
+                          'w-full flex items-center justify-between py-2 px-3 rounded-2xl transition-all duration-150 cursor-pointer group gap-3 select-none active:scale-[0.99] min-h-[44px]',
+                          isDone
+                            ? 'bg-casa-surface-subtle/40 opacity-50'
+                            : 'hover:bg-casa-surface hover:shadow-2xs'
+                        )}
+                      >
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <IconButton
+                            size="sm"
+                            variant="ghost"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setCompletedItems((prev) => ({
+                                ...prev,
+                                [evt.id]: !prev[evt.id],
+                              }))
+                            }}
+                            className={cn(
+                              'rounded-full shrink-0 transition-all duration-150',
+                              isDone
+                                ? 'text-emerald-700 bg-emerald-100/60 hover:bg-emerald-200'
+                                : 'text-casa-muted hover:text-casa-navy hover:bg-casa-surface-subtle'
+                            )}
+                            aria-label={isDone ? `Mark ${evt.title} incomplete` : `Mark ${evt.title} done`}
+                            icon={
+                              isDone ? (
+                                <CheckCircle2 size={20} className="text-emerald-600" />
+                              ) : (
+                                <div className="w-5 h-5 rounded-full border-2 border-casa-border hover:border-casa-navy bg-white" />
+                              )
+                            }
+                          />
+
+                          {evt.all_day ? (
+                            <span className="font-sans text-caption font-semibold text-casa-muted shrink-0">
+                              All Day
+                            </span>
+                          ) : (
+                            <span className="font-mono text-caption font-bold text-casa-navy/80 shrink-0">
+                              {format(parseISO(evt.start_time), 'h:mm a')}
+                            </span>
+                          )}
+
+                          <span
+                            className={cn(
+                              'text-body-sm font-semibold truncate transition-colors flex-1',
+                              isDone ? 'line-through text-casa-muted' : 'text-casa-navy group-hover:text-amber-900'
+                            )}
+                          >
+                            {evt.title}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          {avatarPeople.length > 0 && <PersonAvatarStack people={avatarPeople} size="xs" max={2} />}
+                          <ChevronRight
+                            size={14}
+                            className="text-casa-muted/60 group-hover:text-casa-navy transition-transform group-hover:translate-x-0.5"
+                          />
+                        </div>
+                      </div>
+                    )
+                  })}
+
+                  {activeReminders.length > 3 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setTodosExpanded(!todosExpanded)}
+                      className="w-full flex items-center justify-center gap-1.5 py-1.5 text-caption font-bold text-casa-muted hover:text-casa-navy transition-colors min-h-[36px] rounded-xl hover:bg-casa-surface-subtle"
+                    >
+                      {todosExpanded ? (
+                        <>
+                          <span>Show less</span>
+                          <ChevronUp size={14} />
+                        </>
+                      ) : (
+                        <>
+                          <span>+ {activeReminders.length - 3} more to-dos</span>
+                          <ChevronDown size={14} />
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 3. Today's Schedule (Appointments + Past Completed Events) */}
+          {(upcomingAppointments.length > 0 || pastEvents.length > 0) && (
+            <div className={cn(
+              'flex-col justify-start pb-3.5 border-b border-casa-border/40 space-y-2 px-1',
+              mobileSubTab === 'schedule' ? 'flex' : 'hidden lg:flex'
+            )}>
+              <div className="flex items-center justify-between px-1">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-casa-gold/20 text-casa-navy flex items-center justify-center font-bold">
+                    <Calendar size={15} className="text-casa-gold" />
+                  </div>
+                  <h3 className="font-sans text-body font-bold text-casa-navy">
+                    Today's Schedule
+                  </h3>
+                  {upcomingAppointments.length > 0 ? (
+                    <span className="px-2 py-0.5 rounded-full text-3xs font-bold bg-casa-gold/15 text-casa-navy border border-casa-gold/30">
+                      {upcomingAppointments.length}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-3xs font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-800 border border-emerald-500/25">
+                      <Check size={10} className="stroke-[3]" />
+                      <span>Completed</span>
+                    </span>
+                  )}
+                </div>
+                {upcomingAppointments.length > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setCanvasSubmode('turbo')}
+                    className="text-3xs font-bold text-casa-gold uppercase tracking-wider hover:underline min-h-[36px] px-2"
+                  >
+                    Expand All
+                  </Button>
+                )}
+              </div>
+
+              {/* Collapsible Past Events */}
+              {pastEvents.length > 0 && (
+                <div className="mb-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    fullWidth
+                    align="between"
+                    onClick={() => setShowPastEvents(!showPastEvents)}
+                    className="min-h-[36px] py-1 px-2.5 rounded-xl bg-casa-surface-subtle/80 hover:bg-casa-surface-subtle text-caption text-casa-muted hover:text-casa-navy border border-casa-border/30 transition-colors"
+                  >
+                    <span className="inline-flex items-center gap-1.5 font-medium">
+                      <CheckCircle2 size={13} className="text-emerald-600/80" />
+                      <span>{pastEvents.length} completed earlier today</span>
+                    </span>
+                    {showPastEvents ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                  </Button>
+
+                  <AnimatePresence>
+                    {showPastEvents && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="space-y-1 pt-1 overflow-hidden"
+                      >
+                        {pastEvents.map((evt) => (
+                          <div
+                            key={evt.id}
+                            onClick={() => onOpenEvent(evt)}
+                            className="flex items-center justify-between px-3 py-1.5 rounded-xl opacity-45 hover:opacity-85 transition-all cursor-pointer bg-casa-bg/30 text-caption border border-casa-border/20 group"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              {evt.all_day ? (
+                                <span className="font-sans text-caption font-semibold text-casa-muted shrink-0">
+                                  All Day
+                                </span>
+                              ) : (
+                                <span className="font-mono text-xs font-semibold text-casa-muted shrink-0">
+                                  {format(parseISO(evt.start_time), 'h:mm a')}
+                                </span>
+                              )}
+                              <span className="truncate line-through text-casa-muted group-hover:text-casa-navy">
+                                {evt.title}
+                              </span>
+                              {evt.location_name && (
+                                <span className="text-2xs text-casa-muted truncate hidden sm:inline">
+                                  · {evt.location_name}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              {evt.members.map((m) => (
+                                <span
+                                  key={m.id}
+                                  className="w-2 h-2 rounded-full"
+                                  style={{
+                                    backgroundColor: m.family_member?.color_hex || 'var(--color-casa-muted)',
+                                  }}
+                                  title={m.family_member?.name}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
+
+              {/* Upcoming Appointments List */}
+              {upcomingAppointments.length > 0 && (
+                <div className="space-y-1">
+                  {upcomingAppointments.map((evt) => {
+                    let isNow = false
+                    try {
+                      const start = parseISO(evt.start_time).getTime()
+                      const end = parseISO(evt.end_time).getTime()
+                      const currentTime = now.getTime()
+                      isNow = !evt.all_day && currentTime >= start && currentTime <= end
+                    } catch {
+                      // Ignore parse errors
+                    }
+
+                    const driverMember = evt.members.find(
+                      (m) =>
+                        m.family_member?.name &&
+                        (evt.title.toLowerCase().includes(m.family_member.name.toLowerCase() + ' drives') ||
+                          evt.title.toLowerCase().includes('picked up by ' + m.family_member.name.toLowerCase()) ||
+                          m.role?.toLowerCase() === 'driver')
+                    )
+
+                    const avatarPeople = evt.members.map((m) => ({
+                      id: m.family_member?.id || m.id,
+                      name: m.family_member?.name || 'Member',
+                      color: m.family_member?.color_hex || 'var(--color-casa-navy)',
+                    }))
+
                     return (
                       <div
                         key={evt.id}
@@ -855,57 +1265,45 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                           }
                         }}
                         className={cn(
-                          'flex items-center justify-between px-4 py-3 rounded-2xl border transition-all duration-150 cursor-pointer group gap-3 active:scale-[0.97] active:opacity-75',
-                          isDone
-                            ? 'bg-casa-surface-subtle/50 border-casa-border/30 opacity-60'
-                            : 'bg-amber-500/8 hover:bg-amber-500/12 border-amber-500/25 shadow-2xs'
+                          'w-full flex items-center justify-between py-2 px-3 rounded-2xl transition-all duration-150 cursor-pointer group gap-3 active:scale-[0.98] min-h-[44px]',
+                          isNow
+                            ? 'bg-emerald-500/8 hover:bg-emerald-500/12 border border-emerald-500/30'
+                            : 'hover:bg-casa-surface hover:shadow-2xs'
                         )}
                       >
-                        <div className="flex items-center gap-3 min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <Bell size={13} className="text-amber-700 shrink-0" />
-                            <span className="font-mono text-body-sm font-bold text-amber-900">
-                              {evt.all_day ? 'All Day' : format(parseISO(evt.start_time), 'h:mm a')}
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          {evt.all_day ? (
+                            <span className="font-sans text-caption font-semibold text-casa-muted shrink-0">
+                              All Day
                             </span>
-                          </div>
-
-                          <span
-                            className={cn(
-                              'text-body-sm font-semibold truncate group-hover:text-amber-900 transition-colors',
-                              isDone ? 'line-through text-casa-muted' : 'text-casa-navy'
-                            )}
-                          >
+                          ) : (
+                            <span className="font-mono text-body-sm font-semibold text-casa-navy shrink-0">
+                              {format(parseISO(evt.start_time), 'h:mm a')}
+                            </span>
+                          )}
+                          <span className="text-body-sm font-semibold text-casa-navy truncate group-hover:text-casa-gold transition-colors">
                             {evt.title}
                           </span>
+                          {evt.location_name && (
+                            <span className="text-caption text-casa-text-secondary truncate hidden md:inline">
+                              · {evt.location_name}
+                            </span>
+                          )}
+                          {isNow && (
+                            <span className="inline-flex items-center gap-1 text-3xs font-bold uppercase tracking-wider text-emerald-800 bg-emerald-500/20 px-2 py-0.5 rounded-full shrink-0">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                              Now
+                            </span>
+                          )}
                         </div>
 
-                        <div className="flex items-center gap-2.5 shrink-0">
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            leadingIcon={
-                              isDone ? (
-                                <CheckCircle2 size={13} className="text-emerald-700" />
-                              ) : (
-                                <Check size={13} className="text-casa-navy" />
-                              )
-                            }
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setCompletedItems((prev) => ({
-                                ...prev,
-                                [evt.id]: !prev[evt.id],
-                              }))
-                            }}
-                            className={cn(
-                              'min-h-[34px] px-3 py-1 rounded-xl text-caption font-semibold transition-all',
-                              isDone
-                                ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
-                                : 'bg-casa-surface hover:bg-white text-casa-navy border-casa-border shadow-2xs'
-                            )}
-                          >
-                            <span>Done</span>
-                          </Button>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {driverMember?.family_member?.name && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-3xs font-semibold bg-amber-500/10 text-amber-900 border border-amber-500/20 hidden sm:inline-flex">
+                              <Car size={10} className="text-amber-800" />
+                              <span>{driverMember.family_member.name} drives</span>
+                            </span>
+                          )}
                           <PersonAvatarStack people={avatarPeople} size="sm" max={2} />
                           <ChevronRight
                             size={14}
@@ -914,9 +1312,59 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                         </div>
                       </div>
                     )
-                  }
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
-                  // Standard appointment / event row
+          {/* 4. Tomorrow's Schedule Preview */}
+          <div className={cn(
+            'flex-col justify-start space-y-2.5 px-1 py-1',
+            mobileSubTab === 'schedule' ? 'flex' : 'hidden lg:flex'
+          )}>
+            <div className="flex items-center justify-between px-1">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-slate-500/10 text-slate-800 flex items-center justify-center font-bold">
+                  <Calendar size={15} className="text-slate-700" />
+                </div>
+                <h3 className="font-sans text-body font-bold text-casa-navy">
+                  Tomorrow's Schedule
+                </h3>
+                <span className="px-2 py-0.5 rounded-full text-3xs font-bold bg-slate-500/10 text-slate-800 border border-slate-500/20">
+                  {tomorrowEvents.length}
+                </span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setActiveView('stacked')
+                  navigateTo('/calendar')
+                }}
+                className="text-3xs font-bold text-casa-gold uppercase tracking-wider hover:underline min-h-[36px] px-2"
+              >
+                Full Calendar
+              </Button>
+            </div>
+
+            {tomorrowEvents.length > 0 ? (
+              <div className="space-y-1">
+                {tomorrowEvents.map((evt) => {
+                  const driverMember = evt.members.find(
+                    (m) =>
+                      m.family_member?.name &&
+                      (evt.title.toLowerCase().includes(m.family_member.name.toLowerCase() + ' drives') ||
+                        evt.title.toLowerCase().includes('picked up by ' + m.family_member.name.toLowerCase()) ||
+                        m.role?.toLowerCase() === 'driver')
+                  )
+
+                  const avatarPeople = evt.members.map((m) => ({
+                    id: m.family_member?.id || m.id,
+                    name: m.family_member?.name || 'Member',
+                    color: m.family_member?.color_hex || 'var(--color-casa-navy)',
+                  }))
+
                   return (
                     <div
                       key={evt.id}
@@ -931,41 +1379,29 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                           onOpenEvent(evt)
                         }
                       }}
-                      className={cn(
-                        'flex items-center justify-between px-4 py-3 rounded-2xl border transition-all duration-150 cursor-pointer group gap-3 active:scale-[0.97] active:opacity-75',
-                        isNow
-                          ? 'bg-emerald-500/8 hover:bg-emerald-500/12 border-emerald-500/30 ring-1 ring-emerald-500/20'
-                          : 'bg-casa-bg/40 hover:bg-casa-surface border-casa-border/35 hover:border-casa-gold/40'
-                      )}
+                      className="w-full flex items-center justify-between py-2 px-3 rounded-2xl transition-all duration-150 cursor-pointer group gap-3 hover:bg-casa-surface hover:shadow-2xs active:scale-[0.98] min-h-[44px]"
                     >
                       <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                        <span className="font-mono text-body-sm font-semibold text-casa-navy shrink-0">
-                          {evt.all_day ? 'All Day' : format(parseISO(evt.start_time), 'h:mm a')}
-                        </span>
-
-                        <span className="text-casa-muted/60 text-caption hidden sm:inline shrink-0">
-                          ·
-                        </span>
-
+                        {evt.all_day ? (
+                          <span className="font-sans text-caption font-semibold text-casa-muted shrink-0">
+                            All Day
+                          </span>
+                        ) : (
+                          <span className="font-mono text-body-sm font-semibold text-casa-navy shrink-0">
+                            {format(parseISO(evt.start_time), 'h:mm a')}
+                          </span>
+                        )}
                         <span className="text-body-sm font-semibold text-casa-navy truncate group-hover:text-casa-gold transition-colors">
                           {evt.title}
                         </span>
-
                         {evt.location_name && (
                           <span className="text-caption text-casa-text-secondary truncate hidden md:inline">
                             · {evt.location_name}
                           </span>
                         )}
-
-                        {isNow && (
-                          <span className="inline-flex items-center gap-1 text-3xs font-bold uppercase tracking-wider text-emerald-800 bg-emerald-500/20 px-2 py-0.5 rounded-full shrink-0">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
-                            Now
-                          </span>
-                        )}
                       </div>
 
-                      <div className="flex items-center gap-2.5 shrink-0">
+                      <div className="flex items-center gap-2 shrink-0">
                         {driverMember?.family_member?.name && (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-3xs font-semibold bg-amber-500/10 text-amber-900 border border-amber-500/20 hidden sm:inline-flex">
                             <Car size={10} className="text-amber-800" />
@@ -983,203 +1419,10 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                 })}
               </div>
             ) : (
-              /* Tomorrow Preview Section */
-              <div className="space-y-3">
-                <div className="flex items-center justify-between py-1.5 px-1 border-b border-casa-border/40 text-caption text-casa-muted">
-                  <span className="font-semibold text-casa-navy flex items-center gap-1.5">
-                    <Calendar size={13} className="text-casa-gold" />
-                    <span>Tomorrow · {format(addDays(now, 1), 'EEEE, MMMM d')}</span>
-                  </span>
-                  <span>{tomorrowEvents.length} event{tomorrowEvents.length === 1 ? '' : 's'}</span>
-                </div>
-
-                {tomorrowEvents.length > 0 ? (
-                  <div className="space-y-2 overflow-y-auto max-h-72 pr-1">
-                    {tomorrowEvents.map((evt) => {
-                      const driverMember = evt.members.find(
-                        (m) =>
-                          m.family_member?.name &&
-                          (evt.title.toLowerCase().includes(m.family_member.name.toLowerCase() + ' drives') ||
-                            evt.title.toLowerCase().includes('picked up by ' + m.family_member.name.toLowerCase()) ||
-                            m.role?.toLowerCase() === 'driver')
-                      )
-
-                      const avatarPeople = evt.members.map((m) => ({
-                        id: m.family_member?.id || m.id,
-                        name: m.family_member?.name || 'Member',
-                        color: m.family_member?.color_hex || 'var(--color-casa-navy)',
-                      }))
-
-                      return (
-                        <div
-                          key={evt.id}
-                          role="button"
-                          tabIndex={0}
-                          data-tactile="true"
-                          data-calendar-event
-                          onClick={() => onOpenEvent(evt)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault()
-                              onOpenEvent(evt)
-                            }
-                          }}
-                          className="flex items-center justify-between px-4 py-3 rounded-2xl border bg-casa-bg/40 hover:bg-casa-surface border-casa-border/35 hover:border-casa-gold/40 transition-all duration-150 cursor-pointer group gap-3 active:scale-[0.97] active:opacity-75"
-                        >
-                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                            <span className="font-mono text-body-sm font-semibold text-casa-navy shrink-0">
-                              {evt.all_day ? 'All Day' : format(parseISO(evt.start_time), 'h:mm a')}
-                            </span>
-
-                            <span className="text-casa-muted/60 text-caption hidden sm:inline shrink-0">
-                              ·
-                            </span>
-
-                            <span className="text-body-sm font-semibold text-casa-navy truncate group-hover:text-casa-gold transition-colors">
-                              {evt.title}
-                            </span>
-
-                            {evt.location_name && (
-                              <span className="text-caption text-casa-text-secondary truncate hidden md:inline">
-                                · {evt.location_name}
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="flex items-center gap-2.5 shrink-0">
-                            {driverMember?.family_member?.name && (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-3xs font-semibold bg-amber-500/10 text-amber-900 border border-amber-500/20 hidden sm:inline-flex">
-                                <Car size={10} className="text-amber-800" />
-                                <span>{driverMember.family_member.name} drives</span>
-                              </span>
-                            )}
-                            <PersonAvatarStack people={avatarPeople} size="sm" max={2} />
-                            <ChevronRight
-                              size={14}
-                              className="text-casa-muted group-hover:text-casa-navy transition-transform group-hover:translate-x-0.5"
-                            />
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                ) : (
-                  <div className="py-7 px-4 rounded-2xl bg-casa-bg/25 text-center flex flex-col items-center justify-center gap-2 border border-casa-border/30">
-                    <div className="w-10 h-10 rounded-2xl bg-amber-500/15 text-casa-gold flex items-center justify-center">
-                      <Sparkles size={20} className="text-casa-gold" />
-                    </div>
-                    <h4 className="text-body-sm font-bold text-casa-navy">All caught up for today!</h4>
-                    <p className="text-caption text-casa-muted max-w-xs">
-                      No appointments scheduled for tomorrow — enjoy an open day.
-                    </p>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setActiveView('stacked')
-                        navigateTo('/calendar')
-                      }}
-                      className="text-caption font-bold text-casa-gold hover:underline mt-1"
-                    >
-                      <span>Open Full Calendar</span>
-                      <ArrowRight size={13} className="ml-1" />
-                    </Button>
-                  </div>
-                )}
+              <div className="py-4 px-3 text-center text-caption text-casa-muted">
+                No appointments scheduled for tomorrow.
               </div>
             )}
-          </div>
-
-          {/* 2. Tonight's Kitchen (Bottom) */}
-          <div className={cn(
-            'rounded-3xl p-6 bg-gradient-to-br from-amber-500/10 via-casa-surface to-casa-surface border border-amber-500/20 shadow-sm flex-col justify-start',
-            mobileSubTab === 'kitchen' ? 'flex' : 'hidden lg:flex'
-          )}>
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-800 flex items-center justify-center font-bold">
-                  {dinnerPlan.mode === 'takeout' ? (
-                    <ShoppingBag size={16} />
-                  ) : dinnerPlan.mode === 'leftovers' ? (
-                    <Clock size={16} />
-                  ) : (
-                    <Utensils size={16} />
-                  )}
-                </div>
-                <span className="text-caption font-bold uppercase tracking-widest text-amber-800">
-                  {dinnerPlan.mode === 'takeout'
-                    ? "Tonight's Takeout"
-                    : dinnerPlan.mode === 'leftovers'
-                    ? "Tonight's Leftovers"
-                    : "Tonight's Kitchen"}
-                </span>
-              </div>
-              <span className="text-caption font-semibold text-casa-muted">
-                {isDinnerPast ? 'Dinner Completed' : dinnerPlan.targetTime || '6:30 PM Target'}
-              </span>
-            </div>
-
-            <div>
-              <h3 className="font-display text-heading font-bold text-casa-navy">
-                {dinnerPlan.title}
-              </h3>
-              <p className="text-body-sm text-casa-text-secondary mt-1">
-                {isDinnerPast ? 'Dinner served · Kitchen closed' : dinnerPlan.subtitle}
-              </p>
-            </div>
-
-            <div className="pt-4 mt-4 border-t border-casa-border/50 flex items-center justify-between">
-              <span
-                className={cn(
-                  'inline-flex items-center gap-1.5 text-caption font-semibold px-2.5 py-1 rounded-md',
-                  isDinnerPast
-                    ? 'text-slate-700 bg-slate-100'
-                    : 'text-emerald-800 bg-emerald-100 border border-emerald-300'
-                )}
-              >
-                <CheckCircle2 size={13} />{' '}
-                {isDinnerPast ? 'Cleaned up' : dinnerPlan.statusBadge || 'Ingredients ready'}
-              </span>
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    document.dispatchEvent(
-                      new CustomEvent('open-ai-chat', {
-                        detail: {
-                          launchId: crypto.randomUUID(),
-                          agent: 'chef',
-                          source: 'tonights-kitchen',
-                          prompt: undefined,
-                          autoSend: false,
-                        },
-                      })
-                    )
-                  }}
-                  className="text-body-sm font-semibold text-casa-gold hover:text-amber-800 transition-colors flex items-center gap-1 min-h-[44px] px-2.5"
-                >
-                  <span>Change</span>
-                </Button>
-                {dinnerPlan.mode === 'cook' && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      if (dinnerPlan.recipeId) {
-                        navigateTo(`/cook?recipe=${encodeURIComponent(dinnerPlan.recipeId)}&autocook=true`)
-                      } else {
-                        navigateTo('/cook')
-                      }
-                    }}
-                    className="text-body-sm font-bold text-casa-navy hover:text-casa-gold transition-colors flex items-center gap-1 min-h-[44px] px-3"
-                  >
-                    <span>Recipe</span>
-                    <ArrowRight size={14} />
-                  </Button>
-                )}
-              </div>
-            </div>
           </div>
         </div>
       </div>

@@ -22,6 +22,7 @@ import { useAppStore } from './stores/appStore'
 import SidecarCompanion from './components/shared/SidecarCompanion'
 import CanvasUndoToast from './components/canvas/CanvasUndoToast'
 import { useTonightDinnerSync } from './hooks/useTonightDinnerSync'
+import { useReminderNeedsYouActions } from './hooks/useReminderNeedsYouActions'
 
 const SAFE_MODE = String(import.meta.env.VITE_SAFE_MODE ?? '').toLowerCase()
 const IS_SAFE_MODE = SAFE_MODE === '1' || SAFE_MODE === 'true' || SAFE_MODE === 'yes'
@@ -72,7 +73,14 @@ function AppShell() {
   useIdleTimer(ssMs, dispMs)
 
   const now = useLiveClock(60_000)
-  useRollingEvents(now)
+  const { data: rollingEvents = [] } = useRollingEvents(now)
+  const { queueMissedReminders } = useReminderNeedsYouActions()
+
+  useEffect(() => {
+    if (rollingEvents.length > 0) {
+      void queueMissedReminders(rollingEvents, now).catch(() => {})
+    }
+  }, [rollingEvents, now, queueMissedReminders])
 
   const [screensaverActive, setScreensaverActive] = useState(false)
   const {

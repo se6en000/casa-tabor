@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Zap, Calendar } from 'lucide-react'
 import { useTurboCanvasPresenter } from '../../hooks/useTurboCanvasPresenter'
+import { clusterPrepItems } from '../../utils/prepItemClusters'
 import { Button } from '../ui'
 import ActionQueueWidget from './widgets/ActionQueueWidget'
 import NowAndNextWidget from './widgets/NowAndNextWidget'
@@ -36,7 +37,8 @@ export default function TurboCanvasView({ onOpenEvent, onQuickCreate }: TurboCan
 
   // Mobile segmented tab switcher ('schedule' vs 'queue')
   const [mobileTab, setMobileTab] = useState<'schedule' | 'queue'>('schedule')
-  const totalActionable = activeConflicts.length + activePrep.length
+  const clusteredPrep = clusterPrepItems(activePrep)
+  const totalActionable = activeConflicts.length + clusteredPrep.length
 
   return (
     <div className="w-full h-full flex flex-col px-3 sm:px-4 md:px-5 pt-2 sm:pt-3 pb-3 overflow-hidden">

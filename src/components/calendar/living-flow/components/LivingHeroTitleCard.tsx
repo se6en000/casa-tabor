@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { format, addDays } from 'date-fns'
 import {
   Calendar, Clock, ChevronDown, Minus, Plus, Tag,
@@ -58,9 +58,12 @@ export default function LivingHeroTitleCard({
   const [currentDate, setCurrentDate] = useState<Date>(safeDate)
   const [duration, setDuration] = useState<number>(durationMinutes)
   const [activeMode, setActiveMode] = useState<LivingFlowMode>(mode)
+  const isEditingRef = useRef(false)
 
   useEffect(() => {
-    setLocalTitle(title)
+    if (!isEditingRef.current) {
+      setLocalTitle(title)
+    }
   }, [title])
 
   useEffect(() => {
@@ -121,25 +124,44 @@ export default function LivingHeroTitleCard({
 
   return (
     <div className={`living-hero-title-card flex flex-col ${expandedSection ? 'has-expanded' : ''}`}>
-      {/* In-Place Editable Title */}
-      <h2
-        contentEditable
-        suppressContentEditableWarning
-        onBlur={(e) => {
-          const text = e.currentTarget.textContent?.trim() || 'Untitled'
-          setLocalTitle(text)
-          onUpdateTitle(text)
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault()
-            e.currentTarget.blur()
-          }
-        }}
-        className="living-event-title cursor-text hover:bg-slate-50/50 rounded px-1 -mx-1 transition-colors"
-      >
-        {localTitle}
-      </h2>
+      {/* In-Place Controlled Editable Title via Zero-Lag CSS Grid Auto-Sizing */}
+      <div className="grid grid-cols-1 grid-rows-1 relative w-full">
+        {/* Invisible shadow span that dictates the exact container height without white-space gaps */}
+        <span
+          aria-hidden="true"
+          className="invisible col-start-1 row-start-1 living-event-title px-1 -mx-1 whitespace-pre-wrap select-none pointer-events-none"
+        >
+          {localTitle || 'Event title…'}
+        </span>
+
+        {/* Textarea that fills the grid cell exactly */}
+        <textarea
+          rows={1}
+          value={localTitle}
+          onFocus={() => {
+            isEditingRef.current = true
+          }}
+          onChange={(e) => {
+            setLocalTitle(e.target.value)
+          }}
+          onBlur={(e) => {
+            isEditingRef.current = false
+            const text = e.target.value.trim() || 'Untitled'
+            setLocalTitle(text)
+            if (text !== title) {
+              onUpdateTitle(text)
+            }
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              e.currentTarget.blur()
+            }
+          }}
+          placeholder="Event title…"
+          className="col-start-1 row-start-1 living-event-title cursor-text hover:bg-slate-50/50 focus:bg-white/80 rounded px-1 -mx-1 transition-colors resize-none overflow-hidden"
+        />
+      </div>
 
       {/* Meta Pills Cluster */}
       <div className="flex flex-wrap items-center gap-1.5 mt-3">

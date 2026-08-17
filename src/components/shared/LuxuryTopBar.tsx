@@ -14,6 +14,9 @@ import { useLiveClock } from '../../hooks/useLiveClock'
 import { useHomeWeather } from '../../hooks/useHomeWeather'
 import { useTodayEvents } from '../../hooks/useCalendarEvents'
 import { useNotifications } from '../../hooks/useNotifications'
+import { useWeekConflicts } from '../../hooks/useConflicts'
+import { usePrepItems } from '../../hooks/usePrepItems'
+import { clusterPrepItems } from '../../utils/prepItemClusters'
 import { cn } from '../../utils/cn'
 import { IconButton } from '../ui'
 import { useAppStore } from '../../stores/appStore'
@@ -315,8 +318,28 @@ function UtilityTrack({
   const navigate = useNavigate()
   const location = useLocation()
   const queryClient = useQueryClient()
+  const { canvasSubmode, setCanvasSubmode } = useAppStore()
   const [isSpinning, setIsSpinning] = useState(false)
   const isSettings = location.pathname.startsWith('/settings')
+
+  const { data: conflicts = [] } = useWeekConflicts()
+  const { data: prepItems = [] } = usePrepItems()
+
+  const activeConflicts = useMemo(() => conflicts.filter((c) => !c.resolved), [conflicts])
+  const activePrep = useMemo(() => prepItems.filter((p) => !p.dismissed), [prepItems])
+  const clusteredPrep = useMemo(() => clusterPrepItems(activePrep), [activePrep])
+  const totalAttentionCount = activeConflicts.length + clusteredPrep.length
+
+  const isTriageActive = location.pathname === '/' && canvasSubmode === 'turbo'
+
+  const handleTriageClick = () => {
+    if (location.pathname !== '/') {
+      navigate('/')
+      setCanvasSubmode('turbo')
+    } else {
+      setCanvasSubmode(canvasSubmode === 'turbo' ? 'calm' : 'turbo')
+    }
+  }
 
   const handleRefresh = async () => {
     setIsSpinning(true)
@@ -326,23 +349,23 @@ function UtilityTrack({
 
   const iconCn = (isActive = false) =>
     cn(
-      'rounded-full transition-colors',
+      'w-8 h-8 rounded-full flex items-center justify-center transition-all duration-150',
       isActive
         ? isWarm
-          ? 'bg-casa-navy/15 text-casa-navy ring-1 ring-casa-gold/60 font-semibold'
-          : 'bg-white/25 text-white ring-1 ring-white/40 font-semibold'
+          ? 'bg-casa-navy/12 text-casa-navy ring-1 ring-casa-gold/50 shadow-2xs font-semibold'
+          : 'bg-casa-gold/20 text-casa-gold ring-1 ring-casa-gold/40 shadow-2xs font-semibold'
         : isWarm
-        ? 'text-casa-text-tertiary hover:text-casa-navy hover:bg-black/5'
-        : 'text-white/60 hover:text-white hover:bg-white/10',
+        ? 'text-casa-text-secondary hover:text-casa-navy hover:bg-black/5 active:scale-95'
+        : 'text-white/70 hover:text-white hover:bg-white/10 active:scale-95'
     )
 
   return (
     <div
       className={cn(
-        'hidden sm:inline-flex items-center p-0.5 rounded-full border gap-0.5',
+        'hidden sm:inline-flex items-center p-1 rounded-full border gap-1 transition-all',
         isWarm
-          ? 'bg-casa-surface/40 border-casa-border/40'
-          : 'bg-white/5 border-white/10',
+          ? 'bg-casa-surface/60 border-casa-border/50 shadow-2xs'
+          : 'bg-white/[0.06] border-white/[0.12] shadow-2xs backdrop-blur-md'
       )}
     >
       {/* Refresh Screen */}
@@ -368,6 +391,31 @@ function UtilityTrack({
         variant="ghost"
         className={iconCn(false)}
       />
+
+      {/* Triage Bell with Luxury Complication Badge */}
+      <div className="relative inline-flex items-center justify-center">
+        <IconButton
+          icon={<Bell size={14} strokeWidth={1.8} className={isTriageActive ? undefined : totalAttentionCount > 0 ? (isWarm ? 'text-amber-800' : 'text-casa-gold') : undefined} />}
+          aria-label={totalAttentionCount > 0 ? `${totalAttentionCount} Triage Items` : 'Triage Items'}
+          onClick={handleTriageClick}
+          title={totalAttentionCount > 0 ? `${totalAttentionCount} Triage Items` : 'Triage Items'}
+          size="sm"
+          variant="ghost"
+          className={iconCn(isTriageActive)}
+        />
+        {totalAttentionCount > 0 && (
+          <span
+            className={cn(
+              'absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full font-bold text-3xs flex items-center justify-center leading-none pointer-events-none shadow-xs border',
+              isWarm
+                ? 'bg-casa-gold text-casa-navy border-casa-surface ring-1 ring-casa-gold/40'
+                : 'bg-casa-gold text-casa-navy border-casa-navy ring-1 ring-casa-gold/50'
+            )}
+          >
+            {totalAttentionCount}
+          </span>
+        )}
+      </div>
 
       {/* Settings */}
       <IconButton

@@ -202,6 +202,7 @@ export default function SidecarCompanion({
             />
           ) : selectedEvent && selectedEvent.start_time ? (
             <LivingFlowSidecar
+              key={selectedEvent.id}
               event={selectedEvent}
               onClose={closeSidecar}
               embedded={true}

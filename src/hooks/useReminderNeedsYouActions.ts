@@ -10,8 +10,6 @@ import type { SnoozeDuration } from '../utils/snoozeDuration'
 import { publishEventAggregatePatch, evictEventFromAllCaches } from '../lib/eventAggregateCache'
 
 const ONE_HOUR_MS = 60 * 60 * 1000
-const ONE_DAY_MS = 24 * 60 * 60 * 1000
-const MISSED_GRACE_MS = 10 * 60 * 1000
 
 const REMINDER_SOURCE_MANUAL = 'reminder_manual'
 const REMINDER_SOURCE_MISSED = 'reminder_missed'
@@ -132,16 +130,16 @@ export function useReminderNeedsYouActions() {
       const startMs = getEventStartDate(event).getTime()
       return (event.event_type === 'reminder')
         && event.status !== 'cancelled'
-        && (nowMs > startMs + MISSED_GRACE_MS)
+        && (nowMs > startMs)
     })
 
     if (missed.length === 0) return
 
-    const existingSources = [REMINDER_SOURCE_MANUAL, REMINDER_SOURCE_MISSED]
+    const activeSources = [REMINDER_SOURCE_MANUAL, REMINDER_SOURCE_MISSED]
     const { data: existing, error: existingError } = await supabase
       .from('prep_items')
-      .select('source_ref')
-      .in('source_type', existingSources)
+      .select('source_ref, dismissed')
+      .in('source_type', activeSources)
       .in('source_ref', missed.map((event) => event.id))
 
     if (existingError) throw existingError
@@ -150,10 +148,10 @@ export function useReminderNeedsYouActions() {
     const toInsert = missed.filter((event) => !existingIds.has(event.id))
     if (toInsert.length === 0) return
 
-    const dueBy = new Date(nowMs + ONE_DAY_MS).toISOString()
     const rows = toInsert.map((event) => {
-      const overdueMs = nowMs - (getEventStartDate(event).getTime() + MISSED_GRACE_MS)
+      const overdueMs = nowMs - getEventStartDate(event).getTime()
       const priority = overdueMs > 2 * ONE_HOUR_MS ? 3 : 2
+      const assignee = event.source_member_id || event.members?.[0]?.family_member?.id || null
       return {
         event_id: null,
         type: 'reminder',
@@ -162,13 +160,14 @@ export function useReminderNeedsYouActions() {
         description: buildReminderPrepDescription(cleanEventTitle(event.title), REMINDER_SOURCE_MISSED),
         event_title: cleanEventTitle(event.title),
         event_date: event.start_time,
-        due_by: dueBy,
+        due_by: event.start_time,
         priority,
         dismissed: false,
         source_type: REMINDER_SOURCE_MISSED,
         source_ref: event.id,
         source_pattern_key: 'reminder:missed',
         source_confidence: 1,
+        assigned_to: assignee,
       }
     })
 

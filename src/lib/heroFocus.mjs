@@ -52,11 +52,60 @@ function endMs(event) {
 }
 
 /**
+ * Helper to identify reminders, chores, tasks, and soft routines that should never take hero focus.
+ * @param {object|null|undefined} e
+ * @returns {boolean}
+ */
+export function isReminderOrChore(e) {
+  if (!e) return false
+  if (e.event_type === 'reminder') return true
+  const cat = (e.enrichment?.category || e.category || '').toLowerCase().trim()
+  const title = (e.title || '').toLowerCase()
+
+  // Real medical / doctor / dentist appointments are NEVER chores or to-dos
+  if (
+    cat === 'medical' ||
+    cat === 'doctor' ||
+    cat === 'dentist' ||
+    cat === 'appointment' ||
+    cat === 'health' ||
+    title.startsWith('dr ') ||
+    title.startsWith('dr.') ||
+    title.includes('dr ') ||
+    title.includes('dr.') ||
+    title.includes('doctor') ||
+    title.includes('dentist') ||
+    title.includes('orthodontist') ||
+    title.includes('pediatrician') ||
+    title.includes('therapy')
+  ) {
+    return false
+  }
+
+  return (
+    cat.includes('reminder') ||
+    cat.includes('chore') ||
+    cat.includes('task') ||
+    cat.includes('routine') ||
+    cat === 'meds' ||
+    cat === 'medication' ||
+    cat === 'pill' ||
+    cat.includes('medication') ||
+    title.includes('reminder') ||
+    title.includes('take out the trash') ||
+    title.includes('trash') ||
+    title.includes('dishwasher') ||
+    title.includes('recycling') ||
+    title.includes('laundry')
+  )
+}
+
+/**
  * Pick the event that is happening *right now* and should take over the hero as
- * a live "in progress" state. Excludes all-day events and reminders so they
- * don't hijack the hero. When multiple overlap, the one ending soonest wins
+ * a live "in progress" state. Excludes all-day events, chores, and reminders so
+ * they don't hijack the hero. When multiple overlap, the one ending soonest wins
  * (most immediately relevant — it's the window about to free you up).
- * @param {Array<{start_time:string,end_time?:string,all_day?:boolean,event_type?:string}>} events
+ * @param {Array<{start_time:string,end_time?:string,all_day?:boolean,event_type?:string,title?:string,category?:string,enrichment?:object}>} events
  * @param {Date|number} now
  * @returns {object|null}
  */
@@ -68,7 +117,7 @@ export function pickActiveHeroEvent(events, now) {
       .filter(
         (e) =>
           e &&
-          e.event_type !== 'reminder' &&
+          !isReminderOrChore(e) &&
           !e.all_day &&
           startMs(e) <= nowMs &&
           endMs(e) > nowMs,

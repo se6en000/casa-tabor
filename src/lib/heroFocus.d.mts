@@ -3,7 +3,16 @@ export interface HeroFocusEvent {
   end_time?: string | null
   all_day?: boolean
   event_type?: string
+  title?: string
+  category?: string | null
+  enrichment?: {
+    category?: string | null
+    [key: string]: any
+  } | null
+  [key: string]: any
 }
+
+export function isReminderOrChore(e: HeroFocusEvent | any): boolean
 
 export function formatDurationLabel(minutes: number): string
 

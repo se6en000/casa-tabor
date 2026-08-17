@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { format, parseISO, isAfter, isBefore } from 'date-fns'
 import { useLiveClock } from './useLiveClock'
 import { useTodayEvents, useTomorrowEvents, type EventWithDetails } from './useCalendarEvents'
@@ -11,9 +11,11 @@ import {
 } from './usePrepItems'
 import { useFamilyMembers } from './useFamilyMembers'
 import { useHomeWeather } from './useHomeWeather'
+import { useReminderNeedsYouActions } from './useReminderNeedsYouActions'
 import { type SnoozeDuration, snoozeDurationLabel } from '../utils/snoozeDuration'
 import { useAttentionStore } from '../stores/attentionStore'
 import { useAppStore } from '../stores/appStore'
+import { clusterPrepItems } from '../utils/prepItemClusters'
 import type { PrepItem, Conflict, FamilyMember } from '../types'
 
 export interface DriverAvailability {
@@ -71,6 +73,13 @@ export function useTurboCanvasPresenter(): TurboCanvasPresenterState {
   const completePrep = useCompletePrepItem()
   const downvotePrep = useDownvotePrepItem()
   const snoozePrep = useSnoozePrepItem()
+  const { queueMissedReminders } = useReminderNeedsYouActions()
+
+  useEffect(() => {
+    if (todayEvents.length > 0) {
+      void queueMissedReminders(todayEvents, now).catch(() => {})
+    }
+  }, [todayEvents, now, queueMissedReminders])
 
   const [pushedPrepIds, setPushedPrepIds] = useState<Record<string, 'later_today' | 'tomorrow' | 'weekend'>>({})
 
@@ -136,7 +145,7 @@ export function useTurboCanvasPresenter(): TurboCanvasPresenterState {
 
   // Dynamic Natural Language Household Status Narrative
   const householdNarrative = useMemo(() => {
-    const totalTriage = activeConflicts.length + activePrep.length
+    const totalTriage = activeConflicts.length + clusterPrepItems(activePrep).length
 
     if (todayEvents.length === 0) {
       if (totalTriage > 0) {

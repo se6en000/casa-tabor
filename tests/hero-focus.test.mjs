@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { formatDurationLabel, pickActiveHeroEvent, resolveRestingIndex } from '../src/lib/heroFocus.mjs'
+import { formatDurationLabel, isReminderOrChore, pickActiveHeroEvent, resolveRestingIndex } from '../src/lib/heroFocus.mjs'
 
 test('formatDurationLabel renders human-friendly windows', () => {
   assert.equal(formatDurationLabel(0), '0 min')
@@ -12,6 +12,17 @@ test('formatDurationLabel renders human-friendly windows', () => {
   assert.equal(formatDurationLabel(210), '3.5 hrs')
   assert.equal(formatDurationLabel(130), '2h 10m')
   assert.equal(formatDurationLabel(-5), '0 min')
+})
+
+test('isReminderOrChore identifies chores, reminders, tasks, and medications', () => {
+  assert.equal(isReminderOrChore({ event_type: 'reminder', title: 'Feed Dogs' }), true)
+  assert.equal(isReminderOrChore({ title: 'Take out the trash' }), true)
+  assert.equal(isReminderOrChore({ title: 'Run dishwasher' }), true)
+  assert.equal(isReminderOrChore({ title: 'Morning Meds / Pills', category: 'routine' }), true)
+  assert.equal(isReminderOrChore({ title: 'Soccer Practice', category: 'sports' }), false)
+  assert.equal(isReminderOrChore({ title: 'Dentist Appointment', location_name: 'Main St Dental' }), false)
+  assert.equal(isReminderOrChore({ title: 'Dr Hanna', category: 'medical' }), false)
+  assert.equal(isReminderOrChore({ title: 'Dr. Smith Checkup' }), false)
 })
 
 const iso = (y, mo, d, h, mi) => new Date(y, mo, d, h, mi, 0).toISOString()
@@ -25,11 +36,12 @@ test('pickActiveHeroEvent returns the in-progress event (the disappearing-act fi
   assert.equal(pickActiveHeroEvent(events, now)?.title, 'Care')
 })
 
-test('pickActiveHeroEvent ignores all-day events and reminders', () => {
+test('pickActiveHeroEvent ignores all-day events, chores, and reminders', () => {
   const now = new Date(2026, 6, 9, 15, 30)
   const events = [
     { title: 'Birthday', start_time: iso(2026, 6, 9, 0, 0), end_time: iso(2026, 6, 10, 0, 0), all_day: true },
-    { title: 'Take out trash', start_time: iso(2026, 6, 9, 15, 0), end_time: iso(2026, 6, 9, 16, 0), event_type: 'reminder' },
+    { title: 'Take out trash', start_time: iso(2026, 6, 9, 15, 0), end_time: iso(2026, 6, 9, 16, 0) },
+    { title: 'Dishwasher', start_time: iso(2026, 6, 9, 15, 0), end_time: iso(2026, 6, 9, 16, 0), event_type: 'reminder' },
   ]
   assert.equal(pickActiveHeroEvent(events, now), null)
 })
