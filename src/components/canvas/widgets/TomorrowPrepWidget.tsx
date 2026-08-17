@@ -35,13 +35,13 @@ export default function TomorrowPrepWidget({
   return (
     <div
       className={cn(
-        'w-full rounded-3xl p-6 bg-gradient-to-br from-casa-navy via-slate-900 to-slate-950 text-white border border-white/10 shadow-xl relative overflow-hidden flex flex-col justify-between space-y-4',
+        'w-full rounded-3xl p-6 sm:p-7 bg-gradient-to-br from-casa-navy via-slate-900 to-slate-950 text-white border border-white/10 shadow-xl relative overflow-hidden flex flex-col justify-between space-y-5',
         hasTomorrowExceptions && 'ring-1 ring-amber-400/40',
         className,
       )}
     >
       {/* Background ambient glow */}
-      <div className="absolute top-0 right-0 w-80 h-80 bg-casa-gold/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute top-0 right-0 w-96 h-96 bg-casa-gold/10 rounded-full blur-3xl pointer-events-none" />
 
       {/* ── Header ── */}
       <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-3 relative z-10">

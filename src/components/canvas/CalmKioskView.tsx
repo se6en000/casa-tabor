@@ -36,7 +36,6 @@ interface CalmKioskViewProps {
 export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
   const dinnerPlan = useAppStore((s) => s.dinnerPlan)
   const setActiveView = useCalendarStore((s) => s.setActiveView)
-  const setSelectedDate = useCalendarStore((s) => s.setSelectedDate)
   const [showPastEvents, setShowPastEvents] = useState(false)
   const [completedItems, setCompletedItems] = useState<Record<string, boolean>>({})
   const [mobileSubTab, setMobileSubTab] = useState<'schedule' | 'triage' | 'kitchen'>('schedule')
@@ -55,9 +54,6 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
     pastEvents,
     upcomingAppointments,
     tomorrowEvents,
-    isTodayDone,
-    firstTomorrowEvent,
-    isEvening,
     isDinnerPast,
     totalAttentionCount,
     minutesUntilNext,
@@ -553,44 +549,11 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
               )}
             </motion.div>
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center rounded-3xl p-8 bg-gradient-to-br from-slate-900 to-casa-navy text-white border border-white/10 shadow-xl text-center min-h-[260px]">
-              <div className="w-14 h-14 rounded-2xl bg-casa-gold/20 text-casa-gold flex items-center justify-center mb-4 border border-casa-gold/30">
-                <CheckCircle2 size={32} />
-              </div>
-              <h3 className="font-display text-heading font-bold text-white tracking-tight">
-                {isEvening
-                  ? 'Evening Wind-Down · Schedule Complete'
-                  : isTodayDone && pastEvents.length > 0
-                  ? 'All Done for Today!'
-                  : 'Schedule is Clear Today'}
-              </h3>
-              <p className="text-body-sm text-white/70 max-w-md mt-2 leading-relaxed">
-                {firstTomorrowEvent
-                  ? `All scheduled events for today are finished. First up tomorrow: ${firstTomorrowEvent.title}${firstTomorrowEvent.all_day ? ' (All Day)' : ` at ${format(parseISO(firstTomorrowEvent.start_time), 'h:mm a')}`}.`
-                  : isEvening
-                  ? 'All scheduled events for today are finished. Rest well & check tomorrow’s preview.'
-                  : 'No upcoming events scheduled for today. Relax and enjoy your day!'}
-              </p>
-              <div className="mt-5 flex items-center gap-3">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    setSelectedDate(new Date())
-                    setActiveView('stacked')
-                    navigateTo('/calendar')
-                  }}
-                  className="bg-white/10 hover:bg-white/20 text-white font-semibold rounded-xl min-h-[44px] px-4 border border-white/15"
-                >
-                  <span>View Tomorrow's Schedule</span>
-                  <ArrowRight size={14} className="ml-1" />
-                </Button>
-              </div>
-            </div>
+            <TomorrowPrepWidget now={now} />
           )}
 
-          {/* Stylized Ambient Daily Briefing Prose */}
-          {dailyBriefing && (
+          {/* Stylized Ambient Daily Briefing Prose (shown only during active daytime events) */}
+          {nextEvent && dailyBriefing && (
             <div className="px-1 py-1 flex items-start gap-3">
               <div className="p-1.5 rounded-xl bg-amber-500/15 text-casa-gold shrink-0 mt-0.5 border border-amber-500/20">
                 <Sparkles size={16} className="text-casa-gold animate-pulse" />
@@ -715,9 +678,6 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
               )}
             </div>
           )}
-
-          {/* ── Tomorrow Morning Readiness & Exceptions Widget ── */}
-          <TomorrowPrepWidget now={now} />
 
           {/* 1. Today's Appointments & Reminders (Top) / Tomorrow Preview */}
           <div className={cn(
