@@ -65,7 +65,8 @@ export default function LivingFlowSidecar({
     scopeImpacts,
     markCompleted,
     snoozeReminder,
-    setRecurScope
+    setRecurScope,
+    isRecurring,
   } = useLivingFlowState(event, handleAnimatedClose)
 
   const activeAttendeesNames = familyMembers
@@ -87,6 +88,7 @@ export default function LivingFlowSidecar({
         selectedMemberIds={state.selectedMemberIds}
         primaryMemberId={state.primaryMemberId}
         recurScope={state.recurScope}
+        isRecurring={isRecurring}
         onToggleMember={toggleMember}
         onSetRecurScope={setRecurScope}
         onClose={handleAnimatedClose}

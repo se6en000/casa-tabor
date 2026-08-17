@@ -17,8 +17,10 @@ import { saveEventTransportationOverride } from '../../../../lib/eventPlanOverri
 import type { EventLocationScope } from '../../../../lib/eventLocation'
 import {
   loadRecurringEditorContext,
+  saveRecurringEditorMutation,
   deleteRecurringEditorMutation,
   announceRecurringDelete,
+  announceRecurringSave,
   truncateRecurrenceLinesForFuture,
   type RecurringEditorContext,
 } from '../../../../lib/recurringEventEditor'
@@ -185,6 +187,7 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
   const isCanonicalOccurrence = Boolean(initialEvent?.series_id && initialEvent?.record_kind === 'occurrence')
   const [recurringContext, setRecurringContext] = useState<RecurringEditorContext | null>(null)
   const [recurringEditorEnabled, setRecurringEditorEnabled] = useState(false)
+  const [recurringEditorWritable, setRecurringEditorWritable] = useState(false)
   const [recurringDeleteEnabled, setRecurringDeleteEnabled] = useState(false)
   const [recurringContextLoading, setRecurringContextLoading] = useState(false)
   const [showDeleteScopeModal, setShowDeleteScopeModal] = useState(false)
@@ -198,6 +201,7 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     if (!initialEvent?.id || !isCanonicalOccurrence) {
       setRecurringContext(null)
       setRecurringEditorEnabled(false)
+      setRecurringEditorWritable(false)
       setRecurringDeleteEnabled(false)
       setRecurringContextLoading(false)
       return
@@ -209,6 +213,7 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
       .then((result) => {
         if (cancelled) return
         setRecurringEditorEnabled(result.enabled)
+        setRecurringEditorWritable(Boolean(result.writable))
         setRecurringDeleteEnabled(Boolean(result.deletable))
         setRecurringContext(result.context ?? null)
       })
@@ -376,16 +381,143 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     triggerGoogleEventSync(supabase, initialEvent.id)
   }, [initialEvent, familyMembers, queryClient, invalidateCalendar])
 
+  // Scoped recurring field mutation helper
+  const persistRecurringFieldMutation = useCallback(async (
+    changedField: 'title' | 'schedule' | 'venue' | 'attendees' | 'category',
+    values: {
+      title?: string
+      startDate?: Date
+      endDate?: Date
+      durationMinutes?: number
+      venue?: VenueInfo
+      selectedMemberIds?: string[]
+      category?: string
+      mode?: LivingFlowMode
+    }
+  ): Promise<boolean> => {
+    if (!initialEvent?.id) return false
+    if (!isCanonicalOccurrence || !recurringEditorEnabled || !recurringEditorWritable || !recurringContext) {
+      return false
+    }
+
+    const scope = state.recurScope
+    const snapshot = recurringContext.effective_bundle as {
+      event?: Record<string, unknown>
+      members?: Array<Record<string, unknown>>
+      enrichment?: Record<string, unknown> | null
+    }
+    const baselineEvent = snapshot.event ?? (initialEvent as unknown as Record<string, unknown>)
+    const changedPaths: string[] = []
+
+    const newTitle = (values.title ?? state.title).trim()
+    const newStart = values.startDate ? values.startDate.toISOString() : (state.startDate ? state.startDate.toISOString() : initialEvent.start_time)
+    const newEnd = values.endDate ? values.endDate.toISOString() : (state.endDate ? state.endDate.toISOString() : initialEvent.end_time)
+    const durationMs = new Date(newEnd).getTime() - new Date(newStart).getTime()
+    const venueInfo = values.venue ?? state.venue
+    const newLocation = (venueInfo.name || '').trim() || null
+    const newAddress = (venueInfo.address || '').trim() || null
+    const memberIds = values.selectedMemberIds ?? state.selectedMemberIds
+    const catName = values.category ?? state.category
+    const catSlug = normalizeCategoryName(catName).slug
+
+    if (changedField === 'title' || newTitle !== baselineEvent.title) {
+      changedPaths.push('event.title')
+    }
+    if (changedField === 'schedule' || newStart !== baselineEvent.start_time || newEnd !== baselineEvent.end_time) {
+      changedPaths.push('event.startTime')
+      changedPaths.push('event.endTime')
+    }
+    if (changedField === 'venue' || newLocation !== ((baselineEvent.location_name as string | null)?.trim() || null) || newAddress !== ((baselineEvent.address as string | null)?.trim() || null)) {
+      changedPaths.push('event.locationName')
+      changedPaths.push('event.address')
+    }
+    if (changedField === 'attendees') {
+      changedPaths.push('assignments')
+    }
+    if (changedField === 'category') {
+      changedPaths.push('enrichment')
+    }
+
+    if (changedPaths.length === 0) return true
+
+    const assignments = memberIds.map((mid) => ({
+      family_member_id: mid,
+      role: 'attendee',
+    })).sort((a, b) => a.family_member_id.localeCompare(b.family_member_id))
+
+    const enrichment = {
+      ...(snapshot.enrichment ?? {}),
+      category: catSlug,
+    }
+    delete (enrichment as Record<string, unknown>).id
+    delete (enrichment as Record<string, unknown>).event_id
+    delete (enrichment as Record<string, unknown>).created_at
+    delete (enrichment as Record<string, unknown>).updated_at
+
+    const detailPatch = {
+      event: {
+        title: newTitle,
+        start_time: newStart,
+        end_time: newEnd,
+        duration_ms: Math.max(15 * 60 * 1000, durationMs),
+        all_day: false,
+        event_type: values.mode === 'reminder' ? 'reminder' : 'event',
+        location_name: newLocation,
+        address: newAddress,
+        lat: initialEvent.lat ?? null,
+        lng: initialEvent.lng ?? null,
+      },
+      assignments,
+      enrichment,
+    }
+
+    const seriesPatch: Record<string, unknown> = {
+      timezone: recurringContext.series.timezone,
+      recurrence_lines: recurringContext.series.recurrence_lines,
+    }
+
+    const actionId = crypto.randomUUID()
+    const result = await saveRecurringEditorMutation({
+      selected_event_id: initialEvent.id,
+      action_id: actionId,
+      scope,
+      expected_series_revision: recurringContext.series.revision,
+      changed_paths: changedPaths,
+      detail_patch: detailPatch,
+      series_patch: seriesPatch,
+      preserve_exceptions: true,
+    })
+
+    announceRecurringSave({
+      title: newTitle,
+      affected_occurrences: result.result?.affected_occurrences ?? 0,
+      google_sync_status: result.result?.google_sync_status ?? 'not_enabled',
+    })
+
+    if (result.result?.series_revision) {
+      setRecurringContext(current => current ? {
+        ...current,
+        series: { ...current.series, revision: result.result.series_revision }
+      } : current)
+    }
+
+    invalidateCalendar()
+    return true
+  }, [initialEvent, isCanonicalOccurrence, recurringEditorEnabled, recurringEditorWritable, recurringContext, state, invalidateCalendar])
+
   // Update Title
   const updateTitle = useCallback(async (newTitle: string) => {
     setState(prev => ({ ...prev, title: newTitle }))
     if (!initialEvent?.id) return
     try {
-      await updateEventTitle(supabase, queryClient, initialEvent.id, newTitle)
+      const handled = await persistRecurringFieldMutation('title', { title: newTitle })
+      if (!handled) {
+        await updateEventTitle(supabase, queryClient, initialEvent.id, newTitle)
+      }
     } catch (err) {
       console.error('[LivingFlow] Failed to update event title:', err)
     }
-  }, [initialEvent?.id, queryClient])
+  }, [initialEvent?.id, persistRecurringFieldMutation, queryClient])
 
   // Toggle Attendee
   const toggleMember = useCallback(async (memberId: string) => {
@@ -398,11 +530,14 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
 
     if (!initialEvent?.id) return
     try {
-      await toggleEventAttendee(supabase, queryClient, initialEvent, memberId, !isSelected, familyMembers)
+      const handled = await persistRecurringFieldMutation('attendees', { selectedMemberIds: nextIds })
+      if (!handled) {
+        await toggleEventAttendee(supabase, queryClient, initialEvent, memberId, !isSelected, familyMembers)
+      }
     } catch (err) {
       console.error('[LivingFlow] Failed to toggle member:', err)
     }
-  }, [initialEvent, state.selectedMemberIds, familyMembers, queryClient])
+  }, [initialEvent, state.selectedMemberIds, persistRecurringFieldMutation, familyMembers, queryClient])
 
   // Set Travel Behavior
   const setTravelBehavior = useCallback((behavior: TravelBehavior) => {
@@ -477,19 +612,22 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     }
 
     try {
-      await updateEventVenue(supabase, queryClient, initialEvent, {
-        name: calculatedVenue.name,
-        address: calculatedVenue.address,
-        driveMinutes: calculatedVenue.driveMinutes,
-        distanceMiles: calculatedVenue.distanceMiles,
-        routeSummary: calculatedVenue.routeSummary ?? undefined,
-      }, {
-        familyMembers,
-      })
+      const handled = await persistRecurringFieldMutation('venue', { venue: calculatedVenue })
+      if (!handled) {
+        await updateEventVenue(supabase, queryClient, initialEvent, {
+          name: calculatedVenue.name,
+          address: calculatedVenue.address,
+          driveMinutes: calculatedVenue.driveMinutes,
+          distanceMiles: calculatedVenue.distanceMiles,
+          routeSummary: calculatedVenue.routeSummary ?? undefined,
+        }, {
+          familyMembers,
+        })
+      }
     } catch (err) {
       console.error('[LivingFlow] Failed to update venue:', err)
     }
-  }, [initialEvent, state.startDate, state.bufferMinutes, familyMembers, queryClient])
+  }, [initialEvent, state.startDate, state.bufferMinutes, persistRecurringFieldMutation, familyMembers, queryClient])
 
   // Set Start Time and Duration
   const setStartAndDuration = useCallback(async (startDate: Date, durationMins: number) => {
@@ -503,11 +641,14 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
 
     if (!initialEvent?.id) return
     try {
-      await updateEventSchedule(supabase, queryClient, initialEvent, startDate, endDate)
+      const handled = await persistRecurringFieldMutation('schedule', { startDate, endDate, durationMinutes: durationMins })
+      if (!handled) {
+        await updateEventSchedule(supabase, queryClient, initialEvent, startDate, endDate)
+      }
     } catch (err) {
       console.error('[LivingFlow] Failed to update event timing:', err)
     }
-  }, [initialEvent, queryClient])
+  }, [initialEvent, persistRecurringFieldMutation, queryClient])
 
   // Nudge Time (+/- 15m)
   const nudgeMinutes = useCallback((mins: number) => {
@@ -524,11 +665,14 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     setState(prev => ({ ...prev, category: catName, categoryIcon: icon, mode }))
     if (!initialEvent?.id) return
     try {
-      await updateEventCategory(supabase, queryClient, initialEvent.id, catName, mode)
+      const handled = await persistRecurringFieldMutation('category', { category: catName, mode })
+      if (!handled) {
+        await updateEventCategory(supabase, queryClient, initialEvent.id, catName, mode)
+      }
     } catch (err) {
       console.error('[LivingFlow] Failed to update category:', err)
     }
-  }, [initialEvent?.id, queryClient])
+  }, [initialEvent?.id, persistRecurringFieldMutation, queryClient])
 
   // Delete Request Entrypoint
   const requestDelete = useCallback(() => {
@@ -684,6 +828,8 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     scopeImpacts,
     markCompleted,
     snoozeReminder,
-    setRecurScope
+    setRecurScope,
+    isRecurring: isCanonicalOccurrence || Boolean(initialEvent?.recurrence_master_id),
+    isCanonicalOccurrence,
   }
 }

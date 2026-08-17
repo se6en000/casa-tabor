@@ -1,15 +1,16 @@
 import { useState } from 'react'
-import { Link2, X, ChevronDown, Users, Star, Check, Plus, Rotate3d } from 'lucide-react'
+import { Link2, X, ChevronDown, Users, Star, Check, Plus, Rotate3d, Repeat } from 'lucide-react'
 import type { FamilyMember } from '../../../../types'
 import type { RecurrenceScope } from '../types'
 import { getDisplayMemberColor } from '../../../../design-system/memberColors'
-import { IconButton } from '../../../ui'
+import { IconButton, Chip } from '../../../ui'
 
 interface LivingFlowHeaderProps {
   familyMembers: FamilyMember[]
   selectedMemberIds: string[]
   primaryMemberId: string | null
   recurScope: RecurrenceScope
+  isRecurring?: boolean
   onToggleMember: (id: string) => void
   onSetRecurScope: (scope: RecurrenceScope) => void
   onClose: () => void
@@ -21,6 +22,7 @@ export default function LivingFlowHeader({
   selectedMemberIds,
   primaryMemberId,
   recurScope,
+  isRecurring,
   onToggleMember,
   onSetRecurScope,
   onClose,
@@ -87,6 +89,35 @@ export default function LivingFlowHeader({
           />
         </div>
       </div>
+
+      {/* Recurrence Banner & Scope Controls */}
+      {isRecurring && (
+        <div className="px-5 py-2 flex items-center justify-between border-t border-amber-200/60 bg-amber-50/50">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900">
+            <Repeat size={13} className="text-amber-700 shrink-0" />
+            <span>Repeating Event</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-semibold text-slate-500 mr-0.5">Apply edits:</span>
+            <Chip
+              size="sm"
+              tone={recurScope === 'this' ? 'accent' : 'neutral'}
+              selected={recurScope === 'this'}
+              onClick={() => onSetRecurScope('this')}
+            >
+              This only
+            </Chip>
+            <Chip
+              size="sm"
+              tone={recurScope === 'all' ? 'accent' : 'neutral'}
+              selected={recurScope === 'all'}
+              onClick={() => onSetRecurScope('all')}
+            >
+              All repeating
+            </Chip>
+          </div>
+        </div>
+      )}
 
       {/* ══════ INLINE ATTENDEES DRAWER ══════ */}
       {attendeesExpanded && (

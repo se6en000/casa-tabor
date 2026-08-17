@@ -175,6 +175,14 @@ async function syncOne(sb: SupabaseClient, resolved: ResolvedGoogleConnection) {
       sync_token: syncToken,
       last_incremental_sync_at: syncedAt,
     })
+
+    // Keep recurring series synchronized with Google
+    sb.functions.invoke('import-google-recurrence', {
+      body: { connection_id: connection.id },
+    }).catch((recurErr: unknown) => {
+      console.warn(`[sync-calendars] Recurrence import notice for connection ${connection.id}:`, recurErr)
+    })
+
     return { pulled, upserted, quarantine_recovery: quarantineTripped, connection_id: connection.id }
   } catch (cause) {
     const errorMsg = toErrorMessage(cause)

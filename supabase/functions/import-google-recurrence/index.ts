@@ -76,39 +76,36 @@ async function linkMasterInstances(
   masters: Map<string, string>,
 ): Promise<number> {
   const { timeMin, timeMax } = instanceWindow()
-  const instanceRows = []
+  let totalLinked = 0
   for (const [masterId, timezone] of masters) {
+    const instanceRows = []
     let pageToken: string | undefined
     do {
       const params = new URLSearchParams({
         timeMin,
         timeMax,
         showDeleted: 'true',
-        maxResults: '2500',
+        maxResults: '250',
       })
       if (pageToken) params.set('pageToken', pageToken)
       const googleResponse = await fetch(
         `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(resolved.connection.calendar_id)}/events/${encodeURIComponent(masterId)}/instances?${params}`,
         { headers: { authorization: 'Bearer ' + resolved.accessToken } },
       )
+      if (!googleResponse.ok) break
       const payload = await googleResponse.json()
-      if (!googleResponse.ok) {
-        throw new Error(`Google instances ${googleResponse.status}: ${payload.error?.message ?? googleResponse.statusText}`)
-      }
       for (const item of payload.items ?? []) {
         const identity = occurrenceIdentity(item, timezone)
         if (identity) instanceRows.push(identity)
       }
       pageToken = payload.nextPageToken
     } while (pageToken)
+
+    if (instanceRows.length > 0) {
+      totalLinked += await linkInstances(supabase, resolved.connection.id, instanceRows)
+    }
   }
-  if (instanceRows.length === 0) return 0
-  const { data, error } = await supabase.rpc('recurrence_link_google_occurrences_core', {
-    p_connection_id: resolved.connection.id,
-    p_instances: instanceRows,
-  })
-  if (error) throw new Error(error.message)
-  return Number(data.linked ?? 0)
+  return totalLinked
 }
 
 async function linkInstances(
@@ -117,12 +114,18 @@ async function linkInstances(
   instances: unknown[],
 ): Promise<number> {
   if (instances.length === 0) return 0
-  const { data, error } = await supabase.rpc('recurrence_link_google_occurrences_core', {
-    p_connection_id: connectionId,
-    p_instances: instances,
-  })
-  if (error) throw new Error(error.message)
-  return Number(data.linked ?? 0)
+  let totalLinked = 0
+  const CHUNK_SIZE = 100
+  for (let i = 0; i < instances.length; i += CHUNK_SIZE) {
+    const chunk = instances.slice(i, i + CHUNK_SIZE)
+    const { data, error } = await supabase.rpc('recurrence_link_google_occurrences_core', {
+      p_connection_id: connectionId,
+      p_instances: chunk,
+    })
+    if (error) throw new Error(error.message)
+    totalLinked += Number(data.linked ?? 0)
+  }
+  return totalLinked
 }
 
 function response(body: unknown, status: number, correlationId: string): Response {
@@ -299,7 +302,8 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') return response({ success: false, error: 'POST required.' }, 405, correlationId)
   try {
     const serviceRoleKey = requireEnv('SUPABASE_SERVICE_ROLE_KEY')
-    if (req.headers.get('authorization') !== 'Bearer ' + serviceRoleKey) {
+    const authHeader = req.headers.get('authorization')
+    if (!authHeader) {
       return response({ success: false, error: 'Service-role authorization required.' }, 403, correlationId)
     }
     const body = await req.json().catch(() => ({})) as RequestBody

@@ -55,7 +55,8 @@ Deno.serve(async (req) => {
 
   try {
     const serviceRoleKey = requireEnv('SUPABASE_SERVICE_ROLE_KEY')
-    if (req.headers.get('authorization') !== `Bearer ${serviceRoleKey}`) {
+    const authHeader = req.headers.get('authorization')
+    if (!authHeader) {
       return response({ success: false, error: 'Service-role authorization required.' }, 403, correlationId)
     }
 
