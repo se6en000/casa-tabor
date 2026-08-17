@@ -90,7 +90,11 @@ function AppShell() {
   }, [currentZone, setRoomToneZone])
 
   useEffect(() => {
-    const triggerCatchUpSync = () => {
+    let lastCatchUp = 0
+    const triggerCatchUpSync = (force = false) => {
+      const nowMs = Date.now()
+      if (!force && nowMs - lastCatchUp < 60_000) return
+      lastCatchUp = nowMs
       void queryClient.invalidateQueries({ queryKey: ['events'] })
       void queryClient.invalidateQueries({ queryKey: ['grocery'] })
       void queryClient.invalidateQueries({ queryKey: ['notifications'] })
@@ -104,11 +108,11 @@ function AppShell() {
     }
     const onWake  = () => {
       setScreensaverActive(false)
-      triggerCatchUpSync()
+      triggerCatchUpSync(true)
     }
     const onVisibilityOrFocus = () => {
       if (typeof document !== 'undefined' && document.visibilityState !== 'hidden') {
-        triggerCatchUpSync()
+        triggerCatchUpSync(false)
       }
     }
 
@@ -117,7 +121,7 @@ function AppShell() {
     document.addEventListener('wake-kiosk', onWake)
     document.addEventListener('visibilitychange', onVisibilityOrFocus)
     window.addEventListener('focus', onVisibilityOrFocus)
-    window.addEventListener('online', onVisibilityOrFocus)
+    window.addEventListener('online', () => triggerCatchUpSync(true))
 
     return () => {
       document.removeEventListener('screensaver-on', onSleep)
@@ -125,7 +129,7 @@ function AppShell() {
       document.removeEventListener('wake-kiosk', onWake)
       document.removeEventListener('visibilitychange', onVisibilityOrFocus)
       window.removeEventListener('focus', onVisibilityOrFocus)
-      window.removeEventListener('online', onVisibilityOrFocus)
+      window.removeEventListener('online', () => triggerCatchUpSync(true))
     }
   }, [aiDrawerOpen, queryClient])
 

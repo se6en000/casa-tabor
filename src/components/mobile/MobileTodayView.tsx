@@ -149,6 +149,8 @@ export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate 
                 <span>
                   {isHeroTravel && heroTravelEta.data?.leave_by
                     ? `Leave at ${format(new Date(heroTravelEta.data.leave_by), 'h:mm a')} · On Track`
+                    : differenceInMinutes(getEventStartDate(heroEvent), now) > 60
+                    ? `Today at ${format(getEventStartDate(heroEvent), 'h:mm a')}`
                     : `Starts in ${Math.max(1, differenceInMinutes(getEventStartDate(heroEvent), now))} min`}
                 </span>
               )}

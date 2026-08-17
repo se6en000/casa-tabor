@@ -4,13 +4,20 @@ import { useFamilyMembers } from './useFamilyMembers'
 import { useMemberAvailability } from './useMemberAvailability'
 import {
   deserializeRoutineFromAvailabilityRules,
+  deserializeHouseholdRhythm,
   deriveAmbientRoutineStatus,
   isRoutineDropoffException,
   getEstimatedDriveMinutes,
   applyTimeToDate,
   formatChildNames,
+  resolveTodayHandoffStage,
+  getDailyOverrides,
+  saveDailyOverrides,
   type FamilyRoutine,
   type AmbientRoutineStatus,
+  type HouseholdWeekdayRhythm,
+  type HandoffStageInfo,
+  type DailyOverrides,
 } from '../lib/familyRoutines'
 import type { FamilyMember } from '../types'
 
@@ -72,6 +79,12 @@ export interface FamilyRoutineIntelligence {
   allPrepCompleted: boolean
   ambientStatuses: AmbientRoutineStatus[]
   activeRoutinesCount: number
+  householdRhythm: HouseholdWeekdayRhythm
+  handoffStage: HandoffStageInfo
+  dailyOverrides: DailyOverrides
+  setDailyOverride: (key: keyof DailyOverrides, value: unknown) => void
+  toggleEmmeTransport: () => void
+  toggleGiselleOff: () => void
 }
 
 const STORAGE_PREFIX = 'casa_bedtime_prep_'
@@ -359,6 +372,47 @@ export function useFamilyRoutineIntelligence(now: Date = new Date()): FamilyRout
     return deriveAmbientRoutineStatus(familyRoutines, familyMembers as FamilyMember[], now)
   }, [familyRoutines, familyMembers, now])
 
+  // Household Weekday Rhythm (Casa Tabor Baseline)
+  const householdRhythm = useMemo<HouseholdWeekdayRhythm>(() => {
+    return deserializeHouseholdRhythm(availabilityRules, familyMembers as FamilyMember[])
+  }, [availabilityRules, familyMembers])
+
+  // Daily 1-Tap Quick Overrides state
+  const [dailyOverrides, setDailyOverridesState] = useState<DailyOverrides>(() => {
+    return getDailyOverrides(todayKey)
+  })
+
+  const setDailyOverride = useCallback((key: keyof DailyOverrides, value: unknown) => {
+    setDailyOverridesState((prev) => {
+      const next = { ...prev, [key]: value }
+      saveDailyOverrides(todayKey, next)
+      return next
+    })
+  }, [todayKey])
+
+  const toggleEmmeTransport = useCallback(() => {
+    setDailyOverridesState((prev) => {
+      const currentMode = prev.emmeTransportMode || householdRhythm.afternoonChain.emmeDefaultMode
+      const nextMode: 'bus' | 'giselle_carpool' = currentMode === 'bus' ? 'giselle_carpool' : 'bus'
+      const next: DailyOverrides = { ...prev, emmeTransportMode: nextMode }
+      saveDailyOverrides(todayKey, next)
+      return next
+    })
+  }, [todayKey, householdRhythm])
+
+  const toggleGiselleOff = useCallback(() => {
+    setDailyOverridesState((prev) => {
+      const next = { ...prev, giselleOffToday: !prev.giselleOffToday }
+      saveDailyOverrides(todayKey, next)
+      return next
+    })
+  }, [todayKey])
+
+  // Current Handoff Stage
+  const handoffStage = useMemo<HandoffStageInfo>(() => {
+    return resolveTodayHandoffStage(householdRhythm, now)
+  }, [householdRhythm, now, dailyOverrides])
+
   return {
     phase,
     isEvening,
@@ -385,5 +439,12 @@ export function useFamilyRoutineIntelligence(now: Date = new Date()): FamilyRout
     allPrepCompleted,
     ambientStatuses,
     activeRoutinesCount: familyRoutines.length,
+    householdRhythm,
+    handoffStage,
+    dailyOverrides,
+    setDailyOverride,
+    toggleEmmeTransport,
+    toggleGiselleOff,
   }
 }
+
