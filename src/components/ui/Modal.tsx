@@ -57,7 +57,7 @@ export function Modal({
   return createPortal(
     <AnimatePresence onExitComplete={onExitComplete}>
       {open && (
-        <div className={cn('fixed inset-0 z-modal flex items-center justify-center p-4', className)}>
+        <div data-portal-modal="true" className={cn('fixed inset-0 z-modal flex items-center justify-center p-4', className)}>
           <motion.div
             key="modal-backdrop"
             initial={{ opacity: 0 }}

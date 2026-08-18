@@ -188,13 +188,17 @@ export default function SidecarCompanion({
       if (
         target.closest('[data-touch-keyboard]') ||
         target.closest('[data-portal-modal]') ||
+        target.closest('[role="dialog"]') ||
+        target.closest('.z-modal') ||
         target.closest('[data-quick-create]') ||
         target.closest('[data-popover-menu]') ||
         target.closest('#pin-gate') ||
-        target.closest('.quick-create-sheet')
+        target.closest('.quick-create-sheet') ||
+        Boolean(document.querySelector('[role="dialog"]'))
       ) {
         return
       }
+
 
       // 3. Sidecar-Loadable targets (calendar events, action items, Copilot button, prep items):
       // Keep sidecar open so the element's click handler can hot-swap content in place!

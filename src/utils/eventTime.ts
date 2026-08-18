@@ -25,17 +25,26 @@ function looksLikeMidnightTimestamp(value: string): boolean {
 }
 
 export function getEventStartDate(event: EventTimeLike): Date {
-  return event.all_day ? parseDatePortionAsLocal(event.start_time) : asDate(event.start_time)
+  if (!event.all_day) return asDate(event.start_time)
+  if (event.start_time.includes('T')) {
+    return asDate(event.start_time)
+  }
+  return parseDatePortionAsLocal(event.start_time)
 }
 
 export function getEventEndDate(event: EventTimeLike): Date {
   if (!event.all_day) return asDate(event.end_time)
-  const endDayStart = parseDatePortionAsLocal(event.end_time)
-  if (looksLikeMidnightTimestamp(event.end_time)) {
-    return new Date(endDayStart.getTime() - 1)
+  if (event.end_time.includes('T')) {
+    const d = asDate(event.end_time)
+    if (looksLikeMidnightTimestamp(event.end_time)) {
+      return new Date(d.getTime() - 1)
+    }
+    return d
   }
+  const endDayStart = parseDatePortionAsLocal(event.end_time)
   return new Date(endDayStart.getTime() + DAY_MS - 1)
 }
+
 
 export function eventOverlapsRange(event: EventTimeLike, rangeStart: Date, rangeEndExclusive: Date): boolean {
   const start = getEventStartDate(event)
