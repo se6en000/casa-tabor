@@ -55,19 +55,10 @@ function extractAmount(text?: string | null): string | null {
   return match ? match[0] : null
 }
 
-function resolveButtonConfig(item: PrepItem, suggestedPlan?: SuggestedEventPlan | null): {
+function resolveButtonConfig(item: PrepItem): {
   label: string
   Icon: React.ComponentType<{ size?: number; className?: string; strokeWidth?: number }>
-  isSuggestedEvent?: boolean
 } {
-  if (suggestedPlan || item.source_pattern_key === 'event_suggestion' || item.type === 'appointment' || item.type === 'event_suggestion') {
-    return {
-      label: suggestedPlan ? `Add to Calendar (${suggestedPlan.displayDate})` : 'Add to Calendar',
-      Icon: CalendarPlus,
-      isSuggestedEvent: true,
-    }
-  }
-
   const text = (item.description || item.event_title || '').toLowerCase()
   const amount = extractAmount(item.description || item.event_title)
 
@@ -500,7 +491,7 @@ export default function ActionQueueWidget({
                 const HeroBadgeIcon = heroBadge.icon
                 const heroAmount = extractAmount(heroItem.description || heroItem.event_title)
                 const heroSuggestedEvent = detectSuggestedEvent(heroItem)
-                const { label: heroDoneLabel, Icon: HeroDoneIcon, isSuggestedEvent: isHeroSuggestedEvent } = resolveButtonConfig(heroItem, heroSuggestedEvent)
+                const { label: heroDoneLabel, Icon: HeroDoneIcon } = resolveButtonConfig(heroItem)
                 const isHeroSnoozeOpen = openSnoozeId === heroItem.id
                 const isHeroMenuOpen = openMenuId === heroItem.id
                 const isEventAdded = eventAddedItemIds.has(heroItem.id)
@@ -682,18 +673,11 @@ export default function ActionQueueWidget({
                       <Button
                         size="sm"
                         variant="strong"
-                        disabled={isCreating}
-                        onClick={() => {
-                          if (isHeroSuggestedEvent && heroSuggestedEvent) {
-                            handle1TapAddCalendar(heroItem, heroSuggestedEvent)
-                          } else {
-                            onInstantCompleteCluster(heroCluster)
-                          }
-                        }}
+                        onClick={() => onInstantCompleteCluster(heroCluster)}
                         className="px-4 sm:px-5 py-2.5 rounded-full min-h-[48px] text-body-sm font-bold shadow-card flex items-center gap-2 shrink-0 hover:brightness-110"
-                        leadingIcon={isCreating ? <Loader2 size={16} className="animate-spin text-casa-gold" /> : <HeroDoneIcon size={16} strokeWidth={2.5} className="text-emerald-400" />}
+                        leadingIcon={<HeroDoneIcon size={16} strokeWidth={2.5} className="text-emerald-400" />}
                       >
-                        <span>{isEventAdded ? 'Added to Calendar' : heroDoneLabel}</span>
+                        <span>{heroDoneLabel}</span>
                       </Button>
 
                       {/* Primary Anchor 2: Split Snooze Pill with Expandable Presets */}

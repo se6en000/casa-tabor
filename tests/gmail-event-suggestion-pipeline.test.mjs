@@ -74,9 +74,8 @@ test('ActionQueueWidget features 1-tap Add to Calendar for suggested event items
   // 1. Must import CalendarPlus
   assert.match(content, /CalendarPlus/, 'Must import CalendarPlus icon')
 
-  // 2. resolveButtonConfig must support isSuggestedEvent
-  assert.match(content, /isSuggestedEvent/, 'resolveButtonConfig must flag suggested events')
-  assert.match(content, /Add to Calendar/, 'Must provide Add to Calendar button label')
+  // 2. Must provide Add to Calendar button on the orange suggested event banner
+  assert.match(content, /\+ Add to Calendar/, 'Must provide + Add to Calendar button label')
 
   // 3. Must invoke handle1TapAddCalendar on tap
   assert.match(content, /handle1TapAddCalendar/, 'Must define and call handle1TapAddCalendar')
