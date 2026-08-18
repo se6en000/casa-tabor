@@ -350,10 +350,16 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     void queryClient.invalidateQueries({ queryKey: ['prep-items'] })
     void queryClient.invalidateQueries({ queryKey: ['conflicts'] })
     void queryClient.invalidateQueries({ queryKey: ['event-details'] })
+    void queryClient.invalidateQueries({ queryKey: ['member-availability-rules'] })
+    void queryClient.invalidateQueries({ queryKey: ['member-availability-exceptions'] })
     if (initialEvent?.id) {
       void queryClient.invalidateQueries({ queryKey: ['event-details', initialEvent.id] })
     }
     void queryClient.refetchQueries({ queryKey: ['events'], type: 'active' })
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('casa:event-updated', { detail: { eventId: initialEvent?.id } }))
+      window.dispatchEvent(new CustomEvent('casa:overrides-updated'))
+    }
   }, [queryClient, initialEvent?.id])
 
   const persistDriverAndTravel = useCallback(async (

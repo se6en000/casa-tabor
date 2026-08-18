@@ -318,11 +318,26 @@ function useEventsForRange(queryKey: readonly unknown[], start: Date, end: Date)
     const plansByEventId = new Map(
       (transportationQuery.data ?? []).map((row) => [row.event_id, row.transportation_plan]),
     )
+    const deriveEventSourceType = (event: any): 'routine' | 'google' | 'gmail' | 'casa' => {
+      if (event.id?.startsWith('routine-') || event.enrichment?.enriched_by === 'family_routines') {
+        return 'routine'
+      }
+      if (event.google_event_id || event.google_calendar_id) {
+        return 'google'
+      }
+      if (event.flight_number || event.confirmation_number || (event.description && event.description.includes('From: '))) {
+        return 'gmail'
+      }
+      return 'casa'
+    }
+
     const enrichedBaseEvents = baseEvents.map((event) => {
       const transportationPlan = plansByEventId.get(event.id)
-      if (!transportationPlan) return event
+      const sourceType = event.source_type || deriveEventSourceType(event)
+      if (!transportationPlan) return { ...event, source_type: sourceType }
       return {
         ...event,
+        source_type: sourceType,
         plan_override: {
           event_id: event.id,
           verified: null,
@@ -346,6 +361,7 @@ function useEventsForRange(queryKey: readonly unknown[], start: Date, end: Date)
       const reTitle = (re.title || '').toLowerCase()
       const isReDrop = reTitle.includes('drop off')
       const isRePick = reTitle.includes('pick up') || reTitle.includes('picked up')
+      const isReStrings = reTitle.includes('string')
 
       return allHandled.some((be) => {
         const beDate = format(new Date(be.start_time), 'yyyy-MM-dd')
@@ -353,19 +369,26 @@ function useEventsForRange(queryKey: readonly unknown[], start: Date, end: Date)
         const beTitle = (be.title || '').toLowerCase()
         if (beTitle === reTitle) return true
 
-        if (isReDrop && (beTitle.includes('drop off') || beTitle.includes('dropped off'))) {
-          if ((reTitle.includes('palm beach') || reTitle.includes('pbp')) && (beTitle.includes('palm beach') || beTitle.includes('pbp'))) return true
+        // Match Strings / music exception title variations
+        if (isReStrings && beTitle.includes('string')) {
+          if (reTitle.includes('emme') || beTitle.includes('emme')) return true
+        }
+
+        if (isReDrop && (beTitle.includes('drop off') || beTitle.includes('dropped off') || (beTitle.includes('strings') && beTitle.includes('emme')))) {
+          if ((reTitle.includes('palm beach') || reTitle.includes('pbp')) && (beTitle.includes('palm beach') || beTitle.includes('pbp') || beTitle.includes('strings'))) return true
           if (reTitle.includes('bak') && beTitle.includes('bak')) return true
         }
-        if (isRePick && (beTitle.includes('pick up') || beTitle.includes('picked up'))) {
-          if ((reTitle.includes('palm beach') || reTitle.includes('pbp')) && (beTitle.includes('palm beach') || beTitle.includes('pbp') || beTitle.includes('owen & emme'))) return true
+        if (isRePick && (beTitle.includes('pick up') || beTitle.includes('picked up') || (beTitle.includes('strings') && beTitle.includes('emme')))) {
+          if ((reTitle.includes('palm beach') || reTitle.includes('pbp')) && (beTitle.includes('palm beach') || beTitle.includes('pbp') || beTitle.includes('owen & emme') || beTitle.includes('strings'))) return true
           if (reTitle.includes('bak') && beTitle.includes('bak')) return true
         }
         return false
       })
     }
 
-    const newRoutineEvents = routineEventsInRange.filter((re) => !isDuplicateOrHandled(re))
+    const newRoutineEvents = routineEventsInRange
+      .filter((re) => !isDuplicateOrHandled(re))
+      .map((re) => ({ ...re, source_type: 'routine' as const }))
 
     return [...enrichedBaseEvents, ...newRoutineEvents].sort(
       (a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime(),

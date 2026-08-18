@@ -53,17 +53,17 @@ test('routine action events create two discrete short Google Calendar events wit
 
   assert.equal(events.length, 2)
 
-  // 1. Morning Drop-off (Arrival window: 7:45 AM to 8:00 AM)
+  // 1. Morning Drop-off (Target Arrival: 8:00 AM to 8:15 AM)
   const dropEvent = events[0]
   assert.equal(dropEvent.title, 'Drop off Liv @ Bak Middle School')
   const dropStart = new Date(dropEvent.start_time)
   const dropEnd = new Date(dropEvent.end_time)
   const dropDurationMins = (dropEnd.getTime() - dropStart.getTime()) / 60000
-  assert.equal(dropDurationMins, 15) // 7:45 AM to 8:00 AM window
-  assert.equal(dropStart.getHours(), 7)
-  assert.equal(dropStart.getMinutes(), 45)
+  assert.equal(dropDurationMins, 15) // 8:00 AM to 8:15 AM window
+  assert.equal(dropStart.getHours(), 8)
+  assert.equal(dropStart.getMinutes(), 0)
   assert.equal(dropEnd.getHours(), 8)
-  assert.equal(dropEnd.getMinutes(), 0)
+  assert.equal(dropEnd.getMinutes(), 15)
 
   // 2. Afternoon Pick-up (Dismissal window: 2:00 PM to 2:15 PM)
   const pickEvent = events[1]
@@ -77,10 +77,10 @@ test('routine action events create two discrete short Google Calendar events wit
   assert.equal(pickEnd.getHours(), 14)
   assert.equal(pickEnd.getMinutes(), 15)
 
-  // 3. Midday Unblocked Check: The window from 8:00 AM to 2:00 PM is 100% open
+  // 3. Midday Unblocked Check: The window from 8:15 AM to 2:00 PM is 100% open
   const eventsBetween8and2 = events.filter((e) => {
     const s = new Date(e.start_time)
-    return s.getHours() >= 8 && s.getHours() < 14
+    return s.getHours() >= 9 && s.getHours() < 14
   })
   assert.equal(eventsBetween8and2.length, 0)
 })
@@ -142,8 +142,8 @@ test('exceptions_only syncMode filters out normal routine days but syncs Tuesday
   assert.equal(tuesdaySyncEvents.length, 1, 'Tuesday early dropoff must produce only the morning exception event')
   assert.equal(tuesdaySyncEvents[0].title, 'Drop off Liv @ Bak Middle School · Early Strings')
   const tuesdayDropStart = new Date(tuesdaySyncEvents[0].start_time)
-  assert.equal(tuesdayDropStart.getHours(), 6)
-  assert.equal(tuesdayDropStart.getMinutes(), 45) // 6:45 AM arrival for 7:00 AM start
+  assert.equal(tuesdayDropStart.getHours(), 7)
+  assert.equal(tuesdayDropStart.getMinutes(), 0) // 7:00 AM start
 })
 
 test('none syncMode suppresses all external sync events', () => {

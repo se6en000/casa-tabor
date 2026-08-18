@@ -238,11 +238,10 @@ function deriveDeparturesForDate(
   const departures: DepartureItem[] = []
   for (const [key, group] of groups.entries()) {
     const driveMinutes = getEstimatedDriveMinutes(group.venueName, group.venueAddress)
-    const schoolStartTime = group.customSchoolStartTime || applyTimeToDate(targetDate, group.startLocal)
-    const windowStartTime = group.customWindowStartTime || new Date(schoolStartTime.getTime() - 15 * 60000)
+    const targetArrivalTime = group.customSchoolStartTime || applyTimeToDate(targetDate, group.startLocal)
     const departureTime = group.customDepartureTime
       ? new Date(group.customDepartureTime)
-      : new Date(windowStartTime.getTime() - driveMinutes * 60000)
+      : new Date(targetArrivalTime.getTime() - driveMinutes * 60000)
 
     const driverMember = familyMembers.find(
       (m) => m.id === group.driverId || m.name.toLowerCase() === group.driverName.toLowerCase(),
@@ -258,8 +257,8 @@ function deriveDeparturesForDate(
       id: `departure-${key}-${dateKey}`,
       venueName: group.venueName,
       venueAddress: group.venueAddress,
-      arrivalWindow: `${format(windowStartTime, 'h:mm a')} – ${format(schoolStartTime, 'h:mm a')}`,
-      schoolStartTime: format(schoolStartTime, 'h:mm a'),
+      arrivalWindow: format(targetArrivalTime, 'h:mm a'),
+      schoolStartTime: format(targetArrivalTime, 'h:mm a'),
       departureTime: departureTime.toISOString(),
       leaveByTimeFormatted: format(departureTime, 'h:mm a'),
       minutesUntilLeave,

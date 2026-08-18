@@ -20,6 +20,7 @@ import { WeatherIcon } from '../shared/WeatherIcon'
 import { BirthdayCardDecoration } from '../shared/BirthdayCardDecoration'
 import { eventOverlapsDay, getEventDisplayStartDay, getEventEndDate, getEventStartDate } from '../../utils/eventTime'
 import { PersonAvatarStack, CalendarPill, Button } from '../ui'
+import { EventProvenanceBadge } from './EventProvenanceBadge'
 import type { FamilyMember } from '../../types'
 import { deriveCalendarCardResponsibility } from '../../lib/calendarResponsibility'
 import { resolveEventMode } from '../../lib/eventPlanOverrides'
@@ -618,6 +619,7 @@ function EventCard({ event, household, now = new Date(), isHighlighted = false, 
               : format(start, 'h:mm a')}
           </span>
           <span className="text-casa-divider shrink-0">•</span>
+          <EventProvenanceBadge sourceType={event.source_type} isHeroState={isHeroState} />
           <span className="text-caption sm:text-body-sm font-semibold text-casa-navy truncate">
             {isBirthday && <span className="mr-1" aria-hidden="true">🎂</span>}
             {cleanTitle}
@@ -760,15 +762,18 @@ function EventCard({ event, household, now = new Date(), isHighlighted = false, 
         )}
       >
         <div className="space-y-1 min-w-0">
-          {/* Title — Same crisp font as reminder titles */}
-          <p
-            className={cn(
-              'stacked-event-title font-bold text-body leading-snug line-clamp-2',
-              isHeroState ? 'text-white' : 'text-casa-navy'
-            )}
-          >
-            {cleanTitle}
-          </p>
+          {/* Title and Provenance */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <EventProvenanceBadge sourceType={event.source_type} isHeroState={isHeroState} />
+            <p
+              className={cn(
+                'stacked-event-title font-bold text-body leading-snug line-clamp-2',
+                isHeroState ? 'text-white' : 'text-casa-navy'
+              )}
+            >
+              {cleanTitle}
+            </p>
+          </div>
 
           {/* Location / Mode / Leave by */}
           {(event.location_name || isHosted) && (

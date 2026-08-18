@@ -85,6 +85,8 @@ export interface CalendarEvent {
   leg_type: string | null
   flight_number: string | null
   confirmation_number: string | null
+  // Provenance / Source type
+  source_type?: 'routine' | 'google' | 'gmail' | 'casa'
   // Joined
   members?: EventMember[]
   enrichment?: EventEnrichment | null

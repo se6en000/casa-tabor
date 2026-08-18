@@ -893,7 +893,7 @@ export default function FamilySettingsPage() {
                                 <div>
                                   <p className="text-caption font-semibold text-casa-navy uppercase tracking-wide">Recurring Schedule & Routine</p>
                                   <p className="text-caption text-casa-muted mt-0.5">
-                                    Configures daily school or summer camp times with automatic morning drop-off & afternoon pick-up events.
+                                    Configures daily school, camp, or recurring schedule times with automatic departure calculation, driver assignment, and calendar sync.
                                   </p>
                                 </div>
 
@@ -960,12 +960,12 @@ export default function FamilySettingsPage() {
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                                       <div>
                                         <label className="block text-caption font-semibold text-casa-muted uppercase tracking-wide mb-1">
-                                          {currentRoutineType === 'camp' ? 'Camp / Program' : 'School / Venue'}
+                                          {currentRoutineType === 'camp' ? 'Camp / Program' : currentRoutineType === 'work' ? 'Workplace / Office' : 'School / Destination'}
                                         </label>
                                         <SmartPlaceInput
                                           field="name"
-                                          label={currentRoutineType === 'camp' ? 'Camp / Program' : 'School / Venue'}
-                                          placeholder={currentRoutineType === 'camp' ? 'Summer Day Camp' : 'Search saved school (e.g. Palm Beach Public)…'}
+                                          label={currentRoutineType === 'camp' ? 'Camp / Program' : currentRoutineType === 'work' ? 'Workplace / Office' : 'School / Destination'}
+                                          placeholder={currentRoutineType === 'camp' ? 'Summer Day Camp' : 'Search saved place (e.g. Palm Beach Public, Office)…'}
                                           value={{ name: routine.venueName || '', address: routine.venueAddress || '' }}
                                           onChange={(place) => {
                                             patchRoutine(m.id!, {

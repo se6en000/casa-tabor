@@ -19,6 +19,7 @@ import { WeatherIcon } from '../shared/WeatherIcon'
 import { LeaveByCard } from '../shared/LeaveByCard'
 import { BirthdayCardDecoration } from '../shared/BirthdayCardDecoration'
 import { Button, CalendarPill, IconButton, PersonAvatarStack } from '../ui'
+import { EventProvenanceBadge } from './EventProvenanceBadge'
 import SnoozeMenu from '../shared/SnoozeMenu'
 import type { SnoozeDuration } from '../../utils/snoozeDuration'
 import { differenceInDays } from 'date-fns'
@@ -337,6 +338,7 @@ export function DayEventCard({
               {event.all_day ? 'ALL DAY' : format(start, 'h:mm a')}
             </span>
             <span className="text-casa-divider shrink-0">•</span>
+            <EventProvenanceBadge sourceType={event.source_type} />
             <span className="text-caption sm:text-body-sm font-semibold text-casa-navy truncate">
               {isBirthday && <span className="mr-1" aria-hidden="true">🎂</span>}
               {cleanTitle}
@@ -472,10 +474,13 @@ export function DayEventCard({
           {/* Top Row: Title + Quick Navigation Button */}
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <p className="font-display text-body-lg sm:text-heading font-bold text-casa-navy leading-snug truncate md:overflow-visible md:text-clip md:whitespace-normal">
-                {isBirthday && <span className="mr-1" aria-hidden="true">🎂</span>}
-                {cleanTitle}
-              </p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <EventProvenanceBadge sourceType={event.source_type} />
+                <p className="font-display text-body-lg sm:text-heading font-bold text-casa-navy leading-snug truncate md:overflow-visible md:text-clip md:whitespace-normal">
+                  {isBirthday && <span className="mr-1" aria-hidden="true">🎂</span>}
+                  {cleanTitle}
+                </p>
+              </div>
               <div className="flex items-center flex-wrap gap-x-3 gap-y-0.5 mt-1">
                 {event.location_name && (
                   isHosted ? (

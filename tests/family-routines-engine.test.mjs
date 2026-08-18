@@ -170,14 +170,14 @@ test('generateConsolidatedRoutineActionEvents merges Owen & Emme into 1 PBP even
   assert.equal(pbpDrop.title, 'Drop off Owen & Emme @ Palm Beach Public Elementary School')
   // PBP drive time: 10 mins
   assert.equal(pbpDrop.enrichment?.drive_time_mins, 10)
-  // Drop-off window: 7:45 AM - 8:00 AM
+  // Drop-off target arrival: 8:00 AM
   const pbpStart = new Date(pbpDrop.start_time)
-  assert.equal(pbpStart.getHours(), 7)
-  assert.equal(pbpStart.getMinutes(), 45)
-  // Leave time: 7:45 AM - 10m = 7:35 AM
+  assert.equal(pbpStart.getHours(), 8)
+  assert.equal(pbpStart.getMinutes(), 0)
+  // Leave time: 8:00 AM - 10m = 7:50 AM
   const pbpDep = new Date(pbpDrop.enrichment.departure_time)
   assert.equal(pbpDep.getHours(), 7)
-  assert.equal(pbpDep.getMinutes(), 35)
+  assert.equal(pbpDep.getMinutes(), 50)
   // Check passengers: Owen & Emme
   const pbpPassengers = pbpDrop.members.filter(m => m.role === 'passenger')
   assert.equal(pbpPassengers.length, 2)
@@ -189,14 +189,14 @@ test('generateConsolidatedRoutineActionEvents merges Owen & Emme into 1 PBP even
   assert.equal(bakDrop.title, 'Drop off Liv @ Bak Middle School of the Arts')
   // Bak drive time: 18 mins
   assert.equal(bakDrop.enrichment?.drive_time_mins, 18)
-  // Drop-off window: 7:45 AM - 8:00 AM
+  // Drop-off target arrival: 8:00 AM
   const bakStart = new Date(bakDrop.start_time)
-  assert.equal(bakStart.getHours(), 7)
-  assert.equal(bakStart.getMinutes(), 45)
-  // Leave time: 7:45 AM - 18m = 7:27 AM
+  assert.equal(bakStart.getHours(), 8)
+  assert.equal(bakStart.getMinutes(), 0)
+  // Leave time: 8:00 AM - 18m = 7:42 AM
   const bakDep = new Date(bakDrop.enrichment.departure_time)
   assert.equal(bakDep.getHours(), 7)
-  assert.equal(bakDep.getMinutes(), 27)
+  assert.equal(bakDep.getMinutes(), 42)
   // Check passenger: Liv
   const bakPassengers = bakDrop.members.filter(m => m.role === 'passenger')
   assert.equal(bakPassengers.length, 1)
@@ -305,18 +305,18 @@ test('DayScheduleOverride correctly splits siblings on custom days and merges on
     date: tuesday,
   })
 
-  // On Tuesday morning: Emme is at 6:45-7:00 AM, Owen is at 7:45-8:00 AM, Liv is at 7:45-8:00 AM -> 3 drop-off cards!
+  // On Tuesday morning: Emme is at 7:00 AM (Early Strings), Owen is at 8:00 AM, Liv is at 8:00 AM -> 3 drop-off cards!
   const emmeDrop = tuesdayEvents.find(e => e.title.includes('Drop off Emme @ Palm Beach'))
   assert.notEqual(emmeDrop, undefined)
   const emmeStart = new Date(emmeDrop.start_time)
-  assert.equal(emmeStart.getHours(), 6)
-  assert.equal(emmeStart.getMinutes(), 45)
+  assert.equal(emmeStart.getHours(), 7)
+  assert.equal(emmeStart.getMinutes(), 0)
 
   const owenDrop = tuesdayEvents.find(e => e.title.includes('Drop off Owen @ Palm Beach'))
   assert.notEqual(owenDrop, undefined)
   const owenStart = new Date(owenDrop.start_time)
-  assert.equal(owenStart.getHours(), 7)
-  assert.equal(owenStart.getMinutes(), 45)
+  assert.equal(owenStart.getHours(), 8)
+  assert.equal(owenStart.getMinutes(), 0)
 
   // Wednesday, Aug 19, 2026: Standard day -> Owen & Emme automatically merged into 1 card!
   const wednesday = new Date('2026-08-19T10:00:00.000-04:00')

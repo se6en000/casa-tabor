@@ -8,6 +8,7 @@ import {
   Check, Bell, X, Pencil
 } from 'lucide-react'
 import type { LivingFlowMode } from '../types'
+import { EventProvenanceBadge } from '../../EventProvenanceBadge'
 
 interface LivingHeroTitleCardProps {
   title: string
@@ -16,6 +17,7 @@ interface LivingHeroTitleCardProps {
   startDate: Date
   durationMinutes: number
   isAllDay?: boolean
+  sourceType?: string
   onUpdateTitle: (newTitle: string) => void
   onSetStartAndDuration: (startDate: Date, durationMins: number, isAllDay?: boolean) => void
   onSelectCategory: (catName: string, icon: string, mode: LivingFlowMode) => void
@@ -49,6 +51,7 @@ export default function LivingHeroTitleCard({
   startDate,
   durationMinutes,
   isAllDay = false,
+  sourceType,
   onUpdateTitle,
   onSetStartAndDuration,
   onSelectCategory,
@@ -205,6 +208,8 @@ export default function LivingHeroTitleCard({
 
       {/* Meta Pills Cluster */}
       <div className="flex flex-wrap items-center gap-1.5 mt-3">
+        {sourceType && <EventProvenanceBadge sourceType={sourceType} />}
+
         {/* Category Pill */}
         <button
           onClick={() => setExpandedSection(prev => prev === 'category' ? null : 'category')}

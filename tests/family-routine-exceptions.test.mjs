@@ -41,16 +41,13 @@ test('Family Routine Intelligence: departure calculation with override start tim
   const driveMinutes = getEstimatedDriveMinutes('Bak Middle School of the Arts', '')
   assert.equal(driveMinutes, 18, 'Drive time for Bak should be 18 minutes')
 
-  const schoolStartTime = applyTimeToDate(targetDate, overrideStart)
-  const windowStartTime = new Date(schoolStartTime.getTime() - 15 * 60000)
-  const departureTime = new Date(windowStartTime.getTime() - driveMinutes * 60000)
+  const targetArrivalTime = applyTimeToDate(targetDate, overrideStart)
+  const departureTime = new Date(targetArrivalTime.getTime() - driveMinutes * 60000)
 
-  assert.equal(schoolStartTime.getHours(), 7)
-  assert.equal(schoolStartTime.getMinutes(), 0)
-  assert.equal(windowStartTime.getHours(), 6)
-  assert.equal(windowStartTime.getMinutes(), 45)
+  assert.equal(targetArrivalTime.getHours(), 7)
+  assert.equal(targetArrivalTime.getMinutes(), 0)
   assert.equal(departureTime.getHours(), 6)
-  assert.equal(departureTime.getMinutes(), 27)
+  assert.equal(departureTime.getMinutes(), 42) // 7:00 AM - 18m = 6:42 AM
 })
 
 test('Family Routine Intelligence: deserializeRoutineFromAvailabilityRules with dayOverrides', () => {
@@ -149,4 +146,26 @@ test('Family Routine Intelligence: deserializeRoutineFromAvailabilityRules selec
   assert.equal(deserialized.dayOverrides?.length, 1)
   assert.equal(deserialized.dayOverrides[0].label, 'Beethoven Strings')
 })
+
+test('Family Routine Generalization: createWorkRoutine and updateRoutineDayOverrideFromEvent', async () => {
+  const { createWorkRoutine, updateRoutineDayOverrideFromEvent } = await import('../src/lib/familyRoutines.ts')
+  const workRoutine = createWorkRoutine('jake-123', 'Jake', 'Downtown Office', '100 Clematis St')
+  assert.equal(workRoutine.routineType, 'work')
+  assert.equal(workRoutine.title, 'Work Routine')
+  assert.equal(workRoutine.startLocal, '08:30')
+  assert.equal(workRoutine.endLocal, '17:30')
+
+  // Edit recurring drop-off / arrival for Tuesday
+  const updated = updateRoutineDayOverrideFromEvent(workRoutine, {
+    title: 'Early Client Meeting',
+    start_time: '2026-08-18T07:15:00.000-04:00',
+    driverName: 'Jake',
+  }, 2)
+
+  assert.equal(updated.dayOverrides?.length, 1)
+  assert.equal(updated.dayOverrides[0].dayOfWeek, 2)
+  assert.equal(updated.dayOverrides[0].startLocal, '07:15')
+  assert.equal(updated.dayOverrides[0].label, 'Early Client Meeting')
+})
+
 

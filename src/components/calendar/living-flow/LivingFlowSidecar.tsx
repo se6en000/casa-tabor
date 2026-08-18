@@ -106,6 +106,7 @@ export default function LivingFlowSidecar({
           startDate={state.startDate}
           durationMinutes={state.durationMinutes}
           isAllDay={state.isAllDay}
+          sourceType={event?.source_type}
           onUpdateTitle={updateTitle}
           onSetStartAndDuration={setStartAndDuration}
           onSelectCategory={setCategory}

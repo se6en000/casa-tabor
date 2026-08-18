@@ -158,7 +158,7 @@ export async function materializeSyntheticRoutineEvent(
   const routeSummary = isAllDay ? null : (overrides?.venue?.routeSummary ?? syntheticEvent.enrichment?.route_summary ?? (driveMins ? `${driveMins} min drive` : null))
 
   const depTimeIso = (!isAllDay && driveMins > 0)
-    ? new Date(new Date(startTime).getTime() - (driveMins + 5) * 60000).toISOString()
+    ? new Date(new Date(startTime).getTime() - driveMins * 60000).toISOString()
     : (isAllDay ? null : (syntheticEvent.enrichment?.departure_time ?? null))
 
   const { error: evErr } = await supabase
