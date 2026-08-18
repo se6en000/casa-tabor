@@ -1,5 +1,5 @@
 import { type RefObject, type KeyboardEvent, type PointerEvent } from 'react'
-import { Sparkles, Plus, Mic } from 'lucide-react'
+import { Sparkles, Mic } from 'lucide-react'
 import { Button, Chip, Heading, IconButton, Input } from '../ui'
 import { cn } from '../../utils/cn'
 import { type ParsedVoiceGroceryItem } from '../../utils/groceryBatchVoiceParser.ts'
@@ -102,26 +102,39 @@ export default function GroceryCommandBar({
       <div className="space-y-2">
         <div
           className={cn(
-            'w-full max-w-2xl flex items-center gap-2 rounded-2xl border px-4 py-1.5 shadow-2xs transition-all',
+            'w-full max-w-2xl flex items-center gap-2 rounded-2xl border px-2.5 py-1.5 shadow-2xs transition-all',
             isListening
               ? 'bg-casa-accent-subtle/80 border-casa-gold ring-2 ring-casa-gold/25 shadow-md'
               : 'bg-casa-surface border-casa-border focus-within:border-casa-gold/60 focus-within:ring-2 focus-within:ring-casa-gold/15'
           )}
         >
-          {isListening ? (
-            <div className="flex items-center gap-2 text-casa-top-pick-band shrink-0">
-              <Mic size={17} className="text-casa-gold animate-pulse" />
-              {/* Luxury Champagne Audio Waveform (Wavy Soundwave Line) */}
-              <div className="tactile-waveform" aria-label="Listening audio waveform">
-                <span />
-                <span />
-                <span />
-                <span />
-                <span />
-              </div>
+          {/* Luxury Strict Press-and-Hold Microphone Trigger on Left */}
+          <IconButton
+            variant={isListening ? 'secondary' : 'ghost'}
+            size="sm"
+            onPointerDown={onMicPointerDown}
+            onPointerUp={onMicPointerUp}
+            onPointerCancel={onMicPointerCancel}
+            aria-label={isListening ? 'Release to add items' : 'Press and hold to speak grocery list'}
+            title={isListening ? 'Listening... release to add items' : 'Press and hold to speak grocery list'}
+            className={cn(
+              'shrink-0 select-none touch-none transition-all duration-200',
+              isListening
+                ? 'bg-casa-gold text-white shadow-2xs scale-105'
+                : 'text-casa-gold hover:text-casa-navy hover:bg-casa-accent-soft'
+            )}
+            icon={<Mic size={17} />}
+          />
+
+          {/* Undulating Champagne Soundwave while listening */}
+          {isListening && (
+            <div className="tactile-waveform shrink-0" aria-label="Listening audio waveform">
+              <span />
+              <span />
+              <span />
+              <span />
+              <span />
             </div>
-          ) : (
-            <Plus size={18} className="text-casa-gold shrink-0" />
           )}
 
           <Input
@@ -140,24 +153,6 @@ export default function GroceryCommandBar({
               isListening ? 'placeholder:text-casa-top-pick-band font-medium' : 'placeholder:text-casa-muted/60'
             )}
             aria-label="Add grocery item"
-          />
-
-          {/* Luxury Strict Press-and-Hold Microphone Trigger */}
-          <IconButton
-            variant={isListening ? 'secondary' : 'ghost'}
-            size="sm"
-            onPointerDown={onMicPointerDown}
-            onPointerUp={onMicPointerUp}
-            onPointerCancel={onMicPointerCancel}
-            aria-label={isListening ? 'Release to add items' : 'Press and hold to speak grocery list'}
-            title={isListening ? 'Listening... release to add items' : 'Press and hold to speak grocery list'}
-            className={cn(
-              'shrink-0 select-none touch-none transition-all duration-200',
-              isListening
-                ? 'bg-casa-gold text-white shadow-2xs scale-105'
-                : 'text-casa-gold hover:text-casa-navy hover:bg-casa-accent-soft'
-            )}
-            icon={<Mic size={17} />}
           />
 
           <Button

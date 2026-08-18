@@ -2,7 +2,6 @@ import { useState, useRef, useCallback, type KeyboardEvent } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ShoppingCart,
-  Plus,
   Trash2,
   X,
   Mic,
@@ -501,21 +500,7 @@ export default function MobileGroceryView({
           </AnimatePresence>
 
           {/* Input & Voice Row */}
-          <div className="flex items-center gap-1.5 bg-casa-bg rounded-2xl border border-casa-border px-3 h-12 shadow-inner focus-within:ring-2 focus-within:ring-casa-gold/40 focus-within:border-casa-gold/60 transition-all">
-            <Plus size={18} className="text-casa-gold shrink-0" />
-            <input
-              ref={inputRef}
-              type="text"
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={handleKeyDown}
-              enterKeyHint="done"
-              autoComplete="off"
-              autoCorrect="off"
-              placeholder={listening ? 'Listening to voice…' : 'Add grocery item…'}
-              className="flex-1 min-w-0 bg-transparent text-body-sm text-casa-text placeholder:text-casa-muted outline-none"
-            />
-
+          <div className="flex items-center gap-1.5 bg-casa-bg rounded-2xl border border-casa-border px-2.5 h-12 shadow-inner focus-within:ring-2 focus-within:ring-casa-gold/40 focus-within:border-casa-gold/60 transition-all">
             {dictationSupported && (
               <IconButton
                 icon={<Mic size={17} />}
@@ -526,9 +511,36 @@ export default function MobileGroceryView({
                 onPointerCancel={handleMicPointerCancel}
                 aria-label={listening ? 'Release to add grocery items' : 'Hold to speak grocery items'}
                 title={listening ? 'Listening... release to add' : 'Press and hold to speak'}
-                className={cn('h-8 w-8 shrink-0 touch-none select-none', listening && 'bg-casa-gold text-white shadow-2xs scale-105')}
+                className={cn(
+                  'h-8 w-8 shrink-0 touch-none select-none transition-all duration-200',
+                  listening ? 'bg-casa-gold text-white shadow-2xs scale-105' : 'text-casa-gold hover:text-casa-navy hover:bg-casa-accent-soft'
+                )}
               />
             )}
+
+            {/* Undulating Champagne Waveform on mobile while listening */}
+            {listening && (
+              <div className="tactile-waveform shrink-0 mr-1" aria-label="Listening audio waveform">
+                <span />
+                <span />
+                <span />
+                <span />
+                <span />
+              </div>
+            )}
+
+            <input
+              ref={inputRef}
+              type="text"
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={handleKeyDown}
+              enterKeyHint="done"
+              autoComplete="off"
+              autoCorrect="off"
+              placeholder={listening ? 'Listening… release to add' : 'Add grocery item…'}
+              className="flex-1 min-w-0 bg-transparent text-body-sm text-casa-text placeholder:text-casa-muted outline-none"
+            />
 
             <Button
               variant="champagne"
