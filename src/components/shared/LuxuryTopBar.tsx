@@ -6,6 +6,7 @@ import {
   Bell,
   AlertCircle,
   AlertTriangle,
+  RefreshCw,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useLiveClock } from '../../hooks/useLiveClock'
@@ -378,6 +379,16 @@ function UtilityTrack({
         />
       )}
 
+      {/* Refresh Screen */}
+      <IconButton
+        icon={<RefreshCw size={19} strokeWidth={1.8} />}
+        aria-label="Refresh Page"
+        onClick={() => window.location.reload()}
+        title="Refresh Page"
+        variant="ghost"
+        className={iconCn(false)}
+      />
+
       {/* Triage Bell with Luxury Complication Badge */}
       <div className="relative inline-flex items-center justify-center">
         <IconButton
@@ -481,6 +492,21 @@ export default function LuxuryTopBar() {
           <span className="topbar-gold-divider hidden lg:block" />
 
           <UtilityTrack isWarm={isWarm} isCanvas={isCanvas} />
+
+          {/* Mobile Refresh Button */}
+          <div className="sm:hidden">
+            <IconButton
+              icon={<RefreshCw size={16} strokeWidth={1.8} />}
+              aria-label="Refresh Page"
+              onClick={() => window.location.reload()}
+              size="sm"
+              variant="ghost"
+              className={cn(
+                'w-9 h-9 rounded-full flex items-center justify-center transition-colors',
+                isWarm ? 'bg-casa-surface/60 border border-casa-border/40 text-casa-navy' : 'bg-white/10 text-white'
+              )}
+            />
+          </div>
 
           {/* Mobile Notification Bell Button */}
           <div className="relative sm:hidden">

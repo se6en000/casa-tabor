@@ -1,7 +1,7 @@
 import { useMemo, useRef } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
-import { Cloud, Settings, Bell } from 'lucide-react'
+import { Cloud, Settings, Bell, RefreshCw } from 'lucide-react'
 import { useLiveClock } from '../../hooks/useLiveClock'
 import { useHomeWeather } from '../../hooks/useHomeWeather'
 import { useWeekConflicts } from '../../hooks/useConflicts'
@@ -148,6 +148,21 @@ export default function CanvasTopBar() {
               : 'bg-white/[0.06] border-white/[0.12] shadow-2xs backdrop-blur-md'
           )}
         >
+          {/* Refresh Page */}
+          <IconButton
+            icon={<RefreshCw size={19} strokeWidth={1.8} />}
+            aria-label="Refresh Page"
+            onClick={() => window.location.reload()}
+            title="Refresh Page"
+            variant="ghost"
+            className={cn(
+              'size-control rounded-full flex items-center justify-center transition-all duration-150',
+              isCalm
+                ? 'text-casa-text-secondary hover:text-casa-navy hover:bg-black/5 active:scale-95'
+                : 'text-white/70 hover:text-white hover:bg-white/10 active:scale-95'
+            )}
+          />
+
           {/* Triage Bell with Luxury Complication Badge */}
           <div className="relative inline-flex items-center justify-center">
             <IconButton

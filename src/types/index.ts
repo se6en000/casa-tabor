@@ -79,6 +79,7 @@ export interface CalendarEvent {
   series_revision_applied?: number | null
   created_at: string
   updated_at: string
+  deleted_at?: string | null
   // Trip leg fields (new leg-based model)
   trip_id: string | null
   leg_type: string | null

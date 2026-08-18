@@ -13,6 +13,7 @@ import {
 import { useSaveEnrichmentBatch, useEnrichEvent } from '../../hooks/useEnrichEvent'
 import ChecklistEditor from './ChecklistEditor'
 import { supabase } from '../../lib/supabase'
+import { deleteCalendarEvent } from '../../lib/eventMutations'
 import { useQueryClient } from '@tanstack/react-query'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
 import BounceScroll from '../shared/BounceScroll'
@@ -1282,7 +1283,15 @@ function EventEditSheetContent({
     try {
       if (event.google_event_id) {
         try {
-          const googleDelete = await supabase.functions.invoke('delete-google-event', { body: { event_id: event.id } })
+          const googleDelete = await supabase.functions.invoke('delete-google-event', {
+            body: {
+              event_id: event.id,
+              google_event_id: event.google_event_id,
+              google_calendar_id: event.google_calendar_id,
+              google_connection_id: event.google_connection_id,
+              source_member_id: event.source_member_id,
+            },
+          })
           if (googleDelete.error) {
             const errorMsg = String(googleDelete.error.message || '')
             const isNotFound = errorMsg.includes('404') || /not\s*found/i.test(errorMsg)
@@ -1298,9 +1307,7 @@ function EventEditSheetContent({
           }
         }
       }
-      const { error } = await supabase.from('events').delete().eq('id', event.id)
-      if (error) throw new Error(`Casa deletion failed: ${error.message}`)
-      await qc.invalidateQueries({ queryKey: ['events'] })
+      await deleteCalendarEvent(supabase, qc, event.id, event)
       onClose()
     } catch (cause) {
       setDeleteError(cause instanceof Error ? cause.message : 'Could not delete this event.')

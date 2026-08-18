@@ -17,37 +17,52 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
   const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
 
-  const { event_id } = await req.json().catch(() => ({}))
-  if (!event_id) return err('event_id required', 400)
+  const payload = await req.json().catch(() => ({}))
+  const { event_id } = payload
+  if (!event_id && !payload.google_event_id) return err('event_id or google_event_id required', 400)
 
-  // Load event — only need Google IDs and source member
-  const { data: event, error: evErr } = await sb
-    .from('events')
-    .select('id, google_event_id, google_calendar_id, google_connection_id, source_member_id')
-    .eq('id', event_id)
-    .single()
+  let googleEventId = payload.google_event_id as string | undefined
+  let googleCalendarId = payload.google_calendar_id as string | undefined
+  let googleConnectionId = payload.google_connection_id as string | undefined
+  let sourceMemberId = payload.source_member_id as string | undefined
 
-  if (evErr || !event) return err(evErr?.message ?? 'event not found', 404)
-  if (!event.google_event_id) {
+  // If Google IDs not directly provided in payload, load from events table
+  if (!googleEventId && event_id) {
+    const { data: event, error: evErr } = await sb
+      .from('events')
+      .select('id, google_event_id, google_calendar_id, google_connection_id, source_member_id')
+      .eq('id', event_id)
+      .maybeSingle()
+
+    if (event) {
+      googleEventId = event.google_event_id
+      googleCalendarId = event.google_calendar_id
+      googleConnectionId = event.google_connection_id
+      sourceMemberId = event.source_member_id
+    }
+  }
+
+  if (!googleEventId) {
     // No Google event to delete — nothing to do
     return ok({ skipped: 'no google_event_id' })
   }
 
   let connection: CalendarConnection | null = null
-  if (event.google_connection_id) {
+  if (googleConnectionId) {
     const { data: conn, error: connectionError } = await sb
       .from('calendar_connections')
       .select('*')
-      .eq('id', event.google_connection_id)
+      .eq('id', googleConnectionId)
       .maybeSingle()
     if (connectionError) return err(connectionError.message)
     connection = conn as CalendarConnection | null
   }
-  if (!connection && event.source_member_id) {
+  const source_member_id = sourceMemberId
+  if (!connection && source_member_id) {
     const { data: conn } = await sb
       .from('calendar_connections')
       .select('*')
-      .eq('family_member_id', event.source_member_id)
+      .eq('family_member_id', source_member_id)
       .eq('is_enabled', true)
       .maybeSingle()
     connection = conn as CalendarConnection | null
@@ -70,8 +85,8 @@ Deno.serve(async (req) => {
     const resolved = await resolveGoogleConnection(sb, connection)
     await deleteGoogleEvent({
       accessToken: resolved.accessToken,
-      calendarId: event.google_calendar_id || resolved.connection.calendar_id,
-      eventId: event.google_event_id,
+      calendarId: googleCalendarId || resolved.connection.calendar_id,
+      eventId: googleEventId,
     })
     await markGoogleConnectionHealthy(sb, resolved.connection.id)
   } catch (cause) {
@@ -80,14 +95,16 @@ Deno.serve(async (req) => {
     return err(error.message)
   }
 
-  await sb.from('events').update({
-    google_event_id: null,
-    google_calendar_id: null,
-    google_connection_id: null,
-    updated_at: new Date().toISOString(),
-  }).eq('id', event_id)
+  if (event_id) {
+    await sb.from('events').update({
+      google_event_id: null,
+      google_calendar_id: null,
+      google_connection_id: null,
+      updated_at: new Date().toISOString(),
+    }).eq('id', event_id)
+  }
 
-  return ok({ deleted: event.google_event_id })
+  return ok({ deleted: googleEventId })
 })
 
 function ok(body: object) {

@@ -182,23 +182,30 @@ function normalizeEventRow(row: any): EventWithDetails {
   }
 }
 
-async function fetchEventsForRange(start: Date, end: Date): Promise<EventWithDetails[]> {
+interface RangeEventsResult {
+  active: EventWithDetails[]
+  cancelled: EventWithDetails[]
+}
+
+async function fetchEventsForRange(start: Date, end: Date): Promise<RangeEventsResult> {
   const { data: events, error } = await supabase
     .from('events')
     .select(EVENT_SUMMARY_SELECT)
     .lt('start_time', end.toISOString())
     .gt('end_time', start.toISOString())
-    .is('deleted_at', null)
-    .neq('status', 'cancelled')
     .neq('record_kind', 'series_template')
     .order('start_time')
 
   if (error) throw error
 
-  return (events || [])
-    .map(normalizeEventRow)
-    // Keep all-day events anchored to their configured local date portion.
+  const normalized = (events || []).map(normalizeEventRow)
+  const active = normalized
+    .filter((event) => event.status !== 'cancelled')
     .filter((event) => eventOverlapsRange(event, start, end))
+  const cancelled = normalized
+    .filter((event) => event.status === 'cancelled')
+
+  return { active, cancelled }
 }
 
 export async function fetchEventDetails(eventId: string): Promise<EventWithDetails | null> {
@@ -305,11 +312,13 @@ function useEventsForRange(queryKey: readonly unknown[], start: Date, end: Date)
   }, [familyRoutines, familyMembers, start, end])
 
   const events = useMemo(() => {
-    if (!eventsQuery.data) return eventsQuery.data
+    if (!eventsQuery.data) return undefined
+    const baseEvents = eventsQuery.data.active
+    const cancelledEvents = eventsQuery.data.cancelled
     const plansByEventId = new Map(
       (transportationQuery.data ?? []).map((row) => [row.event_id, row.transportation_plan]),
     )
-    const baseEvents = eventsQuery.data.map((event) => {
+    const enrichedBaseEvents = baseEvents.map((event) => {
       const transportationPlan = plansByEventId.get(event.id)
       if (!transportationPlan) return event
       return {
@@ -330,13 +339,15 @@ function useEventsForRange(queryKey: readonly unknown[], start: Date, end: Date)
       }
     })
 
+    const allHandled = [...enrichedBaseEvents, ...cancelledEvents]
+
     const isDuplicateOrHandled = (re: EventWithDetails) => {
       const reDate = format(new Date(re.start_time), 'yyyy-MM-dd')
       const reTitle = (re.title || '').toLowerCase()
       const isReDrop = reTitle.includes('drop off')
       const isRePick = reTitle.includes('pick up') || reTitle.includes('picked up')
 
-      return baseEvents.some((be) => {
+      return allHandled.some((be) => {
         const beDate = format(new Date(be.start_time), 'yyyy-MM-dd')
         if (beDate !== reDate) return false
         const beTitle = (be.title || '').toLowerCase()
@@ -356,7 +367,7 @@ function useEventsForRange(queryKey: readonly unknown[], start: Date, end: Date)
 
     const newRoutineEvents = routineEventsInRange.filter((re) => !isDuplicateOrHandled(re))
 
-    return [...baseEvents, ...newRoutineEvents].sort(
+    return [...enrichedBaseEvents, ...newRoutineEvents].sort(
       (a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime(),
     )
   }, [eventsQuery.data, transportationQuery.data, routineEventsInRange])
@@ -437,9 +448,15 @@ let _reconnectTimer: ReturnType<typeof setTimeout> | null = null
 function _evictDeletedEventFromCache(deletedId: string) {
   if (!deletedId) return
   _queryClientInstances.forEach((qc) => {
-    qc.setQueriesData<EventWithDetails[]>({ queryKey: ['events'] }, (old) => {
-      if (!Array.isArray(old)) return old
-      return old.filter((ev) => ev.id !== deletedId)
+    qc.setQueriesData({ queryKey: ['events'] }, (old: any) => {
+      if (Array.isArray(old)) return old.filter((ev) => ev?.id !== deletedId)
+      if (old && Array.isArray(old.active)) {
+        return {
+          ...old,
+          active: old.active.filter((ev: any) => ev?.id !== deletedId),
+        }
+      }
+      return old
     })
     qc.removeQueries({ queryKey: ['event-details', deletedId] })
   })

@@ -709,18 +709,44 @@ export async function deleteCalendarEvent(
   supabase: SupabaseClient,
   queryClient: QueryClient,
   eventId: string,
+  event?: EventWithDetails | null,
 ) {
   // 1. 0ms Evict from all cached queries
   evictEventFromAllCaches(queryClient, eventId)
 
-  // Trigger Google deletion asynchronously
+  // 2. If this is a synthetic routine event, persist a cancelled tombstone so routine generation suppresses it
+  if (eventId.startsWith('routine-') && event) {
+    await supabase.from('events').insert({
+      id: crypto.randomUUID(),
+      title: event.title,
+      description: event.description,
+      start_time: event.start_time,
+      end_time: event.end_time,
+      all_day: event.all_day ?? false,
+      location_name: event.location_name,
+      address: event.address,
+      status: 'cancelled',
+      record_kind: 'single',
+      updated_at: new Date().toISOString(),
+    })
+    invalidateAllCalendarQueries(queryClient, eventId)
+    return
+  }
+
+  // 3. Trigger Google deletion asynchronously with explicit Google IDs
   void supabase.functions.invoke('delete-google-event', {
-    body: { event_id: eventId },
+    body: {
+      event_id: eventId,
+      google_event_id: event?.google_event_id,
+      google_calendar_id: event?.google_calendar_id,
+      google_connection_id: event?.google_connection_id,
+      source_member_id: event?.source_member_id,
+    },
   }).catch((err) => {
     console.warn('[eventMutations] Background delete-google-event notice:', err)
   })
 
-  // 2. Clean up dependent child tables to prevent foreign key lock delays/timeouts
+  // 4. Clean up dependent child tables to prevent foreign key lock delays/timeouts
   await Promise.allSettled([
     supabase.from('event_members').delete().eq('event_id', eventId),
     supabase.from('event_enrichments').delete().eq('event_id', eventId),

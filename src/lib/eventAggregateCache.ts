@@ -117,6 +117,12 @@ export function evictEventFromAllCaches(
     if (Array.isArray(value)) {
       return value.filter((entry) => !isRecord(entry) || entry.id !== eventId)
     }
+    if (isRecord(value) && Array.isArray(value.active)) {
+      return {
+        ...value,
+        active: value.active.filter((entry) => !isRecord(entry) || entry.id !== eventId),
+      }
+    }
     if (isRecord(value) && Array.isArray(value.events)) {
       return {
         ...value,

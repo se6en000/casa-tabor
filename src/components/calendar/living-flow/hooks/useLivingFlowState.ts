@@ -810,13 +810,13 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     try {
       setShowDeleteConfirm(false)
       onClose?.()
-      await deleteCalendarEvent(supabase, queryClient, initialEvent.id)
+      await deleteCalendarEvent(supabase, queryClient, initialEvent.id, initialEvent)
     } catch (err) {
       setDeleteError(err instanceof Error ? err.message : 'Could not delete this event.')
     } finally {
       setDeleting(false)
     }
-  }, [initialEvent?.id, queryClient, onClose])
+  }, [initialEvent, queryClient, onClose])
 
   // Canonical Recurring Series Delete Handler
   const handleRecurringDelete = useCallback(async (scope: EventLocationScope) => {
