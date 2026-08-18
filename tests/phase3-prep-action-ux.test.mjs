@@ -29,7 +29,7 @@ test('ActionHubPage and ActionInspectionSidecar open an existing event instead o
 
 test('EventDetailPanel gates date formatting on the full event being loaded, not just the { id } stub used by openEventDetails', () => {
   const livingFlowState = readFileSync(new URL('../src/components/calendar/living-flow/hooks/useLivingFlowState.ts', import.meta.url), 'utf8')
-  assert.match(livingFlowState, /initialEvent\?\.start_time \? new Date\(initialEvent\.start_time\) : new Date\(\)/)
+  assert.match(livingFlowState, /getEventStartDate\(initialEvent\)/)
 })
 
 test('priorityVisual gives priority >=3 a Critical danger chip and left-border accent', () => {

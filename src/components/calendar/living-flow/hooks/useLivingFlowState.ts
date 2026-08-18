@@ -4,6 +4,7 @@ import { supabase } from '../../../../lib/supabase'
 import { useFamilyMembers } from '../../../../hooks/useFamilyMembers'
 import { useSavedPlaces, findSavedPlaceByAddress } from '../../../../hooks/useSavedPlaces'
 import { CATEGORY_LABEL } from '../../categoryFields'
+import { getEventStartDate, getEventEndDate } from '../../../../utils/eventTime'
 import type { EventWithDetails } from '../../../../hooks/useCalendarEvents'
 import type { FamilyMember } from '../../../../types'
 import type { LivingFlowState, LivingFlowMode, TravelBehavior, RecurrenceScope, VenueInfo } from '../types'
@@ -74,15 +75,18 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
 
   // Derive initial values from real event
   const initialStartDate = useMemo(() => {
-    return initialEvent?.start_time ? new Date(initialEvent.start_time) : new Date()
-  }, [initialEvent?.start_time])
+    if (!initialEvent) return new Date()
+    return getEventStartDate(initialEvent)
+  }, [initialEvent?.start_time, initialEvent?.all_day])
 
   const initialEndDate = useMemo(() => {
-    if (initialEvent?.end_time) return new Date(initialEvent.end_time)
-    const d = new Date(initialStartDate)
-    d.setMinutes(d.getMinutes() + 60)
-    return d
-  }, [initialEvent?.end_time, initialStartDate])
+    if (!initialEvent) {
+      const d = new Date()
+      d.setMinutes(d.getMinutes() + 60)
+      return d
+    }
+    return getEventEndDate(initialEvent)
+  }, [initialEvent?.start_time, initialEvent?.end_time, initialEvent?.all_day])
 
   const initialDuration = useMemo(() => {
     const diff = initialEndDate.getTime() - initialStartDate.getTime()

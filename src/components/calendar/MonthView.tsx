@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
-  addDays, isSameMonth, isSameDay, isToday, parseISO,
+  addDays, isSameMonth, isToday,
 } from 'date-fns'
 import { AnimatePresence, motion } from 'framer-motion'
 import { X, Clock, MapPin, Navigation } from 'lucide-react'
@@ -10,8 +10,9 @@ import { useCalendarStore } from '../../stores/calendarStore'
 import { useAppStore } from '../../stores/appStore'
 import { useMonthEvents } from '../../hooks/useCalendarEvents'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
-import { isHoliday, holidayLabel, HOLIDAY_COLOR, isReminder, REMINDER_COLOR } from '../../utils/holidays'
+import { isHoliday, holidayLabel, HOLIDAY_COLOR, isReminder, isAllDayReminder, REMINDER_COLOR } from '../../utils/holidays'
 import { cleanEventTitle } from '../../utils/eventTitle'
+import { eventOverlapsDay, getEventStartDate } from '../../utils/eventTime'
 import { useCalendarQuickCreateGesture } from '../../hooks/useCalendarQuickCreateGesture'
 import EventDetailPanel from './EventDetailPanel'
 import QuickCreateSheet from '../shared/QuickCreateSheet'
@@ -86,8 +87,8 @@ function DayPopover({ day, events, activeEventId, onClose, onSelectDay, onSelect
           const holiday = isHoliday(event)
           const reminder = !holiday && isReminder(event)
           const color = holiday ? HOLIDAY_COLOR : reminder ? REMINDER_COLOR : getPrimaryColor(event)
-          const start = parseISO(event.start_time)
-          const isAllDay = event.start_time.endsWith('00:00:00+00:00') && event.end_time?.endsWith('00:00:00+00:00')
+          const start = getEventStartDate(event)
+          const isAllDay = event.all_day || isAllDayReminder(event)
           const isActive = activeEventId === event.id
           return (
             <div
@@ -458,8 +459,8 @@ export default function MonthView() {
   const selectedEvent = selectedEventId ? (events.find(e => e.id === selectedEventId) ?? null) : null
 
   function eventsForDay(day: Date): EventWithDetails[] {
-    return events.filter(e => isSameDay(parseISO(e.start_time), day))
-      .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+    return events.filter(e => eventOverlapsDay(e, day))
+      .sort((a, b) => getEventStartDate(a).getTime() - getEventStartDate(b).getTime())
   }
 
   function drillIntoDay(day: Date) {

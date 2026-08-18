@@ -18,7 +18,7 @@ import { isReminder, isAllDayReminder, isTimedReminder } from '../../utils/holid
 import EventContextMenu from '../shared/EventContextMenu'
 import { WeatherIcon } from '../shared/WeatherIcon'
 import { BirthdayCardDecoration } from '../shared/BirthdayCardDecoration'
-import { eventOverlapsDay, getEventDisplayStartDay, getEventEndDate, getEventStartDate } from '../../utils/eventTime'
+import { eventOverlapsDay, isEventMultiDay, getEventEndDate, getEventStartDate } from '../../utils/eventTime'
 import { PersonAvatarStack, CalendarPill, Button } from '../ui'
 import { EventProvenanceBadge } from './EventProvenanceBadge'
 import type { FamilyMember } from '../../types'
@@ -517,7 +517,7 @@ function EventCard({ event, household, now = new Date(), isHighlighted = false, 
   const happening = isBefore(start, now) && isAfter(end, now)
   const isHeroState = happening || Boolean(urgentAction)
   const isAllDayEvent = event.all_day
-  const displayStartDay = isAllDayEvent ? getEventDisplayStartDay(event) : null
+  const isMultiDay = isEventMultiDay(event)
   const mode = resolveEventMode(event)
   const isHosted = mode === 'hosted'
   const isBirthday = isBirthdayEvent(event)
@@ -615,7 +615,7 @@ function EventCard({ event, household, now = new Date(), isHighlighted = false, 
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <span className="font-mono text-caption font-bold text-casa-navy tabular-nums shrink-0">
             {isAllDayEvent
-              ? (displayStartDay ? format(displayStartDay, 'MMM d') : 'ALL DAY')
+              ? (isMultiDay ? `${format(start, 'MMM d')} – ${format(end, 'MMM d')}` : 'ALL DAY')
               : format(start, 'h:mm a')}
           </span>
           <span className="text-casa-divider shrink-0">•</span>
@@ -727,7 +727,7 @@ function EventCard({ event, household, now = new Date(), isHighlighted = false, 
             )}
           >
             {isAllDayEvent
-              ? (displayStartDay ? format(displayStartDay, 'MMM d') : 'ALL DAY')
+              ? (isMultiDay ? `${format(start, 'MMM d')} – ${format(end, 'MMM d')}` : 'ALL DAY')
               : format(start, 'h:mm')}
           </div>
           {!isAllDayEvent && (
