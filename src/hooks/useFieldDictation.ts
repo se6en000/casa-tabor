@@ -1,37 +1,31 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { STT_TURN_PROTOCOL } from '../lib/sttTurnProtocol.mjs'
 
 /**
  * Lightweight speech-to-text for filling a single text field (e.g. the grocery
- * quick-add input). Unlike useSpeechInput — which is built for the conversational
- * AI drawer (confirm/cancel/dismiss phrases, auto-send) — this hook just streams
- * recognized words into a field and stays out of the way.
+ * quick-add input).
  *
  * Dual path, matching the rest of the app:
  *   • Pi kiosk (Chromium/X11): DeepGram bridge over WebSocket (127.0.0.1:8767).
+ *     Sending {"type":"start", "turn_protocol":"candidate-v1", "utterance_id":"..."}
+ *     activates the Pi hardware LED light strip into "Alive Mode".
  *   • Mobile / desktop browsers: the native Web Speech API.
  *
  * The consumer passes an `onText(fullText)` callback; the hook seeds from the
  * field's current value on start, then emits base + dictated (committed finals +
- * live interim) so the field updates in real time while the sheet stays open.
+ * live interim) so the field updates in real time while active.
  */
 
-const BRIDGE = 'http://127.0.0.1:8766'
 const BRIDGE_WS = 'ws://127.0.0.1:8767'
 const SAFE_MODE = String(import.meta.env.VITE_SAFE_MODE ?? '').toLowerCase()
 const IS_SAFE_MODE = SAFE_MODE === '1' || SAFE_MODE === 'true' || SAFE_MODE === 'yes'
 
 type DictationMode = 'unknown' | 'bridge' | 'webspeech'
 
-async function probeBridge(): Promise<boolean> {
-  try {
-    const ctrl = new AbortController()
-    const tid = setTimeout(() => ctrl.abort(), 800)
-    const res = await fetch(`${BRIDGE}/status`, { signal: ctrl.signal })
-    clearTimeout(tid)
-    return res.ok
-  } catch {
-    return false
-  }
+function createUtteranceId() {
+  return typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`
 }
 
 function joinWords(...parts: string[]): string {
@@ -55,6 +49,7 @@ export function useFieldDictation({
   const baseRef = useRef('')
   const committedRef = useRef('')
   const lastInterimRef = useRef('')
+  const utteranceIdRef = useRef('')
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -118,13 +113,14 @@ export function useFieldDictation({
     triggerAutoSubmitIfReady()
   }, [emit, triggerAutoSubmitIfReady])
 
-  // ── Web Speech API path (mobile / desktop) ──────────────────────────────
+  // ── Web Speech API path (mobile / desktop fallback) ──────────────────────
   const startWebSpeech = useCallback(() => {
     if (!WebSpeech || !activeRef.current) return
     if (recognitionRef.current) {
       try { recognitionRef.current.stop() } catch { /* ignore */ }
       recognitionRef.current = null
     }
+    modeRef.current = 'webspeech'
     const recognition = new WebSpeech()
     recognitionRef.current = recognition
     recognition.continuous = true
@@ -178,17 +174,19 @@ export function useFieldDictation({
     }
   }, [])
 
-  // ── Bridge path (Pi kiosk) ───────────────────────────────────────────────
+  // ── Bridge path (Pi kiosk with hardware LED Alive Mode) ───────────────────
   const stopWS = useCallback(() => {
     if (wsRef.current) {
-      try { wsRef.current.send(JSON.stringify({ type: 'stop' })) } catch { /* ignore */ }
+      try {
+        if (wsRef.current.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({ type: 'stop' }))
+        }
+      } catch { /* ignore */ }
       try { wsRef.current.close() } catch { /* ignore */ }
       wsRef.current = null
     }
   }, [])
 
-  // Ref indirection lets ws.onclose re-invoke the latest startBridge for
-  // reconnect without a self-referential closure (which the compiler rejects).
   const startBridgeRef = useRef<() => void>(() => {})
   const startBridge = useCallback(() => {
     if (!activeRef.current) return
@@ -196,31 +194,64 @@ export function useFieldDictation({
       try { wsRef.current.close() } catch { /* ignore */ }
       wsRef.current = null
     }
-    const ws = new WebSocket(BRIDGE_WS)
-    wsRef.current = ws
 
-    ws.onopen = () => {
-      try { ws.send(JSON.stringify({ type: 'start' })) } catch { /* ignore */ }
+    try {
+      const ws = new WebSocket(BRIDGE_WS)
+      wsRef.current = ws
+
+      ws.onopen = () => {
+        modeRef.current = 'bridge'
+        // Sending this packet tells the Pi daemon to trigger the hardware LED light strip "Alive Mode"
+        try {
+          ws.send(JSON.stringify({
+            type: 'start',
+            turn_protocol: STT_TURN_PROTOCOL,
+            utterance_id: utteranceIdRef.current,
+          }))
+        } catch { /* ignore */ }
+      }
+
+      ws.onmessage = (evt) => {
+        if (!activeRef.current) return
+        try {
+          const msg = JSON.parse(evt.data as string)
+          if (msg.type === 'interim' && typeof msg.text === 'string') {
+            emit(msg.text)
+          } else if (msg.type === 'turn') {
+            const combined = joinWords(msg.committed ?? '', msg.interim ?? '')
+            emit(combined)
+          } else if (msg.type === 'segment_final' && typeof msg.text === 'string') {
+            commitFinal(msg.text)
+          } else if (msg.type === 'final' && typeof msg.text === 'string') {
+            commitFinal(msg.text)
+          }
+        } catch { /* ignore */ }
+      }
+
+      ws.onerror = () => {
+        // If bridge is unreachable (non-Pi device like phone/Mac), fall back to WebSpeech
+        if (activeRef.current && modeRef.current !== 'bridge') {
+          modeRef.current = 'webspeech'
+          startWebSpeech()
+        }
+      }
+
+      ws.onclose = () => {
+        wsRef.current = null
+        if (activeRef.current && modeRef.current === 'bridge') {
+          setTimeout(() => startBridgeRef.current(), 400)
+        }
+      }
+    } catch {
+      // Direct WS creation error fallback
+      modeRef.current = 'webspeech'
+      startWebSpeech()
     }
+  }, [commitFinal, emit, startWebSpeech])
 
-    ws.onmessage = (evt) => {
-      if (!activeRef.current) return
-      try {
-        const msg = JSON.parse(evt.data as string)
-        if (msg.type === 'interim' && typeof msg.text === 'string') emit(msg.text)
-        else if (msg.type === 'final' && typeof msg.text === 'string') commitFinal(msg.text)
-      } catch { /* ignore */ }
-    }
-
-    ws.onerror = () => { /* surfaced via close/retry */ }
-
-    ws.onclose = () => {
-      wsRef.current = null
-      // Reconnect while the user is still dictating.
-      if (activeRef.current) setTimeout(() => startBridgeRef.current(), 400)
-    }
-  }, [commitFinal, emit])
-  useEffect(() => { startBridgeRef.current = startBridge }, [startBridge])
+  useEffect(() => {
+    startBridgeRef.current = startBridge
+  }, [startBridge])
 
   // ── Unified control ──────────────────────────────────────────────────────
   const stop = useCallback((): string => {
@@ -241,28 +272,24 @@ export function useFieldDictation({
     baseRef.current = seed.trim()
     committedRef.current = ''
     lastInterimRef.current = ''
+    utteranceIdRef.current = createUtteranceId()
     activeRef.current = true
     setListening(true)
 
-    if (modeRef.current === 'unknown') {
-      const hasBridge = await probeBridge()
-      modeRef.current = hasBridge ? 'bridge' : (WebSpeech ? 'webspeech' : 'bridge')
+    // If we know mode is webspeech (e.g. previously confirmed no bridge on client), use it directly
+    if (modeRef.current === 'webspeech') {
+      startWebSpeech()
+    } else {
+      // Prioritize the Pi WebSocket bridge (activates hardware LED Alive Mode)
+      startBridge()
     }
-    // A late stop() during the async probe should abort the launch.
-    if (!activeRef.current) return
-
-    if (modeRef.current === 'webspeech') startWebSpeech()
-    else startBridge()
-  }, [WebSpeech, clearSilenceTimer, startWebSpeech, startBridge])
+  }, [clearSilenceTimer, startBridge, startWebSpeech])
 
   const toggle = useCallback((seed: string) => {
     if (activeRef.current) stop()
     else void start(seed)
   }, [start, stop])
 
-  // Clear the accumulated transcript so continued dictation starts fresh into an
-  // empty field — WITHOUT stopping the mic. Used after an item is added so the
-  // user can keep speaking the next item hands-free.
   const resetBuffer = useCallback((seed = '') => {
     clearSilenceTimer()
     baseRef.current = seed.trim()

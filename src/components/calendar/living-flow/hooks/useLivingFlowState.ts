@@ -9,12 +9,13 @@ import type { EventWithDetails } from '../../../../hooks/useCalendarEvents'
 import type { FamilyMember } from '../../../../types'
 import type { LivingFlowState, LivingFlowMode, TravelBehavior, RecurrenceScope, VenueInfo } from '../types'
 import {
-  buildEventTransportationPlan,
-  applyDriverChangeToPlan,
-  applyWaitBehaviorToPlan,
+  buildEventTransportationPlanForMode,
+  buildLogisticsStepsFromRoute,
   parseDistanceMilesFromSummary,
+  type LogisticsMode,
 } from '../../../../lib/eventTransportation'
 import { saveEventTransportationOverride } from '../../../../lib/eventPlanOverrides'
+import { useAppStore } from '../../../../stores/appStore'
 import type { EventLocationScope } from '../../../../lib/eventLocation'
 import {
   loadRecurringEditorContext,
@@ -126,37 +127,6 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     return initialMemberIds[0] || familyMembers.find((m: FamilyMember) => m.role === 'parent')?.id || null
   }, [initialMemberIds, familyMembers])
 
-  const initialDriverLeg1 = useMemo(() => {
-    const plan = initialEvent?.plan_override?.transportation_plan
-    if (plan?.legs?.[0]?.driverName) return plan.legs[0].driverName
-    const overrideId = initialEvent?.plan_override?.driver_overrides?.[0]
-    if (overrideId) {
-      const match = familyMembers.find(m => m.id === overrideId)
-      if (match) return match.name
-    }
-    const parent = familyMembers.find(m => m.role === 'parent' && m.can_drive)
-    return parent?.name || 'Kelly'
-  }, [initialEvent?.plan_override, familyMembers])
-
-  const initialDriverLeg2 = useMemo(() => {
-    const plan = initialEvent?.plan_override?.transportation_plan
-    if (plan?.legs?.[1]?.driverName) return plan.legs[1].driverName
-    const overrideId = initialEvent?.plan_override?.driver_overrides?.[1]
-    if (overrideId) {
-      const match = familyMembers.find(m => m.id === overrideId)
-      if (match) return match.name
-    }
-    return initialDriverLeg1
-  }, [initialEvent?.plan_override, familyMembers, initialDriverLeg1])
-
-  const normalizedCategory = useMemo(() => {
-    return normalizeCategoryName(initialEvent?.enrichment?.category)
-  }, [initialEvent?.enrichment?.category])
-
-  const initialMode = useMemo<LivingFlowMode>(() => {
-    return isLikelyReminderOrHome(initialEvent, initialEvent?.enrichment?.category) ? 'reminder' : 'event'
-  }, [initialEvent])
-
   const initialTravelBehavior = useMemo<TravelBehavior>(() => {
     const plan = initialEvent?.plan_override?.transportation_plan
     if (plan) {
@@ -170,8 +140,51 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
       }
       return 'two_way'
     }
+    const title = (initialEvent?.title || '').toLowerCase()
+    if (title.includes('pick up') || title.includes('pickup') || initialEvent?.id?.startsWith('routine-pick-')) {
+      return 'pickup_only'
+    }
+    if (title.includes('drop off') || title.includes('dropoff') || initialEvent?.id?.startsWith('routine-drop-')) {
+      return 'dropoff_only'
+    }
     return initialEvent?.plan_override?.waits === false ? 'two_way' : 'stay'
-  }, [initialEvent?.plan_override])
+  }, [initialEvent?.plan_override, initialEvent?.title, initialEvent?.id])
+
+  const initialDriverLeg1 = useMemo(() => {
+    const plan = initialEvent?.plan_override?.transportation_plan
+    if (plan?.legs?.[0]?.driverName && plan?.legs?.[0]?.purpose !== 'pickup') return plan.legs[0].driverName
+    const overrideId = initialEvent?.plan_override?.driver_overrides?.[0]
+    if (overrideId) {
+      const match = familyMembers.find(m => m.id === overrideId)
+      if (match) return match.name
+    }
+    const driverMember = initialEvent?.members?.find(m => m.role === 'driver')?.family_member
+    if (driverMember?.name) return driverMember.name
+    const parent = familyMembers.find(m => m.role === 'parent' && m.can_drive)
+    return parent?.name || 'Kelly'
+  }, [initialEvent?.plan_override, initialEvent?.members, familyMembers])
+
+  const initialDriverLeg2 = useMemo(() => {
+    const plan = initialEvent?.plan_override?.transportation_plan
+    if (plan?.legs?.[1]?.driverName) return plan.legs[1].driverName
+    if (plan?.legs?.[0]?.purpose === 'pickup' && plan?.legs?.[0]?.driverName) return plan.legs[0].driverName
+    const overrideId = initialEvent?.plan_override?.driver_overrides?.[1]
+    if (overrideId) {
+      const match = familyMembers.find(m => m.id === overrideId)
+      if (match) return match.name
+    }
+    const driverMember = initialEvent?.members?.find(m => m.role === 'driver')?.family_member
+    if (driverMember?.name) return driverMember.name
+    return initialDriverLeg1
+  }, [initialEvent?.plan_override, initialEvent?.members, familyMembers, initialDriverLeg1])
+
+  const normalizedCategory = useMemo(() => {
+    return normalizeCategoryName(initialEvent?.enrichment?.category)
+  }, [initialEvent?.enrichment?.category])
+
+  const initialMode = useMemo<LivingFlowMode>(() => {
+    return isLikelyReminderOrHome(initialEvent, initialEvent?.enrichment?.category) ? 'reminder' : 'event'
+  }, [initialEvent])
 
   const initialIsAllDay = useMemo(() => {
     return Boolean(initialEvent?.all_day)
@@ -336,10 +349,11 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
   // Computed Pickup Departure Time (Inbound Departure for Pickup)
   const pickupDepartureDate = useMemo(() => {
     const totalPreMinutes = (state.venue.driveMinutes || 0) + state.bufferMinutes
-    const base = !state.endDate || isNaN(new Date(state.endDate).getTime()) ? new Date() : new Date(state.endDate)
+    const anchorDate = state.travelBehavior === 'pickup_only' ? state.startDate : state.endDate
+    const base = !anchorDate || isNaN(new Date(anchorDate).getTime()) ? new Date() : new Date(anchorDate)
     base.setMinutes(base.getMinutes() - totalPreMinutes)
     return base
-  }, [state.endDate, state.venue.driveMinutes, state.bufferMinutes])
+  }, [state.startDate, state.endDate, state.travelBehavior, state.venue.driveMinutes, state.bufferMinutes])
 
   // Computed Return Time
   const returnDate = useMemo(() => {
@@ -374,7 +388,8 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     newDriverLeg2: string,
     newBehavior: TravelBehavior,
   ) => {
-    if (!initialEvent?.id) return
+    let currentEvent = activeEventRef.current || initialEvent
+    if (!currentEvent?.id) return
 
     const findMember = (name: string): FamilyMember | undefined => {
       const lower = name.toLowerCase().trim()
@@ -389,24 +404,112 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     const homeAddress = '3209 Washington Road, West Palm Beach, FL, 33405-1646'
     const waits = newBehavior === 'stay'
 
-    const currentPlan = initialEvent.plan_override?.transportation_plan
-      ?? buildEventTransportationPlan(initialEvent, homeAddress, driver1, { waitOnSite: waits })
+    try {
+      if (currentEvent.id.startsWith('routine-')) {
+        const materialized = await materializeSyntheticRoutineEvent(
+          supabase,
+          queryClient,
+          currentEvent,
+          {
+            travelBehavior: newBehavior,
+            driverLeg1: newDriverLeg1,
+            driverLeg2: newDriverLeg2,
+          },
+          { familyMembers, homeAddress },
+        )
+        activeEventRef.current = materialized
+        currentEventIdRef.current = materialized.id
+        useAppStore.getState().setSelectedSidecarEventId(materialized.id)
+        return
+      }
 
-    const withDriver1 = applyDriverChangeToPlan(currentPlan, 0, driver1, false)
-    const withDriver2 = applyDriverChangeToPlan(withDriver1, 1, driver2, false)
-    const finalPlan = applyWaitBehaviorToPlan(withDriver2, newBehavior, initialEvent, homeAddress)
+      const logisticsMode: LogisticsMode =
+        newBehavior === 'dropoff' || newBehavior === 'dropoff_only' ? 'dropoff_only' :
+        newBehavior === 'pickup_only' ? 'pickup_only' :
+        newBehavior
 
-    await saveEventTransportationOverride({
-      supabase,
-      queryClient,
-      event: initialEvent,
-      transportationPlan: finalPlan,
-      waits,
-      modeOverride: initialEvent.plan_override?.mode_override || 'appointment',
-    })
+      const finalPlan = buildEventTransportationPlanForMode(
+        currentEvent,
+        homeAddress,
+        logisticsMode,
+        { driver1, driver2 },
+      )
 
-    invalidateCalendar()
-    triggerGoogleEventSync(supabase, initialEvent.id)
+      await saveEventTransportationOverride({
+        supabase,
+        queryClient,
+        event: currentEvent,
+        transportationPlan: finalPlan,
+        waits,
+        modeOverride: currentEvent.plan_override?.mode_override || 'appointment',
+        driverOverrides: {
+          ...(driver1.id ? { 0: driver1.id } : {}),
+          ...(driver2.id ? { 1: driver2.id } : {}),
+        } as Record<number, string>,
+      })
+
+      // Sync driver(s) to event_members
+      const relevantDriverIds = [
+        (newBehavior !== 'pickup_only' && driver1Member?.id) ? driver1Member.id : null,
+        (newBehavior !== 'dropoff_only' && driver2Member?.id) ? driver2Member.id : null,
+      ].filter((id): id is string => Boolean(id))
+
+      if (relevantDriverIds.length > 0) {
+        const existingMembers = currentEvent.members || []
+        const existingMemberIds = new Set(existingMembers.map(m => m.family_member?.id || m.id))
+        for (const drvId of relevantDriverIds) {
+          if (!existingMemberIds.has(drvId)) {
+            await supabase.from('event_members').insert({
+              event_id: currentEvent.id,
+              family_member_id: drvId,
+              role: 'driver',
+              rsvp_status: 'accepted',
+            })
+          }
+        }
+      }
+
+      // Update event_logistics
+      const isHome = (currentEvent.location_name || '').toLowerCase() === 'home' || !currentEvent.address?.trim()
+      const driveMins = currentEvent.enrichment?.drive_time_mins ?? 0
+      if (!isHome && driveMins > 0) {
+        const attendeeNames = (currentEvent.members ?? [])
+          .filter(m => m.role !== 'driver')
+          .map(m => m.family_member?.name || '')
+          .filter(Boolean)
+        const distMiles = currentEvent.enrichment ? parseDistanceMilesFromSummary(currentEvent.enrichment.route_summary) : 0
+        const steps = buildLogisticsStepsFromRoute({
+          eventId: currentEvent.id,
+          eventTitle: currentEvent.title,
+          startTime: currentEvent.start_time || new Date().toISOString(),
+          endTime: currentEvent.end_time || new Date().toISOString(),
+          venueName: currentEvent.location_name || 'Destination',
+          venueAddress: currentEvent.address || '',
+          homeAddress,
+          driveMinutes: driveMins,
+          distanceMiles: distMiles,
+          driverLeg1: newDriverLeg1,
+          driverLeg2: newDriverLeg2,
+          attendees: attendeeNames,
+          waitOnSite: waits,
+          mode: newBehavior,
+          bufferMinutes: 5,
+        })
+        if (steps.length > 0) {
+          try {
+            await supabase.from('event_logistics').delete().eq('event_id', currentEvent.id)
+            await supabase.from('event_logistics').insert(steps)
+          } catch (logErr) {
+            console.warn('[LivingFlow] Failed to update logistics steps on driver change:', logErr)
+          }
+        }
+      }
+
+      invalidateCalendar()
+      triggerGoogleEventSync(supabase, currentEvent.id)
+    } catch (err) {
+      console.error('[LivingFlow] Failed to persist driver and travel:', err)
+    }
   }, [initialEvent, familyMembers, queryClient, invalidateCalendar])
 
   // Scoped recurring field mutation helper
@@ -554,6 +657,7 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
         )
         activeEventRef.current = materialized
         currentEventIdRef.current = materialized.id
+        useAppStore.getState().setSelectedSidecarEventId(materialized.id)
         return
       }
 
@@ -588,6 +692,7 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
         )
         activeEventRef.current = materialized
         currentEventIdRef.current = materialized.id
+        useAppStore.getState().setSelectedSidecarEventId(materialized.id)
         return
       }
 
@@ -692,6 +797,7 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
         )
         activeEventRef.current = materialized
         currentEventIdRef.current = materialized.id
+        useAppStore.getState().setSelectedSidecarEventId(materialized.id)
         return
       }
 
@@ -741,6 +847,7 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
         )
         activeEventRef.current = materialized
         currentEventIdRef.current = materialized.id
+        useAppStore.getState().setSelectedSidecarEventId(materialized.id)
         return
       }
 
@@ -780,6 +887,7 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
         )
         activeEventRef.current = materialized
         currentEventIdRef.current = materialized.id
+        useAppStore.getState().setSelectedSidecarEventId(materialized.id)
         return
       }
 

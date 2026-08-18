@@ -457,8 +457,13 @@ export function applyLogisticsModeToPlan(
   event: EventWithDetails,
   homeAddress: string,
 ): EventTransportationPlan {
-  const driver1 = plan.legs[0] ? { id: plan.legs[0].driverId, name: plan.legs[0].driverName } : null
-  const driver2 = plan.legs[1] ? { id: plan.legs[1].driverId, name: plan.legs[1].driverName } : driver1
+  const isSinglePickup = plan.legs.length === 1 && plan.legs[0].purpose === 'pickup'
+  const driver1 = isSinglePickup
+    ? null
+    : (plan.legs[0] ? { id: plan.legs[0].driverId, name: plan.legs[0].driverName } : null)
+  const driver2 = isSinglePickup
+    ? { id: plan.legs[0].driverId, name: plan.legs[0].driverName }
+    : (plan.legs[1] ? { id: plan.legs[1].driverId, name: plan.legs[1].driverName } : driver1)
   return buildEventTransportationPlanForMode(event, homeAddress, mode, { driver1, driver2 })
 }
 

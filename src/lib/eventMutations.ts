@@ -8,6 +8,8 @@ import {
   syncTransportationAttendees,
   buildLogisticsStepsFromRoute,
   parseDistanceMilesFromSummary,
+  buildEventTransportationPlanForMode,
+  type LogisticsMode,
 } from './eventTransportation.ts'
 import {
   saveEventTransportationOverride,
@@ -17,6 +19,7 @@ import {
   evictEventFromAllCaches,
 } from './eventAggregateCache.ts'
 import { normalizeAllDayEventRange } from '../utils/allDayEventRange.ts'
+import type { TravelBehavior } from '../components/calendar/living-flow/types.ts'
 
 export interface EventVenuePayload {
   name: string
@@ -127,6 +130,9 @@ export async function materializeSyntheticRoutineEvent(
     category?: string
     mode?: 'event' | 'reminder'
     isAllDay?: boolean
+    travelBehavior?: TravelBehavior
+    driverLeg1?: string
+    driverLeg2?: string
   },
   options?: {
     familyMembers?: FamilyMember[]
@@ -135,6 +141,7 @@ export async function materializeSyntheticRoutineEvent(
 ): Promise<EventWithDetails> {
   const newEventId = crypto.randomUUID()
   const members = options?.familyMembers ?? []
+  const homeAddress = options?.homeAddress || '3209 Washington Road, West Palm Beach, FL, 33405-1646'
 
   const isAllDay = overrides?.isAllDay === true
   const title = (overrides?.title ?? syntheticEvent.title ?? 'New Event').trim()
@@ -183,17 +190,81 @@ export async function materializeSyntheticRoutineEvent(
 
   if (evErr) throw evErr
 
-  const targetMemberIds = overrides?.selectedMemberIds ?? (syntheticEvent.members ?? []).map((m) => m.family_member?.id || m.id).filter(Boolean)
-  const memberInserts = targetMemberIds.map((mid) => {
-    const mem = members.find((m) => m.id === mid)
-    const isDriver = mem?.role === 'parent' || mem?.can_drive
-    return {
+  // Resolve drivers
+  const findMemberByName = (name?: string | null): FamilyMember | undefined => {
+    if (!name) return undefined
+    const lower = name.toLowerCase().trim()
+    return members.find(m => m.name.toLowerCase() === lower || m.full_name?.toLowerCase() === lower)
+  }
+
+  const driver1Name = overrides?.driverLeg1 ?? syntheticEvent.plan_override?.transportation_plan?.legs?.[0]?.driverName ?? 'Jake'
+  const driver2Name = overrides?.driverLeg2 ?? syntheticEvent.plan_override?.transportation_plan?.legs?.[1]?.driverName ?? driver1Name
+
+  const driver1Member = findMemberByName(driver1Name)
+  const driver2Member = findMemberByName(driver2Name)
+
+  // Resolve travel behavior
+  let travelBehavior: LogisticsMode = (overrides?.travelBehavior as LogisticsMode) ?? 'stay'
+  if (!overrides?.travelBehavior) {
+    const rawPlan = syntheticEvent.plan_override?.transportation_plan
+    if (rawPlan) {
+      if (rawPlan.legs.length === 0) travelBehavior = 'none'
+      else if (rawPlan.legs.length === 1) {
+        if (rawPlan.legs[0].purpose === 'dropoff') travelBehavior = 'dropoff_only'
+        else if (rawPlan.legs[0].purpose === 'pickup') travelBehavior = 'pickup_only'
+      } else if (rawPlan.waitOnSite) travelBehavior = 'stay'
+      else travelBehavior = 'two_way'
+    } else {
+      const lowerTitle = title.toLowerCase()
+      if (lowerTitle.includes('pick up') || lowerTitle.includes('pickup') || syntheticEvent.id?.startsWith('routine-pick-')) {
+        travelBehavior = 'pickup_only'
+      } else if (lowerTitle.includes('drop off') || lowerTitle.includes('dropoff') || syntheticEvent.id?.startsWith('routine-drop-')) {
+        travelBehavior = 'dropoff_only'
+      } else {
+        travelBehavior = 'stay'
+      }
+    }
+  }
+
+  // Build target members: include kids/attendees and driver(s)
+  const baseMemberIds = overrides?.selectedMemberIds ?? (syntheticEvent.members ?? [])
+    .filter(m => m.role !== 'driver')
+    .map(m => m.family_member?.id || m.id)
+    .filter(Boolean)
+
+  const activeDriverMembers = [
+    (travelBehavior !== 'pickup_only' && driver1Member) ? driver1Member : null,
+    (travelBehavior !== 'dropoff_only' && driver2Member) ? driver2Member : null,
+  ].filter((m): m is FamilyMember => Boolean(m))
+
+  const distinctMemberInserts = new Map<string, {
+    event_id: string
+    family_member_id: string
+    role: string
+    rsvp_status: 'accepted'
+  }>()
+
+  // Add passenger/attendee members
+  for (const mid of baseMemberIds) {
+    distinctMemberInserts.set(mid, {
       event_id: newEventId,
       family_member_id: mid,
-      role: isDriver ? 'driver' : 'passenger',
+      role: 'passenger',
       rsvp_status: 'accepted',
-    }
-  })
+    })
+  }
+
+  // Add driver members
+  for (const drv of activeDriverMembers) {
+    distinctMemberInserts.set(drv.id, {
+      event_id: newEventId,
+      family_member_id: drv.id,
+      role: 'driver',
+      rsvp_status: 'accepted',
+    })
+  }
+
+  const memberInserts = Array.from(distinctMemberInserts.values())
 
   if (memberInserts.length > 0) {
     const { error: memErr } = await supabase.from('event_members').insert(memberInserts)
@@ -216,6 +287,85 @@ export async function materializeSyntheticRoutineEvent(
   const { error: enrErr } = await supabase.from('event_enrichments').insert(enrichmentPayload)
   if (enrErr) console.warn('[materializeSyntheticRoutineEvent] event_enrichments error:', enrErr)
 
+  // Build and save transportation plan override & logistics
+  let planOverridePayload: any = null
+  if (travelBehavior !== 'none' && !isAllDay && driveMins > 0) {
+    const driver1Obj = { id: driver1Member?.id ?? null, name: driver1Name }
+    const driver2Obj = { id: driver2Member?.id ?? null, name: driver2Name }
+    const tempEvent: EventWithDetails = {
+      ...syntheticEvent,
+      id: newEventId,
+      title,
+      start_time: startTime,
+      end_time: endTime,
+      location_name: locationName,
+      address,
+      members: memberInserts.map(mi => ({
+        id: crypto.randomUUID(),
+        role: mi.role,
+        family_member: members.find(m => m.id === mi.family_member_id)!,
+      })).filter(m => Boolean(m.family_member)),
+      enrichment: enrichmentPayload as any,
+      plan_override: null,
+      logistics: [],
+      checklist: [],
+      actions: [],
+    }
+
+    const transportationPlan = buildEventTransportationPlanForMode(
+      tempEvent,
+      homeAddress,
+      travelBehavior,
+      { driver1: driver1Obj, driver2: driver2Obj },
+    )
+
+    planOverridePayload = await saveEventTransportationOverride({
+      supabase,
+      queryClient,
+      event: tempEvent,
+      transportationPlan,
+      waits: travelBehavior === 'stay',
+      modeOverride: 'appointment',
+      driverOverrides: {
+        ...(driver1Obj.id ? { 0: driver1Obj.id } : {}),
+        ...(driver2Obj.id ? { 1: driver2Obj.id } : {}),
+      } as Record<number, string>,
+    })
+
+    // Insert logistics steps
+    const attendeeNames = memberInserts
+      .filter(m => m.role !== 'driver')
+      .map(m => members.find(f => f.id === m.family_member_id)?.name || '')
+      .filter(Boolean)
+    const distMiles = parseDistanceMilesFromSummary(routeSummary)
+
+    const steps = buildLogisticsStepsFromRoute({
+      eventId: newEventId,
+      eventTitle: title,
+      startTime,
+      endTime,
+      venueName: locationName || 'Destination',
+      venueAddress: address || '',
+      homeAddress,
+      driveMinutes: driveMins,
+      distanceMiles: distMiles,
+      driverLeg1: driver1Name,
+      driverLeg2: driver2Name,
+      attendees: attendeeNames,
+      waitOnSite: travelBehavior === 'stay',
+      mode: travelBehavior,
+      bufferMinutes: 5,
+    })
+
+    if (steps.length > 0) {
+      try {
+        await supabase.from('event_logistics').insert(steps)
+      } catch (logErr) {
+        console.warn('[materializeSyntheticRoutineEvent] event_logistics error:', logErr)
+      }
+    }
+  }
+
   invalidateAllCalendarQueries(queryClient, newEventId)
   triggerGoogleEventSync(supabase, newEventId)
 
@@ -230,6 +380,7 @@ export async function materializeSyntheticRoutineEvent(
     event_type: eventType,
     is_exception: true,
     enrichment: enrichmentPayload as any,
+    plan_override: planOverridePayload,
     members: memberInserts.map((mi) => ({
       id: crypto.randomUUID(),
       role: mi.role,

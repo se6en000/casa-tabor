@@ -66,6 +66,9 @@ export default function LivingRouteTimeline({
   const activeMode: TravelBehavior = travelBehavior === 'dropoff' ? 'two_way' : travelBehavior
 
   const activeAttendees = familyMembers
+    .filter((m) => selectedMemberIds.includes(m.id) && m.name !== driverLeg1 && m.name !== driverLeg2 && m.role !== 'parent')
+    .map((m) => m.name)
+    .join(', ') || familyMembers
     .filter((m) => selectedMemberIds.includes(m.id))
     .map((m) => m.name)
     .join(', ') || 'Kids'
