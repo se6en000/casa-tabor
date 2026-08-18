@@ -60,7 +60,7 @@ const ADVANCED_GROUPS = [
     label: 'System Telemetry & Costs',
     items: [
       { to: '/settings/status',  icon: Activity,      label: 'Cost & Token Dashboard', desc: 'AI usage & billing reconciliation' },
-      { to: '/settings/analytics', icon: LineChart,   label: 'Data & Graph Health', desc: 'Orchestration & sync status' },
+      { to: '/settings/analytics', icon: LineChart,   label: 'Orchestration & Graph Health', desc: 'Pipeline telemetry, sub-engine status & graph' },
       { to: '/settings/grocery-intelligence', icon: ShoppingCart, label: 'Grocery Intelligence', desc: 'Taxonomy quality & dedupe signals' },
     ],
   },

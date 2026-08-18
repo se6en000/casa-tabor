@@ -28,18 +28,31 @@ function inferModel(provider, url, requestBody) {
   return typeof requestBody?.model === 'string' ? requestBody.model : 'unknown'
 }
 
-function extractUsage(provider, payload) {
+function extractUsage(provider, payload, promptChars = 0) {
   if (!payload || typeof payload !== 'object') {
-    return { inputTokens: 0, cachedInputTokens: 0, thoughtTokens: 0, outputTokens: 0, totalTokens: 0 }
+    const estimatedPromptTokens = promptChars > 0 ? Math.max(1, Math.ceil(promptChars / 4)) : 0
+    return { inputTokens: estimatedPromptTokens, cachedInputTokens: 0, thoughtTokens: 0, outputTokens: 0, totalTokens: estimatedPromptTokens }
   }
   if (provider === 'gemini') {
     const usage = payload.usageMetadata ?? {}
+    let inputTokens = nonNegativeInteger(usage.promptTokenCount)
+    const cachedInputTokens = nonNegativeInteger(usage.cachedContentTokenCount)
+    const thoughtTokens = nonNegativeInteger(usage.thoughtsTokenCount)
+    const outputTokens = nonNegativeInteger(usage.candidatesTokenCount)
+    let totalTokens = nonNegativeInteger(usage.totalTokenCount)
+
+    // For embeddings or responses without usageMetadata, approximate tokens from promptChars
+    if (inputTokens === 0 && promptChars > 0) {
+      inputTokens = Math.max(1, Math.ceil(promptChars / 4))
+      totalTokens = inputTokens
+    }
+
     return {
-      inputTokens: nonNegativeInteger(usage.promptTokenCount),
-      cachedInputTokens: nonNegativeInteger(usage.cachedContentTokenCount),
-      thoughtTokens: nonNegativeInteger(usage.thoughtsTokenCount),
-      outputTokens: nonNegativeInteger(usage.candidatesTokenCount),
-      totalTokens: nonNegativeInteger(usage.totalTokenCount),
+      inputTokens,
+      cachedInputTokens,
+      thoughtTokens,
+      outputTokens,
+      totalTokens,
     }
   }
   if (provider === 'openai') {
@@ -167,6 +180,53 @@ function persistWithoutExtendingUserLatency(promise) {
   promise.catch((error) => console.error('[provider-call-ledger] background insert failed', error))
 }
 
+async function dispatchRateLimitNotification(functionName, model, status) {
+  if (status !== 429) return
+  if (typeof Deno === 'undefined') return
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  if (!supabaseUrl || !serviceKey) return
+
+  try {
+    // Check if a rate limit notification was recently created in the last 15 minutes to avoid notification storms
+    const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString()
+    const checkRes = await fetch(
+      `${supabaseUrl}/rest/v1/notifications?source=eq.system&type=eq.rate_limit_warning&created_at=gte.${fifteenMinutesAgo}&limit=1`,
+      {
+        headers: {
+          apikey: serviceKey,
+          authorization: `Bearer ${serviceKey}`,
+        },
+      },
+    )
+    if (checkRes.ok) {
+      const existing = await checkRes.json()
+      if (Array.isArray(existing) && existing.length > 0) {
+        return // Suppress duplicate alert within 15-minute window
+      }
+    }
+
+    await fetch(`${supabaseUrl}/rest/v1/notifications`, {
+      method: 'POST',
+      headers: {
+        apikey: serviceKey,
+        authorization: `Bearer ${serviceKey}`,
+        'content-type': 'application/json',
+        prefer: 'resolution=ignore-duplicates,return=minimal',
+      },
+      body: JSON.stringify({
+        type: 'rate_limit_warning',
+        title: 'AI Rate Limit Reached',
+        body: `Casa exceeded the request limit on ${functionName} (${model}). Backing off temporarily.`,
+        source: 'system',
+        read: false,
+      }),
+    })
+  } catch (error) {
+    console.error('[provider-call-ledger] failed to dispatch rate limit alert', error)
+  }
+}
+
 export function createTrackedProviderFetch(baseContext) {
   return async function trackedProviderFetch(url, init, callContext = {}) {
     const startedAt = Date.now()
@@ -174,15 +234,19 @@ export function createTrackedProviderFetch(baseContext) {
     const requestBody = readJsonBody(init)
     const provider = callContext.provider ?? inferProvider(url)
     const model = callContext.model ?? inferModel(provider, url, requestBody)
+    const promptChars = callContext.promptChars ?? countPromptCharacters(requestBody)
     try {
       const response = await fetch(url, init)
       const responseLatencyMs = Date.now() - startedAt
       const ledgerWrite = readResponsePayload(provider, response).then((payload) => {
-        const usage = extractUsage(provider, payload)
+        const usage = extractUsage(provider, payload, promptChars)
         const providerRequestId =
           response.headers.get('x-request-id')
           ?? response.headers.get('x-goog-request-id')
           ?? response.headers.get('request-id')
+        if (response.status === 429) {
+          persistWithoutExtendingUserLatency(dispatchRateLimitNotification(baseContext.functionName, model, response.status))
+        }
         return insertLedgerRow('ai_provider_calls', {
           id,
           idempotency_key: callContext.idempotencyKey ?? id,
@@ -204,7 +268,7 @@ export function createTrackedProviderFetch(baseContext) {
           thought_tokens: usage.thoughtTokens,
           output_tokens: usage.outputTokens,
           total_tokens: usage.totalTokens,
-          prompt_chars: callContext.promptChars ?? countPromptCharacters(requestBody),
+          prompt_chars: promptChars,
           tool_count: callContext.toolCount ?? countTools(requestBody),
           latency_ms: responseLatencyMs,
           status: response.ok ? 'success' : 'provider_error',
@@ -240,7 +304,7 @@ export function createTrackedProviderFetch(baseContext) {
         latency_ms: Date.now() - startedAt,
         status: error instanceof DOMException && error.name === 'AbortError' ? 'cancelled' : 'transport_error',
         error_class: error instanceof Error ? error.name : 'unknown_transport_error',
-        prompt_chars: callContext.promptChars ?? countPromptCharacters(requestBody),
+        prompt_chars: promptChars,
         tool_count: callContext.toolCount ?? countTools(requestBody),
         metadata: {},
       }))
