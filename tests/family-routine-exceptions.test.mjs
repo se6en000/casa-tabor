@@ -94,3 +94,59 @@ test('Family Routine Intelligence: deserializeRoutineFromAvailabilityRules with 
   assert.equal(deserialized.dayOverrides[0].label, 'Beethoven Strings')
   assert.equal(deserialized.dayOverrides[0].startLocal, '07:00')
 })
+
+test('Family Routine Intelligence: deserializeRoutineFromAvailabilityRules selects the latest rule when duplicates exist', () => {
+  const memberId = 'emme-123'
+  const rules = [
+    {
+      id: 'rule-older',
+      member_id: memberId,
+      day_of_week: 2,
+      start_local: '08:00',
+      end_local: '15:30',
+      availability_type: 'unavailable',
+      reason: JSON.stringify({
+        type: 'school_routine',
+        title: 'School Routine',
+        venueName: 'Bak Middle School of the Arts',
+        dayOverrides: [],
+        enabled: true,
+      }),
+      timezone: 'America/New_York',
+      created_at: '2026-08-18T01:00:00.000Z',
+      updated_at: '2026-08-18T01:00:00.000Z',
+    },
+    {
+      id: 'rule-newer',
+      member_id: memberId,
+      day_of_week: 2,
+      start_local: '08:00',
+      end_local: '15:00',
+      availability_type: 'unavailable',
+      reason: JSON.stringify({
+        type: 'school_routine',
+        title: 'School Routine',
+        venueName: 'Palm Beach Public Elementary School',
+        dayOverrides: [
+          {
+            dayOfWeek: 2,
+            startLocal: '07:00',
+            label: 'Beethoven Strings',
+            enabled: true,
+          },
+        ],
+        enabled: true,
+      }),
+      timezone: 'America/New_York',
+      created_at: '2026-08-18T02:50:00.000Z',
+      updated_at: '2026-08-18T02:50:00.000Z',
+    },
+  ]
+
+  const deserialized = deserializeRoutineFromAvailabilityRules(memberId, rules)
+  assert.ok(deserialized)
+  assert.equal(deserialized.venueName, 'Palm Beach Public Elementary School', 'Should pick latest routine')
+  assert.equal(deserialized.dayOverrides?.length, 1)
+  assert.equal(deserialized.dayOverrides[0].label, 'Beethoven Strings')
+})
+

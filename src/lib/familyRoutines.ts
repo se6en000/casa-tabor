@@ -676,7 +676,13 @@ export function deserializeRoutineFromAvailabilityRules(
 
   if (routineRules.length === 0) return null
 
-  const first = routineRules[0]
+  const sortedRoutineRules = [...routineRules].sort((a, b) => {
+    const aTime = (a.updated_at || a.created_at || '') as string
+    const bTime = (b.updated_at || b.created_at || '') as string
+    return bTime.localeCompare(aTime)
+  })
+
+  const first = sortedRoutineRules[0]
   let payload: RoutinePayload = {
     type: 'school_routine',
     routineType: 'school',

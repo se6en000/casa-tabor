@@ -124,6 +124,18 @@ export const COMPONENT_MANIFEST = [
     example: '<JewelCapsuleCopilot isActive={isAiOpen} onClick={toggleAi} />',
   }),
   component({
+    name: 'CopilotIcon',
+    category: 'action',
+    purpose: 'Ambient jewelry multi-facet AI star icon with animated specular sheen.',
+    useWhen: 'Use for AI copilot iconography, drawer headers, and conversational status representation.',
+    avoid: 'Do not use for non-AI generic icons.',
+    variants: ['default', 'glow:subtle', 'glow:normal', 'glow:intense'],
+    states: ['idle', 'thinking', 'speaking', 'listening', 'active'],
+    accessibility: 'Exposes aria-label or hides via aria-hidden when purely decorative.',
+    responsive: 'Scalable SVG geometry preserves hairline fidelity at any size.',
+    example: '<CopilotIcon size={24} state="idle" />',
+  }),
+  component({
     name: 'IconButton',
     category: 'action',
     purpose: 'Runs a compact action represented by one familiar icon.',

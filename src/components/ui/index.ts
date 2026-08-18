@@ -56,3 +56,4 @@ export {
   type WorkflowActionsProps,
 } from './Patterns'
 export { JewelCapsuleCopilot, type JewelCapsuleCopilotProps } from './JewelCapsuleCopilot'
+export { CopilotIcon, type CopilotIconProps, type CopilotIconState, type CopilotShimmerSpeed, type CopilotGlowIntensity } from './CopilotIcon'
