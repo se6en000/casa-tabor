@@ -51,6 +51,11 @@ const ALLOWED_UPDATE_KEYS = new Set([
   'action_items',
   'members_add',
   'members_remove',
+  'driver_name',
+  'driver_leg1',
+  'driver_leg2',
+  'travel_behavior',
+  'primary_attendee',
 ])
 
 export function normalizeOptionalText(value) {

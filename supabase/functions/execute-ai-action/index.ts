@@ -1163,6 +1163,46 @@ Deno.serve(async (req) => {
 
       await applyMemberRoleOverrides(sb, normalized.eventId, membersPrimary, membersAttendees)
 
+      if (
+        cleanArgs.driver_name !== undefined ||
+        cleanArgs.driver_leg1 !== undefined ||
+        cleanArgs.driver_leg2 !== undefined ||
+        cleanArgs.travel_behavior !== undefined
+      ) {
+        const { data: family } = await sb.from('family_members').select('id, name, full_name, role, can_drive')
+        const driverName = typeof cleanArgs.driver_name === 'string' ? cleanArgs.driver_name.trim() : undefined
+        const driverLeg1 = typeof cleanArgs.driver_leg1 === 'string' ? cleanArgs.driver_leg1.trim() : undefined
+        const driverLeg2 = typeof cleanArgs.driver_leg2 === 'string' ? cleanArgs.driver_leg2.trim() : undefined
+        const travelBehavior = typeof cleanArgs.travel_behavior === 'string' ? cleanArgs.travel_behavior.trim() : undefined
+
+        const { data: existingOverride } = await sb
+          .from('event_plan_overrides')
+          .select('*')
+          .eq('event_id', normalized.eventId)
+          .maybeSingle()
+
+        const d1 = driverLeg1 ?? driverName
+        const d2 = driverLeg2 ?? driverName
+        const d1Member = d1 ? resolveFamilyMemberByName(family ?? [], d1) : null
+        const d2Member = d2 ? resolveFamilyMemberByName(family ?? [], d2) : null
+
+        const driverOverrides: Record<number, string> = {
+          ...(existingOverride?.driver_overrides ?? {}),
+          ...(d1 !== undefined ? (d1Member ? { 0: d1Member.id } : { 0: d1 }) : {}),
+          ...(d2 !== undefined ? (d2Member ? { 1: d2Member.id } : { 1: d2 }) : {}),
+        }
+
+        const waits = travelBehavior === 'stay' ? true : travelBehavior === 'two_way' ? false : existingOverride?.waits ?? null
+
+        await sb.from('event_plan_overrides').upsert({
+          event_id: normalized.eventId,
+          verified: true,
+          waits,
+          driver_overrides: driverOverrides,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'event_id' })
+      }
+
       const { data: updatedEvent, error: updatedEventError } = await sb
         .from('events')
         .select('updated_at')

@@ -257,34 +257,40 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
 
   const currentEventIdRef = useRef(initialEvent?.id)
   const activeEventRef = useRef<EventWithDetails | null>(initialEvent)
+  const lastEventUpdatedAtRef = useRef(initialEvent?.updated_at)
 
   // Sync state whenever event prop changes
   useEffect(() => {
     if (!initialEvent) return
     const isNewEvent = initialEvent.id !== currentEventIdRef.current
+    const isServerUpdate = Boolean(initialEvent.updated_at && initialEvent.updated_at !== lastEventUpdatedAtRef.current)
     currentEventIdRef.current = initialEvent.id
     activeEventRef.current = initialEvent
+    lastEventUpdatedAtRef.current = initialEvent.updated_at
 
     const cat = normalizeCategoryName(initialEvent.enrichment?.category)
     const mode = isLikelyReminderOrHome(initialEvent, initialEvent.enrichment?.category) ? 'reminder' : 'event'
 
-    setState(prev => ({
-      ...prev,
-      mode,
-      title: isNewEvent ? (initialEvent.title || 'New Event') : (prev.title || initialEvent.title),
-      category: cat.label,
-      startDate: isNewEvent ? initialStartDate : prev.startDate,
-      endDate: isNewEvent ? initialEndDate : prev.endDate,
-      durationMinutes: isNewEvent ? initialDuration : prev.durationMinutes,
-      isAllDay: isNewEvent ? initialIsAllDay : (prev.isAllDay ?? initialIsAllDay),
-      venue: isNewEvent ? initialVenue : prev.venue,
-      selectedMemberIds: isNewEvent ? initialMemberIds : prev.selectedMemberIds,
-      primaryMemberId: isNewEvent ? initialPrimaryId : prev.primaryMemberId,
-      travelBehavior: isNewEvent ? initialTravelBehavior : prev.travelBehavior,
-      driverLeg1: isNewEvent ? initialDriverLeg1 : prev.driverLeg1,
-      driverLeg2: isNewEvent ? initialDriverLeg2 : prev.driverLeg2,
-    }))
-  }, [initialEvent?.id, initialStartDate, initialEndDate, initialDuration, initialIsAllDay, initialVenue, initialMemberIds, initialPrimaryId, initialTravelBehavior, initialDriverLeg1, initialDriverLeg2])
+    setState(prev => {
+      const venuePropChanged = initialVenue.name !== prev.venue.name || initialVenue.address !== prev.venue.address
+      return {
+        ...prev,
+        mode,
+        title: isNewEvent || isServerUpdate ? (initialEvent.title || 'New Event') : (prev.title || initialEvent.title),
+        category: cat.label,
+        startDate: isNewEvent || isServerUpdate ? initialStartDate : prev.startDate,
+        endDate: isNewEvent || isServerUpdate ? initialEndDate : prev.endDate,
+        durationMinutes: isNewEvent || isServerUpdate ? initialDuration : prev.durationMinutes,
+        isAllDay: isNewEvent || isServerUpdate ? initialIsAllDay : (prev.isAllDay ?? initialIsAllDay),
+        venue: isNewEvent || isServerUpdate || venuePropChanged ? initialVenue : prev.venue,
+        selectedMemberIds: isNewEvent || isServerUpdate ? initialMemberIds : prev.selectedMemberIds,
+        primaryMemberId: isNewEvent || isServerUpdate ? initialPrimaryId : prev.primaryMemberId,
+        travelBehavior: isNewEvent || isServerUpdate ? initialTravelBehavior : prev.travelBehavior,
+        driverLeg1: isNewEvent || isServerUpdate ? initialDriverLeg1 : prev.driverLeg1,
+        driverLeg2: isNewEvent || isServerUpdate ? initialDriverLeg2 : prev.driverLeg2,
+      }
+    })
+  }, [initialEvent?.id, initialEvent?.updated_at, initialStartDate, initialEndDate, initialDuration, initialIsAllDay, initialVenue, initialMemberIds, initialPrimaryId, initialTravelBehavior, initialDriverLeg1, initialDriverLeg2])
 
   // Resolve live route ETA if event has destination address but missing computed driving metrics
   useEffect(() => {

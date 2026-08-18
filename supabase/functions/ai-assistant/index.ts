@@ -2661,8 +2661,8 @@ Deno.serve(async (req) => {
     })
     if (
       context?.pendingAction ||
-      (activeConversationEvent && agentWriteData?.planReason !== 'read') ||
-      ['event.create', 'event.move', 'event.delete', 'event.edit'].includes(calendarFrame?.intent ?? '')
+      (activeConversationEvent && agentWriteData?.planReason !== 'read' && agentWriteData?.planKind === 'blocked_mutation') ||
+      (['event.create', 'event.move', 'event.delete', 'event.edit'].includes(calendarFrame?.intent ?? '') && !activeConversationEvent)
     ) {
       return {
         status: 200,
@@ -4607,6 +4607,9 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
   // Call Gemini with function calling — one primary and at most one synthesis round.
   async function callGeminiWithTools(contents: GeminiContent[]): Promise<{ type: string; [key: string]: unknown }> {
     const llmStartMs = Date.now()
+    const requiresCompleteRecipe = intentRouting.profile === 'recipe' &&
+      typeof cookingFrame?.intent === 'string' &&
+      ['recipe.create', 'recipe.generate', 'recipe.draft'].includes(cookingFrame.intent)
     const userLikelyRequestedWrite = explicitReminderCreate || userRequestedWriteIntent || acceptedPlanningProposal
     const primaryHardTimeoutMs = image
       ? Math.max(IMAGE_PRIMARY_HARD_TIMEOUT_MS, intentRouting.profile === 'recipe' ? RECIPE_PRIMARY_HARD_TIMEOUT_MS : PRIMARY_HARD_TIMEOUT_MS)
@@ -5634,7 +5637,14 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       const parts: string[] = []
       if (args.title !== undefined) parts.push(`title → "${String(args.title).slice(0, 40)}"`)
       if (args.start !== undefined) parts.push(`time → ${String(args.start).slice(0, 30)}`)
+      if (args.all_day !== undefined) parts.push(args.all_day ? 'all-day' : 'timed')
       if (args.location !== undefined || args.address !== undefined) parts.push(`location → "${String(args.location ?? args.address ?? '').slice(0, 30)}"`)
+      if (args.driver_name !== undefined) parts.push(`driver → ${String(args.driver_name || 'none')}`)
+      if (args.driver_leg1 !== undefined || args.driver_leg2 !== undefined) {
+        parts.push(`drivers → dropoff: ${String(args.driver_leg1 ?? '—')}, pickup: ${String(args.driver_leg2 ?? '—')}`)
+      }
+      if (args.travel_behavior !== undefined) parts.push(`logistics → ${String(args.travel_behavior)}`)
+      if (args.primary_attendee !== undefined) parts.push(`for → ${String(args.primary_attendee)}`)
       if (args.notes !== undefined) parts.push('notes updated')
       if (args.category !== undefined) parts.push(`category → ${String(args.category)}`)
       if (Array.isArray(args.what_to_bring)) parts.push(`bring list → ${(args.what_to_bring as string[]).join(', ')}`)
