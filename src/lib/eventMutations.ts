@@ -720,6 +720,17 @@ export async function deleteCalendarEvent(
     console.warn('[eventMutations] Background delete-google-event notice:', err)
   })
 
+  // 2. Clean up dependent child tables to prevent foreign key lock delays/timeouts
+  await Promise.allSettled([
+    supabase.from('event_members').delete().eq('event_id', eventId),
+    supabase.from('event_enrichments').delete().eq('event_id', eventId),
+    supabase.from('event_plan_overrides').delete().eq('event_id', eventId),
+    supabase.from('prep_items').delete().eq('source_ref', eventId),
+    supabase.from('event_logistics').delete().eq('event_id', eventId),
+    supabase.from('event_checklist_items').delete().eq('event_id', eventId),
+    supabase.from('event_action_items').delete().eq('event_id', eventId),
+  ])
+
   const { error } = await supabase
     .from('events')
     .delete()

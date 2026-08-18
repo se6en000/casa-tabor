@@ -42,7 +42,7 @@ const LOGISTICS_MODE_OPTIONS: Array<{
   { mode: 'stay', label: 'Stay on Site', shortLabel: 'Stay', icon: Coffee },
   { mode: 'dropoff_only', label: 'Drop Only', shortLabel: 'Drop', icon: ArrowDown },
   { mode: 'pickup_only', label: 'Pick Up Only', shortLabel: 'Pick Up', icon: ArrowUp },
-  { mode: 'two_way', label: 'Drop & Pick', shortLabel: 'Two-Way', icon: Repeat },
+  { mode: 'two_way', label: 'Drop & Pick', shortLabel: '2-Way', icon: Repeat },
   { mode: 'none', label: 'No Ride', shortLabel: 'None', icon: Footprints },
 ]
 

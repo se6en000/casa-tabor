@@ -5,7 +5,7 @@
 import { useMemo, useState, type ElementType } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ClipboardList, ChevronDown, Gift, Plane, Stethoscope, CreditCard, ShoppingBag, Ban, Moon, ThumbsDown, Mail, Bot, Check, Bell, RefreshCw, FileText, CalendarClock, MessageSquareReply } from 'lucide-react'
+import { ClipboardList, ChevronDown, Gift, Plane, Stethoscope, CreditCard, ShoppingBag, Ban, Moon, ThumbsDown, Mail, Bot, Check, Bell, RefreshCw, FileText, CalendarClock, MessageSquareReply, CalendarPlus } from 'lucide-react'
 import { differenceInDays, parseISO } from 'date-fns'
 import { cn } from '../../utils/cn'
 import { usePrepItems, useCompletePrepItem, useSnoozePrepItem, useDownvotePrepItem } from '../../hooks/usePrepItems'
@@ -45,6 +45,8 @@ const TYPE_ICON: Record<string, ElementType> = {
   rsvp: MessageSquareReply,
   deadline: CalendarClock,
   renewal: RefreshCw,
+  appointment: CalendarPlus,
+  event_suggestion: CalendarPlus,
 }
 
 function PrepTypeIcon({ type }: { type: string }) {

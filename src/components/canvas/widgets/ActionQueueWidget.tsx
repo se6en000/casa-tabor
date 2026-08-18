@@ -55,10 +55,19 @@ function extractAmount(text?: string | null): string | null {
   return match ? match[0] : null
 }
 
-function resolveButtonConfig(item: PrepItem): {
+function resolveButtonConfig(item: PrepItem, suggestedPlan?: SuggestedEventPlan | null): {
   label: string
   Icon: React.ComponentType<{ size?: number; className?: string; strokeWidth?: number }>
+  isSuggestedEvent?: boolean
 } {
+  if (suggestedPlan || item.source_pattern_key === 'event_suggestion' || item.type === 'appointment' || item.type === 'event_suggestion') {
+    return {
+      label: suggestedPlan ? `Add to Calendar (${suggestedPlan.displayDate})` : 'Add to Calendar',
+      Icon: CalendarPlus,
+      isSuggestedEvent: true,
+    }
+  }
+
   const text = (item.description || item.event_title || '').toLowerCase()
   const amount = extractAmount(item.description || item.event_title)
 
@@ -219,6 +228,9 @@ export default function ActionQueueWidget({
     const res = await createSuggestedEvent(plan, item)
     if (res.success) {
       setEventAddedItemIds((prev) => new Set(prev).add(item.id))
+      setTimeout(() => {
+        handleCompletePrep(item)
+      }, 700)
     }
   }
 
@@ -487,10 +499,10 @@ export default function ActionQueueWidget({
                 const heroBadge = sourceBadge(heroItem)
                 const HeroBadgeIcon = heroBadge.icon
                 const heroAmount = extractAmount(heroItem.description || heroItem.event_title)
-                const { label: heroDoneLabel, Icon: HeroDoneIcon } = resolveButtonConfig(heroItem)
+                const heroSuggestedEvent = detectSuggestedEvent(heroItem)
+                const { label: heroDoneLabel, Icon: HeroDoneIcon, isSuggestedEvent: isHeroSuggestedEvent } = resolveButtonConfig(heroItem, heroSuggestedEvent)
                 const isHeroSnoozeOpen = openSnoozeId === heroItem.id
                 const isHeroMenuOpen = openMenuId === heroItem.id
-                const heroSuggestedEvent = detectSuggestedEvent(heroItem)
                 const isEventAdded = eventAddedItemIds.has(heroItem.id)
 
                 return (
@@ -666,15 +678,22 @@ export default function ActionQueueWidget({
 
                     {/* ── Universal 2-Anchor Footer: [ Done ] vs [ Snooze ▾ ] ── */}
                     <div className="pt-3.5 border-t border-casa-border/60 flex items-center justify-between gap-2.5 flex-wrap">
-                      {/* Primary Anchor 1: Contextual Done Button */}
+                      {/* Primary Anchor 1: Contextual Action Button */}
                       <Button
                         size="sm"
                         variant="strong"
-                        onClick={() => onInstantCompleteCluster(heroCluster)}
+                        disabled={isCreating}
+                        onClick={() => {
+                          if (isHeroSuggestedEvent && heroSuggestedEvent) {
+                            handle1TapAddCalendar(heroItem, heroSuggestedEvent)
+                          } else {
+                            onInstantCompleteCluster(heroCluster)
+                          }
+                        }}
                         className="px-4 sm:px-5 py-2.5 rounded-full min-h-[48px] text-body-sm font-bold shadow-card flex items-center gap-2 shrink-0 hover:brightness-110"
-                        leadingIcon={<HeroDoneIcon size={16} strokeWidth={2.5} className="text-emerald-400" />}
+                        leadingIcon={isCreating ? <Loader2 size={16} className="animate-spin text-casa-gold" /> : <HeroDoneIcon size={16} strokeWidth={2.5} className="text-emerald-400" />}
                       >
-                        <span>{heroDoneLabel}</span>
+                        <span>{isEventAdded ? 'Added to Calendar' : heroDoneLabel}</span>
                       </Button>
 
                       {/* Primary Anchor 2: Split Snooze Pill with Expandable Presets */}

@@ -56,7 +56,49 @@ export function detectSuggestedEvent(item: PrepItem | null): SuggestedEventPlan 
   if (!item) return null
   const desc = (item.description || item.event_title || '').trim()
 
-  // 1. School PTO / Spirit Day (8/28/26) - only if explicitly PTO spirit day
+  // 1. Explicit event_suggestion or appointment source pattern
+  if (item.source_pattern_key === 'event_suggestion' || item.type === 'appointment' || item.type === 'event_suggestion') {
+    const rawTitle = item.event_title || desc.replace(/^Suggested Appointment:\s*/i, '').split(' at ')[0].split(' — ')[0].trim() || 'Appointment'
+    const targetDateIso = item.event_date || item.due_by
+    if (targetDateIso) {
+      try {
+        const d = new Date(targetDateIso)
+        if (!isNaN(d.getTime())) {
+          const yyyy = d.getFullYear()
+          const mm = String(d.getMonth() + 1).padStart(2, '0')
+          const dd = String(d.getDate()).padStart(2, '0')
+          const dateStr = `${yyyy}-${mm}-${dd}`
+          const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+          const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+          const isMidnightUtc = d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0
+          const isAllDay = isMidnightUtc && targetDateIso.length === 10
+          
+          let location: string | null = null
+          if (desc.includes(' at ')) {
+            const afterAt = desc.split(' at ')[1]
+            location = afterAt.split(' — ')[0].trim()
+          }
+
+          const timeString = isAllDay ? '' : d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+
+          return {
+            title: rawTitle,
+            date: dateStr,
+            displayDate: `${dayNames[d.getDay()]}, ${monthNames[d.getMonth()]} ${d.getDate()}${timeString ? ` · ${timeString}` : ''}`,
+            startTime: isAllDay ? null : d.toISOString(),
+            endTime: isAllDay ? null : new Date(d.getTime() + 45 * 60_000).toISOString(),
+            allDay: isAllDay,
+            location: location || item.attention_vendor || null,
+            description: desc || null,
+            category: item.category || 'general',
+            confidence: 'high',
+          }
+        }
+      } catch {}
+    }
+  }
+
+  // 2. School PTO / Spirit Day (8/28/26) - only if explicitly PTO spirit day
   if (/(?=.*(?:pto|pta))(?=.*spirit\s*day)/i.test(desc)) {
     return {
       title: 'PTO Spirit Day - Palm Beach School (Wear Green & Gold)',
@@ -70,7 +112,7 @@ export function detectSuggestedEvent(item: PrepItem | null): SuggestedEventPlan 
     }
   }
 
-  // 2. Science Camp Trip / Medical Waiver (8/17/26) - only if explicitly Science Camp waiver/trip
+  // 3. Science Camp Trip / Medical Waiver (8/17/26) - only if explicitly Science Camp waiver/trip
   if (/(?=.*(?:science\s*camp|lake\s*alpine))(?=.*(?:waiver|release|medication|departure|camp))/i.test(desc)) {
     return {
       title: '5th Grade Science Camp Departure (Lake Alpine)',
@@ -86,7 +128,7 @@ export function detectSuggestedEvent(item: PrepItem | null): SuggestedEventPlan 
     }
   }
 
-  // 3. Fallback to explicit due date if present and within reasonable calendar window
+  // 4. Fallback to explicit due date if present and within reasonable calendar window
   if (item.due_by) {
     try {
       const d = new Date(item.due_by)

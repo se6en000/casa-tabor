@@ -581,6 +581,89 @@ async function persistInboxActions(
   return data?.length ?? 0
 }
 
+async function persistEventSuggestions(
+  sb: ReturnType<typeof createClient>,
+  sourceOwnerMemberId: string | null,
+  messageId: string,
+  subject: string,
+  sender: string,
+  events: ExtractedEventItem[],
+  familyMembers: { id: string; name: string; role: string }[],
+  isUserLabeled = false,
+  clusterId: string | null = null,
+): Promise<number> {
+  if (events.length === 0) return 0
+  const rows: Record<string, unknown>[] = []
+
+  for (const ev of events) {
+    const evStartIso = (!ev.start_datetime || ev.start_datetime === 'unknown') ? null : ev.start_datetime
+    if (!evStartIso) continue
+    const evStartTime = new Date(evStartIso)
+    if (isNaN(evStartTime.getTime())) continue
+
+    const evAssignedMember = resolveImmediateFamilyMember({
+      members: familyMembers,
+      preferredName: ev.assigned_member ?? null,
+      entityNames: [ev.title, ev.location].filter((v): v is string => typeof v === 'string' && v.trim().length > 0),
+      fallbackMemberId: sourceOwnerMemberId,
+    }) ?? familyMembers[0]
+
+    // Check if matching event is already confirmed on calendar
+    const existingMatch = await findMatchingEvent(sb, evAssignedMember.id, ev.title, evStartIso, ev.location ?? '')
+    if (existingMatch) continue
+
+    const eventTitle = ev.title?.trim() || subject.slice(0, 60)
+    const locationPart = ev.location ? ` at ${ev.location}` : ''
+    const descPart = ev.description ? ` — ${ev.description}` : ''
+    const cleanDesc = `Suggested Appointment: ${eventTitle}${locationPart}${descPart}`
+
+    const lowerText = `${eventTitle} ${ev.description || ''} ${ev.location || ''}`.toLowerCase()
+    const category =
+      /doctor|physician|pediatric|dental|dentist|orthodont|therapy|clinic|hospital|checkup|immuniz|vaccin|prescription|med/i.test(lowerText) ? 'medical_health'
+      : /school|teacher|open house|orientation|picture day|spirit day|book fair|curriculum|pto|pta|bak|grades?/i.test(lowerText) ? 'forms_paperwork'
+      : /flight|hotel|airbnb|car rental|resort|vacation|airport|terminal/i.test(lowerText) ? 'travel_trips'
+      : /party|birthday|dinner|celebration|wedding|brunch|lunch/i.test(lowerText) ? 'gift_occasion'
+      : 'general_todo'
+
+    const sourceRef = `gmail:${sourceOwnerMemberId ?? 'household'}:${messageId}`
+    const threadKey = `suggestion:${messageId}:${normalizeTransactionKeyPart(eventTitle)}`
+
+    rows.push({
+      event_id: null,
+      type: 'appointment',
+      category,
+      emoji: '📅',
+      description: cleanDesc,
+      event_title: eventTitle,
+      event_date: evStartTime.toISOString(),
+      due_by: evStartTime.toISOString(),
+      priority: 2,
+      source_type: 'gmail',
+      source_ref: sourceRef,
+      source_pattern_key: 'event_suggestion',
+      source_confidence: isUserLabeled ? 1.0 : 0.95,
+      attention_thread_key: threadKey,
+      attention_vendor: ev.location || sender.split('<')[0].replace(/"/g, '').trim() || null,
+      attention_stage: 'suggested_event',
+      assigned_to: evAssignedMember.id,
+      is_user_labeled: isUserLabeled,
+      cluster_id: clusterId,
+    })
+  }
+
+  if (rows.length === 0) return 0
+
+  try {
+    const { data, error } = await sb.from('prep_items').insert(rows).select('id')
+    if (!error) return data?.length ?? 0
+  } catch {}
+
+  const fallbackRows = rows.map(({ is_user_labeled: _u, cluster_id: _c, ...rest }) => rest)
+  const { data, error } = await sb.from('prep_items').insert(fallbackRows).select('id')
+  if (error) throw error
+  return data?.length ?? 0
+}
+
 async function persistEmailKnowledgeClaims(
   sb: ReturnType<typeof createClient>,
   canonicalEmailId: string,
@@ -1239,7 +1322,7 @@ async function handleGmailScan(req: Request): Promise<Response> {
           }
         }
 
-        // ── INTENT: new_event / Compound Multi-Event Creation ──────
+        // ── INTENT: new_event / Event Suggestions Pipeline ───────────
         const eventsToProcess: ExtractedEventItem[] = (classified?.events && classified.events.length > 0)
           ? classified.events
           : (classified?.title && classified.start_datetime && !isUnknown(classified.start_datetime))
@@ -1254,55 +1337,33 @@ async function handleGmailScan(req: Request): Promise<Response> {
               }]
             : []
 
-        let createdCountForMessage = 0
-        let lastCreatedEventId: string | null = null
-
-        for (const evItem of eventsToProcess) {
-          const evStartIso = isUnknown(evItem.start_datetime) ? null : evItem.start_datetime
-          const evEndIso = isUnknown(evItem.end_datetime) ? null : evItem.end_datetime
-          const evStartTime = evStartIso ? new Date(evStartIso) : null
-          if (!evStartTime || isNaN(evStartTime.getTime())) continue
-
-          const evEndTime = evEndIso ? new Date(evEndIso) : new Date(evStartTime.getTime() + (evItem.all_day ? 24 * 3600_000 : 3600_000))
-          const evAssignedMember = resolveImmediateFamilyMember({
-            members: familyMembers,
-            preferredName: evItem.assigned_member ?? classified?.assigned_member ?? null,
-            entityNames: [evItem.title, evItem.location].filter((v): v is string => typeof v === 'string' && v.trim().length > 0),
-            fallbackMemberId: sourceOwnerMemberId ?? (tokenBelongsToImmediateFamily ? memberId : null),
-          }) ?? familyMembers[0]
-
-          const existingMatch = await findMatchingEvent(sb, evAssignedMember.id, evItem.title, evStartIso ?? '', evItem.location ?? '')
-          if (existingMatch) continue
-
-          const { data: newEvent } = await sb.from('events').insert({
-            title: evItem.title || details.subject.slice(0, 60),
-            description: evItem.description || `Imported from email: ${details.subject}`,
-            start_time: evStartTime.toISOString(),
-            end_time: evEndTime.toISOString(),
-            all_day: evItem.all_day ?? false,
-            location_name: evItem.location || null,
-            source_member_id: evAssignedMember.id,
-          }).select('id').single()
-
-          if (newEvent) {
-            lastCreatedEventId = newEvent.id
-            await sb.from('event_members').insert({ event_id: newEvent.id, family_member_id: evAssignedMember.id, role: 'primary' })
-            created++
-            createdCountForMessage++
-
-            // Dispatch Google Calendar creation & enrichment
-            await sb.functions.invoke('create-google-event', {
-              body: { event_id: newEvent.id },
-            }).catch(() => {})
-
-            sb.functions.invoke('enrich-event', {
-              body: { event_id: newEvent.id },
-            }).catch(() => {})
+        let suggestionsCreated = 0
+        if (eventsToProcess.length > 0) {
+          suggestionsCreated = await persistEventSuggestions(
+            sb,
+            sourceOwnerMemberId,
+            msgId,
+            details.subject,
+            details.from,
+            eventsToProcess,
+            familyMembers,
+            isUserLabeled,
+            canonicalEmail.id,
+          )
+          actions += suggestionsCreated
+          if (suggestionsCreated > 0) {
+            await persistEmailKnowledgeClaims(
+              sb,
+              canonicalEmail.id,
+              memberId,
+              msgId,
+              emailReceivedAt,
+            )
           }
         }
 
         // Record processed message state
-        const skippedReason = (createdCountForMessage > 0 || actionsFromEmail > 0)
+        const skippedReason = (suggestionsCreated > 0 || actionsFromEmail > 0)
           ? null
           : (classified?.skip_reason ?? 'no events or actionable items found')
 
@@ -1313,15 +1374,15 @@ async function handleGmailScan(req: Request): Promise<Response> {
           email_subject: details.subject,
           from_email: details.from,
           received_at: emailReceivedAt,
-          intent: (createdCountForMessage > 0 || classified?.intent === 'new_event') ? 'new_event' : (actionsFromEmail > 0 ? 'skip' : (classified?.intent ?? 'skip')),
+          intent: (suggestionsCreated > 0 || classified?.intent === 'new_event') ? 'new_event' : (actionsFromEmail > 0 ? 'skip' : (classified?.intent ?? 'skip')),
           skipped_reason: skippedReason,
-          created_event_id: lastCreatedEventId,
+          created_event_id: null,
           email_body: details.body.slice(0, 8000),
           is_user_labeled: isUserLabeled,
           training_source: isUserLabeled ? 'gmail_label_casa' : null,
         }, { onConflict: 'family_member_id,gmail_message_id' })
 
-        if (createdCountForMessage === 0 && actionsFromEmail === 0) {
+        if (suggestionsCreated === 0 && actionsFromEmail === 0) {
           skipped++
         }
       }

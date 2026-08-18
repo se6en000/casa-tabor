@@ -1,1 +1,1 @@
-export * from './assistantEntityLinks'
+export * from './assistantEntityLinks.ts'

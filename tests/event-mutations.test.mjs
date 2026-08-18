@@ -142,3 +142,37 @@ test('updateEventSchedule with isAllDay formats ISO to full day boundaries and c
   assert.equal(enrichUpdatedPayload.departure_time, null)
 })
 
+test('deleteCalendarEvent cleans up child records before deleting from events', async () => {
+  const { deleteCalendarEvent } = await import('../src/lib/eventMutations.ts')
+  const deletedTables = []
+  const mockSupabase = {
+    functions: {
+      invoke: () => Promise.resolve(),
+    },
+    from: (table) => ({
+      delete: () => ({
+        eq: (col, val) => {
+          deletedTables.push(table)
+          return Promise.resolve({ error: null })
+        },
+      }),
+    }),
+  }
+  const mockQueryClient = {
+    getQueryData: () => null,
+    setQueryData: () => {},
+    setQueriesData: () => {},
+    removeQueries: () => {},
+    invalidateQueries: () => Promise.resolve(),
+    refetchQueries: () => Promise.resolve(),
+  }
+
+  await deleteCalendarEvent(mockSupabase, mockQueryClient, 'evt-123')
+
+  assert.ok(deletedTables.includes('event_members'))
+  assert.ok(deletedTables.includes('event_enrichments'))
+  assert.ok(deletedTables.includes('event_plan_overrides'))
+  assert.ok(deletedTables.includes('events'))
+  assert.equal(deletedTables[deletedTables.length - 1], 'events')
+})
+
