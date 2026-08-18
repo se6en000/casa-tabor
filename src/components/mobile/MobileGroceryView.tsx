@@ -190,30 +190,30 @@ export default function MobileGroceryView({
             return (
               <section
                 key={`mobile-group-${group.key}`}
-                className="overflow-hidden rounded-2xl border border-casa-border/80 bg-casa-surface shadow-xs"
+                className="overflow-hidden rounded-2xl border border-casa-border/80 bg-casa-surface shadow-2xs"
               >
                 {/* Category Header */}
-                <div className="flex items-center justify-between border-b border-casa-accent-soft-border bg-[linear-gradient(120deg,var(--color-casa-accent-soft),var(--color-casa-accent-soft-hover))] px-3.5 py-2.5">
+                <div className="flex items-center justify-between border-b border-casa-border/70 bg-gradient-to-b from-casa-bg to-casa-bg-2 px-3.5 py-2.5">
                   <div className="flex items-center gap-2.5 min-w-0">
                     <div
                       className={cn(
-                        'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-casa-border/60 shadow-2xs',
+                        'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-casa-border/80 bg-white shadow-2xs text-casa-navy',
                         categoryIconBadgeClassName(getCategoryTone(group.key))
                       )}
                     >
                       <CategoryIcon size={14} />
                     </div>
-                    <span className="truncate text-body-sm font-bold text-casa-navy">
+                    <span className="truncate font-display text-body-sm font-semibold text-casa-navy">
                       {group.label}
                     </span>
                   </div>
-                  <span className="text-2xs font-mono font-semibold text-casa-muted bg-casa-surface/80 px-2 py-0.5 rounded-full border border-casa-border/50">
+                  <span className="text-3xs font-mono font-semibold text-casa-muted bg-casa-bg-2 px-2 py-0.5 rounded-full border border-casa-border/60">
                     {group.items.length}
                   </span>
                 </div>
 
                 {/* Items in Category */}
-                <div className="divide-y divide-casa-divider">
+                <div className="divide-y divide-casa-divider/70">
                   <AnimatePresence initial={false}>
                     {group.items.map((item) => {
                       const isDismissQueued = dismissingIds.has(item.id)
@@ -232,45 +232,58 @@ export default function MobileGroceryView({
                           transition={{ duration: 0.2 }}
                           className={cn(
                             'flex items-center gap-3 px-3.5 py-3 transition-colors duration-150',
-                            visualChecked && 'opacity-60 bg-casa-gold/5',
+                            visualChecked && 'opacity-50 bg-casa-surface-subtle',
                             isDismissExiting && 'opacity-0 scale-95',
-                            isSpotlighted && 'bg-casa-gold/15 ring-2 ring-casa-gold'
+                            isSpotlighted && 'bg-casa-accent-subtle'
                           )}
                         >
-                          {/* Large 44px+ Checkbox Touch Zone */}
-                          <div className="flex items-center justify-center -ml-1.5 p-1.5 shrink-0">
-                            <Checkbox
-                              checked={visualChecked}
-                              onChange={() => {
-                                triggerHaptic(8)
-                                onToggleItem(item.id, !visualChecked)
-                              }}
-                              label={visualChecked ? `Mark ${item.name} as needed` : `Mark ${item.name} as in cart`}
-                              className="min-h-0 shrink-0 gap-0 pt-0 [&>span:last-child]:sr-only"
-                            />
-                          </div>
+                          {/* Large 48px+ Brass Checkbox Touch Trigger */}
+                          <IconButton
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              triggerHaptic(8)
+                              onToggleItem(item.id, !visualChecked)
+                            }}
+                            aria-label={visualChecked ? `Mark ${item.name} as needed` : `Mark ${item.name} as in cart`}
+                            className="flex-shrink-0 -ml-1 p-0 hover:bg-transparent"
+                            icon={
+                              <div
+                                className={cn(
+                                  'w-[22px] h-[22px] rounded-lg border flex items-center justify-center transition-all duration-200',
+                                  visualChecked
+                                    ? 'bg-casa-gold border-casa-gold text-white shadow-2xs scale-95'
+                                    : 'border-casa-border bg-white text-transparent'
+                                )}
+                              >
+                                <svg className="w-3.5 h-3.5 stroke-current stroke-[2.5]" viewBox="0 0 24 24" fill="none">
+                                  <polyline points="20 6 9 17 4 12" />
+                                </svg>
+                              </div>
+                            }
+                          />
 
                           {/* Item Details */}
                           <div className="min-w-0 flex-1">
                             <div className="flex items-baseline gap-1.5 flex-wrap">
                               <span
                                 className={cn(
-                                  'text-body-sm font-semibold text-casa-navy leading-snug transition-all',
-                                  visualChecked && 'line-through text-casa-muted'
+                                  'text-body-sm font-medium text-casa-navy leading-snug transition-all',
+                                  visualChecked && 'line-through text-casa-muted/70'
                                 )}
                               >
                                 {item.name}
                               </span>
                               {(item.quantity || item.unit) && (
-                                <span className="inline-flex items-center px-1.5 py-0.2 rounded bg-casa-bg border border-casa-border text-3xs font-mono font-medium text-casa-muted shrink-0">
+                                <span className="inline-flex items-center px-1.5 py-0.2 rounded bg-casa-bg-2 border border-casa-border/70 text-3xs font-mono font-medium text-casa-muted shrink-0">
                                   {item.quantity}
                                   {item.unit ? ` ${item.unit}` : ''}
                                 </span>
                               )}
                             </div>
-                            {(item.subcategory || item.brand || item.notes) && (
-                              <p className="text-3xs text-casa-muted leading-tight truncate mt-0.5">
-                                {[item.brand, item.subcategory, item.notes].filter(Boolean).join(' · ')}
+                            {item.notes && (
+                              <p className="text-3xs text-casa-muted/80 italic leading-tight truncate mt-0.5">
+                                {item.notes}
                               </p>
                             )}
                           </div>
@@ -285,7 +298,7 @@ export default function MobileGroceryView({
                               onDeleteItem(item.id)
                             }}
                             aria-label={`Delete ${item.name}`}
-                            className="-mr-1.5 p-2 h-9 w-9 text-casa-muted/60 hover:text-casa-error hover:bg-casa-error/10 shrink-0 rounded-xl"
+                            className="-mr-1.5 p-2 h-9 w-9 text-casa-muted/50 hover:text-casa-error hover:bg-casa-error/10 shrink-0 rounded-xl"
                           />
                         </motion.div>
                       )

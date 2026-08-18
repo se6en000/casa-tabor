@@ -43,7 +43,6 @@ import {
   Card,
   Chip,
   Input,
-  Modal,
   PageShell,
   Sheet,
   Text,
@@ -102,20 +101,20 @@ const DEFAULT_CATEGORY_VISUAL: CategoryVisual = {
 // (src/utils/groceryVisuals.ts), a typed semantic tone map backed entirely by
 // canonical casa-* tokens so category badges stay correct in both themes.
 const CATEGORY_VISUAL_BY_KEY: Record<string, CategoryVisual> = {
-  produce: { icon: Leaf, subtitle: 'Fresh items • entry side' },
-  dairy: { icon: Milk, subtitle: 'Cold essentials • back wall' },
-  meat: { icon: Beef, subtitle: 'Protein picks • butcher lane' },
-  bakery: { icon: Croissant, subtitle: 'Bread & baked goods' },
-  frozen: { icon: Snowflake, subtitle: 'Frozen staples' },
-  pantry: { icon: Package, subtitle: 'Shelf staples • center aisles' },
-  beverages: { icon: Coffee, subtitle: 'Drinks & hydration' },
-  snacks: { icon: Popcorn, subtitle: 'Quick bites & treats' },
-  deli: { icon: Sandwich, subtitle: 'Prepared foods' },
-  household: { icon: House, subtitle: 'Home & cleaning' },
-  'personal-care': { icon: HeartPulse, subtitle: 'Health & body' },
+  produce: { icon: Leaf, subtitle: 'Fresh produce & herbs' },
+  dairy: { icon: Milk, subtitle: 'Cold dairy & refrigerated' },
+  meat: { icon: Beef, subtitle: 'Prime butcher & seafood' },
+  bakery: { icon: Croissant, subtitle: 'Artisan bread & baked goods' },
+  frozen: { icon: Snowflake, subtitle: 'Frozen essentials' },
+  pantry: { icon: Package, subtitle: 'Cellar & pantry staples' },
+  beverages: { icon: Coffee, subtitle: 'Beverages & coffee' },
+  snacks: { icon: Popcorn, subtitle: 'Snacks & treats' },
+  deli: { icon: Sandwich, subtitle: 'Deli & prepared foods' },
+  household: { icon: House, subtitle: 'Household & cleaning' },
+  'personal-care': { icon: HeartPulse, subtitle: 'Health & personal care' },
   baby: { icon: BabyIcon, subtitle: 'Baby essentials' },
   pet: { icon: PawPrint, subtitle: 'Pet supplies' },
-  other: { icon: ShoppingCart, subtitle: 'Everything else' },
+  other: { icon: ShoppingCart, subtitle: 'General provisions' },
 }
 const RECIPE_MEAL_SLOTS: Array<{ slot: RecipeMealPlanSlot; label: string }> = [
   { slot: 'tonight', label: 'Tonight' },
@@ -577,7 +576,6 @@ export default function GroceryPage() {
     y: number
   } | null>(null)
   const [dragOverCategory, setDragOverCategory] = useState<string | null>(null)
-  const [reviewingItemId, setReviewingItemId] = useState<string | null>(null)
   const [spotlightedItemId, setSpotlightedItemId] = useState<string | null>(null)
   const { isSwapped: isItemJustMoved, triggerSwap: triggerItemMoved } = useTactileSwapState()
   const inputRef = useRef<HTMLInputElement>(null)
@@ -1594,9 +1592,6 @@ export default function GroceryPage() {
     : lastSyncTimeLabel
       ? `Updated ${lastSyncTimeLabel}`
       : 'Loading…'
-  const reviewingItem = reviewingItemId
-    ? items.find((item) => item.id === reviewingItemId) ?? null
-    : null
 
   return (
     <div className="h-full min-h-0 flex-1 overflow-hidden bg-casa-bg">
@@ -1838,7 +1833,18 @@ export default function GroceryPage() {
               dismissingExitingIds={dismissingExitingIds}
               onToggleItem={handleToggle}
               onDeleteItem={(id) => deleteItem.mutate(id)}
-              onRequestReview={setReviewingItemId}
+              onRecategorize={(id, category) => {
+                const item = items.find((i) => i.id === id)
+                if (!item) return
+                triggerItemMoved(id, 'move')
+                updateItemCategory.mutate({
+                  id,
+                  category,
+                  fromCategory: item.category,
+                  itemName: item.name,
+                  reviewedByUser: true,
+                })
+              }}
               onMovePointerDown={handleMovePointerDown}
               onMovePointerMove={handleMovePointerMove}
               onMovePointerUp={handleMovePointerUp}
@@ -1847,47 +1853,6 @@ export default function GroceryPage() {
           )}
         </PageShell>
       </div>
-      <Modal
-        open={reviewingItem !== null}
-        onClose={() => setReviewingItemId(null)}
-        title={reviewingItem ? `Recategorize ${reviewingItem.name}` : 'Recategorize item'}
-        size="lg"
-        panelClassName="max-w-2xl"
-      >
-        {reviewingItem && (
-          <>
-            <Text role="body-sm" muted>
-              Choose the store section. The grocery list stays fixed behind this overlay.
-            </Text>
-            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {GROCERY_CATEGORIES.map((category) => (
-                <Chip
-                  key={`${reviewingItem.id}-${category.key}`}
-                  tone="neutral"
-                  selected={reviewingItem.category === category.key}
-                  onClick={() => {
-                    triggerItemMoved(reviewingItem.id, 'move')
-                    updateItemCategory.mutate({
-                      id: reviewingItem.id,
-                      category: category.key,
-                      fromCategory: reviewingItem.category,
-                      itemName: reviewingItem.name,
-                      reviewedByUser: true,
-                    })
-                    setReviewingItemId(null)
-                  }}
-                  className="w-full"
-                >
-                  {splitCategoryLabel(category.label)}
-                </Chip>
-              ))}
-            </div>
-            <Button variant="secondary" className="mt-4" onClick={() => setReviewingItemId(null)}>
-              Looks right
-            </Button>
-          </>
-        )}
-      </Modal>
       {isAddPanelOpen && (
         <Sheet
           open

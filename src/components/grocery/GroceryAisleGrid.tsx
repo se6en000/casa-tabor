@@ -47,7 +47,8 @@ export interface GroceryAisleGridProps {
   dismissingExitingIds: Set<string>
   onToggleItem: (id: string, checked: boolean) => void
   onDeleteItem: (id: string) => void
-  onRequestReview: (id: string) => void
+  onRequestReview?: (id: string) => void
+  onRecategorize?: (id: string, category: string) => void
   onMovePointerDown: (item: GroceryItem, category: string, e: PointerEvent<HTMLButtonElement>) => void
   onMovePointerMove: (e: PointerEvent<HTMLButtonElement>) => void
   onMovePointerUp: (e: PointerEvent<HTMLButtonElement>) => void
@@ -70,18 +71,19 @@ export default function GroceryAisleGrid({
   onToggleItem,
   onDeleteItem,
   onRequestReview,
+  onRecategorize,
   onMovePointerDown,
   onMovePointerMove,
   onMovePointerUp,
   onMovePointerCancel,
 }: GroceryAisleGridProps) {
   return (
-    <div>
+    <div className="w-full">
       {/* ── Drag drop-target banner ── */}
       {dragState && (
-        <div className="mb-4 rounded-2xl border border-casa-gold/40 bg-casa-gold/5 p-3.5 shadow-2xs">
-          <p className="text-caption font-bold text-casa-navy uppercase tracking-wider mb-2">
-            Drop into category
+        <div className="mb-4 rounded-2xl border border-casa-gold/40 bg-casa-surface-subtle p-3.5 shadow-2xs">
+          <p className="text-caption font-semibold text-casa-navy uppercase tracking-wider mb-2">
+            Move to category:
           </p>
           <div className="flex flex-wrap gap-2">
             {GROCERY_CATEGORIES.map((cat) => (
@@ -90,7 +92,7 @@ export default function GroceryAisleGrid({
                 data-drop-category={cat.key}
                 size="sm"
                 selected={dragOverCategory === cat.key}
-                className="cursor-pointer"
+                className="cursor-pointer font-medium"
               >
                 {splitCategoryLabel(cat.label)}
               </Chip>
@@ -100,11 +102,13 @@ export default function GroceryAisleGrid({
       )}
 
       {sections.length === 0 ? (
-        <div className="rounded-3xl border border-casa-border bg-casa-surface p-12 text-center space-y-3">
-          <ShoppingCart size={40} className="mx-auto text-casa-gold opacity-50" />
-          <p className="font-display text-body font-bold text-casa-navy">Your Market Basket is Clear</p>
+        <div className="rounded-3xl border border-casa-border bg-casa-surface p-12 text-center space-y-3 shadow-2xs">
+          <div className="w-14 h-14 rounded-2xl bg-casa-accent-soft border border-casa-gold/30 text-casa-gold flex items-center justify-center mx-auto">
+            <ShoppingCart size={28} />
+          </div>
+          <p className="font-display text-display-sm font-semibold text-casa-navy">All Provisions Accounted For</p>
           <p className="text-body-sm text-casa-muted max-w-md mx-auto">
-            All items are checked off or archived. Use the composer above, pick from express staples, or import from your recipe collection.
+            Your market basket is clear. Use the composer above, choose from express rhythms, or import ingredients from planned meals.
           </p>
         </div>
       ) : (
@@ -125,32 +129,38 @@ export default function GroceryAisleGrid({
                     section.dropKey && dragState && dragOverCategory === section.dropKey && 'bg-casa-gold/5 ring-2 ring-casa-gold/60',
                   )}
                 >
-                  <div className="overflow-hidden rounded-[1.4rem] border border-casa-border/80 bg-casa-surface shadow-card hover:shadow-card-hover transition-shadow duration-300">
-                    <div className="flex items-start justify-between gap-3 border-b border-casa-accent-soft-border bg-[linear-gradient(120deg,var(--color-casa-accent-soft),var(--color-casa-accent-soft-hover))] px-4 py-3.5">
+                  {/* Belgian Linen Plinth Enclosure */}
+                  <div className="overflow-hidden rounded-2xl border border-casa-border/85 bg-casa-surface shadow-card hover:shadow-card-hover transition-all duration-300">
+                    {/* Plinth Header (Warm Belgian Linen Gradient) */}
+                    <div className="flex items-center justify-between gap-3 border-b border-casa-border/70 bg-gradient-to-b from-casa-bg to-casa-bg-2 px-4 py-3">
                       <div className="flex min-w-0 items-center gap-3">
                         <div
                           className={cn(
-                            'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-casa-border/70 shadow-2xs',
+                            'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-casa-border/80 bg-white shadow-2xs text-casa-navy',
                             categoryIconBadgeClassName(getCategoryTone(section.key)),
                           )}
                         >
-                          <CategoryIcon size={18} />
+                          <CategoryIcon size={17} />
                         </div>
                         <div className="min-w-0">
-                          <p className="truncate text-body font-semibold leading-tight text-casa-navy">{section.label}</p>
-                          <p className="mt-0.5 text-caption font-mono text-2xs uppercase tracking-wider text-casa-top-pick-band/90">{section.visual.subtitle}</p>
+                          <h3 className="truncate font-display text-body font-semibold leading-tight text-casa-navy">{section.label}</h3>
+                          <p className="text-2xs font-mono uppercase tracking-wider text-casa-muted/90">{section.visual.subtitle}</p>
                         </div>
                       </div>
-                      <div className="flex shrink-0 items-center gap-2 text-caption text-casa-muted">
+                      <div className="flex shrink-0 items-center gap-1.5">
                         {section.reviewCount > 0 && (
-                          <Chip tone="info" size="sm">{section.reviewCount} suggested</Chip>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-2xs font-semibold bg-casa-warning/15 text-casa-warning border border-casa-warning/30">
+                            {section.reviewCount} suggested
+                          </span>
                         )}
-                        <Chip tone="accent" size="sm">
-                          {section.items.length} item{section.items.length === 1 ? '' : 's'}
-                        </Chip>
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-2xs font-semibold bg-casa-bg-2 text-casa-text border border-casa-border/60">
+                          {section.items.length} {section.items.length === 1 ? 'item' : 'items'}
+                        </span>
                       </div>
                     </div>
-                    <div className="divide-y divide-casa-divider">
+
+                    {/* Plinth Item Rows */}
+                    <div className="divide-y divide-casa-divider/70">
                       {section.items.map((item) => (
                         <div key={item.id} id={`grocery-item-${item.id}`}>
                           <GroceryItemRow
@@ -160,6 +170,7 @@ export default function GroceryAisleGrid({
                             isSpotlighted={spotlightedItemId === item.id}
                             isJustMoved={isItemJustMoved?.(item.id)}
                             onRequestReview={onRequestReview}
+                            onRecategorize={onRecategorize}
                             onToggle={onToggleItem}
                             onDelete={onDeleteItem}
                             onMovePointerDown={(e: PointerEvent<HTMLButtonElement>) => onMovePointerDown(item, item.category, e)}
@@ -180,14 +191,14 @@ export default function GroceryAisleGrid({
 
       {/* ── SECTION: THE COMPLETED ARCHIVE LEDGER ── */}
       {completedSections.length > 0 && (
-        <div className="mt-8 pt-4 border-t border-casa-border/50">
-          <div className="flex items-center justify-between mb-3">
+        <div className="mt-10 pt-5 border-t border-casa-border/60">
+          <div className="flex items-center justify-between mb-3.5">
             <div>
               <Text role="caption" className="font-mono uppercase tracking-wider text-2xs font-bold text-casa-muted">
-                Archive
+                Archive &amp; In-Cart
               </Text>
-              <Heading role="display-sm" className="font-display text-body font-bold text-casa-navy">
-                The Completed Ledger
+              <Heading role="display-sm" className="font-display text-body font-semibold text-casa-navy">
+                The Procured Ledger
               </Heading>
             </div>
             <div className="flex items-center gap-2">
@@ -215,11 +226,11 @@ export default function GroceryAisleGrid({
           {showCompletedArchive && (
             <div className="space-y-4">
               {completedSections.map((cat) => (
-                <div key={`completed-cat-${cat.key}`} className="rounded-2xl border border-casa-border bg-casa-surface/70 p-3 shadow-2xs">
+                <div key={`completed-cat-${cat.key}`} className="rounded-2xl border border-casa-border bg-casa-surface/80 p-3.5 shadow-2xs">
                   <p className="text-caption font-mono uppercase font-bold text-2xs text-casa-muted mb-2">
                     {cat.label} ({cat.items.length})
                   </p>
-                  <div className="divide-y divide-casa-divider">
+                  <div className="divide-y divide-casa-divider/70">
                     {cat.items.map((item) => (
                       <div key={item.id} id={`grocery-item-${item.id}`}>
                         <GroceryItemRow

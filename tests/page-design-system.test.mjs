@@ -31,12 +31,11 @@ test('Design System gallery documents both static and interactive pill contracts
   assert.match(source, /onClick=\{\(\) => undefined\} disabled/)
 })
 
-test('Grocery suggestion review uses an overlay instead of expanding its item row', () => {
-  const source = readFileSync(resolve('src/pages/GroceryPage.tsx'), 'utf8')
-  assert.match(source, /open=\{reviewingItem !== null\}/)
-  assert.match(source, /The grocery list stays fixed behind this overlay/)
-  assert.doesNotMatch(source, /isReviewing &&/)
-  assert.doesNotMatch(source, />Quick recategorize</)
+test('Grocery suggestion review uses an inline expandable tray', () => {
+  const rowSource = readFileSync(resolve('src/components/grocery/GroceryItemRow.tsx'), 'utf8')
+  assert.match(rowSource, /isRecatOpen &&/)
+  assert.match(rowSource, /Looks right ✓/)
+  assert.match(rowSource, /Move from \{currentCategoryLabel\}:/)
 })
 
 test('Grocery uses a compact semantic hierarchy for its dense shopping surface', () => {
