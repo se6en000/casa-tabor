@@ -7,6 +7,7 @@ import ActionQueueWidget from './widgets/ActionQueueWidget'
 import NowAndNextWidget from './widgets/NowAndNextWidget'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { cn } from '../../utils/cn'
+import GmailSyncStatusIndicator from '../shared/GmailSyncStatusIndicator'
 
 interface TurboCanvasViewProps {
   onOpenEvent: (event: EventWithDetails) => void
@@ -76,6 +77,9 @@ export default function TurboCanvasView({ onOpenEvent, onQuickCreate }: TurboCan
           </Button>
         </div>
       </div>
+
+      {/* ── Gmail Sync Health Warning Banner ── */}
+      <GmailSyncStatusIndicator variant="compact" className="mb-3 shrink-0" />
 
       {/* ── 2-Pane Living Canvas Action Center Grid ── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 sm:gap-4 flex-1 min-h-0 items-stretch overflow-hidden">

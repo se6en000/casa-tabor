@@ -152,18 +152,23 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
 
   const initialTravelBehavior = useMemo<TravelBehavior>(() => {
     const plan = initialEvent?.plan_override?.transportation_plan
-    if (!plan || plan.legs.length === 0) {
-      return initialEvent?.plan_override?.waits === false ? 'two_way' : 'stay'
+    if (plan) {
+      if (Array.isArray(plan.legs) && plan.legs.length === 0) return 'none'
+      if (plan.legs.length === 1) {
+        if (plan.legs[0].purpose === 'dropoff') return 'dropoff_only'
+        if (plan.legs[0].purpose === 'pickup') return 'pickup_only'
+      }
+      if (plan.waitOnSite || initialEvent?.plan_override?.waits !== false) {
+        return 'stay'
+      }
+      return 'two_way'
     }
-    if (plan.legs.length === 1) {
-      if (plan.legs[0].purpose === 'dropoff') return 'dropoff_only'
-      if (plan.legs[0].purpose === 'pickup') return 'pickup_only'
-    }
-    if (plan.waitOnSite || initialEvent?.plan_override?.waits !== false) {
-      return 'stay'
-    }
-    return 'two_way'
+    return initialEvent?.plan_override?.waits === false ? 'two_way' : 'stay'
   }, [initialEvent?.plan_override])
+
+  const initialIsAllDay = useMemo(() => {
+    return Boolean(initialEvent?.all_day)
+  }, [initialEvent?.all_day])
 
   // Local State
   const [state, setState] = useState<LivingFlowState>({
@@ -177,6 +182,7 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     startDate: initialStartDate,
     endDate: initialEndDate,
     durationMinutes: initialDuration,
+    isAllDay: initialIsAllDay,
     bufferMinutes: 5,
     recurScope: 'this',
     venue: initialVenue,
@@ -250,6 +256,7 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
       startDate: isNewEvent ? initialStartDate : prev.startDate,
       endDate: isNewEvent ? initialEndDate : prev.endDate,
       durationMinutes: isNewEvent ? initialDuration : prev.durationMinutes,
+      isAllDay: isNewEvent ? initialIsAllDay : (prev.isAllDay ?? initialIsAllDay),
       venue: isNewEvent ? initialVenue : prev.venue,
       selectedMemberIds: isNewEvent ? initialMemberIds : prev.selectedMemberIds,
       primaryMemberId: isNewEvent ? initialPrimaryId : prev.primaryMemberId,
@@ -257,7 +264,7 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
       driverLeg1: isNewEvent ? initialDriverLeg1 : prev.driverLeg1,
       driverLeg2: isNewEvent ? initialDriverLeg2 : prev.driverLeg2,
     }))
-  }, [initialEvent?.id, initialStartDate, initialEndDate, initialDuration, initialVenue, initialMemberIds, initialPrimaryId, initialTravelBehavior, initialDriverLeg1, initialDriverLeg2])
+  }, [initialEvent?.id, initialStartDate, initialEndDate, initialDuration, initialIsAllDay, initialVenue, initialMemberIds, initialPrimaryId, initialTravelBehavior, initialDriverLeg1, initialDriverLeg2])
 
   // Resolve live route ETA if event has destination address but missing computed driving metrics
   useEffect(() => {
@@ -397,6 +404,7 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
       startDate?: Date
       endDate?: Date
       durationMinutes?: number
+      isAllDay?: boolean
       venue?: VenueInfo
       selectedMemberIds?: string[]
       category?: string
@@ -417,6 +425,7 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     const baselineEvent = snapshot.event ?? (initialEvent as unknown as Record<string, unknown>)
     const changedPaths: string[] = []
 
+    const newIsAllDay = values.isAllDay !== undefined ? values.isAllDay : (state.isAllDay ?? false)
     const newTitle = (values.title ?? state.title).trim()
     const newStart = values.startDate ? values.startDate.toISOString() : (state.startDate ? state.startDate.toISOString() : initialEvent.start_time)
     const newEnd = values.endDate ? values.endDate.toISOString() : (state.endDate ? state.endDate.toISOString() : initialEvent.end_time)
@@ -431,9 +440,10 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     if (changedField === 'title' || newTitle !== baselineEvent.title) {
       changedPaths.push('event.title')
     }
-    if (changedField === 'schedule' || newStart !== baselineEvent.start_time || newEnd !== baselineEvent.end_time) {
+    if (changedField === 'schedule' || newStart !== baselineEvent.start_time || newEnd !== baselineEvent.end_time || newIsAllDay !== Boolean(baselineEvent.all_day)) {
       changedPaths.push('event.startTime')
       changedPaths.push('event.endTime')
+      changedPaths.push('event.allDay')
     }
     if (changedField === 'venue' || newLocation !== ((baselineEvent.location_name as string | null)?.trim() || null) || newAddress !== ((baselineEvent.address as string | null)?.trim() || null)) {
       changedPaths.push('event.locationName')
@@ -468,7 +478,7 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
         start_time: newStart,
         end_time: newEnd,
         duration_ms: Math.max(15 * 60 * 1000, durationMs),
-        all_day: false,
+        all_day: newIsAllDay,
         event_type: values.mode === 'reminder' ? 'reminder' : 'event',
         location_name: newLocation,
         address: newAddress,
@@ -690,13 +700,18 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
   }, [initialEvent, state.startDate, state.bufferMinutes, persistRecurringFieldMutation, familyMembers, queryClient])
 
   // Set Start Time and Duration
-  const setStartAndDuration = useCallback(async (startDate: Date, durationMins: number) => {
-    const endDate = new Date(startDate.getTime() + durationMins * 60 * 1000)
+  const setStartAndDuration = useCallback(async (startDate: Date, durationMins: number, isAllDayParam?: boolean) => {
+    const isAllDay = isAllDayParam !== undefined ? isAllDayParam : (durationMins >= 1440)
+    const endDate = isAllDay
+      ? new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate(), 23, 59, 59)
+      : new Date(startDate.getTime() + durationMins * 60 * 1000)
+
     setState(prev => ({
       ...prev,
       startDate,
       endDate,
-      durationMinutes: durationMins
+      durationMinutes: durationMins,
+      isAllDay,
     }))
 
     const currentEvent = activeEventRef.current || initialEvent
@@ -708,7 +723,7 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
           supabase,
           queryClient,
           currentEvent,
-          { startDate, endDate, durationMinutes: durationMins },
+          { startDate, endDate, durationMinutes: durationMins, isAllDay },
           { familyMembers },
         )
         activeEventRef.current = materialized
@@ -716,9 +731,9 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
         return
       }
 
-      const handled = await persistRecurringFieldMutation('schedule', { startDate, endDate, durationMinutes: durationMins })
+      const handled = await persistRecurringFieldMutation('schedule', { startDate, endDate, durationMinutes: durationMins, isAllDay })
       if (!handled) {
-        await updateEventSchedule(supabase, queryClient, currentEvent, startDate, endDate)
+        await updateEventSchedule(supabase, queryClient, currentEvent, startDate, endDate, isAllDay)
       }
     } catch (err) {
       console.error('[LivingFlow] Failed to update event timing:', err)
@@ -730,8 +745,8 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     setState(prev => {
       const nextStart = new Date(prev.startDate.getTime() + mins * 60 * 1000)
       const nextEnd = new Date(nextStart.getTime() + prev.durationMinutes * 60 * 1000)
-      setStartAndDuration(nextStart, prev.durationMinutes)
-      return { ...prev, startDate: nextStart, endDate: nextEnd }
+      void setStartAndDuration(nextStart, prev.durationMinutes, false)
+      return { ...prev, startDate: nextStart, endDate: nextEnd, isAllDay: false }
     })
   }, [setStartAndDuration])
 

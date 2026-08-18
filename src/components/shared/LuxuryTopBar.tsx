@@ -4,6 +4,8 @@ import { format, isAfter, isBefore } from 'date-fns'
 import {
   Settings,
   Bell,
+  AlertCircle,
+  AlertTriangle,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useLiveClock } from '../../hooks/useLiveClock'
@@ -12,6 +14,7 @@ import { useTodayEvents } from '../../hooks/useCalendarEvents'
 import { useNotifications } from '../../hooks/useNotifications'
 import { useWeekConflicts } from '../../hooks/useConflicts'
 import { usePrepItems } from '../../hooks/usePrepItems'
+import { useGmailHealth } from '../../hooks/useGmailHealth'
 import { clusterPrepItems } from '../../utils/prepItemClusters'
 import { cn } from '../../utils/cn'
 import { IconButton, JewelCapsuleCopilot } from '../ui'
@@ -341,6 +344,8 @@ function UtilityTrack({
         : 'text-white/70 hover:text-white hover:bg-white/10 active:scale-95'
     )
 
+  const { summary: gmailHealth, isDown: isGmailDown } = useGmailHealth()
+
   return (
     <div
       className={cn(
@@ -350,6 +355,29 @@ function UtilityTrack({
           : 'bg-white/[0.06] border-white/[0.12] shadow-2xs backdrop-blur-md'
       )}
     >
+      {/* Gmail Health Alert Complication */}
+      {isGmailDown && (
+        <IconButton
+          icon={
+            gmailHealth.status === 'error' ? (
+              <AlertCircle size={18} strokeWidth={2} className="text-rose-500 animate-pulse" />
+            ) : (
+              <AlertTriangle size={18} strokeWidth={2} className="text-amber-500" />
+            )
+          }
+          aria-label={`Gmail Sync: ${gmailHealth.label}`}
+          onClick={() => navigate('/settings/google')}
+          title={`Gmail Sync: ${gmailHealth.label} — Tap to manage in Settings`}
+          variant="ghost"
+          className={cn(
+            'size-control rounded-full flex items-center justify-center transition-all duration-150',
+            gmailHealth.status === 'error'
+              ? 'bg-rose-500/15 text-rose-500 ring-1 ring-rose-500/40'
+              : 'bg-amber-500/15 text-amber-500 ring-1 ring-amber-500/40'
+          )}
+        />
+      )}
+
       {/* Triage Bell with Luxury Complication Badge */}
       <div className="relative inline-flex items-center justify-center">
         <IconButton

@@ -95,15 +95,16 @@ export function normalizeTransportationPlan(value: unknown): EventTransportation
         .map((name) => name.trim())
         .filter(Boolean)
     : undefined
-  return legs.length > 0
-    ? {
-        version: 1,
-        ...(raw.source === 'generated' || raw.source === 'manual' ? { source: raw.source } : {}),
-        ...(typeof raw.waitOnSite === 'boolean' ? { waitOnSite: raw.waitOnSite } : {}),
-        legs,
-        ...(attendeeRoster ? { attendeeRoster } : {}),
-      }
-    : null
+
+  if (raw.legs.length > 0 && legs.length === 0) return null
+
+  return {
+    version: 1,
+    ...(raw.source === 'generated' || raw.source === 'manual' ? { source: raw.source } : {}),
+    ...(typeof raw.waitOnSite === 'boolean' ? { waitOnSite: raw.waitOnSite } : {}),
+    legs,
+    ...(attendeeRoster ? { attendeeRoster } : {}),
+  }
 }
 
 export function eventTimeValue(iso: string | null | undefined): string {

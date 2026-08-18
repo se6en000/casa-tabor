@@ -30,6 +30,7 @@ export interface LivingFlowState {
   isCalculatingRoute?: boolean
   selectedMemberIds: string[]
   primaryMemberId: string | null
+  isAllDay?: boolean
 }
 
 export interface LivingFlowProps {

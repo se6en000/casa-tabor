@@ -105,6 +105,7 @@ export default function LivingFlowSidecar({
           mode={state.mode}
           startDate={state.startDate}
           durationMinutes={state.durationMinutes}
+          isAllDay={state.isAllDay}
           onUpdateTitle={updateTitle}
           onSetStartAndDuration={setStartAndDuration}
           onSelectCategory={setCategory}
@@ -115,7 +116,7 @@ export default function LivingFlowSidecar({
         {state.mode === 'event' ? (
           <>
             {/* ⭐ Hero Departure Capsule (Shown if travel / drive is required) */}
-            {isDrivingOuting ? (
+            {isDrivingOuting && state.travelBehavior !== 'none' && !state.isAllDay ? (
               <LivingDepartureHero
                 departureDate={departureDate}
                 arrivalDate={state.startDate}

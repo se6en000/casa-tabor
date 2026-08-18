@@ -39,6 +39,7 @@ import { buttonClassName } from '../design-system/variants.mjs'
 import { Button, CalendarPill, Card, Chip, EmptyState, Heading, IconButton, PersonAvatarStack, PrimaryRail, Sheet, Text } from '../components/ui'
 import SnoozeMenu from '../components/shared/SnoozeMenu'
 import type { SnoozeDuration } from '../utils/snoozeDuration'
+import GmailSyncStatusIndicator from '../components/shared/GmailSyncStatusIndicator'
 
 const SHARED_GOLD = 'var(--color-casa-gold)'
 
@@ -435,6 +436,9 @@ export default function HomePage() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* ── Gmail Sync Health Warning Banner ── */}
+        <GmailSyncStatusIndicator variant="banner" className="mb-4" />
 
         <HeroCarousel
           now={now}

@@ -540,13 +540,15 @@ function EventCard({ event, household, now = new Date(), isHighlighted = false, 
     [event, household, now, overrideVersion]
   )
 
+  const hasNoRide = Boolean(event.plan_override?.transportation_plan && Array.isArray(event.plan_override.transportation_plan.legs) && event.plan_override.transportation_plan.legs.length === 0)
   const departureTime = useMemo(() => {
+    if (event.all_day || hasNoRide) return null
     if (enr?.departure_time) return new Date(enr.departure_time)
-    if (enr?.drive_time_mins && event.start_time && !isHosted && !event.all_day) {
+    if (enr?.drive_time_mins && event.start_time && !isHosted) {
       return new Date(new Date(event.start_time).getTime() - (enr.drive_time_mins + 5) * 60_000)
     }
     return null
-  }, [enr?.departure_time, enr?.drive_time_mins, event.start_time, isHosted, event.all_day])
+  }, [enr?.departure_time, enr?.drive_time_mins, event.start_time, isHosted, event.all_day, hasNoRide])
   const durationMins = differenceInMinutes(end, start)
   const durationStr = formatCompactDuration(durationMins)
 

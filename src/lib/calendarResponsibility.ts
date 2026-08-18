@@ -92,6 +92,14 @@ export function deriveCalendarCardResponsibility(
 ): CalendarCardResponsibility {
   const mode = resolveEventMode(event)
   const persisted = getPersistedPlanOverrides(event)
+  if (persisted.transportationPlan && Array.isArray(persisted.transportationPlan.legs) && persisted.transportationPlan.legs.length === 0) {
+    return {
+      responsible: null,
+      attendees: event.members ?? [],
+      summary: '',
+      roleBadge: 'drive',
+    }
+  }
   const explicit = projectHomeTransportation(event, persisted.transportationPlan, now)
   if (explicit) {
     const drivers = explicit.drivers

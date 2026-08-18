@@ -16,6 +16,7 @@ import {
   publishEventAggregatePatch,
   evictEventFromAllCaches,
 } from './eventAggregateCache.ts'
+import { normalizeAllDayEventRange } from '../utils/allDayEventRange.ts'
 
 export interface EventVenuePayload {
   name: string
@@ -125,6 +126,7 @@ export async function materializeSyntheticRoutineEvent(
     selectedMemberIds?: string[]
     category?: string
     mode?: 'event' | 'reminder'
+    isAllDay?: boolean
   },
   options?: {
     familyMembers?: FamilyMember[]
@@ -134,19 +136,30 @@ export async function materializeSyntheticRoutineEvent(
   const newEventId = crypto.randomUUID()
   const members = options?.familyMembers ?? []
 
+  const isAllDay = overrides?.isAllDay === true
   const title = (overrides?.title ?? syntheticEvent.title ?? 'New Event').trim()
-  const startTime = overrides?.startDate ? overrides.startDate.toISOString() : (syntheticEvent.start_time || new Date().toISOString())
-  const endTime = overrides?.endDate ? overrides.endDate.toISOString() : (syntheticEvent.end_time || new Date(new Date(startTime).getTime() + 15 * 60000).toISOString())
+  let startTime = overrides?.startDate ? overrides.startDate.toISOString() : (syntheticEvent.start_time || new Date().toISOString())
+  let endTime = overrides?.endDate ? overrides.endDate.toISOString() : (syntheticEvent.end_time || new Date(new Date(startTime).getTime() + 15 * 60000).toISOString())
+  if (isAllDay && overrides?.startDate) {
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const startStr = `${overrides.startDate.getFullYear()}-${pad(overrides.startDate.getMonth() + 1)}-${pad(overrides.startDate.getDate())}`
+    const endStr = overrides.endDate
+      ? `${overrides.endDate.getFullYear()}-${pad(overrides.endDate.getMonth() + 1)}-${pad(overrides.endDate.getDate())}`
+      : startStr
+    const range = normalizeAllDayEventRange(startStr, endStr)
+    startTime = range.start
+    endTime = range.end
+  }
   const locationName = (overrides?.venue?.name ?? syntheticEvent.location_name ?? '').trim()
   const address = (overrides?.venue?.address ?? syntheticEvent.address ?? '').trim()
   const eventType = overrides?.mode ?? syntheticEvent.event_type ?? 'event'
   const category = (overrides?.category ?? syntheticEvent.enrichment?.category ?? 'School').toLowerCase().replace(/\s+/g, '_')
-  const driveMins = overrides?.venue?.driveMinutes ?? syntheticEvent.enrichment?.drive_time_mins ?? (locationName.toLowerCase().includes('palm beach') ? 10 : 15)
-  const routeSummary = overrides?.venue?.routeSummary ?? syntheticEvent.enrichment?.route_summary ?? (driveMins ? `${driveMins} min drive` : null)
+  const driveMins = isAllDay ? 0 : (overrides?.venue?.driveMinutes ?? syntheticEvent.enrichment?.drive_time_mins ?? (locationName.toLowerCase().includes('palm beach') ? 10 : 15))
+  const routeSummary = isAllDay ? null : (overrides?.venue?.routeSummary ?? syntheticEvent.enrichment?.route_summary ?? (driveMins ? `${driveMins} min drive` : null))
 
-  const depTimeIso = driveMins > 0
+  const depTimeIso = (!isAllDay && driveMins > 0)
     ? new Date(new Date(startTime).getTime() - (driveMins + 5) * 60000).toISOString()
-    : (syntheticEvent.enrichment?.departure_time ?? null)
+    : (isAllDay ? null : (syntheticEvent.enrichment?.departure_time ?? null))
 
   const { error: evErr } = await supabase
     .from('events')
@@ -156,7 +169,7 @@ export async function materializeSyntheticRoutineEvent(
       description: syntheticEvent.description ?? null,
       start_time: startTime,
       end_time: endTime,
-      all_day: false,
+      all_day: isAllDay,
       event_type: eventType,
       location_name: locationName || null,
       address: address || null,
@@ -247,25 +260,38 @@ export async function updateEventSchedule(
   event: EventWithDetails,
   startDate: Date,
   endDate: Date,
+  isAllDay: boolean = false,
 ) {
-  const driveMins = event.enrichment?.drive_time_mins
-  const newDepTimeIso = (driveMins !== undefined && driveMins !== null && driveMins > 0)
+  let startIso = startDate.toISOString()
+  let endIso = endDate.toISOString()
+  if (isAllDay) {
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const startStr = `${startDate.getFullYear()}-${pad(startDate.getMonth() + 1)}-${pad(startDate.getDate())}`
+    const endStr = `${endDate.getFullYear()}-${pad(endDate.getMonth() + 1)}-${pad(endDate.getDate())}`
+    const range = normalizeAllDayEventRange(startStr, endStr)
+    startIso = range.start
+    endIso = range.end
+  }
+
+  const driveMins = isAllDay ? null : event.enrichment?.drive_time_mins
+  const newDepTimeIso = (!isAllDay && driveMins !== undefined && driveMins !== null && driveMins > 0)
     ? new Date(startDate.getTime() - (driveMins + 5) * 60_000).toISOString()
     : null
 
   publishEventAggregatePatch(queryClient, event.id, {
-    start_time: startDate.toISOString(),
-    end_time: endDate.toISOString(),
+    start_time: startIso,
+    end_time: endIso,
+    all_day: isAllDay,
     enrichment: event.enrichment ? {
       ...event.enrichment,
-      departure_time: newDepTimeIso ?? event.enrichment.departure_time,
+      departure_time: isAllDay ? null : (newDepTimeIso ?? event.enrichment.departure_time),
       updated_at: new Date().toISOString(),
     } : null,
     updated_at: new Date().toISOString(),
   })
 
   // 1. If a transportation plan exists, update the leg arrival and return times
-  if (event.plan_override?.transportation_plan) {
+  if (!isAllDay && event.plan_override?.transportation_plan) {
     const updatedPlan = reconcileTransportationLegTimes(
       event.plan_override.transportation_plan,
       startDate,
@@ -285,21 +311,22 @@ export async function updateEventSchedule(
   const { error } = await supabase
     .from('events')
     .update({
-      start_time: startDate.toISOString(),
-      end_time: endDate.toISOString(),
+      start_time: startIso,
+      end_time: endIso,
+      all_day: isAllDay,
       updated_at: new Date().toISOString(),
     })
     .eq('id', event.id)
 
   if (error) throw error
 
-  // 3. If departure time shifted, update event_enrichments
-  if (newDepTimeIso) {
+  // 3. If departure time shifted or was cleared, update event_enrichments
+  if (isAllDay || newDepTimeIso) {
     try {
       await supabase
         .from('event_enrichments')
         .update({
-          departure_time: newDepTimeIso,
+          departure_time: isAllDay ? null : newDepTimeIso,
           updated_at: new Date().toISOString(),
         })
         .eq('event_id', event.id)

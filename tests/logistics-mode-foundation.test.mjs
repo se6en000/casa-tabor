@@ -260,3 +260,42 @@ test('LivingRouteTimeline and LivingDepartureHero bind all 5 logistics modes', (
   // Hook exports pickupDepartureDate
   assert.match(hookContent, /pickupDepartureDate/)
 })
+
+test('normalizeTransportationPlan preserves empty legs for mode none', async () => {
+  const { normalizeTransportationPlan } = await import('../src/lib/eventTransportation.ts')
+  const emptyPlan = {
+    version: 1,
+    source: 'manual',
+    waitOnSite: false,
+    legs: [],
+    attendeeRoster: ['Liv'],
+  }
+  const normalized = normalizeTransportationPlan(emptyPlan)
+  assert.ok(normalized)
+  assert.equal(normalized.version, 1)
+  assert.equal(normalized.legs.length, 0)
+  assert.deepEqual(normalized.attendeeRoster, ['Liv'])
+})
+
+test('deriveCalendarCardResponsibility suppresses driver assignment when transportation plan legs is empty', async () => {
+  const { deriveCalendarCardResponsibility } = await import('../src/lib/calendarResponsibility.ts')
+  const eventWithNone = {
+    ...mockEvent,
+    plan_override: {
+      transportation_plan: {
+        version: 1,
+        source: 'manual',
+        waitOnSite: false,
+        legs: [],
+        attendeeRoster: ['Liv'],
+      },
+    },
+  }
+  const household = [
+    { id: 'jake-id', name: 'Jake', role: 'parent' },
+    { id: 'liv-id', name: 'Liv', role: 'child' },
+  ]
+  const resp = deriveCalendarCardResponsibility(eventWithNone, household, new Date())
+  assert.equal(resp.responsible, null)
+})
+

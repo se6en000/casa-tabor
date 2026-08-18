@@ -114,15 +114,17 @@ export function DayEventCard({
     () => deriveCalendarCardResponsibility(event, household, now),
     [event, household, now, overrideVersion],
   )
+  const hasNoRide = Boolean(event.plan_override?.transportation_plan && Array.isArray(event.plan_override.transportation_plan.legs) && event.plan_override.transportation_plan.legs.length === 0)
   const fallbackDepartureAt = useMemo(() => {
+    if (event.all_day || hasNoRide) return null
     if (event.enrichment?.departure_time) return new Date(event.enrichment.departure_time)
     if (event.enrichment?.drive_time_mins && event.start_time) {
       return new Date(new Date(event.start_time).getTime() - (event.enrichment.drive_time_mins + 5) * 60_000)
     }
     return null
-  }, [event.enrichment?.departure_time, event.enrichment?.drive_time_mins, event.start_time])
-  const showLiveLeaveBy = !event.all_day && !happening && !isHosted && Boolean(event.address || event.location_name)
-  const showFallbackLeaveBy = !event.all_day && !happening && !isHosted && !(event.address || event.location_name) && Boolean(fallbackDepartureAt)
+  }, [event.enrichment?.departure_time, event.enrichment?.drive_time_mins, event.start_time, event.all_day, hasNoRide])
+  const showLiveLeaveBy = !event.all_day && !happening && !isHosted && !hasNoRide && Boolean(event.address || event.location_name)
+  const showFallbackLeaveBy = !event.all_day && !happening && !isHosted && !hasNoRide && !(event.address || event.location_name) && Boolean(fallbackDepartureAt)
 
   if (timed) {
     async function handleCheck(e: React.MouseEvent) {

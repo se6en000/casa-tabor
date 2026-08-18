@@ -22,6 +22,7 @@ import { inferEventMode, inferEventPlanKind } from '../../lib/eventCommandCenter
 import { isReminderOrChore } from '../../lib/heroFocus.mjs'
 import { openEventDetails } from '../../utils/openEventDetails'
 import { Button } from '../ui'
+import GmailSyncStatusIndicator from '../shared/GmailSyncStatusIndicator'
 
 interface MobileTodayViewProps {
   onOpenQuickCreate?: () => void
@@ -119,7 +120,9 @@ export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate 
 
   return (
     <div className="w-full flex flex-col gap-4 px-4 pt-3 pb-32 overflow-y-auto overscroll-contain">
-      
+      {/* ── Gmail Sync Health Warning Banner ── */}
+      <GmailSyncStatusIndicator variant="compact" />
+
       {/* ══════════════════════════════════════════════════════════════
           1. HERO NEXT-UP CARD (NAVY GRADIENT + GOLD)
          ══════════════════════════════════════════════════════════════ */}

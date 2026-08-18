@@ -95,3 +95,50 @@ test('syncTransportationAttendees synchronizes passenger chips without duplicati
   assert.deepEqual(syncedPlan.legs[0].passengers, ['Liv', 'Owen'])
   assert.deepEqual(syncedPlan.legs[1].passengers, ['Liv', 'Owen'])
 })
+
+test('updateEventSchedule with isAllDay formats ISO to full day boundaries and clears departure time', async () => {
+  const { updateEventSchedule } = await import('../src/lib/eventMutations.ts')
+  let updatedPayload = null
+  let enrichUpdatedPayload = null
+  const mockSupabase = {
+    functions: {
+      invoke: () => Promise.resolve(),
+    },
+    from: (table) => ({
+      update: (payload) => {
+        if (table === 'events') updatedPayload = payload
+        if (table === 'event_enrichments') enrichUpdatedPayload = payload
+        return {
+          eq: () => Promise.resolve({ error: null }),
+        }
+      },
+    }),
+  }
+  const mockQueryClient = {
+    getQueryData: () => null,
+    setQueryData: () => {},
+    setQueriesData: () => {},
+    invalidateQueries: () => Promise.resolve(),
+    refetchQueries: () => Promise.resolve(),
+  }
+
+  const startDate = new Date(2026, 7, 18, 8, 0, 0) // Aug 18, 2026
+  const endDate = new Date(2026, 7, 18, 8, 45, 0)
+  const eventWithEnrichment = {
+    ...testEvent,
+    enrichment: {
+      drive_time_mins: 15,
+      departure_time: '2026-08-18T07:40:00.000Z',
+    },
+  }
+
+  await updateEventSchedule(mockSupabase, mockQueryClient, eventWithEnrichment, startDate, endDate, true)
+
+  assert.ok(updatedPayload)
+  assert.equal(updatedPayload.all_day, true)
+  assert.match(updatedPayload.start_time, /2026-08-18T00:00:00\.000Z/)
+  assert.match(updatedPayload.end_time, /2026-08-18T23:59:59\.000Z/)
+  assert.ok(enrichUpdatedPayload)
+  assert.equal(enrichUpdatedPayload.departure_time, null)
+})
+

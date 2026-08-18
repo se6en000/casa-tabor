@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { format, addDays } from 'date-fns'
+import { format, addDays, isSameDay } from 'date-fns'
 import {
   Calendar, Clock, ChevronDown, Minus, Plus, Tag,
   ShoppingBag, Trophy, Stethoscope, PartyPopper,
@@ -15,8 +15,9 @@ interface LivingHeroTitleCardProps {
   mode: LivingFlowMode
   startDate: Date
   durationMinutes: number
+  isAllDay?: boolean
   onUpdateTitle: (newTitle: string) => void
-  onSetStartAndDuration: (startDate: Date, durationMins: number) => void
+  onSetStartAndDuration: (startDate: Date, durationMins: number, isAllDay?: boolean) => void
   onSelectCategory: (catName: string, icon: string, mode: LivingFlowMode) => void
   onNudgeTime: (mins: number) => void
 }
@@ -47,6 +48,7 @@ export default function LivingHeroTitleCard({
   mode,
   startDate,
   durationMinutes,
+  isAllDay = false,
   onUpdateTitle,
   onSetStartAndDuration,
   onSelectCategory,
@@ -57,6 +59,7 @@ export default function LivingHeroTitleCard({
   const [expandedSection, setExpandedSection] = useState<'datetime' | 'category' | null>(null)
   const [currentDate, setCurrentDate] = useState<Date>(safeDate)
   const [duration, setDuration] = useState<number>(durationMinutes)
+  const [localIsAllDay, setLocalIsAllDay] = useState<boolean>(Boolean(isAllDay))
   const [activeMode, setActiveMode] = useState<LivingFlowMode>(mode)
   const isEditingRef = useRef(false)
 
@@ -75,6 +78,10 @@ export default function LivingHeroTitleCard({
     setDuration(durationMinutes)
   }, [durationMinutes])
 
+  useEffect(() => {
+    setLocalIsAllDay(Boolean(isAllDay))
+  }, [isAllDay])
+
   const formattedDate = format(currentDate, 'EEE, MMM d')
   const formattedTime = format(currentDate, 'h:mm a')
 
@@ -88,14 +95,16 @@ export default function LivingHeroTitleCard({
     const next = new Date(currentDate)
     next.setHours(next.getHours() + delta)
     setCurrentDate(next)
-    onSetStartAndDuration(next, duration)
+    setLocalIsAllDay(false)
+    onSetStartAndDuration(next, duration, false)
   }
 
   const stepMinute = (delta: number) => {
     const next = new Date(currentDate)
     next.setMinutes(next.getMinutes() + delta)
     setCurrentDate(next)
-    onSetStartAndDuration(next, duration)
+    setLocalIsAllDay(false)
+    onSetStartAndDuration(next, duration, false)
   }
 
   const togglePeriod = () => {
@@ -106,7 +115,8 @@ export default function LivingHeroTitleCard({
       next.setHours(next.getHours() - 12)
     }
     setCurrentDate(next)
-    onSetStartAndDuration(next, duration)
+    setLocalIsAllDay(false)
+    onSetStartAndDuration(next, duration, false)
   }
 
   const selectDayOffset = (days: number) => {
@@ -114,13 +124,36 @@ export default function LivingHeroTitleCard({
     const next = new Date(currentDate)
     next.setFullYear(target.getFullYear(), target.getMonth(), target.getDate())
     setCurrentDate(next)
-    onSetStartAndDuration(next, duration)
+    onSetStartAndDuration(next, duration, localIsAllDay)
+  }
+
+  const selectExplicitDate = (dateStr: string) => {
+    if (!dateStr) return
+    const parts = dateStr.split('-').map(Number)
+    if (parts.length === 3) {
+      const next = new Date(currentDate)
+      next.setFullYear(parts[0], parts[1] - 1, parts[2])
+      setCurrentDate(next)
+      onSetStartAndDuration(next, duration, localIsAllDay)
+    }
   }
 
   const selectDuration = (mins: number) => {
-    setDuration(mins)
-    onSetStartAndDuration(currentDate, mins)
+    if (mins >= 1440) {
+      setDuration(1440)
+      setLocalIsAllDay(true)
+      onSetStartAndDuration(currentDate, 1440, true)
+    } else {
+      setDuration(mins)
+      setLocalIsAllDay(false)
+      onSetStartAndDuration(currentDate, mins, false)
+    }
   }
+
+  const isTodayActive = isSameDay(currentDate, new Date())
+  const isTomorrowActive = isSameDay(currentDate, addDays(new Date(), 1))
+  const isDay2Active = isSameDay(currentDate, addDays(new Date(), 2))
+  const isOtherDayActive = !isTodayActive && !isTomorrowActive && !isDay2Active
 
   return (
     <div className={`living-hero-title-card flex flex-col ${expandedSection ? 'has-expanded' : ''}`}>
@@ -197,7 +230,7 @@ export default function LivingHeroTitleCard({
           className={`living-action-chip ${expandedSection === 'datetime' ? 'active' : ''}`}
         >
           <Clock size={13} className={expandedSection === 'datetime' ? 'text-white' : 'text-slate-500'} />
-          <span>{formattedTime}</span>
+          <span>{localIsAllDay ? 'All Day' : formattedTime}</span>
           <ChevronDown size={12} className={expandedSection === 'datetime' ? 'rotate-180 transition-transform' : 'text-slate-400'} />
         </button>
 
@@ -243,21 +276,28 @@ export default function LivingHeroTitleCard({
 
           {/* 1. Day Selector Grid */}
           <div className="day-selector-grid-exact">
-            <button onClick={() => selectDayOffset(0)} className="day-select-pill-btn">
+            <button onClick={() => selectDayOffset(0)} className={`day-select-pill-btn ${isTodayActive ? 'active' : ''}`}>
               Today<small>{format(new Date(), 'EEE d')}</small>
             </button>
-            <button onClick={() => selectDayOffset(1)} className="day-select-pill-btn active">
+            <button onClick={() => selectDayOffset(1)} className={`day-select-pill-btn ${isTomorrowActive ? 'active' : ''}`}>
               Tomorrow<small>{format(addDays(new Date(), 1), 'EEE d')}</small>
             </button>
-            <button onClick={() => selectDayOffset(2)} className="day-select-pill-btn">
+            <button onClick={() => selectDayOffset(2)} className={`day-select-pill-btn ${isDay2Active ? 'active' : ''}`}>
               {format(addDays(new Date(), 2), 'EEEE')}<small>{format(addDays(new Date(), 2), 'EEE d')}</small>
             </button>
-            <button onClick={() => selectDayOffset(3)} className="day-select-pill-btn">
-              <div className="flex flex-col items-center justify-center">
-                <span>Pick Date</span>
+            <label className={`day-select-pill-btn relative cursor-pointer ${isOtherDayActive ? 'active' : ''}`}>
+              <input
+                type="date"
+                value={format(currentDate, 'yyyy-MM-dd')}
+                onChange={(e) => selectExplicitDate(e.target.value)}
+                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                aria-label="Pick date"
+              />
+              <div className="flex flex-col items-center justify-center pointer-events-none">
+                <span>{isOtherDayActive ? format(currentDate, 'MMM d') : 'Pick Date'}</span>
                 <Calendar size={12} className="mt-0.5" />
               </div>
-            </button>
+            </label>
           </div>
 
           {/* 2. Touch Stepper Wheels (48px targets) */}
@@ -307,16 +347,19 @@ export default function LivingHeroTitleCard({
               { mins: 90, label: '1h 30m' },
               { mins: 160, label: '2h 40m' },
               { mins: 240, label: '4h' },
-              { mins: 480, label: 'All Day' }
-            ].map((item) => (
-              <button
-                key={item.mins}
-                onClick={() => selectDuration(item.mins)}
-                className={`dur-chip-btn ${duration === item.mins ? 'active' : ''}`}
-              >
-                {item.label}
-              </button>
-            ))}
+              { mins: 1440, label: 'All Day' }
+            ].map((item) => {
+              const isChipActive = item.mins >= 1440 ? localIsAllDay : (!localIsAllDay && duration === item.mins)
+              return (
+                <button
+                  key={item.mins}
+                  onClick={() => selectDuration(item.mins)}
+                  className={`dur-chip-btn ${isChipActive ? 'active' : ''}`}
+                >
+                  {item.label}
+                </button>
+              )
+            })}
           </div>
         </div>
       )}

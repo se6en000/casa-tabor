@@ -38,13 +38,15 @@ export default function LargeEventCard({
   const cleanTitle = cleanEventTitle(event.title)
   const showSyncState = event.event_type !== 'reminder'
   const isGoogleSynced = !!event.google_event_id
+  const hasNoRide = Boolean(event.plan_override?.transportation_plan && Array.isArray(event.plan_override.transportation_plan.legs) && event.plan_override.transportation_plan.legs.length === 0)
   const departureAt = useMemo(() => {
+    if (event.all_day || hasNoRide) return null
     if (event.enrichment?.departure_time) return new Date(event.enrichment.departure_time)
     if (event.enrichment?.drive_time_mins && event.start_time) {
       return new Date(new Date(event.start_time).getTime() - (event.enrichment.drive_time_mins + 5) * 60_000)
     }
     return null
-  }, [event.enrichment?.departure_time, event.enrichment?.drive_time_mins, event.start_time])
+  }, [event.enrichment?.departure_time, event.enrichment?.drive_time_mins, event.start_time, event.all_day, hasNoRide])
 
   return (
     <div

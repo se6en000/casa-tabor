@@ -66,14 +66,15 @@ export default function EventBlock({ event, onClick, onDoubleClick, columnCount 
   const confidence = event.enrichment?.confidence
   const confidenceDotClass = confidence ? CONFIDENCE_DOT[confidence] : null
 
+  const hasNoRide = Boolean(event.plan_override?.transportation_plan && Array.isArray(event.plan_override.transportation_plan.legs) && event.plan_override.transportation_plan.legs.length === 0)
   const departureAt = useMemo(() => {
-    if (event.all_day) return null
+    if (event.all_day || hasNoRide) return null
     if (event.enrichment?.departure_time) return new Date(event.enrichment.departure_time)
     if (event.enrichment?.drive_time_mins && event.start_time) {
       return new Date(new Date(event.start_time).getTime() - (event.enrichment.drive_time_mins + 5) * 60_000)
     }
     return null
-  }, [event.enrichment?.departure_time, event.enrichment?.drive_time_mins, event.start_time, event.all_day])
+  }, [event.enrichment?.departure_time, event.enrichment?.drive_time_mins, event.start_time, event.all_day, hasNoRide])
 
   // ── Long-press drag detection ────────────────────────────────
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)

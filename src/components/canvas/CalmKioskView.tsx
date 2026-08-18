@@ -29,6 +29,7 @@ import { Button, IconButton, PersonAvatarStack, JourneyProgressBar } from '../ui
 import TomorrowPrepWidget from './widgets/TomorrowPrepWidget'
 import MorningLaunchpadWidget from './widgets/MorningLaunchpadWidget'
 import { useFamilyRoutineIntelligence } from '../../hooks/useFamilyRoutineIntelligence'
+import GmailSyncStatusIndicator from '../shared/GmailSyncStatusIndicator'
 
 interface CalmKioskViewProps {
   onOpenEvent: (event: EventWithDetails) => void
@@ -170,6 +171,9 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
 
   return (
     <div className="w-full h-full flex flex-col justify-start p-4 sm:p-6 lg:p-8 xl:p-10 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-8 overflow-y-auto scrollbar-hide">
+      {/* ── Gmail Sync Health Warning Banner ── */}
+      <GmailSyncStatusIndicator variant="banner" className="mb-5 shrink-0" />
+
       {/* ── Top Section: 12-Col Grid Alignment (7 cols Greeting, 5 cols Tonight's Kitchen) ── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 xl:gap-10 pb-5 border-b border-casa-border/40 shrink-0 items-center">
         <div className="lg:col-span-7">
