@@ -67,11 +67,11 @@ export default function LivingFlowHeader({
               type="button"
               onClick={onSwitchToAi}
               className="min-h-[34px] px-3 py-1 flex items-center gap-1.5 rounded-full text-2xs font-bold text-casa-navy bg-casa-accent-subtle hover:bg-casa-accent-soft border border-casa-gold/40 shadow-2xs transition-all active:scale-95 group shrink-0"
-              title="Flip to Casa AI"
-              aria-label="Flip to Casa AI"
+              title="Flip to Copilot"
+              aria-label="Flip to Copilot"
             >
               <Rotate3d size={14} className="text-casa-gold transition-transform duration-300 group-hover:rotate-180" />
-              <span>Flip to AI</span>
+              <span>Flip to Copilot</span>
             </Button>
           )}
           <IconButton

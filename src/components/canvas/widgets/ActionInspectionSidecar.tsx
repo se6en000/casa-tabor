@@ -495,8 +495,8 @@ export default function ActionInspectionSidecar({
               })
             }}
             className="living-header-action-btn group"
-            title="Flip to Casa AI (✨)"
-            aria-label="Flip to Casa AI"
+            title="Flip to Copilot (✨)"
+            aria-label="Flip to Copilot"
             icon={<Rotate3d size={16} className="text-amber-700 transition-transform duration-300 group-hover:rotate-180" />}
           />
 
@@ -570,7 +570,7 @@ export default function ActionInspectionSidecar({
               <span>AI Executive Brief</span>
             </div>
             <span className="text-2xs font-mono font-semibold px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-900">
-              Verified by Casa AI
+              Verified by Copilot
             </span>
           </div>
 

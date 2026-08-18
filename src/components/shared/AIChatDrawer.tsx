@@ -1345,7 +1345,7 @@ export default function AIChatDrawer({
                           className="w-full min-h-[44px] flex items-center justify-center gap-2 rounded-xl bg-white border border-casa-gold/40 text-casa-navy text-caption font-bold shadow-xs hover:bg-casa-gold/10 active:scale-[0.99] transition-all"
                         >
                           <Sparkles size={14} className="text-casa-gold" />
-                          <span>Review with Casa AI</span>
+                          <span>Review with Copilot</span>
                         </Button>
                       </div>
                     )}
@@ -1803,7 +1803,7 @@ export default function AIChatDrawer({
                         value={input}
                         onChange={e => handleInputChange(e.target.value)}
                         onKeyDown={handleKeyDown}
-                        placeholder={attachedImage ? 'Ask Casa AI about this image…' : 'Ask Casa anything or speak…'}
+                        placeholder={attachedImage ? 'Ask Copilot about this image…' : 'Ask Copilot anything or speak…'}
                         rows={2}
                         aria-label="Assistant message"
                         className="w-full min-h-[44px] max-h-[160px] bg-transparent text-body text-casa-navy placeholder:text-casa-muted/80 outline-none resize-none leading-relaxed px-1 py-0.5 font-medium"

@@ -181,8 +181,8 @@ export function TopBarC() {
                   ? 'bg-casa-gold text-casa-navy font-bold ring-2 ring-casa-gold/60'
                   : 'bg-casa-gold/15 hover:bg-casa-gold/30 text-casa-gold',
               )}
-              title={aiDrawerOpen ? 'Close Casa AI' : 'Talk to Casa AI'}
-              aria-label={aiDrawerOpen ? 'Close Casa AI' : 'Talk to Casa AI'}
+              title={aiDrawerOpen ? 'Close Copilot' : 'Talk to Copilot'}
+              aria-label={aiDrawerOpen ? 'Close Copilot' : 'Talk to Copilot'}
               aria-expanded={aiDrawerOpen}
             >
               <Sparkles size={15} strokeWidth={aiDrawerOpen ? 2.2 : 1.8} />

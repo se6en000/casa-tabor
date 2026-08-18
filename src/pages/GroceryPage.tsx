@@ -1994,7 +1994,7 @@ export default function GroceryPage() {
             ))}
           </div>
           <p className="mt-1 text-caption text-casa-muted">
-            Tip: tap the sparkle in the top bar to ask Casa AI, then say “add milk, eggs, and bananas.”
+            Tip: tap the sparkle in the top bar to ask Copilot, then say “add milk, eggs, and bananas.”
           </p>
             </>
           )}

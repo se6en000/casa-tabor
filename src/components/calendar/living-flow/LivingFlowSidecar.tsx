@@ -195,7 +195,7 @@ export default function LivingFlowSidecar({
             else onAskAi?.()
           }}
           className="flex-1 py-2 px-4 rounded-full bg-casa-accent-subtle hover:bg-casa-accent-soft border border-casa-gold/40 text-casa-navy font-bold text-caption flex items-center justify-center gap-2 shadow-xs transition-all min-h-control"
-          aria-label="Switch to Casa AI Assistant"
+          aria-label="Switch to Copilot"
         >
           <Sparkles size={15} className="text-casa-gold" />
           <span>Ask Copilot about this…</span>

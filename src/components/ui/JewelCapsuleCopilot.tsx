@@ -143,7 +143,7 @@ export const JewelCapsuleCopilot = forwardRef<HTMLButtonElement, JewelCapsuleCop
     },
     ref
   ) {
-    const displayLabel = label ?? (isActive ? 'Close' : 'Casa AI')
+    const displayLabel = label ?? (isActive ? 'Close' : 'Copilot')
 
     return (
       <motion.button
@@ -177,8 +177,8 @@ export const JewelCapsuleCopilot = forwardRef<HTMLButtonElement, JewelCapsuleCop
           isActive && 'ring-2 ring-casa-gold/80 bg-casa-accent-soft shadow-xs',
           className
         )}
-        title={isActive ? 'Close Casa AI' : 'Open Casa AI'}
-        aria-label={isActive ? 'Close Casa AI' : 'Open Casa AI'}
+        title={isActive ? 'Close Copilot' : 'Open Copilot'}
+        aria-label={isActive ? 'Close Copilot' : 'Open Copilot'}
         aria-expanded={isActive}
         {...(rest as any)}
       >
