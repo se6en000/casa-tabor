@@ -489,15 +489,15 @@ export default function StatusDashboardPage() {
             <div className="flex items-start gap-3">
               <div className={cn(
                 'rounded-pill p-2 mt-0.5 shrink-0',
-                isCircuitBreakerActive ? 'bg-amber-100 text-amber-800' : 'bg-surface-inset text-casa-muted',
+                isCircuitBreakerActive ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800',
               )}>
-                {isCircuitBreakerActive ? <Pause size={18} /> : <Play size={18} />}
+                {isCircuitBreakerActive ? <Pause size={18} /> : <Zap size={18} />}
               </div>
               <div>
                 <div className="flex items-center gap-2">
                   <p className="text-body-sm font-semibold text-casa-navy">Dev AI Circuit Breaker</p>
-                  <Chip size="sm" tone={isCircuitBreakerActive ? 'warning' : 'neutral'}>
-                    {isCircuitBreakerActive ? ('Paused (' + summary.circuit_breaker.pause_scope + ')') : 'Active'}
+                  <Chip size="sm" tone={isCircuitBreakerActive ? 'warning' : 'success'}>
+                    {isCircuitBreakerActive ? ('Paused (' + summary.circuit_breaker.pause_scope + ')') : 'AI Live'}
                   </Chip>
                 </div>
                 <p className="text-caption text-casa-muted mt-0.5">

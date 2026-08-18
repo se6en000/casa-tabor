@@ -108,6 +108,7 @@ test('StatusDashboardPage: renders rate limit banner, dev circuit breaker, hourl
   assert.match(dashboardSource, /AI Provider Rate Limit Alert \(HTTP 429 Detected\)/)
   assert.match(dashboardSource, /AI Quota & Rate Limit Health: Healthy/)
   assert.match(dashboardSource, /Dev AI Circuit Breaker/)
+  assert.match(dashboardSource, /AI Live/)
   assert.match(dashboardSource, /Pause Background/)
   assert.match(dashboardSource, /Pause All AI/)
   assert.match(dashboardSource, /24-Hour Live Burn Rate/)
