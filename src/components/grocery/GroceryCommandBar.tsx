@@ -1,7 +1,9 @@
-import { type RefObject, type KeyboardEvent } from 'react'
-import { Sparkles, Plus } from 'lucide-react'
-import { Button, Chip, Heading, Input } from '../ui'
+import { type RefObject, type KeyboardEvent, type PointerEvent } from 'react'
+import { Sparkles, Plus, Mic } from 'lucide-react'
+import { Button, Chip, Heading, IconButton, Input } from '../ui'
 import { cn } from '../../utils/cn'
+import { type ParsedVoiceGroceryItem } from '../../utils/groceryBatchVoiceParser.ts'
+import GroceryVoiceStagingRibbon from './GroceryVoiceStagingRibbon'
 
 export interface GroceryCommandBarProps {
   uncheckedCount: number
@@ -10,6 +12,8 @@ export interface GroceryCommandBarProps {
   inputValue: string
   inputRef: RefObject<HTMLInputElement | null>
   mergeSuggestion: { id: string; name: string } | null
+  isListening?: boolean
+  stagedVoiceItems?: ParsedVoiceGroceryItem[]
   onInputChange: (val: string) => void
   onInputKeyDown: (e: KeyboardEvent<HTMLInputElement>) => void
   onAddItem: () => void
@@ -17,6 +21,14 @@ export interface GroceryCommandBarProps {
   onSpotlightItem: (id: string) => void
   onForceAddSuggestion: () => void
   onClearChecked?: () => void
+  onMicPointerDown?: (e: PointerEvent<HTMLButtonElement>) => void
+  onMicPointerUp?: (e: PointerEvent<HTMLButtonElement>) => void
+  onMicPointerLeave?: (e: PointerEvent<HTMLButtonElement>) => void
+  onMicPointerCancel?: (e: PointerEvent<HTMLButtonElement>) => void
+  onMicClick?: () => void
+  onRemoveStagedItem?: (id: string) => void
+  onCommitStagedItems?: (items: ParsedVoiceGroceryItem[]) => void
+  onCancelStagedItems?: () => void
 }
 
 const EXPRESS_STRIP_ITEMS = [
@@ -39,6 +51,8 @@ export default function GroceryCommandBar({
   inputValue,
   inputRef,
   mergeSuggestion,
+  isListening = false,
+  stagedVoiceItems = [],
   onInputChange,
   onInputKeyDown,
   onAddItem,
@@ -46,6 +60,14 @@ export default function GroceryCommandBar({
   onSpotlightItem,
   onForceAddSuggestion,
   onClearChecked,
+  onMicPointerDown,
+  onMicPointerUp,
+  onMicPointerLeave,
+  onMicPointerCancel,
+  onMicClick,
+  onRemoveStagedItem,
+  onCommitStagedItems,
+  onCancelStagedItems,
 }: GroceryCommandBarProps) {
   return (
     <div className="space-y-3.5 pb-3.5 border-b border-casa-border/60">
@@ -82,18 +104,61 @@ export default function GroceryCommandBar({
 
       {/* Ergonomic Compact Item Composer */}
       <div className="space-y-2">
-        <div className="w-full max-w-2xl flex items-center gap-2 bg-casa-surface rounded-2xl border border-casa-border px-4 py-1.5 shadow-2xs focus-within:border-casa-gold/60 focus-within:ring-2 focus-within:ring-casa-gold/15 transition-all">
-          <Plus size={18} className="text-casa-gold shrink-0" />
+        <div
+          className={cn(
+            'w-full max-w-2xl flex items-center gap-2 rounded-2xl border px-4 py-1.5 shadow-2xs transition-all',
+            isListening
+              ? 'bg-casa-accent-subtle/80 border-casa-gold ring-2 ring-casa-gold/25 shadow-md'
+              : 'bg-casa-surface border-casa-border focus-within:border-casa-gold/60 focus-within:ring-2 focus-within:ring-casa-gold/15'
+          )}
+        >
+          {isListening ? (
+            <div className="flex items-center gap-1.5 text-casa-top-pick-band animate-pulse shrink-0">
+              <span className="flex h-2.5 w-2.5 rounded-full bg-casa-gold animate-ping" />
+              <Mic size={17} className="text-casa-gold" />
+            </div>
+          ) : (
+            <Plus size={18} className="text-casa-gold shrink-0" />
+          )}
+
           <Input
             ref={inputRef}
             type="text"
             value={inputValue}
             onChange={(e) => onInputChange(e.target.value)}
             onKeyDown={onInputKeyDown}
-            placeholder="Add fresh produce, dairy, bakery, meat, or pantry staple…"
-            className="flex-1 border-0 bg-transparent shadow-none text-body placeholder:text-casa-muted/60 focus:outline-none py-1.5"
+            placeholder={
+              isListening
+                ? 'Listening… speak items (e.g. "milk, 3 avocados, sourdough")'
+                : 'Add fresh produce, dairy, bakery, meat, or pantry staple…'
+            }
+            className={cn(
+              'flex-1 border-0 bg-transparent shadow-none text-body focus:outline-none py-1.5',
+              isListening ? 'placeholder:text-casa-top-pick-band font-medium' : 'placeholder:text-casa-muted/60'
+            )}
             aria-label="Add grocery item"
           />
+
+          {/* Luxury Press-and-Hold Microphone Trigger */}
+          <IconButton
+            variant={isListening ? 'secondary' : 'ghost'}
+            size="sm"
+            onPointerDown={onMicPointerDown}
+            onPointerUp={onMicPointerUp}
+            onPointerLeave={onMicPointerLeave}
+            onPointerCancel={onMicPointerCancel}
+            onClick={onMicClick}
+            aria-label={isListening ? 'Release or click to finish speaking' : 'Press and hold to speak grocery list'}
+            title={isListening ? 'Recording... release or click to stop' : 'Hold to speak list · Tap to dictate'}
+            className={cn(
+              'shrink-0 select-none touch-none transition-all duration-200',
+              isListening
+                ? 'bg-casa-gold text-white shadow-2xs scale-105'
+                : 'text-casa-gold hover:text-casa-navy hover:bg-casa-accent-soft'
+            )}
+            icon={<Mic size={17} />}
+          />
+
           <Button
             variant="champagne"
             size="sm"
@@ -104,6 +169,18 @@ export default function GroceryCommandBar({
             Add to list
           </Button>
         </div>
+
+        {/* Staged Voice Ingestion Ribbon if items are detected */}
+        {stagedVoiceItems.length > 0 && onRemoveStagedItem && onCommitStagedItems && onCancelStagedItems && (
+          <div className="w-full max-w-2xl pt-1">
+            <GroceryVoiceStagingRibbon
+              items={stagedVoiceItems}
+              onRemoveItem={onRemoveStagedItem}
+              onCommitAll={onCommitStagedItems}
+              onCancel={onCancelStagedItems}
+            />
+          </div>
+        )}
 
         {/* Quick 1-Tap Express Staples Bar (Pantry Rhythms) */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar">

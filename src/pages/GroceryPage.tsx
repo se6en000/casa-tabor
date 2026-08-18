@@ -28,6 +28,8 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { cn } from '../utils/cn'
 import { useGroceryList, GROCERY_CATEGORIES, type GroceryItem } from '../hooks/useGroceryList'
 import { inferCategoryFromName } from '../utils/groceryCategorization'
+import { parseGroceryVoiceBatch, type ParsedVoiceGroceryItem } from '../utils/groceryBatchVoiceParser.ts'
+import { useFieldDictation } from '../hooks/useFieldDictation'
 import GroceryCommandBar from '../components/grocery/GroceryCommandBar'
 import GroceryAisleGrid from '../components/grocery/GroceryAisleGrid'
 import MobileGroceryView from '../components/mobile/MobileGroceryView'
@@ -689,6 +691,94 @@ export default function GroceryPage() {
     }
     setGroceryToastMessage(`Added “${trimmedName}” to ${category}`)
   }, [addItem, defaultListId, findMergeSuggestion, spotlightItem])
+
+  const [stagedVoiceItems, setStagedVoiceItems] = useState<ParsedVoiceGroceryItem[]>([])
+  const [isPressingMic, setIsPressingMic] = useState(false)
+
+  const handleVoiceComplete = useCallback((fullText: string) => {
+    const clean = fullText.trim()
+    if (!clean) return
+    const parsed = parseGroceryVoiceBatch(clean)
+    if (parsed.length > 0) {
+      setStagedVoiceItems(parsed)
+      setInputValue('')
+    }
+  }, [])
+
+  const dictation = useFieldDictation({
+    onText: (text) => setInputValue(text),
+    onComplete: (fullText) => handleVoiceComplete(fullText),
+  })
+
+  const handleCommitVoiceItems = useCallback((itemsToCommit: ParsedVoiceGroceryItem[]) => {
+    if (!defaultListId || itemsToCommit.length === 0) return
+    for (const item of itemsToCommit) {
+      addItem.mutate({
+        list_id: defaultListId,
+        name: item.name,
+        quantity: item.quantity,
+        unit: item.unit,
+        category: item.category,
+        checked: false,
+        notes: null,
+      })
+      triggerItemMoved(item.id, 'move')
+    }
+    setGroceryToastMessage(`Added ${itemsToCommit.length} provisions to your list`)
+    setStagedVoiceItems([])
+    setInputValue('')
+  }, [addItem, defaultListId, triggerItemMoved])
+
+  const handleRemoveStagedItem = useCallback((id: string) => {
+    setStagedVoiceItems((prev) => prev.filter((item) => item.id !== id))
+  }, [])
+
+  const handleCancelStagedItems = useCallback(() => {
+    setStagedVoiceItems([])
+  }, [])
+
+  const handleMicPointerDown = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return
+    e.preventDefault()
+    setIsPressingMic(true)
+    void dictation.start(inputValue)
+  }, [dictation, inputValue])
+
+  const handleMicPointerUp = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!isPressingMic) return
+    e.preventDefault()
+    setIsPressingMic(false)
+    dictation.stop()
+    if (inputValue.trim()) {
+      handleVoiceComplete(inputValue)
+    }
+  }, [dictation, handleVoiceComplete, inputValue, isPressingMic])
+
+  const handleMicPointerLeave = useCallback(() => {
+    if (!isPressingMic) return
+    setIsPressingMic(false)
+    dictation.stop()
+    if (inputValue.trim()) {
+      handleVoiceComplete(inputValue)
+    }
+  }, [dictation, handleVoiceComplete, inputValue, isPressingMic])
+
+  const handleMicPointerCancel = useCallback(() => {
+    if (!isPressingMic) return
+    setIsPressingMic(false)
+    dictation.stop()
+  }, [dictation, isPressingMic])
+
+  const handleMicClick = useCallback(() => {
+    if (dictation.listening) {
+      dictation.stop()
+      if (inputValue.trim()) {
+        handleVoiceComplete(inputValue)
+      }
+    } else {
+      void dictation.start(inputValue)
+    }
+  }, [dictation, handleVoiceComplete, inputValue])
 
   const handleAddItem = () => {
     addItemByName(inputValue, { spotlightOnDuplicate: true, clearInput: true })
@@ -1635,6 +1725,8 @@ export default function GroceryPage() {
             inputValue={inputValue}
             inputRef={inputRef}
             mergeSuggestion={mergeSuggestion}
+            isListening={dictation.listening}
+            stagedVoiceItems={stagedVoiceItems}
             onInputChange={setInputValue}
             onInputKeyDown={handleKeyDown}
             onAddItem={handleAddItem}
@@ -1649,6 +1741,14 @@ export default function GroceryPage() {
               inputRef.current?.focus()
             }}
             onClearChecked={() => void clearChecked.mutate()}
+            onMicPointerDown={handleMicPointerDown}
+            onMicPointerUp={handleMicPointerUp}
+            onMicPointerLeave={handleMicPointerLeave}
+            onMicPointerCancel={handleMicPointerCancel}
+            onMicClick={handleMicClick}
+            onRemoveStagedItem={handleRemoveStagedItem}
+            onCommitStagedItems={handleCommitVoiceItems}
+            onCancelStagedItems={handleCancelStagedItems}
           />
 
           {syncError && <Alert tone="danger" title="Grocery sync failed" className="mb-3">{syncError}</Alert>}
