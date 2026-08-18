@@ -379,7 +379,10 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                       try {
                         const end = parseISO(nextEvent.end_time)
                         const minsToEnd = differenceInMinutes(end, now)
-                        if (minsToEnd <= 10 && minsToEnd > 0) {
+                        if (minsToEnd <= 0) {
+                          statusLabel = 'CONCLUDED · WRAPPING UP'
+                          dotClass = 'bg-emerald-400'
+                        } else if (minsToEnd <= 10) {
                           statusLabel = `WRAPPING UP · ENDS IN ${formatDurationLong(minsToEnd)}`
                           dotClass = 'bg-amber-400 animate-pulse'
                         } else {

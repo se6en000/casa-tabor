@@ -482,7 +482,8 @@ export default function AIChatDrawer({
       if (textareaRef.current) textareaRef.current.value = ''
       return
     }
-    const dinnerIntent = matchDinnerPlanIntent(trimmed, useAppStore.getState().dinnerPlan)
+    const isDinnerScope = !focusedEvent && !focusedAction && (page === 'cook' || launchContext?.source === 'tonights-kitchen' || /\b(dinner|kitchen|recipe|cook tonight|takeout|flanigan|pizza|leftovers)\b/i.test(trimmed))
+    const dinnerIntent = isDinnerScope ? matchDinnerPlanIntent(trimmed, useAppStore.getState().dinnerPlan) : null
     if (dinnerIntent) {
       appendSyntheticMessage({
         id: crypto.randomUUID(),
@@ -838,29 +839,33 @@ export default function AIChatDrawer({
     return `${sessionPart}:${suffix}:${Date.now().toString(36)}`
   }, [session?.id])
 
-  // Only prime an event greeting if there are no active messages, preserving ongoing chat
+  // Only prime an event greeting when focusing on an event, starting a fresh scoped session
   const firedEventGreetRef = useRef<string | null>(null)
   useEffect(() => {
     if (!open || !focusedEvent || loading) return
     if (firedEventGreetRef.current === focusedEvent.id) return
     if (sessionLoading) return
-    if (messages.length > 0) return // Keep existing conversation intact!
     firedEventGreetRef.current = focusedEvent.id
+
+    // Start a clean, dedicated session for this event
+    startFresh()
 
     const ev = focusedEvent
     const memberNames = ev.members.map(m => m.family_member?.name).filter(Boolean).join(', ')
     const start = new Date(ev.start_time)
     const dateStr = start.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
-    const timeStr = ev.all_day ? 'All day' : start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+    const hasSpecificTime = start.getHours() !== 0 || start.getMinutes() !== 0
+    const timeFormatted = (!ev.all_day || hasSpecificTime)
+      ? `at ${start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
+      : '· All Day'
 
+    const isChoreOrReminder = ev.event_type === 'reminder' || /trash|recycle|chore|meds|medication|clean|water|filter/i.test(ev.title)
     const missing: string[] = []
-    if (!ev.location_name) missing.push('Location')
-    if (!memberNames) missing.push('Attendees')
-    if (!ev.enrichment?.category) missing.push('Category')
-    if (!ev.description && !ev.enrichment?.prep_notes) missing.push('Notes')
+    if (!ev.location_name && !isChoreOrReminder) missing.push('Location')
+    if (!memberNames && !isChoreOrReminder) missing.push('Attendees')
 
     let content = `I'm ready to help with **${ev.title}** ✏️\n\n`
-    content += `📅 ${dateStr} at ${timeStr}\n`
+    content += `📅 ${dateStr} ${timeFormatted}\n`
     if (ev.location_name) content += `📍 ${ev.location_name}\n`
     if (memberNames) content += `👥 ${memberNames}\n`
     if (ev.enrichment?.category) content += `🏷️ ${ev.enrichment.category}\n`
@@ -872,7 +877,7 @@ export default function AIChatDrawer({
     content += `\n\nWhat would you like to change or ask about this event?`
 
     primeMessages([{ id: crypto.randomUUID(), role: 'assistant', content }])
-  }, [open, focusedEvent?.id, sessionLoading, messages.length, loading, primeMessages])
+  }, [open, focusedEvent?.id, sessionLoading, loading, primeMessages, startFresh])
 
   // Only prime an action greeting when launching AI from an action queue item
   const firedActionGreetRef = useRef<string | null>(null)
@@ -1107,80 +1112,78 @@ export default function AIChatDrawer({
   const drawerBody = (
     <>
       {/* Luxury Casa AI Header */}
-      <div className="py-3 px-4 sm:px-5 flex items-center justify-between border-b border-casa-gold/20 bg-gradient-to-r from-casa-surface via-casa-bg to-casa-surface shrink-0 relative z-20 shadow-2xs">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-100 via-casa-gold to-amber-700 flex items-center justify-center text-white shadow-xs shrink-0">
-            <Sparkles size={15} />
+      {/* Luxury Casa AI Header */}
+      <div className="py-2.5 px-4 sm:px-5 flex items-center justify-between border-b border-casa-gold/20 bg-gradient-to-r from-casa-surface via-casa-bg to-casa-surface shrink-0 relative z-20 shadow-2xs">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-100 via-casa-gold to-amber-700 flex items-center justify-center text-white shadow-xs shrink-0">
+            <Sparkles size={14} />
           </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5 leading-none">
-              <span className="font-bold text-body-sm tracking-tight text-casa-navy">Casa AI</span>
-              <span className="text-2xs uppercase tracking-widest font-bold px-1.5 py-0.5 rounded-full bg-casa-gold/15 text-casa-gold-hover border border-casa-gold/30">Concierge</span>
-            </div>
-          </div>
-
-          <div className="hidden sm:flex items-center gap-1.5 ml-2">
-            {speech.supported && (
-              <Button
-                variant="ghost"
-                type="button"
-                onClick={handleConversationToggle}
-                aria-pressed={conversationMode}
-                title={conversationMode
-                  ? 'Hands-free ON — mic stays armed for back-and-forth. Tap to turn off.'
-                  : 'Hands-free OFF — tap the microphone for each turn.'}
-                className={cn(
-                  'min-h-[36px] px-3 flex items-center gap-1.5 rounded-full text-caption font-bold transition-all active:scale-95 border',
-                  conversationMode
-                    ? 'bg-amber-50 text-amber-900 border-amber-300 shadow-2xs'
-                    : 'bg-white text-slate-700 hover:text-slate-900 border-slate-200 hover:border-amber-300 hover:bg-amber-50/40',
-                )}
-              >
-                <MessagesSquare size={13} className={conversationMode ? 'text-amber-700' : 'text-slate-500'} />
-                <span>{conversationMode ? 'Hands-free' : 'Push to talk'}</span>
-              </Button>
-            )}
-            {Boolean(profile?.token || privateHistory.access) && (
-              <Button
-                variant="ghost"
-                type="button"
-                onClick={() => {
-                  setHistoryUnlockError(null)
-                  setHistoryModalOpen(true)
-                  loadHistoryConversations()
-                }}
-                title={`Open ${profile?.memberName ?? 'your'} private conversation history`}
-                className="min-h-[36px] rounded-full bg-amber-50/70 border border-amber-300/80 px-3 text-caption font-bold text-amber-900 transition-all hover:bg-amber-100 hover:border-amber-400 active:scale-95 shadow-2xs"
-              >
-                Private
-              </Button>
-            )}
-          </div>
+          <span className="font-bold text-body-sm tracking-tight text-casa-navy shrink-0">Casa AI</span>
+          <span className="hidden sm:inline-block text-2xs uppercase tracking-widest font-bold px-1.5 py-0.5 rounded-full bg-casa-gold/15 text-casa-gold-hover border border-casa-gold/30 shrink-0">
+            Concierge
+          </span>
 
           {loading && (
-            <span className="text-casa-gold text-caption font-semibold animate-pulse flex items-center gap-1 shrink-0 ml-1">
+            <span className="text-casa-gold text-2xs font-semibold animate-pulse flex items-center gap-1 shrink-0 px-2 py-0.5 rounded-full bg-casa-gold/10 border border-casa-gold/25">
               <span className="w-1.5 h-1.5 rounded-full bg-casa-gold animate-pulse inline-block" />
               thinking…
             </span>
           )}
           {!loading && speech.listening && (
-            <span className="text-red-500 text-caption font-semibold flex items-center gap-1 shrink-0 ml-1">
+            <span className="text-red-500 text-2xs font-semibold flex items-center gap-1 shrink-0 px-2 py-0.5 rounded-full bg-red-50 border border-red-200">
               <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse inline-block" />
               listening
             </span>
           )}
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex items-center gap-1.5 shrink-0">
+        {/* Action Buttons & Modes */}
+        <div className="flex items-center gap-1 shrink-0">
+          {speech.supported && (
+            <Button
+              variant="ghost"
+              type="button"
+              onClick={handleConversationToggle}
+              aria-pressed={conversationMode}
+              title={conversationMode
+                ? 'Hands-free ON — mic stays armed for back-and-forth. Tap to turn off.'
+                : 'Hands-free OFF — tap the microphone for each turn.'}
+              className={cn(
+                'min-h-[32px] px-2.5 py-1 flex items-center gap-1 rounded-full text-2xs font-bold transition-all active:scale-95 border',
+                conversationMode
+                  ? 'bg-amber-50 text-amber-900 border-amber-300 shadow-2xs'
+                  : 'bg-white text-slate-700 hover:text-slate-900 border-slate-200 hover:border-amber-300 hover:bg-amber-50/40',
+              )}
+            >
+              <MessagesSquare size={12} className={conversationMode ? 'text-amber-700' : 'text-slate-500'} />
+              <span className="hidden md:inline">{conversationMode ? 'Hands-free' : 'Push to talk'}</span>
+            </Button>
+          )}
+
+          {Boolean(profile?.token || privateHistory.access) && (
+            <Button
+              variant="ghost"
+              type="button"
+              onClick={() => {
+                setHistoryUnlockError(null)
+                setHistoryModalOpen(true)
+                loadHistoryConversations()
+              }}
+              title={`Open ${profile?.memberName ?? 'your'} private conversation history`}
+              className="min-h-[32px] rounded-full bg-amber-50/70 border border-amber-300/80 px-2.5 text-2xs font-bold text-amber-900 transition-all hover:bg-amber-100 hover:border-amber-400 active:scale-95 shadow-2xs"
+            >
+              Private
+            </Button>
+          )}
+
           {onSwitchToEvent && (Boolean(focusedEvent) || Boolean(focusedAction)) && (
             <IconButton
               variant="ghost"
               onClick={onSwitchToEvent}
               title={`Flip to ${focusedEvent ? `event: ${focusedEvent.title}` : focusedAction ? `action: ${focusedAction.title}` : 'details'}`}
               aria-label="Flip to inspection details"
-              className="living-header-action-btn group"
-              icon={<Rotate3d size={16} className="text-amber-700 transition-transform duration-300 group-hover:rotate-180" />}
+              className="min-h-[32px] min-w-[32px] p-1.5 rounded-full hover:bg-amber-50 group"
+              icon={<Rotate3d size={15} className="text-amber-700 transition-transform duration-300 group-hover:rotate-180" />}
             />
           )}
           {(hasSession || messages.length > 0) && (
@@ -1189,106 +1192,138 @@ export default function AIChatDrawer({
               onClick={startFresh}
               title="New conversation"
               aria-label="New conversation"
-              className="living-header-action-btn group"
-              icon={<RotateCcw size={16} className="text-slate-800 transition-transform duration-300 group-hover:-rotate-90" />}
+              className="min-h-[32px] min-w-[32px] p-1.5 rounded-full hover:bg-slate-100 group"
+              icon={<RotateCcw size={15} className="text-slate-800 transition-transform duration-300 group-hover:-rotate-90" />}
             />
           )}
           <IconButton
             variant="ghost"
             onClick={onClose}
-            className="living-header-action-btn"
+            className="min-h-[32px] min-w-[32px] p-1.5 rounded-full hover:bg-slate-100"
             aria-label="Close assistant"
             title="Close assistant"
-            icon={<X size={16} className="text-slate-800" />}
+            icon={<X size={15} className="text-slate-800" />}
           />
         </div>
       </div>
 
-            {/* Messages */}
-            <BounceScroll nativeScroll className="flex-1 min-h-0" innerClassName="px-4 py-4 space-y-3">
-              {/* Focused Event Banner */}
-              {focusedEvent && (
-                <div className="flex items-center justify-between gap-2.5 px-3.5 py-2.5 rounded-2xl bg-casa-gold/10 border border-casa-gold/30 text-casa-navy shadow-subtle mb-1">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5 font-bold text-body-sm truncate">
-                      <CalendarDays size={14} className="text-casa-gold shrink-0" />
-                      <span className="truncate">{focusedEvent.title}</span>
-                    </div>
-                    <div className="text-caption text-casa-muted truncate mt-0.5 font-medium flex items-center gap-1">
-                      <span>{format(new Date(focusedEvent.start_time), 'EEE, MMM d · h:mm a')}</span>
-                      {focusedEvent.location_name && (
-                        <>
-                          <span>·</span>
-                          <MapPin size={11} className="text-casa-gold shrink-0 inline" />
-                          <span className="truncate">{focusedEvent.location_name}</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {(focusedEvent.address || focusedEvent.location_name) && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          const dest = encodeURIComponent(focusedEvent.address || focusedEvent.location_name || '')
-                          window.open(`https://www.google.com/maps/search/?api=1&query=${dest}`, '_blank')
-                        }}
-                        title="Open directions in Google Maps"
-                        className="px-2.5 py-1 text-caption font-bold rounded-lg bg-casa-gold/20 hover:bg-casa-gold/30 text-casa-navy border border-casa-gold/40 flex items-center gap-1"
-                      >
-                        <Navigation size={12} className="text-casa-gold" />
-                        <span>Directions</span>
-                      </Button>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleOpenEventDetails(focusedEvent.id)}
-                      className="px-2.5 py-1 text-caption font-semibold rounded-lg bg-white border border-casa-border hover:bg-casa-surface text-casa-navy shadow-xs flex items-center gap-1"
-                    >
-                      <span>Full Details</span>
-                      <ArrowRight size={12} />
-                    </Button>
-                  </div>
-                </div>
-              )}
+      {/* Pinned Focused Event Subheader Bar */}
+      {focusedEvent && (
+        <div className="border-b border-casa-gold/25 bg-gradient-to-b from-amber-50/60 via-white to-amber-50/30 px-4 py-3 shrink-0 shadow-2xs backdrop-blur-sm">
+          <div className="flex items-center justify-between gap-2 mb-1.5">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="text-2xs uppercase tracking-wider font-extrabold px-2 py-0.5 rounded-full bg-casa-gold/15 text-casa-gold-hover border border-casa-gold/30 shrink-0">
+                {focusedEvent.enrichment?.category === 'school' || /picture|photo|concert|school/i.test(focusedEvent.title) ? '📸 School & Milestone' :
+                 focusedEvent.enrichment?.category === 'medical' || /doctor|dr|pediatric|dentist|health/i.test(focusedEvent.title) ? '🩺 Medical & Health' :
+                 focusedEvent.enrichment?.category === 'logistics' || /strings|drop off|pickup|soccer|gymnastics/i.test(focusedEvent.title) ? '🚗 Logistics & Carpool' :
+                 focusedEvent.event_type === 'reminder' || /trash|recycle|chore|meds/i.test(focusedEvent.title) ? '🔔 Reminder & Chore' : '📅 Calendar Event'}
+              </span>
+              <span className="text-caption font-semibold text-casa-muted truncate">
+                {format(new Date(focusedEvent.start_time), 'EEE, MMM d · h:mm a')}
+              </span>
+            </div>
 
-              {/* Focused Action Banner */}
-              {focusedAction && !focusedEvent && (
-                <div className="flex items-center justify-between gap-2.5 px-3.5 py-2.5 rounded-2xl bg-casa-gold/10 border border-casa-gold/30 text-casa-navy shadow-subtle mb-1">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5 font-bold text-body-sm truncate">
-                      <Sparkles size={14} className="text-casa-gold shrink-0" />
-                      <span className="truncate">{focusedAction.title}</span>
-                    </div>
-                    <div className="text-caption text-casa-muted truncate mt-0.5 font-medium flex items-center gap-1">
-                      {focusedAction.sender && <span className="truncate">From: {focusedAction.sender}</span>}
-                      {focusedAction.amount && (
-                        <>
-                          <span>·</span>
-                          <span className="font-mono font-bold text-casa-gold-hover">{focusedAction.amount}</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {onSwitchToEvent && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={onSwitchToEvent}
-                        className="px-2.5 py-1 text-caption font-semibold rounded-lg bg-white border border-casa-border hover:bg-casa-surface text-casa-navy shadow-xs flex items-center gap-1 min-h-[36px]"
-                      >
-                        <span>Full Details</span>
-                        <ArrowRight size={12} />
-                      </Button>
-                    )}
-                  </div>
-                </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {(focusedEvent.address || focusedEvent.location_name) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    const dest = encodeURIComponent(focusedEvent.address || focusedEvent.location_name || '')
+                    window.open(`https://www.google.com/maps/search/?api=1&query=${dest}`, '_blank')
+                  }}
+                  title="Open directions in Google Maps"
+                  className="min-h-[28px] px-2 py-0.5 text-2xs font-bold rounded-lg bg-white hover:bg-casa-gold/15 text-casa-navy border border-casa-border shadow-xs flex items-center gap-1"
+                >
+                  <Navigation size={11} className="text-casa-gold" />
+                  <span>Directions</span>
+                </Button>
               )}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleOpenEventDetails(focusedEvent.id)}
+                className="min-h-[28px] px-2 py-0.5 text-2xs font-bold rounded-lg bg-casa-navy hover:bg-slate-800 text-white shadow-xs flex items-center gap-1"
+              >
+                <span>Full Details</span>
+                <ArrowRight size={11} />
+              </Button>
+            </div>
+          </div>
 
-              {/* Session resume banner */}
+          <div className="flex items-baseline justify-between gap-2">
+            <h3 className="font-extrabold text-body-sm text-casa-navy truncate">
+              {focusedEvent.title}
+            </h3>
+          </div>
+
+          {focusedEvent.location_name && (
+            <div className="flex items-center gap-1.5 text-caption text-casa-muted truncate mt-0.5 font-medium">
+              <MapPin size={12} className="text-casa-gold shrink-0" />
+              <span className="truncate">{focusedEvent.location_name}</span>
+              {focusedEvent.address && focusedEvent.address !== focusedEvent.location_name && (
+                <span className="text-slate-400 truncate text-2xs">({focusedEvent.address})</span>
+              )}
+            </div>
+          )}
+
+          {/* Mini Logistics Strip if transportation or driver exists */}
+          {Boolean(focusedEvent.plan_override?.transportation_plan?.legs?.[0]?.driverName || focusedEvent.plan_override?.transportation_plan?.legs?.[0]?.time) && (
+            <div className="mt-2 flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-casa-navy text-white text-2xs font-medium shadow-xs">
+              <div className="flex items-center gap-2 truncate">
+                {focusedEvent.plan_override?.transportation_plan?.legs?.[0]?.driverName && (
+                  <span className="font-bold text-amber-300">
+                    🚗 {focusedEvent.plan_override.transportation_plan.legs[0].driverName} driving
+                  </span>
+                )}
+                {focusedEvent.plan_override?.transportation_plan?.legs?.[0]?.time && (
+                  <span className="text-slate-200">
+                    ⏱️ Leave by {focusedEvent.plan_override.transportation_plan.legs[0].time}
+                  </span>
+                )}
+              </div>
+              <span className="text-emerald-400 font-bold shrink-0">🟢 Traffic Clear</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Pinned Focused Action Subheader Bar */}
+      {focusedAction && !focusedEvent && (
+        <div className="border-b border-casa-gold/25 bg-gradient-to-b from-amber-50/60 via-white to-amber-50/30 px-4 py-3 shrink-0 shadow-2xs backdrop-blur-sm">
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="text-2xs uppercase tracking-wider font-extrabold px-2 py-0.5 rounded-full bg-casa-gold/15 text-casa-gold-hover border border-casa-gold/30 shrink-0">
+                ⚡ Action Item
+              </span>
+              {focusedAction.urgency && (
+                <span className="text-caption font-semibold text-casa-muted truncate">
+                  {focusedAction.urgency}
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="flex items-baseline justify-between gap-2">
+            <h3 className="font-extrabold text-body-sm text-casa-navy truncate">
+              {focusedAction.title}
+            </h3>
+            {focusedAction.amount && (
+              <span className="font-mono font-bold text-body-sm text-casa-gold-hover shrink-0">
+                {focusedAction.amount}
+              </span>
+            )}
+          </div>
+          {focusedAction.sender && (
+            <div className="text-caption text-casa-muted truncate mt-0.5 font-medium">
+              From: {focusedAction.sender}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Messages */}
+      <BounceScroll nativeScroll className="flex-1 min-h-0" innerClassName="px-4 py-4 space-y-3">
+        {/* Session resume banner */}
               {hasSession && messages.length > 0 && !focusedEvent && !focusedAction && (
                 <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-casa-gold/8 border border-casa-gold/20 text-caption text-casa-muted">
                   <Sparkles size={11} className="text-casa-gold flex-shrink-0" />
@@ -1371,8 +1406,9 @@ export default function AIChatDrawer({
                           variant="ghost"
                           key={s}
                           type="button"
+                          onPointerDown={(e) => e.stopPropagation()}
                           onClick={() => { markUserInteraction(); sendCurrentInput(s) }}
-                          className="min-h-[38px] px-3.5 py-1.5 rounded-full border border-casa-gold/30 bg-casa-bg text-caption font-semibold text-casa-navy hover:bg-white hover:border-casa-gold/60 transition-all shadow-2xs"
+                          className="min-h-[38px] px-3.5 py-1.5 rounded-full border border-casa-gold/30 bg-casa-bg text-caption font-semibold text-casa-navy hover:bg-white hover:border-casa-gold/60 transition-all shadow-2xs touch-manipulation cursor-pointer"
                         >
                           {s}
                         </Button>
@@ -1656,11 +1692,12 @@ export default function AIChatDrawer({
                             variant="ghost"
                             key={s}
                             type="button"
+                            onPointerDown={(e) => e.stopPropagation()}
                             onClick={() => {
                               markUserInteraction()
                               sendCurrentInput(s)
                             }}
-                            className="px-3 py-1.5 rounded-full border border-casa-gold/30 bg-casa-gold/5 text-caption font-medium text-casa-navy hover:bg-casa-gold/15 hover:border-casa-gold/60 transition-all whitespace-nowrap shrink-0 shadow-xs"
+                            className="px-3 py-1.5 rounded-full border border-casa-gold/30 bg-casa-gold/5 text-caption font-medium text-casa-navy hover:bg-casa-gold/15 hover:border-casa-gold/60 transition-all whitespace-nowrap shrink-0 shadow-xs touch-manipulation cursor-pointer"
                           >
                             <Sparkles size={11} className="inline mr-1 text-casa-gold" />
                             {s}
@@ -3382,11 +3419,44 @@ function deriveDynamicFollowUpSuggestions(
   focusedAction?: ActionAiContext,
 ): string[] {
   if (focusedEvent) {
+    const titleLower = focusedEvent.title.toLowerCase()
+    const categoryLower = (focusedEvent.enrichment?.category || '').toLowerCase()
+    const isReminderOrChore = focusedEvent.event_type === 'reminder' || /trash|recycle|chore|meds|medication|clean|water|filter/i.test(titleLower)
+    const isSchoolOrPhotos = /photo|picture|school|bak|rehearsal|concert|strings|band/i.test(titleLower) || /school|milestone/i.test(categoryLower)
+    const isMedical = /dr|doctor|pediatric|dentist|appointment|clinic|therapy/i.test(titleLower) || /medical|health/i.test(categoryLower)
+
+    if (isReminderOrChore) {
+      return [
+        `Mark as completed now`,
+        `Snooze for 30 minutes`,
+        `Reassign to another family member`,
+        `Reschedule ${focusedEvent.title}`,
+      ]
+    }
+
+    if (isSchoolOrPhotos) {
+      return [
+        `Who is driving for ${focusedEvent.title}?`,
+        `Check for morning schedule overlap`,
+        `Search email for photo order form`,
+        `Reschedule ${focusedEvent.title}`,
+      ]
+    }
+
+    if (isMedical) {
+      return [
+        `Check driving time from Home`,
+        `Who is driving for ${focusedEvent.title}?`,
+        `View preparation instructions`,
+        `Reschedule ${focusedEvent.title}`,
+      ]
+    }
+
     return [
       `Who is driving for ${focusedEvent.title}?`,
-      `Reschedule ${focusedEvent.title}`,
-      `Add location for ${focusedEvent.title}`,
       `Check for conflicts with ${focusedEvent.title}`,
+      `Reschedule ${focusedEvent.title}`,
+      `Add notes for ${focusedEvent.title}`,
     ]
   }
 

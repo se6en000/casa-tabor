@@ -187,6 +187,7 @@ function buildContext(ctx: AssistantContext, messages: AIMessage[], experienceMo
     focusedEvent: ctx.focusedEvent ? {
       id: ctx.focusedEvent.id,
       title: ctx.focusedEvent.title,
+      event_type: ctx.focusedEvent.event_type ?? 'event',
       start_time: ctx.focusedEvent.start_time,
       end_time: ctx.focusedEvent.end_time,
       updated_at: ctx.focusedEvent.updated_at,
@@ -194,6 +195,10 @@ function buildContext(ctx: AssistantContext, messages: AIMessage[], experienceMo
       location_name: ctx.focusedEvent.location_name ?? null,
       address: ctx.focusedEvent.address ?? null,
       description: ctx.focusedEvent.description ?? null,
+      source_feed: ctx.focusedEvent.google_calendar_id ? 'Google Calendar Feed' : 'Casa Household Calendar',
+      driver: ctx.focusedEvent.plan_override?.transportation_plan?.legs?.[0]?.driverName ?? null,
+      leave_by: ctx.focusedEvent.plan_override?.transportation_plan?.legs?.[0]?.time ?? null,
+      drive_duration_min: ctx.focusedEvent.plan_override?.transportation_plan?.legs?.length ? 15 : null,
       members: ctx.focusedEvent.members.map(m => m.family_member?.name ?? '').filter(Boolean),
       category: ctx.focusedEvent.enrichment?.category ?? null,
       notes: ctx.focusedEvent.enrichment?.prep_notes ?? null,
@@ -205,6 +210,19 @@ function buildContext(ctx: AssistantContext, messages: AIMessage[], experienceMo
       cost_estimate: ctx.focusedEvent.enrichment?.cost_estimate ?? null,
       dietary_notes: ctx.focusedEvent.enrichment?.dietary_notes ?? null,
       meal_impact: ctx.focusedEvent.enrichment?.meal_impact ?? null,
+      surrounding_neighborhood: ctx.events.filter(e => {
+        if (e.id === ctx.focusedEvent?.id) return false
+        const targetStart = new Date(ctx.focusedEvent!.start_time).getTime()
+        const eStart = new Date(e.start_time).getTime()
+        return Math.abs(eStart - targetStart) <= 2.5 * 60 * 60 * 1000 // 2.5 hours
+      }).slice(0, 6).map(e => ({
+        id: e.id,
+        title: e.title,
+        start_time: e.start_time,
+        end_time: e.end_time,
+        location_name: e.location_name ?? null,
+        members: e.members.map(m => m.family_member?.name ?? '').filter(Boolean)
+      })),
       checklist: ctx.focusedEvent.checklist.map(item => ({
         id: item.id,
         label: item.label,

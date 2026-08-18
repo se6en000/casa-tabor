@@ -12,8 +12,121 @@ export interface JewelCapsuleCopilotProps extends ButtonHTMLAttributes<HTMLButto
 }
 
 /**
+ * Luxury Multi-Faceted AI Sparkle Icon
+ * Unmistakable AI constellation indicator with gem-cut facets,
+ * specular core, and breathing ambient micro-animations.
+ */
+function LuxuryAIIcon({ isActive, isProactive }: { isActive?: boolean; isProactive?: boolean }) {
+  return (
+    <span className="relative w-4.5 h-4.5 shrink-0 flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
+      <motion.svg
+        viewBox="0 0 20 20"
+        className="w-full h-full overflow-visible"
+        animate={
+          isActive
+            ? {
+                scale: 1.05,
+                filter: 'drop-shadow(0 0 8px rgba(212,175,55,0.85)) drop-shadow(0 0 14px rgba(201,169,110,0.5))',
+              }
+            : isProactive
+            ? {
+                scale: [1, 1.15, 1],
+                filter: [
+                  'drop-shadow(0 0 3px rgba(212,175,55,0.4))',
+                  'drop-shadow(0 0 10px rgba(212,175,55,0.95))',
+                  'drop-shadow(0 0 3px rgba(212,175,55,0.4))',
+                ],
+              }
+            : {
+                scale: [1, 1.07, 1],
+                filter: [
+                  'drop-shadow(0 0 2px rgba(212,175,55,0.25))',
+                  'drop-shadow(0 0 6px rgba(212,175,55,0.65))',
+                  'drop-shadow(0 0 2px rgba(212,175,55,0.25))',
+                ],
+              }
+        }
+        transition={{
+          duration: isActive ? 0.3 : isProactive ? 1.8 : 3.2,
+          repeat: isActive ? 0 : Infinity,
+          ease: 'easeInOut',
+        }}
+        aria-hidden="true"
+      >
+        <defs>
+          {/* Top-Left Facet: Champagne Silk Highlight */}
+          <linearGradient id="casa-ai-facet-hl" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="rgb(255, 253, 248)" />
+            <stop offset="100%" stopColor="rgb(245, 226, 179)" />
+          </linearGradient>
+          {/* Top-Right Facet: Royal Amber Gold */}
+          <linearGradient id="casa-ai-facet-mid" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="rgb(246, 226, 182)" />
+            <stop offset="100%" stopColor="rgb(212, 175, 55)" />
+          </linearGradient>
+          {/* Bottom-Right Facet: Deep Antique Gold */}
+          <linearGradient id="casa-ai-facet-deep" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="rgb(184, 142, 40)" />
+            <stop offset="100%" stopColor="rgb(122, 91, 40)" />
+          </linearGradient>
+          {/* Bottom-Left Facet: Warm Shaded Gold */}
+          <linearGradient id="casa-ai-facet-warm" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="rgb(212, 175, 55)" />
+            <stop offset="100%" stopColor="rgb(158, 123, 36)" />
+          </linearGradient>
+          {/* Satellite Sparkle */}
+          <linearGradient id="casa-ai-sparkle-sat" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="white" />
+            <stop offset="60%" stopColor="rgb(246, 226, 182)" />
+            <stop offset="100%" stopColor="rgb(212, 175, 55)" />
+          </linearGradient>
+        </defs>
+
+        {/* Primary 4-Point Faceted AI Diamond Star */}
+        <g>
+          {/* Top-Left Facet */}
+          <path d="M9 2 C9 6.2 5.6 9.8 1.5 10 L9 10 Z" fill="url(#casa-ai-facet-hl)" />
+          {/* Top-Right Facet */}
+          <path d="M9 2 C9 6.2 12.4 9.8 16.5 10 L9 10 Z" fill="url(#casa-ai-facet-mid)" />
+          {/* Bottom-Right Facet */}
+          <path d="M9 10 L16.5 10 C12.4 10.2 9 13.8 9 18 Z" fill="url(#casa-ai-facet-deep)" />
+          {/* Bottom-Left Facet */}
+          <path d="M9 10 L9 18 C9 13.8 5.6 10.2 1.5 10 Z" fill="url(#casa-ai-facet-warm)" />
+          {/* Facet Hairline Accents */}
+          <line x1="9" y1="2" x2="9" y2="18" stroke="rgba(255,255,255,0.4)" strokeWidth="0.4" />
+          <line x1="1.5" y1="10" x2="16.5" y2="10" stroke="rgba(255,255,255,0.3)" strokeWidth="0.4" />
+        </g>
+
+        {/* Secondary Satellite Sparkle (Twinkling Companion Starlet) */}
+        <motion.path
+          d="M15.5 1.5 C15.5 2.8 14.4 3.8 13 4 C14.4 4.2 15.5 5.2 15.5 6.5 C15.5 5.2 16.6 4.2 18 4 C16.6 3.8 15.5 2.8 15.5 1.5 Z"
+          fill="url(#casa-ai-sparkle-sat)"
+          animate={
+            isActive
+              ? { scale: 1.1, opacity: 1 }
+              : {
+                  scale: [0.85, 1.25, 0.85],
+                  opacity: [0.65, 1, 0.65],
+                }
+          }
+          transition={{
+            duration: isActive ? 0.3 : 2.4,
+            repeat: isActive ? 0 : Infinity,
+            ease: 'easeInOut',
+            delay: 0.3,
+          }}
+        />
+
+        {/* Specular Core Highlight */}
+        <circle cx="9" cy="10" r="0.9" fill="white" opacity="0.95" />
+      </motion.svg>
+    </span>
+  )
+}
+
+/**
  * Dynamic Jewel Capsule Copilot Button
- * Haute luxury AI trigger with continuous 3D fluid orb physics,
+ * Haute luxury AI trigger with faceted diamond sparkle constellation,
  * brushed gold hairline bezel, and glassmorphic elevation.
  */
 export const JewelCapsuleCopilot = forwardRef<HTMLButtonElement, JewelCapsuleCopilotProps>(
@@ -69,20 +182,8 @@ export const JewelCapsuleCopilot = forwardRef<HTMLButtonElement, JewelCapsuleCop
         aria-expanded={isActive}
         {...(rest as any)}
       >
-        {/* 3D Living Liquid Orb */}
-        <span
-          className={cn(
-            'relative w-4 h-4 rounded-full shrink-0 flex items-center justify-center transition-transform duration-300',
-            'bg-gradient-to-br from-amber-100 via-casa-gold to-amber-800',
-            'shadow-xs',
-            isActive ? 'animate-spin' : 'animate-[spin_4.5s_linear_infinite]',
-            'group-hover:scale-110'
-          )}
-          aria-hidden="true"
-        >
-          {/* Specular Highlight */}
-          <span className="absolute top-[15%] left-[20%] w-[35%] h-[35%] rounded-full bg-white/90 blur-[0.3px]" />
-        </span>
+        {/* Luxury AI Sparkle Indicator */}
+        <LuxuryAIIcon isActive={isActive} isProactive={isProactive} />
 
         {/* Proactive Unread Badge */}
         {isProactive && badgeCount !== undefined && badgeCount > 0 && (
@@ -112,3 +213,4 @@ export const JewelCapsuleCopilot = forwardRef<HTMLButtonElement, JewelCapsuleCop
     )
   }
 )
+

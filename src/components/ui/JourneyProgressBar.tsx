@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { format, parseISO, differenceInMinutes, addMinutes } from 'date-fns'
-import { Car, MapPin, Clock, Home } from 'lucide-react'
+import { Car, MapPin, Clock, Home, CheckCircle2 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { formatDurationHuman } from '../../utils/eventTime'
 
@@ -130,7 +130,9 @@ export function JourneyProgressBar({
     }
   }, [isAllDay, parsedStart, parsedEnd, parsedLeave, driveTimeMins, now])
 
+  const isConcluded = phase === 'concluded'
   const isInSession = phase === 'in-session'
+  const isSessionOrConcluded = isInSession || isConcluded
 
   // Non-travel event fallback (standard session bar)
   if (!hasDrive) {
@@ -139,12 +141,23 @@ export function JourneyProgressBar({
         {showLabels && parsedStart && (
           <div className="flex items-center justify-between text-caption font-semibold text-white/70">
             <span className="flex items-center gap-1.5 text-casa-gold">
-              <Clock size={13} />
-              {minutesUntilStart !== null && minutesUntilStart > 0
-                ? `Starts in ${formatDurationHuman(minutesUntilStart)}`
-                : phase === 'in-session'
-                ? 'Underway'
-                : 'Scheduled'}
+              {isConcluded ? (
+                <>
+                  <CheckCircle2 size={13} className="text-emerald-400" />
+                  <span className="text-emerald-400">Concluded</span>
+                </>
+              ) : (
+                <>
+                  <Clock size={13} />
+                  <span>
+                    {minutesUntilStart !== null && minutesUntilStart > 0
+                      ? `Starts in ${formatDurationHuman(minutesUntilStart)}`
+                      : phase === 'in-session'
+                      ? 'Underway'
+                      : 'Scheduled'}
+                  </span>
+                </>
+              )}
             </span>
             <span>
               {format(parsedStart, 'h:mm a')}
@@ -162,26 +175,56 @@ export function JourneyProgressBar({
     )
   }
 
-  // Active Event Session Timeline (when appointment is already underway / happening now)
-  if (isInSession) {
-    const elapsedMins = Math.max(0, totalEventDurationMins - (minutesUntilEnd ?? 0))
-    const homeEta = parsedEnd && driveTimeMins ? addMinutes(parsedEnd, driveTimeMins) : null
+  // Active Event Session Timeline or Concluded Wrap-Up (when appointment is underway or concluded)
+  if (isSessionOrConcluded) {
+    const elapsedMins = Math.min(totalEventDurationMins, Math.max(0, totalEventDurationMins - (minutesUntilEnd ?? 0)))
+    const homeEta = driveTimeMins
+      ? parsedEnd && now <= parsedEnd
+        ? addMinutes(parsedEnd, driveTimeMins)
+        : addMinutes(now, driveTimeMins)
+      : null
 
     return (
       <div className={cn('w-full space-y-2', className)}>
         {showLabels && (
           <div className="flex items-center justify-between text-caption font-medium">
-            <div className="flex items-center gap-1.5 text-casa-gold font-semibold truncate">
-              <Clock size={13} className="shrink-0" />
-              <span>
-                {minutesUntilEnd !== null && minutesUntilEnd > 0
-                  ? `Ends in ${formatDurationHuman(minutesUntilEnd)}`
-                  : 'Wrapping up'}
-              </span>
-              {parsedEnd && (
-                <span className="text-white/60 font-normal shrink-0">
-                  ({format(parsedEnd, 'h:mm a')})
-                </span>
+            <div className="flex items-center gap-1.5 font-semibold truncate">
+              {isConcluded ? (
+                <>
+                  <CheckCircle2 size={13} className="shrink-0 text-emerald-400" />
+                  <span className="text-emerald-400">Event Concluded</span>
+                  {parsedEnd && (
+                    <span className="text-white/60 font-normal shrink-0">
+                      (Ended {format(parsedEnd, 'h:mm a')})
+                    </span>
+                  )}
+                </>
+              ) : minutesUntilEnd !== null && minutesUntilEnd <= 10 && minutesUntilEnd > 0 ? (
+                <>
+                  <Clock size={13} className="shrink-0 text-amber-400 animate-pulse" />
+                  <span className="text-amber-400">
+                    Wrapping up · Ends in {formatDurationHuman(minutesUntilEnd)}
+                  </span>
+                  {parsedEnd && (
+                    <span className="text-white/60 font-normal shrink-0">
+                      ({format(parsedEnd, 'h:mm a')})
+                    </span>
+                  )}
+                </>
+              ) : (
+                <>
+                  <Clock size={13} className="shrink-0 text-casa-gold" />
+                  <span className="text-casa-gold">
+                    {minutesUntilEnd !== null && minutesUntilEnd > 0
+                      ? `Ends in ${formatDurationHuman(minutesUntilEnd)}`
+                      : 'Wrapping up'}
+                  </span>
+                  {parsedEnd && (
+                    <span className="text-white/60 font-normal shrink-0">
+                      ({format(parsedEnd, 'h:mm a')})
+                    </span>
+                  )}
+                </>
               )}
             </div>
             {homeEta && (
@@ -199,14 +242,24 @@ export function JourneyProgressBar({
             {/* Zone 1: Appointment Session Progress (65% width) */}
             <div className="relative w-[65%] h-full rounded-l-full bg-white/5 flex items-center overflow-hidden mr-0.5">
               <div
-                className="h-full rounded-l-full bg-gradient-to-r from-casa-gold via-amber-400 to-emerald-400 transition-all duration-500 shadow-sm"
-                style={{ width: `${progressPercent}%` }}
+                className={cn(
+                  'h-full rounded-l-full transition-all duration-500 shadow-sm',
+                  isConcluded
+                    ? 'bg-gradient-to-r from-casa-gold via-amber-400 to-emerald-400 w-full'
+                    : 'bg-gradient-to-r from-casa-gold via-amber-400 to-emerald-400',
+                )}
+                style={{ width: isConcluded ? '100%' : `${progressPercent}%` }}
               />
             </div>
 
             {/* Zone 2: Return Drive Home (35% width) */}
             <div className="relative w-[35%] h-full rounded-r-full bg-white/5 flex items-center overflow-hidden border-l border-white/10">
-              <div className="w-full h-full bg-amber-500/20" />
+              <div
+                className={cn(
+                  'w-full h-full transition-colors duration-500',
+                  isConcluded ? 'bg-amber-500/30' : 'bg-amber-500/20',
+                )}
+              />
             </div>
           </div>
 
@@ -218,7 +271,9 @@ export function JourneyProgressBar({
             <div
               className={cn(
                 'w-4 h-4 rounded-full flex items-center justify-center text-3xs font-bold border shadow-md transition-transform',
-                minutesUntilEnd !== null && minutesUntilEnd <= 10
+                isConcluded
+                  ? 'bg-emerald-400 text-slate-950 border-white ring-2 ring-emerald-400/50'
+                  : minutesUntilEnd !== null && minutesUntilEnd <= 10
                   ? 'bg-amber-400 text-slate-950 border-white scale-110 animate-pulse ring-2 ring-amber-400/50'
                   : 'bg-slate-900 text-casa-gold border-casa-gold/60',
               )}
@@ -231,7 +286,9 @@ export function JourneyProgressBar({
         {showLabels && (
           <div className="flex items-center justify-between text-3xs font-sans uppercase tracking-wider text-white/50 px-1 pt-0.5">
             <span className="w-[60%] text-left truncate">
-              {formatDurationHuman(elapsedMins)} elapsed ({formatDurationHuman(totalEventDurationMins)} total)
+              {isConcluded
+                ? `Completed (${formatDurationHuman(totalEventDurationMins)})`
+                : `${formatDurationHuman(elapsedMins)} elapsed (${formatDurationHuman(totalEventDurationMins)} total)`}
             </span>
             <span className="w-[40%] text-right font-semibold text-white/70 truncate">
               {driveTimeMins}m drive back {returnDestinationName.toLowerCase() === 'home' ? 'home' : `to ${returnDestinationName}`}
@@ -278,7 +335,7 @@ export function JourneyProgressBar({
               ) : isEnRoute ? (
                 <span>En Route · {driveTimeMins} min</span>
               ) : (
-                <span>At Event</span>
+                <span>Prep to Depart</span>
               )}
             </span>
           </div>

@@ -396,7 +396,7 @@ export function matchDinnerPlanIntent(
   }
 
   // 6. Dining Out
-  if (normalized.includes('din') && (normalized.includes('out') || normalized.includes('restaurant'))) {
+  if (/\b(?:dining out|eat out|eating out|go out to eat|restaurant|dine out)\b/i.test(normalized)) {
     const target = '7:00 PM Target'
     const windowInfo = calculateOrderOrPrepWindow('dineout', target)
     const newPlan: DinnerPlan = {
@@ -559,16 +559,8 @@ export function matchDinnerPlanIntent(
 
   // 12. Driver / Chef reassignment with real household members or requested driver
   if (
-    normalized.includes('pickup') ||
-    normalized.includes('picking up') ||
-    normalized.includes('driver') ||
-    normalized.includes('driving') ||
-    normalized.includes('chef') ||
-    normalized.includes('sarah') ||
-    normalized.includes('jake') ||
-    normalized.includes('kelly') ||
-    normalized.includes('giselle') ||
-    normalized.includes('luke')
+    /\b(?:dinner driver|kitchen driver|food pickup|takeout driver)\b/i.test(normalized) ||
+    /\b(?:sarah|jake|kelly|giselle|luke)\s+(?:is\s+)?(?:cooking|chef|picking up(?:\s+(?:dinner|food|takeout))?|pickup|driver|driving)\b/i.test(normalized)
   ) {
     let name = 'Jake'
     if (normalized.includes('sarah')) name = 'Sarah'
