@@ -10,6 +10,8 @@ import {
   ChevronDown,
   Calendar,
   CalendarPlus,
+  CheckSquare,
+  Square,
   Moon,
   Sun,
   ExternalLink,
@@ -28,7 +30,12 @@ import type { PrepItem, Conflict, FamilyMember } from '../../../types'
 import type { SnoozeDuration } from '../../../utils/snoozeDuration'
 import type { DriverAvailability } from '../../../hooks/useTurboCanvasPresenter'
 import { sourceBadge } from '../../../utils/prepSourceBadge'
-import { detectSuggestedEvent, type SuggestedEventPlan } from '../../../utils/actionInspectionSynthesis'
+import {
+  detectSuggestedEvent,
+  detectSuggestedActionBundle,
+  type SuggestedEventPlan,
+  type SuggestedActionBundle,
+} from '../../../utils/actionInspectionSynthesis'
 import { clusterPrepItems, buildGmailWebUrl, type PrepItemCluster } from '../../../utils/prepItemClusters'
 import { useCreateSuggestedEvent } from '../../../hooks/useCreateSuggestedEvent'
 import { useAppStore } from '../../../stores/appStore'
@@ -117,7 +124,36 @@ export default function ActionQueueWidget({
   const [spotlightItemId, setSpotlightItemId] = useState<string | null>(null)
   const [eventAddedItemIds, setEventAddedItemIds] = useState<Set<string>>(new Set())
 
-  const { createSuggestedEvent, isCreating } = useCreateSuggestedEvent()
+  const [selectedBundleActionIds, setSelectedBundleActionIds] = useState<Record<string, string[]>>({})
+
+  const { createSuggestedEvent, createSuggestedActionBundle, isCreating } = useCreateSuggestedEvent()
+
+  const getSelectedActionIds = (bundle: SuggestedActionBundle) => {
+    if (selectedBundleActionIds[bundle.bundleId]) {
+      return selectedBundleActionIds[bundle.bundleId]
+    }
+    return bundle.actions.filter((a) => a.defaultSelected).map((a) => a.id)
+  }
+
+  const toggleBundleAction = (bundle: SuggestedActionBundle, actionId: string) => {
+    const current = getSelectedActionIds(bundle)
+    const next = current.includes(actionId)
+      ? current.filter((id) => id !== actionId)
+      : [...current, actionId]
+    setSelectedBundleActionIds((prev) => ({ ...prev, [bundle.bundleId]: next }))
+  }
+
+  const handle1TapAddBundle = async (item: PrepItem, bundle: SuggestedActionBundle) => {
+    const selectedIds = getSelectedActionIds(bundle)
+    if (selectedIds.length === 0) return
+    const res = await createSuggestedActionBundle(bundle, selectedIds, item)
+    if (res.success) {
+      setEventAddedItemIds((prev) => new Set(prev).add(item.id))
+      setTimeout(() => {
+        handleCompletePrep(item)
+      }, 850)
+    }
+  }
 
   // Instant 0ms client-side filter
   const visibleConflicts = useMemo(
@@ -490,7 +526,9 @@ export default function ActionQueueWidget({
                 const heroBadge = sourceBadge(heroItem)
                 const HeroBadgeIcon = heroBadge.icon
                 const heroAmount = extractAmount(heroItem.description || heroItem.event_title)
+                const heroActionBundle = detectSuggestedActionBundle(heroItem)
                 const heroSuggestedEvent = detectSuggestedEvent(heroItem)
+                const selectedHeroActionIds = heroActionBundle ? getSelectedActionIds(heroActionBundle) : []
                 const { label: heroDoneLabel, Icon: HeroDoneIcon } = resolveButtonConfig(heroItem)
                 const isHeroSnoozeOpen = openSnoozeId === heroItem.id
                 const isHeroMenuOpen = openMenuId === heroItem.id
@@ -637,8 +675,170 @@ export default function ActionQueueWidget({
                       </div>
                     </div>
 
-                    {/* ── 1-Tap Proactive Card-Face Action Strip ── */}
-                    {heroSuggestedEvent && (
+                    {/* ── Compound Multi-Action Bundle / Proactive Suggestions ── */}
+                    {heroActionBundle && heroActionBundle.actions.length > 0 ? (
+                      <div className="p-3.5 sm:p-4 rounded-2xl bg-amber-50/75 border border-amber-200/90 flex flex-col gap-3 shadow-2xs">
+                        <div className="flex items-center justify-between gap-2 border-b border-amber-200/60 pb-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-6 h-6 rounded-md bg-amber-500/15 text-amber-900 flex items-center justify-center font-bold shrink-0">
+                              <Sparkles size={13} className="text-amber-700" />
+                            </div>
+                            <div className="min-w-0">
+                              <span className="text-caption font-bold text-amber-950 uppercase tracking-wider block leading-none">
+                                Suggested Plan ({heroActionBundle.actions.length})
+                              </span>
+                              {heroActionBundle.summary && (
+                                <span className="text-3xs text-amber-800/80 font-medium truncate block mt-0.5">
+                                  {heroActionBundle.summary}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <span className="text-3xs font-semibold px-2 py-0.5 rounded-full bg-amber-200/70 text-amber-900 shrink-0">
+                            {selectedHeroActionIds.length} of {heroActionBundle.actions.length} Selected
+                          </span>
+                        </div>
+
+                        {/* List of Actions */}
+                        <div className="space-y-2">
+                          {heroActionBundle.actions.map((act) => {
+                            const isSelected = selectedHeroActionIds.includes(act.id)
+                            const isReminder = act.type === 'reminder'
+                            const isLink = act.type === 'link'
+
+                            return (
+                              <div
+                                key={act.id}
+                                onClick={() => {
+                                  if (!isLink) toggleBundleAction(heroActionBundle, act.id)
+                                }}
+                                className={cn(
+                                  'p-2.5 sm:p-3 rounded-xl border transition-all flex items-start justify-between gap-2.5 text-left',
+                                  isLink
+                                    ? 'bg-casa-surface border-casa-border/70 shadow-2xs'
+                                    : (isSelected
+                                      ? 'bg-casa-surface border-amber-400 shadow-2xs cursor-pointer'
+                                      : 'bg-casa-surface/60 border-casa-border/60 opacity-65 hover:opacity-90 cursor-pointer')
+                                )}
+                              >
+                                <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                                  {!isLink ? (
+                                    <button
+                                      type="button"
+                                      aria-label={`Toggle ${act.title}`}
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        toggleBundleAction(heroActionBundle, act.id)
+                                      }}
+                                      className={cn(
+                                        'min-w-[40px] min-h-[40px] -m-1.5 flex items-center justify-center rounded-lg transition-colors shrink-0',
+                                        isSelected ? 'text-amber-600' : 'text-casa-muted hover:text-casa-navy'
+                                      )}
+                                    >
+                                      {isSelected ? (
+                                        <CheckSquare size={18} className="text-amber-600 shrink-0" />
+                                      ) : (
+                                        <Square size={18} className="text-casa-muted/60 shrink-0" />
+                                      )}
+                                    </button>
+                                  ) : (
+                                    <div className="w-5 h-5 flex items-center justify-center text-purple-700 shrink-0 mt-0.5">
+                                      <ExternalLink size={14} />
+                                    </div>
+                                  )}
+
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                                      <span
+                                        className={cn(
+                                          'text-3xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border',
+                                          isReminder
+                                            ? 'bg-sky-100 text-sky-900 border-sky-200'
+                                            : isLink
+                                            ? 'bg-purple-100 text-purple-900 border-purple-200'
+                                            : 'bg-amber-100 text-amber-950 border-amber-300'
+                                        )}
+                                      >
+                                        {act.badgeLabel || (isReminder ? 'PREP TASK' : 'CALENDAR EVENT')}
+                                      </span>
+
+                                      <span className="text-caption font-bold text-casa-navy">
+                                        {act.displayDate}
+                                      </span>
+
+                                      {act.assignedMemberName && (
+                                        <span className="text-3xs font-semibold px-1.5 py-0.2 rounded bg-casa-bg border border-casa-border text-casa-navy">
+                                          For {act.assignedMemberName}
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    <h5 className="text-body-sm font-bold text-casa-navy leading-snug">
+                                      {act.title}
+                                    </h5>
+
+                                    {act.subtitle && (
+                                      <p className="text-caption text-casa-muted leading-tight mt-0.5">
+                                        {act.subtitle}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {isLink && act.url && (
+                                  <a
+                                    href={act.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="px-2.5 py-1.5 rounded-lg bg-casa-surface border border-casa-border hover:border-casa-navy text-casa-navy text-caption font-bold shadow-2xs inline-flex items-center gap-1 shrink-0 no-underline min-h-[38px]"
+                                  >
+                                    <span>Open Portal</span>
+                                    <ExternalLink size={11} className="text-casa-muted" />
+                                  </a>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+
+                        {/* Multi-Action Execution Bar */}
+                        <div className="pt-1.5 border-t border-amber-200/60 flex items-center justify-between gap-2 flex-wrap">
+                          <span className="text-3xs text-amber-900/80 font-medium">
+                            Adds synchronized reminder &amp; calendar blocks
+                          </span>
+
+                          {isEventAdded ? (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-100 text-emerald-900 text-caption font-bold border border-emerald-300 shadow-2xs">
+                              <Check size={14} className="text-emerald-700" />
+                              <span>Added to Schedule</span>
+                            </span>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="primary"
+                              disabled={isCreating || selectedHeroActionIds.length === 0}
+                              onClick={() => handle1TapAddBundle(heroItem, heroActionBundle)}
+                              className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-caption font-bold shadow-xs transition-all min-h-[44px] flex items-center gap-1.5 shrink-0"
+                            >
+                              {isCreating ? (
+                                <Loader2 size={13} className="animate-spin" />
+                              ) : (
+                                <CalendarPlus size={14} />
+                              )}
+                              <span>
+                                {selectedHeroActionIds.length === heroActionBundle.actions.length
+                                  ? `+ Add Both (${selectedHeroActionIds.length}) to Schedule`
+                                  : selectedHeroActionIds.length > 0
+                                  ? `+ Add Selected (${selectedHeroActionIds.length}) to Schedule`
+                                  : 'Select an Action'}
+                              </span>
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ) : heroSuggestedEvent ? (
                       <div className="p-3 rounded-2xl bg-amber-50/90 border border-amber-200 flex items-center justify-between gap-3 flex-wrap">
                         <div className="flex items-center gap-2 min-w-0">
                           <Calendar size={16} className="text-amber-700 shrink-0" />
@@ -665,7 +865,7 @@ export default function ActionQueueWidget({
                           </Button>
                         )}
                       </div>
-                    )}
+                    ) : null}
 
                     {/* ── Universal 2-Anchor Footer: [ Done ] vs [ Snooze ▾ ] ── */}
                     <div className="pt-3.5 border-t border-casa-border/60 flex items-center justify-between gap-2.5 flex-wrap">
@@ -781,6 +981,7 @@ export default function ActionQueueWidget({
                   const badge = sourceBadge(item)
                   const BadgeIcon = badge.icon
                   const amount = extractAmount(item.description || item.event_title)
+                  const microActionBundle = detectSuggestedActionBundle(item)
                   const microSuggestedEvent = detectSuggestedEvent(item)
                   const isMicroEventAdded = eventAddedItemIds.has(item.id)
 
@@ -844,7 +1045,32 @@ export default function ActionQueueWidget({
                               </>
                             )}
 
-                            {microSuggestedEvent && (
+                            {microActionBundle && microActionBundle.actions.length > 1 ? (
+                              <>
+                                <span>·</span>
+                                {isMicroEventAdded ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 text-2xs font-semibold border border-emerald-200">
+                                    <Check size={9} className="text-emerald-700" />
+                                    <span>Plan Added ({microActionBundle.actions.length})</span>
+                                  </span>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handle1TapAddBundle(item, microActionBundle)
+                                    }}
+                                    className="h-auto p-0 hover:bg-transparent"
+                                  >
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100/90 text-amber-900 text-2xs font-semibold border border-amber-300/80 hover:bg-amber-200 transition-colors">
+                                      <Sparkles size={9} className="text-amber-700 shrink-0" />
+                                      <span>+ Add Plan ({microActionBundle.actions.length} items)</span>
+                                    </span>
+                                  </Button>
+                                )}
+                              </>
+                            ) : microSuggestedEvent ? (
                               <>
                                 <span>·</span>
                                 {isMicroEventAdded ? (
@@ -869,7 +1095,7 @@ export default function ActionQueueWidget({
                                   </Button>
                                 )}
                               </>
-                            )}
+                            ) : null}
 
                             {item.due_by ? (
                               <>

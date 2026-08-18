@@ -180,7 +180,7 @@ test('detectSuggestedEvent: returns accurate plan for quick queue badge detectio
   })
   assert.ok(pto)
   assert.equal(pto.date, '2026-08-28')
-  assert.equal(pto.displayDate, 'Fri, Aug 28')
+  assert.equal(pto.displayDate, 'Fri, Aug 28 · All Day')
   assert.equal(pto.allDay, true)
 
   const camp = detectSuggestedEvent({
@@ -190,7 +190,7 @@ test('detectSuggestedEvent: returns accurate plan for quick queue badge detectio
   })
   assert.ok(camp)
   assert.equal(camp.date, '2026-08-17')
-  assert.equal(camp.displayDate, 'Mon, Aug 17')
+  assert.equal(camp.displayDate, 'Mon, Aug 17 · 7:30 AM – 8:30 AM')
 
   const nonDated = detectSuggestedEvent({
     id: 'misc-1',

@@ -160,7 +160,12 @@ export default function DataAnalyticsPage() {
         suppressionsRes,
         graphEdgesRes,
         graphLastSeenRes,
-        nodesRes,
+        graphNodesRes,
+        memberNodesRes,
+        placeNodesRes,
+        contactNodesRes,
+        routineNodesRes,
+        eventNodesRes,
       ] = await Promise.all([
         supabase
           .from('conflicts')
@@ -190,16 +195,35 @@ export default function DataAnalyticsPage() {
           .maybeSingle(),
         supabase
           .from('household_graph_nodes')
-          .select('node_type'),
+          .select('id', { count: 'exact', head: true }),
+        supabase
+          .from('household_graph_nodes')
+          .select('id', { count: 'exact', head: true })
+          .eq('node_type', 'member'),
+        supabase
+          .from('household_graph_nodes')
+          .select('id', { count: 'exact', head: true })
+          .eq('node_type', 'place'),
+        supabase
+          .from('household_graph_nodes')
+          .select('id', { count: 'exact', head: true })
+          .eq('node_type', 'contact'),
+        supabase
+          .from('household_graph_nodes')
+          .select('id', { count: 'exact', head: true })
+          .eq('node_type', 'routine'),
+        supabase
+          .from('household_graph_nodes')
+          .select('id', { count: 'exact', head: true })
+          .eq('node_type', 'event'),
       ])
 
-      const nodes = nodesRes.data ?? []
       const breakdown = {
-        member: nodes.filter((n) => n.node_type === 'member').length,
-        place: nodes.filter((n) => n.node_type === 'place').length,
-        contact: nodes.filter((n) => n.node_type === 'contact').length,
-        event: nodes.filter((n) => n.node_type === 'event').length,
-        routine: nodes.filter((n) => n.node_type === 'routine').length,
+        member: memberNodesRes.count ?? 0,
+        place: placeNodesRes.count ?? 0,
+        contact: contactNodesRes.count ?? 0,
+        event: eventNodesRes.count ?? 0,
+        routine: routineNodesRes.count ?? 0,
       }
 
       const activeSuppressed = (suppressionsRes.data ?? []).filter(
@@ -216,7 +240,7 @@ export default function DataAnalyticsPage() {
         actionQueue: estimatedActionQueue,
         downvotes30d: feedbackRes.count ?? 0,
         suppressedPatterns: activeSuppressed,
-        graphNodes: nodes.length,
+        graphNodes: graphNodesRes.count ?? 0,
         graphEdges: graphEdgesRes.count ?? 0,
         graphLastSeenAt: graphLastSeenRes.data?.last_seen_at ?? null,
         nodeTypeBreakdown: breakdown,

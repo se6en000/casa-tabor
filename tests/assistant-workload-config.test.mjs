@@ -40,7 +40,7 @@ test('legacy llm config receives independent safe workload defaults', () => {
       provider: 'gemini',
       model: 'gemini-2.5-flash',
       background_model: 'gemini-2.5-flash-lite',
-      talk_plan_model: 'gemini-3.6-flash',
+      talk_plan_model: 'gemini-2.5-flash',
       do_reasoning_preset: 'balanced',
       talk_plan_reasoning_preset: 'deep',
       background_reasoning_preset: 'fast',

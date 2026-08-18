@@ -19,6 +19,8 @@ import {
   CalendarPlus,
   CalendarCheck,
   Calendar,
+  CheckSquare,
+  Square,
   MapPin,
   Loader2,
   Tag,
@@ -47,6 +49,7 @@ import {
   type SuggestedEventPlan,
 } from '../../../utils/actionInspectionSynthesis'
 import { buildGmailWebUrl } from '../../../utils/prepItemClusters'
+import { useCreateSuggestedEvent } from '../../../hooks/useCreateSuggestedEvent'
 import { useQueryClient } from '@tanstack/react-query'
 import { useFamilyMembers } from '../../../hooks/useFamilyMembers'
 import { useAppStore } from '../../../stores/appStore'
@@ -96,6 +99,10 @@ export default function ActionInspectionSidecar({
   const [creatingEvent, setCreatingEvent] = useState(false)
   const [createdEventId, setCreatedEventId] = useState<string | null>(null)
   const [trainedSuccess, setTrainedSuccess] = useState<string | null>(null)
+  const [selectedBundleActionIds, setSelectedBundleActionIds] = useState<Record<string, string[]>>({})
+  const [bundleSuccess, setBundleSuccess] = useState(false)
+
+  const { createSuggestedActionBundle, isCreating: isCreatingBundle } = useCreateSuggestedEvent()
 
   const { rules: captureRules = [], saveRule: saveCaptureRule, removeRule: removeCaptureRule, isSaving: isSavingRule } = useHouseholdCaptureRules()
   const downvote = useDownvotePrepItem()
@@ -595,8 +602,181 @@ export default function ActionInspectionSidecar({
             </li>
           </ul>
 
-          {/* ══════ PROACTIVE ACTION PLAN: SUGGESTED EVENT ══════ */}
-          {analysis.suggestedEvent && (
+          {/* ══════ PROACTIVE ACTION PLAN: COMPOUND ACTION BUNDLE OR SUGGESTED EVENT ══════ */}
+          {analysis.suggestedActionBundle && analysis.suggestedActionBundle.actions.length > 0 ? (
+            (() => {
+              const bundle = analysis.suggestedActionBundle
+              const selectedIds = selectedBundleActionIds[bundle.bundleId]
+                ? selectedBundleActionIds[bundle.bundleId]
+                : bundle.actions.filter((a) => a.defaultSelected).map((a) => a.id)
+
+              const toggleAction = (actId: string) => {
+                const next = selectedIds.includes(actId)
+                  ? selectedIds.filter((id) => id !== actId)
+                  : [...selectedIds, actId]
+                setSelectedBundleActionIds((prev) => ({ ...prev, [bundle.bundleId]: next }))
+              }
+
+              const handleExecuteBundle = async () => {
+                if (selectedIds.length === 0) return
+                const res = await createSuggestedActionBundle(bundle, selectedIds, activeItem, analysis.subject)
+                if (res.success) {
+                  setBundleSuccess(true)
+                  await qc.invalidateQueries({ queryKey: ['events'] })
+                  await qc.invalidateQueries({ queryKey: ['prep-items'] })
+                }
+              }
+
+              return (
+                <div className="pt-3 border-t border-amber-200/90 flex flex-col gap-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-caption font-bold text-amber-950 flex items-center gap-1.5">
+                      <Sparkles size={13} className="text-amber-700" />
+                      <span>Suggested Action Plan ({bundle.actions.length})</span>
+                    </span>
+                    <span className="text-3xs font-mono font-bold px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-900">
+                      {selectedIds.length} of {bundle.actions.length} Selected
+                    </span>
+                  </div>
+
+                  <div className="space-y-2">
+                    {bundle.actions.map((act) => {
+                      const isSelected = selectedIds.includes(act.id)
+                      const isReminder = act.type === 'reminder'
+                      const isLink = act.type === 'link'
+
+                      return (
+                        <div
+                          key={act.id}
+                          onClick={() => {
+                            if (!isLink) toggleAction(act.id)
+                          }}
+                          className={cn(
+                            'p-3 rounded-xl border transition-all flex items-start justify-between gap-2.5 text-left',
+                            isLink
+                              ? 'bg-white/90 border-casa-border/80'
+                              : (isSelected
+                                ? 'bg-white/95 border-amber-400 shadow-2xs cursor-pointer'
+                                : 'bg-white/60 border-casa-border/60 opacity-65 hover:opacity-85 cursor-pointer')
+                          )}
+                        >
+                          <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                            {!isLink ? (
+                              <button
+                                type="button"
+                                aria-label={`Toggle ${act.title}`}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  toggleAction(act.id)
+                                }}
+                                className={cn(
+                                  'min-w-[36px] min-h-[36px] -m-1 flex items-center justify-center rounded-lg transition-colors shrink-0',
+                                  isSelected ? 'text-amber-600' : 'text-casa-muted hover:text-casa-navy'
+                                )}
+                              >
+                                {isSelected ? (
+                                  <CheckSquare size={18} className="text-amber-600 shrink-0" />
+                                ) : (
+                                  <Square size={18} className="text-casa-muted/60 shrink-0" />
+                                )}
+                              </button>
+                            ) : (
+                              <div className="w-5 h-5 flex items-center justify-center text-purple-700 shrink-0 mt-0.5">
+                                <ExternalLink size={14} />
+                              </div>
+                            )}
+
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                                <span
+                                  className={cn(
+                                    'text-3xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border',
+                                    isReminder
+                                      ? 'bg-sky-100 text-sky-900 border-sky-200'
+                                      : isLink
+                                      ? 'bg-purple-100 text-purple-900 border-purple-200'
+                                      : 'bg-amber-100 text-amber-950 border-amber-300'
+                                  )}
+                                >
+                                  {act.badgeLabel || (isReminder ? 'PREP TASK' : 'CALENDAR EVENT')}
+                                </span>
+
+                                <span className="text-caption font-bold text-casa-navy">
+                                  {act.displayDate}
+                                </span>
+
+                                {act.assignedMemberName && (
+                                  <span className="text-3xs font-semibold px-1.5 py-0.2 rounded bg-casa-bg border border-casa-border text-casa-navy">
+                                    For {act.assignedMemberName}
+                                  </span>
+                                )}
+                              </div>
+
+                              <h5 className="text-body-sm font-bold text-casa-navy leading-snug">
+                                {act.title}
+                              </h5>
+
+                              {act.subtitle && (
+                                <p className="text-caption text-casa-muted leading-tight mt-0.5">
+                                  {act.subtitle}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          {isLink && act.url && (
+                            <a
+                              href={act.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="px-2.5 py-1.5 rounded-lg bg-casa-surface border border-casa-border hover:border-casa-navy text-casa-navy text-caption font-bold shadow-2xs inline-flex items-center gap-1 shrink-0 no-underline min-h-[38px]"
+                            >
+                              <span>Open</span>
+                              <ExternalLink size={11} className="text-casa-muted" />
+                            </a>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {bundleSuccess ? (
+                    <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-800 font-bold text-body-sm flex items-center justify-center gap-2 shadow-2xs">
+                      <Check size={16} className="text-emerald-600" />
+                      <span>Plan Added to Schedule &amp; Calendar</span>
+                    </div>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="strong"
+                      disabled={isCreatingBundle || selectedIds.length === 0}
+                      onClick={handleExecuteBundle}
+                      className="w-full min-h-[44px] sm:min-h-[48px] rounded-xl text-body-sm font-bold shadow-card flex items-center justify-center gap-2 transition-all hover:brightness-110 active:scale-[0.99]"
+                    >
+                      {isCreatingBundle ? (
+                        <>
+                          <Loader2 size={16} className="animate-spin text-casa-gold" />
+                          <span>Scheduling Selected Items...</span>
+                        </>
+                      ) : (
+                        <>
+                          <CalendarPlus size={16} className="text-casa-gold shrink-0" />
+                          <span>
+                            {selectedIds.length === bundle.actions.length
+                              ? `+ Add All (${selectedIds.length}) to Schedule`
+                              : selectedIds.length > 0
+                              ? `+ Add Selected (${selectedIds.length}) to Schedule`
+                              : 'Select an Action'}
+                          </span>
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
+              )
+            })()
+          ) : analysis.suggestedEvent ? (
             <div className="pt-3 border-t border-amber-200/90 flex flex-col gap-2.5">
               <div className="flex items-center justify-between">
                 <span className="text-caption font-bold text-amber-950 flex items-center gap-1.5">
@@ -664,7 +844,7 @@ export default function ActionInspectionSidecar({
                 )}
               </div>
             </div>
-          )}
+          ) : null}
         </div>
 
         {/* ══════ SIBLING CLUSTER ITEMS (Extracted from Same Email) ══════ */}

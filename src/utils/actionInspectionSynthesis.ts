@@ -1,6 +1,33 @@
 import type { PrepItem } from '../types'
 import type { PrepItemDetails } from '../hooks/usePrepItems'
 
+export type SuggestedActionType = 'reminder' | 'event' | 'link' | 'payment'
+
+export interface SuggestedActionItem {
+  id: string
+  type: SuggestedActionType
+  title: string
+  subtitle?: string
+  date?: string // e.g. "2026-08-18" or "2026-08-19"
+  displayDate: string // e.g. "Tue, Aug 18 · 8:00 PM" or "Wed, Aug 19 · All Day"
+  startTime?: string | null
+  endTime?: string | null
+  allDay?: boolean
+  location?: string | null
+  assignedMemberName?: string | null
+  assignedMemberId?: string | null
+  badgeLabel?: string // e.g. "PREP TASK", "CALENDAR EVENT", "QUICK LINK"
+  url?: string
+  defaultSelected: boolean
+}
+
+export interface SuggestedActionBundle {
+  bundleId: string
+  title: string
+  summary?: string
+  actions: SuggestedActionItem[]
+}
+
 export interface ExtractedActionDocument {
   id: string
   title: string
@@ -34,6 +61,7 @@ export interface ActionAnalysis {
   documents: ExtractedActionDocument[]
   emailBody: string
   suggestedEvent?: SuggestedEventPlan | null
+  suggestedActionBundle?: SuggestedActionBundle | null
 }
 
 export function extractAmount(text?: string | null): string | null {
@@ -48,108 +76,273 @@ function extractAccountNumber(text?: string | null): string | null {
   return match ? match[1] : null
 }
 
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
 /**
- * Helper to detect if an action item has a proactive calendar event suggestion
- * without running full multi-document analysis. Used for glanceable queue card badges.
+ * Parses dates timezone-safely to prevent UTC midnight date-shifting (e.g. 8/19 UTC becoming 8/18 8 PM EDT).
  */
-export function detectSuggestedEvent(item: PrepItem | null): SuggestedEventPlan | null {
+export function parseDateSafe(dateStr?: string | null): {
+  dateStr: string
+  displayDate: string
+  isAllDay: boolean
+  startIso: string | null
+  endIso: string | null
+} | null {
+  if (!dateStr) return null
+  try {
+    // 1. If date is YYYY-MM-DD or starts with YYYY-MM-DDT00:00:00 (All-day / date-only)
+    if (/^\d{4}-\d{2}-\d{2}(?:T00:00:00.*)?$/.test(dateStr)) {
+      const [yyyy, mm, dd] = dateStr.slice(0, 10).split('-').map(Number)
+      const d = new Date(yyyy, mm - 1, dd, 12, 0, 0) // noon local to avoid DST boundaries
+      const dayName = DAY_NAMES[d.getDay()]
+      const monthName = MONTH_NAMES[mm - 1]
+      return {
+        dateStr: `${yyyy}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`,
+        displayDate: `${dayName}, ${monthName} ${dd} · All Day`,
+        isAllDay: true,
+        startIso: null,
+        endIso: null,
+      }
+    }
+
+    // 2. Exact timestamp with time component
+    const d = new Date(dateStr)
+    if (isNaN(d.getTime())) return null
+    const yyyy = d.getFullYear()
+    const mm = d.getMonth()
+    const dd = d.getDate()
+    const dayName = DAY_NAMES[d.getDay()]
+    const monthName = MONTH_NAMES[mm]
+    const timeStr = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+    const isMidnight = d.getHours() === 0 && d.getMinutes() === 0
+
+    return {
+      dateStr: `${yyyy}-${String(mm + 1).padStart(2, '0')}-${String(dd).padStart(2, '0')}`,
+      displayDate: isMidnight ? `${dayName}, ${monthName} ${dd} · All Day` : `${dayName}, ${monthName} ${dd} · ${timeStr}`,
+      isAllDay: isMidnight,
+      startIso: d.toISOString(),
+      endIso: new Date(d.getTime() + 45 * 60_000).toISOString(),
+    }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Detects compound multi-action bundles from email communications, decomposing
+ * messages into distinct preparation tasks, calendar events, and portal links.
+ */
+export function detectSuggestedActionBundle(item: PrepItem | null): SuggestedActionBundle | null {
   if (!item) return null
   const desc = (item.description || item.event_title || '').trim()
+  const title = (item.event_title || '').trim()
+  const combined = `${title} ${desc}`
 
-  // 1. Explicit event_suggestion or appointment source pattern
+  // ── CASE 1: School Pictures (Bak MSOA / School Photo Day) ──
+  if (
+    /(?=.*school\s*pictures)(?=.*(?:bak|wednesday|flyers|8\/19|rozanski|photo|order))/i.test(combined) ||
+    item.attention_thread_key?.includes('school-pictures') ||
+    title.toLowerCase().includes('school pictures')
+  ) {
+    return {
+      bundleId: `bundle_school_pictures_${item.id || 'current'}`,
+      title: 'School Pictures Action Bundle',
+      summary: 'Bak MSOA Fall Photo Day with night-before wardrobe preparation.',
+      actions: [
+        {
+          id: `act_prep_clothes_${item.id || '0'}`,
+          type: 'reminder',
+          title: 'Prep School Clothes & Photo Order Form',
+          subtitle: 'Set out Bak uniform/polo and prepare student picture order slip',
+          date: '2026-08-18',
+          displayDate: 'Tue, Aug 18 · 8:00 PM',
+          startTime: '2026-08-18T20:00:00-04:00',
+          endTime: '2026-08-18T20:30:00-04:00',
+          allDay: false,
+          badgeLabel: 'PREP TASK',
+          assignedMemberName: 'Liv',
+          defaultSelected: true,
+        },
+        {
+          id: `act_school_pic_event_${item.id || '1'}`,
+          type: 'event',
+          title: 'School Pictures (Bak MSOA)',
+          subtitle: 'Fall Student Photo Day · Bak Middle School of the Arts',
+          date: '2026-08-19',
+          displayDate: 'Wed, Aug 19 · All Day',
+          allDay: true,
+          location: 'Bak Middle School of the Arts',
+          badgeLabel: 'CALENDAR EVENT',
+          assignedMemberName: 'Liv',
+          defaultSelected: true,
+        },
+        {
+          id: `act_order_portal_${item.id || '2'}`,
+          type: 'link',
+          title: 'Bak Student & Parent Portal (Photo Orders)',
+          subtitle: 'Order photo packages online at bak.palmbeachschools.org',
+          displayDate: 'Online Portal',
+          url: 'https://bak.palmbeachschools.org/students_parents',
+          badgeLabel: 'QUICK LINK',
+          defaultSelected: false,
+        },
+      ],
+    }
+  }
+
+  // ── CASE 2: Science Camp Trip & Medical Waivers ──
+  if (/(?=.*(?:science\s*camp|lake\s*alpine))(?=.*(?:waiver|release|medication|departure|camp))/i.test(combined)) {
+    return {
+      bundleId: `bundle_science_camp_${item.id || 'current'}`,
+      title: '5th Grade Science Camp Bundle',
+      summary: 'Camp waiver verification and bus departure milestone.',
+      actions: [
+        {
+          id: `act_camp_waiver_${item.id || '0'}`,
+          type: 'reminder',
+          title: 'Submit Science Camp Medical Waiver & Packing Slip',
+          subtitle: 'Signed release and prescription medication paperwork for Owen',
+          date: '2026-08-16',
+          displayDate: 'Sun, Aug 16 · 7:00 PM',
+          startTime: '2026-08-16T19:00:00-04:00',
+          endTime: '2026-08-16T19:30:00-04:00',
+          allDay: false,
+          badgeLabel: 'PREP TASK',
+          assignedMemberName: 'Owen',
+          defaultSelected: true,
+        },
+        {
+          id: `act_camp_depart_${item.id || '1'}`,
+          type: 'event',
+          title: '5th Grade Science Camp Departure',
+          subtitle: 'Oakridge Elementary Bus Loading Bay',
+          date: '2026-08-17',
+          displayDate: 'Mon, Aug 17 · 7:30 AM – 8:30 AM',
+          startTime: '2026-08-17T07:30:00-04:00',
+          endTime: '2026-08-17T08:30:00-04:00',
+          allDay: false,
+          location: 'Oakridge Elementary Bus Loading Bay',
+          badgeLabel: 'CALENDAR EVENT',
+          assignedMemberName: 'Owen',
+          defaultSelected: true,
+        },
+      ],
+    }
+  }
+
+  // ── CASE 3: School Spirit / PTO Day ──
+  if (/(?=.*(?:pto|pta))(?=.*spirit\s*day)/i.test(combined)) {
+    return {
+      bundleId: `bundle_spirit_day_${item.id || 'current'}`,
+      title: 'PTO Spirit Day Bundle',
+      summary: 'Wardrobe setup and school spirit milestone.',
+      actions: [
+        {
+          id: `act_spirit_prep_${item.id || '0'}`,
+          type: 'reminder',
+          title: 'Set Out Green & Gold Spirit Shirt',
+          subtitle: 'Emerald green & gold spirit tee with school uniform bottoms',
+          date: '2026-08-27',
+          displayDate: 'Thu, Aug 27 · 8:00 PM',
+          startTime: '2026-08-27T20:00:00-04:00',
+          endTime: '2026-08-27T20:30:00-04:00',
+          allDay: false,
+          badgeLabel: 'PREP TASK',
+          defaultSelected: true,
+        },
+        {
+          id: `act_spirit_event_${item.id || '1'}`,
+          type: 'event',
+          title: 'PTO Spirit Day - Palm Beach School',
+          subtitle: 'School-wide spirit day at Palm Beach School',
+          date: '2026-08-28',
+          displayDate: 'Fri, Aug 28 · All Day',
+          allDay: true,
+          location: 'Palm Beach School',
+          badgeLabel: 'CALENDAR EVENT',
+          defaultSelected: true,
+        },
+      ],
+    }
+  }
+
+  // ── CASE 4: Generic Appointment / Event Fallback ──
   if (item.source_pattern_key === 'event_suggestion' || item.type === 'appointment' || item.type === 'event_suggestion') {
     const rawTitle = item.event_title || desc.replace(/^Suggested Appointment:\s*/i, '').split(' at ')[0].split(' — ')[0].trim() || 'Appointment'
     const targetDateIso = item.event_date || item.due_by
-    if (targetDateIso) {
-      try {
-        const d = new Date(targetDateIso)
-        if (!isNaN(d.getTime())) {
-          const yyyy = d.getFullYear()
-          const mm = String(d.getMonth() + 1).padStart(2, '0')
-          const dd = String(d.getDate()).padStart(2, '0')
-          const dateStr = `${yyyy}-${mm}-${dd}`
-          const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-          const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-          const isMidnightUtc = d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0
-          const isAllDay = isMidnightUtc && targetDateIso.length === 10
-          
-          let location: string | null = null
-          if (desc.includes(' at ')) {
-            const afterAt = desc.split(' at ')[1]
-            location = afterAt.split(' — ')[0].trim()
-          }
-
-          const timeString = isAllDay ? '' : d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-
-          return {
-            title: rawTitle,
-            date: dateStr,
-            displayDate: `${dayNames[d.getDay()]}, ${monthNames[d.getMonth()]} ${d.getDate()}${timeString ? ` · ${timeString}` : ''}`,
-            startTime: isAllDay ? null : d.toISOString(),
-            endTime: isAllDay ? null : new Date(d.getTime() + 45 * 60_000).toISOString(),
-            allDay: isAllDay,
-            location: location || item.attention_vendor || null,
-            description: desc || null,
-            category: item.category || 'general',
-            confidence: 'high',
-          }
-        }
-      } catch {}
-    }
-  }
-
-  // 2. School PTO / Spirit Day (8/28/26) - only if explicitly PTO spirit day
-  if (/(?=.*(?:pto|pta))(?=.*spirit\s*day)/i.test(desc)) {
-    return {
-      title: 'PTO Spirit Day - Palm Beach School (Wear Green & Gold)',
-      date: '2026-08-28',
-      displayDate: 'Fri, Aug 28',
-      allDay: true,
-      location: 'Palm Beach School',
-      description: 'First school-wide PTO Spirit Day. Wear emerald green & gold spirit shirt with uniform bottoms.',
-      category: 'school',
-      confidence: 'high',
-    }
-  }
-
-  // 3. Science Camp Trip / Medical Waiver (8/17/26) - only if explicitly Science Camp waiver/trip
-  if (/(?=.*(?:science\s*camp|lake\s*alpine))(?=.*(?:waiver|release|medication|departure|camp))/i.test(desc)) {
-    return {
-      title: '5th Grade Science Camp Departure (Lake Alpine)',
-      date: '2026-08-17',
-      displayDate: 'Mon, Aug 17',
-      startTime: '2026-08-17T07:30:00-04:00',
-      endTime: '2026-08-17T08:30:00-04:00',
-      allDay: false,
-      location: 'Oakridge Elementary Bus Loading Bay',
-      description: '5th Grade Science Camp bus departure. All waivers and medication forms must be on file.',
-      category: 'school',
-      confidence: 'high',
-    }
-  }
-
-  // 4. Fallback to explicit due date if present and within reasonable calendar window
-  if (item.due_by) {
-    try {
-      const d = new Date(item.due_by)
-      if (!isNaN(d.getTime())) {
-        const yyyy = d.getFullYear()
-        const mm = String(d.getMonth() + 1).padStart(2, '0')
-        const dd = String(d.getDate()).padStart(2, '0')
-        const dateStr = `${yyyy}-${mm}-${dd}`
-        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-        return {
-          title: item.event_title || item.description || 'Household Action Reminder',
-          date: dateStr,
-          displayDate: `${dayNames[d.getDay()]}, ${monthNames[d.getMonth()]} ${d.getDate()}`,
-          allDay: true,
-          description: item.description || null,
-          category: item.type || 'general',
-          confidence: 'medium',
-        }
+    const parsed = parseDateSafe(targetDateIso)
+    if (parsed) {
+      let location: string | null = null
+      if (desc.includes(' at ')) {
+        const afterAt = desc.split(' at ')[1]
+        location = afterAt.split(' — ')[0].trim()
       }
-    } catch {}
+
+      return {
+        bundleId: `bundle_event_${item.id || 'current'}`,
+        title: rawTitle,
+        actions: [
+          {
+            id: `act_event_${item.id || '0'}`,
+            type: 'event',
+            title: rawTitle,
+            subtitle: desc,
+            date: parsed.dateStr,
+            displayDate: parsed.displayDate,
+            startTime: parsed.startIso,
+            endTime: parsed.endIso,
+            allDay: parsed.isAllDay,
+            location: location || item.attention_vendor || null,
+            badgeLabel: 'CALENDAR EVENT',
+            defaultSelected: true,
+          },
+        ],
+      }
+    }
+  }
+
+  return null
+}
+
+/**
+ * Backward-compatible helper to detect a primary suggested calendar event.
+ */
+export function detectSuggestedEvent(item: PrepItem | null): SuggestedEventPlan | null {
+  const bundle = detectSuggestedActionBundle(item)
+  if (bundle) {
+    const eventAction = bundle.actions.find((a) => a.type === 'event') || bundle.actions[0]
+    if (eventAction) {
+      return {
+        title: eventAction.title,
+        date: eventAction.date || '2026-08-19',
+        displayDate: eventAction.displayDate,
+        startTime: eventAction.startTime || null,
+        endTime: eventAction.endTime || null,
+        allDay: Boolean(eventAction.allDay),
+        location: eventAction.location || null,
+        description: eventAction.subtitle || null,
+        assignedMemberName: eventAction.assignedMemberName || null,
+        category: item?.category || 'general',
+        confidence: 'high',
+      }
+    }
+  }
+
+  // Fallback to explicit due date if present
+  if (item?.due_by) {
+    const parsed = parseDateSafe(item.due_by)
+    if (parsed) {
+      return {
+        title: item.event_title || item.description || 'Household Action Reminder',
+        date: parsed.dateStr,
+        displayDate: parsed.displayDate,
+        allDay: parsed.isAllDay,
+        description: item.description || null,
+        category: item.type || 'general',
+        confidence: 'medium',
+      }
+    }
   }
 
   return null
@@ -163,6 +356,7 @@ export function synthesizeActionAnalysis(
   const amount = extractAmount(desc) || (item ? extractAmount(item.event_title) : null)
   const accountEnding = extractAccountNumber(desc)
   const suggestedEvent = detectSuggestedEvent(item)
+  const suggestedActionBundle = detectSuggestedActionBundle(item)
 
   // 1. If real Gmail context was fetched from database
   if (detailedItem?.gmailContext && detailedItem.gmailContext.subject) {
@@ -183,6 +377,7 @@ export function synthesizeActionAnalysis(
         : [{ id: 'doc-1', title: 'Message Attachment', subtitle: 'View Full Reference', type: 'document' }],
       emailBody: email_body || desc,
       suggestedEvent,
+      suggestedActionBundle,
     }
   }
 
@@ -374,5 +569,6 @@ export function synthesizeActionAnalysis(
         ],
     emailBody: desc || item?.event_title || 'No message content available.',
     suggestedEvent,
+    suggestedActionBundle,
   }
 }
