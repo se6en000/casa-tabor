@@ -35,7 +35,10 @@ import {
   completeEventOrReminder,
   deleteCalendarEvent,
   triggerGoogleEventSync,
+  invalidateAllCalendarQueries,
 } from '../../../../lib/eventMutations'
+import { evictEventFromAllCaches } from '../../../../lib/eventAggregateCache'
+
 
 const DEFAULT_VENUE: VenueInfo = {
   name: 'Home',
@@ -795,7 +798,8 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
       setShowDeleteConfirm(true)
       return
     }
-    if (isCanonicalOccurrence && recurringEditorEnabled) {
+    const isRecurringEvent = isCanonicalOccurrence || Boolean(initialEvent?.series_id || initialEvent?.recurrence_master_id || initialEvent?.rrule)
+    if (isRecurringEvent && recurringEditorEnabled) {
       if (!recurringDeleteEnabled) {
         setDeleteError('Recurring event deletion is not enabled for this series yet.')
         setDeleteBlocked(true)
@@ -806,19 +810,22 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
       return
     }
     setShowDeleteConfirm(true)
-  }, [initialEvent?.record_kind, isCanonicalOccurrence, recurringDeleteEnabled, recurringEditorEnabled])
+  }, [initialEvent, isCanonicalOccurrence, recurringDeleteEnabled, recurringEditorEnabled])
 
   // Single / Non-recurring Event Delete Handler
   const handleDelete = useCallback(async () => {
     if (!initialEvent?.id) return
+    const eventId = initialEvent.id
     setDeleting(true)
-    setDeleteError(null)
+    // 0ms Optimistic Eviction across all screens
+    evictEventFromAllCaches(queryClient, eventId)
+    setShowDeleteConfirm(false)
+    onClose?.()
     try {
-      setShowDeleteConfirm(false)
-      onClose?.()
-      await deleteCalendarEvent(supabase, queryClient, initialEvent.id, initialEvent)
+      await deleteCalendarEvent(supabase, queryClient, eventId, initialEvent)
     } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : 'Could not delete this event.')
+      console.error('[LivingFlow] Delete failed in background:', err)
+      invalidateAllCalendarQueries(queryClient, eventId)
     } finally {
       setDeleting(false)
     }
@@ -830,8 +837,13 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
       setDeleteError('Recurring series details are unavailable.')
       return
     }
+    const eventId = initialEvent.id
     setDeleting(true)
-    setDeleteError(null)
+    if (scope === 'this' || scope === 'all') {
+      evictEventFromAllCaches(queryClient, eventId)
+    }
+    setShowDeleteScopeModal(false)
+    onClose?.()
     try {
       const seriesPatch: Record<string, unknown> = {}
       if (scope === 'future') {
@@ -845,10 +857,8 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
       }
       const actionId = recurringDeleteActionIdRef.current ?? crypto.randomUUID()
       recurringDeleteActionIdRef.current = actionId
-      setShowDeleteScopeModal(false)
-      onClose?.()
       const result = await deleteRecurringEditorMutation({
-        selected_event_id: initialEvent.id,
+        selected_event_id: eventId,
         action_id: actionId,
         scope,
         expected_series_revision: recurringContext.series.revision,
@@ -858,11 +868,14 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
       invalidateCalendar()
       announceRecurringDelete({ ...result, title: initialEvent.title, scope })
     } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : 'Could not delete the selected recurring events.')
+      console.error('[LivingFlow] Recurring delete failed in background:', err)
+      invalidateCalendar()
     } finally {
       setDeleting(false)
     }
-  }, [initialEvent, recurringContext, invalidateCalendar, onClose])
+  }, [initialEvent, recurringContext, queryClient, invalidateCalendar, onClose])
+
+
 
   const scopeImpacts = recurringContext ? {
     this: {

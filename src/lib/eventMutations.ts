@@ -711,7 +711,7 @@ export async function deleteCalendarEvent(
   eventId: string,
   event?: EventWithDetails | null,
 ) {
-  // 1. 0ms Evict from all cached queries
+  // 1. 0ms Evict from all cached queries immediately across all screens
   evictEventFromAllCaches(queryClient, eventId)
 
   // 2. If this is a synthetic routine event, persist a cancelled tombstone so routine generation suppresses it
@@ -733,20 +733,55 @@ export async function deleteCalendarEvent(
     return
   }
 
-  // 3. Trigger Google deletion asynchronously with explicit Google IDs
-  void supabase.functions.invoke('delete-google-event', {
-    body: {
-      event_id: eventId,
-      google_event_id: event?.google_event_id,
-      google_calendar_id: event?.google_calendar_id,
-      google_connection_id: event?.google_connection_id,
-      source_member_id: event?.source_member_id,
-    },
-  }).catch((err) => {
-    console.warn('[eventMutations] Background delete-google-event notice:', err)
-  })
+  // 3. Resolve Google sync info: extract from event or fetch from DB if needed
+  let googleEventId = event?.google_event_id
+  let googleCalendarId = event?.google_calendar_id
+  let googleConnectionId = event?.google_connection_id
+  let sourceMemberId = event?.source_member_id
 
-  // 4. Clean up dependent child tables to prevent foreign key lock delays/timeouts
+  if (!googleEventId) {
+    try {
+      const { data: dbEvent } = await supabase
+        .from('events')
+        .select('google_event_id, google_calendar_id, google_connection_id, source_member_id')
+        .eq('id', eventId)
+        .maybeSingle()
+      if (dbEvent) {
+        googleEventId = dbEvent.google_event_id
+        googleCalendarId = dbEvent.google_calendar_id
+        googleConnectionId = dbEvent.google_connection_id
+        sourceMemberId = dbEvent.source_member_id
+      }
+    } catch (dbLookupErr) {
+      console.warn('[eventMutations] DB lookup error for Google sync fields:', dbLookupErr)
+    }
+  }
+
+  // 4. Trigger Google deletion if this was a Google-synced event
+  if (googleEventId) {
+    try {
+      const googleRes = await supabase.functions.invoke('delete-google-event', {
+        body: {
+          event_id: eventId,
+          google_event_id: googleEventId,
+          google_calendar_id: googleCalendarId,
+          google_connection_id: googleConnectionId,
+          source_member_id: sourceMemberId,
+        },
+      })
+      if (googleRes.error) {
+        const errorMsg = String(googleRes.error.message || '')
+        const isNotFound = errorMsg.includes('404') || errorMsg.includes('410') || /not\s*found/i.test(errorMsg)
+        if (!isNotFound) {
+          console.warn('[eventMutations] Google Calendar deletion warning:', googleRes.error)
+        }
+      }
+    } catch (err) {
+      console.warn('[eventMutations] Background delete-google-event error:', err)
+    }
+  }
+
+  // 5. Clean up dependent child tables to prevent foreign key lock delays/timeouts
   await Promise.allSettled([
     supabase.from('event_members').delete().eq('event_id', eventId),
     supabase.from('event_enrichments').delete().eq('event_id', eventId),
@@ -765,3 +800,4 @@ export async function deleteCalendarEvent(
   if (error) throw error
   invalidateAllCalendarQueries(queryClient, eventId)
 }
+

@@ -1437,8 +1437,27 @@ Deno.serve(async (req) => {
       if (eventRow.recurrence_master_id || eventRow.rrule) {
         throw new Error(RECURRING_EDIT_ERROR)
       }
-      await sb.functions.invoke('delete-google-event', { body: { event_id: args.id } }).catch(() => {})
-      const { error } = await sb.from('events').update({ status: 'cancelled' }).eq('id', args.id)
+      await sb.functions.invoke('delete-google-event', {
+        body: { event_id: args.id },
+        headers: { Authorization: `Bearer ${requireEnv('SUPABASE_SERVICE_ROLE_KEY')}` },
+      }).catch((err) => console.warn('[execute-ai-action] delete-google-event warning:', err))
+
+      // Clean up child tables to prevent foreign key issues
+      await Promise.allSettled([
+        sb.from('event_members').delete().eq('event_id', args.id),
+        sb.from('event_enrichments').delete().eq('event_id', args.id),
+        sb.from('event_plan_overrides').delete().eq('event_id', args.id),
+        sb.from('prep_items').delete().eq('source_ref', args.id),
+        sb.from('event_logistics').delete().eq('event_id', args.id),
+        sb.from('event_checklist_items').delete().eq('event_id', args.id),
+        sb.from('event_action_items').delete().eq('event_id', args.id),
+      ])
+
+      const { error } = await sb.from('events').update({
+        status: 'cancelled',
+        deleted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }).eq('id', args.id)
       if (error) throw new Error(error.message)
       return new Response(JSON.stringify({ success: true, correlation_id: cid }), {
         headers: { ...CORS, 'content-type': 'application/json' },
@@ -1490,14 +1509,22 @@ Deno.serve(async (req) => {
       const missingCount = uniqueIds.length - matchedIds.length
 
       for (const eventId of matchedIds) {
-        await sb.functions.invoke('delete-google-event', { body: { event_id: eventId } }).catch(() => {})
+        await sb.functions.invoke('delete-google-event', {
+          body: { event_id: eventId },
+          headers: { Authorization: `Bearer ${requireEnv('SUPABASE_SERVICE_ROLE_KEY')}` },
+        }).catch((err) => console.warn('[execute-ai-action] delete-google-event bulk warning:', err))
       }
 
       const { error: updateError } = await sb
         .from('events')
-        .update({ status: 'cancelled' })
+        .update({
+          status: 'cancelled',
+          deleted_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
         .in('id', matchedIds)
       if (updateError) throw new Error(updateError.message)
+
 
       return new Response(JSON.stringify({
         success: true,

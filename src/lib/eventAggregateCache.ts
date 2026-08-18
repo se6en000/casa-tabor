@@ -140,6 +140,12 @@ export function evictEventFromAllCaches(
     { queryKey: ['event-transportation-plans'] },
     (current) => patchTransportationCollection(current, eventId, null),
   )
+  queryClient.setQueriesData({ queryKey: ['prep-items'] }, (current: unknown) => {
+    if (Array.isArray(current)) {
+      return current.filter((item) => !isRecord(item) || (item.event_id !== eventId && item.source_ref !== eventId))
+    }
+    return current
+  })
 
   if (!target) return
   target.dispatchEvent(new CustomEvent('casa:event-deleted', {
@@ -148,6 +154,10 @@ export function evictEventFromAllCaches(
   target.dispatchEvent(new CustomEvent('casa:event-updated', {
     detail: { eventId, patch: { status: 'cancelled' } },
   }))
+  target.dispatchEvent(new CustomEvent('casa:overrides-updated', {
+    detail: { eventId },
+  }))
 }
+
 
 
