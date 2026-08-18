@@ -742,45 +742,44 @@ export default function GroceryPage() {
   const handleMicPointerDown = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return
     e.preventDefault()
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId)
+    } catch {}
     setIsPressingMic(true)
-    void dictation.start(inputValue)
-  }, [dictation, inputValue])
+    setInputValue('')
+    void dictation.start('')
+  }, [dictation])
 
   const handleMicPointerUp = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
     if (!isPressingMic) return
     e.preventDefault()
-    setIsPressingMic(false)
-    dictation.stop()
-    if (inputValue.trim()) {
-      handleVoiceComplete(inputValue)
-    }
-  }, [dictation, handleVoiceComplete, inputValue, isPressingMic])
-
-  const handleMicPointerLeave = useCallback(() => {
-    if (!isPressingMic) return
-    setIsPressingMic(false)
-    dictation.stop()
-    if (inputValue.trim()) {
-      handleVoiceComplete(inputValue)
-    }
-  }, [dictation, handleVoiceComplete, inputValue, isPressingMic])
-
-  const handleMicPointerCancel = useCallback(() => {
-    if (!isPressingMic) return
-    setIsPressingMic(false)
-    dictation.stop()
-  }, [dictation, isPressingMic])
-
-  const handleMicClick = useCallback(() => {
-    if (dictation.listening) {
-      dictation.stop()
-      if (inputValue.trim()) {
-        handleVoiceComplete(inputValue)
+    try {
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId)
       }
-    } else {
-      void dictation.start(inputValue)
+    } catch {}
+    setIsPressingMic(false)
+    const captured = dictation.stop()
+    const textToProcess = (captured || inputValue).trim()
+    if (textToProcess) {
+      handleVoiceComplete(textToProcess)
     }
-  }, [dictation, handleVoiceComplete, inputValue])
+  }, [dictation, handleVoiceComplete, inputValue, isPressingMic])
+
+  const handleMicPointerCancel = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!isPressingMic) return
+    try {
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId)
+      }
+    } catch {}
+    setIsPressingMic(false)
+    const captured = dictation.stop()
+    const textToProcess = (captured || inputValue).trim()
+    if (textToProcess) {
+      handleVoiceComplete(textToProcess)
+    }
+  }, [dictation, handleVoiceComplete, inputValue, isPressingMic])
 
   const handleAddItem = () => {
     addItemByName(inputValue, { spotlightOnDuplicate: true, clearInput: true })
@@ -1780,9 +1779,7 @@ export default function GroceryPage() {
             onClearChecked={() => void clearChecked.mutate()}
             onMicPointerDown={handleMicPointerDown}
             onMicPointerUp={handleMicPointerUp}
-            onMicPointerLeave={handleMicPointerLeave}
             onMicPointerCancel={handleMicPointerCancel}
-            onMicClick={handleMicClick}
             onRemoveStagedItem={handleRemoveStagedItem}
             onCommitStagedItems={handleCommitVoiceItems}
             onCancelStagedItems={handleCancelStagedItems}

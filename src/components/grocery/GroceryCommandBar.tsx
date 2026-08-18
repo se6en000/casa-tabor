@@ -23,9 +23,7 @@ export interface GroceryCommandBarProps {
   onClearChecked?: () => void
   onMicPointerDown?: (e: PointerEvent<HTMLButtonElement>) => void
   onMicPointerUp?: (e: PointerEvent<HTMLButtonElement>) => void
-  onMicPointerLeave?: (e: PointerEvent<HTMLButtonElement>) => void
   onMicPointerCancel?: (e: PointerEvent<HTMLButtonElement>) => void
-  onMicClick?: () => void
   onRemoveStagedItem?: (id: string) => void
   onCommitStagedItems?: (items: ParsedVoiceGroceryItem[]) => void
   onCancelStagedItems?: () => void
@@ -62,9 +60,7 @@ export default function GroceryCommandBar({
   onClearChecked,
   onMicPointerDown,
   onMicPointerUp,
-  onMicPointerLeave,
   onMicPointerCancel,
-  onMicClick,
   onRemoveStagedItem,
   onCommitStagedItems,
   onCancelStagedItems,
@@ -136,7 +132,7 @@ export default function GroceryCommandBar({
             onKeyDown={onInputKeyDown}
             placeholder={
               isListening
-                ? 'Listening… speak items (e.g. "milk, 3 avocados, sourdough")'
+                ? 'Listening… release when done speaking'
                 : 'Add fresh produce, dairy, bakery, meat, or pantry staple…'
             }
             className={cn(
@@ -146,17 +142,15 @@ export default function GroceryCommandBar({
             aria-label="Add grocery item"
           />
 
-          {/* Luxury Press-and-Hold Microphone Trigger */}
+          {/* Luxury Strict Press-and-Hold Microphone Trigger */}
           <IconButton
             variant={isListening ? 'secondary' : 'ghost'}
             size="sm"
             onPointerDown={onMicPointerDown}
             onPointerUp={onMicPointerUp}
-            onPointerLeave={onMicPointerLeave}
             onPointerCancel={onMicPointerCancel}
-            onClick={onMicClick}
-            aria-label={isListening ? 'Release or click to finish speaking' : 'Press and hold to speak grocery list'}
-            title={isListening ? 'Recording... release or click to stop' : 'Hold to speak list · Tap to dictate'}
+            aria-label={isListening ? 'Release to add items' : 'Press and hold to speak grocery list'}
+            title={isListening ? 'Listening... release to add items' : 'Press and hold to speak grocery list'}
             className={cn(
               'shrink-0 select-none touch-none transition-all duration-200',
               isListening

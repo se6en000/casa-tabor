@@ -83,15 +83,65 @@ export default function MobileGroceryView({
     } catch {}
   }
 
-  // Voice dictation
+  // Voice dictation (Strictly Press-and-Hold)
+  const [isPressingMic, setIsPressingMic] = useState(false)
   const {
     supported: dictationSupported,
     listening,
-    toggle: toggleDictation,
+    start: startDictation,
+    stop: stopDictation,
     resetBuffer: resetDictation,
   } = useFieldDictation({
     onText: (text) => setInputValue(text),
   })
+
+  const handleMicPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return
+    e.preventDefault()
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId)
+    } catch {}
+    triggerHaptic(10)
+    setIsPressingMic(true)
+    setInputValue('')
+    void startDictation('')
+  }
+
+  const handleMicPointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!isPressingMic) return
+    e.preventDefault()
+    try {
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId)
+      }
+    } catch {}
+    triggerHaptic(8)
+    setIsPressingMic(false)
+    const captured = stopDictation()
+    const textToAdd = (captured || inputValue).trim()
+    if (textToAdd) {
+      onAddItem(textToAdd, { allowDuplicate: false })
+      setInputValue('')
+      resetDictation('')
+    }
+  }
+
+  const handleMicPointerCancel = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!isPressingMic) return
+    try {
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId)
+      }
+    } catch {}
+    setIsPressingMic(false)
+    const captured = stopDictation()
+    const textToAdd = (captured || inputValue).trim()
+    if (textToAdd) {
+      onAddItem(textToAdd, { allowDuplicate: false })
+      setInputValue('')
+      resetDictation('')
+    }
+  }
 
   // Duplicate detection for input
   const activeItems = items.filter((i) => !i.checked && !i.deleted_at)
@@ -471,12 +521,12 @@ export default function MobileGroceryView({
                 icon={<Mic size={17} />}
                 variant={listening ? 'primary' : 'ghost'}
                 size="sm"
-                onClick={() => {
-                  triggerHaptic(10)
-                  toggleDictation(inputValue)
-                }}
-                aria-label={listening ? 'Stop voice dictation' : 'Dictate grocery item'}
-                className={cn('h-8 w-8 shrink-0', listening && 'animate-pulse text-casa-navy')}
+                onPointerDown={handleMicPointerDown}
+                onPointerUp={handleMicPointerUp}
+                onPointerCancel={handleMicPointerCancel}
+                aria-label={listening ? 'Release to add grocery items' : 'Hold to speak grocery items'}
+                title={listening ? 'Listening... release to add' : 'Press and hold to speak'}
+                className={cn('h-8 w-8 shrink-0 touch-none select-none', listening && 'bg-casa-gold text-white shadow-2xs scale-105')}
               />
             )}
 

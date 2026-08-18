@@ -223,14 +223,16 @@ export function useFieldDictation({
   useEffect(() => { startBridgeRef.current = startBridge }, [startBridge])
 
   // ── Unified control ──────────────────────────────────────────────────────
-  const stop = useCallback(() => {
+  const stop = useCallback((): string => {
     clearSilenceTimer()
-    if (!activeRef.current) return
+    const captured = joinWords(baseRef.current, committedRef.current, lastInterimRef.current).trim()
+    if (!activeRef.current) return captured
     activeRef.current = false
     setListening(false)
     if (modeRef.current === 'webspeech') stopWebSpeech()
     else stopWS()
     emit('') // settle field to base + committed, drop trailing interim
+    return captured
   }, [clearSilenceTimer, stopWebSpeech, stopWS, emit])
 
   const start = useCallback(async (seed: string) => {
