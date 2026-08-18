@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import type React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIcon, Camera, Mic, Keyboard, RotateCcw, MessagesSquare, Plus, Square, CalendarDays, ShoppingCart, ChefHat, Pencil, AlertTriangle, Clock3, Utensils, Bell, UserPlus, MapPin, Mail, Activity, ChevronRight, Navigation, ArrowRight, Rotate3d, BookOpen } from 'lucide-react'
+import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIcon, Camera, Mic, Keyboard, RotateCcw, Plus, Square, Calendar, CalendarDays, Car, ShoppingCart, ChefHat, Pencil, AlertTriangle, Clock3, Utensils, Bell, UserPlus, MapPin, Mail, Activity, ChevronRight, Navigation, Rotate3d, BookOpen, Lock } from 'lucide-react'
 import { format } from 'date-fns'
 import { useNavigate } from 'react-router-dom'
 import { cn } from '../../utils/cn'
@@ -19,6 +19,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import type { FamilyMember, DinnerPlan, DinnerMode } from '../../types'
 import { useAppStore } from '../../stores/appStore'
+import { getDisplayMemberColor } from '../../design-system/memberColors'
 import BounceScroll from '../shared/BounceScroll'
 import MarkdownContent from '../shared/MarkdownContent'
 import { Button, Card, Heading, IconButton, LiveTranscript, Modal, Text } from '../ui'
@@ -97,10 +98,7 @@ export default function AIChatDrawer({
   const [historyUnlockError, setHistoryUnlockError] = useState<string | null>(null)
   const [historyConversations, setHistoryConversations] = useState<PrivateConversation[]>([])
   const [historyListLoading, setHistoryListLoading] = useState(false)
-  const [conversationMode, setConversationMode] = useState<boolean>(() => {
-    // Conversational by default: opening the assistant starts listening and
-    // re-arms between turns until dismissed. Users can opt into press-to-talk
-    // via the Convo toggle (persisted).
+  const [conversationMode] = useState<boolean>(() => {
     try {
       const stored = localStorage.getItem(CONVERSATION_MODE_KEY)
       return stored === null ? true : stored === '1'
@@ -839,7 +837,7 @@ export default function AIChatDrawer({
     return `${sessionPart}:${suffix}:${Date.now().toString(36)}`
   }, [session?.id])
 
-  // Only prime an event greeting when focusing on an event, starting a fresh scoped session
+  // Start a clean, focused session when switching events (silent executive standby)
   const firedEventGreetRef = useRef<string | null>(null)
   useEffect(() => {
     if (!open || !focusedEvent || loading) return
@@ -847,37 +845,9 @@ export default function AIChatDrawer({
     if (sessionLoading) return
     firedEventGreetRef.current = focusedEvent.id
 
-    // Start a clean, dedicated session for this event
+    // Start a clean, dedicated session for this event without synthetic message bloat
     startFresh()
-
-    const ev = focusedEvent
-    const memberNames = ev.members.map(m => m.family_member?.name).filter(Boolean).join(', ')
-    const start = new Date(ev.start_time)
-    const dateStr = start.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
-    const hasSpecificTime = start.getHours() !== 0 || start.getMinutes() !== 0
-    const timeFormatted = (!ev.all_day || hasSpecificTime)
-      ? `at ${start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
-      : '· All Day'
-
-    const isChoreOrReminder = ev.event_type === 'reminder' || /trash|recycle|chore|meds|medication|clean|water|filter/i.test(ev.title)
-    const missing: string[] = []
-    if (!ev.location_name && !isChoreOrReminder) missing.push('Location')
-    if (!memberNames && !isChoreOrReminder) missing.push('Attendees')
-
-    let content = `I'm ready to help with **${ev.title}** ✏️\n\n`
-    content += `📅 ${dateStr} ${timeFormatted}\n`
-    if (ev.location_name) content += `📍 ${ev.location_name}\n`
-    if (memberNames) content += `👥 ${memberNames}\n`
-    if (ev.enrichment?.category) content += `🏷️ ${ev.enrichment.category}\n`
-    if (missing.length > 0) {
-      content += `\n⚠️ Missing: ${missing.join(', ')} — want me to help fill those in?\n`
-    } else {
-      content += `\nEverything looks filled in!`
-    }
-    content += `\n\nWhat would you like to change or ask about this event?`
-
-    primeMessages([{ id: crypto.randomUUID(), role: 'assistant', content }])
-  }, [open, focusedEvent?.id, sessionLoading, loading, primeMessages, startFresh])
+  }, [open, focusedEvent?.id, sessionLoading, loading, startFresh])
 
   // Only prime an action greeting when launching AI from an action queue item
   const firedActionGreetRef = useRef<string | null>(null)
@@ -1065,21 +1035,6 @@ export default function AIChatDrawer({
     }, 80)
   }, [markUserInteraction, speech.stop])
 
-  // Conversation mode: hands-free loop that keeps the mic armed between turns.
-  // Enabling it immediately starts listening; disabling stops the mic.
-  const handleConversationToggle = useCallback(() => {
-    markUserInteraction()
-    setConversationMode(prev => {
-      const next = !prev
-      if (next) {
-        if (speech.supported && !speech.listening && !speech.connecting) speech.start()
-      } else {
-        speech.stop()
-      }
-      return next
-    })
-  }, [markUserInteraction, speech])
-
   const hasSession = !sessionLoading && !!session && session.messages.length > 0
   const voiceLevel = Math.max(0, Math.min(1, speech.volume / 100))
 
@@ -1111,17 +1066,27 @@ export default function AIChatDrawer({
 
   const drawerBody = (
     <>
-      {/* Luxury Casa AI Header */}
-      {/* Luxury Casa AI Header */}
-      <div className="py-2.5 px-4 sm:px-5 flex items-center justify-between border-b border-casa-gold/20 bg-gradient-to-r from-casa-surface via-casa-bg to-casa-surface shrink-0 relative z-20 shadow-2xs">
+      {/* Drawer Header Bar */}
+      <div className="py-2 px-4 sm:px-5 flex items-center justify-between border-b border-casa-gold/20 bg-gradient-to-r from-casa-surface via-casa-bg to-casa-surface shrink-0 relative z-20 shadow-2xs min-h-[44px]">
         <div className="flex items-center gap-2 min-w-0">
-          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-100 via-casa-gold to-amber-700 flex items-center justify-center text-white shadow-xs shrink-0">
-            <Sparkles size={14} />
-          </div>
-          <span className="font-bold text-body-sm tracking-tight text-casa-navy shrink-0">Casa AI</span>
-          <span className="hidden sm:inline-block text-2xs uppercase tracking-widest font-bold px-1.5 py-0.5 rounded-full bg-casa-gold/15 text-casa-gold-hover border border-casa-gold/30 shrink-0">
-            Concierge
-          </span>
+          {focusedEvent && focusedEvent.members && focusedEvent.members.length > 0 && (
+            <div className="flex items-center gap-1.5 min-w-0">
+              <div className="flex items-center">
+                {focusedEvent.members.slice(0, 3).map((m) => (
+                  <div
+                    key={m.id || m.family_member?.id}
+                    className="w-5 h-5 rounded-full border border-white text-2xs font-extrabold flex items-center justify-center text-white shrink-0 -ml-1 first:ml-0 shadow-2xs"
+                    style={{ backgroundColor: getDisplayMemberColor(m.family_member?.color_hex) }}
+                  >
+                    {(m.family_member?.name ?? 'M').charAt(0).toUpperCase()}
+                  </div>
+                ))}
+              </div>
+              <span className="text-2xs font-extrabold text-casa-navy uppercase tracking-wider truncate">
+                {focusedEvent.members.map((m) => m.family_member?.name).filter(Boolean).join(' + ') || 'Event'}
+              </span>
+            </div>
+          )}
 
           {loading && (
             <span className="text-casa-gold text-2xs font-semibold animate-pulse flex items-center gap-1 shrink-0 px-2 py-0.5 rounded-full bg-casa-gold/10 border border-casa-gold/25">
@@ -1137,55 +1102,37 @@ export default function AIChatDrawer({
           )}
         </div>
 
-        {/* Action Buttons & Modes */}
-        <div className="flex items-center gap-1 shrink-0">
-          {speech.supported && (
+        {/* Action Buttons: Hero Flip Action, Private History, New Session, Close */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {onSwitchToEvent && (Boolean(focusedEvent) || Boolean(focusedAction)) && (
             <Button
               variant="ghost"
               type="button"
-              onClick={handleConversationToggle}
-              aria-pressed={conversationMode}
-              title={conversationMode
-                ? 'Hands-free ON — mic stays armed for back-and-forth. Tap to turn off.'
-                : 'Hands-free OFF — tap the microphone for each turn.'}
-              className={cn(
-                'min-h-[32px] px-2.5 py-1 flex items-center gap-1 rounded-full text-2xs font-bold transition-all active:scale-95 border',
-                conversationMode
-                  ? 'bg-amber-50 text-amber-900 border-amber-300 shadow-2xs'
-                  : 'bg-white text-slate-700 hover:text-slate-900 border-slate-200 hover:border-amber-300 hover:bg-amber-50/40',
-              )}
+              onClick={onSwitchToEvent}
+              title={`Flip to ${focusedEvent ? `event: ${focusedEvent.title}` : focusedAction ? `action: ${focusedAction.title}` : 'details'}`}
+              aria-label="Flip to event details"
+              className="min-h-[34px] px-3 py-1 flex items-center gap-1.5 rounded-full text-2xs font-bold text-casa-navy bg-casa-accent-subtle hover:bg-casa-accent-soft border border-casa-gold/40 shadow-2xs transition-all active:scale-95 group shrink-0"
             >
-              <MessagesSquare size={12} className={conversationMode ? 'text-amber-700' : 'text-slate-500'} />
-              <span className="hidden md:inline">{conversationMode ? 'Hands-free' : 'Push to talk'}</span>
+              <Rotate3d size={14} className="text-casa-gold transition-transform duration-300 group-hover:rotate-180" />
+              <span>Flip to {focusedEvent ? 'Event' : 'Action'}</span>
             </Button>
           )}
 
           {Boolean(profile?.token || privateHistory.access) && (
-            <Button
+            <IconButton
               variant="ghost"
-              type="button"
               onClick={() => {
                 setHistoryUnlockError(null)
                 setHistoryModalOpen(true)
                 loadHistoryConversations()
               }}
               title={`Open ${profile?.memberName ?? 'your'} private conversation history`}
-              className="min-h-[32px] rounded-full bg-amber-50/70 border border-amber-300/80 px-2.5 text-2xs font-bold text-amber-900 transition-all hover:bg-amber-100 hover:border-amber-400 active:scale-95 shadow-2xs"
-            >
-              Private
-            </Button>
-          )}
-
-          {onSwitchToEvent && (Boolean(focusedEvent) || Boolean(focusedAction)) && (
-            <IconButton
-              variant="ghost"
-              onClick={onSwitchToEvent}
-              title={`Flip to ${focusedEvent ? `event: ${focusedEvent.title}` : focusedAction ? `action: ${focusedAction.title}` : 'details'}`}
-              aria-label="Flip to inspection details"
-              className="min-h-[32px] min-w-[32px] p-1.5 rounded-full hover:bg-amber-50 group"
-              icon={<Rotate3d size={15} className="text-amber-700 transition-transform duration-300 group-hover:rotate-180" />}
+              aria-label="Private conversation history"
+              className="min-h-[32px] min-w-[32px] p-1.5 rounded-full hover:bg-amber-50 text-amber-900"
+              icon={<Lock size={15} className="text-amber-800" />}
             />
           )}
+
           {(hasSession || messages.length > 0) && (
             <IconButton
               variant="ghost"
@@ -1207,84 +1154,62 @@ export default function AIChatDrawer({
         </div>
       </div>
 
-      {/* Pinned Focused Event Subheader Bar */}
+      {/* Silent Executive Anchor HUD (Concept 2: Pure AI Mode) */}
       {focusedEvent && (
-        <div className="border-b border-casa-gold/25 bg-gradient-to-b from-amber-50/60 via-white to-amber-50/30 px-4 py-3 shrink-0 shadow-2xs backdrop-blur-sm">
-          <div className="flex items-center justify-between gap-2 mb-1.5">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <span className="text-2xs uppercase tracking-wider font-extrabold px-2 py-0.5 rounded-full bg-casa-gold/15 text-casa-gold-hover border border-casa-gold/30 shrink-0">
-                {focusedEvent.enrichment?.category === 'school' || /picture|photo|concert|school/i.test(focusedEvent.title) ? '📸 School & Milestone' :
-                 focusedEvent.enrichment?.category === 'medical' || /doctor|dr|pediatric|dentist|health/i.test(focusedEvent.title) ? '🩺 Medical & Health' :
-                 focusedEvent.enrichment?.category === 'logistics' || /strings|drop off|pickup|soccer|gymnastics/i.test(focusedEvent.title) ? '🚗 Logistics & Carpool' :
-                 focusedEvent.event_type === 'reminder' || /trash|recycle|chore|meds/i.test(focusedEvent.title) ? '🔔 Reminder & Chore' : '📅 Calendar Event'}
-              </span>
-              <span className="text-caption font-semibold text-casa-muted truncate">
-                {format(new Date(focusedEvent.start_time), 'EEE, MMM d · h:mm a')}
-              </span>
+        <div className="border-b border-casa-gold/25 bg-gradient-to-r from-casa-surface-subtle via-casa-accent-subtle/40 to-casa-surface-subtle px-3.5 py-2.5 shrink-0 shadow-2xs backdrop-blur-sm flex items-center justify-between gap-2">
+          <div
+            onClick={() => handleOpenEventDetails(focusedEvent.id)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleOpenEventDetails(focusedEvent.id) }}
+            title="Tap to view event details"
+            className="flex items-center gap-2.5 min-w-0 flex-1 cursor-pointer hover:opacity-85 transition-opacity"
+          >
+            <div className="w-7 h-7 rounded-lg bg-casa-gold/15 border border-casa-gold/30 flex items-center justify-center shrink-0">
+              <Calendar size={14} className="text-casa-gold" />
             </div>
-
-            <div className="flex items-center gap-1.5 shrink-0">
-              {(focusedEvent.address || focusedEvent.location_name) && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    const dest = encodeURIComponent(focusedEvent.address || focusedEvent.location_name || '')
-                    window.open(`https://www.google.com/maps/search/?api=1&query=${dest}`, '_blank')
-                  }}
-                  title="Open directions in Google Maps"
-                  className="min-h-[28px] px-2 py-0.5 text-2xs font-bold rounded-lg bg-white hover:bg-casa-gold/15 text-casa-navy border border-casa-border shadow-xs flex items-center gap-1"
-                >
-                  <Navigation size={11} className="text-casa-gold" />
-                  <span>Directions</span>
-                </Button>
-              )}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => handleOpenEventDetails(focusedEvent.id)}
-                className="min-h-[28px] px-2 py-0.5 text-2xs font-bold rounded-lg bg-casa-navy hover:bg-slate-800 text-white shadow-xs flex items-center gap-1"
-              >
-                <span>Full Details</span>
-                <ArrowRight size={11} />
-              </Button>
-            </div>
-          </div>
-
-          <div className="flex items-baseline justify-between gap-2">
-            <h3 className="font-extrabold text-body-sm text-casa-navy truncate">
-              {focusedEvent.title}
-            </h3>
-          </div>
-
-          {focusedEvent.location_name && (
-            <div className="flex items-center gap-1.5 text-caption text-casa-muted truncate mt-0.5 font-medium">
-              <MapPin size={12} className="text-casa-gold shrink-0" />
-              <span className="truncate">{focusedEvent.location_name}</span>
-              {focusedEvent.address && focusedEvent.address !== focusedEvent.location_name && (
-                <span className="text-slate-400 truncate text-2xs">({focusedEvent.address})</span>
-              )}
-            </div>
-          )}
-
-          {/* Mini Logistics Strip if transportation or driver exists */}
-          {Boolean(focusedEvent.plan_override?.transportation_plan?.legs?.[0]?.driverName || focusedEvent.plan_override?.transportation_plan?.legs?.[0]?.time) && (
-            <div className="mt-2 flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-casa-navy text-white text-2xs font-medium shadow-xs">
-              <div className="flex items-center gap-2 truncate">
-                {focusedEvent.plan_override?.transportation_plan?.legs?.[0]?.driverName && (
-                  <span className="font-bold text-amber-300">
-                    🚗 {focusedEvent.plan_override.transportation_plan.legs[0].driverName} driving
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="font-extrabold text-caption text-casa-navy truncate leading-tight">
+                  {focusedEvent.title}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-2xs text-casa-muted font-medium truncate mt-0.5">
+                <span>{format(new Date(focusedEvent.start_time), 'EEE, MMM d · h:mm a')}</span>
+                {focusedEvent.location_name && (
+                  <span className="hidden sm:inline-flex items-center gap-1 text-casa-muted truncate">
+                    <span>·</span>
+                    <MapPin size={10} className="text-casa-gold shrink-0" />
+                    <span className="truncate">{focusedEvent.location_name}</span>
                   </span>
                 )}
-                {focusedEvent.plan_override?.transportation_plan?.legs?.[0]?.time && (
-                  <span className="text-slate-200">
-                    ⏱️ Leave by {focusedEvent.plan_override.transportation_plan.legs[0].time}
+                {Boolean(focusedEvent.plan_override?.transportation_plan?.legs?.[0]?.driverName) && (
+                  <span className="hidden md:inline-flex items-center gap-1 text-amber-900 bg-casa-gold/15 px-1.5 py-0.5 rounded-full font-bold">
+                    <Car size={10} className="text-casa-gold" />
+                    <span>{focusedEvent.plan_override?.transportation_plan?.legs?.[0]?.driverName}</span>
                   </span>
                 )}
               </div>
-              <span className="text-emerald-400 font-bold shrink-0">🟢 Traffic Clear</span>
             </div>
-          )}
+          </div>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            {(focusedEvent.address || focusedEvent.location_name) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  const dest = encodeURIComponent(focusedEvent.address || focusedEvent.location_name || '')
+                  window.open(`https://www.google.com/maps/search/?api=1&query=${dest}`, '_blank')
+                }}
+                title="Open directions in Google Maps"
+                className="min-h-[30px] px-2.5 py-0.5 text-2xs font-bold rounded-lg bg-casa-surface hover:bg-casa-accent-subtle text-casa-navy border border-casa-border shadow-2xs flex items-center gap-1"
+              >
+                <Navigation size={11} className="text-casa-gold" />
+                <span className="hidden sm:inline">Directions</span>
+              </Button>
+            )}
+          </div>
         </div>
       )}
 
@@ -1340,82 +1265,120 @@ export default function AIChatDrawer({
 
               {/* Editorial Proactive Welcome & Travertine Plinths */}
               {messages.length === 0 && (
-                <div className="flex flex-col gap-3 py-2 text-left">
-                  {/* Salutation Card */}
-                  <div className="rounded-2xl bg-gradient-to-br from-casa-bg via-casa-surface-subtle to-casa-bg-2 border border-casa-gold/30 p-4 shadow-subtle space-y-1">
-                    <div className="flex items-center gap-1.5 text-2xs font-bold uppercase tracking-wider text-casa-gold-hover">
-                      <Sparkles size={13} className="text-casa-gold" />
-                      <span>Estate Intelligence</span>
+                focusedEvent ? (
+                  <div className="flex flex-col gap-3.5 py-3 text-left">
+                    {/* Standby Card */}
+                    <div className="rounded-2xl bg-gradient-to-br from-casa-surface via-casa-surface-subtle to-casa-accent-subtle/30 border border-casa-gold/35 p-4 shadow-subtle space-y-1.5">
+                      <div className="flex items-center gap-1.5 text-2xs font-bold uppercase tracking-wider text-casa-gold-hover">
+                        <Sparkles size={13} className="text-casa-gold" />
+                        <span>Event Copilot Standby</span>
+                      </div>
+                      <h3 className="text-body font-bold text-casa-navy leading-snug">
+                        Ready to assist with {focusedEvent.title}
+                      </h3>
+                      <p className="text-caption text-casa-muted leading-relaxed">
+                        Ask a question, check conflicts, or tap a quick action below.
+                      </p>
                     </div>
-                    <h3 className="text-body font-bold text-casa-navy leading-snug">
-                      {format(new Date(), 'EEEE, MMMM d')}
-                    </h3>
-                    <p className="text-caption text-casa-muted leading-relaxed">
-                      Schedules, meal planning, grocery coordination, and proactive family assistance.
-                    </p>
-                  </div>
 
-                  {/* Travertine Hero Plinth for Proactive Nudge */}
-                  {proactiveNudge && !nudgeDismissed && (
-                    <div className="rounded-2xl bg-casa-accent-subtle border border-casa-gold/45 p-4 shadow-card space-y-2.5">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5 text-caption font-bold uppercase tracking-wide text-amber-900">
-                          <AlertTriangle size={15} className="text-casa-gold" />
-                          <span>Attention Recommended</span>
+                    {/* Dynamic Event Suggestion Pills */}
+                    <div className="space-y-2 pt-1">
+                      <p className="text-2xs uppercase tracking-widest font-bold text-casa-muted px-1">Suggested actions</p>
+                      <div className="flex flex-wrap gap-2">
+                        {dynamicSuggestions.map(s => (
+                          <Button
+                            variant="ghost"
+                            key={s}
+                            type="button"
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onClick={() => { markUserInteraction(); sendCurrentInput(s) }}
+                            className="min-h-control px-3.5 py-1.5 rounded-full border border-casa-gold/30 bg-casa-surface hover:bg-casa-accent-subtle hover:border-casa-gold/60 text-caption font-semibold text-casa-navy transition-all shadow-2xs touch-manipulation cursor-pointer flex items-center gap-1.5"
+                          >
+                            <Sparkles size={12} className="text-casa-gold shrink-0" />
+                            <span>{s}</span>
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-3 py-2 text-left">
+                    {/* Salutation Card */}
+                    <div className="rounded-2xl bg-gradient-to-br from-casa-bg via-casa-surface-subtle to-casa-bg-2 border border-casa-gold/30 p-4 shadow-subtle space-y-1">
+                      <div className="flex items-center gap-1.5 text-2xs font-bold uppercase tracking-wider text-casa-gold-hover">
+                        <Sparkles size={13} className="text-casa-gold" />
+                        <span>Estate Intelligence</span>
+                      </div>
+                      <h3 className="text-body font-bold text-casa-navy leading-snug">
+                        {format(new Date(), 'EEEE, MMMM d')}
+                      </h3>
+                      <p className="text-caption text-casa-muted leading-relaxed">
+                        Schedules, meal planning, grocery coordination, and proactive family assistance.
+                      </p>
+                    </div>
+
+                    {/* Travertine Hero Plinth for Proactive Nudge */}
+                    {proactiveNudge && !nudgeDismissed && (
+                      <div className="rounded-2xl bg-casa-accent-subtle border border-casa-gold/45 p-4 shadow-card space-y-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 text-caption font-bold uppercase tracking-wide text-amber-900">
+                            <AlertTriangle size={15} className="text-casa-gold" />
+                            <span>Attention Recommended</span>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            type="button"
+                            onClick={() => setNudgeDismissed(true)}
+                            aria-label="Dismiss notification"
+                            className="text-casa-muted hover:text-casa-navy p-1 rounded-full hover:bg-black/5"
+                          >
+                            <X size={14} />
+                          </Button>
                         </div>
+                        <p className="text-body-sm font-semibold text-casa-navy leading-snug">
+                          {proactiveNudge.text}
+                        </p>
                         <Button
                           variant="ghost"
                           type="button"
-                          onClick={() => setNudgeDismissed(true)}
-                          aria-label="Dismiss notification"
-                          className="text-casa-muted hover:text-casa-navy p-1 rounded-full hover:bg-black/5"
+                          onClick={() => { markUserInteraction(); sendCurrentInput(proactiveNudge.prompt) }}
+                          className="w-full min-h-[44px] flex items-center justify-center gap-2 rounded-xl bg-white border border-casa-gold/40 text-casa-navy text-caption font-bold shadow-xs hover:bg-casa-gold/10 active:scale-[0.99] transition-all"
                         >
-                          <X size={14} />
+                          <Sparkles size={14} className="text-casa-gold" />
+                          <span>Review with Casa AI</span>
                         </Button>
                       </div>
-                      <p className="text-body-sm font-semibold text-casa-navy leading-snug">
-                        {proactiveNudge.text}
-                      </p>
-                      <Button
-                        variant="ghost"
-                        type="button"
-                        onClick={() => { markUserInteraction(); sendCurrentInput(proactiveNudge.prompt) }}
-                        className="w-full min-h-[44px] flex items-center justify-center gap-2 rounded-xl bg-white border border-casa-gold/40 text-casa-navy text-caption font-bold shadow-xs hover:bg-casa-gold/10 active:scale-[0.99] transition-all"
-                      >
-                        <Sparkles size={14} className="text-casa-gold" />
-                        <span>Review with Casa AI</span>
-                      </Button>
-                    </div>
-                  )}
+                    )}
 
-                  {/* Ambient Glance Cards */}
-                  <AmbientGlanceCards
-                    events={events}
-                    onPromptSelect={(prompt) => {
-                      markUserInteraction()
-                      sendCurrentInput(prompt)
-                    }}
-                  />
+                    {/* Ambient Glance Cards */}
+                    <AmbientGlanceCards
+                      events={events}
+                      onPromptSelect={(prompt) => {
+                        markUserInteraction()
+                        sendCurrentInput(prompt)
+                      }}
+                    />
 
-                  {/* Dynamic Suggestion Pills */}
-                  <div className="space-y-1.5 pt-1">
-                    <p className="text-2xs uppercase tracking-widest font-bold text-casa-muted px-1">Suggested inquiries</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {dynamicSuggestions.map(s => (
-                        <Button
-                          variant="ghost"
-                          key={s}
-                          type="button"
-                          onPointerDown={(e) => e.stopPropagation()}
-                          onClick={() => { markUserInteraction(); sendCurrentInput(s) }}
-                          className="min-h-[38px] px-3.5 py-1.5 rounded-full border border-casa-gold/30 bg-casa-bg text-caption font-semibold text-casa-navy hover:bg-white hover:border-casa-gold/60 transition-all shadow-2xs touch-manipulation cursor-pointer"
-                        >
-                          {s}
-                        </Button>
-                      ))}
+                    {/* Dynamic Suggestion Pills */}
+                    <div className="space-y-1.5 pt-1">
+                      <p className="text-2xs uppercase tracking-widest font-bold text-casa-muted px-1">Suggested inquiries</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {dynamicSuggestions.map(s => (
+                          <Button
+                            variant="ghost"
+                            key={s}
+                            type="button"
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onClick={() => { markUserInteraction(); sendCurrentInput(s) }}
+                            className="min-h-[38px] px-3.5 py-1.5 rounded-full border border-casa-gold/30 bg-casa-bg text-caption font-semibold text-casa-navy hover:bg-white hover:border-casa-gold/60 transition-all shadow-2xs touch-manipulation cursor-pointer"
+                          >
+                            {s}
+                          </Button>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                </div>
+                )
               )}
 
               {messages.map((msg, messageIndex) => {
@@ -3427,36 +3390,36 @@ function deriveDynamicFollowUpSuggestions(
 
     if (isReminderOrChore) {
       return [
-        `Mark as completed now`,
-        `Snooze for 30 minutes`,
-        `Reassign to another family member`,
-        `Reschedule ${focusedEvent.title}`,
+        'Mark completed now',
+        'Snooze for 30 minutes',
+        'Reassign family member',
+        'Reschedule reminder',
       ]
     }
 
     if (isSchoolOrPhotos) {
       return [
-        `Who is driving for ${focusedEvent.title}?`,
-        `Check for morning schedule overlap`,
-        `Search email for photo order form`,
-        `Reschedule ${focusedEvent.title}`,
+        'Who is driving?',
+        'Check for schedule overlaps',
+        'Search email for school forms',
+        'Adjust departure time',
       ]
     }
 
     if (isMedical) {
       return [
-        `Check driving time from Home`,
-        `Who is driving for ${focusedEvent.title}?`,
-        `View preparation instructions`,
-        `Reschedule ${focusedEvent.title}`,
+        'Check driving time and buffer',
+        'Who is driving?',
+        'View preparation notes',
+        'Reschedule appointment',
       ]
     }
 
     return [
-      `Who is driving for ${focusedEvent.title}?`,
-      `Check for conflicts with ${focusedEvent.title}`,
-      `Reschedule ${focusedEvent.title}`,
-      `Add notes for ${focusedEvent.title}`,
+      'Who is driving?',
+      'Check for schedule conflicts',
+      'Adjust departure buffer',
+      'Add event notes or checklist',
     ]
   }
 

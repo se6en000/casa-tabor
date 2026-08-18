@@ -189,10 +189,15 @@ export default function LivingFlowSidecar({
         )}
 
         <button
-          onClick={() => onAskAi?.(`Tell me about ${state.title} at ${state.venue.name}`)}
-          className="flex-1 py-2.5 px-4 rounded-full bg-amber-50 border border-amber-300 text-slate-900 font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm hover:shadow-md transition-all min-h-[44px]"
+          type="button"
+          onClick={() => {
+            if (onSwitchToAi) onSwitchToAi()
+            else onAskAi?.()
+          }}
+          className="flex-1 py-2 px-4 rounded-full bg-casa-accent-subtle hover:bg-casa-accent-soft border border-casa-gold/40 text-casa-navy font-bold text-caption flex items-center justify-center gap-2 shadow-xs transition-all min-h-control"
+          aria-label="Switch to Casa AI Assistant"
         >
-          <Sparkles size={14} className="text-amber-700" />
+          <Sparkles size={15} className="text-casa-gold" />
           <span>Ask Copilot about this…</span>
         </button>
       </footer>

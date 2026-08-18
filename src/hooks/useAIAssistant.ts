@@ -17,6 +17,7 @@ import {
 } from '../lib/assistantTelemetry'
 import { assistantErrorMessage } from '../lib/assistantErrors.mjs'
 import { useProfileSession } from '../contexts/ProfileSessionContext'
+import { resolveFocusedEventDeterministicAnswer, deriveEventTransportation } from '../lib/focusedEventDeterministicAnswer'
 
 export type { AIMessage }
 
@@ -184,62 +185,65 @@ function buildContext(ctx: AssistantContext, messages: AIMessage[], experienceMo
       household_impact: ctx.focusedAction.householdImpact ?? null,
       email_body: ctx.focusedAction.emailBody ?? null,
     } : undefined,
-    focusedEvent: ctx.focusedEvent ? {
-      id: ctx.focusedEvent.id,
-      title: ctx.focusedEvent.title,
-      event_type: ctx.focusedEvent.event_type ?? 'event',
-      start_time: ctx.focusedEvent.start_time,
-      end_time: ctx.focusedEvent.end_time,
-      updated_at: ctx.focusedEvent.updated_at,
-      all_day: ctx.focusedEvent.all_day,
-      location_name: ctx.focusedEvent.location_name ?? null,
-      address: ctx.focusedEvent.address ?? null,
-      description: ctx.focusedEvent.description ?? null,
-      source_feed: ctx.focusedEvent.google_calendar_id ? 'Google Calendar Feed' : 'Casa Household Calendar',
-      driver: ctx.focusedEvent.plan_override?.transportation_plan?.legs?.[0]?.driverName ?? null,
-      leave_by: ctx.focusedEvent.plan_override?.transportation_plan?.legs?.[0]?.time ?? null,
-      drive_duration_min: ctx.focusedEvent.plan_override?.transportation_plan?.legs?.length ? 15 : null,
-      members: ctx.focusedEvent.members.map(m => m.family_member?.name ?? '').filter(Boolean),
-      category: ctx.focusedEvent.enrichment?.category ?? null,
-      notes: ctx.focusedEvent.enrichment?.prep_notes ?? null,
-      what_to_bring: ctx.focusedEvent.enrichment?.what_to_bring ?? [],
-      outfit_suggestion: ctx.focusedEvent.enrichment?.outfit_suggestion ?? null,
-      parking_notes: ctx.focusedEvent.enrichment?.parking_notes ?? null,
-      contact_name: ctx.focusedEvent.enrichment?.contact_name ?? null,
-      contact_phone: ctx.focusedEvent.enrichment?.contact_phone ?? null,
-      cost_estimate: ctx.focusedEvent.enrichment?.cost_estimate ?? null,
-      dietary_notes: ctx.focusedEvent.enrichment?.dietary_notes ?? null,
-      meal_impact: ctx.focusedEvent.enrichment?.meal_impact ?? null,
-      surrounding_neighborhood: ctx.events.filter(e => {
-        if (e.id === ctx.focusedEvent?.id) return false
-        const targetStart = new Date(ctx.focusedEvent!.start_time).getTime()
-        const eStart = new Date(e.start_time).getTime()
-        return Math.abs(eStart - targetStart) <= 2.5 * 60 * 60 * 1000 // 2.5 hours
-      }).slice(0, 6).map(e => ({
-        id: e.id,
-        title: e.title,
-        start_time: e.start_time,
-        end_time: e.end_time,
-        location_name: e.location_name ?? null,
-        members: e.members.map(m => m.family_member?.name ?? '').filter(Boolean)
-      })),
-      checklist: ctx.focusedEvent.checklist.map(item => ({
-        id: item.id,
-        label: item.label,
-        note: item.note,
-        checked: item.checked,
-        category: item.category,
-      })),
-      actions: ctx.focusedEvent.actions.map(item => ({
-        id: item.id,
-        title: item.title,
-        description: item.description,
-        due_date: item.due_date,
-        is_urgent: item.is_urgent,
-        completed: item.completed,
-        assigned_to: item.assigned_to,
-      })),
-    } : undefined,
+    focusedEvent: ctx.focusedEvent ? (() => {
+      const transport = deriveEventTransportation(ctx.focusedEvent, ctx.family)
+      return {
+        id: ctx.focusedEvent.id,
+        title: ctx.focusedEvent.title,
+        event_type: ctx.focusedEvent.event_type ?? 'event',
+        start_time: ctx.focusedEvent.start_time,
+        end_time: ctx.focusedEvent.end_time,
+        updated_at: ctx.focusedEvent.updated_at,
+        all_day: ctx.focusedEvent.all_day,
+        location_name: ctx.focusedEvent.location_name ?? null,
+        address: ctx.focusedEvent.address ?? null,
+        description: ctx.focusedEvent.description ?? null,
+        source_feed: ctx.focusedEvent.google_calendar_id ? 'Google Calendar Feed' : 'Casa Household Calendar',
+        driver: transport?.driverName ?? null,
+        leave_by: transport?.leaveTime ?? null,
+        drive_duration_min: transport?.driveMinutes ?? null,
+        members: ctx.focusedEvent.members.map(m => m.family_member?.name ?? '').filter(Boolean),
+        category: ctx.focusedEvent.enrichment?.category ?? null,
+        notes: ctx.focusedEvent.enrichment?.prep_notes ?? null,
+        what_to_bring: ctx.focusedEvent.enrichment?.what_to_bring ?? [],
+        outfit_suggestion: ctx.focusedEvent.enrichment?.outfit_suggestion ?? null,
+        parking_notes: ctx.focusedEvent.enrichment?.parking_notes ?? null,
+        contact_name: ctx.focusedEvent.enrichment?.contact_name ?? null,
+        contact_phone: ctx.focusedEvent.enrichment?.contact_phone ?? null,
+        cost_estimate: ctx.focusedEvent.enrichment?.cost_estimate ?? null,
+        dietary_notes: ctx.focusedEvent.enrichment?.dietary_notes ?? null,
+        meal_impact: ctx.focusedEvent.enrichment?.meal_impact ?? null,
+        surrounding_neighborhood: ctx.events.filter(e => {
+          if (e.id === ctx.focusedEvent?.id) return false
+          const targetStart = new Date(ctx.focusedEvent!.start_time).getTime()
+          const eStart = new Date(e.start_time).getTime()
+          return Math.abs(eStart - targetStart) <= 2.5 * 60 * 60 * 1000 // 2.5 hours
+        }).slice(0, 6).map(e => ({
+          id: e.id,
+          title: e.title,
+          start_time: e.start_time,
+          end_time: e.end_time,
+          location_name: e.location_name ?? null,
+          members: e.members.map(m => m.family_member?.name ?? '').filter(Boolean)
+        })),
+        checklist: ctx.focusedEvent.checklist.map(item => ({
+          id: item.id,
+          label: item.label,
+          note: item.note,
+          checked: item.checked,
+          category: item.category,
+        })),
+        actions: ctx.focusedEvent.actions.map(item => ({
+          id: item.id,
+          title: item.title,
+          description: item.description,
+          due_date: item.due_date,
+          is_urgent: item.is_urgent,
+          completed: item.completed,
+          assigned_to: item.assigned_to,
+        })),
+      }
+    })() : undefined,
     grocery: ctx.groceryContext ? {
       total_items: ctx.groceryContext.totalItems,
       to_buy_count: ctx.groceryContext.toBuyCount,
@@ -373,13 +377,40 @@ export function useAIAssistant(ctx: AssistantContext) {
 
     const replayExistingUserMessage = options?.replayExistingUserMessage === true
     const userMsg: AIMessage = { id: genId(), role: 'user', content: text, imageDataUrl: image?.dataUrl }
-    if (!replayExistingUserMessage) setMessages(prev => [...prev, userMsg])
-    setLoading(true)
 
     let activeSession = sessionRef.current
     if (!activeSession) {
       activeSession = startNewSession()
     }
+
+    // Instant deterministic resolution for focused event inquiries (driver, buffer, notes, conflicts)
+    if (!image && !activeImage) {
+      const deterministicEventAnswer = resolveFocusedEventDeterministicAnswer(
+        text,
+        ctxRef.current.focusedEvent,
+        ctxRef.current.events,
+        ctxRef.current.family,
+      )
+      if (deterministicEventAnswer.matched && deterministicEventAnswer.content) {
+        const assistantMsg: AIMessage = {
+          id: genId(),
+          role: 'assistant',
+          content: deterministicEventAnswer.content,
+        }
+        setMessages(prev => {
+          const updated = replayExistingUserMessage ? [...prev, assistantMsg] : [...prev, userMsg, assistantMsg]
+          if (activeSession) persistSessionMessages(activeSession.id, updated)
+          return updated
+        })
+        emitAssistantTrace('turn_completed', trace, {
+          payload: { outcome: 'deterministic_event_resolved', result_type: 'text' },
+        })
+        return
+      }
+    }
+
+    if (!replayExistingUserMessage) setMessages(prev => [...prev, userMsg])
+    setLoading(true)
 
     const imagePayload = activeImage
       ? { mimeType: activeImage.mimeType, data: activeImage.dataUrl.replace(/^data:[^;]+;base64,/, '') }

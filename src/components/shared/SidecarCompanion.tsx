@@ -274,7 +274,7 @@ export default function SidecarCompanion({
         new CustomEvent('open-ai-chat', {
           detail: {
             prompt: promptText,
-            autoSend: true,
+            autoSend: false,
             source: 'event-sidecar',
           },
         })

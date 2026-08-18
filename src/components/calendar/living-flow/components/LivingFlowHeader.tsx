@@ -3,7 +3,7 @@ import { Link2, X, ChevronDown, Users, Star, Check, Plus, Rotate3d, Repeat } fro
 import type { FamilyMember } from '../../../../types'
 import type { RecurrenceScope } from '../types'
 import { getDisplayMemberColor } from '../../../../design-system/memberColors'
-import { IconButton, Chip } from '../../../ui'
+import { Button, IconButton, Chip } from '../../../ui'
 
 interface LivingFlowHeaderProps {
   familyMembers: FamilyMember[]
@@ -62,13 +62,17 @@ export default function LivingFlowHeader({
         {/* Action Buttons */}
         <div className="flex items-center gap-1.5">
           {onSwitchToAi && (
-            <IconButton
-              icon={<Rotate3d size={16} className="text-amber-700 transition-transform duration-300 group-hover:rotate-180" />}
+            <Button
+              variant="ghost"
+              type="button"
               onClick={onSwitchToAi}
-              className="living-header-action-btn group"
-              title="Flip to Copilot"
-              aria-label="Flip to Copilot"
-            />
+              className="min-h-[34px] px-3 py-1 flex items-center gap-1.5 rounded-full text-2xs font-bold text-casa-navy bg-casa-accent-subtle hover:bg-casa-accent-soft border border-casa-gold/40 shadow-2xs transition-all active:scale-95 group shrink-0"
+              title="Flip to Casa AI"
+              aria-label="Flip to Casa AI"
+            >
+              <Rotate3d size={14} className="text-casa-gold transition-transform duration-300 group-hover:rotate-180" />
+              <span>Flip to AI</span>
+            </Button>
           )}
           <IconButton
             icon={<Link2 size={16} className="text-slate-800" />}

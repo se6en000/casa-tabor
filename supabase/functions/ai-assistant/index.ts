@@ -1246,6 +1246,7 @@ Deno.serve(async (req) => {
     latestUserText &&
     !userRequestedWriteIntent &&
     !context.focusedEvent &&
+    !context.focused_event &&
     !image &&
     !householdDirectoryQuestion
   )
