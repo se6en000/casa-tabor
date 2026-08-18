@@ -747,6 +747,33 @@ html[data-density="kiosk"] .ai-composer-kiosk-only {
   to { opacity: 1; transform: translateY(0); }
 }
 
+.tactile-waveform {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 1.25rem;
+}
+
+.tactile-waveform > span {
+  width: 2.5px;
+  border-radius: var(--radius-full);
+  background: var(--color-casa-gold);
+  transform-origin: center;
+  animation: tactile-wave-pulse 800ms ease-in-out infinite alternate;
+}
+
+.tactile-waveform > span:nth-child(1) { height: 0.5rem; animation-delay: 0ms; }
+.tactile-waveform > span:nth-child(2) { height: 1.1rem; animation-delay: 140ms; }
+.tactile-waveform > span:nth-child(3) { height: 0.75rem; animation-delay: 280ms; }
+.tactile-waveform > span:nth-child(4) { height: 1.25rem; animation-delay: 420ms; }
+.tactile-waveform > span:nth-child(5) { height: 0.6rem; animation-delay: 200ms; }
+
+@keyframes tactile-wave-pulse {
+  0% { transform: scaleY(0.35); opacity: 0.55; }
+  50% { transform: scaleY(1); opacity: 1; }
+  100% { transform: scaleY(0.45); opacity: 0.65; }
+}
+
 /* ── Event Command Center typography normalization ───────────────────────── */
 .event-command-center {
   color: var(--color-casa-text);

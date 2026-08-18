@@ -113,9 +113,16 @@ export default function GroceryCommandBar({
           )}
         >
           {isListening ? (
-            <div className="flex items-center gap-1.5 text-casa-top-pick-band animate-pulse shrink-0">
-              <span className="flex h-2.5 w-2.5 rounded-full bg-casa-gold animate-ping" />
-              <Mic size={17} className="text-casa-gold" />
+            <div className="flex items-center gap-2 text-casa-top-pick-band shrink-0">
+              <Mic size={17} className="text-casa-gold animate-pulse" />
+              {/* Luxury Champagne Audio Waveform (Wavy Soundwave Line) */}
+              <div className="tactile-waveform" aria-label="Listening audio waveform">
+                <span />
+                <span />
+                <span />
+                <span />
+                <span />
+              </div>
             </div>
           ) : (
             <Plus size={18} className="text-casa-gold shrink-0" />
