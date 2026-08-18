@@ -182,10 +182,13 @@ const PAUSE_DURATION_OPTIONS = [
 ] as const
 
 const TIMEFRAME_OPTIONS = [
-  { value: '24h', label: '24h' },
-  { value: '7d', label: '7d' },
-  { value: '30d', label: '30d' },
+  { value: '1h', label: '1 hour' },
+  { value: '1d', label: '1 day' },
+  { value: '7d', label: '7 days' },
+  { value: '30d', label: '30 days' },
 ] as const
+
+type TimeframeOption = (typeof TIMEFRAME_OPTIONS)[number]['value']
 
 const CAPABILITY_FILTER_OPTIONS = [
   { value: 'all', label: 'All Capabilities' },
@@ -270,17 +273,23 @@ export default function StatusDashboardPage() {
   const [llmConfig, setLlmConfig] = useState<{ provider: string; model: string } | null>(null)
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null)
   const [selectedHour, setSelectedHour] = useState<HourlyUsagePoint | null>(null)
-  const [timeframe, setTimeframe] = useState<'24h' | '7d' | '30d'>('30d')
+  const [timeframe, setTimeframe] = useState<TimeframeOption>('30d')
   const [capabilityFilter, setCapabilityFilter] = useState<'all' | 'user' | 'background'>('all')
   const [circuitBreakerSaving, setCircuitBreakerSaving] = useState(false)
   const [pauseDuration, setPauseDuration] = useState<'15m' | '1h' | '4h' | 'indefinite'>('1h')
   const [liveStreamActive, setLiveStreamActive] = useState(false)
 
-  const load = useCallback(async (selectedTf: '24h' | '7d' | '30d' = timeframe) => {
+  const load = useCallback(async (selectedTf: TimeframeOption = timeframe) => {
     setLoading(true)
     setError(null)
     const periodEnd = new Date()
-    const ms = selectedTf === '24h' ? 24 * 60 * 60 * 1000 : selectedTf === '7d' ? 7 * 24 * 60 * 60 * 1000 : 30 * 24 * 60 * 60 * 1000
+    const ms = selectedTf === '1h'
+      ? 60 * 60 * 1000
+      : selectedTf === '1d'
+        ? 24 * 60 * 60 * 1000
+        : selectedTf === '7d'
+          ? 7 * 24 * 60 * 60 * 1000
+          : 30 * 24 * 60 * 60 * 1000
     const periodStart = new Date(periodEnd.getTime() - ms)
     const [summaryRes, cfgRes] = await Promise.all([
       supabase.rpc('get_cost_dashboard_summary', {
@@ -729,7 +738,13 @@ export default function StatusDashboardPage() {
                     Capability Consumption Matrix
                   </h2>
                   <p className="text-caption text-casa-muted">
-                    {timeframe === '24h' ? 'Showing past 24 hours consumption' : timeframe === '7d' ? 'Showing past 7 days consumption' : 'Showing past 30 days consumption'}
+                    {timeframe === '1h'
+                      ? 'Showing past 1 hour consumption'
+                      : timeframe === '1d'
+                        ? 'Showing past 1 day consumption'
+                        : timeframe === '7d'
+                          ? 'Showing past 7 days consumption'
+                          : 'Showing past 30 days consumption'}
                   </p>
                 </div>
               </div>
@@ -901,7 +916,13 @@ export default function StatusDashboardPage() {
 
           <section aria-labelledby="cost-summary-heading">
             <h2 id="cost-summary-heading" className="text-subheading font-display text-content-heading mb-3">
-              {timeframe === '24h' ? 'Past 24 Hours' : timeframe === '7d' ? 'Past 7 Days' : 'Last 30 Days'} Cumulative
+              {timeframe === '1h'
+                ? 'Past 1 Hour'
+                : timeframe === '1d'
+                  ? 'Past 1 Day'
+                  : timeframe === '7d'
+                    ? 'Past 7 Days'
+                    : 'Last 30 Days'} Cumulative
             </h2>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <StatCard
