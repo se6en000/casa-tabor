@@ -51,6 +51,7 @@ import { resolveDeterministicEventMutation } from '../_shared/deterministic-even
 import {
   answerPendingSelectiveClear,
   calendarDeleteAmbiguityClarification,
+  findTargetEventFromText,
   isCalendarMutationDisambiguationFollowUp,
   calendarMutationClarification,
   resolveActiveCalendarMutation,
@@ -491,7 +492,8 @@ Deno.serve(async (req) => {
   const reminderDomainLanguage = hasReminderLanguage(latestUserText)
   const explicitReminderRead = explicitReminderSearchForMessages(messages)
   const reminderCreateRequestText = explicitReminderCreateRequestForMessages(messages)
-  const incomingConversationState = normalizeConversationState(context?.conversationState)
+  const incomingConversationState = normalizeConversationState(context?.conversationState) ??
+    (context?.focusedEvent ? eventConversationState(context.focusedEvent, new Date()) : null)
   const acceptedPlanningProposal = Boolean(
     experienceMode === 'talk_plan' &&
     incomingConversationState?.activeEntityType === 'planning_proposal' &&
@@ -1137,9 +1139,13 @@ Deno.serve(async (req) => {
     return { status: 200, payload: { type: 'debug', error: eventsResult.error, yearStart: windowStart.toISOString(), yearEnd: yearEnd.toISOString(), correlation_id: cid } }
   }
   const allEvents = eventsResult.data
-  const activeConversationEvent = incomingConversationState
-    ? allEvents?.find((event: { id: string }) => event.id === incomingConversationState.activeEventId) ?? null
-    : null
+  const activeConversationEvent = (incomingConversationState?.activeEventId
+    ? allEvents?.find((event: { id: string }) => event.id === incomingConversationState.activeEventId)
+    : null) ?? (context?.focusedEvent
+    ? allEvents?.find((event: { id: string }) => event.id === context.focusedEvent.id) ?? context.focusedEvent
+    : null) ?? (latestUserText
+    ? findTargetEventFromText(latestUserText, allEvents ?? [], { utcOffset: context?.utcOffset })
+    : null)
   const activeConversationGroceryItem = incomingConversationState?.activeEntityType === 'grocery_item'
     ? groceryItems?.find((item: { id: string }) => item.id === incomingConversationState.activeGroceryItemId) ?? null
     : null
@@ -2334,7 +2340,6 @@ Deno.serve(async (req) => {
   }
   if (
     talkPlanCommandLane &&
-    intentRouting.profile === 'event' &&
     latestUserText &&
     activeConversationEvent
   ) {
@@ -2391,6 +2396,34 @@ Deno.serve(async (req) => {
               },
             },
       }
+    }
+  }
+  if (
+    talkPlanCommandLane &&
+    intentRouting.profile === 'event' &&
+    latestUserText &&
+    !activeConversationEvent &&
+    (allEvents ?? []).length > 0 &&
+    !['event.create'].includes(calendarFrame?.intent ?? '')
+  ) {
+    const upcomingCandidates = (allEvents ?? [])
+      .filter((e: { start_time: string }) => new Date(e.start_time).getTime() >= now.getTime() - 4 * 3600000)
+      .slice(0, 5)
+    const candidateList = upcomingCandidates.length > 0 ? upcomingCandidates : (allEvents ?? []).slice(0, 5)
+    const titles = candidateList.map((e: { title: string }) => `"${e.title}"`).join(', ')
+    return {
+      status: 200,
+      payload: {
+        type: 'text',
+        text: `Which event would you like to update? (e.g., ${titles})`,
+        conversation_state: calendarClarificationConversationState(candidateList, latestUserText, now),
+        correlation_id: cid,
+        telemetry: {
+          ...llmTelemetry,
+          request_total_ms: Date.now() - requestStartMs,
+          context_load_ms: contextLoadMs,
+        },
+      },
     }
   }
   if (shouldRunAgentWrite) {
@@ -2661,8 +2694,7 @@ Deno.serve(async (req) => {
     })
     if (
       context?.pendingAction ||
-      (activeConversationEvent && agentWriteData?.planReason !== 'read' && agentWriteData?.planKind === 'blocked_mutation') ||
-      (['event.create', 'event.move', 'event.delete', 'event.edit'].includes(calendarFrame?.intent ?? '') && !activeConversationEvent)
+      (activeConversationEvent && agentWriteData?.planReason !== 'read' && agentWriteData?.planKind === 'blocked_mutation')
     ) {
       return {
         status: 200,

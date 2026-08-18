@@ -161,6 +161,46 @@ function deleteSelectionMatches(request, events, utcOffset) {
   ))
 }
 
+export function findTargetEventFromText(text, events, options = {}) {
+  if (!text || !Array.isArray(events) || events.length === 0) return null
+  const input = normalizeAssistantSpeechPunctuation(text).toLowerCase()
+
+  // 1. Exact / Full title match
+  const exactTitleMatches = events.filter((e) => {
+    if (!e.title) return false
+    const title = String(e.title).toLowerCase().trim()
+    return title.length >= 3 && input.includes(title)
+  })
+  if (exactTitleMatches.length === 1) return exactTitleMatches[0]
+  if (exactTitleMatches.length > 1) {
+    return exactTitleMatches.sort((a, b) => (b.title?.length ?? 0) - (a.title?.length ?? 0))[0]
+  }
+
+  // 2. Keyword token matching (ignore generic stopwords and intent words)
+  const stopWords = new Set([
+    'change', 'update', 'driver', 'driving', 'attendee', 'attendees', 'primary',
+    'category', 'location', 'venue', 'address', 'checklist', 'notes', 'bring',
+    'water', 'bottle', 'guards', 'hours', 'before', 'visit', 'please', 'today',
+    'tomorrow', 'event', 'appointment', 'meeting', 'reminder', 'schedule', 'time',
+    'with', 'from', 'into', 'also', 'that', 'this', 'will', 'have', 'been',
+  ])
+
+  const tokens = input
+    .replace(/[^\w\s]/g, ' ')
+    .split(/\s+/)
+    .filter((t) => t.length >= 3 && !stopWords.has(t))
+
+  if (tokens.length > 0) {
+    const tokenMatches = events.filter((e) => {
+      const eTitle = String(e.title ?? '').toLowerCase()
+      return tokens.some((token) => eTitle.includes(token))
+    })
+    if (tokenMatches.length === 1) return tokenMatches[0]
+  }
+
+  return null
+}
+
 export function resolveActiveCalendarMutation(text, event, events, options = {}) {
   if (!event?.id) return null
   const input = normalizeAssistantSpeechPunctuation(text)
@@ -279,12 +319,14 @@ export function resolveActiveCalendarMutation(text, event, events, options = {})
   }
 
   const explicitRename = input.match(
-    /^(?:please\s+)?(?:rename|change\s+(?:the\s+)?(?:name|title)|set\s+(?:the\s+)?(?:name|title))\s+(?:of\s+(?:this\s+)?(?:event|appointment)\s+)?(?:to|as)\s+(.+?)[.!?]?$/i,
+    /^(?:please\s+)?(?:rename|change\s+(?:the\s+)?(?:name|title)|set\s+(?:the\s+)?(?:name|title))\s+(?:(?:of|for)\s+(?:this\s+)?(?:event|appointment)\s+)?(?:to|as)\s+(.+?)[.!?]?$/i,
+  ) || input.match(
+    /^(?:please\s+)?rename\s+(?:(.+?)\s+)?to\s+(.+?)[.!?]?$/i,
   ) || input.match(
     /^rename\s+(?:to\s+)?(.+?)[.!?]?$/i,
   )
   if (explicitRename && !/\b(?:driver|location|venue|category|what\s+to\s+bring)\b/i.test(input)) {
-    const rawTitle = explicitRename[1].trim().replace(/^["']|["']$/g, '')
+    const rawTitle = (explicitRename[2] ?? explicitRename[1]).trim().replace(/^["']|["']$/g, '')
     if (rawTitle.length > 0 && !/^(?:the\s+)?(?:event|appointment|this)$/i.test(rawTitle)) {
       return {
         tool: 'update_event',
@@ -320,7 +362,9 @@ export function resolveActiveCalendarMutation(text, event, events, options = {})
   const categoryMatch = input.match(
     /^(?:please\s+)?(?:change|set|update|make)\s+(?:the\s+)?category\s+(?:to|as)\s+([a-z_\s]+)[.!?]?$/i,
   ) || input.match(
-    /^(?:tag|mark)\s+(?:this\s+)?(?:as\s+)?([a-z_\s]+)[.!?]?$/i,
+    /^(?:tag|mark)\s+(?:(?:this|the)\s+)?(?:.+?\s+)?as\s+([a-z_\s]+)[.!?]?$/i,
+  ) || input.match(
+    /^(?:tag|mark)\s+(?:this\s+)?([a-z_\s]+)[.!?]?$/i,
   ) || input.match(
     /^(?:it's|its|make\s+it|it\s+is)\s+(?:a|an)?\s*(medical|sports|school|social|work|errand|dining|travel|birthday|home\s+maintenance)\s*(?:event|appointment|category)?[.!?]?$/i,
   )
@@ -447,9 +491,9 @@ export function resolveActiveCalendarMutation(text, event, events, options = {})
 
   // Single driver assignment: "Kelly is driving", "assign driver to Jake", "switch driver to Kelly"
   const singleDriverMatch = input.match(
-    /^(?:please\s+)?(?:set|assign|change|switch|make)\s+(?:the\s+)?driver\s+(?:to|as)\s+([a-z][a-z'-]*)[.!?]?$/i,
+    /^(?:please\s+)?(?:set|assign|change|switch|make)\s+(?:the\s+)?driver\s+(?:to|as)\s+([a-z][a-z'-]*)(?:\s+(?:for|to)\s+.+)?$/i,
   ) || input.match(
-    /^([a-z][a-z'-]*)\s+(?:is\s+driving|will\s+drive|is\s+the\s+driver|drives)[.!?]?$/i,
+    /^([a-z][a-z'-]*)\s+(?:is\s+driving|will\s+drive|is\s+the\s+driver|drives)(?:\s+(?:for|to)\s+.+)?$/i,
   )
   if (singleDriverMatch && !/\b(?:to|at|in|on)\b/i.test(singleDriverMatch[1])) {
     const rawDriver = singleDriverMatch[1].trim()
