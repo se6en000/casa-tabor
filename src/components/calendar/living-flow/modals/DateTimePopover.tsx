@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { format, addDays, isSameDay } from 'date-fns'
 import { Clock, X, Calendar, Minus, Plus } from 'lucide-react'
 
@@ -20,6 +20,21 @@ export default function DateTimePopover({
   const [currentDate, setCurrentDate] = useState<Date>(new Date(startDate))
   const [duration, setDuration] = useState<number>(durationMinutes)
   const [localIsAllDay, setLocalIsAllDay] = useState<boolean>(Boolean(isAllDay))
+  const dateInputRef = useRef<HTMLInputElement>(null)
+
+  const handleOpenDatePicker = () => {
+    if (dateInputRef.current) {
+      try {
+        if (typeof dateInputRef.current.showPicker === 'function') {
+          dateInputRef.current.showPicker()
+        } else {
+          dateInputRef.current.focus()
+        }
+      } catch {
+        dateInputRef.current.focus()
+      }
+    }
+  }
 
   useEffect(() => {
     setCurrentDate(new Date(startDate))
@@ -146,13 +161,18 @@ export default function DateTimePopover({
           >
             {format(addDays(new Date(), 2), 'EEEE')}<small>{format(addDays(new Date(), 2), 'EEE d')}</small>
           </button>
-          <label className={`day-select-pill-btn relative cursor-pointer ${isOtherDayActive ? 'active' : ''}`}>
+          <label
+            onClick={handleOpenDatePicker}
+            className={`day-select-pill-btn relative cursor-pointer ${isOtherDayActive ? 'active' : ''}`}
+          >
             <input
+              ref={dateInputRef}
               type="date"
               value={format(currentDate, 'yyyy-MM-dd')}
               onChange={(e) => selectExplicitDate(e.target.value)}
-              className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+              className="absolute inset-0 opacity-0 pointer-events-none w-full h-full"
               aria-label="Pick date"
+              tabIndex={-1}
             />
             <div className="flex flex-col items-center justify-center pointer-events-none">
               <span>{isOtherDayActive ? format(currentDate, 'MMM d') : 'Pick Date'}</span>

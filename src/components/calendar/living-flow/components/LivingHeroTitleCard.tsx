@@ -65,6 +65,21 @@ export default function LivingHeroTitleCard({
   const [localIsAllDay, setLocalIsAllDay] = useState<boolean>(Boolean(isAllDay))
   const [activeMode, setActiveMode] = useState<LivingFlowMode>(mode)
   const isEditingRef = useRef(false)
+  const dateInputRef = useRef<HTMLInputElement>(null)
+
+  const handleOpenDatePicker = () => {
+    if (dateInputRef.current) {
+      try {
+        if (typeof dateInputRef.current.showPicker === 'function') {
+          dateInputRef.current.showPicker()
+        } else {
+          dateInputRef.current.focus()
+        }
+      } catch {
+        dateInputRef.current.focus()
+      }
+    }
+  }
 
   useEffect(() => {
     if (!isEditingRef.current) {
@@ -290,13 +305,18 @@ export default function LivingHeroTitleCard({
             <button onClick={() => selectDayOffset(2)} className={`day-select-pill-btn ${isDay2Active ? 'active' : ''}`}>
               {format(addDays(new Date(), 2), 'EEEE')}<small>{format(addDays(new Date(), 2), 'EEE d')}</small>
             </button>
-            <label className={`day-select-pill-btn relative cursor-pointer ${isOtherDayActive ? 'active' : ''}`}>
+            <label
+              onClick={handleOpenDatePicker}
+              className={`day-select-pill-btn relative cursor-pointer ${isOtherDayActive ? 'active' : ''}`}
+            >
               <input
+                ref={dateInputRef}
                 type="date"
                 value={format(currentDate, 'yyyy-MM-dd')}
                 onChange={(e) => selectExplicitDate(e.target.value)}
-                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                className="absolute inset-0 opacity-0 pointer-events-none w-full h-full"
                 aria-label="Pick date"
+                tabIndex={-1}
               />
               <div className="flex flex-col items-center justify-center pointer-events-none">
                 <span>{isOtherDayActive ? format(currentDate, 'MMM d') : 'Pick Date'}</span>
