@@ -12,7 +12,7 @@ import {
   type FamilyRoutine,
   type AmbientRoutineStatus,
 } from '../lib/familyRoutines'
-import type { FamilyMember } from '../types'
+import type { FamilyMember, MemberAvailabilityException } from '../types'
 
 export interface DepartureItem {
   id: string
@@ -81,6 +81,7 @@ function deriveDeparturesForDate(
   now: Date,
   familyRoutines: FamilyRoutine[],
   familyMembers: FamilyMember[],
+  availabilityExceptions: MemberAvailabilityException[] = [],
 ): DepartureItem[] {
   if (familyRoutines.length === 0 || familyMembers.length === 0) return []
 
@@ -92,6 +93,21 @@ function deriveDeparturesForDate(
     if (r.startDate && dateKey < r.startDate) return false
     if (r.endDate && dateKey > r.endDate) return false
     if (!r.daysOfWeek.includes(dayOfWeek)) return false
+
+    // If child has day_off exception on targetDate, skip routine departure
+    const hasDayOff = availabilityExceptions.some((ex) => {
+      if (ex.member_id !== r.memberId) return false
+      if (ex.override_type !== 'day_off') return false
+      try {
+        const exStart = format(new Date(ex.start_at), 'yyyy-MM-dd')
+        const exEnd = format(new Date(ex.end_at), 'yyyy-MM-dd')
+        return dateKey >= exStart && dateKey <= exEnd
+      } catch {
+        return false
+      }
+    })
+    if (hasDayOff) return false
+
     return true
   })
 
@@ -250,7 +266,7 @@ function derivePrepChecklist(
 export function useFamilyRoutineIntelligence(now: Date = new Date()): FamilyRoutineIntelligence {
   const { data: familyMembers = [] } = useFamilyMembers()
   const memberIds = useMemo(() => (familyMembers as FamilyMember[]).map((m: FamilyMember) => m.id), [familyMembers])
-  const { rules: availabilityRules = [] } = useMemberAvailability(memberIds)
+  const { rules: availabilityRules = [], exceptions: availabilityExceptions = [] } = useMemberAvailability(memberIds)
 
   const familyRoutines = useMemo<FamilyRoutine[]>(() => {
     return (familyMembers as FamilyMember[])
@@ -284,8 +300,8 @@ export function useFamilyRoutineIntelligence(now: Date = new Date()): FamilyRout
 
   // Derive TODAY's morning routine departures
   const todayDepartures = useMemo<DepartureItem[]>(() => {
-    return deriveDeparturesForDate(now, now, familyRoutines, familyMembers as FamilyMember[])
-  }, [now, familyRoutines, familyMembers])
+    return deriveDeparturesForDate(now, now, familyRoutines, familyMembers as FamilyMember[], availabilityExceptions)
+  }, [now, familyRoutines, familyMembers, availabilityExceptions])
 
   const hasTodayDepartures = todayDepartures.length > 0
   const nextTodayDeparture = useMemo(() => {
@@ -294,8 +310,8 @@ export function useFamilyRoutineIntelligence(now: Date = new Date()): FamilyRout
 
   // Derive TOMORROW's morning routine departures
   const tomorrowDepartures = useMemo<DepartureItem[]>(() => {
-    return deriveDeparturesForDate(tomorrowDate, now, familyRoutines, familyMembers as FamilyMember[])
-  }, [tomorrowDate, now, familyRoutines, familyMembers])
+    return deriveDeparturesForDate(tomorrowDate, now, familyRoutines, familyMembers as FamilyMember[], availabilityExceptions)
+  }, [tomorrowDate, now, familyRoutines, familyMembers, availabilityExceptions])
 
   const hasTomorrowExceptions = useMemo(() => {
     return tomorrowDepartures.some((d) => d.isException)

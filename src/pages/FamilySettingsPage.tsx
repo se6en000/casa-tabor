@@ -567,6 +567,9 @@ export default function FamilySettingsPage() {
       }))
       return [...filtered, ...newRulesWithIds]
     })
+
+    await qc.invalidateQueries({ queryKey: ['member-availability-rules'] })
+    await qc.invalidateQueries({ queryKey: ['member-availability-exceptions'] })
   }
 
   async function applySchoolTemplate(memberId: string) {
