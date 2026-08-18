@@ -6,18 +6,13 @@ import { cn } from '../../utils/cn'
 import { cleanEventTitle } from '../../utils/eventTitle'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 
+import { EventSyncStatusDot } from './EventSyncStatusDot'
+
 const HOUR_HEIGHT = 60 // px per hour
 const GRID_START_HOUR = 6 // 6 AM
 
 // When all 5 members are on an event, use gold (shared family)
 const SHARED_COLOR = 'var(--color-casa-gold)'
-
-// Confidence dot colors
-const CONFIDENCE_DOT: Record<string, string> = {
-  high: 'bg-casa-success',
-  medium: 'bg-casa-warning',
-  low: 'bg-casa-error',
-}
 
 interface EventBlockProps {
   event: EventWithDetails
@@ -63,8 +58,6 @@ export default function EventBlock({ event, onClick, onDoubleClick, columnCount 
   const leftPercent = 2.5 + columnIndex * widthPercent
 
   const isCompact = height < 50
-  const confidence = event.enrichment?.confidence
-  const confidenceDotClass = confidence ? CONFIDENCE_DOT[confidence] : null
 
   const hasNoRide = Boolean(event.plan_override?.transportation_plan && Array.isArray(event.plan_override.transportation_plan.legs) && event.plan_override.transportation_plan.legs.length === 0)
   const departureAt = useMemo(() => {
@@ -184,13 +177,12 @@ export default function EventBlock({ event, onClick, onDoubleClick, columnCount 
         )
       })()}
 
-      {/* Confidence dot — top right corner */}
-      {confidenceDotClass && (
-        <span
-          className={cn('absolute right-1.5 top-1.5 h-2 w-2 rounded-full border border-white/50', confidenceDotClass)}
-          title={`Enrichment confidence: ${confidence}`}
-        />
-      )}
+      {/* Google Sync Status dot — top right corner */}
+      <EventSyncStatusDot
+        event={event}
+        size="xs"
+        className="absolute right-1.5 top-1.5 z-10"
+      />
       {/* Repeat indicator for recurring instances */}
       {(event as any).recurrence_master_id && (
         <span className="absolute bottom-1 right-1 opacity-60">

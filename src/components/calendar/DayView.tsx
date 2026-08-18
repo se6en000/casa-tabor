@@ -20,6 +20,7 @@ import { LeaveByCard } from '../shared/LeaveByCard'
 import { BirthdayCardDecoration } from '../shared/BirthdayCardDecoration'
 import { Button, CalendarPill, IconButton, PersonAvatarStack } from '../ui'
 import { EventProvenanceBadge } from './EventProvenanceBadge'
+import { EventSyncStatusDot } from './EventSyncStatusDot'
 import SnoozeMenu from '../shared/SnoozeMenu'
 import type { SnoozeDuration } from '../../utils/snoozeDuration'
 import { differenceInDays } from 'date-fns'
@@ -399,6 +400,8 @@ export function DayEventCard({
                 className="shrink-0"
               />
             )}
+
+            <EventSyncStatusDot event={event} size="xs" />
           </div>
         </div>
       </motion.li>
@@ -501,22 +504,25 @@ export function DayEventCard({
               </div>
             </div>
 
-            {/* Quick 1-tap Directions button (44px target) */}
-            {(event.address || event.location_name) && !isHosted && (
-              <IconButton
-                variant="secondary"
-                size="sm"
-                aria-label={`Open directions to ${event.location_name || event.address}`}
-                title="Open directions"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  const query = event.address ? `${event.location_name ? `${event.location_name}, ` : ''}${event.address}` : event.location_name
-                  window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query || '')}`, '_blank')
-                }}
-                className="shrink-0 min-h-[44px] min-w-[44px] text-casa-navy border-casa-border hover:border-casa-navy"
-                icon={<Navigation size={14} className="text-casa-gold" />}
-              />
-            )}
+            {/* Top Right: Sync Status Dot & Directions button */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <EventSyncStatusDot event={event} size="sm" />
+              {(event.address || event.location_name) && !isHosted && (
+                <IconButton
+                  variant="secondary"
+                  size="sm"
+                  aria-label={`Open directions to ${event.location_name || event.address}`}
+                  title="Open directions"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    const query = event.address ? `${event.location_name ? `${event.location_name}, ` : ''}${event.address}` : event.location_name
+                    window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query || '')}`, '_blank')
+                  }}
+                  className="shrink-0 min-h-[44px] min-w-[44px] text-casa-navy border-casa-border hover:border-casa-navy"
+                  icon={<Navigation size={14} className="text-casa-gold" />}
+                />
+              )}
+            </div>
           </div>
 
           {/* Footer Row: Responsibility Chip + Attendee Stack */}

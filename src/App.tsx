@@ -12,6 +12,7 @@ import LuxuryTopBar from './components/shared/LuxuryTopBar'
 import PinGate from './components/shared/PinGate'
 import ArtScreensaver from './components/shared/ArtScreensaver'
 import QuickCreateSheet from './components/shared/QuickCreateSheet'
+import SyncTriageModal from './components/calendar/SyncTriageModal'
 import TouchKeyboard from './components/shared/TouchKeyboard'
 import { Button } from './components/ui'
 import { useIdleTimer } from './hooks/useIdleTimer'
@@ -206,6 +207,8 @@ function AppShell() {
         open={quickCreateOpen}
         onClose={() => setQuickCreateOpen(false)}
       />
+
+      <SyncTriageModal />
 
       <TouchKeyboard />
 

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import { format, parseISO, differenceInMinutes, subMinutes } from 'date-fns'
 import {
   MapPin,
@@ -17,6 +17,7 @@ import {
   Navigation,
   ArrowRight,
   Gift,
+  RotateCw,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useCalmKioskPresenter } from '../../hooks/useCalmKioskPresenter'
@@ -40,7 +41,6 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
   const setActiveView = useCalendarStore((s) => s.setActiveView)
   const [showPastEvents, setShowPastEvents] = useState(false)
   const [showOverdueTodos, setShowOverdueTodos] = useState(false)
-  const [completedItems, setCompletedItems] = useState<Record<string, boolean>>({})
   const [todosExpanded, setTodosExpanded] = useState(false)
   const [mobileSubTab, setMobileSubTab] = useState<'schedule' | 'triage' | 'kitchen'>('schedule')
 
@@ -111,6 +111,10 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
     pastEvents,
     upcomingAppointments,
     todayReminders,
+    overdueReminders,
+    activeReminders,
+    completedItems,
+    setCompletedItems,
     tomorrowEvents,
     isDinnerPast,
     totalAttentionCount,
@@ -134,6 +138,8 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
     handleCompletePrep,
     setCanvasSubmode,
     navigateTo,
+    isRefreshing,
+    refreshBriefing,
   } = useCalmKioskPresenter()
 
   const routineIntel = useFamilyRoutineIntelligence(now)
@@ -156,18 +162,6 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
       minutesUntilNext !== null &&
       minutesUntilNext <= 75,
   )
-
-  const overdueReminders = useMemo(() => {
-    return todayReminders.filter(
-      (evt) => !evt.all_day && !completedItems[evt.id] && parseISO(evt.start_time).getTime() < now.getTime()
-    )
-  }, [todayReminders, completedItems, now])
-
-  const activeReminders = useMemo(() => {
-    return todayReminders.filter(
-      (evt) => evt.all_day || completedItems[evt.id] || parseISO(evt.start_time).getTime() >= now.getTime()
-    )
-  }, [todayReminders, completedItems, now])
 
   return (
     <div className="w-full h-full flex flex-col justify-start p-4 sm:p-6 lg:p-8 xl:p-10 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-8 overflow-y-auto scrollbar-hide">
@@ -707,16 +701,32 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
             <TomorrowPrepWidget now={now} />
           )}
 
-          {/* Stylized Ambient Daily Briefing Prose (shown only during active daytime events) */}
-          {nextEvent && dailyBriefing && (
+          {/* Stylized Ambient Daily Briefing Prose */}
+          {dailyBriefing && (
             <div className="px-1 py-1 flex items-start gap-3">
               <div className="p-1.5 rounded-xl bg-amber-500/15 text-casa-gold shrink-0 mt-0.5 border border-amber-500/20">
                 <Sparkles size={16} className="text-casa-gold animate-pulse" />
               </div>
-              <div className="space-y-0.5 min-w-0">
-                <span className="text-2xs uppercase tracking-widest font-sans font-bold text-amber-700">
-                  {timeHorizonLabel}
-                </span>
+              <div className="space-y-1 min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-2xs uppercase tracking-widest font-sans font-bold text-amber-700">
+                    {timeHorizonLabel}
+                  </span>
+                  <IconButton
+                    variant="ghost"
+                    size="sm"
+                    aria-label="Refresh daily brief"
+                    title="Refresh daily brief on demand"
+                    onClick={() => void refreshBriefing()}
+                    className="min-h-[44px] min-w-[44px] -my-2 -mr-2 text-amber-700/70 hover:text-amber-900 hover:bg-amber-500/10 transition-colors"
+                    icon={
+                      <RotateCw
+                        size={13}
+                        className={cn('transition-transform duration-500', isRefreshing && 'animate-spin')}
+                      />
+                    }
+                  />
+                </div>
                 <p className="font-display text-body-lg sm:text-heading text-casa-navy font-medium leading-relaxed">
                   {dailyBriefing}
                 </p>

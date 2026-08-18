@@ -546,6 +546,7 @@ function _subscribeRealtimeChannel() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'event_enrichments' }, _fireInvalidation)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'event_logistics' }, _fireInvalidation)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'event_checklist_items' }, _fireInvalidation)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'google_sync_jobs' }, _fireInvalidation)
     .subscribe((status, err) => {
       if (status === 'SUBSCRIBED') {
         // Connected / reconnected: catch up on any missed updates

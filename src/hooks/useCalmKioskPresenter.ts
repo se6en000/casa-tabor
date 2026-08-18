@@ -1,8 +1,9 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { format, parseISO, differenceInMinutes, subMinutes } from 'date-fns'
+import { format, parseISO, differenceInMinutes, subMinutes, startOfDay, differenceInCalendarDays } from 'date-fns'
+import { useQueryClient } from '@tanstack/react-query'
 import { useLiveClock, greetingFor } from './useLiveClock'
-import { useTodayEvents, useTomorrowEvents, type EventWithDetails } from './useCalendarEvents'
+import { useTodayEvents, useTomorrowEvents, useRollingEvents, type EventWithDetails } from './useCalendarEvents'
 import { useWeekConflicts, useResolveConflict } from './useConflicts'
 import { usePrepItems, useCompletePrepItem } from './usePrepItems'
 import { useFamilyMembers } from './useFamilyMembers'
@@ -10,6 +11,7 @@ import { useHomeWeather } from './useHomeWeather'
 import { useReminderNeedsYouActions } from './useReminderNeedsYouActions'
 import { useMemberAvailability } from './useMemberAvailability'
 import { useAppStore } from '../stores/appStore'
+import { fetchTonightDinnerPlan, isValidDinnerPlan } from '../utils/dinnerPlanSync'
 import { inferEventMode, inferEventPlanKind } from '../lib/eventCommandCenter'
 import type { EventTransportationPlan, TransportationLeg } from '../lib/eventTransportation'
 import {
@@ -38,6 +40,11 @@ export interface CalmKioskPresenterState {
   pastEvents: EventWithDetails[]
   upcomingAppointments: EventWithDetails[]
   todayReminders: EventWithDetails[]
+  openReminders: EventWithDetails[]
+  overdueReminders: EventWithDetails[]
+  activeReminders: EventWithDetails[]
+  completedItems: Record<string, boolean>
+  setCompletedItems: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
   todayEvents: EventWithDetails[]
   tomorrowEvents: EventWithDetails[]
   isTodayDone: boolean
@@ -67,14 +74,22 @@ export interface CalmKioskPresenterState {
   locationDisplayText: string | null
   setCanvasSubmode: (submode: 'calm' | 'turbo') => void
   navigateTo: (path: string) => void
+  isRefreshing: boolean
+  refreshBriefing: () => Promise<void>
+  upcomingMilestonesAndPrep: EventWithDetails[]
+  milestonePhrases: string[]
 }
 
 export function useCalmKioskPresenter(): CalmKioskPresenterState {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { setCanvasSubmode } = useAppStore()
   const now = useLiveClock(10_000)
+  const [completedItems, setCompletedItems] = useState<Record<string, boolean>>({})
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const { data: todayEvents = [] } = useTodayEvents(now)
   const { data: tomorrowEvents = [] } = useTomorrowEvents(now)
+  const { data: rollingEvents = [] } = useRollingEvents(now)
   const { data: conflicts = [] } = useWeekConflicts()
   const { data: prepItems = [] } = usePrepItems()
   const { data: familyMembers = [] } = useFamilyMembers()
@@ -385,6 +400,45 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
       })
   }, [effectiveTodayEvents])
 
+  // Reminders breakdown (reactive to completedItems)
+  const openReminders = useMemo(() => {
+    return todayReminders.filter((e) => !completedItems[e.id])
+  }, [todayReminders, completedItems])
+
+  const overdueReminders = useMemo(() => {
+    return todayReminders.filter(
+      (evt) => !evt.all_day && !completedItems[evt.id] && parseISO(evt.start_time).getTime() < now.getTime()
+    )
+  }, [todayReminders, completedItems, now])
+
+  const activeReminders = useMemo(() => {
+    return todayReminders.filter(
+      (evt) => evt.all_day || completedItems[evt.id] || parseISO(evt.start_time).getTime() >= now.getTime()
+    )
+  }, [todayReminders, completedItems, now])
+
+  const refreshBriefing = useCallback(async () => {
+    setIsRefreshing(true)
+    try {
+      await Promise.allSettled([
+        queryClient.invalidateQueries({ queryKey: ['calendar_events'] }),
+        queryClient.invalidateQueries({ queryKey: ['weather'] }),
+        queryClient.invalidateQueries({ queryKey: ['conflicts'] }),
+        queryClient.invalidateQueries({ queryKey: ['prep_items'] }),
+        queryClient.invalidateQueries({ queryKey: ['family_members'] }),
+        fetchTonightDinnerPlan().then((plan) => {
+          if (plan && isValidDinnerPlan(plan)) {
+            useAppStore.getState().setDinnerPlan(plan, { localOnly: true })
+          }
+        }),
+      ])
+    } finally {
+      setTimeout(() => {
+        setIsRefreshing(false)
+      }, 600)
+    }
+  }, [queryClient])
+
   // Filter appointment stream (exclude meals, stale ended items)
   const appointmentEvents = useMemo(() => {
     return effectiveTodayEvents.filter((e) => {
@@ -432,59 +486,174 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     }).length
   }, [effectiveTodayEvents])
 
+  // ── Upcoming Milestone & Long-Term Prep Radar (Tomorrow through +14 days) ──
+  const upcomingMilestonesAndPrep = useMemo(() => {
+    const todayStart = startOfDay(now)
+    const candidates = rollingEvents.filter((e: EventWithDetails) => {
+      if (isMealEvent(e)) return false
+      try {
+        const eventStart = startOfDay(parseISO(e.start_time))
+        const daysAway = differenceInCalendarDays(eventStart, todayStart)
+        // Must be in the future (tomorrow through 14 days out)
+        if (daysAway < 1 || daysAway > 14) return false
+
+        const titleLower = (e.title || '').toLowerCase()
+        const catLower = (e.enrichment?.category || (e as unknown as Record<string, unknown>).category || '').toString().toLowerCase()
+
+        // 1. Celebrations, Anniversaries, Birthdays, Parties, Special Events
+        const isCelebration =
+          /birthday|bday|anniversary|party|celebration|wedding|shower|graduation|gala|reunion|festival|tournament|recital|concert/i.test(
+            titleLower,
+          ) ||
+          /birthday|anniversary|party|celebration|wedding|graduation|social|school|sports/i.test(
+            catLower,
+          )
+
+        // 2. Travel & Trips
+        const isTrip = Boolean(
+          e.trip_id ||
+            /trip|travel|flight|vacation|getaway|hotel/i.test(catLower) ||
+            /flight|hotel|trip to|vacation/i.test(titleLower),
+        )
+
+        // 3. Events with Active Prep Requirements or Checklists
+        const hasUncheckedChecklist = Boolean(
+          (e as unknown as { checklist?: Array<{ checked: boolean }> }).checklist &&
+            (e as unknown as { checklist?: Array<{ checked: boolean }> }).checklist?.some((item: { checked: boolean }) => !item.checked),
+        )
+        const hasPrepNotes = Boolean(
+          (e.enrichment?.prep_notes && e.enrichment.prep_notes.trim().length > 0) ||
+            (e.enrichment?.what_to_bring &&
+              (Array.isArray(e.enrichment.what_to_bring)
+                ? e.enrichment.what_to_bring.length > 0
+                : Boolean(e.enrichment.what_to_bring))),
+        )
+        const hasLinkedPrepItem = prepItems.some(
+          (p) => Boolean(p.event_id && p.event_id === e.id && !p.dismissed),
+        )
+
+        return isCelebration || isTrip || hasUncheckedChecklist || hasPrepNotes || hasLinkedPrepItem
+      } catch {
+        return false
+      }
+    })
+
+    // Sort by chronological start time
+    return candidates.sort((a: EventWithDetails, b: EventWithDetails) => {
+      try {
+        return parseISO(a.start_time).getTime() - parseISO(b.start_time).getTime()
+      } catch {
+        return 0
+      }
+    })
+  }, [rollingEvents, prepItems, now])
+
+  const milestonePhrases = useMemo(() => {
+    const todayStart = startOfDay(now)
+    return upcomingMilestonesAndPrep.map((e: EventWithDetails) => {
+      const start = parseISO(e.start_time)
+      const daysAway = differenceInCalendarDays(startOfDay(start), todayStart)
+
+      let timeLabel = ''
+      if (daysAway === 1) {
+        timeLabel = 'tomorrow'
+      } else if (daysAway === 2) {
+        timeLabel = `in 2 days (${format(start, 'EEEE')})`
+      } else if (daysAway <= 6) {
+        timeLabel = `this ${format(start, 'EEEE')}`
+      } else if (daysAway <= 13) {
+        timeLabel = `next ${format(start, 'EEEE')} (${format(start, 'MMM d')})`
+      } else {
+        timeLabel = `in ${daysAway} days (${format(start, 'MMM d')})`
+      }
+
+      // Check prep details
+      let prepTag = ''
+      const eWithChecklist = e as unknown as { checklist?: Array<{ checked: boolean; label: string }> }
+      if (eWithChecklist.checklist && eWithChecklist.checklist.length > 0) {
+        const unchecked = eWithChecklist.checklist.filter((c: { checked: boolean }) => !c.checked).length
+        if (unchecked > 0) {
+          prepTag = ` · ${unchecked} prep task${unchecked > 1 ? 's' : ''} open`
+        }
+      } else if (e.enrichment?.what_to_bring) {
+        const raw = e.enrichment.what_to_bring
+        const itemStr = Array.isArray(raw) ? raw[0] : String(raw).split(/[,;]/)[0]
+        if (itemStr) {
+          prepTag = ` · prep: ${itemStr.trim()}`
+        }
+      } else if (e.enrichment?.prep_notes) {
+        const note = e.enrichment.prep_notes.trim()
+        if (note.length > 0 && note.length <= 35) {
+          prepTag = ` · ${note}`
+        }
+      }
+
+      return `${e.title} ${timeLabel}${prepTag}`
+    })
+  }, [upcomingMilestonesAndPrep, now])
+
   const dailyBriefing = useMemo(() => {
+    // 1. Weather note
     const weatherNote = weather
       ? weather.temp >= 85
-        ? `Warm ${weather.temp}°F day ahead. Remember hydration & sun protection.`
+        ? `Warm ${weather.temp}°F afternoon ahead. Remember hydration & sun protection.`
         : weather.temp <= 50
         ? `Crisp ${weather.temp}°F conditions. Light jackets recommended.`
         : `${weather.temp}°F with ${weather.condition.toLowerCase()} skies.`
       : ''
 
-    if (isTodayDone || isEvening) {
-      const count = tomorrowEventsSorted.length
-      if (count === 0) {
-        return `Schedule complete for today. Tomorrow is open with no early appointments.`
-      }
+    // 2. Reminders / To-Dos note (focus on unclosed items)
+    let remindersNote = ''
+    if (openReminders.length === 1) {
+      remindersNote = `1 open to-do today: ${openReminders[0].title}.`
+    } else if (openReminders.length === 2) {
+      remindersNote = `2 open to-dos today: ${openReminders[0].title} & ${openReminders[1].title}.`
+    } else if (openReminders.length > 2) {
+      remindersNote = `${openReminders.length} open to-dos today including ${openReminders[0].title} & ${openReminders[1].title}.`
+    } else if (todayReminders.length > 0 && openReminders.length === 0) {
+      remindersNote = 'All daily to-dos completed.'
+    }
 
+    // 3. Tomorrow morning critical start (if early < 9am or special departure)
+    let tomorrowEarlyNote = ''
+    if (tomorrowEventsSorted.length > 0) {
       const timedEvents = tomorrowEventsSorted.filter((e) => !e.all_day)
-      const firstEvent = timedEvents[0] || tomorrowEventsSorted[0]
-
-      let startTimeStr = ''
+      const firstEvent = timedEvents[0]
       if (firstEvent && !firstEvent.all_day) {
         try {
-          startTimeStr = ` at ${format(parseISO(firstEvent.start_time), 'h:mm a')}`
+          const start = parseISO(firstEvent.start_time)
+          if (start.getHours() < 9) {
+            const pickupEvt = tomorrowEventsSorted.find((e) => {
+              const t = (e.title || '').toLowerCase()
+              return t.includes('pickup') || t.includes('drop-off') || t.includes('carpool')
+            })
+            const pickupName = pickupEvt?.members?.[0]?.family_member?.name
+            const pickupPart = pickupName ? ` (${pickupName} on pickup)` : ''
+            tomorrowEarlyNote = `Early start tomorrow at ${format(start, 'h:mm a')} with ${firstEvent.title}${pickupPart}.`
+          }
         } catch {}
       }
-
-      const pickupEvt = tomorrowEventsSorted.find((e) => {
-        const t = (e.title || '').toLowerCase()
-        return t.includes('pickup') || t.includes('drop-off')
-      })
-      const pickupName = pickupEvt?.members?.[0]?.family_member?.name || (pickupEvt ? 'Giselle' : null)
-      const pickupPart = pickupName ? ` · ${pickupName} on pickup duty` : ''
-
-      return `Tomorrow: ${count} event${count > 1 ? 's' : ''} scheduled${firstEvent ? `, starting${startTimeStr} with ${firstEvent.title}` : ''}${pickupPart}.`
     }
 
-    if (hour < 12) {
-      const count = effectiveTodayEvents.length
-      const minsToNext = nextEvent ? differenceInMinutes(parseISO(nextEvent.start_time), now) : null
-      const isNextSoon = minsToNext !== null && minsToNext <= 90
-      const scheduleSummary = count > 0 ? `${count} calendar event${count > 1 ? 's' : ''} today.` : 'Open morning with clear schedule.'
-      const nextSummary = isNextSoon && nextEvent ? ` First up: ${nextEvent.title} at ${format(parseISO(nextEvent.start_time), 'h:mm a')}.` : ''
-      return `${weatherNote} ${scheduleSummary}${nextSummary}`
+    // 4. Milestone & Long-Term Prep Radar (7–14 day lookahead)
+    let radarNote = ''
+    if (milestonePhrases.length === 1) {
+      radarNote = `On the radar: ${milestonePhrases[0]}.`
+    } else if (milestonePhrases.length >= 2) {
+      radarNote = `On the radar: ${milestonePhrases[0]} and ${milestonePhrases[1]}.`
+    } else if (tomorrowEventsSorted.length === 0 && !tomorrowEarlyNote) {
+      radarNote = 'Upcoming schedule is clear with no urgent long-term prep.'
     }
 
-    // Afternoon
-    const nextSummary = nextEvent
-      ? ` Next up: ${nextEvent.title}${nextEvent.members?.[0]?.family_member?.name ? ` (${nextEvent.members[0].family_member.name})` : ''}.`
-      : ' All afternoon appointments complete.'
-
-    const dinnerNote = isDinnerPast ? ' Dinner served.' : ' Dinner planned for 6:30 PM.'
-
-    return `${weatherNote}${nextSummary}${dinnerNote}`
-  }, [isTodayDone, isEvening, hour, effectiveTodayEvents, tomorrowEventsSorted, nextEvent, weather, isDinnerPast, now])
+    // Synthesis: Zero redundancy with Hero (next event) and Kitchen (dinner)
+    return [weatherNote, remindersNote, tomorrowEarlyNote, radarNote].filter(Boolean).join(' ')
+  }, [
+    weather,
+    openReminders,
+    todayReminders,
+    tomorrowEventsSorted,
+    milestonePhrases,
+  ])
 
   const minutesUntilNext = useMemo(() => {
     if (!nextEvent) return null
@@ -684,6 +853,11 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     pastEvents,
     upcomingAppointments,
     todayReminders,
+    openReminders,
+    overdueReminders,
+    activeReminders,
+    completedItems,
+    setCompletedItems,
     todayEvents: effectiveTodayEvents,
     tomorrowEvents: tomorrowEventsSorted,
     isTodayDone,
@@ -713,5 +887,9 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     locationDisplayText,
     setCanvasSubmode,
     navigateTo: navigate,
+    isRefreshing,
+    refreshBriefing,
+    upcomingMilestonesAndPrep,
+    milestonePhrases,
   }
 }

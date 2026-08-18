@@ -17,6 +17,7 @@ import { useCalendarQuickCreateGesture } from '../../hooks/useCalendarQuickCreat
 import EventDetailPanel from './EventDetailPanel'
 import QuickCreateSheet from '../shared/QuickCreateSheet'
 import { Button, CalendarPill, IconButton } from '../ui'
+import { EventSyncStatusDot } from './EventSyncStatusDot'
 
 const SHARED_COLOR = 'var(--color-casa-gold)'
 
@@ -306,7 +307,8 @@ function DayCell({
                   )}
                   style={{ backgroundColor: color }}
                 />
-                <span className="truncate">{holiday ? holidayLabel(event.title) : reminder ? `🔔 ${event.title}` : cleanEventTitle(event.title)}</span>
+                <span className="truncate flex-1">{holiday ? holidayLabel(event.title) : reminder ? `🔔 ${event.title}` : cleanEventTitle(event.title)}</span>
+                {!holiday && !reminder && <EventSyncStatusDot event={event} size="xs" className="shrink-0 ml-auto" />}
               </div>
             )
           })}

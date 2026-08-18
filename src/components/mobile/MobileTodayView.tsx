@@ -10,6 +10,8 @@ import {
   AlertCircle,
   ChevronRight,
   CheckCircle2,
+  Camera,
+  Sparkles,
 } from 'lucide-react'
 import { useRollingEvents } from '../../hooks/useCalendarEvents'
 import { getEventStartDate, getEventEndDate, eventOverlapsDay } from '../../utils/eventTime'
@@ -23,6 +25,8 @@ import { isReminderOrChore } from '../../lib/heroFocus.mjs'
 import { openEventDetails } from '../../utils/openEventDetails'
 import { Button } from '../ui'
 import GmailSyncStatusIndicator from '../shared/GmailSyncStatusIndicator'
+import { EventSyncStatusDot } from '../calendar/EventSyncStatusDot'
+import MobileDocumentScanSheet from './MobileDocumentScanSheet'
 
 interface MobileTodayViewProps {
   onOpenQuickCreate?: () => void
@@ -38,6 +42,7 @@ export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate 
   const dinnerPlan = useAppStore((s) => s.dinnerPlan)
 
   const [snoozedEventMinutes, setSnoozedEventMinutes] = useState<number | null>(null)
+  const [scanSheetOpen, setScanSheetOpen] = useState(false)
 
   // Filter Today & Tomorrow Events (Excluding chores and reminders from hero candidates)
   const todayEvents = useMemo(() => {
@@ -298,7 +303,44 @@ export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate 
       )}
 
       {/* ══════════════════════════════════════════════════════════════
-          3. TONIGHT'S DINNER BANNER
+          3. SCANNER SHORTCUT (MOBILE ONLY)
+         ══════════════════════════════════════════════════════════════ */}
+      <div
+        role="button"
+        tabIndex={0}
+        data-tactile="true"
+        onClick={() => setScanSheetOpen(true)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            setScanSheetOpen(true)
+          }
+        }}
+        className="flex items-center justify-between p-3.5 bg-gradient-to-r from-casa-navy via-slate-900 to-slate-950 border border-casa-gold/35 rounded-xl text-white shadow-2xs hover:border-casa-gold active:scale-[0.97] active:opacity-80 transition-all duration-150 cursor-pointer"
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-9 h-9 rounded-xl bg-casa-gold text-casa-navy flex items-center justify-center shrink-0 shadow-xs">
+            <Camera size={19} strokeWidth={2.2} />
+          </div>
+          <div className="min-w-0">
+            <div className="text-body-sm font-bold text-white flex items-center gap-1.5 leading-none mb-1">
+              <span>Scan Document or Card</span>
+              <Sparkles size={13} className="text-casa-gold" />
+            </div>
+            <div className="text-caption text-slate-300 truncate">
+              Snap photo to extract reminders & events
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1 text-caption font-bold text-casa-gold bg-casa-gold/15 border border-casa-gold/25 px-2.5 py-1.5 rounded-full shrink-0 ml-2">
+          <span>Scan</span>
+          <ChevronRight size={13} strokeWidth={2.5} />
+        </div>
+      </div>
+
+      {/* ══════════════════════════════════════════════════════════════
+          4. TONIGHT'S DINNER BANNER
          ══════════════════════════════════════════════════════════════ */}
       <Link
         to="/cook"
@@ -325,7 +367,7 @@ export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate 
       </Link>
 
       {/* ══════════════════════════════════════════════════════════════
-          4. TODAY'S TIMELINE
+          5. TODAY'S TIMELINE
          ══════════════════════════════════════════════════════════════ */}
       <div className="flex flex-col gap-2 mt-1">
         <div className="flex items-center justify-between">
@@ -404,6 +446,8 @@ export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate 
                       )}
                     </div>
                   </div>
+
+                  <EventSyncStatusDot event={ev} size="xs" className="shrink-0" />
                 </div>
               )
             })}
@@ -471,6 +515,8 @@ export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate 
                       {ev.location_name && <span>· {ev.location_name}</span>}
                     </div>
                   </div>
+
+                  <EventSyncStatusDot event={ev} size="xs" className="shrink-0" />
                 </div>
               )
             })}
@@ -478,6 +524,11 @@ export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate 
         </div>
       )}
 
+      {/* ── Document / Card Scanner Sheet ── */}
+      <MobileDocumentScanSheet
+        open={scanSheetOpen}
+        onClose={() => setScanSheetOpen(false)}
+      />
     </div>
   )
 }

@@ -23,6 +23,8 @@ export interface ScheduleStreamItemProps extends Omit<HTMLMotionProps<'div'>, 't
   isHighlighted?: boolean
   /** Optional icon or category element. */
   icon?: ReactNode
+  /** Optional Google Sync Status Dot or right action element. */
+  syncDot?: ReactNode
 }
 
 /**
@@ -39,6 +41,7 @@ export const ScheduleStreamItem = forwardRef<HTMLDivElement, ScheduleStreamItemP
       members = [],
       isHighlighted = false,
       icon,
+      syncDot,
       className,
       onClick,
       ...rest
@@ -82,21 +85,24 @@ export const ScheduleStreamItem = forwardRef<HTMLDivElement, ScheduleStreamItemP
             {timeText}
           </span>
 
-          {members.length > 0 && (
-            <div className="flex items-center gap-1.5 shrink-0">
-              {members.map((m) => (
-                <span
-                  key={m.id}
-                  className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                  style={{
-                    backgroundColor: m.color ?? 'var(--color-casa-gold)',
-                  }}
-                  title={m.name}
-                  aria-label={m.name}
-                />
-              ))}
-            </div>
-          )}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {members.length > 0 && (
+              <div className="flex items-center gap-1.5 shrink-0">
+                {members.map((m) => (
+                  <span
+                    key={m.id}
+                    className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                    style={{
+                      backgroundColor: m.color ?? 'var(--color-casa-gold)',
+                    }}
+                    title={m.name}
+                    aria-label={m.name}
+                  />
+                ))}
+              </div>
+            )}
+            {syncDot}
+          </div>
         </div>
 
         <h3

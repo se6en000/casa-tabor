@@ -87,6 +87,10 @@ export interface CalendarEvent {
   confirmation_number: string | null
   // Provenance / Source type
   source_type?: 'routine' | 'google' | 'gmail' | 'casa'
+  // Google Sync Status
+  google_sync_status?: 'synced' | 'pending' | 'queued' | 'retrying' | 'failed' | 'local_only' | 'not_synced'
+  google_sync_error?: string | null
+  google_sync_last_at?: string | null
   // Joined
   members?: EventMember[]
   enrichment?: EventEnrichment | null

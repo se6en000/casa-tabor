@@ -1,12 +1,13 @@
 import { useMemo } from 'react'
 import { format, isSameDay } from 'date-fns'
-import { CheckCircle2, Clock3, Navigation } from 'lucide-react'
+import { Navigation } from 'lucide-react'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { cn } from '../../utils/cn'
 import { WeatherIcon } from '../shared/WeatherIcon'
 import { getEventDisplayEnd, getMultiDayBoundaryLabel, isEventMultiDay, withColorAlpha } from '../../utils/eventTime'
 import { cleanEventTitle } from '../../utils/eventTitle'
 import { CalendarPill } from '../ui'
+import { EventSyncStatusDot } from './EventSyncStatusDot'
 
 interface LargeEventCardProps {
   event: EventWithDetails
@@ -36,8 +37,6 @@ export default function LargeEventCard({
   const others = members.filter((m) => m !== primary)
   const ownerName = primary?.family_member?.name ?? ''
   const cleanTitle = cleanEventTitle(event.title)
-  const showSyncState = event.event_type !== 'reminder'
-  const isGoogleSynced = !!event.google_event_id
   const hasNoRide = Boolean(event.plan_override?.transportation_plan && Array.isArray(event.plan_override.transportation_plan.legs) && event.plan_override.transportation_plan.legs.length === 0)
   const departureAt = useMemo(() => {
     if (event.all_day || hasNoRide) return null
@@ -100,26 +99,29 @@ export default function LargeEventCard({
                 </CalendarPill>
               )}
             </div>
-            {members.length > 0 && (
-              <div className="flex items-center gap-1 shrink-0 pt-0.5">
-                {primary && (
-                  <CalendarPill
-                    color={primary.family_member?.color_hex ?? 'var(--color-casa-muted)'}
-                    title={ownerName}
-                  >
-                    {ownerName}
-                  </CalendarPill>
-                )}
-                {others.slice(0, 3).map((m) => (
-                  <CalendarPill
-                    key={m.id}
-                    color={m.family_member?.color_hex ?? 'var(--color-casa-muted)'}
-                  >
-                    {m.family_member?.name}
-                  </CalendarPill>
-                ))}
-              </div>
-            )}
+            <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
+              {members.length > 0 && (
+                <div className="flex items-center gap-1">
+                  {primary && (
+                    <CalendarPill
+                      color={primary.family_member?.color_hex ?? 'var(--color-casa-muted)'}
+                      title={ownerName}
+                    >
+                      {ownerName}
+                    </CalendarPill>
+                  )}
+                  {others.slice(0, 3).map((m) => (
+                    <CalendarPill
+                      key={m.id}
+                      color={m.family_member?.color_hex ?? 'var(--color-casa-muted)'}
+                    >
+                      {m.family_member?.name}
+                    </CalendarPill>
+                  ))}
+                </div>
+              )}
+              <EventSyncStatusDot event={event} size="sm" />
+            </div>
           </div>
 
           <div className="flex items-center flex-wrap gap-x-3 gap-y-0.5 mt-1 min-w-0">
@@ -134,17 +136,6 @@ export default function LargeEventCard({
             </span>
             {event.enrichment?.weather_at_event && (
               <WeatherIcon condition={event.enrichment.weather_at_event} size={12} />
-            )}
-            {showSyncState && (
-              <span
-                className={cn(
-                  'inline-flex items-center gap-1 text-caption',
-                  isGoogleSynced ? 'text-emerald-600' : 'text-casa-muted',
-                )}
-                title={isGoogleSynced ? 'Google sync confirmed' : 'Google sync pending'}
-              >
-                {isGoogleSynced ? <CheckCircle2 size={12} /> : <Clock3 size={12} />}
-              </span>
             )}
             {event.location_name && (
               <span className="flex items-center gap-1 text-body-sm text-casa-muted min-w-0 break-words">

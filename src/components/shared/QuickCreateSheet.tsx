@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { CalendarDays, Plus } from 'lucide-react'
+import { CalendarDays, Plus, Camera, Sparkles } from 'lucide-react'
 import { addHours } from 'date-fns'
 import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
@@ -8,6 +8,7 @@ import { useSavedPlaces, savedPlaceAddress } from '../../hooks/useSavedPlaces'
 import { resolveDirectoryPlaceSave, type DirectoryPlaceSelection } from '../../utils/directorySuggestions'
 import { normalizeAllDayEventRange } from '../../utils/allDayEventRange'
 import DirectoryPlaceInput from './DirectoryPlaceInput'
+import MobileDocumentScanSheet from '../mobile/MobileDocumentScanSheet'
 import {
   Alert,
   Button,
@@ -66,6 +67,7 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
   const [saveError, setSaveError] = useState('')
   const [saveSuccess, setSaveSuccess] = useState('')
   const [savePartial, setSavePartial] = useState(false)
+  const [scanSheetOpen, setScanSheetOpen] = useState(false)
 
   // Re-initialise whenever the sheet opens with a new slot
   useEffect(() => {
@@ -322,7 +324,40 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
       contentClassName="px-6 py-5"
       transition={{ type: 'spring', damping: 32, stiffness: 260 }}
     >
-      <div ref={sheetRef} tabIndex={-1} className="space-y-5">
+      <div ref={sheetRef} tabIndex={-1} className="space-y-4">
+        {/* ── 1-Tap AI Scanner Banner (Mobile & Desktop) ── */}
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => setScanSheetOpen(true)}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setScanSheetOpen(true) }}
+          className="flex items-center justify-between p-3.5 rounded-2xl bg-gradient-to-r from-casa-navy via-slate-900 to-slate-950 text-white border border-casa-gold/35 hover:border-casa-gold cursor-pointer active:scale-[0.98] transition-all shadow-xs"
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-casa-gold text-casa-navy flex items-center justify-center shrink-0 shadow-2xs">
+              <Camera size={18} strokeWidth={2.2} />
+            </div>
+            <div className="min-w-0">
+              <div className="text-body-sm font-bold text-white flex items-center gap-1.5 leading-tight">
+                <span>Scan Document or Card</span>
+                <Sparkles size={13} className="text-casa-gold" />
+              </div>
+              <div className="text-caption text-slate-300 truncate mt-0.5">
+                Extract 1 to many events & reminders with AI
+              </div>
+            </div>
+          </div>
+          <div className="text-caption font-bold text-casa-gold bg-casa-gold/15 border border-casa-gold/25 px-2.5 py-1 rounded-lg shrink-0 ml-2">
+            Scan
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 py-0.5">
+          <div className="flex-1 h-px bg-casa-border" />
+          <span className="text-3xs uppercase font-bold tracking-wider text-casa-muted">or create manually</span>
+          <div className="flex-1 h-px bg-casa-border" />
+        </div>
+
         <Field label="Event title" required>
           <Input
             value={title}
@@ -456,6 +491,16 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
           Create Event
         </Button>
       </div>
+
+      {/* ── Document / Card Scanner Sheet ── */}
+      <MobileDocumentScanSheet
+        open={scanSheetOpen}
+        onClose={() => setScanSheetOpen(false)}
+        onSuccess={() => {
+          setScanSheetOpen(false)
+          onClose()
+        }}
+      />
     </Sheet>
   )
 }

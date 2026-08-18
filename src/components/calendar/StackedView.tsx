@@ -21,6 +21,7 @@ import { BirthdayCardDecoration } from '../shared/BirthdayCardDecoration'
 import { eventOverlapsDay, isEventMultiDay, getEventEndDate, getEventStartDate } from '../../utils/eventTime'
 import { PersonAvatarStack, CalendarPill, Button } from '../ui'
 import { EventProvenanceBadge } from './EventProvenanceBadge'
+import { EventSyncStatusDot } from './EventSyncStatusDot'
 import type { FamilyMember } from '../../types'
 import { deriveCalendarCardResponsibility } from '../../lib/calendarResponsibility'
 import { resolveEventMode } from '../../lib/eventPlanOverrides'
@@ -667,6 +668,7 @@ function EventCard({ event, household, now = new Date(), isHighlighted = false, 
               size="xs"
             />
           )}
+          <EventSyncStatusDot event={event} size="xs" />
         </div>
       </motion.div>
     )
@@ -762,17 +764,20 @@ function EventCard({ event, household, now = new Date(), isHighlighted = false, 
         )}
       >
         <div className="space-y-1 min-w-0">
-          {/* Title and Provenance */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <EventProvenanceBadge sourceType={event.source_type} isHeroState={isHeroState} />
-            <p
-              className={cn(
-                'stacked-event-title font-bold text-body leading-snug line-clamp-2',
-                isHeroState ? 'text-white' : 'text-casa-navy'
-              )}
-            >
-              {cleanTitle}
-            </p>
+          {/* Title, Provenance & Sync Status */}
+          <div className="flex items-center justify-between gap-1.5 flex-wrap">
+            <div className="flex items-center gap-1.5 flex-wrap min-w-0 flex-1">
+              <EventProvenanceBadge sourceType={event.source_type} isHeroState={isHeroState} />
+              <p
+                className={cn(
+                  'stacked-event-title font-bold text-body leading-snug line-clamp-2',
+                  isHeroState ? 'text-white' : 'text-casa-navy'
+                )}
+              >
+                {cleanTitle}
+              </p>
+            </div>
+            <EventSyncStatusDot event={event} size="xs" className="shrink-0" />
           </div>
 
           {/* Location / Mode / Leave by */}

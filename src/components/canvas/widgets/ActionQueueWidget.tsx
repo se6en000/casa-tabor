@@ -22,6 +22,9 @@ import {
   Loader2,
   Tag,
   Mail,
+  RefreshCw,
+  CloudOff,
+  ShieldAlert,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button, IconButton, StatusDot } from '../../ui'
@@ -39,6 +42,7 @@ import {
 import { clusterPrepItems, buildGmailWebUrl, type PrepItemCluster } from '../../../utils/prepItemClusters'
 import { useCreateSuggestedEvent } from '../../../hooks/useCreateSuggestedEvent'
 import { useAppStore } from '../../../stores/appStore'
+import { useGoogleSyncTriage } from '../../../hooks/useGoogleSyncTriage'
 
 interface ActionQueueWidgetProps {
   activeConflicts: Conflict[]
@@ -188,7 +192,9 @@ export default function ActionQueueWidget({
 
   const heroItem = heroCluster?.item ?? null
 
-  const totalUrgent = visibleConflicts.length
+  const { failedJobs, retrySync, keepLocalOnly } = useGoogleSyncTriage()
+
+  const totalUrgent = visibleConflicts.length + failedJobs.length
   const totalTasks = clusteredPrep.length
   const totalActionable = totalUrgent + totalTasks
 
@@ -312,6 +318,77 @@ export default function ActionQueueWidget({
 
       {/* ── Scrollable Action Container ── */}
       <div className="flex-1 overflow-y-auto pr-1 space-y-3.5 min-h-0 touch-pan-y overscroll-contain pb-6">
+        {/* ── SECTION 0: GOOGLE CALENDAR SYNC TRIAGE ── */}
+        {failedJobs.length > 0 && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 px-1">
+              <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+              <h3 className="text-caption font-bold uppercase tracking-wider text-rose-700">
+                Google Calendar Sync Triage ({failedJobs.length})
+              </h3>
+            </div>
+
+            <AnimatePresence mode="popLayout">
+              {failedJobs.map((job) => {
+                const title = job.event?.title || 'Calendar Event'
+                const isRetrying = retrySync.isPending && retrySync.variables === job.event_id
+                const isKeepingLocal = keepLocalOnly.isPending && keepLocalOnly.variables === job.event_id
+
+                return (
+                  <motion.div
+                    key={job.id}
+                    layout
+                    initial={{ opacity: 0, y: 12, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, x: 90, scale: 0.94 }}
+                    className="p-4 rounded-2xl bg-rose-50/80 border border-rose-300 shadow-card space-y-3"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5 text-2xs font-bold text-rose-800 border border-rose-300">
+                            <ShieldAlert size={10} className="text-rose-600" />
+                            <span>SYNC DESYNCED</span>
+                          </span>
+                          <span className="text-caption font-bold text-casa-navy truncate">
+                            {title}
+                          </span>
+                        </div>
+                        <p className="text-caption text-rose-900/80 mt-1 line-clamp-2">
+                          {job.last_error || 'Write target rejected sync. Event remains in Casa.'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-1">
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        disabled={isRetrying || isKeepingLocal}
+                        onClick={() => retrySync.mutate(job.event_id)}
+                        className="bg-rose-600 hover:bg-rose-700 text-white min-h-[40px] px-3 font-bold"
+                        leadingIcon={<RefreshCw size={13} className={isRetrying ? 'animate-spin' : ''} />}
+                      >
+                        {isRetrying ? 'Retrying…' : 'Retry Push'}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={isRetrying || isKeepingLocal}
+                        onClick={() => keepLocalOnly.mutate(job.event_id)}
+                        className="border-rose-300 hover:bg-rose-100/60 text-casa-navy min-h-[40px] px-3"
+                        leadingIcon={<CloudOff size={13} />}
+                      >
+                        {isKeepingLocal ? 'Saving…' : 'Keep Casa Only'}
+                      </Button>
+                    </div>
+                  </motion.div>
+                )
+              })}
+            </AnimatePresence>
+          </div>
+        )}
+
         {/* ── SECTION 1: URGENT LOGISTICS & CONFLICTS ── */}
         {visibleConflicts.length > 0 && (
           <div className="space-y-3">
