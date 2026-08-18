@@ -49,11 +49,7 @@ export function CopilotIcon({
   const rawId = useId()
   const id = rawId.replace(/:/g, '-')
 
-  const gradTlId = `casa-copilot-grad-tl-${id}`
-  const gradTrId = `casa-copilot-grad-tr-${id}`
-  const gradBrId = `casa-copilot-grad-br-${id}`
-  const gradBlId = `casa-copilot-grad-bl-${id}`
-  const gradSatId = `casa-copilot-grad-sat-${id}`
+  const gradStarId = `casa-copilot-grad-star-${id}`
   const gradSheenId = `casa-copilot-grad-sheen-${id}`
   const clipId = `casa-copilot-star-clip-${id}`
 
@@ -96,52 +92,23 @@ export function CopilotIcon({
         fill="none"
       >
         <defs>
-          {/* Top-Left Facet: High-reflection Champagne Silk */}
-          <linearGradient id={gradTlId} x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="rgb(255, 253, 248)" />
-            <stop offset="60%" stopColor="rgb(249, 234, 203)" />
-            <stop offset="100%" stopColor="rgb(230, 200, 124)" />
-          </linearGradient>
-
-          {/* Top-Right Facet: Radiant Classic Amber Gold */}
-          <linearGradient id={gradTrId} x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="rgb(247, 227, 181)" />
-            <stop offset="50%" stopColor="rgb(229, 195, 98)" />
-            <stop offset="100%" stopColor="rgb(212, 175, 55)" />
-          </linearGradient>
-
-          {/* Bottom-Right Facet: Deep Antique Bronze Gold Shadow */}
-          <linearGradient id={gradBrId} x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="rgb(212, 175, 55)" />
-            <stop offset="50%" stopColor="rgb(184, 142, 40)" />
-            <stop offset="100%" stopColor="rgb(122, 91, 40)" />
-          </linearGradient>
-
-          {/* Bottom-Left Facet: Warm Mid-Tone Gold */}
-          <linearGradient id={gradBlId} x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="rgb(232, 202, 117)" />
-            <stop offset="50%" stopColor="rgb(201, 162, 56)" />
-            <stop offset="100%" stopColor="rgb(158, 123, 36)" />
-          </linearGradient>
-
-          {/* Satellite Starlet Gold Gradient */}
-          <linearGradient id={gradSatId} x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="rgb(255, 255, 255)" />
-            <stop offset="40%" stopColor="rgb(253, 240, 208)" />
-            <stop offset="80%" stopColor="rgb(229, 195, 98)" />
-            <stop offset="100%" stopColor="rgb(212, 175, 55)" />
+          {/* Luminous Solid Metallic Gold Gradient */}
+          <linearGradient id={gradStarId} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="rgb(250, 232, 170)" />
+            <stop offset="45%" stopColor="rgb(228, 192, 105)" />
+            <stop offset="100%" stopColor="rgb(201, 169, 110)" />
           </linearGradient>
 
           {/* Specular Shimmer Sheen Ribbon */}
           <linearGradient id={gradSheenId} x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" stopColor="rgb(255, 255, 255)" stopOpacity="0" />
-            <stop offset="35%" stopColor="rgb(255, 253, 245)" stopOpacity="0.3" />
+            <stop offset="35%" stopColor="rgb(255, 253, 245)" stopOpacity="0.35" />
             <stop offset="50%" stopColor="rgb(255, 255, 255)" stopOpacity="0.95" />
             <stop offset="65%" stopColor="rgb(255, 244, 208)" stopOpacity="0.4" />
             <stop offset="100%" stopColor="rgb(255, 255, 255)" stopOpacity="0" />
           </linearGradient>
 
-          {/* Precise Vector Star Clipping Mask for Internal Shimmer */}
+          {/* Precise Flat Vector Star Clipping Mask for Internal Shimmer */}
           <clipPath id={clipId}>
             <path d="M 12 2 C 12 7.2 7.2 12 3 12 C 7.2 12 12 16.8 12 22 C 12 16.8 16.8 12 21 12 C 16.8 12 12 7.2 12 2 Z" />
             <path d="M 19.5 1.5 C 19.5 3.1 18.1 4.5 16.5 4.5 C 18.1 4.5 19.5 5.9 19.5 7.5 C 19.5 5.9 20.9 4.5 22.5 4.5 C 20.9 4.5 19.5 3.1 19.5 1.5 Z" />
@@ -155,57 +122,26 @@ export function CopilotIcon({
 
         {/* Prismatic Orbital Ring (Active in Processing) */}
         <g className="copilot-orbital-spinner">
-          <circle cx="12" cy="12" r="10" stroke={`url(#${gradTrId})`} strokeWidth="0.75" strokeDasharray="3 4" fill="none" opacity="0.6" />
+          <circle cx="12" cy="12" r="10" stroke={`url(#${gradStarId})`} strokeWidth="0.75" strokeDasharray="3 4" fill="none" opacity="0.6" />
           <circle cx="12" cy="2" r="1" fill="rgb(255, 255, 255)" />
           <circle cx="22" cy="12" r="0.8" fill="rgb(248, 228, 183)" />
-          <circle cx="12" cy="22" r="1" fill="rgb(212, 175, 55)" />
+          <circle cx="12" cy="22" r="1" fill="rgb(201, 169, 110)" />
         </g>
 
-        {/* The Main 4-Pointed Faceted Star Constellation */}
+        {/* The Clean Flat 4-Pointed Sparkle Star */}
         <g className="copilot-main-star">
-          {/* Facet 1: Top-Left */}
           <path
-            className="copilot-facet copilot-facet-tl"
-            d="M 12 2 C 12 7.2 7.2 12 3 12 L 12 12 Z"
-            fill={`url(#${gradTlId})`}
+            className="copilot-flat-star"
+            d="M 12 2 C 12 7.2 7.2 12 3 12 C 7.2 12 12 16.8 12 22 C 12 16.8 16.8 12 21 12 C 16.8 12 12 7.2 12 2 Z"
+            fill={`url(#${gradStarId})`}
           />
-
-          {/* Facet 2: Top-Right */}
-          <path
-            className="copilot-facet copilot-facet-tr"
-            d="M 12 2 C 12 7.2 16.8 12 21 12 L 12 12 Z"
-            fill={`url(#${gradTrId})`}
-          />
-
-          {/* Facet 3: Bottom-Right */}
-          <path
-            className="copilot-facet copilot-facet-br"
-            d="M 12 12 L 21 12 C 16.8 12 12 16.8 12 22 Z"
-            fill={`url(#${gradBrId})`}
-          />
-
-          {/* Facet 4: Bottom-Left */}
-          <path
-            className="copilot-facet copilot-facet-bl"
-            d="M 12 12 L 12 22 C 12 16.8 7.2 12 3 12 Z"
-            fill={`url(#${gradBlId})`}
-          />
-
-          {/* Hairline Facet Division Bevel Lines */}
-          <g className="copilot-facet-lines">
-            <line x1="12" y1="2.2" x2="12" y2="21.8" />
-            <line x1="3.2" y1="12" x2="20.8" y2="12" />
-          </g>
-
-          {/* Luminous Center Light Aperture Dot */}
-          <circle className="copilot-center-core" cx="12" cy="12" r="1.1" />
         </g>
 
         {/* Companion Satellite Starlet (Top Right) */}
         <path
           className="copilot-satellite-star"
           d="M 19.5 1.5 C 19.5 3.1 18.1 4.5 16.5 4.5 C 18.1 4.5 19.5 5.9 19.5 7.5 C 19.5 5.9 20.9 4.5 22.5 4.5 C 20.9 4.5 19.5 3.1 19.5 1.5 Z"
-          fill={`url(#${gradSatId})`}
+          fill={`url(#${gradStarId})`}
         />
 
         {/* Sweeping Specular Gold Shimmer Masked to Star Contours */}
