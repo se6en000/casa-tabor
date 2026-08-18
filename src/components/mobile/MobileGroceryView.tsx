@@ -47,9 +47,11 @@ export interface MobileGroceryViewProps {
   syncStatusLabel: string
   dismissingIds: Set<string>
   dismissingExitingIds: Set<string>
+  deletingIds?: Set<string>
   spotlightedItemId: string | null
   onToggleItem: (id: string, checked: boolean) => void
   onDeleteItem: (id: string) => void
+  onUndoDelete?: (id: string) => void
   onClearCompleted?: () => void
   onAddItem: (name: string, options?: { allowDuplicate?: boolean }) => void
 }
@@ -63,9 +65,11 @@ export default function MobileGroceryView({
   syncStatusLabel,
   dismissingIds,
   dismissingExitingIds,
+  deletingIds,
   spotlightedItemId,
   onToggleItem,
   onDeleteItem,
+  onUndoDelete,
   onClearCompleted,
   onAddItem,
 }: MobileGroceryViewProps) {
@@ -214,96 +218,126 @@ export default function MobileGroceryView({
 
                 {/* Items in Category */}
                 <div className="divide-y divide-casa-divider/70">
-                  <AnimatePresence initial={false}>
-                    {group.items.map((item) => {
-                      const isDismissQueued = dismissingIds.has(item.id)
-                      const isDismissExiting = dismissingExitingIds.has(item.id)
-                      const visualChecked = item.checked || isDismissQueued
-                      const isSpotlighted = spotlightedItemId === item.id
+                  {group.items.length === 0 ? (
+                    <div className="px-3.5 py-3 text-center text-3xs font-mono text-casa-muted italic bg-casa-surface-subtle/50">
+                      All provisions in cart ✓
+                    </div>
+                  ) : (
+                    <AnimatePresence initial={false}>
+                      {group.items.map((item) => {
+                        const isDismissQueued = dismissingIds.has(item.id)
+                        const isDismissExiting = dismissingExitingIds.has(item.id)
+                        const isDeleting = deletingIds?.has(item.id) ?? false
+                        const visualChecked = item.checked || isDismissQueued
+                        const isSpotlighted = spotlightedItemId === item.id
 
-                      return (
-                        <motion.div
-                          key={item.id}
-                          id={`grocery-item-${item.id}`}
-                          layout
-                          initial={{ opacity: 0, y: -4 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, height: 0, scale: 0.96 }}
-                          transition={{ duration: 0.2 }}
-                          className={cn(
-                            'flex items-center gap-3 px-3.5 py-3 transition-colors duration-150',
-                            visualChecked && 'opacity-50 bg-casa-surface-subtle',
-                            isDismissExiting && 'opacity-0 scale-95',
-                            isSpotlighted && 'bg-casa-accent-subtle'
-                          )}
-                        >
-                          {/* Large 48px+ Brass Checkbox Touch Trigger */}
-                          <IconButton
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              triggerHaptic(8)
-                              onToggleItem(item.id, !visualChecked)
-                            }}
-                            aria-label={visualChecked ? `Mark ${item.name} as needed` : `Mark ${item.name} as in cart`}
-                            className="flex-shrink-0 -ml-1 p-0 hover:bg-transparent"
-                            icon={
-                              <div
-                                className={cn(
-                                  'w-[22px] h-[22px] rounded-lg border flex items-center justify-center transition-all duration-200',
-                                  visualChecked
-                                    ? 'bg-casa-gold border-casa-gold text-white shadow-2xs scale-95'
-                                    : 'border-casa-border bg-white text-transparent'
-                                )}
-                              >
-                                <svg className="w-3.5 h-3.5 stroke-current stroke-[2.5]" viewBox="0 0 24 24" fill="none">
-                                  <polyline points="20 6 9 17 4 12" />
-                                </svg>
-                              </div>
-                            }
-                          />
+                        return (
+                          <motion.div
+                            key={item.id}
+                            id={`grocery-item-${item.id}`}
+                            layout
+                            initial={{ opacity: 0, y: -4 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, height: 0, scale: 0.96 }}
+                            transition={{ duration: 0.2 }}
+                            className={cn(
+                              'flex items-center gap-3 px-3.5 py-3 transition-colors duration-150',
+                              (visualChecked || isDeleting) && 'opacity-50 bg-casa-surface-subtle',
+                              isDismissExiting && 'opacity-0 scale-95',
+                              isSpotlighted && 'bg-casa-accent-subtle'
+                            )}
+                          >
+                            {/* Large 48px+ Brass Checkbox Touch Trigger */}
+                            {!isDeleting && (
+                              <IconButton
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  triggerHaptic(8)
+                                  onToggleItem(item.id, !visualChecked)
+                                }}
+                                aria-label={visualChecked ? `Mark ${item.name} as needed` : `Mark ${item.name} as in cart`}
+                                className="flex-shrink-0 -ml-1 p-0 hover:bg-transparent"
+                                icon={
+                                  <div
+                                    className={cn(
+                                      'w-[22px] h-[22px] rounded-lg border flex items-center justify-center transition-all duration-200',
+                                      visualChecked
+                                        ? 'bg-casa-gold border-casa-gold text-white shadow-2xs scale-95'
+                                        : 'border-casa-border bg-white text-transparent'
+                                    )}
+                                  >
+                                    <svg className="w-3.5 h-3.5 stroke-current stroke-[2.5]" viewBox="0 0 24 24" fill="none">
+                                      <polyline points="20 6 9 17 4 12" />
+                                    </svg>
+                                  </div>
+                                }
+                              />
+                            )}
 
-                          {/* Item Details */}
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-baseline gap-1.5 flex-wrap">
-                              <span
-                                className={cn(
-                                  'text-body-sm font-medium text-casa-navy leading-snug transition-all',
-                                  visualChecked && 'line-through text-casa-muted/70'
-                                )}
-                              >
-                                {item.name}
-                              </span>
-                              {(item.quantity || item.unit) && (
-                                <span className="inline-flex items-center px-1.5 py-0.2 rounded bg-casa-bg-2 border border-casa-border/70 text-3xs font-mono font-medium text-casa-muted shrink-0">
-                                  {item.quantity}
-                                  {item.unit ? ` ${item.unit}` : ''}
+                            {/* Item Details */}
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-baseline gap-1.5 flex-wrap">
+                                <span
+                                  className={cn(
+                                    'text-body-sm font-medium text-casa-navy leading-snug transition-all',
+                                    (visualChecked || isDeleting) && 'line-through text-casa-muted/70'
+                                  )}
+                                >
+                                  {item.name}
                                 </span>
+
+                                {isDeleting ? (
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    <span className="text-3xs font-mono font-medium text-casa-error bg-casa-error/10 px-2 py-0.5 rounded-full border border-casa-error/20">
+                                      Deleted
+                                    </span>
+                                    {onUndoDelete && (
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => onUndoDelete(item.id)}
+                                        className="text-3xs font-semibold text-casa-gold hover:underline p-0 h-auto min-h-0"
+                                      >
+                                        Undo
+                                      </Button>
+                                    )}
+                                  </div>
+                                ) : (
+                                  (item.quantity || item.unit) && (
+                                    <span className="inline-flex items-center px-1.5 py-0.2 rounded bg-casa-bg-2 border border-casa-border/70 text-3xs font-mono font-medium text-casa-muted shrink-0">
+                                      {item.quantity}
+                                      {item.unit ? ` ${item.unit}` : ''}
+                                    </span>
+                                  )
+                                )}
+                              </div>
+                              {item.notes && !isDeleting && (
+                                <p className="text-3xs text-casa-muted/80 italic leading-tight truncate mt-0.5">
+                                  {item.notes}
+                                </p>
                               )}
                             </div>
-                            {item.notes && (
-                              <p className="text-3xs text-casa-muted/80 italic leading-tight truncate mt-0.5">
-                                {item.notes}
-                              </p>
-                            )}
-                          </div>
 
-                          {/* Delete Action (with 44px min hit area) */}
-                          <IconButton
-                            icon={<X size={15} />}
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              triggerHaptic(6)
-                              onDeleteItem(item.id)
-                            }}
-                            aria-label={`Delete ${item.name}`}
-                            className="-mr-1.5 p-2 h-9 w-9 text-casa-muted/50 hover:text-casa-error hover:bg-casa-error/10 shrink-0 rounded-xl"
-                          />
-                        </motion.div>
-                      )
-                    })}
-                  </AnimatePresence>
+                            {/* Delete Action (with 44px min hit area) */}
+                            {!isDeleting && (
+                              <IconButton
+                                icon={<X size={15} />}
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  triggerHaptic(6)
+                                  onDeleteItem(item.id)
+                                }}
+                                aria-label={`Delete ${item.name}`}
+                                className="-mr-1.5 p-2 h-9 w-9 text-casa-muted/50 hover:text-casa-error hover:bg-casa-error/10 shrink-0 rounded-xl"
+                              />
+                            )}
+                          </motion.div>
+                        )
+                      })}
+                    </AnimatePresence>
+                  )}
                 </div>
               </section>
             )

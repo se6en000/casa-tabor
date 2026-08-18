@@ -45,8 +45,10 @@ export interface GroceryAisleGridProps {
   isItemJustMoved?: (id: string) => boolean
   dismissingIds: Set<string>
   dismissingExitingIds: Set<string>
+  deletingIds?: Set<string>
   onToggleItem: (id: string, checked: boolean) => void
   onDeleteItem: (id: string) => void
+  onUndoDelete?: (id: string) => void
   onRequestReview?: (id: string) => void
   onRecategorize?: (id: string, category: string) => void
   onMovePointerDown: (item: GroceryItem, category: string, e: PointerEvent<HTMLButtonElement>) => void
@@ -68,8 +70,10 @@ export default function GroceryAisleGrid({
   isItemJustMoved,
   dismissingIds,
   dismissingExitingIds,
+  deletingIds,
   onToggleItem,
   onDeleteItem,
+  onUndoDelete,
   onRequestReview,
   onRecategorize,
   onMovePointerDown,
@@ -160,27 +164,35 @@ export default function GroceryAisleGrid({
                     </div>
 
                     {/* Plinth Item Rows */}
-                    <div className="divide-y divide-casa-divider/70">
-                      {section.items.map((item) => (
-                        <div key={item.id} id={`grocery-item-${item.id}`}>
-                          <GroceryItemRow
-                            item={item}
-                            dismissPhase={dismissingExitingIds.has(item.id) ? 'exiting' : dismissingIds.has(item.id) ? 'queued' : 'none'}
-                            isDragging={dragState?.itemId === item.id}
-                            isSpotlighted={spotlightedItemId === item.id}
-                            isJustMoved={isItemJustMoved?.(item.id)}
-                            onRequestReview={onRequestReview}
-                            onRecategorize={onRecategorize}
-                            onToggle={onToggleItem}
-                            onDelete={onDeleteItem}
-                            onMovePointerDown={(e: PointerEvent<HTMLButtonElement>) => onMovePointerDown(item, item.category, e)}
-                            onMovePointerMove={onMovePointerMove}
-                            onMovePointerUp={onMovePointerUp}
-                            onMovePointerCancel={onMovePointerCancel}
-                          />
-                        </div>
-                      ))}
-                    </div>
+                    {section.items.length === 0 ? (
+                      <div className="px-4 py-3.5 text-center text-3xs font-mono text-casa-muted italic bg-casa-surface-subtle/50">
+                        All provisions in cart ✓
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-casa-divider/70">
+                        {section.items.map((item) => (
+                          <div key={item.id} id={`grocery-item-${item.id}`}>
+                            <GroceryItemRow
+                              item={item}
+                              dismissPhase={dismissingExitingIds.has(item.id) ? 'exiting' : dismissingIds.has(item.id) ? 'queued' : 'none'}
+                              isDeleting={deletingIds?.has(item.id)}
+                              isDragging={dragState?.itemId === item.id}
+                              isSpotlighted={spotlightedItemId === item.id}
+                              isJustMoved={isItemJustMoved?.(item.id)}
+                              onRequestReview={onRequestReview}
+                              onRecategorize={onRecategorize}
+                              onToggle={onToggleItem}
+                              onDelete={onDeleteItem}
+                              onUndoDelete={onUndoDelete}
+                              onMovePointerDown={(e: PointerEvent<HTMLButtonElement>) => onMovePointerDown(item, item.category, e)}
+                              onMovePointerMove={onMovePointerMove}
+                              onMovePointerUp={onMovePointerUp}
+                              onMovePointerCancel={onMovePointerCancel}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </motion.div>
               )

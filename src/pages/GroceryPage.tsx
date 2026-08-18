@@ -70,7 +70,7 @@ import recipeFallbackHero from '../assets/hero.png'
 const DEDUPE_MIN_INTERVAL_MS = 10 * 60_000
 const SYNC_LAST_DEDUPE_AT_KEY = 'grocery-sync-last-dedupe-at-v1'
 const QUICK_ADD_TOUCH_ITEMS = ['Milk', 'Eggs', 'Bread', 'Bananas', 'Chicken', 'Coffee']
-const CHECKED_ITEM_DISMISS_MS = 3_000
+const INTERACTION_STABILITY_GRACE_MS = 10_000
 const CHECKED_ITEM_EXIT_ANIMATION_MS = 320
 const LOW_CONFIDENCE_REVIEW_THRESHOLD = 0.82
 const STORE_SECTION_ORDER: Record<string, number> = {
@@ -588,8 +588,10 @@ export default function GroceryPage() {
   const dismissExitTimerRef = useRef<number | null>(null)
   const [dismissingIds, setDismissingIds] = useState<Set<string>>(new Set())
   const [dismissingExitingIds, setDismissingExitingIds] = useState<Set<string>>(new Set())
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set())
   const dismissingIdsRef = useRef<Set<string>>(new Set())
   const dismissingExitingIdsRef = useRef<Set<string>>(new Set())
+  const deletingIdsRef = useRef<Set<string>>(new Set())
   const hasRecipeImportSource = recipeUrlInput.trim().length > 0 || recipeImportFiles.length > 0
 
   const activeItems = items.filter((item) => !item.checked)
@@ -1311,10 +1313,55 @@ export default function GroceryPage() {
   }, [dismissingExitingIds])
 
   useEffect(() => {
+    deletingIdsRef.current = deletingIds
+  }, [deletingIds])
+
+  useEffect(() => {
     return () => {
       document.body.style.userSelect = ''
     }
   }, [])
+
+  const resetStabilityTimer = useCallback(() => {
+    if (dismissBatchTimerRef.current) {
+      window.clearTimeout(dismissBatchTimerRef.current)
+      dismissBatchTimerRef.current = null
+    }
+    if (dismissExitTimerRef.current) {
+      window.clearTimeout(dismissExitTimerRef.current)
+      dismissExitTimerRef.current = null
+    }
+
+    dismissBatchTimerRef.current = window.setTimeout(() => {
+      const checkedBatch = Array.from(dismissingIdsRef.current)
+      const deleteBatch = Array.from(deletingIdsRef.current)
+      dismissBatchTimerRef.current = null
+
+      if (checkedBatch.length === 0 && deleteBatch.length === 0) return
+
+      // Execute actual deletions on remote backend after user has stopped interacting
+      for (const id of deleteBatch) {
+        deleteItem.mutate(id)
+      }
+
+      setDismissingExitingIds(new Set([...checkedBatch, ...deleteBatch]))
+
+      dismissExitTimerRef.current = window.setTimeout(() => {
+        setDismissingIds((prev) => {
+          const next = new Set(prev)
+          checkedBatch.forEach((batchId) => next.delete(batchId))
+          return next
+        })
+        setDeletingIds((prev) => {
+          const next = new Set(prev)
+          deleteBatch.forEach((batchId) => next.delete(batchId))
+          return next
+        })
+        setDismissingExitingIds(new Set())
+        dismissExitTimerRef.current = null
+      }, CHECKED_ITEM_EXIT_ANIMATION_MS)
+    }, INTERACTION_STABILITY_GRACE_MS)
+  }, [deleteItem])
 
   const handleToggle = (id: string, checked: boolean) => {
     if (!checked) {
@@ -1340,36 +1387,26 @@ export default function GroceryPage() {
       return next
     })
     setDismissingExitingIds(new Set())
-    if (dismissBatchTimerRef.current) {
-      window.clearTimeout(dismissBatchTimerRef.current)
-    }
-    if (dismissExitTimerRef.current) {
-      window.clearTimeout(dismissExitTimerRef.current)
-      dismissExitTimerRef.current = null
-    }
-    dismissBatchTimerRef.current = window.setTimeout(() => {
-      const batchIds = Array.from(dismissingIdsRef.current)
-      dismissBatchTimerRef.current = null
-      if (batchIds.length === 0) return
-      setDismissingExitingIds(new Set(batchIds))
-      if (dismissExitTimerRef.current) {
-        window.clearTimeout(dismissExitTimerRef.current)
-      }
-      dismissExitTimerRef.current = window.setTimeout(() => {
-        setDismissingIds((prev) => {
-          const next = new Set(prev)
-          batchIds.forEach((batchId) => next.delete(batchId))
-          return next
-        })
-        setDismissingExitingIds((prev) => {
-          const next = new Set(prev)
-          batchIds.forEach((batchId) => next.delete(batchId))
-          return next
-        })
-        dismissExitTimerRef.current = null
-      }, CHECKED_ITEM_EXIT_ANIMATION_MS)
-    }, CHECKED_ITEM_DISMISS_MS)
+    resetStabilityTimer()
   }
+
+  const handleDeleteItem = useCallback((id: string) => {
+    setDeletingIds((prev) => {
+      const next = new Set(prev)
+      next.add(id)
+      return next
+    })
+    resetStabilityTimer()
+  }, [resetStabilityTimer])
+
+  const handleUndoDelete = useCallback((id: string) => {
+    setDeletingIds((prev) => {
+      const next = new Set(prev)
+      next.delete(id)
+      return next
+    })
+    resetStabilityTimer()
+  }, [resetStabilityTimer])
 
   // Silent background maintenance: throttled dedupe only.
   const runBackgroundDedupe = useCallback(async () => {
@@ -1663,7 +1700,7 @@ export default function GroceryPage() {
     }
   }, [runBackgroundDedupe])
 
-  const visibleDismissIds = new Set([...dismissingIds, ...dismissingExitingIds])
+  const visibleDismissIds = new Set([...dismissingIds, ...dismissingExitingIds, ...deletingIds])
 
   const activeItemsByCategory = GROCERY_CATEGORIES.map(cat => ({
     ...cat,
@@ -1703,7 +1740,7 @@ export default function GroceryPage() {
           dismissingExitingIds={dismissingExitingIds}
           spotlightedItemId={spotlightedItemId}
           onToggleItem={handleToggle}
-          onDeleteItem={(id) => deleteItem.mutate(id)}
+          onDeleteItem={handleDeleteItem}
           onClearCompleted={() => void clearChecked.mutate()}
           onAddItem={(name, options) =>
             addItemByName(name, {
@@ -1931,8 +1968,10 @@ export default function GroceryPage() {
               isItemJustMoved={isItemJustMoved}
               dismissingIds={dismissingIds}
               dismissingExitingIds={dismissingExitingIds}
+              deletingIds={deletingIds}
               onToggleItem={handleToggle}
-              onDeleteItem={(id) => deleteItem.mutate(id)}
+              onDeleteItem={handleDeleteItem}
+              onUndoDelete={handleUndoDelete}
               onRecategorize={(id, category) => {
                 const item = items.find((i) => i.id === id)
                 if (!item) return
