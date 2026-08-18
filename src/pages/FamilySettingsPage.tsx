@@ -20,6 +20,7 @@ import {
   deserializeRoutineFromAvailabilityRules,
   serializeRoutineToAvailabilityRules,
   syncMemberRoutineExceptions,
+  formatDisplayVenueName,
   type FamilyRoutine,
   type DayScheduleOverride,
   createSchoolRoutine,
@@ -318,7 +319,7 @@ export default function FamilySettingsPage() {
       }
       setSaved(true)
       setTimeout(() => setSaved(false), 2500)
-    }, 600)
+    }, 400)
     return () => clearTimeout(timer)
   }, [routineDrafts])
 
@@ -327,7 +328,13 @@ export default function FamilySettingsPage() {
       const { error } = await supabase.from('family_members').delete().eq('id', id)
       if (error) throw error
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['family-members'] }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['family-members'] })
+      await qc.invalidateQueries({ queryKey: ['member-availability-rules'] })
+      await qc.invalidateQueries({ queryKey: ['events'] })
+      await qc.invalidateQueries({ queryKey: ['today-events'] })
+      await qc.invalidateQueries({ queryKey: ['tomorrow-events'] })
+    },
   })
 
   function getMember(m: FamilyMember): EditableMember {
@@ -448,6 +455,7 @@ export default function FamilySettingsPage() {
     const existing = rulesForMember(memberId)
       .filter((rule) => rule.availability_type === 'unavailable')
       .map((rule) => rule.id)
+
     if (existing.length > 0) {
       const { error } = await supabase
         .from('member_availability_rules')
@@ -519,12 +527,16 @@ export default function FamilySettingsPage() {
       : []
 
     try {
-      const memberRules = rulesForMember(memberId)
-      const existingRoutineRuleIds = memberRules
+      const { data: remoteRules } = await supabase
+        .from('member_availability_rules')
+        .select('id, reason')
+        .eq('member_id', memberId)
+
+      const existingRoutineRuleIds = (remoteRules || [])
         .filter((r) => {
           try {
             const parsed = JSON.parse(r.reason || '')
-            return parsed.type === 'school_routine'
+            return parsed.type === 'school_routine' || parsed.type === 'family_routine'
           } catch {
             return false
           }
@@ -545,6 +557,12 @@ export default function FamilySettingsPage() {
 
         void syncMemberRoutineExceptions(supabase, memberId, routine, members)
       }
+      await qc.invalidateQueries({ queryKey: ['member-availability-rules'] })
+      await qc.invalidateQueries({ queryKey: ['member-availability-exceptions'] })
+      await qc.invalidateQueries({ queryKey: ['events'] })
+      await qc.invalidateQueries({ queryKey: ['today-events'] })
+      await qc.invalidateQueries({ queryKey: ['tomorrow-events'] })
+      await qc.invalidateQueries({ queryKey: ['rolling-events'] })
     } catch (err) {
       console.warn('Could not sync routine to remote Supabase:', err)
     }
@@ -554,7 +572,7 @@ export default function FamilySettingsPage() {
         if (r.member_id !== memberId) return true
         try {
           const parsed = JSON.parse(r.reason || '')
-          return parsed.type !== 'school_routine'
+          return parsed.type !== 'school_routine' && parsed.type !== 'family_routine'
         } catch {
           return true
         }
@@ -570,6 +588,10 @@ export default function FamilySettingsPage() {
 
     await qc.invalidateQueries({ queryKey: ['member-availability-rules'] })
     await qc.invalidateQueries({ queryKey: ['member-availability-exceptions'] })
+    await qc.invalidateQueries({ queryKey: ['events'] })
+    await qc.invalidateQueries({ queryKey: ['today-events'] })
+    await qc.invalidateQueries({ queryKey: ['tomorrow-events'] })
+    await qc.invalidateQueries({ queryKey: ['rolling-events'] })
   }
 
   async function applySchoolTemplate(memberId: string) {
@@ -632,7 +654,12 @@ export default function FamilySettingsPage() {
       await Promise.all([...updates, ...inserts])
       setEdits({})
       setNewMembers(draftNewMembers)
-      qc.invalidateQueries({ queryKey: ['family-members'] })
+      await qc.invalidateQueries({ queryKey: ['family-members'] })
+      await qc.invalidateQueries({ queryKey: ['member-availability-rules'] })
+      await qc.invalidateQueries({ queryKey: ['events'] })
+      await qc.invalidateQueries({ queryKey: ['today-events'] })
+      await qc.invalidateQueries({ queryKey: ['tomorrow-events'] })
+      await qc.invalidateQueries({ queryKey: ['rolling-events'] })
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     } catch (err) {
@@ -957,7 +984,7 @@ export default function FamilySettingsPage() {
 
                                 {routine && routine.enabled ? (
                                   <div className="rounded-xl border border-casa-border p-3.5 bg-white space-y-3 shadow-2xs">
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
                                       <div>
                                         <label className="block text-caption font-semibold text-casa-muted uppercase tracking-wide mb-1">
                                           {currentRoutineType === 'camp' ? 'Camp / Program' : currentRoutineType === 'work' ? 'Workplace / Office' : 'School / Destination'}
@@ -965,7 +992,7 @@ export default function FamilySettingsPage() {
                                         <SmartPlaceInput
                                           field="name"
                                           label={currentRoutineType === 'camp' ? 'Camp / Program' : currentRoutineType === 'work' ? 'Workplace / Office' : 'School / Destination'}
-                                          placeholder={currentRoutineType === 'camp' ? 'Summer Day Camp' : 'Search saved place (e.g. Palm Beach Public, Office)…'}
+                                          placeholder={currentRoutineType === 'camp' ? 'Summer Day Camp' : 'Search saved place (e.g. Bak Middle, Palm Beach Public)…'}
                                           value={{ name: routine.venueName || '', address: routine.venueAddress || '' }}
                                           onChange={(place) => {
                                             patchRoutine(m.id!, {
@@ -973,6 +1000,24 @@ export default function FamilySettingsPage() {
                                               venueAddress: place.address || (place.name ? routine.venueAddress : ''),
                                             })
                                           }}
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-caption font-semibold text-casa-muted uppercase tracking-wide mb-1">
+                                          Short Name (Header)
+                                        </label>
+                                        <Input
+                                          type="text"
+                                          placeholder={
+                                            routine.venueName
+                                              ? formatDisplayVenueName(routine.venueName)
+                                              : 'e.g. Bak Middle, PBP'
+                                          }
+                                          value={routine.shortVenueName || ''}
+                                          onChange={(e) => {
+                                            patchRoutine(m.id!, { shortVenueName: e.target.value })
+                                          }}
+                                          className="h-9 px-2.5 text-body-sm text-casa-navy font-semibold rounded-lg border-casa-border"
                                         />
                                       </div>
                                       <div>

@@ -21,6 +21,7 @@ export interface FamilyRoutine {
   title: string
   routineType?: 'school' | 'work' | 'camp' | 'custom'
   venueName: string
+  shortVenueName?: string | null
   venueAddress: string
   daysOfWeek: number[] // 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat, 0=Sun
   startLocal: string // e.g. "08:00"
@@ -50,6 +51,7 @@ export interface RoutinePayload {
   routineType?: 'school' | 'work' | 'camp' | 'custom'
   title: string
   venueName: string
+  shortVenueName?: string | null
   venueAddress: string
   dayOverrides?: DayScheduleOverride[]
   startDate?: string | null
@@ -61,6 +63,22 @@ export interface RoutinePayload {
   syncMode?: RoutineSyncMode
   syncToGoogle?: boolean
   enabled: boolean
+}
+
+/**
+ * Formats or cleanly shortens venue names for compact widgets and ambient status pills.
+ * If a custom shortVenueName is specified on the routine, it is prioritized.
+ * Otherwise, cleanly truncates redundant school suffixes like "Elementary School" or "of the Arts".
+ */
+export function formatDisplayVenueName(venueName = '', shortVenueName?: string | null): string {
+  if (shortVenueName && shortVenueName.trim().length > 0) {
+    return shortVenueName.trim()
+  }
+  if (!venueName) return ''
+  let v = venueName.trim()
+  v = v.replace(/\s+of the Arts$/i, '')
+  v = v.replace(/\s+Elementary School$/i, '')
+  return v
 }
 
 export function createSchoolRoutine(
@@ -646,12 +664,13 @@ export function deriveAmbientRoutineStatus(
     // Check if now is during school hours (inclusive of arrival to pickup)
     if (now >= schoolStartTime && now <= schoolEndTime) {
       const endsAtFormatted = format(schoolEndTime, 'h:mm a')
+      const displayVenue = formatDisplayVenueName(routine.venueName, routine.shortVenueName)
       activeStatuses.push({
         isActive: true,
         childName,
-        venueName: routine.venueName,
+        venueName: displayVenue,
         endsAtFormatted,
-        text: `${childName}: At ${routine.venueName} until ${endsAtFormatted}`,
+        text: `${childName}: At ${displayVenue} until ${endsAtFormatted}`,
       })
     }
   }
@@ -669,6 +688,7 @@ export function serializeRoutineToAvailabilityRules(routine: FamilyRoutine): Arr
     routineType: routine.routineType || 'school',
     title: routine.title,
     venueName: routine.venueName,
+    shortVenueName: routine.shortVenueName || null,
     venueAddress: routine.venueAddress,
     dayOverrides: routine.dayOverrides || [],
     startDate: routine.startDate || null,
@@ -732,6 +752,7 @@ export function deserializeRoutineFromAvailabilityRules(
     routineType: 'school',
     title: 'Routine',
     venueName: '',
+    shortVenueName: null,
     venueAddress: '',
     dropoffDriverName: 'Jake',
     pickupDriverName: 'Kelly',
@@ -763,6 +784,7 @@ export function deserializeRoutineFromAvailabilityRules(
     title: payload.title || 'Routine',
     routineType: payload.routineType || 'school',
     venueName: payload.venueName ?? '',
+    shortVenueName: payload.shortVenueName ?? null,
     venueAddress: payload.venueAddress ?? '',
     dayOverrides: payload.dayOverrides || [],
     startDate: payload.startDate || null,

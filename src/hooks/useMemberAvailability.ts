@@ -34,6 +34,7 @@ function _subscribeAvailabilityRealtimeChannel() {
     .channel('availability-realtime-singleton')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'member_availability_rules' }, _fireAvailabilityInvalidation)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'member_availability_exceptions' }, _fireAvailabilityInvalidation)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'family_members' }, _fireAvailabilityInvalidation)
     .subscribe((status, err) => {
       if (status === 'SUBSCRIBED') {
         _fireAvailabilityInvalidation()
@@ -59,6 +60,10 @@ function useRealtimeAvailabilityInvalidation() {
     const cb = () => {
       void qc.invalidateQueries({ queryKey: ['member-availability-rules'] })
       void qc.invalidateQueries({ queryKey: ['member-availability-exceptions'] })
+      void qc.invalidateQueries({ queryKey: ['family-members'] })
+      void qc.invalidateQueries({ queryKey: ['events'] })
+      void qc.invalidateQueries({ queryKey: ['today-events'] })
+      void qc.invalidateQueries({ queryKey: ['tomorrow-events'] })
     }
     _availabilityInvalidateCallbacks.add(cb)
     _availabilityQueryClientInstances.add(qc)

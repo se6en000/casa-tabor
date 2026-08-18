@@ -249,9 +249,15 @@ test('deriveAmbientRoutineStatus returns active status during school or camp hou
   assert.equal(activeStatus.length, 1)
   assert.equal(activeStatus[0].isActive, true)
   assert.equal(activeStatus[0].childName, 'Liv')
-  assert.equal(activeStatus[0].venueName, 'Bak Middle School of the Arts')
+  assert.equal(activeStatus[0].venueName, 'Bak Middle School')
   assert.equal(activeStatus[0].endsAtFormatted, '3:30 PM')
-  assert.match(activeStatus[0].text, /Liv: At Bak Middle School of the Arts until 3:30 PM/)
+  assert.match(activeStatus[0].text, /Liv: At Bak Middle School until 3:30 PM/)
+
+  // With explicit shortVenueName override (e.g. 'Bak')
+  const customShortRoutine = { ...mockLivSchoolRoutine, shortVenueName: 'Bak' }
+  const customStatus = deriveAmbientRoutineStatus([customShortRoutine], [mockLiv], duringSchool)
+  assert.equal(customStatus[0].venueName, 'Bak')
+  assert.equal(customStatus[0].text, 'Liv: At Bak until 3:30 PM')
 
   // Wednesday 6:30 AM (before school)
   const beforeSchool = new Date('2026-08-19T06:30:00.000-04:00')

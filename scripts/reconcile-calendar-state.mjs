@@ -23,20 +23,22 @@ async function reconcile() {
 
   console.log('Found members:', { liv: liv?.id, emme: emme?.id, owen: owen?.id, jake: jake?.id, giselle: giselle?.id })
 
-  // 2. Update Liv's Routine to Tri-Rail Station (8:00 AM drop / 3:30 PM pickup, exceptions_only)
+  // 2. Update Liv's Routine to Bak Middle School of the Arts (8:00 AM drop / 3:30 PM pickup, exceptions_only)
   if (liv) {
+    const kelly = members.find((m) => m.name.toLowerCase() === 'kelly')
     console.log('\nReconciling Liv routine rules in member_availability_rules...')
     const livPayload = {
       type: 'school_routine',
       routineType: 'school',
       title: 'School Routine',
-      venueName: 'Tri-Rail Station',
-      venueAddress: 'West Palm Beach Station, West Palm Beach, FL',
+      venueName: 'Bak Middle School of the Arts',
+      shortVenueName: 'Bak Middle School',
+      venueAddress: '1725 Echo Lake Dr, West Palm Beach, FL',
       daysOfWeek: [1, 2, 3, 4, 5],
       startLocal: '08:00',
       endLocal: '15:30',
-      dropoffDriverName: 'Jake',
-      dropoffDriverId: jake?.id || null,
+      dropoffDriverName: 'Kelly',
+      dropoffDriverId: kelly?.id || null,
       pickupDriverName: 'Giselle',
       pickupDriverId: giselle?.id || null,
       dayOverrides: [],
@@ -60,7 +62,7 @@ async function reconcile() {
     }))
     const { error: livRuleErr } = await supabase.from('member_availability_rules').insert(livRules)
     if (livRuleErr) console.error('Error inserting Liv rules:', livRuleErr)
-    else console.log('✓ Successfully updated Liv routine to Tri-Rail Station (exceptions_only).')
+    else console.log('✓ Successfully updated Liv routine to Bak Middle School of the Arts (exceptions_only).')
   }
 
   // 3. Update Emme's Routine (PBP, Tuesday 7:00 AM Early Strings, Thursday 3:15 PM Late Strings)
@@ -94,7 +96,7 @@ async function reconcile() {
         {
           dayOfWeek: 4, // Thursday
           startLocal: '08:00',
-          endLocal: '15:15',
+          endLocal: '15:00',
           dropoffDriverName: 'Jake',
           dropoffDriverId: jake?.id || null,
           pickupDriverName: 'Giselle',
@@ -113,7 +115,7 @@ async function reconcile() {
       let start = '08:00:00'
       let end = '14:00:00'
       if (dow === 2) start = '07:00:00'
-      if (dow === 4) end = '15:15:00'
+      if (dow === 4) end = '15:00:00'
       return {
         member_id: emme.id,
         day_of_week: dow,

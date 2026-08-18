@@ -99,7 +99,7 @@ async function runValidationAudit() {
   assert(Boolean(owenRoutine), 'Owen has an active routine configured')
 
   // Liv destination & syncMode
-  assert(livRoutine?.venueName === 'Tri-Rail Station', `Liv destination is Tri-Rail Station (actual: "${livRoutine?.venueName}")`)
+  assert(livRoutine?.venueName.includes('Bak Middle School'), `Liv destination is Bak Middle School of the Arts (actual: "${livRoutine?.venueName}")`)
   assert(livRoutine?.syncMode === 'exceptions_only', `Liv syncMode is exceptions_only (actual: "${livRoutine?.syncMode}")`)
   assert((livRoutine?.dayOverrides?.length || 0) === 0, `Liv has 0 day overrides (standard daily schedule)`)
 
@@ -186,6 +186,7 @@ async function runValidationAudit() {
         e.title.toLowerCase().includes('drop off emme') ||
         e.title.toLowerCase().includes('pick up liv') ||
         e.title.toLowerCase().includes('palm beach public') ||
+        e.title.toLowerCase().includes('bak') ||
         e.title.toLowerCase().includes('tri-rail')
       )
       assert(routineCards.length === 0, `Wednesday has 0 standard school routine cards (found ${routineCards.length})`)
@@ -277,7 +278,8 @@ async function runValidationAudit() {
     return 'casa'
   }
 
-  const tueStringsRow = dbEvents.find((e) => e.title.toLowerCase().includes('strings') && e.start_time.startsWith('2026-08-18'))
+  const tueStringsRow = dbEvents.find((e) => e.title.toLowerCase().includes('strings') && e.start_time.startsWith('2026-08-18')) ||
+    allEventsByDate.get('2026-08-18')?.find((e) => e.title.toLowerCase().includes('strings'))
   const thuStringsRow = dbEvents.find((e) => e.title.toLowerCase().includes('strings') && e.start_time.startsWith('2026-08-20'))
   const ballotsRow = dbEvents.find((e) => e.title.toLowerCase().includes('election ballots'))
 
