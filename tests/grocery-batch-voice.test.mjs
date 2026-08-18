@@ -73,3 +73,53 @@ test('parseGroceryVoiceBatch ignores empty input', () => {
   assert.deepEqual(parseGroceryVoiceBatch('   '), [])
   assert.deepEqual(parseGroceryVoiceBatch('please add to my list'), [])
 })
+
+test('parseGroceryVoiceBatch handles unpunctuated continuous speech lists (user case)', () => {
+  // Case from user: "hamberburgers hamberger buns hot dogs hot dog buns"
+  const utterance1 = 'hamberburgers hamberger buns hot dogs hot dog buns'
+  const items1 = parseGroceryVoiceBatch(utterance1)
+
+  assert.equal(items1.length, 4)
+  assert.equal(items1[0].name, 'Hamburgers')
+  assert.equal(items1[0].category, 'meat')
+  assert.equal(items1[1].name, 'Hamburger Buns')
+  assert.equal(items1[1].category, 'bakery')
+  assert.equal(items1[2].name, 'Hot Dogs')
+  assert.equal(items1[2].category, 'meat')
+  assert.equal(items1[3].name, 'Hot Dog Buns')
+  assert.equal(items1[3].category, 'bakery')
+
+  // Case: single compound item "apple juice" is preserved as 1 item
+  const items2 = parseGroceryVoiceBatch('apple juice')
+  assert.equal(items2.length, 1)
+  assert.equal(items2[0].name, 'Apple Juice')
+  assert.equal(items2[0].category, 'beverages')
+
+  // Case: continuous list of compound items
+  const items3 = parseGroceryVoiceBatch('apple juice sourdough bread cold brew')
+  assert.equal(items3.length, 3)
+  assert.equal(items3[0].name, 'Apple Juice')
+  assert.equal(items3[1].name, 'Sourdough Bread')
+  assert.equal(items3[2].name, 'Cold Brew')
+
+  // Case: continuous list of single staples
+  const items4 = parseGroceryVoiceBatch('milk eggs cheese bread butter')
+  assert.equal(items4.length, 5)
+  assert.equal(items4[0].name, 'Milk')
+  assert.equal(items4[1].name, 'Eggs')
+  assert.equal(items4[2].name, 'Cheese')
+  assert.equal(items4[3].name, 'Bread')
+  assert.equal(items4[4].name, 'Butter')
+
+  // Case: mixed quantities and compound items without commas
+  const items5 = parseGroceryVoiceBatch('2 gallons whole milk 3 avocados 1 loaf sourdough bread')
+  assert.equal(items5.length, 3)
+  assert.equal(items5[0].name, 'Whole Milk')
+  assert.equal(items5[0].quantity, '2')
+  assert.equal(items5[0].unit, 'gallons')
+  assert.equal(items5[1].name, 'Avocados')
+  assert.equal(items5[1].quantity, '3')
+  assert.equal(items5[2].name, 'Sourdough Bread')
+  assert.equal(items5[2].quantity, '1')
+  assert.equal(items5[2].unit, 'loaf')
+})
