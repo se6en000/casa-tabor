@@ -318,9 +318,9 @@ export function resolveActiveCalendarMutation(text, event, events, options = {})
   }
 
   const categoryMatch = input.match(
-    /^(?:please\s+)?(?:change|set|update|make)\s+(?:the\s+)?category\s+(?:to|as)\s+([a-z_\s]+?)[.!?]?$/i,
+    /^(?:please\s+)?(?:change|set|update|make)\s+(?:the\s+)?category\s+(?:to|as)\s+([a-z_\s]+)[.!?]?$/i,
   ) || input.match(
-    /^(?:tag|mark)\s+(?:this\s+)?(?:as\s+)?([a-z_\s]+?)[.!?]?$/i,
+    /^(?:tag|mark)\s+(?:this\s+)?(?:as\s+)?([a-z_\s]+)[.!?]?$/i,
   ) || input.match(
     /^(?:it's|its|make\s+it|it\s+is)\s+(?:a|an)?\s*(medical|sports|school|social|work|errand|dining|travel|birthday|home\s+maintenance)\s*(?:event|appointment|category)?[.!?]?$/i,
   )
@@ -467,10 +467,13 @@ export function resolveActiveCalendarMutation(text, event, events, options = {})
 
   // Attendee removal: "remove Jake", "remove Jake from attendees"
   const removeAttendeeMatch = input.match(
-    /^(?:please\s+)?(?:remove|delete)\s+([a-z][a-z\s,and'-]+?)(?:\s+from\s+(?:the\s+)?(?:event|attendees?|appointment))?[.!?]?$/i,
+    /^(?:please\s+)?(?:remove|delete)\s+(.+?)(?:\s+from\s+(?:the\s+)?(?:event|attendees?|appointment))?[.!?]?$/i,
   )
   if (removeAttendeeMatch && !/\b(?:location|venue|address|driver|what\s+to\s+bring|checklist|notes?)\b/i.test(input)) {
-    const rawNames = removeAttendeeMatch[1].split(/\s*(?:,|and|\s+)\s*/i).filter(Boolean)
+    const rawNames = removeAttendeeMatch[1]
+      .split(/\s*(?:,|&|\band\b|\+)\s*/i)
+      .map(s => s.trim())
+      .filter(Boolean)
     const validNames = Array.isArray(options.familyNames)
       ? rawNames.map(r => options.familyNames.find(n => n.toLowerCase() === r.toLowerCase())).filter(Boolean)
       : rawNames
@@ -510,10 +513,15 @@ export function resolveActiveCalendarMutation(text, event, events, options = {})
 
   // Multiple / Single Attendee Addition: "add Owen and Liv", "add Kelly too"
   const addAttendeeMatch = input.match(
-    /\badd\s+([a-z][a-z\s,and'-]*?)(?:\s+too|\s+as\s+attendees?|\s+to\s+(?:the\s+)?(?:calendar\s+)?(?:event|appointment|meeting|dinner|party|practice|attendees?))\b/i,
+    /^(?:please\s+)?add\s+(.+?)(?:\s+too|\s+as\s+attendees?|\s+to\s+(?:the\s+)?(?:calendar\s+)?(?:event|appointment|meeting|dinner|party|practice|attendees?))[.!?]?$/i,
+  ) || input.match(
+    /^(?:please\s+)?add\s+([a-z\s,and'-]+?)(?:\s+too)?[.!?]?$/i,
   )
-  if (addAttendeeMatch && Array.isArray(options.familyNames) && !/\b(?:what\s+to\s+bring|notes?|checklist)\b/i.test(input)) {
-    const rawNames = addAttendeeMatch[1].split(/\s*(?:,|and|\s+)\s*/i).filter(Boolean)
+  if (addAttendeeMatch && Array.isArray(options.familyNames) && !/\b(?:what\s+to\s+bring|notes?|checklist|recipe|ingredient)\b/i.test(input)) {
+    const rawNames = addAttendeeMatch[1]
+      .split(/\s*(?:,|&|\band\b|\+)\s*/i)
+      .map(s => s.trim())
+      .filter(Boolean)
     const validNames = rawNames
       .map((r) => options.familyNames.find((n) => n.toLowerCase() === r.toLowerCase()))
       .filter(Boolean)

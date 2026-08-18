@@ -208,8 +208,9 @@ async function finalizeEventSync(
 }
 
 function extractMemberRoleOverrides(args: Record<string, unknown>) {
-  const membersPrimary = typeof args.members_primary === 'string' && args.members_primary.trim().length > 0
-    ? args.members_primary.trim()
+  const primaryRaw = args.primary_attendee ?? args.members_primary
+  const membersPrimary = typeof primaryRaw === 'string' && primaryRaw.trim().length > 0
+    ? primaryRaw.trim()
     : undefined
   const membersAttendees = Array.isArray(args.members_attendees)
     ? args.members_attendees
@@ -279,7 +280,10 @@ async function applyMemberRoleOverrides(
 
     await sb
       .from('event_members')
-      .upsert({ event_id: eventId, family_member_id: primaryId, role: 'primary', rsvp_status: 'accepted' })
+      .upsert(
+        { event_id: eventId, family_member_id: primaryId, role: 'primary', rsvp_status: 'accepted' },
+        { onConflict: 'event_id,family_member_id' },
+      )
   }
 
   if (membersAttendees !== undefined) {
