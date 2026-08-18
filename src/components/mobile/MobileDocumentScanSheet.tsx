@@ -1,5 +1,4 @@
 import { useState, useRef } from 'react'
-import { format } from 'date-fns'
 import {
   Camera,
   Upload,
@@ -14,8 +13,10 @@ import {
   Layers,
   Trash2,
   Clock,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react'
-import { Sheet, Button, Input, Chip, PersonAvatarStack, Alert, IconButton } from '../ui'
+import { Sheet, Button, Input, Chip, PersonAvatarStack, Alert, IconButton, Switch } from '../ui'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase.ts'
@@ -23,6 +24,8 @@ import {
   optimizeFileForVision,
   matchSuggestedMemberIds,
   batchSaveScannedItems,
+  formatScannedDate,
+  formatScannedTime,
   type ScannedItem,
   type ScanDocumentResponse,
 } from '../../utils/documentScanner.ts'
@@ -51,6 +54,7 @@ export default function MobileDocumentScanSheet({
   const [processingStatus, setProcessingStatus] = useState('Reading document with AI vision...')
   const [documentSummary, setDocumentSummary] = useState('')
   const [scannedItems, setScannedItems] = useState<ScannedItem[]>([])
+  const [expandedItemId, setExpandedItemId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
   const [successMsg, setSuccessMsg] = useState('')
@@ -60,6 +64,7 @@ export default function MobileDocumentScanSheet({
     setProcessingStatus('Reading document with AI vision...')
     setDocumentSummary('')
     setScannedItems([])
+    setExpandedItemId(null)
     setSaving(false)
     setErrorMsg('')
     setSuccessMsg('')
@@ -87,7 +92,7 @@ export default function MobileDocumentScanSheet({
         optimizedFiles.push({ file_base64: opt.base64, mime_type: opt.mimeType })
       }
 
-      setProcessingStatus('Gemini Vision is analyzing schedule, dates & items...')
+      setProcessingStatus('Gemini Vision is extracting exact dates, times & items...')
 
       const { data, error } = await supabase.functions.invoke('scan-document-events', {
         body: {
@@ -105,18 +110,24 @@ export default function MobileDocumentScanSheet({
         throw new Error(response?.error || 'No items could be extracted from this document')
       }
 
+      const todayIso = new Date().toISOString().slice(0, 10)
       const parsedItems: ScannedItem[] = response.items.map((item, idx) => {
         const suggestedMemberIds = matchSuggestedMemberIds(item.suggested_member_name, familyMembers)
+        const dateStr = item.date || item.start_time?.slice(0, 10) || todayIso
         return {
           id: item.id || `scanned-${idx}-${Date.now()}`,
           type: item.type === 'reminder' ? 'reminder' : 'event',
           title: item.title,
+          date: dateStr,
+          start_time_local: item.start_time_local || null,
+          end_time_local: item.end_time_local || null,
           start_time: item.start_time,
           end_time: item.end_time,
           all_day: Boolean(item.all_day),
           location_name: item.location_name ?? null,
           address: item.address ?? null,
           notes: item.notes ?? null,
+          raw_text_snippet: item.raw_text_snippet ?? null,
           selectedMemberIds: suggestedMemberIds,
           confidence: item.confidence ?? 0.9,
           selected: true,
@@ -176,10 +187,10 @@ export default function MobileDocumentScanSheet({
     )
   }
 
-  // Update title
-  const updateItemTitle = (id: string, newTitle: string) => {
+  // Update item field
+  const updateItem = (id: string, patch: Partial<ScannedItem>) => {
     setScannedItems((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, title: newTitle } : item))
+      prev.map((item) => (item.id === id ? { ...item, ...patch } : item))
     )
   }
 
@@ -450,17 +461,13 @@ export default function MobileDocumentScanSheet({
               {/* Scrollable list of Extracted Items */}
               <div className="flex-1 overflow-y-auto space-y-3 pr-1 overscroll-contain">
                 {scannedItems.map((item) => {
-                  let formattedDate = ''
-                  try {
-                    const parsedStart = new Date(item.start_time)
-                    if (!Number.isNaN(parsedStart.getTime())) {
-                      formattedDate = item.all_day
-                        ? format(parsedStart, 'EEEE, MMM d')
-                        : `${format(parsedStart, 'EEE, MMM d')} · ${format(parsedStart, 'h:mm a')}`
-                    }
-                  } catch {
-                    formattedDate = item.start_time
-                  }
+                  const isExpanded = expandedItemId === item.id
+                  const dateLabel = formatScannedDate(item.date, item.all_day ? 'EEEE, MMM d' : 'EEE, MMM d')
+                  const timeLabel = item.all_day
+                    ? 'All Day'
+                    : item.start_time_local
+                      ? `${formatScannedTime(item.start_time_local)}${item.end_time_local ? ` – ${formatScannedTime(item.end_time_local)}` : ''}`
+                      : 'All Day'
 
                   return (
                     <div
@@ -514,35 +521,111 @@ export default function MobileDocumentScanSheet({
                           </div>
                         </div>
 
-                        <IconButton
-                          variant="ghost"
-                          size="sm"
-                          icon={<Trash2 size={15} />}
-                          aria-label="Remove item"
-                          onClick={() => deleteItem(item.id)}
-                          className="text-casa-muted hover:text-red-500 transition-colors"
-                        />
+                        <div className="flex items-center gap-1">
+                          <IconButton
+                            variant="ghost"
+                            size="sm"
+                            icon={isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                            aria-label={isExpanded ? 'Collapse item details' : 'Edit item date & time'}
+                            onClick={() => setExpandedItemId(isExpanded ? null : item.id)}
+                            className="text-casa-muted hover:text-casa-navy"
+                          />
+                          <IconButton
+                            variant="ghost"
+                            size="sm"
+                            icon={<Trash2 size={15} />}
+                            aria-label="Remove item"
+                            onClick={() => deleteItem(item.id)}
+                            className="text-casa-muted hover:text-red-500 transition-colors"
+                          />
+                        </div>
                       </div>
 
                       {/* Editable Title */}
                       <div className="space-y-2">
                         <Input
                           value={item.title}
-                          onChange={(e) => updateItemTitle(item.id, e.target.value)}
+                          onChange={(e) => updateItem(item.id, { title: e.target.value })}
                           placeholder="Event or Reminder title"
                           className="font-bold text-body-sm bg-casa-bg h-9 rounded-xl text-casa-navy"
                         />
 
-                        {/* Date / Time Row */}
-                        <div className="flex items-center gap-1.5 text-caption text-casa-text-secondary font-medium px-1">
-                          <Clock size={13} className="text-casa-gold shrink-0" />
-                          <span className="truncate">{formattedDate}</span>
-                          {item.all_day && (
-                            <span className="text-3xs font-bold uppercase bg-casa-border/60 text-casa-muted px-1.5 py-0.5 rounded">
-                              All Day
-                            </span>
-                          )}
+                        {/* Date / Time Row & Quick Preview */}
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => setExpandedItemId(isExpanded ? null : item.id)}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setExpandedItemId(isExpanded ? null : item.id) }}
+                          className="flex items-center justify-between p-2 rounded-xl bg-casa-bg/80 border border-casa-border/60 text-caption font-medium cursor-pointer hover:border-casa-gold/60 transition-all"
+                        >
+                          <div className="flex items-center gap-1.5 text-casa-navy truncate min-w-0">
+                            <Clock size={13} className="text-casa-gold shrink-0" />
+                            <span className="font-semibold truncate">{dateLabel}</span>
+                            <span className="text-casa-muted">·</span>
+                            <span className="text-casa-text-secondary truncate">{timeLabel}</span>
+                          </div>
+                          <span className="text-3xs font-bold text-casa-gold uppercase tracking-wider shrink-0 ml-2">
+                            {isExpanded ? 'Done' : 'Edit'}
+                          </span>
                         </div>
+
+                        {/* Expanded Date / Time Form Controls */}
+                        {isExpanded && (
+                          <div className="p-3 rounded-xl bg-casa-bg border border-casa-gold/40 space-y-2.5 animate-fadeIn">
+                            <div className="flex items-center justify-between">
+                              <span className="text-3xs font-bold uppercase tracking-wider text-casa-muted">
+                                Date & Time Details
+                              </span>
+                              <Switch
+                                label={<span className="text-2xs font-semibold text-casa-navy">All Day</span>}
+                                checked={item.all_day}
+                                onCheckedChange={(checked) => updateItem(item.id, { all_day: checked })}
+                                className="min-h-0 gap-2"
+                              />
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              <div>
+                                <label className="text-3xs font-semibold text-casa-muted block mb-1">
+                                  Date
+                                </label>
+                                <Input
+                                  type="date"
+                                  value={item.date}
+                                  onChange={(e) => updateItem(item.id, { date: e.target.value })}
+                                  className="h-8 text-caption bg-casa-surface rounded-lg"
+                                />
+                              </div>
+
+                              {!item.all_day && (
+                                <div className="grid grid-cols-2 gap-1.5">
+                                  <div>
+                                    <label className="text-3xs font-semibold text-casa-muted block mb-1">
+                                      Start
+                                    </label>
+                                    <Input
+                                      type="time"
+                                      value={item.start_time_local || '09:00'}
+                                      onChange={(e) => updateItem(item.id, { start_time_local: e.target.value })}
+                                      className="h-8 text-caption bg-casa-surface rounded-lg"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-3xs font-semibold text-casa-muted block mb-1">
+                                      End
+                                    </label>
+                                    <Input
+                                      type="time"
+                                      value={item.end_time_local || '10:00'}
+                                      onChange={(e) => updateItem(item.id, { end_time_local: e.target.value })}
+                                      className="h-8 text-caption bg-casa-surface rounded-lg"
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
 
                         {/* Location Preview if present */}
                         {item.location_name && (
@@ -559,6 +642,13 @@ export default function MobileDocumentScanSheet({
                         {item.notes && (
                           <div className="text-2xs text-casa-muted bg-casa-bg/80 p-2 rounded-lg border border-casa-border/50">
                             {item.notes}
+                          </div>
+                        )}
+
+                        {/* Raw text snippet from document if available */}
+                        {item.raw_text_snippet && (
+                          <div className="text-3xs text-slate-400 italic px-1 truncate">
+                            Snippet: &ldquo;{item.raw_text_snippet}&rdquo;
                           </div>
                         )}
 

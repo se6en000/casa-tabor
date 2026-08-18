@@ -1,16 +1,23 @@
 import { supabase } from '../lib/supabase.ts'
 import type { FamilyMember } from '../types'
+import { parseDatePortionAsLocal } from './eventTime.ts'
+import { normalizeAllDayEventRange } from './allDayEventRange.ts'
+import { format } from 'date-fns'
 
 export interface ScannedItem {
   id: string
   type: 'event' | 'reminder'
   title: string
-  start_time: string
-  end_time: string
+  date: string // YYYY-MM-DD
+  start_time_local: string | null // HH:MM
+  end_time_local: string | null // HH:MM
+  start_time: string // ISO string
+  end_time: string // ISO string
   all_day: boolean
   location_name: string | null
   address: string | null
   notes: string | null
+  raw_text_snippet?: string | null
   selectedMemberIds: string[]
   confidence: number
   selected: boolean
@@ -23,16 +30,49 @@ export interface ScanDocumentResponse {
     id?: string
     type: 'event' | 'reminder'
     title: string
+    date?: string
+    start_time_local?: string | null
+    end_time_local?: string | null
     start_time: string
     end_time: string
     all_day: boolean
     location_name?: string | null
     address?: string | null
     notes?: string | null
+    raw_text_snippet?: string | null
     suggested_member_name?: string | null
     confidence: number
   }>
   error?: string
+}
+
+/**
+ * Format a YYYY-MM-DD date string safely in local time without UTC offset drift.
+ */
+export function formatScannedDate(dateStr: string, formatPattern = 'EEEE, MMM d'): string {
+  if (!dateStr) return ''
+  try {
+    const localDate = parseDatePortionAsLocal(dateStr)
+    if (Number.isNaN(localDate.getTime())) return dateStr
+    return format(localDate, formatPattern)
+  } catch {
+    return dateStr
+  }
+}
+
+/**
+ * Format 24-hour HH:MM time string to human-friendly 12-hour (e.g. "14:30" -> "2:30 PM")
+ */
+export function formatScannedTime(timeStr?: string | null): string {
+  if (!timeStr) return ''
+  const m = /^(\d{1,2}):(\d{2})$/.exec(timeStr.trim())
+  if (!m) return timeStr
+  let hour = Number(m[1])
+  const minute = m[2]
+  const isPm = hour >= 12
+  if (hour > 12) hour -= 12
+  if (hour === 0) hour = 12
+  return `${hour}:${minute} ${isPm ? 'PM' : 'AM'}`
 }
 
 /**
@@ -133,13 +173,30 @@ export async function batchSaveScannedItems(
   for (const item of selectedItems) {
     try {
       const nowIso = new Date().toISOString()
+      let startIso = item.start_time
+      let endIso = item.end_time
+
+      // Ensure proper all-day range or timed range based on the edited date and times
+      if (item.all_day) {
+        const range = normalizeAllDayEventRange(item.date, item.date)
+        startIso = range.start
+        endIso = range.end
+      } else if (item.start_time_local) {
+        const localStartDate = new Date(`${item.date}T${item.start_time_local}:00`)
+        const localEndDate = new Date(`${item.date}T${item.end_time_local || item.start_time_local}:00`)
+        if (!Number.isNaN(localStartDate.getTime())) {
+          startIso = localStartDate.toISOString()
+          endIso = !Number.isNaN(localEndDate.getTime()) ? localEndDate.toISOString() : localStartDate.toISOString()
+        }
+      }
+
       const { data: inserted, error: insertError } = await supabase
         .from('events')
         .insert({
           title: item.title.trim(),
           description: item.notes?.trim() || null,
-          start_time: item.start_time,
-          end_time: item.end_time,
+          start_time: startIso,
+          end_time: endIso,
           all_day: item.all_day,
           status: 'confirmed',
           event_type: item.type,
