@@ -194,16 +194,17 @@ async function fetchEventsForRange(start: Date, end: Date): Promise<RangeEventsR
     .lt('start_time', end.toISOString())
     .gt('end_time', start.toISOString())
     .neq('record_kind', 'series_template')
+    .is('deleted_at', null)
     .order('start_time')
 
   if (error) throw error
 
   const normalized = (events || []).map(normalizeEventRow)
   const active = normalized
-    .filter((event) => event.status !== 'cancelled')
+    .filter((event) => event.status !== 'cancelled' && !event.deleted_at)
     .filter((event) => eventOverlapsRange(event, start, end))
   const cancelled = normalized
-    .filter((event) => event.status === 'cancelled')
+    .filter((event) => event.status === 'cancelled' || Boolean(event.deleted_at))
 
   return { active, cancelled }
 }
