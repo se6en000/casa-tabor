@@ -705,7 +705,7 @@ Deno.serve(async (req) => {
     ? imageContextRaw === 'conversation' ? 'conversation' : 'current_turn'
     : 'none'
   const isScheduleQuery = /\b(?:check|overlap|conflicts?|what time|who is driving|when is|schedule overlap|how far|tell me about)\b/i.test(latestUserText ?? '')
-  const userRequestedWriteIntent = !isScheduleQuery && /\b(move|resched|reschedule|change|update|edit|delete|remove|cancel|add|create|set|shift|push|book)\b/i
+  const userRequestedWriteIntent = !isScheduleQuery && /\b(move|resched|reschedule|change|update|edit|delete|remove|cancel|add|create|set|shift|push|book|drive|driving|driver|drop\s*off|dropoff|pick\s*up|pickup|stay|tag|bring|pack|rename|make|assign|switch|clear)\b/i
     .test(latestUserText ?? '') && (!authoritativeCookingContext || cookingMutationIntent)
   appendServerTrace('server_ai_assistant_start', `messages=${Array.isArray(messages) ? messages.length : 0}`, {
     message_count: Array.isArray(messages) ? messages.length : 0,
@@ -3538,6 +3538,11 @@ Deno.serve(async (req) => {
             members_add: { type: 'ARRAY', items: { type: 'STRING' }, description: 'Family member names to ADD to the event' },
             members_remove: { type: 'ARRAY', items: { type: 'STRING' }, description: 'Family member names to REMOVE from the event' },
             members_primary: { type: 'STRING', description: 'Set the PRIMARY family member for the event (single name)' },
+            primary_attendee: { type: 'STRING', description: 'Set the PRIMARY family member for the event (single name)' },
+            driver_name: { type: 'STRING', description: 'Assigned driver family member name (e.g. Kelly, Jake)' },
+            driver_leg1: { type: 'STRING', description: 'Assigned driver for drop-off leg (e.g. Jake)' },
+            driver_leg2: { type: 'STRING', description: 'Assigned driver for pick-up leg (e.g. Kelly)' },
+            travel_behavior: { type: 'STRING', description: 'Transportation logistics behavior: "stay" (wait on site), "two_way" (two separate round trips), "dropoff_only", "pickup_only", or "none"' },
             members_attendees: {
               type: 'ARRAY',
               items: { type: 'STRING' },
@@ -3612,6 +3617,11 @@ Deno.serve(async (req) => {
             members_add: { type: 'ARRAY', items: { type: 'STRING' }, description: 'Family member names to ADD to each event' },
             members_remove: { type: 'ARRAY', items: { type: 'STRING' }, description: 'Family member names to REMOVE from each event' },
             members_primary: { type: 'STRING', description: 'Set the PRIMARY family member for each event (single name)' },
+            primary_attendee: { type: 'STRING', description: 'Set the PRIMARY family member for each event (single name)' },
+            driver_name: { type: 'STRING', description: 'Assigned driver family member name (e.g. Kelly, Jake)' },
+            driver_leg1: { type: 'STRING', description: 'Assigned driver for drop-off leg (e.g. Jake)' },
+            driver_leg2: { type: 'STRING', description: 'Assigned driver for pick-up leg (e.g. Kelly)' },
+            travel_behavior: { type: 'STRING', description: 'Transportation logistics behavior: "stay", "two_way", "dropoff_only", "pickup_only", or "none"' },
             members_attendees: {
               type: 'ARRAY',
               items: { type: 'STRING' },

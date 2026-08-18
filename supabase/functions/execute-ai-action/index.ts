@@ -1159,13 +1159,33 @@ Deno.serve(async (req) => {
         p_members_add: addIds,
         p_members_remove: removeIds,
         p_action_id: actionId ?? null,
-        p_expected_updated_at: normalized.expectedUpdatedAt,
+        p_expected_updated_at: normalized.expectedUpdatedAt ?? eventRow.updated_at,
         p_request_payload: cleanArgs,
         p_ai_session_id: sessionId ?? null,
       })
       if (rpcError) throw new Error(rpcError.message)
 
       await applyMemberRoleOverrides(sb, normalized.eventId, membersPrimary, membersAttendees)
+
+      if (cleanArgs.primary_attendee !== undefined) {
+        const { data: family } = await sb.from('family_members').select('id, name, full_name')
+        const pri = resolveFamilyMemberByName(family ?? [], String(cleanArgs.primary_attendee).trim())
+        if (pri) {
+          await sb.from('event_members').update({ role: 'attendee', is_primary: false }).eq('event_id', normalized.eventId)
+          await sb.from('event_members').upsert({
+            event_id: normalized.eventId,
+            family_member_id: pri.id,
+            role: 'primary_attendee',
+            is_primary: true,
+          }, { onConflict: 'event_id,family_member_id' })
+        }
+      }
+
+      if (cleanArgs.category !== undefined) {
+        const cat = typeof cleanArgs.category === 'string' ? cleanArgs.category.trim() : null
+        await sb.from('events').update({ category: cat }).eq('id', normalized.eventId)
+        await sb.from('event_enrichments').update({ category: cat, category_locked: true }).eq('event_id', normalized.eventId)
+      }
 
       if (
         cleanArgs.driver_name !== undefined ||

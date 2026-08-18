@@ -95,30 +95,51 @@ export default function SidecarCompanion({
     }
   }, [activePrepItem, activePrepDetails, focusedActionContext])
 
-  // Fetch full details if event is from outside rolling horizon
+  // Fetch full details if event is from outside rolling horizon or freshly modified
   const { data: fetchedEvent, isFetching: isFetchingEvent } = useQuery({
     queryKey: ['event-details', selectedSidecarEventId],
     queryFn: () => selectedSidecarEventId ? fetchEventDetails(selectedSidecarEventId) : null,
     enabled: Boolean(selectedSidecarEventId),
-    staleTime: 5 * 60_000,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   })
+
+  // Whenever flipping to event details sheet or when event is selected, ensure event-details query is fresh
+  useEffect(() => {
+    if (sidecarTab === 'event' && selectedSidecarEventId) {
+      void queryClient.invalidateQueries({ queryKey: ['event-details', selectedSidecarEventId] })
+    }
+  }, [sidecarTab, selectedSidecarEventId, queryClient])
 
   const selectedEvent = useMemo<EventWithDetails | null>(() => {
     if (!selectedSidecarEventId) return null
-    if (fetchedEvent && fetchedEvent.start_time) return fetchedEvent
+
     const fromRolling = rollingEvents.find((e) => e.id === selectedSidecarEventId)
-    if (fromRolling && fromRolling.start_time) return fromRolling
 
     // Search any active event queries cached in queryClient
+    let foundInCachedList: EventWithDetails | null = null
     const allEventQueries = queryClient.getQueriesData<EventWithDetails[]>({ queryKey: ['events'] })
     for (const [, cachedList] of allEventQueries) {
       if (Array.isArray(cachedList)) {
         const found = cachedList.find((e) => e?.id === selectedSidecarEventId)
-        if (found && found.start_time) return found
+        if (found && found.start_time) {
+          foundInCachedList = found
+          break
+        }
       }
     }
 
-    return null
+    const candidates = [fetchedEvent, fromRolling, foundInCachedList].filter((e): e is EventWithDetails => Boolean(e && e.start_time))
+    if (candidates.length === 0) return null
+
+    // Pick the freshest version based on updated_at
+    candidates.sort((a, b) => {
+      const timeA = a.updated_at ? new Date(a.updated_at).getTime() : 0
+      const timeB = b.updated_at ? new Date(b.updated_at).getTime() : 0
+      return timeB - timeA
+    })
+
+    return candidates[0]
   }, [fetchedEvent, rollingEvents, selectedSidecarEventId, queryClient])
 
   // Auto-close sidecar if the event was deleted / no longer exists

@@ -263,7 +263,18 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
   useEffect(() => {
     if (!initialEvent) return
     const isNewEvent = initialEvent.id !== currentEventIdRef.current
-    const isServerUpdate = Boolean(initialEvent.updated_at && initialEvent.updated_at !== lastEventUpdatedAtRef.current)
+    const isServerUpdate = Boolean(
+      (initialEvent.updated_at && initialEvent.updated_at !== lastEventUpdatedAtRef.current) ||
+      initialEvent.title !== activeEventRef.current?.title ||
+      initialEvent.location_name !== activeEventRef.current?.location_name ||
+      initialEvent.address !== activeEventRef.current?.address ||
+      initialEvent.start_time !== activeEventRef.current?.start_time ||
+      initialEvent.end_time !== activeEventRef.current?.end_time ||
+      initialEvent.enrichment?.category !== activeEventRef.current?.enrichment?.category ||
+      initialEvent.plan_override?.waits !== activeEventRef.current?.plan_override?.waits ||
+      JSON.stringify(initialEvent.plan_override?.driver_overrides) !== JSON.stringify(activeEventRef.current?.plan_override?.driver_overrides) ||
+      JSON.stringify(initialEvent.members) !== JSON.stringify(activeEventRef.current?.members)
+    )
     currentEventIdRef.current = initialEvent.id
     activeEventRef.current = initialEvent
     lastEventUpdatedAtRef.current = initialEvent.updated_at
@@ -290,7 +301,7 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
         driverLeg2: isNewEvent || isServerUpdate ? initialDriverLeg2 : prev.driverLeg2,
       }
     })
-  }, [initialEvent?.id, initialEvent?.updated_at, initialStartDate, initialEndDate, initialDuration, initialIsAllDay, initialVenue, initialMemberIds, initialPrimaryId, initialTravelBehavior, initialDriverLeg1, initialDriverLeg2])
+  }, [initialEvent, initialStartDate, initialEndDate, initialDuration, initialIsAllDay, initialVenue, initialMemberIds, initialPrimaryId, initialTravelBehavior, initialDriverLeg1, initialDriverLeg2])
 
   // Resolve live route ETA if event has destination address but missing computed driving metrics
   useEffect(() => {

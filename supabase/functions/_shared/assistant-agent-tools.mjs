@@ -104,6 +104,23 @@ export const AGENT_TOOL_DEFINITIONS = Object.freeze([
       notes: string('Replacement visible notes; empty string clears them.'),
       members_add: stringArray('Family member names to add.'),
       members_remove: stringArray('Family member names to remove.'),
+      primary_attendee: string('Primary attendee family member name.'),
+      driver_name: string('Assigned driver name for the event (e.g. Kelly, Jake).'),
+      driver_leg1: string('Assigned driver for drop-off leg (e.g. Jake).'),
+      driver_leg2: string('Assigned driver for pick-up leg (e.g. Kelly).'),
+      travel_behavior: string('Transportation logistics mode: stay (wait on site), two_way (two round trips), dropoff_only, pickup_only, none.'),
+      category: string('Event category (e.g. Medical, School, Sports, Social, Work, Errand, Other).'),
+      checklist_items: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            label: { type: 'string' },
+            checked: { type: 'boolean' },
+          },
+        },
+        description: 'What to bring / checklist items.',
+      },
       all_day: boolean('Replacement all-day status.'),
       recurrence_scope: string('Deterministically validated recurrence scope: this, future, or all.'),
       expected_series_revision: number('Authoritative recurring-series revision used for stale-write protection.'),

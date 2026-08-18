@@ -32,6 +32,7 @@ import { openEventDetails } from '../../utils/openEventDetails'
 import { buildCreatePreviewCopy, buildDeleteManyPreviewCopy, buildDeletePreviewCopy, buildUpdatePreviewCopy } from '../../utils/aiConfirmPreview'
 import { matchDinnerPlanIntent, getDinnerPlanSuggestions } from '../../utils/dinnerPlanManager'
 import { saveTonightDinnerPlan } from '../../utils/dinnerPlanSync'
+import { invalidateAllCalendarQueries } from '../../lib/eventMutations'
 
 const LOW_CONFIDENCE_CONFIRM_PHRASES = /\b(yes|yeah|yep|ok|okay|use it|that one|correct|right|go ahead)\b/i
 const LOW_CONFIDENCE_REJECT_PHRASES = /\b(no|nope|try again|wrong|not that|cancel)\b/i
@@ -1528,7 +1529,7 @@ export default function AIChatDrawer({
                             undoStatus: 'idle',
                             undoErrorMsg: undefined,
                           })
-                          qc.invalidateQueries({ queryKey: ['events'] })
+                          invalidateAllCalendarQueries(qc, String(requestArgs?.event_id ?? requestArgs?.id ?? focusedEvent?.id ?? ''))
                           qc.invalidateQueries({ queryKey: ['grocery'] })
                           if (actionTrace) {
                             emitAssistantTrace('action_execute_completed', actionTrace, {
@@ -1594,7 +1595,7 @@ export default function AIChatDrawer({
                             undoStatus: 'done',
                             undoErrorMsg: undefined,
                           })
-                          qc.invalidateQueries({ queryKey: ['events'] })
+                          invalidateAllCalendarQueries(qc, focusedEvent?.id)
                         } catch (err) {
                           updateMessageToolStatus(messageId, 'done', {
                             undoStatus: 'error',
@@ -1625,7 +1626,7 @@ export default function AIChatDrawer({
                         }
                       }}
                       onRefreshToolAction={() => {
-                        qc.invalidateQueries({ queryKey: ['events'] })
+                        invalidateAllCalendarQueries(qc, focusedEvent?.id)
                       }}
                       registerPendingAction={registerPendingVoiceAction}
                       onSelectSuggestion={(text) => {

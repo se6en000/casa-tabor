@@ -192,10 +192,9 @@ export function buildValidatedUpdatePayload(args) {
 
   const eventUpdates = {}
   const enrichmentUpdates = {}
-  const expectedUpdatedAt = normalizeExpectedUpdatedAt(args.expected_updated_at, errors)
-  if (expectedUpdatedAt === undefined) {
-    errors.push('expected_updated_at is required')
-  }
+  const expectedUpdatedAt = args.expected_updated_at !== undefined
+    ? normalizeExpectedUpdatedAt(args.expected_updated_at, errors)
+    : undefined
   const recurrenceScope = args.recurrence_scope === undefined
     ? undefined
     : ['this', 'future', 'all'].includes(args.recurrence_scope)

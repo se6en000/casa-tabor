@@ -171,9 +171,12 @@ export function findTargetEventFromText(text, events, options = {}) {
     const title = String(e.title).toLowerCase().trim()
     return title.length >= 3 && input.includes(title)
   })
-  if (exactTitleMatches.length === 1) return exactTitleMatches[0]
   if (exactTitleMatches.length > 1) {
-    return exactTitleMatches.sort((a, b) => (b.title?.length ?? 0) - (a.title?.length ?? 0))[0]
+    return exactTitleMatches.sort((a, b) => {
+      const lengthDiff = (b.title?.length ?? 0) - (a.title?.length ?? 0)
+      if (lengthDiff !== 0) return lengthDiff
+      return new Date(b.created_at || b.updated_at || 0).getTime() - new Date(a.created_at || a.updated_at || 0).getTime()
+    })[0]
   }
 
   // 2. Keyword token matching (ignore generic stopwords and intent words)
@@ -393,7 +396,7 @@ export function resolveActiveCalendarMutation(text, event, events, options = {})
   }
 
   // Travel behavior modes
-  if (/^(?:wait\s+there|wait\s+on\s+site|stay\s+on\s+site|stay\s+there|staying)[.!?]?$/i.test(input)) {
+  if (/^(?:wait\s+there|wait\s+on\s+site|stay\s+on\s+site|stay\s+there|staying)(?:\s+(?:for|to|at)\s+.+)?[.!?]?$/i.test(input)) {
     return {
       tool: 'update_event',
       args: {
@@ -404,7 +407,7 @@ export function resolveActiveCalendarMutation(text, event, events, options = {})
       event,
     }
   }
-  if (/^(?:two\s+way|2\s+way|come\s+back(?:\s+home)?\s+(?:and|to)\s+pick\s+up\s+later|separate\s+trips)[.!?]?$/i.test(input)) {
+  if (/^(?:two\s+way|2\s+way|come\s+back(?:\s+home)?\s+(?:and|to)\s+pick\s+up\s+later|separate\s+trips)(?:\s+(?:for|to|at)\s+.+)?[.!?]?$/i.test(input)) {
     return {
       tool: 'update_event',
       args: {
@@ -415,7 +418,7 @@ export function resolveActiveCalendarMutation(text, event, events, options = {})
       event,
     }
   }
-  if (/^(?:drop\s*off\s+only|just\s+drop(?:ping)?\s+off|only\s+drop(?:ping)?\s+off)[.!?]?$/i.test(input)) {
+  if (/^(?:drop\s*off\s+only|just\s+drop(?:ping)?\s+off|only\s+drop(?:ping)?\s+off)(?:\s+(?:for|to|at)\s+.+)?[.!?]?$/i.test(input)) {
     return {
       tool: 'update_event',
       args: {
@@ -426,7 +429,7 @@ export function resolveActiveCalendarMutation(text, event, events, options = {})
       event,
     }
   }
-  if (/^(?:pick\s*up\s+only|just\s+pick(?:ing)?\s+up|only\s+pick(?:ing)?\s+up)[.!?]?$/i.test(input)) {
+  if (/^(?:pick\s*up\s+only|just\s+pick(?:ing)?\s+up|only\s+pick(?:ing)?\s+up)(?:\s+(?:for|to|at)\s+.+)?[.!?]?$/i.test(input)) {
     return {
       tool: 'update_event',
       args: {
@@ -437,7 +440,7 @@ export function resolveActiveCalendarMutation(text, event, events, options = {})
       event,
     }
   }
-  if (/^(?:no\s+driving(?:\s+needed)?|no\s+ride(?:\s+needed)?|virtual|online|walking)[.!?]?$/i.test(input)) {
+  if (/^(?:no\s+driving(?:\s+needed)?|no\s+ride(?:\s+needed)?|virtual|online|walking)(?:\s+(?:for|to|at)\s+.+)?[.!?]?$/i.test(input)) {
     return {
       tool: 'update_event',
       args: {
@@ -450,7 +453,7 @@ export function resolveActiveCalendarMutation(text, event, events, options = {})
   }
 
   // Clear driver
-  if (/^(?:clear|remove|delete)\s+(?:the\s+)?driver[.!?]?$/i.test(input) || /^(?:no\s+driver|unassigned\s+driver)[.!?]?$/i.test(input)) {
+  if (/^(?:clear|remove|delete)\s+(?:the\s+)?driver(?:\s+(?:for|to|at)\s+.+)?[.!?]?$/i.test(input) || /^(?:no\s+driver|unassigned\s+driver)(?:\s+(?:for|to|at)\s+.+)?[.!?]?$/i.test(input)) {
     return {
       tool: 'update_event',
       args: {
@@ -472,7 +475,7 @@ export function resolveActiveCalendarMutation(text, event, events, options = {})
 
   // Split drivers: "Jake will drop off and Kelly pick up"
   const splitDriversMatch = input.match(
-    /^([a-z][a-z'-]*)\s+(?:will\s+|is\s+)?(?:doing\s+)?(?:drop\s*off|dropoff|drops?\s*off)\s+(?:and\s+|,)?\s*([a-z][a-z'-]*)\s+(?:will\s+|is\s+)?(?:doing\s+)?(?:pick\s*up|pickup|picks?\s*up)[.!?]?$/i,
+    /^([a-z][a-z'-]*)\s+(?:will\s+|is\s+)?(?:doing\s+)?(?:drop\s*off|dropoff|drops?\s*off)\s+(?:and\s+|,)?\s*([a-z][a-z'-]*)\s+(?:will\s+|is\s+)?(?:doing\s+)?(?:pick\s*up|pickup|picks?\s*up)(?:\s+(?:for|to|at)\s+.+)?[.!?]?$/i,
   )
   if (splitDriversMatch) {
     const d1 = splitDriversMatch[1]
@@ -511,7 +514,9 @@ export function resolveActiveCalendarMutation(text, event, events, options = {})
 
   // Attendee removal: "remove Jake", "remove Jake from attendees"
   const removeAttendeeMatch = input.match(
-    /^(?:please\s+)?(?:remove|delete)\s+(.+?)(?:\s+from\s+(?:the\s+)?(?:event|attendees?|appointment))?[.!?]?$/i,
+    /^(?:please\s+)?(?:remove|delete)\s+(.+?)(?:\s+from\s+(?:the\s+)?(?:event|attendees?|appointment)(?:\s+(?:for|to|at)\s+.+)?)?[.!?]?$/i,
+  ) || input.match(
+    /^(?:please\s+)?(?:remove|delete)\s+(.+?)(?:\s+from\s+.+?\s+attendees?)[.!?]?$/i,
   )
   if (removeAttendeeMatch && !/\b(?:location|venue|address|driver|what\s+to\s+bring|checklist|notes?)\b/i.test(input)) {
     const rawNames = removeAttendeeMatch[1]
@@ -534,12 +539,12 @@ export function resolveActiveCalendarMutation(text, event, events, options = {})
     }
   }
 
-  // Primary attendee: "this is for Emme", "primary attendee is Liv"
+  // Primary attendee: "this is for Emme", "primary attendee is Liv", "make Emme the primary attendee"
   const primaryAttendeeMatch = input.match(
-    /^(?:this\s+is\s+for|for|primary\s+attendee\s+is|primary\s+is)\s+([a-z][a-z'-]*)[.!?]?$/i,
+    /^(?:(?:make|set)\s+([a-z][a-z'-]*)\s+(?:the\s+|as\s+)?(?:primary\s+attendee|primary)|(?:this\s+is\s+for|for|primary\s+attendee\s+is|primary\s+is)\s+([a-z][a-z'-]*))(?:\s+(?:for|to|at)\s+.+)?[.!?]?$/i,
   )
   if (primaryAttendeeMatch && Array.isArray(options.familyNames)) {
-    const name = primaryAttendeeMatch[1].toLowerCase()
+    const name = (primaryAttendeeMatch[1] || primaryAttendeeMatch[2]).toLowerCase()
     const member = options.familyNames.find(n => n.toLowerCase() === name)
     if (member) {
       return {
