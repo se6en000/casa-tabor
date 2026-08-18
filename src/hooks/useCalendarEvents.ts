@@ -320,15 +320,42 @@ function useEventsForRange(queryKey: readonly unknown[], start: Date, end: Date)
       (transportationQuery.data ?? []).map((row) => [row.event_id, row.transportation_plan]),
     )
     const deriveEventSourceType = (event: any): 'routine' | 'google' | 'gmail' | 'casa' => {
-      if (event.id?.startsWith('routine-') || event.enrichment?.enriched_by === 'family_routines') {
+      if (event.source_type) return event.source_type
+      const title = (event.title || '').toLowerCase()
+      const desc = (event.description || '').toLowerCase()
+      const enrichedBy = event.enrichment?.enriched_by || ''
+
+      // 1. Routine Origination: Any school/camp/work routines, strings orchestra exceptions, drop-off/pickup
+      if (
+        event.id?.startsWith('routine-') ||
+        enrichedBy === 'family_routines' ||
+        title.includes('beethoven strings') ||
+        title.includes('strings @ pbp') ||
+        title.includes('late strings') ||
+        title.includes('early strings') ||
+        (title.includes('drop off') && (title.includes('palm beach') || title.includes('bak') || title.includes('tri-rail') || title.includes('school'))) ||
+        (title.includes('pick up') && (title.includes('palm beach') || title.includes('bak') || title.includes('tri-rail') || title.includes('school')))
+      ) {
         return 'routine'
       }
-      if (event.google_event_id || event.google_calendar_id) {
-        return 'google'
-      }
-      if (event.flight_number || event.confirmation_number || (event.description && event.description.includes('From: '))) {
+
+      // 2. Gmail Origination: Flights, hotel confirmations, orders, email extractions
+      if (
+        event.flight_number ||
+        event.confirmation_number ||
+        desc.includes('from: ') ||
+        desc.includes('order confirmation') ||
+        title.includes('ordered:')
+      ) {
         return 'gmail'
       }
+
+      // 3. Google Calendar Origination: Imported external Google Calendar entries
+      if (event.raw_google_json) {
+        return 'google'
+      }
+
+      // 4. Casa Native: Manually created in Casa (e.g. Drop off Election Ballots)
       return 'casa'
     }
 

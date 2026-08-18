@@ -238,6 +238,67 @@ async function runValidationAudit() {
   const dep3pm = new Date(pickup3pm.getTime() - pbpDrive * 60000)
   assert(dep3pm.getHours() === 14 && dep3pm.getMinutes() === 50, `3:00 PM pickup calculates departure as 2:50 PM`)
 
+  // ── AUDIT 5: Origination Badges Validation ──
+  console.log('\n--- AUDIT 5: Origination Badges Validation ---')
+
+  function deriveEventOrigination(event) {
+    if (event.source_type) return event.source_type
+    const title = (event.title || '').toLowerCase()
+    const desc = (event.description || '').toLowerCase()
+    const enrichedBy = event.enrichment?.enriched_by || ''
+
+    if (
+      event.id?.startsWith('routine-') ||
+      enrichedBy === 'family_routines' ||
+      title.includes('beethoven strings') ||
+      title.includes('strings @ pbp') ||
+      title.includes('late strings') ||
+      title.includes('early strings') ||
+      (title.includes('drop off') && (title.includes('palm beach') || title.includes('bak') || title.includes('tri-rail') || title.includes('school'))) ||
+      (title.includes('pick up') && (title.includes('palm beach') || title.includes('bak') || title.includes('tri-rail') || title.includes('school')))
+    ) {
+      return 'routine'
+    }
+
+    if (
+      event.flight_number ||
+      event.confirmation_number ||
+      desc.includes('from: ') ||
+      desc.includes('order confirmation') ||
+      title.includes('ordered:')
+    ) {
+      return 'gmail'
+    }
+
+    if (event.raw_google_json) {
+      return 'google'
+    }
+
+    return 'casa'
+  }
+
+  const tueStringsRow = dbEvents.find((e) => e.title.toLowerCase().includes('strings') && e.start_time.startsWith('2026-08-18'))
+  const thuStringsRow = dbEvents.find((e) => e.title.toLowerCase().includes('strings') && e.start_time.startsWith('2026-08-20'))
+  const ballotsRow = dbEvents.find((e) => e.title.toLowerCase().includes('election ballots'))
+
+  assert(Boolean(tueStringsRow), 'Tuesday Strings row exists')
+  if (tueStringsRow) {
+    const origin = deriveEventOrigination(tueStringsRow)
+    assert(origin === 'routine', `Tuesday Strings origination is ROUTINE (actual: "${origin}")`)
+  }
+
+  assert(Boolean(thuStringsRow), 'Thursday Strings row exists')
+  if (thuStringsRow) {
+    const origin = deriveEventOrigination(thuStringsRow)
+    assert(origin === 'routine', `Thursday Strings origination is ROUTINE (actual: "${origin}")`)
+  }
+
+  assert(Boolean(ballotsRow), 'Drop off Election Ballots row exists')
+  if (ballotsRow) {
+    const origin = deriveEventOrigination(ballotsRow)
+    assert(origin === 'casa', `Drop off Election Ballots origination is CASA (not false Google tag) (actual: "${origin}")`)
+  }
+
   console.log('\n=================================================================')
   console.log(`📊 Final Audit Summary: ${passes} Passed, ${errorsFound} Failed`)
   console.log('=================================================================')
