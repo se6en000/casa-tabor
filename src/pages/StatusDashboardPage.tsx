@@ -181,6 +181,12 @@ const PAUSE_DURATION_OPTIONS = [
   { value: 'indefinite', label: 'Indefinite' },
 ] as const
 
+const TIMEFRAME_OPTIONS = [
+  { value: '24h', label: '24h' },
+  { value: '7d', label: '7d' },
+  { value: '30d', label: '30d' },
+] as const
+
 const CAPABILITY_FILTER_OPTIONS = [
   { value: 'all', label: 'All Capabilities' },
   { value: 'background', label: 'Background Crons' },
@@ -264,16 +270,18 @@ export default function StatusDashboardPage() {
   const [llmConfig, setLlmConfig] = useState<{ provider: string; model: string } | null>(null)
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null)
   const [selectedHour, setSelectedHour] = useState<HourlyUsagePoint | null>(null)
+  const [timeframe, setTimeframe] = useState<'24h' | '7d' | '30d'>('30d')
   const [capabilityFilter, setCapabilityFilter] = useState<'all' | 'user' | 'background'>('all')
   const [circuitBreakerSaving, setCircuitBreakerSaving] = useState(false)
   const [pauseDuration, setPauseDuration] = useState<'15m' | '1h' | '4h' | 'indefinite'>('1h')
   const [liveStreamActive, setLiveStreamActive] = useState(false)
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (selectedTf: '24h' | '7d' | '30d' = timeframe) => {
     setLoading(true)
     setError(null)
     const periodEnd = new Date()
-    const periodStart = new Date(periodEnd.getTime() - 30 * 24 * 60 * 60 * 1000)
+    const ms = selectedTf === '24h' ? 24 * 60 * 60 * 1000 : selectedTf === '7d' ? 7 * 24 * 60 * 60 * 1000 : 30 * 24 * 60 * 60 * 1000
+    const periodStart = new Date(periodEnd.getTime() - ms)
     const [summaryRes, cfgRes] = await Promise.all([
       supabase.rpc('get_cost_dashboard_summary', {
         p_start: periodStart.toISOString(),
@@ -297,7 +305,7 @@ export default function StatusDashboardPage() {
     }
     setLastRefresh(new Date())
     setLoading(false)
-  }, [])
+  }, [timeframe])
 
   useEffect(() => {
     void load()
@@ -713,19 +721,35 @@ export default function StatusDashboardPage() {
 
           {/* ── 5. AWESOME CHART #2: CAPABILITY MATRIX & COST DRIVERS ── */}
           <section aria-labelledby="capability-heading">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-2">
               <div className="flex items-center gap-2">
                 <Workflow size={18} className="text-casa-gold" aria-hidden="true" />
-                <h2 id="capability-heading" className="text-subheading font-display text-content-heading">
-                  Capability Consumption Matrix
-                </h2>
+                <div>
+                  <h2 id="capability-heading" className="text-subheading font-display text-content-heading">
+                    Capability Consumption Matrix
+                  </h2>
+                  <p className="text-caption text-casa-muted">
+                    {timeframe === '24h' ? 'Showing past 24 hours consumption' : timeframe === '7d' ? 'Showing past 7 days consumption' : 'Showing past 30 days consumption'}
+                  </p>
+                </div>
               </div>
-              <SegmentedControl
-                aria-label="Filter capabilities"
-                value={capabilityFilter}
-                options={CAPABILITY_FILTER_OPTIONS}
-                onChange={(val) => setCapabilityFilter(val)}
-              />
+              <div className="flex flex-wrap items-center gap-2">
+                <SegmentedControl
+                  aria-label="Timeframe"
+                  value={timeframe}
+                  options={TIMEFRAME_OPTIONS}
+                  onChange={(val) => {
+                    setTimeframe(val)
+                    void load(val)
+                  }}
+                />
+                <SegmentedControl
+                  aria-label="Filter capabilities"
+                  value={capabilityFilter}
+                  options={CAPABILITY_FILTER_OPTIONS}
+                  onChange={(val) => setCapabilityFilter(val)}
+                />
+              </div>
             </div>
 
             <Card padding="none" className="overflow-hidden">
@@ -877,7 +901,7 @@ export default function StatusDashboardPage() {
 
           <section aria-labelledby="cost-summary-heading">
             <h2 id="cost-summary-heading" className="text-subheading font-display text-content-heading mb-3">
-              Last 30 Days Cumulative
+              {timeframe === '24h' ? 'Past 24 Hours' : timeframe === '7d' ? 'Past 7 Days' : 'Last 30 Days'} Cumulative
             </h2>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <StatCard
