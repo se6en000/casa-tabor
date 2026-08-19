@@ -24,6 +24,8 @@ function localParts(date, offsetMinutes) {
     month: shifted.getUTCMonth(),
     day: shifted.getUTCDate(),
     weekday: shifted.getUTCDay(),
+    hour: shifted.getUTCHours(),
+    minute: shifted.getUTCMinutes(),
   }
 }
 
@@ -101,15 +103,15 @@ function createStartIso(text, requestedTime, now, offsetMinutes) {
   let month = localNow.month
   let day = localNow.day
 
+  const hint = extractDateHint(text)
   if (isoDate) {
     year = Number(isoDate[1])
     month = Number(isoDate[2]) - 1
     day = Number(isoDate[3])
   } else {
-    const hint = extractDateHint(text)
-    if (!hint) return null
+    const effectiveHint = hint ?? 'today'
     const currentDay = Date.UTC(year, month, day)
-    let daysAhead = hint === 'today' ? 0 : hint === 'tomorrow' ? 1 : WEEKDAYS.indexOf(hint) - localNow.weekday
+    let daysAhead = effectiveHint === 'today' ? 0 : effectiveHint === 'tomorrow' ? 1 : WEEKDAYS.indexOf(effectiveHint) - localNow.weekday
     if (daysAhead < 0) daysAhead += 7
     const targetDay = new Date(currentDay + daysAhead * 86400000)
     year = targetDay.getUTCFullYear()
@@ -119,7 +121,8 @@ function createStartIso(text, requestedTime, now, offsetMinutes) {
 
   let start = new Date(Date.UTC(year, month, day, requestedTime.hour, requestedTime.minute) - offsetMinutes * 60000)
   if (!isoDate && start.getTime() <= now.getTime()) {
-    start = new Date(start.getTime() + 7 * 86400000)
+    const daysToAdd = (!hint || hint === 'today') ? 1 : 7
+    start = new Date(start.getTime() + daysToAdd * 86400000)
   }
   return start.toISOString()
 }

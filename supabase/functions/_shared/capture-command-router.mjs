@@ -67,14 +67,6 @@ function resolveGroceryCommand(input) {
 }
 
 function resolveReminderCommand(input, options) {
-  const clarification = reminderCreateClarification(input)
-  if (clarification) {
-    return {
-      status: 'needs_clarification',
-      clarification_question: clarification,
-    }
-  }
-
   const subject = explicitReminderSubject(input)
   if (!subject) {
     return {
@@ -90,7 +82,8 @@ function resolveReminderCommand(input, options) {
       currentDate: (options.now instanceof Date ? options.now : new Date()).toISOString(),
       utcOffset: options.utcOffset,
     }) ??
-    resolveAbsoluteRange(input, options)
+    resolveAbsoluteRange(input, options) ??
+    resolveDefaultReminderRange(input, options)
 
   if (!reminderRange) {
     return {
@@ -100,12 +93,6 @@ function resolveReminderCommand(input, options) {
   }
 
   const temporalProvenance = captureTemporalProvenance(input, reminderRange, options)
-  if (temporalProvenance.resolutionKind === 'relative') {
-    return {
-      status: 'needs_clarification',
-      clarification_question: `I resolved ${relativeDateLabel(input)} as ${formatExactDate(temporalProvenance.rangeStart)}. Please repeat the reminder with that exact date to confirm.`,
-    }
-  }
 
   return {
     status: 'execute',
@@ -122,7 +109,6 @@ function resolveReminderCommand(input, options) {
   }
 }
 
-
 function resolveEventCommand(input, options) {
   const mutation = resolveDeterministicEventMutation(input, [], {
     now: options.now,
@@ -131,23 +117,7 @@ function resolveEventCommand(input, options) {
   })
   if (mutation?.tool === 'create_event' && mutation.args) {
     const location = parseEventLocation(input)
-    const temporalProvenance = extractUserTemporalEvidence({
-      id: 'capture-command',
-      role: 'user',
-      content: input,
-    }, options)
-    if (!temporalProvenance) {
-      return {
-        status: 'needs_clarification',
-        clarification_question: 'What date should I create that event for?',
-      }
-    }
-    if (temporalProvenance.resolutionKind === 'relative') {
-      return {
-        status: 'needs_clarification',
-        clarification_question: `I resolved ${relativeDateLabel(input)} as ${formatExactDate(temporalProvenance.rangeStart)}. Please repeat the request with that exact date to confirm.`,
-      }
-    }
+    const temporalProvenance = captureTemporalProvenance(input, { start: mutation.args.start, end: mutation.args.end }, options)
     return {
       status: 'execute',
       tool: 'create_event',
@@ -159,20 +129,12 @@ function resolveEventCommand(input, options) {
         ...(location ? { location } : {}),
       },
     }
-
   }
 
   if (hasSingleMissingEventTime(input)) {
     return {
       status: 'needs_clarification',
       clarification_question: 'What time should I create that event for?',
-    }
-  }
-
-  if (EVENT_PREFIX.test(input) && TIME_HINT.test(input) && !DAY_HINT.test(input)) {
-    return {
-      status: 'needs_clarification',
-      clarification_question: 'What date should I create that event for?',
     }
   }
 
@@ -202,8 +164,13 @@ function captureTemporalProvenance(input, range, options) {
     role: 'user',
     content: input,
   }, options)
-  if (direct) return direct
-  const start = ensureOffsetIso(range.start, options.utcOffset)
+  if (direct) {
+    return {
+      ...direct,
+      requiresExactDateConfirmation: false,
+    }
+  }
+  const start = ensureOffsetIso(range?.start, options.utcOffset)
   const localDate = String(start).slice(0, 10)
   return {
     sourceMessageId: 'capture-command',
@@ -211,7 +178,7 @@ function captureTemporalProvenance(input, range, options) {
     rangeStart: localDate,
     rangeEnd: localDate,
     resolutionKind: 'relative',
-    requiresExactDateConfirmation: true,
+    requiresExactDateConfirmation: false,
   }
 }
 
@@ -263,7 +230,7 @@ function splitTrailingLocation(subject) {
 
 function stripReminderTiming(value) {
   return String(value ?? '')
-    .replace(/\s+(?:today|tomorrow|tonight)\b/gi, '')
+    .replace(/\s+(?:on\s+)?(?:today|tomorrow|tonight|sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/gi, '')
     .replace(/\s+(?:this|in the)\s+(?:early\s+|late\s+)?(?:morning|afternoon|evening|night)\b/gi, '')
     .replace(/\s+(?:at|around)\s+(?:\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)|lunch(?:\s*time)?|lunchtime|noon|midday|breakfast(?:\s*time)?|dinner(?:\s*time)?|bedtime|after work)\b/gi, '')
     .trim()
@@ -288,13 +255,42 @@ function resolveAbsoluteRange(input, options) {
   const now = options.now instanceof Date ? options.now : new Date()
   const targetDate = resolveTargetDate(input, now, offsetMinutes)
   if (!targetDate) return null
-  const startMs = Date.UTC(
+  let startMs = Date.UTC(
     targetDate.year,
     targetDate.month,
     targetDate.day,
     requestedTime.hour,
     requestedTime.minute,
   ) - offsetMinutes * 60000
+  if (!Number.isFinite(startMs)) return null
+  const hasExplicitDate = /\b(?:today|tomorrow|sunday|monday|tuesday|wednesday|thursday|friday|saturday|\d{4}-\d{2}-\d{2})\b/i.test(input)
+  if (!hasExplicitDate && startMs <= now.getTime()) {
+    startMs += 86400000
+  }
+  return {
+    start: formatAtOffset(startMs, options.utcOffset, offsetMinutes),
+    end: formatAtOffset(startMs + 15 * 60000, options.utcOffset, offsetMinutes),
+  }
+}
+
+function resolveDefaultReminderRange(input, options) {
+  const offsetMinutes = parseOffsetMinutes(options.utcOffset)
+  const now = options.now instanceof Date ? options.now : new Date()
+  const nowLocal = localParts(now, offsetMinutes)
+  const targetDate = resolveTargetDate(input, now, offsetMinutes)
+  const nowMinute = nowLocal.hour * 60 + nowLocal.minute
+  const isToday = targetDate.year === nowLocal.year && targetDate.month === nowLocal.month && targetDate.day === nowLocal.day
+
+  let hour = 9
+  let minute = 0
+  if (isToday) {
+    if (nowMinute >= 9 * 60) {
+      const nextQuarterHour = Math.ceil((nowMinute + 10) / 15) * 15
+      hour = Math.floor(nextQuarterHour / 60) % 24
+      minute = nextQuarterHour % 60
+    }
+  }
+  const startMs = Date.UTC(targetDate.year, targetDate.month, targetDate.day, hour, minute) - offsetMinutes * 60000
   if (!Number.isFinite(startMs)) return null
   return {
     start: formatAtOffset(startMs, options.utcOffset, offsetMinutes),
@@ -313,12 +309,14 @@ function resolveTargetDate(input, now, offsetMinutes) {
   }
   const weekday = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
     .find((day) => new RegExp(`\\b${day}\\b`, 'i').test(input))
-  if (!weekday) return null
-  const todayUtcDay = Date.UTC(nowLocal.year, nowLocal.month, nowLocal.day)
-  let daysAhead = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].indexOf(weekday) - nowLocal.weekday
-  if (daysAhead <= 0) daysAhead += 7
-  const target = new Date(todayUtcDay + daysAhead * 86400000)
-  return { year: target.getUTCFullYear(), month: target.getUTCMonth(), day: target.getUTCDate() }
+  if (weekday) {
+    const todayUtcDay = Date.UTC(nowLocal.year, nowLocal.month, nowLocal.day)
+    let daysAhead = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].indexOf(weekday) - nowLocal.weekday
+    if (daysAhead <= 0) daysAhead += 7
+    const target = new Date(todayUtcDay + daysAhead * 86400000)
+    return { year: target.getUTCFullYear(), month: target.getUTCMonth(), day: target.getUTCDate() }
+  }
+  return { year: nowLocal.year, month: nowLocal.month, day: nowLocal.day }
 }
 
 function parseExplicitTime(input) {
@@ -366,5 +364,7 @@ function localParts(date, offsetMinutes) {
     month: shifted.getUTCMonth(),
     day: shifted.getUTCDate(),
     weekday: shifted.getUTCDay(),
+    hour: shifted.getUTCHours(),
+    minute: shifted.getUTCMinutes(),
   }
 }
