@@ -28,7 +28,7 @@ export default function MobileFloatingDock({ onOpenQuickCreate }: MobileFloating
     } catch {}
   }
 
-  // 5 Tabs in exact requested order: Today / Calendar / Grocery / Cooking / More (NO BADGES)
+  // 5 Tabs in exact requested order: Today / Agenda / Grocery / Cooking / More (NO BADGES)
   const navTabs = [
     {
       to: '/',
@@ -43,7 +43,7 @@ export default function MobileFloatingDock({ onOpenQuickCreate }: MobileFloating
     {
       to: '/calendar',
       icon: Calendar,
-      label: 'Calendar',
+      label: 'Agenda',
       isActive: location.pathname.startsWith('/calendar'),
       onClick: () => {
         triggerHaptic()
@@ -81,7 +81,7 @@ export default function MobileFloatingDock({ onOpenQuickCreate }: MobileFloating
   return (
     <>
       {/* ── Single-Thumb Floating Quick Add FAB (lg:hidden) ── */}
-      <div className="lg:hidden fixed app-fab-mobile right-4 z-40 pointer-events-auto">
+      <div className="lg:hidden fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] right-4 z-sticky pointer-events-auto">
         <Button
           variant="ghost"
           onClick={() => {
@@ -95,10 +95,10 @@ export default function MobileFloatingDock({ onOpenQuickCreate }: MobileFloating
         </Button>
       </div>
 
-      {/* ── Snapped Bottom Navigation Bar (lg:hidden, ZERO BADGES) ── */}
+      {/* ── Docked 4-Tab Bottom Navigation Bar (lg:hidden, ZERO BADGES) ── */}
       <nav
         aria-label="Mobile Navigation Bar"
-        className="lg:hidden w-full flex-none z-30 app-mobile-nav bg-casa-surface border-t border-casa-border shadow-[0_-2px_12px_rgba(0,0,0,0.04)] flex items-center justify-around px-2 pt-1.5 pointer-events-auto"
+        className="lg:hidden fixed bottom-0 left-0 right-0 z-sticky bg-casa-surface/98 dark:bg-casa-surface/95 backdrop-blur-xl border-t border-casa-border shadow-[0_-4px_24px_rgba(0,0,0,0.06)] flex items-center justify-around px-2 pt-1.5 pb-[calc(0.5rem+env(safe-area-inset-bottom))] transition-all duration-300 pointer-events-auto"
       >
         {navTabs.map((tab) => (
           <NavLink

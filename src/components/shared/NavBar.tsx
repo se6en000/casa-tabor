@@ -10,7 +10,7 @@ import { Button } from '../ui'
 
 const primaryTabs = [
   { to: '/', icon: Home, label: 'Today' },
-  { to: '/calendar', icon: Calendar, label: 'Calendar' },
+  { to: '/calendar', icon: Calendar, label: 'Agenda' },
   { to: '/cook', icon: ChefHat, label: 'Cooking' },
 ]
 
@@ -23,7 +23,7 @@ export default function NavBar() {
 
   return (
     <>
-      <nav className="app-bottom-nav lg:hidden w-full flex-none bg-casa-surface border-t border-casa-border flex items-center justify-around z-30">
+      <nav className="app-bottom-nav lg:hidden fixed bottom-0 left-0 right-0 bg-casa-surface border-t border-casa-border flex items-center justify-around z-sticky">
         {primaryTabs.map(({ to, icon: Icon, label }) => (
           <NavLink
             key={to}

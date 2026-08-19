@@ -157,17 +157,6 @@ html {
      All rem-based tokens, spacing, and components scale proportionally.
      clamp(min, preferred, max) — preferred is a linear vw interpolation. */
   font-size: clamp(1rem, calc(0.818rem + 0.777vw), 1.75rem);
-  width: 100%;
-  height: 100%;
-  height: 100dvh;
-  height: -webkit-fill-available;
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-  overscroll-behavior: none;
-  touch-action: manipulation;
-  -webkit-text-size-adjust: 100%;
-  text-size-adjust: 100%;
 }
 
 /* Fine-pointer density is capability-driven; touch and kiosk keep the
@@ -181,54 +170,24 @@ html {
 body {
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
-  width: 100%;
-  height: 100%;
-  height: 100dvh;
-  height: -webkit-fill-available;
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-  overscroll-behavior: none;
-  touch-action: manipulation;
-  -webkit-touch-callout: none;
-  background-color: var(--color-casa-bg);
+  min-height: 100dvh;
+  overflow-x: hidden;
 }
 
 #root {
-  width: 100%;
-  height: 100%;
-  height: 100dvh;
-  height: -webkit-fill-available;
-  overflow: hidden;
-  overscroll-behavior: none;
+  min-height: 100dvh;
 }
 
 /* ── Responsive application shell ─────────────────────────────── */
 .app-shell {
-  width: 100%;
-  max-width: 100vw;
-  height: 100%;
   height: 100vh;
   height: 100svh;
   height: 100dvh;
-  height: -webkit-fill-available;
   min-width: 0;
-  overflow: hidden;
-  overscroll-behavior: none;
-  touch-action: manipulation;
 }
 
 .app-shell-main {
-  min-height: 0;
-}
-
-.app-mobile-nav {
-  min-height: calc(3.75rem + env(safe-area-inset-bottom, 0px));
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-}
-
-.app-fab-mobile {
-  bottom: calc(4.25rem + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(var(--spacing-nav-height) + env(safe-area-inset-bottom));
 }
 
 .app-topbar {
@@ -340,6 +299,12 @@ html.midnight-gallery .topbar-gold-divider {
   }
 }
 
+@media (min-width: 64rem) {
+  .app-shell-main {
+    padding-bottom: 0;
+  }
+}
+
 @layer base {
   /* Headings default to display font */
   h1, h2, h3, h4, h5, h6 {
@@ -358,21 +323,18 @@ html.midnight-gallery .topbar-gold-divider {
 /* brightness and color temperature adjustments via the sensor   */
 /* bridge (pi/sensor-bridge/main.py). No software overlay needed. */
 
-/* ── Kiosk / Mobile / Touch Mode ─────────────────────────────── */
-/* Applied unconditionally — this is a touch-first native app shell */
+/* ── Kiosk / Touch Mode (Pi Chromium + any touch device) ─────── */
+/* Applied unconditionally — this is a touch-first app           */
 
 html {
-  overscroll-behavior: none;
-  touch-action: manipulation;
-}
-
-/* Scrollable containers inherit momentum scrolling and isolated overscroll containment */
-.overflow-y-auto,
-.overflow-x-auto,
-.overflow-auto,
-[data-scrollable="true"] {
-  -webkit-overflow-scrolling: touch;
+  /* Rubber-band glow at scroll edges (tablet feel) but NO pull-to-refresh:
+     `contain` keeps the local elastic bounce while blocking scroll chaining /
+     pull-to-refresh navigation. (`none` would suppress the bounce entirely.)
+     The bounce only renders when Chromium's ElasticOverscroll feature is on —
+     enabled in the Pi launcher via --enable-features=ElasticOverscroll. */
   overscroll-behavior: contain;
+  /* Don't block scroll/swipe — let individual elements define touch-action */
+  touch-action: auto;
 }
 
 /* Disable text selection everywhere except inputs */

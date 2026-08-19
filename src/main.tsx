@@ -6,12 +6,10 @@ import App from './App'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { initPointerGestures } from './lib/pointerGestures'
 import { initDensityProfile } from './lib/densityProfile.mjs'
-import { initMobileViewportLock } from './lib/mobileViewportLock'
 import VisualRegressionPage from './pages/VisualRegressionPage'
 
 initPointerGestures()
 initDensityProfile()
-initMobileViewportLock()
 
 const visualRegressionMode = import.meta.env.VITE_VISUAL_TEST_MODE === 'true'
   && window.location.pathname === '/__visual-regression'
