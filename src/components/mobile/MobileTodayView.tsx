@@ -1,5 +1,13 @@
 import { useState, useMemo } from 'react'
-import { format, addDays, differenceInMinutes } from 'date-fns'
+import {
+  format,
+  addDays,
+  differenceInMinutes,
+  endOfDay,
+  startOfDay,
+  isBefore,
+  isSameDay,
+} from 'date-fns'
 import {
   ChevronRight,
   Check,
@@ -80,12 +88,18 @@ export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate 
     }
   }
 
-  // To-Do items (Reminders and chores across the rolling window)
+  // To-Do items: Filtered strictly to Due Today and Missed/Overdue uncompleted items
   const todoItems = useMemo(() => {
+    const todayEnd = endOfDay(now)
     return rollingEvents
-      .filter((ev) => isReminderOrChore(ev) || ev.event_type === 'reminder')
+      .filter((ev) => {
+        if (!isReminderOrChore(ev) && ev.event_type !== 'reminder') return false
+        const startDate = getEventStartDate(ev)
+        // Only include if due today or in the past (missed/overdue)
+        return isBefore(startDate, todayEnd) || isSameDay(startDate, now)
+      })
       .sort((a, b) => getEventStartDate(a).getTime() - getEventStartDate(b).getTime())
-  }, [rollingEvents])
+  }, [rollingEvents, now])
 
   const pendingTodos = useMemo(() => {
     return todoItems.filter((t) => !completedTodoIds.has(t.id))
@@ -151,6 +165,8 @@ export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate 
               const memberName = todo.members?.[0]?.family_member?.name || null
               const memberColorClass = getMemberColorClass(todo.members?.[0]?.family_member?.color_hex)
               const startDate = getEventStartDate(todo)
+              const isMissed = isBefore(startDate, startOfDay(now)) && !isCompleted
+              const isToday = isSameDay(startDate, now)
 
               return (
                 <div
@@ -194,7 +210,15 @@ export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate 
                       {todo.title}
                     </div>
                     <div className="flex items-center gap-2 text-2xs text-casa-muted mt-0.5 truncate">
-                      <span>{format(startDate, 'EEE, MMM d')}</span>
+                      {isMissed ? (
+                        <span className="text-3xs font-semibold px-1.5 py-0.5 rounded bg-rose-50 border border-rose-200 text-rose-700 shrink-0">
+                          Missed ({format(startDate, 'MMM d')})
+                        </span>
+                      ) : isToday ? (
+                        <span className="text-casa-navy/90 font-medium">Today</span>
+                      ) : (
+                        <span>{format(startDate, 'EEE, MMM d')}</span>
+                      )}
                       {memberName && (
                         <span className="flex items-center gap-1">
                           <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', memberColorClass)} />
