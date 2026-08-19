@@ -51,17 +51,6 @@ const DEFAULT_HOUSEHOLD_PLACES: VenueInfo[] = [
   },
 ]
 
-function shouldAppendCityContext(query: string): boolean {
-  const q = query.toLowerCase().trim()
-  if (q.includes(',')) return false
-  if (/\b\d{5}\b/.test(q)) return false
-  const explicitLocations = [
-    'fl', 'florida', 'west palm', 'palm beach', 'miami', 'orlando', 'tampa',
-    'boca', 'jupiter', 'delray', 'wellington', 'atlanta', 'dallas', 'ny', 'california', 'texas',
-  ]
-  return !explicitLocations.some((loc) => q.includes(loc))
-}
-
 export default function LivingVenueCard({
   venue,
   onSelectVenue,
@@ -75,7 +64,7 @@ export default function LivingVenueCard({
 
   const { data: savedPlaces = [] } = useSavedPlaces()
 
-  // Attempt to resolve live GPS or household anchor coordinates
+  // Dynamic Geolocation: Prioritizes live mobile/device GPS, falling back to household home anchor
   useEffect(() => {
     const home = savedPlaces.find(
       (p) => p.name.toLowerCase().includes('home') && p.lat && p.lng,
@@ -85,6 +74,7 @@ export default function LivingVenueCard({
     }
 
     if (typeof navigator !== 'undefined' && navigator.geolocation) {
+      // Live watch/get position for mobile devices on the go (e.g. Royal Palm Beach, Wellington, etc.)
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           setUserCoords({
@@ -97,7 +87,7 @@ export default function LivingVenueCard({
             setUserCoords({ lat: home.lat, lng: home.lng })
           }
         },
-        { timeout: 3000 },
+        { enableHighAccuracy: true, timeout: 5000 },
       )
     }
   }, [savedPlaces])
@@ -153,7 +143,7 @@ export default function LivingVenueCard({
     }
   }
 
-  // Debounced live Google Places search with local geolocation biasing
+  // Debounced live Google Places search dynamically restricted to active device/household coordinates
   useEffect(() => {
     const trimmed = searchTerm.trim()
     if (!isChanging || trimmed.length < 2) {
@@ -167,11 +157,9 @@ export default function LivingVenueCard({
 
     const timer = window.setTimeout(async () => {
       try {
-        const needsCity = shouldAppendCityContext(trimmed)
         const { data, error } = await supabase.functions.invoke('place-search', {
           body: {
             query: trimmed,
-            city: needsCity ? 'West Palm Beach, FL' : undefined,
             lat: userCoords.lat,
             lng: userCoords.lng,
           },

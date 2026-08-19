@@ -1735,6 +1735,8 @@ export default function GroceryPage() {
           spotlightedItemId={spotlightedItemId}
           onToggleItem={handleToggle}
           onDeleteItem={handleDeleteItem}
+          onUndoDelete={handleUndoDelete}
+          deletingIds={deletingIds}
           onClearCompleted={() => void clearChecked.mutate()}
           onAddItem={(name, options) =>
             addItemByName(name, {

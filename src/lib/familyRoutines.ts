@@ -44,6 +44,9 @@ export interface AmbientRoutineStatus {
   venueName: string
   endsAtFormatted: string
   text: string
+  pickupDriverName?: string | null
+  pickupDriverId?: string | null
+  effEndTime?: string | null
 }
 
 export interface RoutinePayload {
@@ -671,6 +674,9 @@ export function deriveAmbientRoutineStatus(
         venueName: displayVenue,
         endsAtFormatted,
         text: `${childName}: At ${displayVenue} until ${endsAtFormatted}`,
+        pickupDriverName: routine.pickupDriverName || null,
+        pickupDriverId: routine.pickupDriverId || null,
+        effEndTime: effEndLocal,
       })
     }
   }

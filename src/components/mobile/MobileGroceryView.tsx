@@ -74,12 +74,29 @@ export default function MobileGroceryView({
 }: MobileGroceryViewProps) {
   const [inputValue, setInputValue] = useState('')
   const [isCartOpen, setIsCartOpen] = useState(false)
+  const [localDeletingIds, setLocalDeletingIds] = useState<Set<string>>(new Set())
   const inputRef = useRef<HTMLInputElement>(null)
 
   const triggerHaptic = (durationMs = 8) => {
     try {
       navigator.vibrate?.(durationMs)
     } catch {}
+  }
+
+  const handleDelete = (id: string) => {
+    triggerHaptic(10)
+    setLocalDeletingIds((prev) => new Set(prev).add(id))
+    onDeleteItem(id)
+  }
+
+  const handleUndo = (id: string) => {
+    triggerHaptic(8)
+    setLocalDeletingIds((prev) => {
+      const next = new Set(prev)
+      next.delete(id)
+      return next
+    })
+    onUndoDelete?.(id)
   }
 
   // Voice dictation (Strictly Press-and-Hold)
@@ -276,7 +293,7 @@ export default function MobileGroceryView({
                       {group.items.map((item) => {
                         const isDismissQueued = dismissingIds.has(item.id)
                         const isDismissExiting = dismissingExitingIds.has(item.id)
-                        const isDeleting = deletingIds?.has(item.id) ?? false
+                        const isDeleting = (deletingIds?.has(item.id) ?? false) || localDeletingIds.has(item.id)
                         const visualChecked = item.checked || isDismissQueued
                         const isSpotlighted = spotlightedItemId === item.id
 
@@ -345,7 +362,7 @@ export default function MobileGroceryView({
                                       <Button
                                         variant="ghost"
                                         size="sm"
-                                        onClick={() => onUndoDelete(item.id)}
+                                        onClick={() => handleUndo(item.id)}
                                         className="text-3xs font-semibold text-casa-gold hover:underline p-0 h-auto min-h-0"
                                       >
                                         Undo
@@ -374,10 +391,7 @@ export default function MobileGroceryView({
                                 icon={<X size={15} />}
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => {
-                                  triggerHaptic(6)
-                                  onDeleteItem(item.id)
-                                }}
+                                onClick={() => handleDelete(item.id)}
                                 aria-label={`Delete ${item.name}`}
                                 className="-mr-1.5 p-2 h-9 w-9 text-casa-muted/50 hover:text-casa-error hover:bg-casa-error/10 shrink-0 rounded-xl"
                               />
@@ -454,10 +468,7 @@ export default function MobileGroceryView({
                         icon={<X size={14} />}
                         variant="ghost"
                         size="sm"
-                        onClick={() => {
-                          triggerHaptic(6)
-                          onDeleteItem(item.id)
-                        }}
+                        onClick={() => handleDelete(item.id)}
                         aria-label={`Delete ${item.name}`}
                         className="-mr-1.5 h-8 w-8 text-casa-muted/50 hover:text-casa-error hover:bg-casa-error/10 shrink-0"
                       />

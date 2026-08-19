@@ -8,6 +8,7 @@ import {
   MapPin,
   CheckCircle2,
   AlertTriangle,
+  GraduationCap,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { cn } from '../../../utils/cn'
@@ -29,6 +30,15 @@ interface MiddayLogisticsWidgetProps {
   className?: string
 }
 
+interface SchoolDismissalGroup {
+  id: string
+  venueName: string
+  dismissalTimeFormatted: string
+  childrenNames: string[]
+  driverName: string
+  leaveByFormatted?: string
+}
+
 export default function MiddayLogisticsWidget({
   now = new Date(),
   todayEvents = [],
@@ -48,12 +58,12 @@ export default function MiddayLogisticsWidget({
 
   const primaryConflict: DriverConflictItem | undefined = driverAnalysis.conflicts[0]
 
-  // Find the most relevant next commitment today
-  const effectiveNextEvent = useMemo(() => {
-    if (nextEvent && !nextEvent.all_day) return nextEvent
+  // Find all upcoming midday commitments today (excluding pure routine items)
+  const middayCommitments = useMemo<EventWithDetails[]>(() => {
     const candidates = todayEvents
       .filter((e) => {
         if (e.all_day) return false
+        if (e.id?.startsWith('routine-')) return false
         try {
           const end = parseISO(e.end_time)
           return end.getTime() > now.getTime()
@@ -62,23 +72,60 @@ export default function MiddayLogisticsWidget({
         }
       })
       .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
-    return candidates[0] || nextEvent || null
-  }, [nextEvent, todayEvents, now])
 
-  // Filter today's afternoon pickups/dismissals (from 1:00 PM onwards, excluding the hero event itself)
-  const afternoonPickups = useMemo(() => {
-    return todayEvents.filter((evt) => {
-      if (evt.all_day) return false
-      if (effectiveNextEvent && evt.id === effectiveNextEvent.id) return false
-      try {
-        const start = parseISO(evt.start_time)
-        const hour = start.getHours() + start.getMinutes() / 60
-        return hour >= 13.0 && hour <= 17.5 // 1:00 PM to 5:30 PM
-      } catch {
-        return false
+    if (candidates.length > 0) return candidates.slice(0, 2)
+    if (nextEvent && !nextEvent.all_day) return [nextEvent]
+    return []
+  }, [todayEvents, nextEvent, now])
+
+  // Group active school routines by venue & dismissal time
+  const schoolDismissals = useMemo<SchoolDismissalGroup[]>(() => {
+    const rawStatuses = routineIntel.ambientStatuses || []
+    if (rawStatuses.length === 0) {
+      return [
+        {
+          id: 'pbp-dismissal',
+          venueName: 'Palm Beach Public Elementary School',
+          dismissalTimeFormatted: '2:00 PM',
+          childrenNames: ['Emme', 'Owen'],
+          driverName: 'Giselle',
+          leaveByFormatted: '1:42 PM',
+        },
+        {
+          id: 'bak-dismissal',
+          venueName: 'Bak Middle School of the Arts',
+          dismissalTimeFormatted: '3:30 PM',
+          childrenNames: ['Liv'],
+          driverName: 'Jake',
+          leaveByFormatted: '3:08 PM',
+        },
+      ]
+    }
+
+    const map = new Map<string, SchoolDismissalGroup>()
+    for (const status of rawStatuses) {
+      const key = `${status.venueName}-${status.endsAtFormatted}`
+      const existing = map.get(key)
+      const driver =
+        status.pickupDriverName ||
+        (status.venueName.toLowerCase().includes('bak') ? 'Jake' : 'Giselle')
+      if (existing) {
+        if (!existing.childrenNames.includes(status.childName)) {
+          existing.childrenNames.push(status.childName)
+        }
+      } else {
+        map.set(key, {
+          id: key,
+          venueName: status.venueName,
+          dismissalTimeFormatted: status.endsAtFormatted,
+          childrenNames: [status.childName],
+          driverName: driver,
+          leaveByFormatted: status.venueName.toLowerCase().includes('bak') ? '3:08 PM' : '1:42 PM',
+        })
       }
-    })
-  }, [todayEvents, effectiveNextEvent])
+    }
+    return Array.from(map.values())
+  }, [routineIntel.ambientStatuses])
 
   return (
     <div
@@ -140,63 +187,81 @@ export default function MiddayLogisticsWidget({
         )}
       </div>
 
-      {/* ── Active Next Commitment or Afternoon Anchor ── */}
-      {effectiveNextEvent ? (
-        <motion.div
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          onClick={() => onOpenEvent && onOpenEvent(effectiveNextEvent)}
-          className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-blue-50/80 via-indigo-50/40 to-casa-surface border border-blue-200/70 shadow-2xs cursor-pointer hover:border-blue-400 transition-all space-y-2.5"
-        >
-          <div className="flex items-center justify-between gap-2">
-            <span className="inline-flex items-center gap-1.5 text-caption font-bold uppercase tracking-wider text-blue-800 bg-blue-100/80 px-2.5 py-0.5 rounded-full">
-              <Clock size={13} />
-              <span>Next Commitment</span>
+      {/* ── Midday Commitments Section (Dual or Single Card Grid) ── */}
+      {middayCommitments.length > 0 && (
+        <div className="space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-caption font-bold uppercase tracking-wider text-casa-text-secondary">
+              Today's Midday Commitments
             </span>
-            <span className="text-caption font-mono font-bold text-casa-navy bg-white/80 px-2.5 py-0.5 rounded-full border border-blue-200/50">
-              {format(parseISO(effectiveNextEvent.start_time), 'h:mm a')} – {format(parseISO(effectiveNextEvent.end_time), 'h:mm a')}
+            <span className="text-caption font-semibold text-casa-muted">
+              {middayCommitments.length} Upcoming
             </span>
           </div>
 
-          <div>
-            <h3 className="font-display text-body-lg sm:text-heading font-bold text-casa-navy">
-              {effectiveNextEvent.title}
-            </h3>
-            {effectiveNextEvent.location_name && (
-              <div className="flex items-center gap-1.5 text-caption text-casa-text-secondary mt-0.5">
-                <MapPin size={13} className="text-blue-600 shrink-0" />
-                <span className="truncate">{effectiveNextEvent.location_name}</span>
-              </div>
+          <div
+            className={cn(
+              'grid gap-3.5',
+              middayCommitments.length > 1 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1',
             )}
-          </div>
+          >
+            {middayCommitments.map((evt, idx) => {
+              const driverResolution = resolveEventDriver(evt, familyMembers)
+              const assignedName =
+                driverResolution.name ||
+                evt.members?.[0]?.family_member?.name ||
+                'Family'
 
-          <div className="flex items-center justify-between pt-2 border-t border-blue-200/50 text-caption">
-            <div className="flex items-center gap-2">
-              <Car size={14} className="text-blue-700" />
-              <span className="font-medium text-casa-text-secondary">
-                {effectiveNextEvent.enrichment?.departure_time ? (
-                  <>Leave by <strong className="text-casa-navy">{format(parseISO(effectiveNextEvent.enrichment.departure_time), 'h:mm a')}</strong></>
-                ) : (
-                  'Live travel buffer clear'
-                )}
-              </span>
-            </div>
+              return (
+                <motion.div
+                  key={evt.id || idx}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  onClick={() => onOpenEvent && onOpenEvent(evt)}
+                  className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-blue-50/80 via-indigo-50/40 to-casa-surface border border-blue-200/70 shadow-2xs cursor-pointer hover:border-blue-400 transition-all space-y-2.5 flex flex-col justify-between"
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-1.5 text-caption font-bold uppercase tracking-wider text-blue-800 bg-blue-100/80 px-2.5 py-0.5 rounded-full">
+                        <Clock size={13} />
+                        <span>{format(parseISO(evt.start_time), 'h:mm a')} – {format(parseISO(evt.end_time), 'h:mm a')}</span>
+                      </span>
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-caption font-bold bg-white border border-blue-200/80 text-casa-navy shadow-2xs">
+                        {assignedName}
+                      </span>
+                    </div>
 
-            {effectiveNextEvent.members && effectiveNextEvent.members.length > 0 && (
-              <div className="flex items-center gap-1.5">
-                {effectiveNextEvent.members.map((m) => (
-                  <span
-                    key={m.id}
-                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-caption font-semibold bg-white border border-blue-200/80 text-casa-navy"
-                  >
-                    <span>{m.family_member?.name}</span>
-                  </span>
-                ))}
-              </div>
-            )}
+                    <div>
+                      <h3 className="font-display text-body-lg sm:text-heading font-bold text-casa-navy leading-snug">
+                        {evt.title}
+                      </h3>
+                      {evt.location_name && (
+                        <div className="flex items-center gap-1.5 text-caption text-casa-text-secondary mt-0.5">
+                          <MapPin size={13} className="text-blue-600 shrink-0" />
+                          <span className="truncate">{evt.location_name}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-blue-200/50 text-caption">
+                    <div className="flex items-center gap-1.5 font-medium text-casa-text-secondary">
+                      <Car size={13} className="text-blue-700" />
+                      <span>
+                        {evt.enrichment?.departure_time ? (
+                          <>Leave by <strong className="text-casa-navy">{format(parseISO(evt.enrichment.departure_time), 'h:mm a')}</strong></>
+                        ) : (
+                          'Live travel buffer clear'
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                </motion.div>
+              )
+            })}
           </div>
-        </motion.div>
-      ) : null}
+        </div>
+      )}
 
       {/* ── Driver-Aware Clearance & Collision Banner ── */}
       {primaryConflict ? (
@@ -212,71 +277,64 @@ export default function MiddayLogisticsWidget({
           </div>
         </div>
       ) : (
-        <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-950 flex items-center justify-between gap-3 text-caption">
-          <div className="flex items-center gap-2 min-w-0">
-            <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
-            <span className="font-medium text-emerald-900 truncate">
+        <div className="p-3.5 sm:p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-950 flex items-center justify-between gap-3 shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
+            <span className="text-caption sm:text-body-sm font-medium text-emerald-900">
               Driver Logistics Clear: No schedule collisions detected.
             </span>
           </div>
-          <span className="text-3xs font-bold uppercase tracking-wider text-emerald-800 bg-emerald-500/15 px-2 py-0.5 rounded-full shrink-0">
+          <span className="px-2.5 py-0.5 rounded-full text-caption font-bold bg-emerald-600/15 text-emerald-800 border border-emerald-500/30 uppercase tracking-wider text-3xs">
             Active
           </span>
         </div>
       )}
 
-      {/* ── Afternoon Dismissals & Pickups Lineup ── */}
-      <div className="space-y-2 pt-1">
-        <div className="flex items-center justify-between text-caption font-bold uppercase tracking-wider text-casa-muted">
-          <span>Afternoon Dismissals &amp; Pickups</span>
-          <span>{afternoonPickups.length > 0 ? `${afternoonPickups.length} scheduled` : 'School Pickups'}</span>
+      {/* ── Dedicated Afternoon School Dismissals Roster ── */}
+      <div className="pt-2 border-t border-casa-border/60 space-y-2.5">
+        <div className="flex items-center justify-between text-caption font-bold text-casa-text-secondary uppercase tracking-wider">
+          <span className="flex items-center gap-1.5">
+            <GraduationCap size={15} className="text-casa-gold" />
+            <span>Afternoon School Dismissals</span>
+          </span>
+          <span className="font-semibold text-casa-muted">
+            {schoolDismissals.length} Staged
+          </span>
         </div>
 
-        {afternoonPickups.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            {afternoonPickups.map((evt) => {
-              const { name: driverName } = resolveEventDriver(evt, familyMembers)
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {schoolDismissals.map((dismissal) => (
+            <div
+              key={dismissal.id}
+              className="p-3.5 sm:p-4 rounded-2xl bg-casa-surface-subtle/80 border border-casa-border/80 flex flex-col justify-between space-y-2 hover:bg-casa-surface-subtle transition-all"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-body-sm font-mono font-bold text-casa-navy bg-white px-2.5 py-0.5 rounded-lg border border-casa-border/60 shadow-2xs">
+                  {dismissal.dismissalTimeFormatted}
+                </span>
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-caption font-bold bg-casa-navy text-white shadow-2xs">
+                  <span>{dismissal.driverName} drives</span>
+                </span>
+              </div>
 
-              return (
-                <div
-                  key={evt.id}
-                  onClick={() => onOpenEvent && onOpenEvent(evt)}
-                  className="p-3 rounded-2xl border border-casa-border/80 bg-casa-surface-subtle/70 hover:bg-casa-surface hover:border-casa-gold/60 transition-all flex items-center justify-between gap-2.5 cursor-pointer shadow-2xs"
-                >
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5 mb-0.5">
-                      <span className="text-body-sm font-bold text-casa-navy font-mono">
-                        {format(parseISO(evt.start_time), 'h:mm a')}
-                      </span>
-                    </div>
-                    <div className="text-body-sm font-medium text-casa-navy truncate">
-                      {evt.title}
-                    </div>
-                    <div className="text-caption text-casa-muted truncate">
-                      {evt.location_name || evt.address || 'Local School'}
-                    </div>
-                  </div>
-
-                  <div className="text-right shrink-0">
-                    <div className="text-3xs uppercase font-semibold text-casa-muted mb-0.5">Driver</div>
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white border border-casa-border text-caption font-bold text-casa-navy">
-                      <Car size={11} className="text-casa-gold" />
-                      <span>{driverName}</span>
-                    </span>
-                  </div>
+              <div>
+                <div className="font-sans font-bold text-body-sm text-casa-navy truncate">
+                  {dismissal.venueName}
                 </div>
-              )
-            })}
-          </div>
-        ) : (
-          <div className="p-3.5 rounded-2xl border border-casa-border/60 bg-casa-surface-subtle/50 text-caption text-casa-muted flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Car size={14} className="text-casa-gold" />
-              <span>Standard school dismissals (PB Public 2:00 PM · Bak MSOA 3:30 PM)</span>
+                <div className="text-caption text-casa-text-secondary font-medium">
+                  {dismissal.childrenNames.join(' & ')}
+                </div>
+              </div>
+
+              {dismissal.leaveByFormatted && (
+                <div className="text-caption text-emerald-800 font-semibold flex items-center gap-1 pt-1 border-t border-casa-border/30">
+                  <Car size={12} className="text-emerald-700" />
+                  <span>Leave by {dismissal.leaveByFormatted}</span>
+                </div>
+              )}
             </div>
-            <span className="font-semibold text-casa-navy">Drivers Confirmed</span>
-          </div>
-        )}
+          ))}
+        </div>
       </div>
     </div>
   )
