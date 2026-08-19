@@ -48,10 +48,28 @@ export default function MiddayLogisticsWidget({
 
   const primaryConflict: DriverConflictItem | undefined = driverAnalysis.conflicts[0]
 
-  // Filter today's afternoon pickups/dismissals (from 1:00 PM onwards)
+  // Find the most relevant next commitment today
+  const effectiveNextEvent = useMemo(() => {
+    if (nextEvent && !nextEvent.all_day) return nextEvent
+    const candidates = todayEvents
+      .filter((e) => {
+        if (e.all_day) return false
+        try {
+          const end = parseISO(e.end_time)
+          return end.getTime() > now.getTime()
+        } catch {
+          return true
+        }
+      })
+      .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+    return candidates[0] || nextEvent || null
+  }, [nextEvent, todayEvents, now])
+
+  // Filter today's afternoon pickups/dismissals (from 1:00 PM onwards, excluding the hero event itself)
   const afternoonPickups = useMemo(() => {
     return todayEvents.filter((evt) => {
       if (evt.all_day) return false
+      if (effectiveNextEvent && evt.id === effectiveNextEvent.id) return false
       try {
         const start = parseISO(evt.start_time)
         const hour = start.getHours() + start.getMinutes() / 60
@@ -60,7 +78,7 @@ export default function MiddayLogisticsWidget({
         return false
       }
     })
-  }, [todayEvents])
+  }, [todayEvents, effectiveNextEvent])
 
   return (
     <div
@@ -123,11 +141,11 @@ export default function MiddayLogisticsWidget({
       </div>
 
       {/* ── Active Next Commitment or Afternoon Anchor ── */}
-      {nextEvent ? (
+      {effectiveNextEvent ? (
         <motion.div
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
-          onClick={() => onOpenEvent && onOpenEvent(nextEvent)}
+          onClick={() => onOpenEvent && onOpenEvent(effectiveNextEvent)}
           className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-blue-50/80 via-indigo-50/40 to-casa-surface border border-blue-200/70 shadow-2xs cursor-pointer hover:border-blue-400 transition-all space-y-2.5"
         >
           <div className="flex items-center justify-between gap-2">
@@ -136,18 +154,18 @@ export default function MiddayLogisticsWidget({
               <span>Next Commitment</span>
             </span>
             <span className="text-caption font-mono font-bold text-casa-navy bg-white/80 px-2.5 py-0.5 rounded-full border border-blue-200/50">
-              {format(parseISO(nextEvent.start_time), 'h:mm a')} – {format(parseISO(nextEvent.end_time), 'h:mm a')}
+              {format(parseISO(effectiveNextEvent.start_time), 'h:mm a')} – {format(parseISO(effectiveNextEvent.end_time), 'h:mm a')}
             </span>
           </div>
 
           <div>
             <h3 className="font-display text-body-lg sm:text-heading font-bold text-casa-navy">
-              {nextEvent.title}
+              {effectiveNextEvent.title}
             </h3>
-            {nextEvent.location_name && (
+            {effectiveNextEvent.location_name && (
               <div className="flex items-center gap-1.5 text-caption text-casa-text-secondary mt-0.5">
                 <MapPin size={13} className="text-blue-600 shrink-0" />
-                <span className="truncate">{nextEvent.location_name}</span>
+                <span className="truncate">{effectiveNextEvent.location_name}</span>
               </div>
             )}
           </div>
@@ -156,17 +174,17 @@ export default function MiddayLogisticsWidget({
             <div className="flex items-center gap-2">
               <Car size={14} className="text-blue-700" />
               <span className="font-medium text-casa-text-secondary">
-                {nextEvent.enrichment?.departure_time ? (
-                  <>Leave by <strong className="text-casa-navy">{format(parseISO(nextEvent.enrichment.departure_time), 'h:mm a')}</strong></>
+                {effectiveNextEvent.enrichment?.departure_time ? (
+                  <>Leave by <strong className="text-casa-navy">{format(parseISO(effectiveNextEvent.enrichment.departure_time), 'h:mm a')}</strong></>
                 ) : (
                   'Live travel buffer clear'
                 )}
               </span>
             </div>
 
-            {nextEvent.members && nextEvent.members.length > 0 && (
+            {effectiveNextEvent.members && effectiveNextEvent.members.length > 0 && (
               <div className="flex items-center gap-1.5">
-                {nextEvent.members.map((m) => (
+                {effectiveNextEvent.members.map((m) => (
                   <span
                     key={m.id}
                     className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-caption font-semibold bg-white border border-blue-200/80 text-casa-navy"

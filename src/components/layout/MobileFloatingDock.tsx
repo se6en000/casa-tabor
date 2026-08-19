@@ -45,7 +45,7 @@ export default function MobileFloatingDock({ onOpenQuickCreate }: MobileFloating
     {
       to: '/calendar',
       icon: Calendar,
-      label: 'Agenda',
+      label: 'Calendar',
       isActive: location.pathname.startsWith('/calendar'),
       onClick: () => {
         triggerHaptic()

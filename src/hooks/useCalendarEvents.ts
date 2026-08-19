@@ -518,7 +518,7 @@ function _fireInvalidation() {
   _debounceTimer = setTimeout(() => {
     _debounceTimer = null
     _invalidateCallbacks.forEach(f => f())
-  }, 600)
+  }, 80)
 }
 
 function _firePlanInvalidation() {
@@ -526,7 +526,7 @@ function _firePlanInvalidation() {
   _planDebounceTimer = setTimeout(() => {
     _planDebounceTimer = null
     _planInvalidateCallbacks.forEach(f => f())
-  }, 600)
+  }, 80)
 }
 
 function _subscribeRealtimeChannel() {
@@ -574,11 +574,18 @@ function useRealtimeEventInvalidation() {
     const cb = () => {
       void qc.invalidateQueries({ queryKey: ['events'] })
       void qc.invalidateQueries({ queryKey: ['event-details'] })
+      void qc.refetchQueries({ queryKey: ['events'], type: 'active' })
     }
     const planCb = () => {
       void qc.invalidateQueries({ queryKey: ['event-transportation-plans'] })
       void qc.invalidateQueries({ queryKey: ['event-details'] })
     }
+    const onManualMutated = () => {
+      cb()
+      planCb()
+    }
+    window.addEventListener('casa-event-mutated', onManualMutated)
+
     _invalidateCallbacks.add(cb)
     _planInvalidateCallbacks.add(planCb)
     _queryClientInstances.add(qc)
@@ -589,6 +596,7 @@ function useRealtimeEventInvalidation() {
     }
 
     return () => {
+      window.removeEventListener('casa-event-mutated', onManualMutated)
       _invalidateCallbacks.delete(cb)
       _planInvalidateCallbacks.delete(planCb)
       _queryClientInstances.delete(qc)

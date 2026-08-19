@@ -114,6 +114,9 @@ export function invalidateAllCalendarQueries(queryClient: QueryClient, eventId?:
     void queryClient.invalidateQueries({ queryKey: ['event-details', eventId] })
   }
   void queryClient.refetchQueries({ queryKey: ['events'], type: 'active' })
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('casa-event-mutated', { detail: { eventId } }))
+  }
 }
 
 export async function materializeSyntheticRoutineEvent(

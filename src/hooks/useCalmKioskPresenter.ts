@@ -172,17 +172,19 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     return [...todayEvents, ...newRoutineEvents]
   }, [todayEvents, routineTodayEvents])
 
-  // Helper to test if an event is a meal (which is featured in Tonight's Kitchen)
+  // Helper to test if an event is strictly a home cooking placeholder (handled by Tonight's Kitchen)
   const isMealEvent = (e: EventWithDetails) => {
-    const cat = (e.enrichment?.category || (e as any).category || '').toLowerCase()
-    const title = (e.title || '').toLowerCase()
-    return (
-      cat.includes('meal') ||
-      cat.includes('prep') ||
-      cat.includes('cook') ||
-      title.includes('dinner') ||
-      title.includes('lunch')
-    )
+    const title = (e.title || '').trim().toLowerCase()
+    // Explicit kitchen recipe placeholders
+    if (title.startsWith('cook:') || title.startsWith("tonight's kitchen:") || title.startsWith('recipe:')) {
+      return true
+    }
+    // If it has an offsite venue, restaurant, or location, it is ALWAYS a real appointment
+    const loc = (e.location_name || e.address || '').trim().toLowerCase()
+    if (loc && !['home', 'at home', 'casa'].includes(loc)) {
+      return false
+    }
+    return false
   }
 
   // Helper to test if an event is travel / off-site
