@@ -141,6 +141,21 @@ Deno.serve(async (request) => {
       })
     }
 
+    if (body.action === 'list_recent_requests') {
+      const { data: reqs, error: reqErr } = await sb
+        .from('capture_requests')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(20)
+      if (reqErr) throw reqErr
+      return new Response(JSON.stringify({
+        status: 'success',
+        requests: reqs ?? [],
+      }), {
+        headers: { ...CORS, 'content-type': 'application/json' },
+      })
+    }
+
     if (body.action === 'revoke_device') {
       const deviceId = normalizeText(body.deviceId)
       if (!deviceId) throw new Error('deviceId required')

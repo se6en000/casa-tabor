@@ -157,6 +157,20 @@ html {
      All rem-based tokens, spacing, and components scale proportionally.
      clamp(min, preferred, max) — preferred is a linear vw interpolation. */
   font-size: clamp(1rem, calc(0.818rem + 0.777vw), 1.75rem);
+  /* Lock viewport against zoom and elastic window shifting */
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 /* Fine-pointer density is capability-driven; touch and kiosk keep the
@@ -170,20 +184,39 @@ html {
 body {
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
-  min-height: 100dvh;
-  overflow-x: hidden;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
 }
 
 #root {
-  min-height: 100dvh;
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 /* ── Responsive application shell ─────────────────────────────── */
 .app-shell {
+  width: 100%;
+  max-width: 100vw;
   height: 100vh;
   height: 100svh;
   height: 100dvh;
   min-width: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: manipulation;
 }
 
 .app-shell-main {
@@ -323,18 +356,21 @@ html.midnight-gallery .topbar-gold-divider {
 /* brightness and color temperature adjustments via the sensor   */
 /* bridge (pi/sensor-bridge/main.py). No software overlay needed. */
 
-/* ── Kiosk / Touch Mode (Pi Chromium + any touch device) ─────── */
-/* Applied unconditionally — this is a touch-first app           */
+/* ── Kiosk / Mobile / Touch Mode ─────────────────────────────── */
+/* Applied unconditionally — this is a touch-first native app shell */
 
 html {
-  /* Rubber-band glow at scroll edges (tablet feel) but NO pull-to-refresh:
-     `contain` keeps the local elastic bounce while blocking scroll chaining /
-     pull-to-refresh navigation. (`none` would suppress the bounce entirely.)
-     The bounce only renders when Chromium's ElasticOverscroll feature is on —
-     enabled in the Pi launcher via --enable-features=ElasticOverscroll. */
+  overscroll-behavior: none;
+  touch-action: manipulation;
+}
+
+/* Scrollable containers inherit momentum scrolling and isolated overscroll containment */
+.overflow-y-auto,
+.overflow-x-auto,
+.overflow-auto,
+[data-scrollable="true"] {
+  -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
-  /* Don't block scroll/swipe — let individual elements define touch-action */
-  touch-action: auto;
 }
 
 /* Disable text selection everywhere except inputs */

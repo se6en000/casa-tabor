@@ -122,6 +122,7 @@ function resolveReminderCommand(input, options) {
   }
 }
 
+
 function resolveEventCommand(input, options) {
   const mutation = resolveDeterministicEventMutation(input, [], {
     now: options.now,
@@ -215,6 +216,7 @@ function captureTemporalProvenance(input, range, options) {
 }
 
 function looksLikeGroceryCommand(input) {
+  if (/\b(?:reminder|reminders|to do|todo|task|calendar|meeting|appt|appointment)\b/i.test(input)) return false
   if (!/^(?:please\s+)?add\b/i.test(input)) return false
   if (GROCERY_LIST_HINT.test(input)) return true
   return !looksLikeEventCommand(input) && !DAY_HINT.test(input) && !TIME_HINT.test(input)
@@ -250,6 +252,9 @@ function parseRequestedItem(value) {
 function splitTrailingLocation(subject) {
   const match = String(subject).match(/^(.+?)\s+at\s+(.+)$/i)
   if (!match) return { title: stripReminderTiming(subject), location: null }
+  if (/^\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)$/i.test(match[2].trim()) || /^(?:noon|midnight|lunch|dinner)$/i.test(match[2].trim())) {
+    return { title: stripReminderTiming(subject), location: null }
+  }
   return {
     title: stripReminderTiming(match[1].trim()),
     location: match[2].trim(),
@@ -258,10 +263,9 @@ function splitTrailingLocation(subject) {
 
 function stripReminderTiming(value) {
   return String(value ?? '')
-    .replace(
-      /\s+(?:(?:today|tomorrow|tonight)(?:\s+(?:morning|afternoon|evening|night))?|(?:this|in the)\s+(?:early\s+|late\s+)?(?:morning|afternoon|evening|night)|(?:at|around)\s+(?:lunch(?:\s*time)?|lunchtime|noon|midday|breakfast(?:\s*time)?|dinner(?:\s*time)?|bedtime|after work))\s*$/i,
-      '',
-    )
+    .replace(/\s+(?:today|tomorrow|tonight)\b/gi, '')
+    .replace(/\s+(?:this|in the)\s+(?:early\s+|late\s+)?(?:morning|afternoon|evening|night)\b/gi, '')
+    .replace(/\s+(?:at|around)\s+(?:\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)|lunch(?:\s*time)?|lunchtime|noon|midday|breakfast(?:\s*time)?|dinner(?:\s*time)?|bedtime|after work)\b/gi, '')
     .trim()
 }
 

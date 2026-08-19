@@ -10,7 +10,7 @@ import { Button } from '../ui'
 
 const primaryTabs = [
   { to: '/', icon: Home, label: 'Today' },
-  { to: '/calendar', icon: Calendar, label: 'Agenda' },
+  { to: '/calendar', icon: Calendar, label: 'Calendar' },
   { to: '/cook', icon: ChefHat, label: 'Cooking' },
 ]
 
