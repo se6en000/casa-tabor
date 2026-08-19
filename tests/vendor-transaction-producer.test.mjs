@@ -66,18 +66,35 @@ test('vendor transaction identity clusters multiple Walmart emails into a single
     type: 'payment',
   }
 
+  const item3 = {
+    id: 'item-3',
+    event_title: 'Your Walmart order of 27 items is out for delivery',
+    description: '27 items including Bananas, Milk, Bread. Arriving today',
+    attention_thread_key: 'walmart-items-count',
+    source_type: 'gmail',
+    created_at: '2026-08-19T14:10:00Z',
+    due_by: '2026-08-19T18:00:00Z',
+    dismissed: false,
+    priority: 1,
+    type: 'delivery',
+  }
+
   const t1 = buildDeliveryTransitItem(item1)
   const t2 = buildDeliveryTransitItem(item2)
+  const t3 = buildDeliveryTransitItem(item3)
 
   assert.equal(t1.threadKey, 'delivery:walmart:2026-08-19')
   assert.equal(t2.threadKey, 'delivery:walmart:2026-08-19')
+  assert.equal(t3.threadKey, 'delivery:walmart:2026-08-19')
 
-  const { actionableItems, deliveryTransitItems } = splitActionableAndTransitItems([item1, item2])
+  const { actionableItems, deliveryTransitItems } = splitActionableAndTransitItems([item1, item2, item3])
   assert.equal(actionableItems.length, 0)
   assert.equal(deliveryTransitItems.length, 1)
   assert.equal(deliveryTransitItems[0].vendor, 'Walmart')
   assert.equal(deliveryTransitItems[0].cost, '$138.65')
   assert.equal(deliveryTransitItems[0].stage, 'out_for_delivery')
   assert.equal(deliveryTransitItems[0].isPerishable, true)
+  assert.match(deliveryTransitItems[0].itemSummary, /InHome/i)
+  assert.match(deliveryTransitItems[0].itemSummary, /27 items/i)
 })
 

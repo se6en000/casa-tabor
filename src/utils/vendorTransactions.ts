@@ -28,18 +28,25 @@ function legacyVendor(item: PrepItem) {
   return VENDOR_ALIASES.find(({ aliases }) => aliases.some((alias) => text.includes(alias)))?.vendor ?? null
 }
 
-function orderId(item: PrepItem) {
+function orderId(item: PrepItem): string | null {
   const text = `${item.event_title ?? ''} ${item.description}`
-  const match = text.match(/\border\s*(?:number|no\.?|id)?\s*[:#]?\s*#?([a-z0-9-]*\d[a-z0-9-]{3,})\b/i)
-  return match ? match[1] : null
-}
 
-function transactionDescriptor(item: PrepItem) {
-  const text = `${item.event_title ?? ''} ${item.description}`
-  const descriptor = text.match(
-    /(?:delivered:\s*|delivery of\s+)([a-z0-9][a-z0-9™+ .'-]{2,100}?\+\s*\d+\s*items?)/i,
-  )?.[1]
-  return descriptor ? normalizeKeyPart(descriptor) : null
+  // Amazon order format: 123-1234567-1234567
+  const amazonMatch = text.match(/\b\d{3}-\d{7}-\d{7}\b/)
+  if (amazonMatch) return amazonMatch[0]
+
+  // Explicit numeric Order Number: e.g. "Order #20001519169311", "Order number: 987654321", "#2000151-91693117"
+  const explicitOrderMatch = text.match(/\border\s*(?:number|no\.?|id|#)\s*[:#]?\s*#?([a-z0-9-]*\d{6,}[a-z0-9-]*)\b/i)
+  if (explicitOrderMatch) return explicitOrderMatch[1]
+
+  // Tracking numbers (UPS, FedEx, USPS)
+  const upsMatch = text.match(/\b1Z[0-9A-Z]{16}\b/i)
+  if (upsMatch) return upsMatch[0].toUpperCase()
+
+  const uspsMatch = text.match(/\b9[2345]\d{20,24}\b/)
+  if (uspsMatch) return uspsMatch[0]
+
+  return null
 }
 
 export function transactionStage(item: PrepItem): DeliveryTransitStage | null {
@@ -81,6 +88,10 @@ function resolveVendorName(item: PrepItem): string {
 }
 
 function deliveryDateKey(item: PrepItem): string {
+  const text = `${item.event_title ?? ''} ${item.description}`.toLowerCase()
+  if (text.includes('today') || text.includes('arriving today')) {
+    return new Date().toISOString().slice(0, 10)
+  }
   if (item.due_by) {
     return item.due_by.slice(0, 10)
   }
@@ -103,25 +114,90 @@ export function vendorTransactionIdentity(item: PrepItem): VendorTransactionIden
   const explicitKey = item.attention_thread_key?.trim()
   const explicitMessageFallback = explicitKey?.includes(':message:') || explicitKey?.includes('suggestion:') ? explicitKey : null
   const extractedOrderId = orderId(item)
-  const descriptor = transactionDescriptor(item)
   const dateKey = deliveryDateKey(item)
 
   // A canonical transaction key has an actual numeric order ID (e.g. transaction:walmart:2000151-91693117)
   const isCanonicalOrderKey = Boolean(
     explicitKey &&
     !explicitMessageFallback &&
-    /^transaction:[a-z0-9-]+:[a-z0-9-]*\d[a-z0-9-]*$/i.test(explicitKey)
+    /^transaction:[a-z0-9-]+:[a-z0-9-]*\d{6,}[a-z0-9-]*$/i.test(explicitKey)
   )
 
   const key =
     (isCanonicalOrderKey ? explicitKey : null)
     || (extractedOrderId
       ? `transaction:${vendorKey}:${normalizeKeyPart(extractedOrderId)}`
-      : descriptor
-        ? `transaction:${vendorKey}:items:${descriptor}`
-        : `delivery:${vendorKey}:${dateKey}`)
+      : `delivery:${vendorKey}:${dateKey}`)
 
   return { key, vendor, stage: transactionStage(item) }
+}
+
+export function mergeItemSummary(summaryA?: string | null, summaryB?: string | null): string {
+  const isGeneric = (s?: string | null) =>
+    !s || /final charge|temporary hold|charge for your|receipt for|your walmart order|package|grocery delivery/i.test(s)
+
+  if (!summaryA && !summaryB) return 'Grocery Delivery'
+  if (!summaryA) return summaryB!
+  if (!summaryB) return summaryA
+
+  const aIsGeneric = isGeneric(summaryA)
+  const bIsGeneric = isGeneric(summaryB)
+
+  if (aIsGeneric && !bIsGeneric) return summaryB
+  if (!aIsGeneric && bIsGeneric) return summaryA
+
+  const aHasInHome = /inhome/i.test(summaryA)
+  const bHasInHome = /inhome/i.test(summaryB)
+  const aHasItems = /\d+\s+items?/i.test(summaryA)
+  const bHasItems = /\d+\s+items?/i.test(summaryB)
+
+  if (aHasInHome && bHasItems && !aHasItems) {
+    const itemsPart = summaryB.match(/\d+\s+items?(?:\s+including\s+[A-Za-z0-9\s™+'-]{3,40})?/i)?.[0]
+    return itemsPart ? `Delivery of InHome order (${itemsPart})` : summaryA
+  }
+  if (bHasInHome && aHasItems && !bHasItems) {
+    const itemsPart = summaryA.match(/\d+\s+items?(?:\s+including\s+[A-Za-z0-9\s™+'-]{3,40})?/i)?.[0]
+    return itemsPart ? `Delivery of InHome order (${itemsPart})` : summaryB
+  }
+
+  return summaryA.length >= summaryB.length ? summaryA : summaryB
+}
+
+export function mergeDeliveryTransitItem(
+  existing: DeliveryTransitItem,
+  incoming: DeliveryTransitItem
+): DeliveryTransitItem {
+  const stageRank: DeliveryTransitStage[] = ['confirmed', 'payment', 'shipped', 'out_for_delivery', 'delivered', 'problem']
+  const existingRank = stageRank.indexOf(existing.stage)
+  const incomingRank = stageRank.indexOf(incoming.stage)
+  const higherStage = incomingRank > existingRank ? incoming.stage : existing.stage
+
+  const mergedCost = incoming.cost || existing.cost || null
+  const mergedSummary = mergeItemSummary(existing.itemSummary, incoming.itemSummary)
+
+  const isDetailedEta = (eta?: string | null) =>
+    Boolean(eta && /between|by\s+\d|today|\d{1,2}:\d{2}/i.test(eta))
+
+  const mergedEta = isDetailedEta(incoming.etaDisplay)
+    ? incoming.etaDisplay
+    : isDetailedEta(existing.etaDisplay)
+    ? existing.etaDisplay
+    : incoming.etaDisplay || existing.etaDisplay || null
+
+  const newerDate =
+    new Date(incoming.occurredAt).getTime() >= new Date(existing.occurredAt).getTime()
+      ? incoming.occurredAt
+      : existing.occurredAt
+
+  return {
+    ...existing,
+    stage: higherStage,
+    cost: mergedCost,
+    itemSummary: mergedSummary,
+    etaDisplay: mergedEta,
+    isPerishable: existing.isPerishable || incoming.isPerishable,
+    occurredAt: newerDate,
+  }
 }
 
 export function isNewerTransactionUpdate(
@@ -205,20 +281,20 @@ export function buildDeliveryTransitItem(item: PrepItem): DeliveryTransitItem {
   const stage = transaction?.stage || transactionStage(item) || 'shipped'
   const isPerish = isPerishableDelivery(item)
 
-  // Extract clean summary
-  const desc = item.description || ''
-  const itemMatch = desc.match(/(?:delivered:\s*|delivery of\s+)([A-Za-z0-9\s™+'-]{2,60}?\+\s*\d+\s*items?)/i)
-    || desc.match(/(\d+\s+items?\s+including\s+[A-Za-z0-9\s™+'-]{3,40})/i)
-    || desc.match(/(Delivery of InHome order)/i)
-    || desc.match(/(\d+\s+items?|[A-Za-z0-9\s™+'-]{3,40}(?:Book|Tools|Kit|Packs?|Order|Box))/i)
+  // Extract clean summary from combined title & description
+  const fullText = `${item.event_title ?? ''} ${item.description ?? ''}`.trim()
+  const itemMatch = fullText.match(/(?:delivered:\s*|delivery of\s+)([A-Za-z0-9\s™+'-]{2,60}?\+\s*\d+\s*items?)/i)
+    || fullText.match(/(\d+\s+items?\s+including\s+[A-Za-z0-9\s™+'-]{3,40})/i)
+    || fullText.match(/(Delivery of InHome order)/i)
+    || fullText.match(/(\d+\s+items?|[A-Za-z0-9\s™+'-]{3,40}(?:Book|Tools|Kit|Packs?|Order|Box))/i)
 
   const itemSummary = itemMatch ? itemMatch[1] || itemMatch[0].trim() : (isPerish ? 'Grocery Delivery' : 'Package')
 
   // Extract cost / amount
-  const cost = extractAmount(desc) || (item.event_title ? extractAmount(item.event_title) : null)
+  const cost = extractAmount(fullText)
 
   // Extract ETA or time window
-  const etaMatch = desc.match(/(?:(?:delivery\s+)?window\s+(?:is\s+)?[\d:apm\s–-]+|between\s+[\d:apm\s–-]+|today\s+by\s+[\d:apm]+|today\s+between\s+[\d:apm\s–-]+|expected\s+today)/i)
+  const etaMatch = fullText.match(/(?:(?:delivery\s+)?window\s+(?:is\s+)?[\d:apm\s–-]+|between\s+[\d:apm\s–-]+|today\s+by\s+[\d:apm]+|today\s+between\s+[\d:apm\s–-]+|expected\s+today)/i)
   const etaDisplay = etaMatch ? etaMatch[0].trim() : (item.due_by ? new Date(item.due_by).toLocaleDateString() : null)
 
   return {

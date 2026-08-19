@@ -18,6 +18,7 @@ import type { PrepItem, DeliveryTransitItem, DeliveryTransitStage, FamilyMember 
 import {
   isDeliveryTransitItem,
   buildDeliveryTransitItem,
+  mergeDeliveryTransitItem,
   stageStepIndex,
 } from '../../../utils/vendorTransactions.ts'
 import { buildGmailWebUrl } from '../../../utils/prepItemClusters'
@@ -87,7 +88,6 @@ export default function EstateLogisticsWidget({
   // Extract and build unique transit items
   const allTransitItems = useMemo<DeliveryTransitItem[]>(() => {
     const transitMap = new Map<string, DeliveryTransitItem>()
-    const stageRank: DeliveryTransitStage[] = ['confirmed', 'payment', 'shipped', 'out_for_delivery', 'delivered', 'problem']
 
     for (const item of activePrep) {
       if (isDeliveryTransitItem(item)) {
@@ -99,42 +99,7 @@ export default function EstateLogisticsWidget({
         if (!existing) {
           transitMap.set(transit.threadKey, transit)
         } else {
-          const existingRank = stageRank.indexOf(existing.stage)
-          const incomingRank = stageRank.indexOf(transit.stage)
-          const higherStage = incomingRank > existingRank ? transit.stage : existing.stage
-
-          const mergedCost = transit.cost || existing.cost || null
-          const isGenericPaymentSummary = (summary?: string | null) =>
-            !summary || /final charge|temporary hold|charge for your|receipt for/i.test(summary)
-
-          const incomingLen = transit.itemSummary?.length ?? 0
-          const existingLen = existing.itemSummary?.length ?? 0
-          const mergedSummary = !isGenericPaymentSummary(transit.itemSummary) && (incomingLen >= existingLen || isGenericPaymentSummary(existing.itemSummary))
-            ? (transit.itemSummary ?? existing.itemSummary)
-            : (!isGenericPaymentSummary(existing.itemSummary) ? existing.itemSummary : transit.itemSummary)
-
-          const isDetailedEta = (eta?: string | null) =>
-            Boolean(eta && /between|by\s+\d|today/i.test(eta))
-
-          const mergedEta = isDetailedEta(transit.etaDisplay)
-            ? transit.etaDisplay
-            : isDetailedEta(existing.etaDisplay)
-            ? existing.etaDisplay
-            : transit.etaDisplay || existing.etaDisplay || null
-
-          const newerDate =
-            new Date(transit.occurredAt).getTime() >= new Date(existing.occurredAt).getTime()
-              ? transit.occurredAt
-              : existing.occurredAt
-
-          transitMap.set(transit.threadKey, {
-            ...existing,
-            stage: higherStage,
-            cost: mergedCost,
-            itemSummary: mergedSummary,
-            etaDisplay: mergedEta,
-            occurredAt: newerDate,
-          })
+          transitMap.set(transit.threadKey, mergeDeliveryTransitItem(existing, transit))
         }
       }
     }
