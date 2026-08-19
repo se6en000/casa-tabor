@@ -4038,6 +4038,11 @@ EXECUTIVE ASSISTANT REASONING RULES:
    - When an edit IS requested, use update_event with ID: ${(context.focusedEvent as {id:string}).id}.
    - Always include expected_updated_at: ${(context.focusedEvent as {updated_at:string}).updated_at}.
    - Keep spoken/text confirmations punchy and human (1-2 sentences).
+6. CONCIERGE & DEICTIC ENTITY GROUNDING (CRITICAL):
+   - When the user asks about activities, tours, amenities, dress codes, menus, bag policies, weather, or things to do near "the hotel", "the resort", "the venue", "the restaurant", "the clinic", "the doctor", "the school", "the stadium", "here", or "nearby":
+     - ALWAYS anchor the inquiry to this event's specific Venue Name: "${(context.focusedEvent as {location_name?:string|null}).location_name ?? (context.focusedEvent as {title:string}).title}", Address: "${(context.focusedEvent as {address?:string|null}).address ?? 'Not set'}", and Destination City: "${(context.focusedEvent as {address?:string|null}).address ? (context.focusedEvent as {address:string}).address : (context.homeCity || 'West Palm Beach, FL')}".
+     - When using web search grounding, include the specific venue name, neighborhood, and city (for example: "ghost tours near The Plymouth South Beach, Miami Beach FL", "dress code at Buccan Palm Beach", "clear bag policy LoanDepot Park Miami").
+     - NEVER confuse the venue with unrelated historical or homonymous cities (for example, NEVER search for Plymouth, Massachusetts when the hotel is The Plymouth South Beach in Miami Beach, FL).
 ${EDIT_INTENT_GUARDRAILS}
 ${DIFF_AND_OUTPUT_GUARDRAILS}
 ${RECOVERY_AND_CONFLICT_GUARDRAILS}` : ''}
@@ -4618,10 +4623,23 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
     }
 
     if (name === 'search_web') {
-      const query = String(args.query ?? '').trim()
+      const rawQuery = String(args.query ?? '').trim()
       const parsedMax = Number(args.max_results ?? 5)
       const maxResults = Number.isFinite(parsedMax) ? Math.max(1, Math.min(8, Math.round(parsedMax))) : 5
-      if (!query) return { results: [], count: 0, error: 'Missing query' }
+      if (!rawQuery) return { results: [], count: 0, error: 'Missing query' }
+
+      let query = rawQuery
+      if (context.focusedEvent) {
+        const fe = context.focusedEvent as { location_name?: string | null; address?: string | null; title?: string }
+        const venue = fe.location_name || fe.title || ''
+        const address = fe.address || ''
+        const deicticAnchor = [venue, address].filter(Boolean).join(' ')
+        if (deicticAnchor && /\b(hotel|resort|venue|restaurant|clinic|doctor|school|stadium|park|here|nearby|around)\b/i.test(query)) {
+          if (!query.toLowerCase().includes(venue.toLowerCase()) && (!address || !query.toLowerCase().includes(address.toLowerCase()))) {
+            query = `${query} near ${deicticAnchor}`
+          }
+        }
+      }
 
       // Server-side math interceptor: catch tip/percentage/arithmetic queries
       const mathIntercept =
@@ -5085,8 +5103,13 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           return 'I could not find a matching place yet.'
         }
         if (name === 'search_web') {
-          const count = Number(toolResult.count ?? 0)
-          if (count > 0) return `I found ${count} web result${count === 1 ? '' : 's'} for that query.`
+          const findings = typeof toolResult.findings === 'string' ? toolResult.findings.trim() : ''
+          if (findings) return findings
+          const results = Array.isArray(toolResult.results) ? toolResult.results as Array<{ title?: string; url?: string; snippet?: string }> : []
+          if (results.length > 0) {
+            const lines = results.slice(0, 3).map((r) => `- **${r.title}**: ${r.snippet}`).join('\n')
+            return `Here are the top web findings:\n${lines}`
+          }
           return 'I could not find web results for that query.'
         }
         if (name === 'get_weather_forecast') {

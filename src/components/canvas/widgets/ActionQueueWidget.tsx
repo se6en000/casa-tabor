@@ -25,7 +25,6 @@ import {
   RefreshCw,
   CloudOff,
   ShieldAlert,
-  Truck,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button, IconButton, StatusDot } from '../../ui'
@@ -42,7 +41,6 @@ import {
 } from '../../../utils/actionInspectionSynthesis'
 import { clusterPrepItems, buildGmailWebUrl, type PrepItemCluster } from '../../../utils/prepItemClusters'
 import { splitActionableAndTransitItems } from '../../../utils/needsYouFeed'
-import { stageStepIndex } from '../../../utils/vendorTransactions'
 import { useCreateSuggestedEvent } from '../../../hooks/useCreateSuggestedEvent'
 import { useAppStore } from '../../../stores/appStore'
 import { useGoogleSyncTriage } from '../../../hooks/useGoogleSyncTriage'
@@ -174,7 +172,7 @@ export default function ActionQueueWidget({
   )
 
   // Separate pure Action Items from passive In-Transit Deliveries
-  const { actionableItems, deliveryTransitItems } = useMemo(
+  const { actionableItems } = useMemo(
     () => splitActionableAndTransitItems(visiblePrep),
     [visiblePrep]
   )
@@ -206,7 +204,6 @@ export default function ActionQueueWidget({
   const totalUrgent = visibleConflicts.length + failedJobs.length
   const totalTasks = clusteredPrep.length
   const totalActionable = totalUrgent + totalTasks
-  const totalDeliveries = deliveryTransitItems.length
 
   const onInstantCompleteCluster = (cluster: PrepItemCluster) => {
     setOptimisticDismissedIds((prev) => {
@@ -278,7 +275,7 @@ export default function ActionQueueWidget({
   }
 
   return (
-    <div className="w-full h-full flex flex-col bg-transparent overflow-hidden min-h-0 relative">
+    <div className="w-full h-full flex flex-col bg-casa-surface border border-casa-border/80 shadow-card rounded-3xl p-5 sm:p-6 overflow-hidden min-h-0 relative">
       {/* ── Global Click-Away Invisible Backdrop for menus ── */}
       {openMenuId && (
         <div
@@ -288,11 +285,11 @@ export default function ActionQueueWidget({
         />
       )}
 
-      {/* ── Widget Header: Matches Quiet Luxury Typography ── */}
-      <div className="flex items-center justify-between pb-3 mb-1 shrink-0 px-0.5">
+      {/* ── BroadSheet Header ── */}
+      <div className="flex items-start justify-between pb-3.5 border-b border-casa-border/60 shrink-0">
         <div>
           <h2 className="font-display text-display-sm font-bold text-casa-navy leading-none tracking-tight">
-            Action Queue
+            Executive Action Queue
           </h2>
           <p className="text-caption text-casa-muted mt-1 font-medium">
             Universal Done &amp; Snooze Engine
@@ -305,24 +302,17 @@ export default function ActionQueueWidget({
               variant="secondary"
               size="sm"
               onClick={handleBatchAutoTriage}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-casa-gold/15 hover:bg-casa-gold/25 text-casa-navy text-caption font-bold border border-casa-gold/30 transition-all shadow-xs min-h-[44px]"
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-casa-gold/15 hover:bg-casa-gold/25 text-casa-navy text-caption font-bold border border-casa-gold/30 transition-all shadow-xs min-h-[36px]"
               title="Automatically assign available drivers and optimize logistics"
             >
-              <Sparkles size={13} className="text-casa-gold" />
+              <Sparkles size={12} className="text-casa-gold" />
               <span>Auto-Triage</span>
             </Button>
           )}
 
-          {totalDeliveries > 0 && (
-            <span className="hidden sm:inline-flex items-center gap-1 text-caption font-mono font-bold px-3 py-1.5 rounded-full bg-sky-50 text-sky-900 border border-sky-200 shadow-2xs">
-              <Truck size={12} className="text-sky-700" />
-              <span>{totalDeliveries} In Transit</span>
-            </span>
-          )}
-
           <span
             className={cn(
-              'text-caption font-mono font-bold px-3.5 py-1.5 rounded-full border shadow-2xs tracking-wide',
+              'text-caption font-mono font-bold px-3 py-1 rounded-full border tracking-wide',
               totalActionable > 0
                 ? 'bg-casa-accent-subtle text-casa-top-pick-band border-casa-accent-subtle-border'
                 : 'bg-emerald-100/90 text-emerald-950 border-emerald-300/80'
@@ -333,8 +323,8 @@ export default function ActionQueueWidget({
         </div>
       </div>
 
-      {/* ── Scrollable Action Container ── */}
-      <div className="flex-1 overflow-y-auto pr-1 space-y-3.5 min-h-0 touch-pan-y overscroll-contain pb-6">
+      {/* ── Scrollable Broadsheet Flow ── */}
+      <div className="flex-1 overflow-y-auto pr-0.5 space-y-5 min-h-0 touch-pan-y overscroll-contain pt-3 pb-4">
         {/* ── SECTION 0: GOOGLE CALENDAR SYNC TRIAGE ── */}
         {failedJobs.length > 0 && (
           <div className="space-y-3">
@@ -358,7 +348,7 @@ export default function ActionQueueWidget({
                     initial={{ opacity: 0, y: 12, scale: 0.98 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, x: 90, scale: 0.94 }}
-                    className="p-4 rounded-2xl bg-rose-50/80 border border-rose-300 shadow-card space-y-3"
+                    className="p-4 rounded-2xl bg-rose-50/80 border border-rose-300 shadow-2xs space-y-3"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
@@ -438,7 +428,7 @@ export default function ActionQueueWidget({
                     transition={{
                       layout: { duration: 0.28, ease: [0.25, 1, 0.5, 1] },
                     }}
-                    className="p-4.5 rounded-2xl bg-amber-50/80 border border-amber-300/90 shadow-card relative"
+                    className="p-4.5 rounded-2xl bg-amber-50/80 border border-amber-300/90 shadow-2xs relative"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
@@ -474,7 +464,7 @@ export default function ActionQueueWidget({
                         title="Solve with Copilot"
                         aria-label="Solve with Copilot"
                         onClick={() => openCopilotForConflict(c)}
-                        className="p-2.5 rounded-xl text-casa-gold hover:bg-casa-gold/20 min-h-[48px] min-w-[48px] shrink-0 flex items-center justify-center"
+                        className="p-2 rounded-xl text-casa-gold hover:bg-casa-gold/20 min-h-[40px] min-w-[40px] shrink-0 flex items-center justify-center"
                         icon={<Sparkles size={16} />}
                       />
                     </div>
@@ -494,9 +484,9 @@ export default function ActionQueueWidget({
                                     `Assigned ${recommended.member.name} as driver`
                                   )
                                 }
-                                className="px-3.5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-caption font-bold shadow-sm transition-all min-h-[48px] flex items-center gap-2"
+                                className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-caption font-bold shadow-xs transition-all min-h-[44px] flex items-center gap-2"
                               >
-                                <Car size={15} />
+                                <Car size={14} />
                                 <span>Assign {recommended.member.name} (Recommended)</span>
                               </Button>
                             )}
@@ -505,9 +495,9 @@ export default function ActionQueueWidget({
                               size="sm"
                               variant="ghost"
                               onClick={() => openCopilotForConflict(c)}
-                              className="px-3.5 py-2.5 rounded-xl text-amber-900 hover:bg-amber-200/60 text-caption font-semibold transition-all min-h-[48px] flex items-center gap-1.5"
+                              className="px-3.5 py-2 rounded-xl text-amber-900 hover:bg-amber-200/60 text-caption font-semibold transition-all min-h-[44px] flex items-center gap-1.5"
                             >
-                              <Sparkles size={14} className="text-amber-700" />
+                              <Sparkles size={13} className="text-amber-700" />
                               <span>Ask Copilot</span>
                             </Button>
                           </div>
@@ -530,7 +520,7 @@ export default function ActionQueueWidget({
                                   }
                                   title={`${member.name}: ${isAvailable ? 'Free' : 'Has conflict'}`}
                                   className={cn(
-                                    'px-3 py-2 rounded-xl text-caption font-semibold transition-all min-h-[44px] flex items-center gap-1.5',
+                                    'px-3 py-1.5 rounded-xl text-caption font-semibold transition-all min-h-[40px] flex items-center gap-1.5',
                                     isAvailable
                                       ? 'bg-casa-surface border-casa-border hover:border-casa-navy text-casa-navy'
                                       : 'bg-casa-surface/60 border-casa-border/50 text-casa-muted opacity-80'
@@ -555,9 +545,9 @@ export default function ActionQueueWidget({
                             onClick={() =>
                               onInstantResolveConflict(c, 'Split transport: 2 drivers assigned')
                             }
-                            className="px-3.5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-caption font-bold shadow-sm transition-all min-h-[48px] flex items-center gap-1.5"
+                            className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-caption font-bold shadow-xs transition-all min-h-[44px] flex items-center gap-1.5"
                           >
-                            <Car size={14} />
+                            <Car size={13} />
                             <span>Assign 2nd Driver</span>
                           </Button>
 
@@ -568,7 +558,7 @@ export default function ActionQueueWidget({
                               onClick={() =>
                                 onInstantResolveConflict(c, `Kept: ${c.event_a?.title || 'Event A'}`)
                               }
-                              className="px-3 py-2 rounded-xl bg-casa-surface border border-casa-border hover:border-casa-navy text-casa-navy text-caption font-semibold transition-all min-h-[48px]"
+                              className="px-3 py-2 rounded-xl bg-casa-surface border border-casa-border hover:border-casa-navy text-casa-navy text-caption font-semibold transition-all min-h-[44px]"
                             >
                               Prioritize {shortTitle(c.event_a.title, 14)}
                             </Button>
@@ -578,19 +568,10 @@ export default function ActionQueueWidget({
                             size="sm"
                             variant="ghost"
                             onClick={() => openCopilotForConflict(c)}
-                            className="px-3.5 py-2.5 rounded-xl text-amber-900 hover:bg-amber-200/60 text-caption font-semibold transition-all min-h-[48px] flex items-center gap-1.5"
+                            className="px-3 py-2 rounded-xl text-amber-900 hover:bg-amber-200/60 text-caption font-semibold transition-all min-h-[44px] flex items-center gap-1.5"
                           >
-                            <Sparkles size={14} className="text-amber-700" />
-                            <span>Reschedule with Copilot</span>
-                          </Button>
-
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => onInstantResolveConflict(c, 'Acknowledged overlap')}
-                            className="px-3 py-2 rounded-xl text-casa-muted hover:text-casa-navy hover:bg-black/5 text-caption font-semibold transition-all min-h-[48px]"
-                          >
-                            Acknowledge
+                            <Sparkles size={13} className="text-amber-700" />
+                            <span>Reschedule</span>
                           </Button>
                         </div>
                       ) : (
@@ -598,9 +579,9 @@ export default function ActionQueueWidget({
                           size="sm"
                           variant="primary"
                           onClick={() => onInstantResolveConflict(c, 'Resolved')}
-                          className="px-3.5 py-2.5 rounded-xl bg-amber-500 text-white hover:bg-amber-600 text-caption font-bold shadow-sm transition-all min-h-[48px] flex items-center gap-1.5"
+                          className="px-3.5 py-2 rounded-xl bg-amber-500 text-white hover:bg-amber-600 text-caption font-bold shadow-xs transition-all min-h-[44px] flex items-center gap-1.5"
                         >
-                          <Check size={14} />
+                          <Check size={13} />
                           <span>Acknowledge & Clear</span>
                         </Button>
                       )}
@@ -612,8 +593,8 @@ export default function ActionQueueWidget({
           </div>
         )}
 
-        {/* ── SECTION 2: PALM BEACH TRAVERTINE PLINTH & SPOTLIGHT FOCUS ── */}
-        <div className="space-y-3.5">
+        {/* ── SECTION 2: HERO ACTION FOCUS ── */}
+        <div className="space-y-4">
           <AnimatePresence mode="popLayout">
             {heroCluster && heroItem && (
               (() => {
@@ -644,36 +625,36 @@ export default function ActionQueueWidget({
                       layout: { duration: 0.28, ease: [0.25, 1, 0.5, 1] },
                     }}
                     className={cn(
-                      'p-5 sm:p-6 rounded-3xl bg-casa-surface transition-all flex flex-col gap-4 relative border-2 overflow-hidden',
+                      'p-4.5 sm:p-5 rounded-2xl transition-all flex flex-col gap-3.5 relative overflow-hidden',
                       selectedSidecarActionId === heroItem.id && sidecarTab === 'action'
-                        ? 'border-casa-gold shadow-card-hover'
-                        : 'border-casa-gold/25 hover:border-casa-gold/60 shadow-card'
+                        ? 'bg-casa-gold/15 border-2 border-casa-gold ring-2 ring-casa-gold/30'
+                        : 'bg-casa-surface-subtle/70 border border-casa-border/80 hover:border-casa-gold/60'
                     )}
                   >
                     {/* ── Top Context & Category Strip ── */}
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="inline-flex items-center gap-1.5 text-caption font-semibold px-3 py-1 rounded-full bg-casa-accent-subtle text-casa-top-pick-band border border-casa-accent-subtle-border tracking-wide">
-                          <HeroBadgeIcon size={12} className="text-casa-gold shrink-0" />
+                        <span className="inline-flex items-center gap-1 text-caption font-semibold px-2.5 py-0.5 rounded-full bg-casa-accent-subtle text-casa-top-pick-band border border-casa-accent-subtle-border tracking-wide">
+                          <HeroBadgeIcon size={11} className="text-casa-gold shrink-0" />
                           <span>{heroBadge.label}</span>
                         </span>
 
                         {heroCluster.relatedCount > 0 && (
-                          <span className="inline-flex items-center gap-1 text-caption font-semibold px-2.5 py-1 rounded-full bg-sky-100 text-sky-900 border border-sky-200">
-                            <Layers size={11} className="text-sky-700" />
-                            <span>{heroCluster.relatedCount + 1} thread updates</span>
+                          <span className="inline-flex items-center gap-1 text-caption font-semibold px-2 py-0.5 rounded-full bg-sky-100 text-sky-900 border border-sky-200">
+                            <Layers size={10} className="text-sky-700" />
+                            <span>{heroCluster.relatedCount + 1} updates</span>
                           </span>
                         )}
 
                         {heroItem.is_user_labeled && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-purple-100 text-purple-900 text-caption font-semibold border border-purple-200">
-                            <Tag size={11} className="text-purple-700" />
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-100 text-purple-900 text-caption font-semibold border border-purple-200">
+                            <Tag size={10} className="text-purple-700" />
                             <span>Casa Labeled</span>
                           </span>
                         )}
 
-                        <span className="inline-flex items-center gap-1 text-caption font-semibold px-2.5 py-1 rounded-full bg-casa-gold/15 text-casa-top-pick-band border border-casa-gold/30">
-                          <Sparkles size={11} className="text-casa-gold" />
+                        <span className="inline-flex items-center gap-1 text-caption font-semibold px-2 py-0.5 rounded-full bg-casa-gold/15 text-casa-top-pick-band border border-casa-gold/30">
+                          <Sparkles size={10} className="text-casa-gold" />
                           <span>Priority Focus</span>
                         </span>
 
@@ -682,20 +663,20 @@ export default function ActionQueueWidget({
                             href={buildGmailWebUrl(heroItem, null, familyMembers)}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 text-2xs font-bold text-red-900 bg-red-50 hover:bg-red-100 border border-red-200 px-2.5 py-1 rounded-full shadow-2xs transition-colors no-underline min-h-[28px]"
+                            className="inline-flex items-center gap-1 text-3xs font-bold text-red-900 bg-red-50 hover:bg-red-100 border border-red-200 px-2 py-0.5 rounded-full transition-colors no-underline min-h-[26px]"
                             title="Open email directly in Gmail"
                             onClick={(e) => e.stopPropagation()}
                           >
-                            <Mail size={11} className="text-red-600 shrink-0" />
-                            <span>Open in Gmail</span>
-                            <ExternalLink size={10} className="text-red-500 shrink-0" />
+                            <Mail size={10} className="text-red-600 shrink-0" />
+                            <span>Gmail</span>
+                            <ExternalLink size={8} className="text-red-500 shrink-0" />
                           </a>
                         )}
                       </div>
 
-                      <div className="flex items-center gap-2.5">
+                      <div className="flex items-center gap-2">
                         {heroItem.due_by ? (
-                          <span className="text-caption text-casa-error font-semibold px-2.5 py-1 rounded-full bg-rose-50 border border-rose-200/80">
+                          <span className="text-caption text-casa-error font-semibold px-2 py-0.5 rounded-full bg-rose-50 border border-rose-200/80">
                             Due Today
                           </span>
                         ) : (
@@ -708,7 +689,7 @@ export default function ActionQueueWidget({
                           <IconButton
                             variant="ghost"
                             size="sm"
-                            aria-label="Inspect email & details in sidecar"
+                            aria-label="Inspect in sidecar"
                             title="Inspect in sidecar"
                             data-sidecar-trigger="true"
                             data-sidecar-loadable="true"
@@ -716,8 +697,8 @@ export default function ActionQueueWidget({
                               e.stopPropagation()
                               openActionInSidecar(heroItem.id)
                             }}
-                            className="text-casa-muted hover:text-casa-navy transition-colors opacity-70 hover:opacity-100 min-h-[48px] min-w-[48px]"
-                            icon={<ExternalLink size={15} />}
+                            className="text-casa-muted hover:text-casa-navy transition-colors min-h-[36px] min-w-[36px]"
+                            icon={<ExternalLink size={14} />}
                           />
 
                           {/* Overflow / Downvote Menu */}
@@ -728,8 +709,8 @@ export default function ActionQueueWidget({
                                 size="sm"
                                 align="start"
                                 onClick={() => onInstantDownvoteCluster(heroCluster)}
-                                className="w-full text-caption text-casa-error hover:bg-rose-50 transition-colors font-medium min-h-[44px]"
-                                leadingIcon={<ThumbsDown size={13} />}
+                                className="w-full text-caption text-casa-error hover:bg-rose-50 transition-colors font-medium min-h-[40px]"
+                                leadingIcon={<ThumbsDown size={12} />}
                               >
                                 <span>Mark Not Relevant</span>
                               </Button>
@@ -739,7 +720,7 @@ export default function ActionQueueWidget({
                       </div>
                     </div>
 
-                    {/* ── Synthesized Content Body (Clickable to inspect in Sidecar) ── */}
+                    {/* ── Synthesized Content Body ── */}
                     <div
                       role="button"
                       tabIndex={0}
@@ -753,7 +734,7 @@ export default function ActionQueueWidget({
                           openActionInSidecar(heroItem.id)
                         }
                       }}
-                      className="min-w-0 flex flex-col gap-1.5 pl-0.5 cursor-pointer group"
+                      className="min-w-0 flex flex-col gap-1 cursor-pointer group"
                     >
                       <h4 className="font-body text-body sm:text-body-lg font-bold text-casa-navy group-hover:text-casa-gold-hover leading-snug transition-colors">
                         {heroItem.description || heroItem.event_title || 'Prep Item'}
@@ -771,22 +752,15 @@ export default function ActionQueueWidget({
 
                     {/* ── Compound Multi-Action Bundle / Proactive Suggestions ── */}
                     {heroActionBundle && heroActionBundle.actions.length > 0 ? (
-                      <div className="p-3.5 sm:p-4 rounded-2xl bg-amber-50/75 border border-amber-200/90 flex flex-col gap-3 shadow-2xs">
-                        <div className="flex items-center justify-between gap-2 border-b border-amber-200/60 pb-2">
+                      <div className="p-3 sm:p-3.5 rounded-xl bg-amber-50/75 border border-amber-200/90 flex flex-col gap-2.5 shadow-2xs">
+                        <div className="flex items-center justify-between gap-2 border-b border-amber-200/60 pb-1.5">
                           <div className="flex items-center gap-2 min-w-0">
-                            <div className="w-6 h-6 rounded-md bg-amber-500/15 text-amber-900 flex items-center justify-center font-bold shrink-0">
-                              <Sparkles size={13} className="text-amber-700" />
+                            <div className="w-5 h-5 rounded-md bg-amber-500/15 text-amber-900 flex items-center justify-center font-bold shrink-0">
+                              <Sparkles size={12} className="text-amber-700" />
                             </div>
-                            <div className="min-w-0">
-                              <span className="text-caption font-bold text-amber-950 uppercase tracking-wider block leading-none">
-                                Suggested Plan ({heroActionBundle.actions.length})
-                              </span>
-                              {heroActionBundle.summary && (
-                                <span className="text-3xs text-amber-800/80 font-medium truncate block mt-0.5">
-                                  {heroActionBundle.summary}
-                                </span>
-                              )}
-                            </div>
+                            <span className="text-caption font-bold text-amber-950 uppercase tracking-wider block leading-none">
+                              Suggested Plan ({heroActionBundle.actions.length})
+                            </span>
                           </div>
 
                           <span className="text-3xs font-semibold px-2 py-0.5 rounded-full bg-amber-200/70 text-amber-900 shrink-0">
@@ -795,7 +769,7 @@ export default function ActionQueueWidget({
                         </div>
 
                         {/* List of Actions */}
-                        <div className="space-y-2">
+                        <div className="space-y-1.5">
                           {heroActionBundle.actions.map((act) => {
                             const isSelected = selectedHeroActionIds.includes(act.id)
                             const isReminder = act.type === 'reminder'
@@ -808,7 +782,7 @@ export default function ActionQueueWidget({
                                   if (!isLink) toggleBundleAction(heroActionBundle, act.id)
                                 }}
                                 className={cn(
-                                  'p-2.5 sm:p-3 rounded-xl border transition-all flex items-start justify-between gap-2.5 text-left',
+                                  'p-2.5 rounded-lg border transition-all flex items-start justify-between gap-2 text-left',
                                   isLink
                                     ? 'bg-casa-surface border-casa-border/70 shadow-2xs'
                                     : (isSelected
@@ -816,7 +790,7 @@ export default function ActionQueueWidget({
                                       : 'bg-casa-surface/60 border-casa-border/60 opacity-65 hover:opacity-90 cursor-pointer')
                                 )}
                               >
-                                <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                                <div className="flex items-start gap-2 min-w-0 flex-1">
                                   {!isLink ? (
                                     <button
                                       type="button"
@@ -826,19 +800,19 @@ export default function ActionQueueWidget({
                                         toggleBundleAction(heroActionBundle, act.id)
                                       }}
                                       className={cn(
-                                        'min-w-[40px] min-h-[40px] -m-1.5 flex items-center justify-center rounded-lg transition-colors shrink-0',
+                                        'min-w-[32px] min-h-[32px] -m-1 flex items-center justify-center rounded transition-colors shrink-0',
                                         isSelected ? 'text-amber-600' : 'text-casa-muted hover:text-casa-navy'
                                       )}
                                     >
                                       {isSelected ? (
-                                        <CheckSquare size={18} className="text-amber-600 shrink-0" />
+                                        <CheckSquare size={16} className="text-amber-600 shrink-0" />
                                       ) : (
-                                        <Square size={18} className="text-casa-muted/60 shrink-0" />
+                                        <Square size={16} className="text-casa-muted/60 shrink-0" />
                                       )}
                                     </button>
                                   ) : (
-                                    <div className="w-5 h-5 flex items-center justify-center text-purple-700 shrink-0 mt-0.5">
-                                      <ExternalLink size={14} />
+                                    <div className="w-4 h-4 flex items-center justify-center text-purple-700 shrink-0 mt-0.5">
+                                      <ExternalLink size={13} />
                                     </div>
                                   )}
 
@@ -846,7 +820,7 @@ export default function ActionQueueWidget({
                                     <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
                                       <span
                                         className={cn(
-                                          'text-3xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border',
+                                          'text-3xs font-bold uppercase tracking-wider px-1.5 py-0.2 rounded border',
                                           isReminder
                                             ? 'bg-sky-100 text-sky-900 border-sky-200'
                                             : isLink
@@ -860,23 +834,11 @@ export default function ActionQueueWidget({
                                       <span className="text-caption font-bold text-casa-navy">
                                         {act.displayDate}
                                       </span>
-
-                                      {act.assignedMemberName && (
-                                        <span className="text-3xs font-semibold px-1.5 py-0.2 rounded bg-casa-bg border border-casa-border text-casa-navy">
-                                          For {act.assignedMemberName}
-                                        </span>
-                                      )}
                                     </div>
 
                                     <h5 className="text-body-sm font-bold text-casa-navy leading-snug">
                                       {act.title}
                                     </h5>
-
-                                    {act.subtitle && (
-                                      <p className="text-caption text-casa-muted leading-tight mt-0.5">
-                                        {act.subtitle}
-                                      </p>
-                                    )}
                                   </div>
                                 </div>
 
@@ -886,10 +848,10 @@ export default function ActionQueueWidget({
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     onClick={(e) => e.stopPropagation()}
-                                    className="px-2.5 py-1.5 rounded-lg bg-casa-surface border border-casa-border hover:border-casa-navy text-casa-navy text-caption font-bold shadow-2xs inline-flex items-center gap-1 shrink-0 no-underline min-h-[38px]"
+                                    className="px-2 py-1 rounded bg-casa-surface border border-casa-border hover:border-casa-navy text-casa-navy text-caption font-bold shadow-2xs inline-flex items-center gap-1 shrink-0 no-underline min-h-[32px]"
                                   >
-                                    <span>Open Portal</span>
-                                    <ExternalLink size={11} className="text-casa-muted" />
+                                    <span>Portal</span>
+                                    <ExternalLink size={10} className="text-casa-muted" />
                                   </a>
                                 )}
                               </div>
@@ -898,14 +860,14 @@ export default function ActionQueueWidget({
                         </div>
 
                         {/* Multi-Action Execution Bar */}
-                        <div className="pt-1.5 border-t border-amber-200/60 flex items-center justify-between gap-2 flex-wrap">
+                        <div className="pt-1 border-t border-amber-200/60 flex items-center justify-between gap-2 flex-wrap">
                           <span className="text-3xs text-amber-900/80 font-medium">
-                            Adds synchronized reminder &amp; calendar blocks
+                            Adds synchronized schedule blocks
                           </span>
 
                           {isEventAdded ? (
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-100 text-emerald-900 text-caption font-bold border border-emerald-300 shadow-2xs">
-                              <Check size={14} className="text-emerald-700" />
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-100 text-emerald-900 text-caption font-bold border border-emerald-300 shadow-2xs">
+                              <Check size={13} className="text-emerald-700" />
                               <span>Added to Schedule</span>
                             </span>
                           ) : (
@@ -914,18 +876,18 @@ export default function ActionQueueWidget({
                               variant="primary"
                               disabled={isCreating || selectedHeroActionIds.length === 0}
                               onClick={() => handle1TapAddBundle(heroItem, heroActionBundle)}
-                              className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-caption font-bold shadow-xs transition-all min-h-[44px] flex items-center gap-1.5 shrink-0"
+                              className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-caption font-bold shadow-xs transition-all min-h-[40px] flex items-center gap-1.5 shrink-0"
                             >
                               {isCreating ? (
-                                <Loader2 size={13} className="animate-spin" />
+                                <Loader2 size={12} className="animate-spin" />
                               ) : (
-                                <CalendarPlus size={14} />
+                                <CalendarPlus size={13} />
                               )}
                               <span>
                                 {selectedHeroActionIds.length === heroActionBundle.actions.length
-                                  ? `+ Add Both (${selectedHeroActionIds.length}) to Schedule`
+                                  ? `+ Add Both (${selectedHeroActionIds.length})`
                                   : selectedHeroActionIds.length > 0
-                                  ? `+ Add Selected (${selectedHeroActionIds.length}) to Schedule`
+                                  ? `+ Add Selected (${selectedHeroActionIds.length})`
                                   : 'Select an Action'}
                               </span>
                             </Button>
@@ -933,18 +895,18 @@ export default function ActionQueueWidget({
                         </div>
                       </div>
                     ) : heroSuggestedEvent ? (
-                      <div className="p-3 rounded-2xl bg-amber-50/90 border border-amber-200 flex items-center justify-between gap-3 flex-wrap">
+                      <div className="p-3 rounded-xl bg-amber-50/90 border border-amber-200 flex items-center justify-between gap-3 flex-wrap">
                         <div className="flex items-center gap-2 min-w-0">
-                          <Calendar size={16} className="text-amber-700 shrink-0" />
+                          <Calendar size={15} className="text-amber-700 shrink-0" />
                           <span className="text-caption font-bold text-amber-950 truncate">
                             Suggests: {heroSuggestedEvent.title} ({heroSuggestedEvent.displayDate})
                           </span>
                         </div>
 
                         {isEventAdded ? (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-100 text-emerald-900 text-caption font-bold border border-emerald-200">
-                            <Check size={14} className="text-emerald-700" />
-                            <span>Added to Calendar</span>
+                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-xl bg-emerald-100 text-emerald-900 text-caption font-bold border border-emerald-200">
+                            <Check size={13} className="text-emerald-700" />
+                            <span>Added</span>
                           </span>
                         ) : (
                           <Button
@@ -952,9 +914,9 @@ export default function ActionQueueWidget({
                             variant="secondary"
                             disabled={isCreating}
                             onClick={() => handle1TapAddCalendar(heroItem, heroSuggestedEvent)}
-                            className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-caption font-bold shadow-xs transition-all min-h-[44px] flex items-center gap-1.5 shrink-0"
+                            className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-caption font-bold shadow-xs transition-all min-h-[40px] flex items-center gap-1.5 shrink-0"
                           >
-                            {isCreating ? <Loader2 size={13} className="animate-spin" /> : <CalendarPlus size={14} />}
+                            {isCreating ? <Loader2 size={12} className="animate-spin" /> : <CalendarPlus size={13} />}
                             <span>+ Add to Calendar ({heroSuggestedEvent.displayDate})</span>
                           </Button>
                         )}
@@ -962,27 +924,27 @@ export default function ActionQueueWidget({
                     ) : null}
 
                     {/* ── Universal 2-Anchor Footer: [ Done ] vs [ Snooze ▾ ] ── */}
-                    <div className="pt-3.5 border-t border-casa-border/60 flex items-center justify-between gap-2.5 flex-wrap">
+                    <div className="pt-3 border-t border-casa-border/50 flex items-center justify-between gap-2.5 flex-wrap">
                       {/* Primary Anchor 1: Contextual Action Button */}
                       <Button
                         size="sm"
                         variant="strong"
                         onClick={() => onInstantCompleteCluster(heroCluster)}
-                        className="px-4 sm:px-5 py-2.5 rounded-full min-h-[48px] text-body-sm font-bold shadow-card flex items-center gap-2 shrink-0 hover:brightness-110"
-                        leadingIcon={<HeroDoneIcon size={16} strokeWidth={2.5} className="text-emerald-400" />}
+                        className="px-4 py-2 rounded-full min-h-[44px] text-body-sm font-bold shadow-xs flex items-center gap-2 shrink-0 hover:brightness-110"
+                        leadingIcon={<HeroDoneIcon size={15} strokeWidth={2.5} className="text-emerald-400" />}
                       >
                         <span>{heroDoneLabel}</span>
                       </Button>
 
-                      {/* Primary Anchor 2: Split Snooze Pill with Expandable Presets */}
+                      {/* Primary Anchor 2: Split Snooze Pill */}
                       <div className="inline-flex items-stretch rounded-full bg-casa-surface border border-casa-border hover:border-casa-gold transition-all shadow-xs shrink-0 max-w-full overflow-hidden">
                         <Button
                           size="sm"
                           variant="ghost"
                           onClick={() => onInstantSnoozeCluster(heroCluster, 'tomorrow')}
-                          className="px-3 sm:px-4 py-2 text-body-sm font-semibold text-casa-navy hover:text-casa-gold-hover transition-colors min-h-[48px] rounded-l-full rounded-r-none border-none flex items-center gap-1.5 sm:gap-2"
+                          className="px-3.5 py-1.5 text-caption font-semibold text-casa-navy hover:text-casa-gold-hover transition-colors min-h-[44px] rounded-l-full rounded-r-none border-none flex items-center gap-1.5"
                           title="Snooze to tomorrow morning"
-                          leadingIcon={<Clock size={14} className="text-casa-gold shrink-0" />}
+                          leadingIcon={<Clock size={13} className="text-casa-gold shrink-0" />}
                         >
                           <span>Snooze Tomorrow</span>
                         </Button>
@@ -993,10 +955,10 @@ export default function ActionQueueWidget({
                           onClick={() => setOpenSnoozeId(isHeroSnoozeOpen ? null : heroItem.id)}
                           aria-label="More snooze options"
                           title="More snooze options"
-                          className="px-2.5 sm:px-3 border-l border-casa-border/70 text-casa-muted hover:text-casa-navy hover:bg-casa-gold/10 transition-colors rounded-r-full rounded-l-none min-h-[48px] min-w-[36px] sm:min-w-[40px] flex items-center justify-center shrink-0"
+                          className="px-2.5 border-l border-casa-border/70 text-casa-muted hover:text-casa-navy hover:bg-casa-gold/10 transition-colors rounded-r-full rounded-l-none min-h-[44px] min-w-[34px] flex items-center justify-center shrink-0"
                           icon={
                             <ChevronDown
-                              size={15}
+                              size={14}
                               className={cn('transition-transform duration-200', isHeroSnoozeOpen && 'rotate-180')}
                             />
                           }
@@ -1014,14 +976,14 @@ export default function ActionQueueWidget({
                           transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
                           className="overflow-hidden"
                         >
-                          <div className="pt-2.5 mt-1 border-t border-dashed border-casa-border/60 grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+                          <div className="pt-2 mt-1 border-t border-dashed border-casa-border/60 grid grid-cols-1 sm:grid-cols-3 gap-1.5">
                             <Button
                               variant="ghost"
                               size="sm"
                               align="start"
                               onClick={() => onInstantSnoozeCluster(heroCluster, '3h')}
-                              className="w-full px-3 py-2 rounded-xl bg-casa-surface hover:bg-casa-gold/15 border border-casa-border/70 text-caption text-casa-navy transition-colors font-medium min-h-[44px]"
-                              leadingIcon={<Moon size={13} className="text-casa-gold" />}
+                              className="w-full px-3 py-1.5 rounded-xl bg-casa-surface hover:bg-casa-gold/15 border border-casa-border/70 text-caption text-casa-navy transition-colors font-medium min-h-[40px]"
+                              leadingIcon={<Moon size={12} className="text-casa-gold" />}
                             >
                               <span className="flex-1 text-left text-caption font-semibold">Tonight (+3h)</span>
                             </Button>
@@ -1031,8 +993,8 @@ export default function ActionQueueWidget({
                               size="sm"
                               align="start"
                               onClick={() => onInstantSnoozeCluster(heroCluster, 'tomorrow')}
-                              className="w-full px-3 py-2 rounded-xl bg-casa-surface hover:bg-casa-gold/15 border border-casa-border/70 text-caption text-casa-navy transition-colors font-medium min-h-[44px]"
-                              leadingIcon={<Sun size={13} className="text-casa-gold" />}
+                              className="w-full px-3 py-1.5 rounded-xl bg-casa-surface hover:bg-casa-gold/15 border border-casa-border/70 text-caption text-casa-navy transition-colors font-medium min-h-[40px]"
+                              leadingIcon={<Sun size={12} className="text-casa-gold" />}
                             >
                               <span className="flex-1 text-left text-caption font-semibold">Tomorrow (9 AM)</span>
                             </Button>
@@ -1042,8 +1004,8 @@ export default function ActionQueueWidget({
                               size="sm"
                               align="start"
                               onClick={() => onInstantPushCluster(heroCluster, 'weekend')}
-                              className="w-full px-3 py-2 rounded-xl bg-casa-surface hover:bg-casa-gold/15 border border-casa-border/70 text-caption text-casa-navy transition-colors font-medium min-h-[44px]"
-                              leadingIcon={<Calendar size={13} className="text-casa-gold" />}
+                              className="w-full px-3 py-1.5 rounded-xl bg-casa-surface hover:bg-casa-gold/15 border border-casa-border/70 text-caption text-casa-navy transition-colors font-medium min-h-[40px]"
+                              leadingIcon={<Calendar size={12} className="text-casa-gold" />}
                             >
                               <span className="flex-1 text-left text-caption font-semibold">This Weekend</span>
                             </Button>
@@ -1057,19 +1019,19 @@ export default function ActionQueueWidget({
             )}
           </AnimatePresence>
 
-          {/* ── QUIET MINIMALIST MICRO-QUEUE: Subsequent Matters ── */}
+          {/* ── EDITORIAL MICRO-QUEUE: Subsequent Matters ── */}
           {microClusters.length > 0 && (
-            <div className="p-4 sm:p-5 rounded-3xl bg-casa-surface border border-casa-border/80 shadow-sm space-y-2">
-              <div className="flex items-center justify-between pb-2 border-b border-casa-border/50">
-                <span className="text-caption font-bold uppercase tracking-wider text-casa-muted">
+            <div className="space-y-2 pt-1">
+              <div className="flex items-center justify-between pb-1 border-b border-casa-border/50">
+                <span className="text-caption font-bold uppercase tracking-wider text-casa-navy">
                   Queued Household Matters ({microClusters.length})
                 </span>
-                <span className="text-caption text-casa-gold font-medium">
+                <span className="text-3xs text-casa-muted font-medium">
                   Tap row to focus
                 </span>
               </div>
 
-              <div className="divide-y divide-casa-border/40">
+              <div className="divide-y divide-casa-border/30">
                 {microClusters.map((cluster) => {
                   const item = cluster.item
                   const badge = sourceBadge(item)
@@ -1100,13 +1062,13 @@ export default function ActionQueueWidget({
                         }
                       }}
                       className={cn(
-                        'py-3 px-3 -mx-1.5 rounded-2xl flex items-start justify-between gap-3 group cursor-pointer transition-all duration-150 active:scale-[0.97] active:opacity-75 border-2',
+                        'py-2.5 px-2 rounded-xl flex items-start justify-between gap-3 group cursor-pointer transition-all duration-150 min-h-[48px]',
                         selectedSidecarActionId === item.id && sidecarTab === 'action'
-                          ? 'bg-casa-gold/10 border-casa-gold shadow-xs'
-                          : 'hover:bg-casa-bg/80 border-transparent hover:border-casa-border/60'
+                          ? 'bg-casa-gold/15 shadow-2xs'
+                          : 'hover:bg-casa-surface-subtle/80'
                       )}
                     >
-                      <div className="flex items-start gap-3 min-w-0 flex-1">
+                      <div className="flex items-start gap-2.5 min-w-0 flex-1">
                         <IconButton
                           variant="secondary"
                           size="sm"
@@ -1115,24 +1077,24 @@ export default function ActionQueueWidget({
                             e.stopPropagation()
                             onInstantCompleteCluster(cluster)
                           }}
-                          className="min-w-[48px] min-h-[48px] rounded-full border border-casa-border hover:border-casa-gold hover:bg-casa-bg flex items-center justify-center text-casa-muted hover:text-casa-gold shrink-0 transition-all shadow-2xs group-hover:border-casa-gold/60 mt-0.5"
-                          icon={<Check size={16} strokeWidth={2.5} />}
+                          className="min-w-[38px] min-h-[38px] rounded-full border border-casa-border hover:border-casa-gold hover:bg-casa-bg flex items-center justify-center text-casa-muted hover:text-casa-gold shrink-0 transition-all shadow-2xs group-hover:border-casa-gold/60 mt-0.5"
+                          icon={<Check size={14} strokeWidth={2.5} />}
                         />
 
                         <div className="min-w-0 flex-1 pt-0.5">
-                          <div className="text-body-sm font-semibold text-casa-navy line-clamp-3 leading-snug break-words">
+                          <div className="text-body-sm font-semibold text-casa-navy line-clamp-2 leading-snug break-words">
                             {item.description || item.event_title}
                           </div>
-                          <div className="flex items-center gap-2 text-caption text-casa-muted mt-1 flex-wrap">
+                          <div className="flex items-center gap-2 text-caption text-casa-muted mt-0.5 flex-wrap">
                             <span className="inline-flex items-center gap-1">
-                              <BadgeIcon size={12} className="text-casa-gold shrink-0" />
+                              <BadgeIcon size={11} className="text-casa-gold shrink-0" />
                               <span>{badge.label}</span>
                             </span>
 
                             {cluster.relatedCount > 0 && (
                               <>
                                 <span>·</span>
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-100 text-sky-900 text-2xs font-semibold border border-sky-200">
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full bg-sky-100 text-sky-900 text-3xs font-semibold border border-sky-200">
                                   <Layers size={9} className="text-sky-700" />
                                   <span>{cluster.relatedCount + 1} updates</span>
                                 </span>
@@ -1143,7 +1105,7 @@ export default function ActionQueueWidget({
                               <>
                                 <span>·</span>
                                 {isMicroEventAdded ? (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 text-2xs font-semibold border border-emerald-200">
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.2 rounded-full bg-emerald-100 text-emerald-900 text-3xs font-semibold border border-emerald-200">
                                     <Check size={9} className="text-emerald-700" />
                                     <span>Plan Added ({microActionBundle.actions.length})</span>
                                   </span>
@@ -1157,7 +1119,7 @@ export default function ActionQueueWidget({
                                     }}
                                     className="h-auto p-0 hover:bg-transparent"
                                   >
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100/90 text-amber-900 text-2xs font-semibold border border-amber-300/80 hover:bg-amber-200 transition-colors">
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.2 rounded-full bg-amber-100/90 text-amber-900 text-3xs font-semibold border border-amber-300/80 hover:bg-amber-200 transition-colors">
                                       <Sparkles size={9} className="text-amber-700 shrink-0" />
                                       <span>+ Add Plan ({microActionBundle.actions.length} items)</span>
                                     </span>
@@ -1168,7 +1130,7 @@ export default function ActionQueueWidget({
                               <>
                                 <span>·</span>
                                 {isMicroEventAdded ? (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 text-2xs font-semibold border border-emerald-200">
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.2 rounded-full bg-emerald-100 text-emerald-900 text-3xs font-semibold border border-emerald-200">
                                     <Check size={9} className="text-emerald-700" />
                                     <span>Added ({microSuggestedEvent.displayDate})</span>
                                   </span>
@@ -1182,9 +1144,9 @@ export default function ActionQueueWidget({
                                     }}
                                     className="h-auto p-0 hover:bg-transparent"
                                   >
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100/90 text-amber-900 text-2xs font-semibold border border-amber-300/80 hover:bg-amber-200 transition-colors">
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.2 rounded-full bg-amber-100/90 text-amber-900 text-3xs font-semibold border border-amber-300/80 hover:bg-amber-200 transition-colors">
                                       <CalendarPlus size={9} className="text-amber-700 shrink-0" />
-                                      <span>+ Add {microSuggestedEvent.displayDate}</span>
+                                      <span>+ Add to Calendar ({microSuggestedEvent.displayDate})</span>
                                     </span>
                                   </Button>
                                 )}
@@ -1205,13 +1167,12 @@ export default function ActionQueueWidget({
                                   href={buildGmailWebUrl(item, null, familyMembers)}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 text-3xs font-bold text-red-900 bg-red-50 hover:bg-red-100 border border-red-200 px-1.5 py-0.5 rounded-full transition-colors no-underline"
+                                  className="inline-flex items-center gap-1 text-3xs font-bold text-red-900 bg-red-50 hover:bg-red-100 border border-red-200 px-1.5 py-0.2 rounded-full transition-colors no-underline"
                                   title="Open original email in Gmail"
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   <Mail size={9} className="text-red-600 shrink-0" />
                                   <span>Gmail</span>
-                                  <ExternalLink size={8} className="text-red-500 shrink-0" />
                                 </a>
                               </>
                             )}
@@ -1234,8 +1195,8 @@ export default function ActionQueueWidget({
                             e.stopPropagation()
                             onInstantSnoozeCluster(cluster, 'tomorrow')
                           }}
-                          className="px-3.5 py-2 text-caption font-semibold text-casa-navy hover:bg-casa-bg border border-casa-border/70 rounded-full min-h-[44px] flex items-center gap-1.5 shadow-2xs"
-                          leadingIcon={<Clock size={12} className="text-casa-gold" />}
+                          className="px-3 py-1 text-caption font-semibold text-casa-navy hover:bg-casa-bg border border-casa-border/70 rounded-full min-h-[36px] flex items-center gap-1 shadow-2xs"
+                          leadingIcon={<Clock size={11} className="text-casa-gold" />}
                         >
                           <span>Snooze</span>
                         </Button>
@@ -1248,175 +1209,14 @@ export default function ActionQueueWidget({
           )}
 
           {clusteredPrep.length === 0 && visibleConflicts.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-48 text-center p-6 bg-emerald-50/50 rounded-2xl border border-emerald-200">
-              <CheckCircle2 size={36} className="text-emerald-600 mb-2" />
+            <div className="flex flex-col items-center justify-center h-48 text-center p-6 space-y-2">
+              <CheckCircle2 size={36} className="text-emerald-600 mb-1" />
               <h4 className="font-display text-body-lg font-bold text-emerald-900">
                 Household in Harmony
               </h4>
-              <p className="text-caption text-emerald-700 mt-1 max-w-xs">
+              <p className="text-caption text-emerald-700 max-w-xs">
                 Zero pending conflicts or overdue preparation tasks.
               </p>
-            </div>
-          )}
-
-          {/* ── SECTION 3: PARCEL & LOGISTICS RADAR PLINTH ── */}
-          {deliveryTransitItems.length > 0 && (
-            <div className="p-4 sm:p-5 rounded-3xl bg-casa-surface border border-casa-border/80 shadow-sm space-y-3 mt-4">
-              <div className="flex items-center justify-between pb-2 border-b border-casa-border/50">
-                <div className="flex items-center gap-2">
-                  <Truck size={16} className="text-casa-gold" />
-                  <span className="text-caption font-bold uppercase tracking-wider text-casa-navy">
-                    Parcel &amp; Logistics Radar ({deliveryTransitItems.length})
-                  </span>
-                </div>
-                <span className="text-2xs font-mono font-medium text-casa-muted">
-                  Ambient Transit Tracker
-                </span>
-              </div>
-
-              <div className="space-y-3">
-                {deliveryTransitItems.map((item) => {
-                  const stepIdx = stageStepIndex(item.stage)
-                  const isDelivered = item.stage === 'delivered'
-                  const isOutForDelivery = item.stage === 'out_for_delivery'
-
-                  return (
-                    <div
-                      key={item.id}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => openActionInSidecar(item.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault()
-                          openActionInSidecar(item.id)
-                        }
-                      }}
-                      className={cn(
-                        'p-4 rounded-2xl border transition-all cursor-pointer group shadow-2xs hover:shadow-card flex flex-col gap-3',
-                        isDelivered
-                          ? 'bg-emerald-50/30 border-emerald-200/80 hover:border-emerald-300'
-                          : isOutForDelivery
-                          ? 'bg-amber-50/25 border-amber-300/80 hover:border-amber-400'
-                          : 'bg-casa-surface border-casa-border/80 hover:border-casa-gold/60'
-                      )}
-                    >
-                      {/* Header row: Vendor, summary, tags, ETA */}
-                      <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <div className="flex items-center gap-2 flex-wrap min-w-0">
-                          <span className="inline-flex items-center gap-1.5 text-body-sm font-bold text-casa-navy">
-                            <Package size={15} className="text-casa-gold shrink-0" />
-                            <span>{item.vendor}</span>
-                          </span>
-
-                          {item.itemSummary && (
-                            <>
-                              <span className="text-casa-muted/50">·</span>
-                              <span className="text-caption text-casa-muted font-medium truncate max-w-[220px]">
-                                {item.itemSummary}
-                              </span>
-                            </>
-                          )}
-
-                          {item.isPerishable && (
-                            <span className="inline-flex items-center gap-1 text-3xs font-bold text-emerald-800 bg-emerald-100/90 border border-emerald-200 px-2 py-0.5 rounded-full shadow-2xs">
-                              <Sparkles size={9} className="text-emerald-700" />
-                              <span>Perishable</span>
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          {item.etaDisplay && (
-                            <span
-                              className={cn(
-                                'text-2xs font-semibold px-2.5 py-1 rounded-full border',
-                                isDelivered
-                                  ? 'bg-emerald-100 text-emerald-950 border-emerald-300'
-                                  : isOutForDelivery
-                                  ? 'bg-amber-100 text-amber-950 border-amber-300 font-bold'
-                                  : 'bg-casa-bg text-casa-muted border-casa-border'
-                              )}
-                            >
-                              {isDelivered ? `Arrived · ${item.etaDisplay}` : item.etaDisplay}
-                            </span>
-                          )}
-
-                          <span className="text-caption text-casa-gold font-semibold opacity-75 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all">
-                            ›
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Visual 4-Step Progress Track */}
-                      <div className="flex items-center justify-between gap-1 pt-1">
-                        {[
-                          { label: 'Confirmed', step: 0 },
-                          { label: 'Shipped', step: 1 },
-                          { label: 'En Route', step: 2 },
-                          { label: 'Arrived', step: 3 },
-                        ].map((s, idx) => {
-                          const isCompleted = stepIdx >= s.step
-                          const isCurrent = stepIdx === s.step
-
-                          return (
-                            <div key={s.label} className="flex-1 flex flex-col items-center gap-1.5 min-w-0">
-                              <div className="w-full flex items-center">
-                                <div
-                                  className={cn(
-                                    'h-1 flex-1 rounded-full transition-colors',
-                                    idx === 0
-                                      ? 'opacity-0'
-                                      : stepIdx >= s.step
-                                      ? 'bg-casa-gold'
-                                      : 'bg-casa-border/40'
-                                  )}
-                                />
-                                <div
-                                  className={cn(
-                                    'w-3.5 h-3.5 rounded-full border-2 shrink-0 transition-transform flex items-center justify-center',
-                                    isCurrent
-                                      ? 'bg-casa-gold border-casa-navy scale-110 ring-2 ring-casa-gold/30'
-                                      : isCompleted
-                                      ? 'bg-casa-navy border-casa-gold'
-                                      : 'bg-casa-bg border-casa-border/60'
-                                  )}
-                                >
-                                  {isCompleted && !isCurrent && (
-                                    <Check size={8} className="text-white" />
-                                  )}
-                                </div>
-                                <div
-                                  className={cn(
-                                    'h-1 flex-1 rounded-full transition-colors',
-                                    idx === 3
-                                      ? 'opacity-0'
-                                      : stepIdx > s.step
-                                      ? 'bg-casa-gold'
-                                      : 'bg-casa-border/40'
-                                  )}
-                                />
-                              </div>
-                              <span
-                                className={cn(
-                                  'text-3xs font-medium truncate',
-                                  isCurrent
-                                    ? 'text-casa-navy font-bold'
-                                    : isCompleted
-                                    ? 'text-casa-muted font-medium'
-                                    : 'text-casa-muted/50'
-                                )}
-                              >
-                                {s.label}
-                              </span>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
             </div>
           )}
         </div>

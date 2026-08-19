@@ -200,3 +200,38 @@ test('Talk and Plan only enters deterministic calendar lanes for explicit operat
   assert.equal(shouldUseTalkPlanCalendarCommandLane('Create an appointment next Friday at 7'), true)
   assert.equal(shouldUseTalkPlanCalendarCommandLane('Move that appointment to Saturday', { hasActiveEvent: true }), true)
 })
+
+test('Event Copilot sidecar concierge inquiries route to web while calendar operations stay on event', () => {
+  // Concierge web inquiries on focused events
+  assert.equal(
+    classifyAssistantIntent('is there a ghost tour near the hotel?', { focusedEvent: true }).profile,
+    'web',
+  )
+  assert.equal(
+    classifyAssistantIntent('what is the dress code for dinner?', { focusedEvent: true }).profile,
+    'web',
+  )
+  assert.equal(
+    classifyAssistantIntent('what is the clear bag policy at the stadium?', { focusedEvent: true }).profile,
+    'web',
+  )
+  assert.equal(
+    classifyAssistantIntent('recommend fun activities near the resort', { focusedEvent: true }).profile,
+    'web',
+  )
+
+  // Calendar operations on focused events remain on event lane
+  assert.equal(
+    classifyAssistantIntent('change driver to Kelly', { focusedEvent: true }).profile,
+    'event',
+  )
+  assert.equal(
+    classifyAssistantIntent('move this to 4 PM', { focusedEvent: true }).profile,
+    'event',
+  )
+  assert.equal(
+    classifyAssistantIntent('who is driving?', { focusedEvent: true }).profile,
+    'event',
+  )
+})
+
