@@ -25,7 +25,9 @@ export default function MobileFloatingDock({ onOpenQuickCreate }: MobileFloating
   const triggerHaptic = () => {
     try {
       navigator.vibrate?.(8)
-    } catch {}
+    } catch {
+      // Haptics optional / unsupported
+    }
   }
 
   // 5 Tabs in exact requested order: Today / Agenda / Grocery / Cooking / More (NO BADGES)
@@ -81,7 +83,7 @@ export default function MobileFloatingDock({ onOpenQuickCreate }: MobileFloating
   return (
     <>
       {/* ── Single-Thumb Floating Quick Add FAB (lg:hidden) ── */}
-      <div className="lg:hidden fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] right-4 z-sticky pointer-events-auto">
+      <div className="lg:hidden fixed bottom-[calc(5.25rem+env(safe-area-inset-bottom))] right-4 z-sticky pointer-events-auto">
         <Button
           variant="ghost"
           onClick={() => {
@@ -95,10 +97,10 @@ export default function MobileFloatingDock({ onOpenQuickCreate }: MobileFloating
         </Button>
       </div>
 
-      {/* ── Docked 4-Tab Bottom Navigation Bar (lg:hidden, ZERO BADGES) ── */}
+      {/* ── Floating Curved Island Bottom Navigation Bar (lg:hidden, ZERO BADGES) ── */}
       <nav
         aria-label="Mobile Navigation Bar"
-        className="lg:hidden fixed bottom-0 left-0 right-0 z-sticky bg-casa-surface/98 dark:bg-casa-surface/95 backdrop-blur-xl border-t border-casa-border shadow-[0_-4px_24px_rgba(0,0,0,0.06)] flex items-center justify-around px-2 pt-1.5 pb-[calc(0.5rem+env(safe-area-inset-bottom))] transition-all duration-300 pointer-events-auto"
+        className="lg:hidden fixed bottom-[calc(0.75rem+env(safe-area-inset-bottom))] left-3.5 right-3.5 max-w-md mx-auto z-sticky bg-casa-surface/92 dark:bg-casa-surface/90 backdrop-blur-2xl border border-casa-border/80 rounded-full shadow-[0_12px_36px_rgba(0,0,0,0.12)] flex items-center justify-around px-2 py-1 transition-all duration-300 pointer-events-auto"
       >
         {navTabs.map((tab) => (
           <NavLink
@@ -107,20 +109,20 @@ export default function MobileFloatingDock({ onOpenQuickCreate }: MobileFloating
             end={tab.to === '/'}
             onClick={tab.onClick}
             className={cn(
-              'relative flex flex-1 flex-col items-center justify-center min-h-[48px] py-1 rounded-xl transition-all duration-200',
+              'relative flex flex-1 flex-col items-center justify-center min-h-[46px] py-1 rounded-full transition-all duration-200',
               tab.isActive
                 ? 'text-casa-gold font-bold scale-[1.03]'
                 : 'text-casa-muted hover:text-casa-navy active:scale-95'
             )}
           >
-            <tab.icon size={22} strokeWidth={tab.isActive ? 2.3 : 1.8} />
+            <tab.icon size={21} strokeWidth={tab.isActive ? 2.3 : 1.8} />
             <span className="text-2xs tracking-tight leading-none mt-1 font-medium truncate">
               {tab.label}
             </span>
             {tab.isActive && (
               <motion.div
                 layoutId="mobile-nav-active-dot"
-                className="absolute bottom-0 w-1 h-1 rounded-full bg-casa-gold"
+                className="absolute bottom-1 w-1 h-1 rounded-full bg-casa-gold"
                 transition={{ type: 'spring', stiffness: 380, damping: 30 }}
               />
             )}
