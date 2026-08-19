@@ -113,3 +113,57 @@ test('EstateLogisticsWidget provides 1-tap single-instance dismissal with X butt
   assert.match(estateLogisticsWidget, /Dismiss this delivery/)
   assert.match(turboCanvasView, /onDismissDelivery=\{handleCompletePrep\}/)
 })
+
+test('InHome grocery delivery windows are classified as delivery transit items and never calendar appointments', async () => {
+  const { detectSuggestedActionBundle, detectSuggestedEvent } = await import('../src/utils/actionInspectionSynthesis.ts')
+
+  const inHomeDeliveryItem = {
+    id: 'prep-walmart-inhome-1',
+    type: 'appointment',
+    source_type: 'gmail',
+    source_pattern_key: 'event_suggestion',
+    description: 'Suggested Appointment: InHome delivery at 3209 Washington Rd West Palm Beach, FL 33405 — Delivery of InHome order including C2O Pure Coconut Water and 22 other items. Delivery window is 2pm – 6pm.',
+    event_title: 'InHome delivery',
+    event_date: '2026-08-19T19:00:00.000Z',
+    created_at: '2026-08-19T14:00:00Z',
+  }
+
+  // 1. Must be recognized as a delivery transit item
+  assert.equal(isDeliveryTransitItem(inHomeDeliveryItem), true)
+  assert.equal(isPerishableDelivery(inHomeDeliveryItem), true)
+
+  // 2. Must NOT produce suggested action bundles or calendar appointments
+  assert.equal(detectSuggestedActionBundle(inHomeDeliveryItem), null)
+  assert.equal(detectSuggestedEvent(inHomeDeliveryItem), null)
+
+  // 3. Must be routed to deliveryTransitItems by splitActionableAndTransitItems
+  const { actionableItems, deliveryTransitItems } = splitActionableAndTransitItems([inHomeDeliveryItem])
+  assert.equal(actionableItems.length, 0)
+  assert.equal(deliveryTransitItems.length, 1)
+  assert.equal(deliveryTransitItems[0].vendor, 'Walmart')
+  assert.equal(deliveryTransitItems[0].isPerishable, true)
+})
+
+test('Vendor order pricing/hold confirmation is routed to delivery transit items with cost attached and excluded from action queue', () => {
+  const pricingItem = {
+    id: 'prep-walmart-hold-1',
+    type: 'payment',
+    source_type: 'gmail',
+    description: 'The final charge for your Walmart order will be updated once finalized. The temporary hold is $138.65.',
+    event_title: 'The final charge for your Walmart order',
+    created_at: '2026-08-19T14:30:00Z',
+  }
+
+  // 1. Must be recognized as a delivery transit item
+  assert.equal(isDeliveryTransitItem(pricingItem), true)
+
+  const deliveryTransit = buildDeliveryTransitItem(pricingItem)
+  assert.equal(deliveryTransit.vendor, 'Walmart')
+  assert.equal(deliveryTransit.cost, '$138.65')
+
+  // 2. Must be routed to deliveryTransitItems, NOT actionableItems
+  const { actionableItems, deliveryTransitItems } = splitActionableAndTransitItems([pricingItem])
+  assert.equal(actionableItems.length, 0)
+  assert.equal(deliveryTransitItems.length, 1)
+  assert.equal(deliveryTransitItems[0].cost, '$138.65')
+})

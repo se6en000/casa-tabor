@@ -87,6 +87,7 @@ export default function EstateLogisticsWidget({
   // Extract and build unique transit items
   const allTransitItems = useMemo<DeliveryTransitItem[]>(() => {
     const transitMap = new Map<string, DeliveryTransitItem>()
+    const stageRank: DeliveryTransitStage[] = ['confirmed', 'payment', 'shipped', 'out_for_delivery', 'delivered', 'problem']
 
     for (const item of activePrep) {
       if (isDeliveryTransitItem(item)) {
@@ -95,8 +96,34 @@ export default function EstateLogisticsWidget({
           continue
         }
         const existing = transitMap.get(transit.threadKey)
-        if (!existing || new Date(transit.occurredAt) >= new Date(existing.occurredAt)) {
+        if (!existing) {
           transitMap.set(transit.threadKey, transit)
+        } else {
+          const existingRank = stageRank.indexOf(existing.stage)
+          const incomingRank = stageRank.indexOf(transit.stage)
+          const higherStage = incomingRank > existingRank ? transit.stage : existing.stage
+
+          const mergedCost = transit.cost || existing.cost || null
+          const isGenericPaymentSummary = (summary?: string | null) =>
+            !summary || /final charge|temporary hold|charge for your|receipt for/i.test(summary)
+
+          const mergedSummary = !isGenericPaymentSummary(transit.itemSummary)
+            ? transit.itemSummary
+            : existing.itemSummary
+          const mergedEta = transit.etaDisplay || existing.etaDisplay || null
+          const newerDate =
+            new Date(transit.occurredAt).getTime() >= new Date(existing.occurredAt).getTime()
+              ? transit.occurredAt
+              : existing.occurredAt
+
+          transitMap.set(transit.threadKey, {
+            ...existing,
+            stage: higherStage,
+            cost: mergedCost,
+            itemSummary: mergedSummary,
+            etaDisplay: mergedEta,
+            occurredAt: newerDate,
+          })
         }
       }
     }
@@ -310,6 +337,12 @@ export default function EstateLogisticsWidget({
                         <Sparkles size={9} className="text-casa-gold" />
                         <span>Imminent Arrival</span>
                       </span>
+
+                      {heroItem.cost && (
+                        <span className="inline-flex items-center gap-1 text-3xs font-mono font-bold px-2 py-0.5 rounded-full bg-casa-surface border border-casa-border/90 text-casa-navy shadow-2xs">
+                          {heroItem.cost}
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-1 shrink-0">
@@ -340,18 +373,29 @@ export default function EstateLogisticsWidget({
                     </div>
                   </div>
 
-                  {/* Summary & ETA */}
+                  {/* Summary & ETA & Final Cost */}
                   <div className="space-y-0.5">
                     <p className="text-body sm:text-body-lg font-bold text-casa-navy group-hover:text-casa-gold-hover transition-colors leading-snug">
                       {heroItem.itemSummary}
                     </p>
 
-                    {heroItem.etaDisplay && (
-                      <div className="flex items-center gap-1.5 text-caption font-medium text-casa-muted">
-                        <Clock size={12} className="text-casa-gold shrink-0" />
-                        <span>ETA: <strong className="text-casa-navy font-semibold">{heroItem.etaDisplay}</strong></span>
-                      </div>
-                    )}
+                    <div className="flex items-center gap-3 text-caption font-medium text-casa-muted flex-wrap">
+                      {heroItem.etaDisplay && (
+                        <div className="flex items-center gap-1.5">
+                          <Clock size={12} className="text-casa-gold shrink-0" />
+                          <span>ETA: <strong className="text-casa-navy font-semibold">{heroItem.etaDisplay}</strong></span>
+                        </div>
+                      )}
+                      {heroItem.cost && (
+                        <div className="flex items-center gap-1 font-mono font-bold text-casa-navy">
+                          <span>·</span>
+                          <span>{heroItem.cost}</span>
+                          <span className="text-3xs font-sans font-medium text-casa-muted">
+                            {/hold/i.test(heroItem.rawItem.description || '') ? '(Hold)' : '(Total)'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* 4-Stage Stepper Rail */}
@@ -570,8 +614,14 @@ function LedgerRow({
         </div>
       </div>
 
-      {/* Right: Stage/ETA Pill, Gmail, Dismiss X, and Chevron */}
+      {/* Right: Cost, Stage/ETA Pill, Gmail, Dismiss X, and Chevron */}
       <div className="flex items-center gap-2 shrink-0">
+        {item.cost && (
+          <span className="font-mono text-2xs font-bold text-casa-navy px-1.5 py-0.5 rounded bg-casa-surface border border-casa-border/80 shadow-2xs">
+            {item.cost}
+          </span>
+        )}
+
         {item.etaDisplay ? (
           <span
             className={cn(

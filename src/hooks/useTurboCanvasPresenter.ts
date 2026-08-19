@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { format, parseISO, isAfter, isBefore } from 'date-fns'
 import { useLiveClock } from './useLiveClock'
-import { useTodayEvents, useTomorrowEvents, type EventWithDetails } from './useCalendarEvents'
+import { useTodayEvents, useTomorrowEvents, useRollingEvents, type EventWithDetails } from './useCalendarEvents'
 import { useWeekConflicts, useResolveConflict } from './useConflicts'
 import {
   usePrepItems,
@@ -16,6 +16,8 @@ import { type SnoozeDuration, snoozeDurationLabel } from '../utils/snoozeDuratio
 import { useAttentionStore } from '../stores/attentionStore'
 import { useAppStore } from '../stores/appStore'
 import { clusterPrepItems } from '../utils/prepItemClusters'
+import { isItemAlreadyScheduled } from '../utils/calendarEventMatcher.ts'
+import { supabase } from '../lib/supabase'
 import type { PrepItem, Conflict, FamilyMember } from '../types'
 
 export interface DriverAvailability {
@@ -64,6 +66,7 @@ export function useTurboCanvasPresenter(): TurboCanvasPresenterState {
   const now = useLiveClock(10_000)
   const { data: todayEvents = [] } = useTodayEvents(now)
   const { data: tomorrowEvents = [] } = useTomorrowEvents(now)
+  const { data: rollingEvents = [] } = useRollingEvents(now)
   const { data: conflicts = [] } = useWeekConflicts()
   const { data: prepItems = [] } = usePrepItems()
   const { data: familyMembers = [] } = useFamilyMembers()
@@ -101,14 +104,39 @@ export function useTurboCanvasPresenter(): TurboCanvasPresenterState {
     [prepItems, pendingDismissalIds]
   )
 
+  // Filter out prep items whose suggested calendar events are already scheduled on the calendar
+  const unscheduledPrep = useMemo(() => {
+    if (rollingEvents.length === 0) return unpushedPrep
+    const duplicateIds: string[] = []
+    const filtered = unpushedPrep.filter((p) => {
+      const alreadyScheduled = isItemAlreadyScheduled(p, rollingEvents)
+      if (alreadyScheduled) {
+        duplicateIds.push(p.id)
+        return false
+      }
+      return true
+    })
+
+    // Silently auto-archive duplicate prep items in Supabase in the background
+    if (duplicateIds.length > 0) {
+      void supabase
+        .from('prep_items')
+        .update({ dismissed: true, dismissed_at: new Date().toISOString() })
+        .in('id', duplicateIds)
+        .then(() => {})
+    }
+
+    return filtered
+  }, [unpushedPrep, rollingEvents])
+
   const activePrep = useMemo(
-    () => unpushedPrep.filter((p) => !pushedPrepIds[p.id]),
-    [unpushedPrep, pushedPrepIds]
+    () => unscheduledPrep.filter((p) => !pushedPrepIds[p.id]),
+    [unscheduledPrep, pushedPrepIds]
   )
 
   const pushedPrep = useMemo(
-    () => unpushedPrep.filter((p) => Boolean(pushedPrepIds[p.id])),
-    [unpushedPrep, pushedPrepIds]
+    () => unscheduledPrep.filter((p) => Boolean(pushedPrepIds[p.id])),
+    [unscheduledPrep, pushedPrepIds]
   )
 
   // Driver availability heuristic for a specific conflict

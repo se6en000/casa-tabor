@@ -50,10 +50,10 @@ export function transactionStage(item: PrepItem): DeliveryTransitStage | null {
   const text = `${item.event_title ?? ''} ${item.description}`.toLowerCase()
   if (/\b(cancelled|canceled|failed|problem|issue|missing|damaged)\b/.test(text)) return 'problem'
   if (/\bdelivered\b/.test(text)) return 'delivered'
-  if (/\bout for delivery\b|\barriving today\b|\ben route\b/.test(text)) return 'out_for_delivery'
+  if (/\bout for delivery\b|\barriving today\b|\ben route\b|\bdelivery window\b|\binhome delivery\b/.test(text)) return 'out_for_delivery'
   if (/\bshipped\b|\bpackage on the way\b|\btransit\b/.test(text)) return 'shipped'
   if (/\b(payment|charged|temporary hold)\b/.test(text)) return 'payment'
-  if (/\b(confirmed|scheduled|placed|order received)\b/.test(text)) return 'confirmed'
+  if (/\b(confirmed|scheduled|placed|order received|delivery of)\b/.test(text)) return 'confirmed'
   return null
 }
 
@@ -99,11 +99,29 @@ export function isNewerTransactionUpdate(
   return stageRank.indexOf(itemStage as DeliveryTransitStage ?? 'confirmed') > stageRank.indexOf(currentStage as DeliveryTransitStage ?? 'confirmed')
 }
 
+function extractAmount(text?: string | null): string | null {
+  if (!text) return null
+  const match = text.match(/\$[\d,]+(?:\.\d{2})?/)
+  return match ? match[0] : null
+}
+
 export function isDeliveryTransitItem(item: PrepItem): boolean {
   if (item.type === 'delivery') return true
+  if (isPerishableDelivery(item)) return true
+  const text = `${item.event_title ?? ''} ${item.description}`.toLowerCase()
+  if (/\b(inhome delivery|delivery window|grocery delivery|package delivery|courier delivery|out for delivery|shipped|en route)\b/.test(text)) {
+    return true
+  }
+  const vendor = item.attention_vendor || legacyVendor(item)
+  // Vendor payment/pricing/charge notifications (e.g. "final charge for your Walmart order", "temporary hold is $138.65")
+  if (vendor && (
+    item.type === 'payment' ||
+    /\b(charge|hold|total|receipt|order amount|temporary hold|final charge|order total|charged)\b/i.test(text)
+  )) {
+    return true
+  }
   const stage = transactionStage(item)
   if (stage === 'shipped' || stage === 'out_for_delivery' || stage === 'delivered') return true
-  const vendor = item.attention_vendor || legacyVendor(item)
   if (vendor && (item.type === 'delivery' || item.attention_stage === 'confirmed' || item.attention_stage === 'shipped')) return true
   return false
 }
@@ -151,6 +169,9 @@ export function buildDeliveryTransitItem(item: PrepItem): DeliveryTransitItem {
   const itemMatch = desc.match(/(\d+\s+items?|[A-Za-z0-9\s™+'-]{3,40}(?:Book|Tools|Kit|Packs?|Order|Box))/i)
   const itemSummary = itemMatch ? itemMatch[0].trim() : (isPerish ? 'Grocery Delivery' : 'Package')
 
+  // Extract cost / amount
+  const cost = extractAmount(desc) || (item.event_title ? extractAmount(item.event_title) : null)
+
   // Extract ETA or time window
   const etaMatch = desc.match(/(?:between\s+[\d:apm\s-]+|today\s+by\s+[\d:apm]+|today\s+between\s+[\d:apm\s-]+|expected\s+today)/i)
   const etaDisplay = etaMatch ? etaMatch[0] : (item.due_by ? new Date(item.due_by).toLocaleDateString() : null)
@@ -162,6 +183,7 @@ export function buildDeliveryTransitItem(item: PrepItem): DeliveryTransitItem {
     title: item.event_title || `${vendor} Delivery`,
     itemSummary,
     stage,
+    cost,
     isPerishable: isPerish,
     etaDisplay,
     occurredAt: item.created_at,

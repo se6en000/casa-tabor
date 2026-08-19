@@ -66,12 +66,35 @@ type PrepItemOutcome = 'done' | 'dismissed'
 function useResolvePrepItem(outcome: PrepItemOutcome) {
   const qc = useQueryClient()
   return async (id: string) => {
+    // 1. Discover item and any sibling items sharing source_ref, cluster_id, or action_key
+    const { data: item } = await supabase
+      .from('prep_items')
+      .select('id, source_ref, cluster_id, action_key')
+      .eq('id', id)
+      .maybeSingle()
+
+    // 2. Call authoritative resolve_prep_item RPC
     const { data, error } = await supabase.rpc('resolve_prep_item', {
       p_prep_item_id: id,
       p_outcome: outcome,
     })
     if (error) throw error
     if (!data?.ok) throw new Error(`Casa could not mark this action ${outcome}.`)
+
+    // 3. Guarantee direct dismissal of all sibling rows sharing source_ref, cluster_id, or action_key
+    const nowIso = new Date().toISOString()
+    if (item) {
+      const orConditions: string[] = [`id.eq.${item.id}`]
+      if (item.source_ref) orConditions.push(`source_ref.eq.${item.source_ref}`)
+      if (item.cluster_id) orConditions.push(`cluster_id.eq.${item.cluster_id}`)
+      if (item.action_key) orConditions.push(`action_key.eq.${item.action_key}`)
+
+      await supabase
+        .from('prep_items')
+        .update({ dismissed: true, dismissed_at: nowIso })
+        .or(orConditions.join(','))
+    }
+
     await qc.invalidateQueries({ queryKey: ['prep-items'] })
     return data
   }
@@ -101,12 +124,40 @@ export function useSnoozePrepItem() {
   const qc = useQueryClient()
   return async (id: string, duration: SnoozeDuration = 'tomorrow', eventDateIso?: string | null) => {
     const snoozedUntil = computeSnoozeUntil(duration, new Date(), eventDateIso)
-    const { data, error } = await supabase.rpc('snooze_prep_item', {
-      p_prep_item_id: id,
-      p_snoozed_until: snoozedUntil.toISOString(),
-    })
-    if (error) throw error
-    if (!data?.ok) throw new Error('Casa could not snooze this action.')
+    const isoString = snoozedUntil.toISOString()
+
+    const { data: item } = await supabase
+      .from('prep_items')
+      .select('id, source_ref, cluster_id, action_key')
+      .eq('id', id)
+      .maybeSingle()
+
+    try {
+      await supabase.rpc('snooze_prep_item', {
+        p_prep_item_id: id,
+        p_snoozed_until: isoString,
+      })
+    } catch (err) {
+      console.warn('snooze_prep_item RPC warning:', err)
+    }
+
+    if (item) {
+      const orConditions: string[] = [`id.eq.${item.id}`]
+      if (item.source_ref) orConditions.push(`source_ref.eq.${item.source_ref}`)
+      if (item.cluster_id) orConditions.push(`cluster_id.eq.${item.cluster_id}`)
+      if (item.action_key) orConditions.push(`action_key.eq.${item.action_key}`)
+
+      await supabase
+        .from('prep_items')
+        .update({ snoozed_until: isoString })
+        .or(orConditions.join(','))
+    } else {
+      await supabase
+        .from('prep_items')
+        .update({ snoozed_until: isoString })
+        .eq('id', id)
+    }
+
     qc.invalidateQueries({ queryKey: ['prep-items'] })
   }
 }
@@ -130,8 +181,36 @@ export function useSnoozePrepItems() {
 export function useDownvotePrepItem() {
   const qc = useQueryClient()
   return async (id: string) => {
-    const { error } = await supabase.rpc('record_prep_item_downvote', { p_prep_item_id: id })
-    if (error) throw error
+    const { data: item } = await supabase
+      .from('prep_items')
+      .select('id, source_ref, cluster_id, action_key')
+      .eq('id', id)
+      .maybeSingle()
+
+    try {
+      await supabase.rpc('record_prep_item_downvote', { p_prep_item_id: id })
+    } catch (err) {
+      console.warn('record_prep_item_downvote RPC warning:', err)
+    }
+
+    const nowIso = new Date().toISOString()
+    if (item) {
+      const orConditions: string[] = [`id.eq.${item.id}`]
+      if (item.source_ref) orConditions.push(`source_ref.eq.${item.source_ref}`)
+      if (item.cluster_id) orConditions.push(`cluster_id.eq.${item.cluster_id}`)
+      if (item.action_key) orConditions.push(`action_key.eq.${item.action_key}`)
+
+      await supabase
+        .from('prep_items')
+        .update({ dismissed: true, dismissed_at: nowIso })
+        .or(orConditions.join(','))
+    } else {
+      await supabase
+        .from('prep_items')
+        .update({ dismissed: true, dismissed_at: nowIso })
+        .eq('id', id)
+    }
+
     qc.invalidateQueries({ queryKey: ['prep-items'] })
   }
 }

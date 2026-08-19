@@ -343,6 +343,7 @@ export interface DeliveryTransitItem {
   title: string
   itemSummary: string | null
   stage: DeliveryTransitStage
+  cost?: string | null
   trackingUrl?: string | null
   carrier?: string | null
   etaDisplay?: string | null

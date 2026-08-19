@@ -60,6 +60,7 @@ import { useFamilyMembers } from '../../../hooks/useFamilyMembers'
 import { useAppStore } from '../../../stores/appStore'
 import { useRollingEvents } from '../../../hooks/useCalendarEvents'
 import { useLiveClock } from '../../../hooks/useLiveClock'
+import { findMatchingCalendarEvent } from '../../../utils/calendarEventMatcher.ts'
 import { supabase } from '../../../lib/supabase'
 
 import type { ActionAiContext } from '../../../hooks/useAIAssistant'
@@ -156,7 +157,7 @@ export default function ActionInspectionSidecar({
     ))
   }, [captureRules, senderDomain, analysis.senderEmail])
 
-  // Check if suggested event is already in the calendar
+  // Check if suggested event is already in the calendar using intelligent fuzzy matcher
   const matchedCalendarEvent = useMemo(() => {
     if (createdEventId) {
       return rollingEvents.find((e) => e.id === createdEventId) || { id: createdEventId, title: analysis.suggestedEvent?.title }
@@ -166,15 +167,7 @@ export default function ActionInspectionSidecar({
       if (found) return found
     }
     if (analysis.suggestedEvent) {
-      const targetDate = analysis.suggestedEvent.date
-      const targetTitle = analysis.suggestedEvent.title.toLowerCase()
-      const found = rollingEvents.find((e) => {
-        const evStart = e.start_time ? e.start_time.slice(0, 10) : ''
-        return evStart === targetDate && (
-          e.title.toLowerCase().includes(targetTitle.slice(0, 15)) ||
-          targetTitle.includes(e.title.toLowerCase().slice(0, 15))
-        )
-      })
+      const found = findMatchingCalendarEvent(analysis.suggestedEvent, rollingEvents)
       if (found) return found
     }
     return null
@@ -280,17 +273,19 @@ export default function ActionInspectionSidecar({
     setIsResolving(true)
     navigator.vibrate?.(25)
     try {
+      const siblingIds = siblingItems.map((s) => s.id)
+      const allRelatedIds = new Set([activeItem.id, ...siblingIds])
+
       if (onCompleteAction) {
-        onCompleteAction(activeItem)
+        await onCompleteAction(activeItem)
       } else {
         await completePrepItem(activeItem.id)
       }
 
-      // Auto-advance to next item if available
-      if (queueIndex >= 0 && queueIndex < queueItems.length - 1 && queueItems[queueIndex + 1]) {
-        handleSelectAction(queueItems[queueIndex + 1].id)
-      } else if (siblingItems.length > 0) {
-        handleSelectAction(siblingItems[0].id)
+      // Auto-advance to next distinct matter in queue (never resurrect siblings from the completed matter)
+      const nextDistinctItem = queueItems.find((q) => !allRelatedIds.has(q.id))
+      if (nextDistinctItem) {
+        handleSelectAction(nextDistinctItem.id)
       } else {
         onClose()
       }
@@ -307,17 +302,19 @@ export default function ActionInspectionSidecar({
     setSnoozeOpen(false)
     navigator.vibrate?.(25)
     try {
+      const siblingIds = siblingItems.map((s) => s.id)
+      const allRelatedIds = new Set([activeItem.id, ...siblingIds])
+
       if (onSnoozeAction) {
-        onSnoozeAction(activeItem, period)
+        await onSnoozeAction(activeItem, period)
       } else {
         await snoozePrepItem(activeItem.id, period, activeItem.due_by)
       }
 
-      // Auto-advance to next item
-      if (queueIndex >= 0 && queueIndex < queueItems.length - 1 && queueItems[queueIndex + 1]) {
-        handleSelectAction(queueItems[queueIndex + 1].id)
-      } else if (siblingItems.length > 0) {
-        handleSelectAction(siblingItems[0].id)
+      // Auto-advance to next distinct matter in queue
+      const nextDistinctItem = queueItems.find((q) => !allRelatedIds.has(q.id))
+      if (nextDistinctItem) {
+        handleSelectAction(nextDistinctItem.id)
       } else {
         onClose()
       }

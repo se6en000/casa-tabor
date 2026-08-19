@@ -367,6 +367,25 @@ test('buildGmailWebUrl & resolveGmailAccountEmail targets specific user account'
   assert.match(spcoUrl, /mail\.google\.com\/mail\/u\/jacobrtabor%40gmail\.com\/#search/i)
 })
 
+test('ActionInspectionSidecar and usePrepItems resolve sibling actions and advance only to distinct matters', () => {
+  const prepItemsContent = fs.readFileSync(
+    path.join(process.cwd(), 'src/hooks/usePrepItems.ts'),
+    'utf8'
+  )
+  const sidecarContent = fs.readFileSync(
+    path.join(process.cwd(), 'src/components/canvas/widgets/ActionInspectionSidecar.tsx'),
+    'utf8'
+  )
 
+  // 1. useResolvePrepItem queries sibling identifiers and updates database with orConditions
+  assert.match(prepItemsContent, /select\('id,\s*source_ref,\s*cluster_id,\s*action_key'\)/)
+  assert.match(prepItemsContent, /dismissed:\s*true,\s*dismissed_at:\s*nowIso/)
+  assert.match(prepItemsContent, /orConditions\.push\(`source_ref\.eq\.\$\{item\.source_ref\}`\)/)
+  assert.match(prepItemsContent, /orConditions\.push\(`cluster_id\.eq\.\$\{item\.cluster_id\}`\)/)
 
-
+  // 2. ActionInspectionSidecar collects all sibling IDs and advances only to distinct items
+  assert.match(sidecarContent, /const siblingIds = siblingItems\.map\(\(s\) => s\.id\)/)
+  assert.match(sidecarContent, /const allRelatedIds = new Set\(\[activeItem\.id, \.\.\.siblingIds\]\)/)
+  assert.match(sidecarContent, /queueItems\.find\(\(q\) => !allRelatedIds\.has\(q\.id\)\)/)
+  assert.doesNotMatch(sidecarContent, /handleSelectAction\(siblingItems\[0\]\.id\)/)
+})

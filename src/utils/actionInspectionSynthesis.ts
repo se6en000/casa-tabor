@@ -1,5 +1,6 @@
 import type { PrepItem } from '../types'
 import type { PrepItemDetails } from '../hooks/usePrepItems'
+import { isDeliveryTransitItem } from './vendorTransactions.ts'
 
 export type SuggestedActionType = 'reminder' | 'event' | 'link' | 'payment'
 
@@ -134,10 +135,14 @@ export function parseDateSafe(dateStr?: string | null): {
  * messages into distinct preparation tasks, calendar events, and portal links.
  */
 export function detectSuggestedActionBundle(item: PrepItem | null): SuggestedActionBundle | null {
-  if (!item) return null
+  if (!item || isDeliveryTransitItem(item)) return null
   const desc = (item.description || item.event_title || '').trim()
   const title = (item.event_title || '').trim()
   const combined = `${title} ${desc}`
+
+  if (/\b(inhome delivery|delivery window|grocery delivery|package delivery|courier delivery)\b/i.test(combined)) {
+    return null
+  }
 
   // ── CASE 1: School Pictures (Bak MSOA / School Photo Day) ──
   if (
@@ -309,6 +314,7 @@ export function detectSuggestedActionBundle(item: PrepItem | null): SuggestedAct
  * Backward-compatible helper to detect a primary suggested calendar event.
  */
 export function detectSuggestedEvent(item: PrepItem | null): SuggestedEventPlan | null {
+  if (!item || isDeliveryTransitItem(item)) return null
   const bundle = detectSuggestedActionBundle(item)
   if (bundle) {
     const eventAction = bundle.actions.find((a) => a.type === 'event') || bundle.actions[0]
