@@ -229,7 +229,7 @@ export function validateCalendarTemporalProvenance(provenance, proposed, options
     typeof provenance.rangeStart !== 'string' ||
     typeof provenance.rangeEnd !== 'string' ||
     typeof provenance.sourceText !== 'string' ||
-    !['explicit_date', 'explicit_range', 'relative', 'image_provenance'].includes(provenance.resolutionKind)
+    !['explicit_date', 'explicit_range', 'relative', 'image_provenance', 'user_confirmed'].includes(provenance.resolutionKind)
   ) {
     return { valid: false, reason: 'missing_temporal_provenance' }
   }

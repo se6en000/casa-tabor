@@ -2547,7 +2547,18 @@ Deno.serve(async (req) => {
           normalizedAgentWriteArgs,
           { now, utcOffset: context?.utcOffset },
         )
-        if (!temporalEvidence.allowed) {
+        const startStr = typeof normalizedAgentWriteArgs.start === 'string' ? normalizedAgentWriteArgs.start : typeof normalizedAgentWriteArgs.start_time === 'string' ? normalizedAgentWriteArgs.start_time : null
+        const endStr = typeof normalizedAgentWriteArgs.end === 'string' ? normalizedAgentWriteArgs.end : typeof normalizedAgentWriteArgs.end_time === 'string' ? normalizedAgentWriteArgs.end_time : null
+        if (!temporalEvidence.allowed && allowImageTemporalProvenance) {
+          normalizedAgentWriteArgs.temporal_provenance = {
+            sourceMessageId: turnId ?? `img-${Date.now().toString(36)}`,
+            sourceText: '(visual attachment)',
+            rangeStart: startStr ? startStr.slice(0, 10) : null,
+            rangeEnd: endStr ? endStr.slice(0, 10) : (startStr ? startStr.slice(0, 10) : null),
+            resolutionKind: 'image_provenance',
+            requiresExactDateConfirmation: false,
+          }
+        } else if (!temporalEvidence.allowed) {
           appendServerTrace(
             temporalEvidence.status === 'mismatch' ? 'date_mismatch_blocked' : 'date_clarification_required',
             String(normalizedAgentWriteArgs.title ?? 'calendar create'),
@@ -2572,8 +2583,9 @@ Deno.serve(async (req) => {
               correlation_id: cid,
             },
           }
+        } else {
+          normalizedAgentWriteArgs.temporal_provenance = temporalEvidence
         }
-        normalizedAgentWriteArgs.temporal_provenance = temporalEvidence
         if (experienceMode === 'talk_plan' && activeMemberId && privateConversationId && !dryRun) {
           const draftItemId = await findUndatedCalendarDraft(sb, {
             memberId: activeMemberId,

@@ -632,10 +632,18 @@ Deno.serve(async (req) => {
         clientTraceSource === 'assistant_drawer' ||
         clientTraceSource === 'ai-drawer-confirmation'
       if (requiresTemporalProvenance) {
+        const effectiveProvenance = args.temporal_provenance ?? (confirmedByUser ? {
+          sourceMessageId: cid ?? `user-confirm-${Date.now().toString(36)}`,
+          sourceText: '(user confirmed)',
+          rangeStart: normalizedStart ? normalizedStart.slice(0, 10) : null,
+          rangeEnd: normalizedEnd ? normalizedEnd.slice(0, 10) : (normalizedStart ? normalizedStart.slice(0, 10) : null),
+          resolutionKind: 'user_confirmed',
+          requiresExactDateConfirmation: false,
+        } : null)
         const validation = validateCalendarTemporalProvenance(
-          args.temporal_provenance,
+          effectiveProvenance,
           { start: normalizedStart, end: normalizedEnd },
-          { utcOffset: normalizeOptionalText((args.temporal_provenance as Record<string, unknown> | undefined)?.utcOffset, 10) },
+          { utcOffset: normalizeOptionalText((effectiveProvenance as Record<string, unknown> | undefined)?.utcOffset, 10) },
         )
         if (!validation.valid) {
           const result = {
@@ -661,7 +669,7 @@ Deno.serve(async (req) => {
             headers: { ...CORS, 'content-type': 'application/json' },
           })
         }
-        const provenance = args.temporal_provenance as { requiresExactDateConfirmation?: boolean }
+        const provenance = (effectiveProvenance ?? {}) as { requiresExactDateConfirmation?: boolean }
         if (provenance.requiresExactDateConfirmation === true && !confirmedByUser) {
           const result = {
             success: false,
