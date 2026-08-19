@@ -15,8 +15,12 @@ import { useTodayEvents } from '../../hooks/useCalendarEvents'
 import { useNotifications } from '../../hooks/useNotifications'
 import { useWeekConflicts } from '../../hooks/useConflicts'
 import { usePrepItems } from '../../hooks/usePrepItems'
+import { useRollingEvents } from '../../hooks/useCalendarEvents'
+import { useGoogleSyncTriage } from '../../hooks/useGoogleSyncTriage'
 import { useGmailHealth } from '../../hooks/useGmailHealth'
 import { clusterPrepItems } from '../../utils/prepItemClusters'
+import { splitActionableAndTransitItems } from '../../utils/needsYouFeed'
+import { isItemAlreadyScheduled } from '../../utils/calendarEventMatcher'
 import { cn } from '../../utils/cn'
 import { IconButton, JewelCapsuleCopilot } from '../ui'
 import { useAppStore } from '../../stores/appStore'
@@ -314,13 +318,26 @@ function UtilityTrack({
   const { canvasSubmode, setCanvasSubmode } = useAppStore()
   const isSettings = location.pathname.startsWith('/settings')
 
+  const now = useLiveClock(60_000)
   const { data: conflicts = [] } = useWeekConflicts()
   const { data: prepItems = [] } = usePrepItems()
+  const { data: rollingEvents = [] } = useRollingEvents(now)
+  const { failedJobs } = useGoogleSyncTriage()
 
   const activeConflicts = useMemo(() => conflicts.filter((c) => !c.resolved), [conflicts])
   const activePrep = useMemo(() => prepItems.filter((p) => !p.dismissed), [prepItems])
-  const clusteredPrep = useMemo(() => clusterPrepItems(activePrep), [activePrep])
-  const totalAttentionCount = activeConflicts.length + clusteredPrep.length
+
+  const unscheduledPrep = useMemo(() => {
+    return activePrep.filter((p) => !isItemAlreadyScheduled(p, rollingEvents))
+  }, [activePrep, rollingEvents])
+
+  const { actionableItems } = useMemo(
+    () => splitActionableAndTransitItems(unscheduledPrep),
+    [unscheduledPrep]
+  )
+
+  const clusteredPrep = useMemo(() => clusterPrepItems(actionableItems), [actionableItems])
+  const totalAttentionCount = activeConflicts.length + failedJobs.length + clusteredPrep.length
 
   const isTriageActive = location.pathname === '/' && canvasSubmode === 'turbo'
 

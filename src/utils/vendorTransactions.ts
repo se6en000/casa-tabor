@@ -106,8 +106,15 @@ export function vendorTransactionIdentity(item: PrepItem): VendorTransactionIden
   const descriptor = transactionDescriptor(item)
   const dateKey = deliveryDateKey(item)
 
+  // A canonical transaction key has an actual numeric order ID (e.g. transaction:walmart:2000151-91693117)
+  const isCanonicalOrderKey = Boolean(
+    explicitKey &&
+    !explicitMessageFallback &&
+    /^transaction:[a-z0-9-]+:[a-z0-9-]*\d[a-z0-9-]*$/i.test(explicitKey)
+  )
+
   const key =
-    (explicitKey && !explicitMessageFallback ? explicitKey : null)
+    (isCanonicalOrderKey ? explicitKey : null)
     || (extractedOrderId
       ? `transaction:${vendorKey}:${normalizeKeyPart(extractedOrderId)}`
       : descriptor

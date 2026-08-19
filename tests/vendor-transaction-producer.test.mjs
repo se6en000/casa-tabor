@@ -35,3 +35,49 @@ test('Home and Action Center label grouped transactions as updates', () => {
   assert.match(actionCenter, /topic\.transactionVendor/)
   assert.match(actionCenter, /topic\.transactionVendor \? 'updates' : 'signals'/)
 })
+
+test('vendor transaction identity clusters multiple Walmart emails into a single delivery key on the same date', async () => {
+  const { splitActionableAndTransitItems } = await import('../src/utils/needsYouFeed.ts')
+  const { buildDeliveryTransitItem } = await import('../src/utils/vendorTransactions.ts')
+
+  const item1 = {
+    id: 'item-1',
+    event_title: 'Delivery of InHome order',
+    description: 'Delivery window is 2pm – 6pm',
+    attention_thread_key: 'inhome-delivery-window',
+    source_type: 'gmail',
+    created_at: '2026-08-19T14:00:00Z',
+    due_by: '2026-08-19T18:00:00Z',
+    dismissed: false,
+    priority: 1,
+    type: 'delivery',
+  }
+
+  const item2 = {
+    id: 'item-2',
+    event_title: 'Your Walmart order including bananas...',
+    description: 'Temporary hold is $138.65. Delivery expected today between 2pm – 6pm',
+    attention_thread_key: 'walmart-pricing-summary',
+    source_type: 'gmail',
+    created_at: '2026-08-19T14:05:00Z',
+    due_by: '2026-08-19T18:00:00Z',
+    dismissed: false,
+    priority: 1,
+    type: 'payment',
+  }
+
+  const t1 = buildDeliveryTransitItem(item1)
+  const t2 = buildDeliveryTransitItem(item2)
+
+  assert.equal(t1.threadKey, 'delivery:walmart:2026-08-19')
+  assert.equal(t2.threadKey, 'delivery:walmart:2026-08-19')
+
+  const { actionableItems, deliveryTransitItems } = splitActionableAndTransitItems([item1, item2])
+  assert.equal(actionableItems.length, 0)
+  assert.equal(deliveryTransitItems.length, 1)
+  assert.equal(deliveryTransitItems[0].vendor, 'Walmart')
+  assert.equal(deliveryTransitItems[0].cost, '$138.65')
+  assert.equal(deliveryTransitItems[0].stage, 'out_for_delivery')
+  assert.equal(deliveryTransitItems[0].isPerishable, true)
+})
+

@@ -23,6 +23,9 @@ import {
 } from '../lib/familyRoutines'
 import { isReminderOrChore } from '../lib/heroFocus.mjs'
 import { clusterPrepItems } from '../utils/prepItemClusters'
+import { splitActionableAndTransitItems } from '../utils/needsYouFeed'
+import { isItemAlreadyScheduled } from '../utils/calendarEventMatcher'
+import { useGoogleSyncTriage } from './useGoogleSyncTriage'
 import type { Conflict, PrepItem, FamilyMember } from '../types'
 
 export interface CalmKioskPresenterState {
@@ -125,8 +128,19 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     void completePrep(item.id)
   }
 
-  const clusteredPrep = useMemo(() => clusterPrepItems(activePrep), [activePrep])
-  const totalAttentionCount = activeConflicts.length + clusteredPrep.length
+  const { failedJobs } = useGoogleSyncTriage()
+
+  const unscheduledPrep = useMemo(() => {
+    return activePrep.filter((p) => !isItemAlreadyScheduled(p, rollingEvents))
+  }, [activePrep, rollingEvents])
+
+  const { actionableItems } = useMemo(
+    () => splitActionableAndTransitItems(unscheduledPrep),
+    [unscheduledPrep]
+  )
+
+  const clusteredPrep = useMemo(() => clusterPrepItems(actionableItems), [actionableItems])
+  const totalAttentionCount = activeConflicts.length + failedJobs.length + clusteredPrep.length
 
   const memberIds = useMemo(() => familyMembers.map((m) => m.id), [familyMembers])
   const { rules: availabilityRules = [] } = useMemberAvailability(memberIds)
