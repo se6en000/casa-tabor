@@ -211,7 +211,7 @@ body {
 }
 
 .app-shell-main {
-  padding-bottom: calc(var(--spacing-nav-height) + env(safe-area-inset-bottom));
+  min-height: 0;
 }
 
 .app-topbar {
@@ -320,12 +320,6 @@ html.midnight-gallery .topbar-gold-divider {
   .app-bottom-nav-label {
     max-width: 100%;
     font-size: var(--text-caption);
-  }
-}
-
-@media (min-width: 64rem) {
-  .app-shell-main {
-    padding-bottom: 0;
   }
 }
 
