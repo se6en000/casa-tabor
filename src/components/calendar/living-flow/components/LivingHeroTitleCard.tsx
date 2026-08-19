@@ -5,10 +5,11 @@ import {
   ShoppingBag, Trophy, Stethoscope, PartyPopper,
   GraduationCap, Utensils, Plane, Church, Pill,
   ShoppingCart, BookOpen, Wrench, PawPrint, ClipboardList,
-  Check, Bell, X, Pencil, Bed, Moon
+  Check, Bell, X, Pencil, Bed, Moon, Repeat
 } from 'lucide-react'
 import type { LivingFlowMode } from '../types'
 import { EventProvenanceBadge } from '../../EventProvenanceBadge'
+import RecurrenceRuleBuilder, { parseRrule } from '../../RecurrenceRuleBuilder'
 
 interface LivingHeroTitleCardProps {
   title: string
@@ -19,11 +20,13 @@ interface LivingHeroTitleCardProps {
   durationMinutes: number
   isAllDay?: boolean
   sourceType?: string
+  rrule?: string | null
   onUpdateTitle: (newTitle: string) => void
   onSetStartAndDuration: (startDate: Date, durationMins: number, isAllDay?: boolean) => void
   onSetStartAndEnd?: (startDate: Date, endDate: Date, isAllDay?: boolean) => void
   onSelectCategory: (catName: string, icon: string, mode: LivingFlowMode) => void
   onNudgeTime: (mins: number) => void
+  onUpdateRecurrence?: (rruleStr: string | null) => void
 }
 
 const EVENT_CATEGORIES = [
@@ -55,11 +58,13 @@ export default function LivingHeroTitleCard({
   durationMinutes,
   isAllDay = false,
   sourceType,
+  rrule = null,
   onUpdateTitle,
   onSetStartAndDuration,
   onSetStartAndEnd,
   onSelectCategory,
-  onNudgeTime
+  onNudgeTime,
+  onUpdateRecurrence
 }: LivingHeroTitleCardProps) {
   const safeStartDate = !startDate || isNaN(new Date(startDate).getTime()) ? new Date() : new Date(startDate)
   const safeEndDate = !endDate || isNaN(new Date(endDate).getTime())
@@ -69,7 +74,8 @@ export default function LivingHeroTitleCard({
   const isInitialMultiDay = !isSameDay(safeStartDate, safeEndDate) || durationMinutes >= 1440 || category.toLowerCase() === 'travel'
 
   const [localTitle, setLocalTitle] = useState(title)
-  const [expandedSection, setExpandedSection] = useState<'datetime' | 'category' | null>(null)
+  const [localRrule, setLocalRrule] = useState<string | null>(rrule)
+  const [expandedSection, setExpandedSection] = useState<'datetime' | 'category' | 'recurrence' | null>(null)
   const [scheduleTab, setScheduleTab] = useState<'single' | 'multiday'>(isInitialMultiDay ? 'multiday' : 'single')
   const [currentStartDate, setCurrentStartDate] = useState<Date>(safeStartDate)
   const [currentEndDate, setCurrentEndDate] = useState<Date>(safeEndDate)
@@ -88,6 +94,10 @@ export default function LivingHeroTitleCard({
       setLocalTitle(title)
     }
   }, [title])
+
+  useEffect(() => {
+    setLocalRrule(rrule)
+  }, [rrule])
 
   useEffect(() => {
     const s = !startDate || isNaN(new Date(startDate).getTime()) ? new Date() : new Date(startDate)
@@ -386,6 +396,26 @@ export default function LivingHeroTitleCard({
           <Clock size={13} className={expandedSection === 'datetime' ? 'text-white' : 'text-slate-500'} />
           <span className="truncate max-w-[190px]">{headerTimeLabel}</span>
           <ChevronDown size={12} className={expandedSection === 'datetime' ? 'rotate-180 transition-transform' : 'text-slate-400'} />
+        </button>
+
+        {/* Repeat / Recurrence Pill */}
+        <button
+          onClick={() => setExpandedSection(prev => prev === 'recurrence' ? null : 'recurrence')}
+          className={`living-action-chip ${expandedSection === 'recurrence' ? 'active' : (localRrule ? 'gold-active shadow-sm' : '')}`}
+        >
+          <Repeat size={13} className={expandedSection === 'recurrence' ? 'text-white' : (localRrule ? 'text-amber-800' : 'text-slate-500')} />
+          <span className="truncate max-w-[180px]">
+            {(() => {
+              const parsed = parseRrule(localRrule)
+              if (parsed.freq === 'none') return 'Does not repeat'
+              if (parsed.freq === 'daily') return parsed.interval > 1 ? `Every ${parsed.interval} days` : 'Daily'
+              if (parsed.freq === 'weekly') return parsed.interval > 1 ? `Every ${parsed.interval} weeks` : 'Weekly'
+              if (parsed.freq === 'monthly') return parsed.interval > 1 ? `Every ${parsed.interval} months` : 'Monthly'
+              if (parsed.freq === 'yearly') return parsed.interval > 1 ? `Every ${parsed.interval} years` : 'Yearly'
+              return 'Repeats'
+            })()}
+          </span>
+          <ChevronDown size={12} className={expandedSection === 'recurrence' ? 'rotate-180 transition-transform' : 'text-slate-400'} />
         </button>
 
         {/* Micro Steppers */}
@@ -715,6 +745,54 @@ export default function LivingHeroTitleCard({
               </div>
             </div>
           )}
+
+          {/* Quick Recurrence Trigger Row inside Schedule & Timing */}
+          <div className="mt-3 pt-3 border-t border-slate-200/80 flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-600 flex items-center gap-1.5">
+              <Repeat size={13} className="text-amber-700" />
+              <span>Repeat:</span>
+              <strong className="text-slate-900">
+                {parseRrule(localRrule).freq === 'none' ? 'Does not repeat' : `Repeats ${parseRrule(localRrule).freq}`}
+              </strong>
+            </span>
+            <button
+              type="button"
+              onClick={() => setExpandedSection('recurrence')}
+              className="text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg border border-amber-300/80 transition-colors flex items-center gap-1"
+            >
+              <span>Configure Repeat</span>
+              <ChevronDown size={12} className="-rotate-90" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ══════ INLINE RECURRENCE EXPANSION DRAWER ══════ */}
+      {expandedSection === 'recurrence' && (
+        <div className="living-inline-drawer p-4 bg-white border border-slate-200 rounded-2xl shadow-sm mt-3 space-y-3">
+          <div className="living-inline-drawer-header flex items-center justify-between pb-2 border-b border-slate-100">
+            <span className="flex items-center gap-1.5 font-bold text-xs text-amber-900 uppercase tracking-wide">
+              <Repeat size={14} className="text-amber-700" />
+              <span>Repeat &amp; Recurrence Rule</span>
+            </span>
+            <button
+              onClick={() => setExpandedSection(null)}
+              className="text-xs text-slate-500 hover:text-slate-900 font-bold flex items-center gap-0.5"
+            >
+              <span>Done</span>
+              <X size={13} />
+            </button>
+          </div>
+
+          <RecurrenceRuleBuilder
+            value={localRrule}
+            onChange={(newRruleStr) => {
+              setLocalRrule(newRruleStr)
+              onUpdateRecurrence?.(newRruleStr)
+            }}
+            startDate={format(currentStartDate, 'yyyy-MM-dd')}
+            className="border-0 shadow-none bg-transparent p-0"
+          />
         </div>
       )}
 

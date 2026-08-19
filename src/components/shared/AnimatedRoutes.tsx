@@ -14,6 +14,8 @@ import MusicPage from '../../pages/MusicPage'
 import TabletPrototypePage from '../../pages/TabletPrototypePage'
 import TripDetailPage from '../../pages/TripDetailPage'
 import CookPage from '../../pages/CookPage'
+import CookPrototypeMediumPage from '../../pages/CookPrototypeMediumPage'
+import CookPrototypeLivingCanvasPage from '../../pages/CookPrototypeLivingCanvasPage'
 import StatusDashboardPage from '../../pages/StatusDashboardPage'
 import DataAnalyticsPage from '../../pages/DataAnalyticsPage'
 import GroceryIntelligenceSettingsPage from '../../pages/GroceryIntelligenceSettingsPage'
@@ -48,6 +50,8 @@ export default function AnimatedRoutes() {
         <Route path="/calendar" element={<PageTransition><CalendarPage /></PageTransition>} />
         <Route path="/grocery" element={<PageTransition><GroceryPage /></PageTransition>} />
         <Route path="/cook" element={<PageTransition><CookPage /></PageTransition>} />
+        <Route path="/prototype/cook-medium" element={<PageTransition><CookPrototypeMediumPage /></PageTransition>} />
+        <Route path="/prototype/cook-high" element={<PageTransition><CookPrototypeLivingCanvasPage /></PageTransition>} />
         <Route path="/music" element={<PageTransition><MusicPage /></PageTransition>} />
         <Route path="/briefing" element={<PageTransition><BriefingPage /></PageTransition>} />
         <Route path="/actions" element={<PageTransition><ActionHubPage /></PageTransition>} />

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { CalendarDays, Plus, Camera, Sparkles } from 'lucide-react'
 import { addHours } from 'date-fns'
 import { supabase } from '../../lib/supabase'
+import { syncAndMaterializeRecurringSeries, triggerGoogleEventSync } from '../../lib/eventMutations'
 import { useQueryClient } from '@tanstack/react-query'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
 import type { FamilyMember } from '../../types'
@@ -10,6 +11,7 @@ import { resolveDirectoryPlaceSave, type DirectoryPlaceSelection } from '../../u
 import { normalizeAllDayEventRange } from '../../utils/allDayEventRange'
 import DirectoryPlaceInput from './DirectoryPlaceInput'
 import MobileDocumentScanSheet from '../mobile/MobileDocumentScanSheet'
+import RecurrenceRuleBuilder from '../calendar/RecurrenceRuleBuilder'
 import {
   Alert,
   Button,
@@ -19,7 +21,6 @@ import {
   Field,
   Input,
   PersonAvatarStack,
-  Select,
   Sheet,
   Switch,
   Textarea,
@@ -67,7 +68,8 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
   const [placeFieldKey, setPlaceFieldKey] = useState(0)
   const { data: savedPlaces = [] } = useSavedPlaces()
   const [detailsOpen, setDetailsOpen] = useState(false)
-  const [repeat, setRepeat] = useState<'none' | 'daily' | 'weekly' | 'monthly'>('none')
+  const [rruleStr, setRruleStr] = useState<string | null>(null)
+  const [rruleSummary, setRruleSummary] = useState('Does not repeat')
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
@@ -89,7 +91,8 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
       setPlaceSelection(null)
       setPlaceFieldKey((k) => k + 1)
       setDetailsOpen(false)
-      setRepeat('none')
+      setRruleStr(null)
+      setRruleSummary('Does not repeat')
       setNotes('')
       setSaving(false)
       setSaveError('')
@@ -168,7 +171,7 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
     }
     if (end.getTime() <= start.getTime()) end = addHours(start, 1)
     const allDayRange = allDay ? normalizeAllDayEventRange(startDT, endDT) : null
-    const repeatRule = repeat === 'none' ? null : `FREQ=${repeat.toUpperCase()}`
+    const repeatRule = rruleStr ? rruleStr.replace(/^RRULE:/, '') : null
 
     // Resolve the location against saved_places (lookup-first) instead of
     // trusting free-typed text, so quick-created events dedupe/link to the
@@ -241,18 +244,9 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
     }
 
     if (repeatRule) {
-      const { error: seriesError } = await supabase.from('event_series').insert({
-        template_event_id: inserted.id,
-        recurrence_lines: [`RRULE:${repeatRule}`],
-        ownership: 'casa',
-      })
-      if (seriesError) {
-        setSavePartial(true)
-        setSaveError(`Event was created, but its repeat pattern could not be configured: ${seriesError.message}`)
-        setSaving(false)
-        void qc.invalidateQueries({ queryKey: ['events'] })
-        return
-      }
+      await syncAndMaterializeRecurringSeries(supabase, inserted.id)
+    } else {
+      triggerGoogleEventSync(supabase, inserted.id)
     }
 
     if (inserted && selectedMemberIds.length > 0) {
@@ -312,7 +306,7 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
   const detailsSummary = [
     allDay ? 'All day' : null,
     eventType === 'reminder' ? 'Reminder' : null,
-    repeat === 'none' ? null : `Repeats ${repeat}`,
+    rruleSummary !== 'Does not repeat' ? rruleSummary : null,
     notes.trim() ? 'Notes added' : null,
   ].filter(Boolean).join(' · ') || 'All day, repeat, reminder, or notes'
 
@@ -455,18 +449,15 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
               description="Create a reminder instead of a calendar event."
               disabled={saving || Boolean(saveSuccess)}
             />
-            <Field label="Repeat" hint="For a custom schedule, create the event first and use Edit details.">
-              <Select
-                value={repeat}
-                onChange={(event) => setRepeat(event.target.value as typeof repeat)}
-                disabled={saving || Boolean(saveSuccess)}
-              >
-                <option value="none">Does not repeat</option>
-                <option value="daily">Every day</option>
-                <option value="weekly">Every week</option>
-                <option value="monthly">Every month</option>
-              </Select>
-            </Field>
+            <RecurrenceRuleBuilder
+              value={rruleStr}
+              onChange={(str, summary) => {
+                setRruleStr(str)
+                setRruleSummary(summary)
+              }}
+              startDate={startDT}
+              disabled={saving || Boolean(saveSuccess)}
+            />
             <Field label="Notes">
               <Textarea
                 value={notes}

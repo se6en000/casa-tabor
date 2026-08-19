@@ -68,6 +68,7 @@ export default function LivingFlowSidecar({
     markCompleted,
     snoozeReminder,
     setRecurScope,
+    setRecurrenceRule,
     isRecurring,
   } = useLivingFlowState(event, handleAnimatedClose)
 
@@ -121,11 +122,13 @@ export default function LivingFlowSidecar({
           durationMinutes={state.durationMinutes}
           isAllDay={state.isAllDay}
           sourceType={event?.source_type}
+          rrule={state.rrule}
           onUpdateTitle={updateTitle}
           onSetStartAndDuration={setStartAndDuration}
           onSetStartAndEnd={setStartAndEnd}
           onSelectCategory={setCategory}
           onNudgeTime={nudgeMinutes}
+          onUpdateRecurrence={setRecurrenceRule}
         />
 
         {/* Dynamic Mode: Calendar Event vs Task Reminder */}

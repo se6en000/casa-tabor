@@ -1,7 +1,14 @@
 import type { QueryClient } from '@tanstack/react-query'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { format } from 'date-fns'
+import * as RRulePkg from 'rrule'
+import { formatInTimeZone, fromZonedTime } from 'date-fns-tz'
+// @ts-expect-error recurrence-engine-core is a plain JS module without ambient types
+import { createRecurrenceEngine } from '../../supabase/functions/_shared/recurrence-engine-core.mjs'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
+
+const rrulestr = RRulePkg.rrulestr || (RRulePkg as unknown as { default: { rrulestr: typeof RRulePkg.rrulestr } }).default?.rrulestr
+const recurrenceEngine = createRecurrenceEngine({ rrulestr, formatInTimeZone, fromZonedTime })
 import type { FamilyMember } from '../types'
 import type { EventTransportationPlan } from './eventTransportation.ts'
 import {
@@ -19,6 +26,7 @@ import {
   evictEventFromAllCaches,
 } from './eventAggregateCache.ts'
 import { normalizeAllDayEventRange } from '../utils/allDayEventRange.ts'
+import { serializeToZonedIso } from '../utils/eventTime.ts'
 import type { TravelBehavior } from '../components/calendar/living-flow/types.ts'
 
 export interface EventVenuePayload {
@@ -416,8 +424,8 @@ export async function updateEventSchedule(
   endDate: Date,
   isAllDay: boolean = false,
 ) {
-  let startIso = startDate.toISOString()
-  let endIso = endDate.toISOString()
+  let startIso = serializeToZonedIso(startDate)
+  let endIso = serializeToZonedIso(endDate)
   if (isAllDay) {
     const pad = (n: number) => String(n).padStart(2, '0')
     const startStr = `${startDate.getFullYear()}-${pad(startDate.getMonth() + 1)}-${pad(startDate.getDate())}`
@@ -987,5 +995,225 @@ export async function deleteCalendarEvent(
 
   if (error) throw error
   invalidateAllCalendarQueries(queryClient, eventId)
+}
+
+export async function syncAndMaterializeRecurringSeries(
+  supabase: SupabaseClient,
+  templateEventId: string,
+  options?: { rangeStartIso?: string; rangeEndIso?: string }
+): Promise<void> {
+  if (!templateEventId) return
+
+  try {
+    // 1. Fetch master template event
+    const { data: master, error: masterErr } = await supabase
+      .from('events')
+      .select('*')
+      .eq('id', templateEventId)
+      .maybeSingle()
+
+    if (masterErr || !master) {
+      console.warn('[syncAndMaterializeRecurringSeries] Could not fetch master event:', masterErr)
+      return
+    }
+
+    // 2. Fetch or create event_series entry
+    let { data: series } = await supabase
+      .from('event_series')
+      .select('*')
+      .or(`template_event_id.eq.${templateEventId},id.eq.${(master as any).series_id || '00000000-0000-0000-0000-000000000000'}`)
+      .maybeSingle()
+
+    const formattedRrule = master.rrule
+      ? (master.rrule.startsWith('RRULE:') ? master.rrule : `RRULE:${master.rrule}`)
+      : null
+
+    if (formattedRrule) {
+      if (series) {
+        await supabase
+          .from('event_series')
+          .update({
+            recurrence_lines: [formattedRrule],
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', series.id)
+        series.recurrence_lines = [formattedRrule]
+      } else {
+        const { data: createdSeries } = await supabase
+          .from('event_series')
+          .insert({
+            template_event_id: templateEventId,
+            recurrence_lines: [formattedRrule],
+            ownership: 'casa',
+            timezone: 'America/New_York',
+            status: 'active',
+          })
+          .select('*')
+          .maybeSingle()
+        if (createdSeries) series = createdSeries
+      }
+    }
+
+    if (series && series.recurrence_lines?.length) {
+      // 3. Materialize occurrences locally using recurrence engine
+      const startInstant = new Date(master.start_time)
+      const endInstant = new Date(master.end_time)
+      const durationMs = Math.max(0, endInstant.getTime() - startInstant.getTime())
+
+      const rangeStart = options?.rangeStartIso || new Date(Date.now() - 30 * 86400000).toISOString()
+      const rangeEnd = options?.rangeEndIso || new Date(Date.now() + 365 * 86400000).toISOString()
+
+      const { occurrences } = recurrenceEngine.generateOccurrences({
+        dtstart: master.start_time,
+        durationMs,
+        recurrenceLines: series.recurrence_lines,
+        timezone: series.timezone || 'America/New_York',
+        rangeStart,
+        rangeEnd,
+        allDay: master.all_day,
+      })
+
+      const exdatesSet = new Set<string>(series.exdates || [])
+
+      // Filter out occurrences matching exdates
+      const filteredOccurrences = occurrences.filter((occ: { occurrenceKey: string; start: string }) => {
+        if (exdatesSet.has(occ.occurrenceKey)) return false
+        if (exdatesSet.has(occ.start)) return false
+        return true
+      })
+
+      // Fetch existing occurrences for this series or master
+      const { data: existingOccurrences } = await supabase
+        .from('events')
+        .select('id, occurrence_key, status, start_time')
+        .or(`series_id.eq.${series.id},recurrence_master_id.eq.${templateEventId}`)
+        .eq('record_kind', 'occurrence')
+
+      const validKeys = new Set(filteredOccurrences.map((o: { occurrenceKey: string }) => o.occurrenceKey))
+      const existingSet = new Set((existingOccurrences || []).map((o) => o.occurrence_key))
+
+      // Prune stale occurrences no longer valid under the updated RRULE (e.g. past UNTIL date or in EXDATE)
+      const staleOccurrences = (existingOccurrences || []).filter((o) => {
+        if (!o.occurrence_key) return true
+        return !validKeys.has(o.occurrence_key)
+      })
+
+      if (staleOccurrences.length > 0) {
+        const staleIds = staleOccurrences.map((o) => o.id)
+        await supabase.from('event_members').delete().in('event_id', staleIds)
+        await supabase.from('events').delete().in('id', staleIds)
+      }
+
+      // Upsert missing occurrences
+      for (const occ of filteredOccurrences) {
+        if (!existingSet.has(occ.occurrenceKey)) {
+          await supabase.from('events').insert({
+            title: master.title,
+            description: master.description,
+            start_time: occ.start,
+            end_time: occ.end,
+            all_day: master.all_day,
+            location_name: master.location_name,
+            address: master.address,
+            record_kind: 'occurrence',
+            series_id: series.id,
+            recurrence_master_id: templateEventId,
+            occurrence_key: occ.occurrenceKey,
+            original_start_time: occ.originalStartTime,
+            status: 'confirmed',
+            source_member_id: master.source_member_id,
+            google_calendar_id: master.google_calendar_id,
+            google_connection_id: master.google_connection_id,
+          })
+        }
+      }
+    }
+
+    // 4. Trigger Google Calendar sync
+    triggerGoogleEventSync(supabase, templateEventId)
+
+    // 5. Background double-insurance
+    void supabase.functions.invoke('materialize-recurring-events', { body: {} }).catch(() => {})
+  } catch (err) {
+    console.error('[syncAndMaterializeRecurringSeries] Error during series sync and materialization:', err)
+  }
+}
+
+export async function createOccurrenceException(
+  supabase: SupabaseClient,
+  occurrenceId: string,
+  updates: Partial<EventWithDetails>
+): Promise<string | null> {
+  const { data: occ, error: fetchErr } = await supabase
+    .from('events')
+    .select('*')
+    .eq('id', occurrenceId)
+    .single()
+
+  if (fetchErr || !occ) throw new Error(`Occurrence ${occurrenceId} not found`)
+
+  const originalStartTime = occ.original_start_time || occ.start_time
+
+  const { data: updated, error: updateErr } = await supabase
+    .from('events')
+    .update({
+      ...updates,
+      is_exception: true,
+      record_kind: 'occurrence',
+      original_start_time: originalStartTime,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', occurrenceId)
+    .select('id')
+    .single()
+
+  if (updateErr) throw updateErr
+
+  if (occ.recurrence_master_id) {
+    triggerGoogleEventSync(supabase, occ.recurrence_master_id)
+  }
+
+  return updated?.id || occurrenceId
+}
+
+export async function excludeOccurrence(
+  supabase: SupabaseClient,
+  occurrenceId: string
+): Promise<void> {
+  const { data: occ, error: fetchErr } = await supabase
+    .from('events')
+    .select('id, series_id, recurrence_master_id, occurrence_key, start_time')
+    .eq('id', occurrenceId)
+    .single()
+
+  if (fetchErr || !occ) return
+
+  const targetKey = occ.occurrence_key || occ.start_time
+
+  if (occ.series_id) {
+    const { data: series } = await supabase
+      .from('event_series')
+      .select('exdates')
+      .eq('id', occ.series_id)
+      .maybeSingle()
+
+    const currentExdates: string[] = series?.exdates || []
+    if (!currentExdates.includes(targetKey)) {
+      await supabase
+        .from('event_series')
+        .update({
+          exdates: [...currentExdates, targetKey],
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', occ.series_id)
+    }
+  }
+
+  await supabase.from('event_members').delete().eq('event_id', occurrenceId)
+  await supabase.from('events').delete().eq('id', occurrenceId)
+
+  if (occ.recurrence_master_id) {
+    triggerGoogleEventSync(supabase, occ.recurrence_master_id)
+  }
 }
 

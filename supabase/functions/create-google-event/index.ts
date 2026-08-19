@@ -60,9 +60,9 @@ Deno.serve(async (req) => {
     ? { date: toGoogleAllDayEndDate(event.end_time as string) }
     : { dateTime: new Date(event.end_time).toISOString(), timeZone: TZ }
 
-  // If this is a master recurring event, include the RRULE so Google creates it as a series
-  const recurrence: string[] = (event as Record<string, unknown>).rrule
-    ? [`RRULE:${(event as Record<string, unknown>).rrule}`]
+  const rawRrule = (event as Record<string, unknown>).rrule as string | null
+  const recurrence: string[] = rawRrule
+    ? [rawRrule.startsWith('RRULE:') ? rawRrule : `RRULE:${rawRrule}`]
     : []
 
   // Create in Google Calendar

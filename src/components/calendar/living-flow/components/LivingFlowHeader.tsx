@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Link2, X, ChevronDown, Users, Star, Check, Plus, Rotate3d, Repeat } from 'lucide-react'
+import { Link2, X, ChevronDown, Users, Star, Check, Plus, Rotate3d, Repeat, AlertTriangle } from 'lucide-react'
 import type { FamilyMember } from '../../../../types'
 import type { RecurrenceScope } from '../types'
 import { getDisplayMemberColor, getMemberRoleLabel } from '../../../../design-system/memberColors'
@@ -125,6 +125,14 @@ export default function LivingFlowHeader({
               All repeating
             </Chip>
           </div>
+        </div>
+      )}
+
+      {/* Caution Banner when Editing All Repeating Events */}
+      {isRecurring && recurScope === 'all' && (
+        <div className="px-5 py-2 flex items-center gap-2 bg-amber-500/15 border-t border-amber-300/80 text-amber-950 text-xs font-semibold">
+          <AlertTriangle size={14} className="text-amber-700 shrink-0" />
+          <span>Caution: Changes will apply to all repeating events in this series.</span>
         </div>
       )}
 

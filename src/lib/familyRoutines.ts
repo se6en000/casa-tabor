@@ -835,8 +835,8 @@ export function updateRoutineDayOverrideFromEvent(
   let newPickDriverId = existing?.pickupDriverId !== undefined ? existing.pickupDriverId : routine.pickupDriverId
 
   if (event.start_time) {
-    const d = new Date(event.start_time)
-    const timeStr = format(d, 'HH:mm')
+    const match = event.start_time.match(/T(\d{2}:\d{2})/)
+    const timeStr = match ? match[1] : format(new Date(event.start_time), 'HH:mm')
     if (event.isPickup) {
       newEndLocal = timeStr
       if (event.driverName) newPickDriverName = event.driverName

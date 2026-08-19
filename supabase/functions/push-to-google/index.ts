@@ -21,7 +21,7 @@ Deno.serve(async (req) => {
   // Load event + enrichment
   const { data: event, error: evErr } = await sb
     .from('events')
-    .select('id, title, description, start_time, end_time, all_day, event_type, location_name, address, google_event_id, google_calendar_id, google_connection_id, source_member_id, event_enrichments(*), event_members(role, family_members(name))')
+    .select('id, title, description, start_time, end_time, all_day, event_type, rrule, location_name, address, google_event_id, google_calendar_id, google_connection_id, source_member_id, event_enrichments(*), event_members(role, family_members(name))')
     .eq('id', event_id)
     .single()
 
@@ -121,6 +121,11 @@ Deno.serve(async (req) => {
   // Google Calendar requires timeZone when using dateTime (especially when switching from all-day)
   const TZ = 'America/New_York'
 
+  const rawRrule = (event as Record<string, unknown>).rrule as string | null
+  const recurrence: string[] = rawRrule
+    ? [rawRrule.startsWith('RRULE:') ? rawRrule : `RRULE:${rawRrule}`]
+    : []
+
   const projectionFields = {
     summary,
     ...(location !== undefined ? { location } : {}),
@@ -130,6 +135,7 @@ Deno.serve(async (req) => {
     end: isAllDay
       ? { date: toGoogleAllDayEndDate(event.end_time as string) }
       : { dateTime: toISO(event.end_time), timeZone: TZ },
+    ...(recurrence.length > 0 ? { recurrence } : {}),
   }
 
   try {

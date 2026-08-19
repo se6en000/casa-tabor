@@ -34,6 +34,14 @@
       {
         "path": "src/pages/MusicPage.tsx",
         "reason": "Official Spotify identity and connect action retain Spotify brand colors."
+      },
+      {
+        "path": "src/pages/CookPrototypeLivingCanvasPage.tsx",
+        "reason": "Exploratory kitchen kiosk prototype."
+      },
+      {
+        "path": "src/pages/CookPrototypeMediumPage.tsx",
+        "reason": "Exploratory kitchen kiosk prototype."
       }
     ],
     "inlineStyleBlocks": [

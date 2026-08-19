@@ -3605,6 +3605,24 @@ export default function CookPage() {
                 >
                   Shopping List
                 </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => navigate('/prototype/cook-medium')}
+                  leadingIcon={<BookOpen size={14} className="text-casa-gold" />}
+                  className="text-body-sm font-semibold text-casa-navy hover:text-casa-gold min-h-control bg-casa-surface/90 border-casa-border shadow-2xs"
+                >
+                  Option 2 Prototype
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => navigate('/prototype/cook-high')}
+                  leadingIcon={<Sparkles size={14} className="text-casa-gold" />}
+                  className="text-body-sm font-semibold text-casa-navy hover:text-casa-gold min-h-control bg-casa-surface/90 border-casa-border shadow-2xs"
+                >
+                  Option 3 Prototype
+                </Button>
               </div>
             </div>
 

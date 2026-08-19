@@ -1,16 +1,24 @@
 import { addDays, differenceInCalendarDays, format, isSameDay, startOfDay } from 'date-fns'
+import { toZonedTime, fromZonedTime } from 'date-fns-tz'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
+
+export const HOUSEHOLD_TIMEZONE = 'America/New_York'
 
 type EventTimeLike = Pick<EventWithDetails, 'start_time' | 'end_time'> & { all_day?: boolean }
 
 function asDate(value: string): Date {
-  return new Date(value)
+  if (!value) return new Date()
+  return toZonedTime(value, HOUSEHOLD_TIMEZONE)
+}
+
+export function serializeToZonedIso(date: Date): string {
+  return fromZonedTime(date, HOUSEHOLD_TIMEZONE).toISOString()
 }
 
 export function parseDatePortionAsLocal(value: string): Date {
   if (!value) return new Date()
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(value)
-  if (!m) return new Date(value)
+  if (!m) return toZonedTime(value, HOUSEHOLD_TIMEZONE)
   return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 0, 0, 0, 0)
 }
 

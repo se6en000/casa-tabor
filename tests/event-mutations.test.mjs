@@ -53,8 +53,8 @@ test('reconcileTransportationLegTimes updates arrive_by and depart_at leg times 
     name: 'Jake',
   })
 
-  const newStart = new Date('2026-08-16T14:30:00.000-04:00') // 14:30
-  const newEnd = new Date('2026-08-16T16:30:00.000-04:00')   // 16:30
+  const newStart = new Date(2026, 7, 16, 14, 30, 0) // 14:30
+  const newEnd = new Date(2026, 7, 16, 16, 30, 0)   // 16:30
 
   const updatedPlan = reconcileTransportationLegTimes(plan, newStart, newEnd)
 

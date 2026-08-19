@@ -31,6 +31,7 @@ export interface LivingFlowState {
   selectedMemberIds: string[]
   primaryMemberId: string | null
   isAllDay?: boolean
+  rrule?: string | null
 }
 
 export interface LivingFlowProps {

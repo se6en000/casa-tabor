@@ -16,6 +16,8 @@ const REPORT_PATH = join(REPO_ROOT, 'reports/experience-certification.report.jso
 const EXCLUDED_SURFACES = new Set([
   'src/pages/DesignSystemGalleryPage.tsx',
   'src/pages/VisualRegressionPage.tsx',
+  'src/pages/CookPrototypeLivingCanvasPage.tsx',
+  'src/pages/CookPrototypeMediumPage.tsx',
 ])
 const SPECIALIZED_NATIVE_SURFACES = new Set([
   'src/components/shared/TouchKeyboard.tsx',

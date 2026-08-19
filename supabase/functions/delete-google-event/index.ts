@@ -17,14 +17,101 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
   const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
 
-  const payload = await req.json().catch(() => ({}))
-  const { event_id } = payload
-  if (!event_id && !payload.google_event_id) return err('event_id or google_event_id required', 400)
+  const { event_id, search_q } = payload
+  if (!event_id && !payload.google_event_id && !search_q) return err('event_id, google_event_id or search_q required', 400)
 
   let googleEventId = payload.google_event_id as string | undefined
   let googleCalendarId = payload.google_calendar_id as string | undefined
   let googleConnectionId = payload.google_connection_id as string | undefined
   let sourceMemberId = payload.source_member_id as string | undefined
+
+  if (search_q) {
+    // Bulk search and delete mode directly against Google Calendar API
+    let connection: CalendarConnection | null = null
+    if (sourceMemberId) {
+      const { data: conn } = await sb
+        .from('calendar_connections')
+        .select('*')
+        .eq('family_member_id', sourceMemberId)
+        .eq('is_enabled', true)
+        .maybeSingle()
+      connection = conn as CalendarConnection | null
+    }
+    if (!connection) {
+      const { data: conn } = await sb
+        .from('calendar_connections')
+        .select('*')
+        .eq('access_mode', 'writable')
+        .eq('is_enabled', true)
+        .maybeSingle()
+      connection = conn as CalendarConnection | null
+    }
+    if (!connection) return err('No valid Google connection found for search_q', 400)
+
+    try {
+      const resolved = await resolveGoogleConnection(sb, connection)
+      const calendarId = googleCalendarId || resolved.connection.calendar_id
+
+      let pageToken: string | undefined
+      const deletedGoogleIds: string[] = []
+      let totalFound = 0
+
+      do {
+        const urlParams = new URLSearchParams({
+          q: search_q,
+          singleEvents: 'true',
+          maxResults: '250',
+        })
+        if (pageToken) urlParams.set('pageToken', pageToken)
+
+        const listRes = await fetch(
+          `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?${urlParams}`,
+          { headers: { authorization: `Bearer ${resolved.accessToken}` } }
+        )
+
+        if (!listRes.ok) {
+          const listErrText = await listRes.text()
+          throw new Error(`Google events.list failed: ${listRes.status} ${listErrText}`)
+        }
+
+        const listData = await listRes.json()
+        const items = listData.items ?? []
+        totalFound += items.length
+
+        for (const item of items) {
+          if (!item.id) continue
+          try {
+            await deleteGoogleEvent({
+              accessToken: resolved.accessToken,
+              calendarId,
+              eventId: item.id,
+            })
+            deletedGoogleIds.push(item.id)
+            
+            // Clean up DB reference if exists
+            await sb.from('events').update({
+              google_event_id: null,
+              google_calendar_id: null,
+              google_connection_id: null,
+              status: 'cancelled',
+              updated_at: new Date().toISOString(),
+            }).eq('google_event_id', item.id)
+          } catch (delErr) {
+            console.warn(`Failed to delete Google event ${item.id}:`, delErr)
+          }
+        }
+
+        pageToken = listData.nextPageToken
+      } while (pageToken)
+
+      await markGoogleConnectionHealthy(sb, connection.id)
+      return ok({ search_q, totalFound, deletedCount: deletedGoogleIds.length, deletedGoogleIds })
+    } catch (cause) {
+      const error = cause instanceof Error ? cause : new Error(String(cause))
+      if (connection) await markGoogleConnectionFailure(sb, connection.id, error)
+      return err(error.message)
+    }
+  }
 
   // If Google IDs not directly provided in payload, load from events table
   if (!googleEventId && event_id) {

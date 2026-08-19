@@ -14,7 +14,7 @@ import {
 import { useSaveEnrichmentBatch, useEnrichEvent } from '../../hooks/useEnrichEvent'
 import ChecklistEditor from './ChecklistEditor'
 import { supabase } from '../../lib/supabase'
-import { deleteCalendarEvent } from '../../lib/eventMutations'
+import { deleteCalendarEvent, syncAndMaterializeRecurringSeries, triggerGoogleEventSync, excludeOccurrence } from '../../lib/eventMutations'
 import { useQueryClient } from '@tanstack/react-query'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
 import BounceScroll from '../shared/BounceScroll'
@@ -39,6 +39,7 @@ import { normalizeReminderTimeRange } from '../../utils/reminderTimeRange'
 import type { EventLocationScope } from '../../lib/eventLocation'
 import type { TransportationPlace } from '../../lib/eventTransportation'
 import RecurrenceScopeDialog from './RecurrenceScopeDialog'
+import RecurrenceRuleBuilder from './RecurrenceRuleBuilder'
 import SmartPlaceInput from './SmartPlaceInput'
 import SmartContactInput from './SmartContactInput'
 import {
@@ -981,6 +982,9 @@ function EventEditSheetContent({
         all_day: isAllDay,
         event_type: eventType,
         is_enriched: true,
+        record_kind: isInstance ? 'occurrence' : (event.record_kind || 'single'),
+        is_exception: isInstance ? true : (event.is_exception || false),
+        original_start_time: isInstance ? (event.original_start_time || event.start_time) : (event.original_start_time || null),
         updated_at: new Date().toISOString(),
       }).eq('id', event.id)
       if (error) { alert(`Save failed: ${error.message}`); return }
@@ -1185,25 +1189,21 @@ function EventEditSheetContent({
         .catch(() => {})
 
     } else if (scope === 'all') {
-      // All instances: push master event (with full RRULE) to Google
       const masterIdToSync = isInstance ? event.recurrence_master_id! : event.id
-      supabase.functions.invoke('update-recurring-google', { body: { master_event_id: masterIdToSync } })
-        .then(() => qc.invalidateQueries({ queryKey: ['events'] }))
-        .catch(e => console.warn('[EventEditSheet] update-recurring-google failed:', e))
+      await syncAndMaterializeRecurringSeries(supabase, masterIdToSync)
+      triggerGoogleEventSync(supabase, masterIdToSync)
+      void qc.invalidateQueries({ queryKey: ['events'] })
 
     } else if (scope === 'future') {
-      // Future split: truncate original series in Google + create new series for future branch
       if (event.recurrence_master_id) {
-        // Update original master in Google (now has UNTIL in rrule)
-        supabase.functions.invoke('update-recurring-google', { body: { master_event_id: event.recurrence_master_id } })
-          .catch(e => console.warn('[EventEditSheet] update-recurring-google (original) failed:', e))
+        await syncAndMaterializeRecurringSeries(supabase, event.recurrence_master_id)
+        triggerGoogleEventSync(supabase, event.recurrence_master_id)
       }
       if (newFutureMasterId) {
-        // Create new Google recurring event for the future branch
-        supabase.functions.invoke('update-recurring-google', { body: { master_event_id: newFutureMasterId } })
-          .then(() => qc.invalidateQueries({ queryKey: ['events'] }))
-          .catch(e => console.warn('[EventEditSheet] update-recurring-google (future) failed:', e))
+        await syncAndMaterializeRecurringSeries(supabase, newFutureMasterId)
+        triggerGoogleEventSync(supabase, newFutureMasterId)
       }
+      void qc.invalidateQueries({ queryKey: ['events'] })
     }
     // analyze-conflicts + analyze-prep removed from save — they run on the scheduled HomePage cadence (5x/day)
 
@@ -1331,7 +1331,9 @@ function EventEditSheetContent({
     setDeleteError(null)
     try {
       const seriesPatch: Record<string, unknown> = {}
-      if (scope === 'future') {
+      if (scope === 'this') {
+        await excludeOccurrence(supabase, event.id)
+      } else if (scope === 'future') {
         const originalStart = event.original_start_time ?? (
           event.original_start_date ? `${event.original_start_date}T00:00:00Z` : event.start_time
         )
@@ -1772,124 +1774,17 @@ function EventEditSheetContent({
                   defaultOpen={recur.freq !== 'none'}
                   className="-mx-6 -mb-4 border-b-0"
                 >
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3">
-                    <label className="text-caption text-casa-muted font-medium shrink-0">Repeat</label>
-                    <div className="relative flex-1">
-                      <Select
-                        value={recur.freq}
-                        onChange={e => {
-                          setRecur(r => ({ ...r, freq: e.target.value as typeof r.freq, byDay: [] }))
-                          setRecurrenceTouched(true)
-                          markDirty()
-                        }}
-                        className="pr-8 appearance-none"
-                      >
-                        <option value="none" disabled={isCanonicalOccurrence && recurringEditorEnabled}>
-                          Does not repeat
-                        </option>
-                        <option value="daily">Daily</option>
-                        <option value="weekly">Weekly</option>
-                        <option value="monthly">Monthly</option>
-                        <option value="yearly">Yearly</option>
-                      </Select>
-                      <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-casa-muted pointer-events-none" />
-                    </div>
-                    {recur.freq !== 'none' && (
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <span className="text-caption text-casa-muted">every</span>
-                        <Input
-                          type="number"
-                          min={1} max={99}
-                          value={recur.interval}
-                          onChange={e => {
-                            setRecur(r => ({ ...r, interval: Math.max(1, parseInt(e.target.value) || 1) }))
-                            setRecurrenceTouched(true)
-                            markDirty()
-                          }}
-                          className="w-20 text-center"
-                        />
-                        <span className="text-caption text-casa-muted">
-                          {recur.freq === 'daily' ? 'day(s)' : recur.freq === 'weekly' ? 'wk(s)' : recur.freq === 'monthly' ? 'mo(s)' : 'yr(s)'}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Day-of-week selector for weekly */}
-                  {recur.freq === 'weekly' && (
-                    <div className="flex gap-1.5 flex-wrap">
-                      {['S','M','T','W','T','F','S'].map((d, i) => (
-                        <Chip
-                          key={i}
-                          type="button"
-                          selected={recur.byDay.includes(i)}
-                          onClick={() => {
-                            setRecur(r => ({
-                              ...r,
-                              byDay: r.byDay.includes(i) ? r.byDay.filter(x => x !== i) : [...r.byDay, i],
-                            }))
-                            setRecurrenceTouched(true)
-                            markDirty()
-                          }}
-                        >
-                          {d}
-                        </Chip>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* End condition */}
-                  {recur.freq !== 'none' && (
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <label className="text-caption text-casa-muted font-medium shrink-0">Ends</label>
-                      <div className="flex gap-2">
-                        {(['never','date','count'] as const).map(opt => (
-                          <Chip
-                            key={opt}
-                            type="button"
-                            selected={recur.endType === opt}
-                            onClick={() => {
-                              setRecur(r => ({ ...r, endType: opt }))
-                              setRecurrenceTouched(true)
-                              markDirty()
-                            }}
-                          >
-                            {opt === 'never' ? 'Never' : opt === 'date' ? 'On date' : 'After'}
-                          </Chip>
-                        ))}
-                      </div>
-                      {recur.endType === 'date' && (
-                        <Input
-                          type="date"
-                          value={recur.endDate}
-                          onChange={e => {
-                            setRecur(r => ({ ...r, endDate: e.target.value }))
-                            setRecurrenceTouched(true)
-                            markDirty()
-                          }}
-                          className="flex-1"
-                        />
-                      )}
-                      {recur.endType === 'count' && (
-                        <div className="flex items-center gap-1.5">
-                          <Input
-                            type="number"
-                            min={2} max={999}
-                            value={recur.count}
-                            onChange={e => {
-                              setRecur(r => ({ ...r, count: Math.max(2, parseInt(e.target.value) || 2) }))
-                              setRecurrenceTouched(true)
-                              markDirty()
-                            }}
-                            className="w-24 text-center"
-                          />
-                          <span className="text-caption text-casa-muted">occurrences</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+                  <RecurrenceRuleBuilder
+                    value={buildRrule()}
+                    onChange={(rruleStr) => {
+                      setRecur(parseRrule(rruleStr))
+                      setRecurrenceTouched(true)
+                      markDirty()
+                    }}
+                    startDate={startDT}
+                    disabled={isCanonicalOccurrence && recurringEditorEnabled}
+                    className="border-0 shadow-none bg-transparent p-0"
+                  />
                 </DisclosureSection>
               </div>
 

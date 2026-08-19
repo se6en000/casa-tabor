@@ -243,7 +243,7 @@ test('generateRoutineActionEvents respects startDate and endDate boundaries', ()
 
 test('deriveAmbientRoutineStatus returns active status during school or camp hours', () => {
   // Wednesday 10:30 AM (during school)
-  const duringSchool = new Date('2026-08-19T10:30:00.000-04:00')
+  const duringSchool = new Date(2026, 7, 19, 10, 30, 0)
   const activeStatus = deriveAmbientRoutineStatus([mockLivSchoolRoutine], [mockLiv], duringSchool)
 
   assert.equal(activeStatus.length, 1)
@@ -260,11 +260,11 @@ test('deriveAmbientRoutineStatus returns active status during school or camp hou
   assert.equal(customStatus[0].text, 'Liv: At Bak until 3:30 PM')
 
   // Wednesday 6:30 AM (before school)
-  const beforeSchool = new Date('2026-08-19T06:30:00.000-04:00')
+  const beforeSchool = new Date(2026, 7, 19, 6, 30, 0)
   assert.equal(deriveAmbientRoutineStatus([mockLivSchoolRoutine], [mockLiv], beforeSchool).length, 0)
 
   // Wednesday 4:30 PM (after school)
-  const afterSchool = new Date('2026-08-19T16:30:00.000-04:00')
+  const afterSchool = new Date(2026, 7, 19, 16, 30, 0)
   assert.equal(deriveAmbientRoutineStatus([mockLivSchoolRoutine], [mockLiv], afterSchool).length, 0)
 })
 

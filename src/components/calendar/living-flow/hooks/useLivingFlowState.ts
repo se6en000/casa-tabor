@@ -4,7 +4,7 @@ import { supabase } from '../../../../lib/supabase'
 import { useFamilyMembers } from '../../../../hooks/useFamilyMembers'
 import { useSavedPlaces, findSavedPlaceByAddress } from '../../../../hooks/useSavedPlaces'
 import { CATEGORY_LABEL } from '../../categoryFields'
-import { getEventStartDate, getEventEndDate } from '../../../../utils/eventTime'
+import { getEventStartDate, getEventEndDate, serializeToZonedIso } from '../../../../utils/eventTime'
 import type { EventWithDetails } from '../../../../hooks/useCalendarEvents'
 import type { FamilyMember } from '../../../../types'
 import type { LivingFlowState, LivingFlowMode, TravelBehavior, RecurrenceScope, VenueInfo } from '../types'
@@ -28,6 +28,7 @@ import {
 } from '../../../../lib/recurringEventEditor'
 import {
   materializeSyntheticRoutineEvent,
+  syncAndMaterializeRecurringSeries,
   updateEventTitle,
   updateEventSchedule,
   updateEventVenue,
@@ -207,7 +208,8 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     recurScope: 'this',
     venue: initialVenue,
     selectedMemberIds: initialMemberIds,
-    primaryMemberId: initialPrimaryId
+    primaryMemberId: initialPrimaryId,
+    rrule: initialEvent?.rrule || null,
   })
 
   // Canonical v2 occurrences use series_id; legacy instances use recurrence_master_id
@@ -243,6 +245,10 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
         setRecurringEditorWritable(Boolean(result.writable))
         setRecurringDeleteEnabled(Boolean(result.deletable))
         setRecurringContext(result.context ?? null)
+        if (result.context?.series?.recurrence_lines?.[0]) {
+          const seriesRrule = result.context.series.recurrence_lines[0]
+          setState(prev => ({ ...prev, rrule: prev.rrule || seriesRrule }))
+        }
       })
       .catch((error: Error) => {
         if (!cancelled) {
@@ -583,8 +589,8 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
 
     const newIsAllDay = values.isAllDay !== undefined ? values.isAllDay : (state.isAllDay ?? false)
     const newTitle = (values.title ?? state.title).trim()
-    const newStart = values.startDate ? values.startDate.toISOString() : (state.startDate ? state.startDate.toISOString() : initialEvent.start_time)
-    const newEnd = values.endDate ? values.endDate.toISOString() : (state.endDate ? state.endDate.toISOString() : initialEvent.end_time)
+    const newStart = values.startDate ? serializeToZonedIso(values.startDate) : (state.startDate ? serializeToZonedIso(state.startDate) : initialEvent.start_time)
+    const newEnd = values.endDate ? serializeToZonedIso(values.endDate) : (state.endDate ? serializeToZonedIso(state.endDate) : initialEvent.end_time)
     const durationMs = new Date(newEnd).getTime() - new Date(newStart).getTime()
     const venueInfo = values.venue ?? state.venue
     const newLocation = (venueInfo.name || '').trim() || null
@@ -694,6 +700,16 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
         ...current,
         series: { ...current.series, revision: result.result.series_revision }
       } : current)
+    }
+
+    const targetMasterId = (initialEvent.record_kind === 'occurrence' && (initialEvent.recurrence_master_id || recurringContext?.series?.template_event_id))
+      ? (initialEvent.recurrence_master_id || recurringContext?.series?.template_event_id!)
+      : initialEvent.id
+
+    if (scope === 'this') {
+      supabase.functions.invoke('sync-event-to-google', { body: { event_id: initialEvent.id } }).catch(() => {})
+    } else {
+      triggerGoogleEventSync(supabase, targetMasterId)
     }
 
     invalidateCalendar()
@@ -921,8 +937,8 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
 
     activeEventRef.current = {
       ...currentEvent,
-      start_time: startDate.toISOString(),
-      end_time: endDate.toISOString(),
+      start_time: serializeToZonedIso(startDate),
+      end_time: serializeToZonedIso(endDate),
       all_day: isAllDay,
     }
 
@@ -969,8 +985,8 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
 
     activeEventRef.current = {
       ...currentEvent,
-      start_time: startDate.toISOString(),
-      end_time: endDate.toISOString(),
+      start_time: serializeToZonedIso(startDate),
+      end_time: serializeToZonedIso(endDate),
       all_day: isAllDay,
     }
 
@@ -1124,6 +1140,17 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
         series_patch: seriesPatch,
       })
       recurringDeleteActionIdRef.current = null
+
+      const targetMasterId = (initialEvent.record_kind === 'occurrence' && (initialEvent.recurrence_master_id || recurringContext?.series?.template_event_id))
+        ? (initialEvent.recurrence_master_id || recurringContext?.series?.template_event_id!)
+        : initialEvent.id
+
+      if (scope === 'this') {
+        supabase.functions.invoke('delete-google-event', { body: { event_id: eventId } }).catch(() => {})
+      } else {
+        triggerGoogleEventSync(supabase, targetMasterId)
+      }
+
       invalidateCalendar()
       announceRecurringDelete({ ...result, title: initialEvent.title, scope })
     } catch (err) {
@@ -1173,8 +1200,8 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     try {
       const eventToSnooze: EventWithDetails = {
         ...currentEvent,
-        start_time: state.startDate ? state.startDate.toISOString() : currentEvent.start_time,
-        end_time: state.endDate ? state.endDate.toISOString() : currentEvent.end_time,
+        start_time: state.startDate ? serializeToZonedIso(state.startDate) : currentEvent.start_time,
+        end_time: state.endDate ? serializeToZonedIso(state.endDate) : currentEvent.end_time,
       }
       await snoozeEventOrReminder(supabase, queryClient, eventToSnooze, durationMinutes)
     } catch (err) {
@@ -1185,6 +1212,70 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
   const setRecurScope = useCallback((scope: RecurrenceScope) => {
     setState(prev => ({ ...prev, recurScope: scope }))
   }, [])
+
+  const setRecurrenceRule = useCallback(async (rruleStr: string | null) => {
+    setState(prev => ({ ...prev, rrule: rruleStr, recurScope: 'all' }))
+    const currentEvent = activeEventRef.current || initialEvent
+    if (!currentEvent?.id) return
+
+    try {
+      if (currentEvent.id.startsWith('routine-')) {
+        const materialized = await materializeSyntheticRoutineEvent(
+          supabase,
+          queryClient,
+          currentEvent,
+          { rrule: rruleStr } as any,
+          { familyMembers },
+        )
+        activeEventRef.current = materialized
+        currentEventIdRef.current = materialized.id
+        useAppStore.getState().setSelectedSidecarEventId(materialized.id)
+        return
+      }
+
+      const formattedRrule = rruleStr
+        ? (rruleStr.startsWith('RRULE:') ? rruleStr : `RRULE:${rruleStr}`)
+        : null
+
+      let targetMasterId = (currentEvent.record_kind === 'occurrence' && (currentEvent.recurrence_master_id || recurringContext?.series?.template_event_id))
+        ? (currentEvent.recurrence_master_id || recurringContext?.series?.template_event_id!)
+        : currentEvent.id
+
+      if (currentEvent.record_kind === 'occurrence' && targetMasterId === currentEvent.id && (currentEvent as any).series_id) {
+        const { data: foundSeries } = await supabase
+          .from('event_series')
+          .select('template_event_id')
+          .eq('id', (currentEvent as any).series_id)
+          .maybeSingle()
+        if (foundSeries?.template_event_id) {
+          targetMasterId = foundSeries.template_event_id
+        }
+      }
+
+      await supabase
+        .from('events')
+        .update({
+          rrule: rruleStr,
+          record_kind: formattedRrule ? 'series_template' : 'single',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', targetMasterId)
+
+      if (formattedRrule) {
+        await syncAndMaterializeRecurringSeries(supabase, targetMasterId)
+      } else {
+        await supabase
+          .from('event_series')
+          .delete()
+          .or(`template_event_id.eq.${targetMasterId},id.eq.${(currentEvent as any).series_id || recurringContext?.series?.id || '00000000-0000-0000-0000-000000000000'}`)
+      }
+
+      invalidateCalendar()
+      triggerGoogleEventSync(supabase, targetMasterId)
+    } catch (err) {
+      console.error('[LivingFlow] Failed to update recurrence rule:', err)
+    }
+  }, [initialEvent, familyMembers, queryClient, invalidateCalendar])
 
   return {
     state,
@@ -1220,7 +1311,8 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     markCompleted,
     snoozeReminder,
     setRecurScope,
-    isRecurring: isCanonicalOccurrence || Boolean(initialEvent?.recurrence_master_id),
+    setRecurrenceRule,
+    isRecurring: isCanonicalOccurrence || Boolean(initialEvent?.recurrence_master_id) || Boolean(state.rrule),
     isCanonicalOccurrence,
   }
 }
