@@ -81,7 +81,7 @@ export default function MobileFloatingDock({ onOpenQuickCreate }: MobileFloating
   return (
     <>
       {/* ── Single-Thumb Floating Quick Add FAB (lg:hidden) ── */}
-      <div className="lg:hidden fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] right-4 z-sticky pointer-events-auto">
+      <div className="lg:hidden fixed bottom-[calc(4.25rem+env(safe-area-inset-bottom,0px))] right-4 z-sticky pointer-events-auto">
         <Button
           variant="ghost"
           onClick={() => {
@@ -95,10 +95,10 @@ export default function MobileFloatingDock({ onOpenQuickCreate }: MobileFloating
         </Button>
       </div>
 
-      {/* ── Docked 4-Tab Bottom Navigation Bar (lg:hidden, ZERO BADGES) ── */}
+      {/* ── Snapped Bottom Navigation Bar (lg:hidden, ZERO BADGES) ── */}
       <nav
         aria-label="Mobile Navigation Bar"
-        className="lg:hidden fixed bottom-0 left-0 right-0 z-sticky bg-casa-surface/98 dark:bg-casa-surface/95 backdrop-blur-xl border-t border-casa-border shadow-[0_-4px_24px_rgba(0,0,0,0.06)] flex items-center justify-around px-2 pt-1.5 pb-[calc(0.5rem+env(safe-area-inset-bottom))] transition-all duration-300 pointer-events-auto"
+        className="lg:hidden fixed bottom-0 left-0 right-0 z-sticky bg-casa-surface/98 dark:bg-casa-surface/95 backdrop-blur-xl border-t border-casa-border shadow-[0_-4px_24px_rgba(0,0,0,0.06)] flex items-center justify-around px-2 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))] transition-all duration-300 pointer-events-auto"
       >
         {navTabs.map((tab) => (
           <NavLink
