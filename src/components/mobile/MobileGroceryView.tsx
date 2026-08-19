@@ -470,8 +470,8 @@ export default function MobileGroceryView({
         )}
       </main>
 
-      {/* ── Sticky Bottom Quick-Add Bar (docked above bottom nav) ── */}
-      <div className="fixed bottom-[calc(3.75rem+env(safe-area-inset-bottom))] left-0 right-0 z-sticky px-3 pb-1.5 pt-2 bg-casa-surface/98 backdrop-blur-xl border-t border-casa-border/80 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] pointer-events-auto">
+      {/* ── Floating Translucent Quick-Add Capsule (docked above floating nav) ── */}
+      <div className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] left-3.5 right-3.5 max-w-md mx-auto z-sticky px-3 py-1.5 floating-dock-glass border border-casa-border/50 rounded-2xl shadow-[0_8px_24px_rgba(0,0,0,0.06)] pointer-events-auto">
         <div className="max-w-md mx-auto space-y-2">
           {/* Duplicate Alert Banner */}
           <AnimatePresence initial={false}>

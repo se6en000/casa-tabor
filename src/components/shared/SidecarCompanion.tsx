@@ -325,7 +325,7 @@ export default function SidecarCompanion({
   const isFrontView = !isFlippedToAi
 
   const sidecarContent = (
-    <div className="flex-1 flex flex-col min-h-0 overflow-hidden relative w-full h-full sidecar-flip-viewport [perspective:1200px]">
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden relative w-full h-full sidecar-flip-viewport">
       <motion.div
         className="w-full h-full relative sidecar-flip-card"
         initial={false}

@@ -197,7 +197,7 @@ export default function StackedView() {
                 {/* Scrollable Events container for busy days (Vertical Scroll) */}
                 <div
                   ref={el => { columnScrollRefs.current[idx] = el }}
-                  className="flex-1 overflow-y-auto overscroll-y-contain space-y-2 pr-0.5 pb-28 md:pb-8 scrollbar-none"
+                  className="flex-1 overflow-y-auto overscroll-y-contain space-y-2 pr-0.5 pb-36 md:pb-8 scrollbar-none"
                 >
                   {/* All-day reminders & all-day events */}
                   {dayAllDay.map(r => (

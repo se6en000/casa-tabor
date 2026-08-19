@@ -100,7 +100,7 @@ export default function MobileFloatingDock({ onOpenQuickCreate }: MobileFloating
       {/* ── Floating Curved Island Bottom Navigation Bar (lg:hidden, ZERO BADGES) ── */}
       <nav
         aria-label="Mobile Navigation Bar"
-        className="lg:hidden fixed bottom-[calc(0.75rem+env(safe-area-inset-bottom))] left-3.5 right-3.5 max-w-md mx-auto z-sticky bg-casa-surface/30 dark:bg-casa-surface/20 backdrop-blur-2xl border border-casa-border/40 rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.06)] flex items-center justify-around px-2 py-1 transition-all duration-300 pointer-events-auto"
+        className="lg:hidden fixed bottom-[calc(0.75rem+env(safe-area-inset-bottom))] left-3.5 right-3.5 max-w-md mx-auto z-sticky floating-dock-glass border border-casa-border/50 rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.08)] flex items-center justify-around px-2 py-1 transition-all duration-300 pointer-events-auto"
       >
         {navTabs.map((tab) => (
           <NavLink

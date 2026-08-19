@@ -707,7 +707,7 @@ export default function MobileCookingView({
   const scaleFactor = servings / (activeRecipe.baseServings || 4)
 
   return (
-    <div className="w-full flex flex-col gap-3.5 px-4 pt-3 pb-28">
+    <div className="w-full flex flex-col gap-3.5 px-4 pt-3 pb-36">
       
       {/* ── 1. Search Bar & Scan Button ── */}
       <div className="flex items-center gap-2">

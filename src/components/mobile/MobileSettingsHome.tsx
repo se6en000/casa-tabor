@@ -30,7 +30,7 @@ export default function MobileSettingsHome() {
     : 'Home, School, Work'
 
   return (
-    <div className="w-full flex flex-col gap-4 px-4 pt-3 pb-28">
+    <div className="w-full flex flex-col gap-4 px-4 pt-3 pb-36">
       {/* ── 1. In-Store Grocery List Card ── */}
       <Link
         to="/grocery"

@@ -29,6 +29,7 @@ import { formatDurationLong } from '../../utils/eventTime'
 import { Button, IconButton, PersonAvatarStack, JourneyProgressBar } from '../ui'
 import TomorrowPrepWidget from './widgets/TomorrowPrepWidget'
 import MorningLaunchpadWidget from './widgets/MorningLaunchpadWidget'
+import MiddayLogisticsWidget from './widgets/MiddayLogisticsWidget'
 import { useFamilyRoutineIntelligence } from '../../hooks/useFamilyRoutineIntelligence'
 import GmailSyncStatusIndicator from '../shared/GmailSyncStatusIndicator'
 
@@ -43,6 +44,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
   const [showOverdueTodos, setShowOverdueTodos] = useState(false)
   const [todosExpanded, setTodosExpanded] = useState(false)
   const [mobileSubTab, setMobileSubTab] = useState<'schedule' | 'triage' | 'kitchen'>('schedule')
+  const [heroManualView, setHeroManualView] = useState<'today' | 'tomorrow' | null>(null)
 
   // Collapsible section states with localStorage persistence
   const [todosSectionCollapsed, setTodosSectionCollapsed] = useState<boolean>(() => {
@@ -338,8 +340,24 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
           'lg:col-span-7 flex-col justify-start space-y-4',
           mobileSubTab === 'triage' ? 'hidden lg:flex' : 'flex'
         )}>
-          {showMorningLaunchpad ? (
+          {heroManualView === 'tomorrow' ? (
+            <TomorrowPrepWidget
+              now={now}
+              showViewToggle={true}
+              onToggleTodayView={() => setHeroManualView('today')}
+            />
+          ) : showMorningLaunchpad ? (
             <MorningLaunchpadWidget now={now} />
+          ) : routineIntel.isDaytime && (!nextEvent || (minutesUntilNext !== null && minutesUntilNext > 60) || nextEvent.all_day) ? (
+            <MiddayLogisticsWidget
+              now={now}
+              todayEvents={upcomingAppointments}
+              familyMembers={familyMembers}
+              nextEvent={nextEvent}
+              onOpenEvent={onOpenEvent}
+              onToggleTomorrowView={() => setHeroManualView('tomorrow')}
+              isTomorrowActive={false}
+            />
           ) : nextEvent ? (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
@@ -698,7 +716,11 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
               )}
             </motion.div>
           ) : (
-            <TomorrowPrepWidget now={now} />
+            <TomorrowPrepWidget
+              now={now}
+              showViewToggle={true}
+              onToggleTodayView={() => setHeroManualView('today')}
+            />
           )}
 
           {/* Stylized Ambient Daily Briefing Prose */}

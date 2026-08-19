@@ -462,7 +462,7 @@ export default function WeekView() {
       {/* ── Time grid ────────────────────────────────────────────── */}
       <div
         ref={gridScrollRef}
-        className={cn('flex-1 overflow-y-auto', drag ? 'cursor-grabbing select-none' : '')}
+        className={cn('flex-1 overflow-y-auto pb-36 md:pb-0', drag ? 'cursor-grabbing select-none' : '')}
       >
         <div className="grid grid-cols-[60px_repeat(7,1fr)]" style={{ height: `${HOURS.length * HOUR_HEIGHT}px` }}>
           {/* Hour labels */}

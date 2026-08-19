@@ -72,7 +72,33 @@
   .sidecar-header-action-btn:active {
     transform: scale(0.95);
   }
+
+  /* ── Sidecar 3D Flip Card System ─────────────────────────────── */
+  .sidecar-flip-viewport {
+    perspective: 1200px;
+    -webkit-perspective: 1200px;
+  }
+
+  .sidecar-flip-card {
+    transform-style: preserve-3d;
+    -webkit-transform-style: preserve-3d;
+  }
+
+  .sidecar-flip-face-front {
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    transform: rotateY(0deg);
+    -webkit-transform: rotateY(0deg);
+  }
+
+  .sidecar-flip-face-back {
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    transform: rotateY(180deg);
+    -webkit-transform: rotateY(180deg);
+  }
 }
+
 
 /* ── Touch-first: hover only on devices that support it ───────── */
 /* Redefines hover: variant so it NEVER fires on touchscreens.    */
@@ -192,7 +218,20 @@ body {
 }
 
 .app-shell-main {
-  padding-bottom: calc(var(--spacing-nav-height) + env(safe-area-inset-bottom));
+  padding-bottom: 0;
+}
+
+.floating-dock-glass {
+  background-color: rgba(250, 247, 242, 0.65);
+  -webkit-backdrop-filter: blur(28px) saturate(190%);
+  backdrop-filter: blur(28px) saturate(190%);
+}
+
+html.dark .floating-dock-glass,
+html.midnight-gallery .floating-dock-glass {
+  background-color: rgba(20, 27, 45, 0.65);
+  -webkit-backdrop-filter: blur(28px) saturate(190%);
+  backdrop-filter: blur(28px) saturate(190%);
 }
 
 .app-topbar {
