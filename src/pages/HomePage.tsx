@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { format, isAfter, isBefore, addDays } from 'date-fns'
 import { motion, AnimatePresence, useMotionValue, animate } from 'framer-motion'
-import { Check, CheckCircle2, ChevronLeft, ChevronRight, RefreshCw, MapPin, Clock, Navigation, Bell, Phone, ChefHat } from 'lucide-react'
+import { Check, CheckCircle2, ChevronLeft, ChevronRight, RefreshCw, MapPin, Clock, Navigation, Bell, Phone } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { useFamilyMembers } from '../hooks/useFamilyMembers'
@@ -210,7 +210,6 @@ export default function HomePage() {
   )
   const { visibleMembers } = useCalendarStore()
   const aiDrawerOpen = useAppStore((s) => s.aiDrawerOpen)
-  const dinnerPlan = useAppStore((s) => s.dinnerPlan)
   const openActionInSidecar = useAppStore((s) => s.openActionInSidecar)
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [pastItemsOpen, setPastItemsOpen] = useState(false)
@@ -410,7 +409,7 @@ export default function HomePage() {
       {/* ── Center content ─────────────────────────────────── */}
       <PrimaryRail
         ref={(el) => { ptrRef(el); scrollRef.current = el }}
-        className="overflow-y-auto overscroll-contain touch-pan-y px-6 pt-8 pb-12 lg:px-8"
+        className="overflow-y-auto overscroll-contain touch-pan-y px-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-32 lg:px-8 lg:pt-8 lg:pb-12"
       >
         {/* ── Pull-to-refresh indicator ─────────────────────── */}
         <AnimatePresence>
@@ -450,44 +449,11 @@ export default function HomePage() {
           travelEta={heroTravelEta.data}
         />
 
-        {/* ── Tonight's Dinner Preview (Mobile glance -> 1-tap into /cook) ── */}
-        {Boolean(dinnerPlan?.title) && (
-          <div className="mt-3 mb-1 lg:hidden">
-            <Link
-              to="/cook"
-              className="flex items-center justify-between p-3.5 bg-casa-surface border border-casa-border border-l-4 border-l-casa-gold rounded-card shadow-subtle hover:border-casa-gold transition-all duration-150 active:scale-[0.97] active:opacity-75"
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-xl bg-casa-gold/15 flex items-center justify-center flex-shrink-0 text-casa-gold">
-                  <ChefHat size={20} strokeWidth={1.8} />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-caption font-bold uppercase tracking-wider text-casa-gold leading-none mb-1">
-                    Tonight's Dinner
-                  </div>
-                  <div className="text-body-sm font-semibold text-casa-navy truncate">
-                    {dinnerPlan.title}
-                  </div>
-                  {dinnerPlan.subtitle && (
-                    <div className="text-caption text-casa-muted truncate">
-                      {dinnerPlan.subtitle}
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-1 text-caption font-semibold text-casa-gold bg-casa-gold/10 px-2.5 py-1 rounded-full shrink-0 ml-2">
-                <span>Cook</span>
-                <ChevronRight size={14} />
-              </div>
-            </Link>
-          </div>
-        )}
+        {/* ── Active Morning Launchpad (Morning Action 6:00 AM – 9:30 AM, desktop/tablet only) ── */}
+        <MorningLaunchpadCard now={now} className="mt-3 mb-3 hidden lg:block" />
 
-        {/* ── Active Morning Launchpad (Morning Action 6:00 AM – 9:30 AM) ── */}
-        <MorningLaunchpadCard now={now} className="mt-3 mb-3" />
-
-        {/* ── Tomorrow Morning Prep (Contextual evening / readiness card 5:30 PM – 11:00 PM) ── */}
-        <TomorrowPrepCard now={now} className="mt-3 mb-3" />
+        {/* ── Tomorrow Morning Prep (Contextual evening card 5:30 PM – 11:00 PM, desktop/tablet only) ── */}
+        <TomorrowPrepCard now={now} className="mt-3 mb-3 hidden lg:block" />
 
         {/* ── Today's timeline — first, front and center ──── */}
         <section className="mt-2">

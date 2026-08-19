@@ -467,7 +467,7 @@ export default function LuxuryTopBar() {
     <>
       <header
         className={cn(
-          'app-topbar w-full flex items-center justify-between flex-shrink-0 z-sticky transition-all duration-300',
+          'app-topbar hidden lg:flex w-full items-center justify-between flex-shrink-0 z-sticky transition-all duration-300',
           'luxury-topbar',
           isWarm && 'luxury-topbar--warm',
         )}
