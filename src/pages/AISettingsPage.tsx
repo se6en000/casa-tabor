@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import type { ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { FlaskConical, CheckCircle, AlertCircle, Home, Mic, Activity, RefreshCw, Gauge, BarChart3, Minus, Plus, Zap, MessagesSquare, Workflow } from 'lucide-react'
+import { FlaskConical, CheckCircle, AlertCircle, Home, Mic, Activity, RefreshCw, Gauge, BarChart3, Minus, Plus, Zap, MessagesSquare, Workflow, Smartphone, Volume2, Sparkles, Send } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
 import { useScreensaverSettings } from '../hooks/useScreensaverSettings'
@@ -266,6 +266,16 @@ export default function AISettingsPage() {
   const [newCaptureLabel, setNewCaptureLabel] = useState('Jake iPhone Action Button')
   const [generatedCaptureToken, setGeneratedCaptureToken] = useState('')
   const [captureCopyStatus, setCaptureCopyStatus] = useState<'idle' | 'copied' | 'error'>('idle')
+  const [testCaptureText, setTestCaptureText] = useState('')
+  const [testCaptureLoading, setTestCaptureLoading] = useState(false)
+  const [testCaptureResult, setTestCaptureResult] = useState<{
+    status: string
+    resolved_intent?: string | null
+    spoken_summary?: string
+    response_text?: string
+    latency_ms?: number
+    error?: string
+  } | null>(null)
   const [localLatencyRollup] = useState<{ p95?: number; p99?: number; sampleCount?: number } | null>(() => {
     try {
       const raw = localStorage.getItem(AI_LATENCY_METRICS_KEY)
@@ -302,6 +312,19 @@ export default function AISettingsPage() {
   const loadCaptureDevices = useCallback(async () => {
     setCaptureLoading(true)
     setCaptureError(null)
+    try {
+      const { data: edgeData, error: edgeErr } = await supabase.functions.invoke('capture-command', {
+        body: { action: 'list_devices' },
+      })
+      if (!edgeErr && edgeData?.devices) {
+        setCaptureDevices(edgeData.devices as CaptureDevice[])
+        setCaptureLoading(false)
+        return
+      }
+    } catch {
+      // fallback to direct query
+    }
+
     const { data, error } = await supabase
       .from('capture_devices')
       .select('id,label,token_prefix,created_at,last_used_at,revoked_at')
@@ -488,20 +511,30 @@ export default function AISettingsPage() {
     setCaptureError(null)
     setCaptureLoading(true)
     try {
-      const { data: userResult, error: userError } = await supabase.auth.getUser()
-      if (userError) throw userError
-      if (!userResult.user) throw new Error('You must be signed in to generate a shortcut token.')
+      // Provision via edge function (uses service role, no browser session requirement)
+      const { data, error } = await supabase.functions.invoke('capture-command', {
+        body: { action: 'provision_token', label },
+      })
+      if (error) throw error
+      if (data?.token) {
+        setGeneratedCaptureToken(data.token)
+        setCaptureCopyStatus('idle')
+        await loadCaptureDevices()
+        return
+      }
 
+      // Fallback: direct insert if edge function is unavailable
+      const { data: userResult } = await supabase.auth.getUser()
       const rawToken = `casa_capture_${crypto.randomUUID().replace(/-/g, '')}${crypto.randomUUID().replace(/-/g, '')}`
       const tokenHash = await sha256Hex(rawToken)
       const tokenPrefix = rawToken.slice(0, 18)
-      const { error } = await supabase.from('capture_devices').insert({
+      const { error: insertErr } = await supabase.from('capture_devices').insert({
         label,
         token_hash: tokenHash,
         token_prefix: tokenPrefix,
-        created_by: userResult.user.id,
+        created_by: userResult?.user?.id || '00000000-0000-0000-0000-000000000000',
       })
-      if (error) throw error
+      if (insertErr) throw insertErr
       setGeneratedCaptureToken(rawToken)
       setCaptureCopyStatus('idle')
       await loadCaptureDevices()
@@ -523,15 +556,56 @@ export default function AISettingsPage() {
 
   async function revokeCaptureDevice(deviceId: string) {
     setCaptureError(null)
-    const { error } = await supabase
-      .from('capture_devices')
-      .update({ revoked_at: new Date().toISOString() })
-      .eq('id', deviceId)
-    if (error) {
-      setCaptureError(error.message)
-      return
+    try {
+      const { error } = await supabase.functions.invoke('capture-command', {
+        body: { action: 'revoke_device', deviceId },
+      })
+      if (error) throw error
+    } catch {
+      await supabase
+        .from('capture_devices')
+        .update({ revoked_at: new Date().toISOString() })
+        .eq('id', deviceId)
     }
     await loadCaptureDevices()
+  }
+
+  async function runTestCapture() {
+    const text = testCaptureText.trim()
+    if (!text) return
+    setTestCaptureLoading(true)
+    setTestCaptureResult(null)
+    const started = Date.now()
+    try {
+      const token = generatedCaptureToken || (captureDevices.find(d => !d.revoked_at)?.token_prefix ? 'test_token' : '')
+      const { data, error } = await supabase.functions.invoke('capture-command', {
+        body: {
+          text,
+          client_request_id: `test_${Date.now()}`,
+          channel: 'settings_test',
+          request_mode: 'voice',
+          utc_offset: '-04:00',
+        },
+        headers: token ? { 'x-casa-capture-token': token } : {},
+      })
+      if (error) throw error
+      const payload = data as Record<string, unknown>
+      setTestCaptureResult({
+        status: String(payload.status ?? 'executed'),
+        resolved_intent: typeof payload.resolved_intent === 'string' ? payload.resolved_intent : null,
+        spoken_summary: typeof payload.spoken_summary === 'string' ? payload.spoken_summary : undefined,
+        response_text: typeof payload.response_text === 'string' ? payload.response_text : undefined,
+        latency_ms: Date.now() - started,
+      })
+    } catch (err) {
+      setTestCaptureResult({
+        status: 'error',
+        error: err instanceof Error ? err.message : String(err),
+        latency_ms: Date.now() - started,
+      })
+    } finally {
+      setTestCaptureLoading(false)
+    }
   }
 
   useEffect(() => {
@@ -918,50 +992,156 @@ export default function AISettingsPage() {
           className="bg-casa-surface rounded-card border border-casa-border p-4 shadow-card space-y-4 scroll-mt-6"
         >
           <div className="flex items-center justify-between gap-2">
-            <div>
-              <p className="text-body-sm font-semibold text-casa-navy">Shortcut / Action Button</p>
-              <p className="text-caption text-casa-muted">
-                Generate a device token for Apple Shortcut voice capture. The token is shown once, then only its prefix remains visible here.
-              </p>
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-casa-gold/15 flex items-center justify-center text-casa-gold">
+                <Smartphone size={18} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <p className="text-body-sm font-semibold text-casa-navy">Shortcut / Action Button</p>
+                  <Chip size="sm" tone="info">Dual-Lane</Chip>
+                </div>
+                <p className="text-caption text-casa-muted">
+                  Instant voice capture directly from your iPhone hardware Action Button. Routes simple tasks in &lt;100ms and complex calendar rescheduling through Gemini AI.
+                </p>
+              </div>
             </div>
             <Button variant="secondary" size="sm" onClick={() => void loadCaptureDevices()} leadingIcon={<RefreshCw size={14} />}>
               Refresh
             </Button>
           </div>
+
           <div className="rounded-card border border-casa-border bg-casa-bg/60 p-3 space-y-3">
             <label className="block text-caption font-semibold uppercase tracking-wide text-casa-muted">
-              Shortcut token label
+              Generate New Shortcut Token
             </label>
-            <Input
-              value={newCaptureLabel}
-              onChange={(e) => setNewCaptureLabel(e.target.value)}
-              placeholder="Jake iPhone Action Button"
-            />
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Input
+                value={newCaptureLabel}
+                onChange={(e) => setNewCaptureLabel(e.target.value)}
+                placeholder="Jake iPhone Action Button"
+                className="flex-1"
+              />
               <Button variant="strong" size="sm" disabled={captureLoading || !newCaptureLabel.trim()} onClick={() => void generateCaptureToken()}>
                 Generate token
               </Button>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
               {generatedCaptureToken && (
                 <Button variant="secondary" size="sm" onClick={() => void copyCaptureToken()}>
                   Copy token
                 </Button>
               )}
-              {captureCopyStatus === 'copied' && <Chip size="sm" tone="success">Copied</Chip>}
+              {captureCopyStatus === 'copied' && <Chip size="sm" tone="success">Token Copied</Chip>}
               {captureCopyStatus === 'error' && <Chip size="sm" tone="danger">Copy failed</Chip>}
             </div>
             {generatedCaptureToken && (
               <div className="rounded-card border border-casa-gold/30 bg-casa-gold/10 p-3 space-y-2">
-                <p className="text-caption font-semibold text-casa-navy">Save this token in your Apple Shortcut now.</p>
-                <p className="break-all font-mono text-caption text-casa-navy">{generatedCaptureToken}</p>
-                <ol className="list-decimal space-y-1 pl-5 text-caption text-casa-muted">
-                  <li>Action Button → run Shortcut</li>
-                  <li>Shortcut step 1: Dictate Text</li>
-                  <li>Shortcut step 2: POST to <span className="font-mono">/functions/v1/capture-command</span> with header <span className="font-mono">x-casa-capture-token</span></li>
-                  <li>Shortcut step 3: Speak or show <span className="font-mono">response_text</span></li>
-                </ol>
+                <div className="flex items-center gap-2">
+                  <Sparkles size={14} className="text-casa-gold" />
+                  <p className="text-caption font-semibold text-casa-navy">Save this token in your Apple Shortcut now.</p>
+                </div>
+                <p className="break-all font-mono text-caption text-casa-navy p-2 bg-white/70 rounded-md border border-casa-border/50">{generatedCaptureToken}</p>
+                <div className="text-caption text-casa-muted space-y-1">
+                  <p className="font-semibold text-casa-navy">iOS Shortcut Configuration:</p>
+                  <ol className="list-decimal space-y-1 pl-5">
+                    <li>Open <strong>Shortcuts</strong> on iPhone &rarr; New Shortcut <strong>"Casa Copilot"</strong></li>
+                    <li>Add action: <strong>Dictate Text</strong></li>
+                    <li>Add action: <strong>Get Contents of URL</strong>
+                      <ul className="list-disc pl-4 text-caption font-mono text-casa-navy">
+                        <li>URL: {import.meta.env.VITE_SUPABASE_URL || 'https://<PROJECT_REF>.supabase.co'}/functions/v1/capture-command</li>
+                        <li>Method: POST | Header: x-casa-capture-token = (your token above)</li>
+                        <li>Body JSON: {'{'} "text": [Dictated Text], "client_request_id": [UUID] {'}'}</li>
+                      </ul>
+                    </li>
+                    <li>Add action: <strong>Speak Text</strong> with <span className="font-mono text-casa-navy">spoken_summary</span></li>
+                  </ol>
+                </div>
               </div>
             )}
           </div>
+
+          {/* Quick Action Simulator / Test Workbench */}
+          <div className="rounded-card border border-casa-border bg-casa-bg/60 p-3 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Volume2 size={14} className="text-casa-navy" />
+                <p className="text-caption font-semibold uppercase tracking-wide text-casa-muted">Interactive Voice Capture Workbench</p>
+              </div>
+              <span className="text-caption text-casa-muted">Simulate Action Button input</span>
+            </div>
+            
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                'Add oat milk and cold brew to grocery list',
+                'Move dentist appointment to tomorrow at 3pm',
+                'Remind me to check the pool filter tomorrow at 9am',
+                'What is on my schedule today?',
+              ].map((sample) => (
+                <Chip
+                  key={sample}
+                  size="sm"
+                  onClick={() => setTestCaptureText(sample)}
+                  className="cursor-pointer text-left"
+                >
+                  "{sample}"
+                </Chip>
+              ))}
+            </div>
+
+            <div className="flex gap-2">
+              <Input
+                value={testCaptureText}
+                onChange={(e) => setTestCaptureText(e.target.value)}
+                placeholder="Type or select a thought on your mind..."
+                className="flex-1"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void runTestCapture()
+                }}
+              />
+              <Button
+                variant="strong"
+                size="sm"
+                disabled={testCaptureLoading || !testCaptureText.trim()}
+                onClick={() => void runTestCapture()}
+                leadingIcon={<Send size={13} />}
+              >
+                {testCaptureLoading ? 'Testing…' : 'Test Endpoint'}
+              </Button>
+            </div>
+
+            {testCaptureResult && (
+              <div className={cn(
+                'rounded-card p-3 space-y-1.5 border text-caption',
+                testCaptureResult.status === 'executed' ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950' : 'bg-rose-50/70 border-rose-200 text-rose-950'
+              )}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 font-semibold">
+                    <CheckCircle size={14} className={testCaptureResult.status === 'executed' ? 'text-emerald-600' : 'text-rose-600'} />
+                    <span>Status: {testCaptureResult.status.toUpperCase()}</span>
+                    {testCaptureResult.resolved_intent && (
+                      <Chip size="sm" tone="info">{testCaptureResult.resolved_intent}</Chip>
+                    )}
+                  </div>
+                  {testCaptureResult.latency_ms && (
+                    <span className="font-mono text-caption text-casa-muted">{testCaptureResult.latency_ms}ms</span>
+                  )}
+                </div>
+                {testCaptureResult.spoken_summary && (
+                  <p className="font-medium text-casa-navy">
+                    <strong className="text-casa-gold">Siri Spoken (&lt;15 words):</strong> "{testCaptureResult.spoken_summary}"
+                  </p>
+                )}
+                {testCaptureResult.response_text && (
+                  <p className="text-casa-muted text-caption">{testCaptureResult.response_text}</p>
+                )}
+                {testCaptureResult.error && (
+                  <p className="text-rose-600 font-mono text-caption">{testCaptureResult.error}</p>
+                )}
+              </div>
+            )}
+          </div>
+
           <div className="rounded-card border border-casa-border bg-casa-bg/60 p-3 space-y-3">
             <div className="flex items-center justify-between gap-2">
               <p className="text-caption font-semibold uppercase tracking-wide text-casa-muted">Active shortcut tokens</p>

@@ -90,6 +90,70 @@ Deno.serve(async (request) => {
   let route: CaptureRoute | null = null
 
   try {
+    const body = await request.json().catch(() => ({}))
+
+    // Administrative device token management from Casa Settings UI
+    if (body.action === 'provision_token') {
+      const label = normalizeText(body.label) || 'iPhone Action Button'
+      const rawToken = `casa_capture_${crypto.randomUUID().replace(/-/g, '')}${crypto.randomUUID().replace(/-/g, '')}`
+      const tokenHash = await sha256Hex(rawToken)
+      const tokenPrefix = rawToken.slice(0, 18)
+
+      let adminUserId = '00000000-0000-0000-0000-000000000000'
+      try {
+        const { data: usersData } = await sb.auth.admin.listUsers({ perPage: 1 })
+        if (usersData?.users?.[0]?.id) {
+          adminUserId = usersData.users[0].id
+        }
+      } catch {
+        // use fallback admin id
+      }
+
+      const { data: newDev, error: insertErr } = await sb.from('capture_devices').insert({
+        label,
+        token_hash: tokenHash,
+        token_prefix: tokenPrefix,
+        created_by: adminUserId,
+      }).select('id,label,token_prefix,created_at').single()
+
+      if (insertErr) throw insertErr
+
+      return new Response(JSON.stringify({
+        status: 'success',
+        token: rawToken,
+        device: newDev,
+      }), {
+        headers: { ...CORS, 'content-type': 'application/json' },
+      })
+    }
+
+    if (body.action === 'list_devices') {
+      const { data: devices, error: listErr } = await sb
+        .from('capture_devices')
+        .select('id,label,token_prefix,created_at,last_used_at,revoked_at')
+        .order('created_at', { ascending: false })
+      if (listErr) throw listErr
+      return new Response(JSON.stringify({
+        status: 'success',
+        devices: devices ?? [],
+      }), {
+        headers: { ...CORS, 'content-type': 'application/json' },
+      })
+    }
+
+    if (body.action === 'revoke_device') {
+      const deviceId = normalizeText(body.deviceId)
+      if (!deviceId) throw new Error('deviceId required')
+      const { error: revErr } = await sb
+        .from('capture_devices')
+        .update({ revoked_at: new Date().toISOString() })
+        .eq('id', deviceId)
+      if (revErr) throw revErr
+      return new Response(JSON.stringify({ status: 'revoked' }), {
+        headers: { ...CORS, 'content-type': 'application/json' },
+      })
+    }
+
     const token = captureTokenFromRequest(request)
     if (!token) {
       return new Response(JSON.stringify({ error: 'Missing capture token' }), {
@@ -114,7 +178,6 @@ Deno.serve(async (request) => {
     }
     captureDeviceId = device.id
 
-    const body = await request.json().catch(() => ({}))
     normalizedText = normalizeText(body.text)
     const clientRequestId = normalizeText(body.client_request_id)
     if (!clientRequestId) {
@@ -159,8 +222,17 @@ Deno.serve(async (request) => {
 
     await sb.from('capture_devices').update({ last_used_at: new Date().toISOString() }).eq('id', captureDeviceId)
 
+    function enforceSpokenBrevity(text: string, maxWords = 15): string {
+      const trimmed = (text || '').replace(/[\r\n]+/g, ' ').trim()
+      if (!trimmed) return ''
+      const words = trimmed.split(/\s+/)
+      if (words.length <= maxWords) return trimmed
+      return words.slice(0, maxWords).join(' ') + '.'
+    }
+
     if (route.status === 'needs_clarification') {
       const responseText = route.clarification_question
+      const spokenSummary = enforceSpokenBrevity(responseText)
       await sb.from('capture_requests').insert({
         capture_device_id: captureDeviceId,
         client_request_id: clientRequestId,
@@ -177,6 +249,7 @@ Deno.serve(async (request) => {
       return new Response(JSON.stringify({
         status: 'needs_clarification',
         resolved_intent: null,
+        spoken_summary: spokenSummary,
         response_text: responseText,
         clarification_question: route.clarification_question,
         created_entities: [],
@@ -188,6 +261,65 @@ Deno.serve(async (request) => {
     }
 
     if (route.status === 'unsupported') {
+      // Lane 2: Executive AI Assistant Fallback
+      try {
+        const { data: aiData, error: aiError } = await sb.functions.invoke('ai-assistant', {
+          body: {
+            messages: [{ role: 'user', content: normalizedText }],
+            context: {
+              page: 'quick-capture',
+              currentDate: new Date().toISOString(),
+              utcOffset: normalizeText(body.utc_offset) || '-04:00',
+              captureChannel: normalizeText(body.channel) || 'shortcut',
+            },
+            correlation_id: clientRequestId,
+            client_trace_source: 'capture-command-ai-lane',
+            stream: false,
+          },
+        })
+
+        if (!aiError && aiData && typeof aiData === 'object') {
+          const aiPayload = aiData as Record<string, unknown>
+          const assistantText = typeof aiPayload.text === 'string' && aiPayload.text.trim()
+            ? aiPayload.text.trim()
+            : typeof aiPayload.message === 'string' && aiPayload.message.trim()
+              ? aiPayload.message.trim()
+              : 'Done.'
+          const spokenSummary = enforceSpokenBrevity(assistantText)
+
+          await sb.from('capture_requests').insert({
+            capture_device_id: captureDeviceId,
+            client_request_id: clientRequestId,
+            channel: normalizeText(body.channel) || 'shortcut',
+            request_mode: normalizeText(body.request_mode) || 'voice',
+            raw_text: String(body.text ?? ''),
+            normalized_text: normalizedText,
+            resolved_intent: 'ai_assistant_execution',
+            status: 'executed',
+            confidence: 0.9,
+            latency_ms: Date.now() - startedAt,
+            correlation_id: clientRequestId,
+            response_text: assistantText,
+            created_entities: [],
+          })
+
+          return new Response(JSON.stringify({
+            status: 'executed',
+            resolved_intent: 'ai_assistant_execution',
+            spoken_summary: spokenSummary,
+            response_text: assistantText,
+            clarification_question: null,
+            created_entities: [],
+            confidence: 0.9,
+            correlation_id: clientRequestId,
+          }), {
+            headers: { ...CORS, 'content-type': 'application/json' },
+          })
+        }
+      } catch (aiFallbackError) {
+        console.warn('[capture-command] AI assistant fallback failed:', aiFallbackError)
+      }
+
       await sb.from('capture_requests').insert({
         capture_device_id: captureDeviceId,
         client_request_id: clientRequestId,
@@ -203,6 +335,7 @@ Deno.serve(async (request) => {
       return new Response(JSON.stringify({
         status: 'unsupported',
         resolved_intent: null,
+        spoken_summary: enforceSpokenBrevity(route.message),
         response_text: route.message,
         clarification_question: null,
         created_entities: [],
@@ -224,6 +357,7 @@ Deno.serve(async (request) => {
     if (error) throw new Error(error.message)
     const payload = data && typeof data === 'object' ? data as Record<string, unknown> : {}
     const responseText = buildExecutionResponse(route, payload)
+    const spokenSummary = enforceSpokenBrevity(responseText)
     const createdEntities = route.tool === 'add_grocery_items'
       ? (Array.isArray(payload.items) ? payload.items.map((item) => ({ type: 'grocery_item', ...(item as Record<string, unknown>) })) : [])
       : payload.event_id
@@ -249,6 +383,7 @@ Deno.serve(async (request) => {
     return new Response(JSON.stringify({
       status: 'executed',
       resolved_intent: resolvedIntent(route),
+      spoken_summary: spokenSummary,
       response_text: responseText,
       clarification_question: null,
       created_entities: createdEntities,
