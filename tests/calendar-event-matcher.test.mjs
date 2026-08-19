@@ -6,6 +6,35 @@ import {
   findMatchingCalendarEvent,
   isItemAlreadyScheduled,
 } from '../src/utils/calendarEventMatcher.ts'
+import {
+  extractSmartActionTitle,
+  isGenericNewsletterOrFragment,
+} from '../src/utils/actionInspectionSynthesis.ts'
+
+test('extractSmartActionTitle extracts clean title from newsletter items', () => {
+  const item1 = {
+    event_title: 'Kindergarten by the Sea Updates – 8.16.26',
+    description: "Your child's first i-Ready Math diagnostic assessment is scheduled for Thursday, August 20. Ensure your child gets a good night's sleep and a healthy breakfast.",
+  }
+  assert.equal(extractSmartActionTitle(item1), 'i-Ready Math Diagnostic')
+
+  const itemFragment = {
+    event_title: 'breakfast.',
+    description: "Your child's first i-Ready Math diagnostic assessment is scheduled for Thursday, August 20. Ensure your child gets a good night's sleep and a healthy breakfast.",
+  }
+  assert.equal(extractSmartActionTitle(itemFragment), 'i-Ready Math Diagnostic')
+
+  const itemVolunteer = {
+    event_title: 'Weekly Parent Bulletin',
+    description: 'Volunteer to manage the treasure box and birthday gift bags for the kindergarten classroom.',
+  }
+  assert.equal(extractSmartActionTitle(itemVolunteer), 'Volunteer: Manage the treasure box and birthday gift')
+
+  assert.equal(isGenericNewsletterOrFragment('Kindergarten by the Sea Updates – 8.16.26'), true)
+  assert.equal(isGenericNewsletterOrFragment('breakfast.'), true)
+  assert.equal(isGenericNewsletterOrFragment('i-Ready Math Diagnostic'), false)
+})
+
 
 test('normalizeEventTokens normalizes math and diagnostic synonyms', () => {
   const tokens1 = normalizeEventTokens('i-Ready Math Diagnostic')
@@ -128,3 +157,26 @@ test('isItemAlreadyScheduled identifies duplicate prep item against calendar eve
 
   assert.equal(isItemAlreadyScheduled(unrelatedPrep, calendarEvents), false)
 })
+
+test('isItemAlreadyScheduled identifies match between newsletter prep item and "Iready Inform Testing math" calendar event', () => {
+  const calendarEvents = [
+    {
+      id: 'evt-iready-calendar',
+      title: 'Iready Inform Testing math',
+      start_time: '2026-08-20T00:00:00.000Z',
+    },
+  ]
+
+  const newsletterPrepItem = {
+    id: 'prep-newsletter-iready',
+    type: 'school',
+    source_type: 'gmail',
+    event_title: 'Kindergarten by the Sea Updates – 8.16.26',
+    description: "Your child's first i-Ready Math diagnostic assessment is scheduled for Thursday, August 20. Ensure your child gets a good night's sleep and a healthy breakfast.",
+    due_by: '2026-08-20T00:00:00.000Z',
+    created_at: '2026-08-19T14:00:00Z',
+  }
+
+  assert.equal(isItemAlreadyScheduled(newsletterPrepItem, calendarEvents), true)
+})
+

@@ -131,6 +131,96 @@ export function parseDateSafe(dateStr?: string | null): {
 }
 
 /**
+ * Detects whether a string is a broadcast newsletter subject, bulletin, or unhelpful 1-word fragment.
+ */
+export function isGenericNewsletterOrFragment(text?: string | null): boolean {
+  if (!text) return true
+  const clean = text.trim()
+  if (clean.length === 0) return true
+  // 1-word or 2-word tiny fragments like "breakfast.", "updates", "reminder", "notice", "action"
+  const words = clean.split(/\s+/).filter(Boolean)
+  if (words.length <= 1) return true
+  if (words.length === 2 && /^(?:daily|weekly|email|quick|action)\s+(?:update|updates|reminder|notice|item|alert)[.!]?$/i.test(clean)) return true
+
+  // School / broadcast newsletters e.g. "Kindergarten by the Sea Updates – 8.16.26", "Weekly Newsletter", "Principal Update"
+  if (/(?:updates?|newsletter|bulletin|weekly|daily|friday folders?|family news|announcements?)\s*(?:–|-|—|\d|\()/i.test(clean)) {
+    return true
+  }
+  if (/^(?:kindergarten by the sea updates|palm beach school newsletter|weekly parent update|school news|classroom update)/i.test(clean)) {
+    return true
+  }
+
+  return false
+}
+
+/**
+ * Extracts a concise, high-confidence Palm Beach luxury action title from item description,
+ * replacing noisy newsletter subjects or truncated fragments.
+ */
+export function extractSmartActionTitle(
+  item: PrepItem | null | { event_title?: string | null; description?: string | null; email_subject?: string | null; title?: string | null }
+): string | null {
+  if (!item) return null
+  const desc = (item.description || '').trim()
+  const title = ('event_title' in item ? item.event_title : 'title' in item ? item.title : null) || ''
+  const combined = `${title} ${desc}`
+
+  // 1. i-Ready Math / Reading Diagnostic Assessment
+  if (/\b(?:i[-_ ]ready|iready)\b/i.test(combined)) {
+    const isMath = /\bmath(?:ematics)?\b/i.test(combined)
+    const isReading = /\b(?:reading|ela|literacy)\b/i.test(combined)
+    const type = /\b(?:diagnostic|assessment|testing|test|inform)\b/i.test(combined) ? 'Diagnostic' : 'Assessment'
+    
+    if (isMath && isReading) return `i-Ready Math & Reading ${type}`
+    if (isMath) return `i-Ready Math ${type}`
+    if (isReading) return `i-Ready Reading ${type}`
+    return `i-Ready ${type}`
+  }
+
+  // 2. School Pictures / Photo Day
+  if (/(?:school\s*pictures|picture\s*day|photo\s*day|fall\s*portraits)/i.test(combined)) {
+    const isBak = /bak|msoa/i.test(combined)
+    return isBak ? 'School Pictures (Bak MSOA)' : 'School Picture Day'
+  }
+
+  // 3. Science Camp / Lake Alpine Trip
+  if (/(?:science\s*camp|lake\s*alpine)/i.test(combined)) {
+    if (/(?:waiver|release|medical|form)/i.test(combined)) return 'Science Camp Medical Waiver'
+    return '5th Grade Science Camp Departure'
+  }
+
+  // 4. School Spirit Day / PTO Day
+  if (/(?:spirit\s*day|pto\s*spirit)/i.test(combined)) {
+    return 'PTO Spirit Day - Palm Beach School'
+  }
+
+  // 5. Volunteer Roles (e.g. "Volunteer to manage the treasure box and birthday gift bags...")
+  if (/^volunteer\s+to\s+/i.test(desc)) {
+    const cleaned = desc.replace(/^volunteer\s+to\s+/i, '').split(/[,;—.]|which involves/i)[0].trim()
+    if (cleaned) {
+      const words = cleaned.split(/\s+/).slice(0, 7).join(' ')
+      return `Volunteer: ${words.charAt(0).toUpperCase() + words.slice(1)}`
+    }
+  }
+
+  // 6. Specific structured sentences: "Your child's [first] X is scheduled for [Date]..."
+  const scheduledMatch = desc.match(/(?:your child's\s+(?:first\s+)?|upcoming\s+|annual\s+)([a-z0-9\s-]{4,40}?)\s+is\s+scheduled\s+for/i)
+  if (scheduledMatch && scheduledMatch[1]) {
+    const extracted = scheduledMatch[1].trim()
+    if (extracted.length >= 4 && !isGenericNewsletterOrFragment(extracted)) {
+      return extracted.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ')
+    }
+  }
+
+  // If title is already clean and non-generic, return it
+  if (title && !isGenericNewsletterOrFragment(title)) {
+    return title.trim()
+  }
+
+  return null
+}
+
+/**
  * Detects compound multi-action bundles from email communications, decomposing
  * messages into distinct preparation tasks, calendar events, and portal links.
  */
@@ -142,6 +232,46 @@ export function detectSuggestedActionBundle(item: PrepItem | null): SuggestedAct
 
   if (/\b(inhome delivery|delivery window|grocery delivery|package delivery|courier delivery)\b/i.test(combined)) {
     return null
+  }
+
+  // ── CASE 0: i-Ready Math & Reading Diagnostic Assessments ──
+  if (/\b(?:i[-_ ]ready|iready)\b/i.test(combined) && /\b(?:math|reading|diagnostic|assessment|testing|test)\b/i.test(combined)) {
+    const isMath = /\bmath(?:ematics)?\b/i.test(combined)
+    const isReading = /\b(?:reading|ela|literacy)\b/i.test(combined)
+    const subject = isMath && isReading ? 'Math & Reading' : isMath ? 'Math' : isReading ? 'Reading' : 'Diagnostic'
+    const targetTitle = `i-Ready ${subject} Diagnostic Assessment`
+    const targetDateIso = item.event_date || item.due_by || '2026-08-20'
+    const parsed = parseDateSafe(targetDateIso)
+
+    return {
+      bundleId: `bundle_iready_${item.id || 'current'}`,
+      title: `${targetTitle} Action Bundle`,
+      summary: `i-Ready ${subject} diagnostic testing preparation and calendar milestone.`,
+      actions: [
+        {
+          id: `act_iready_prep_${item.id || '0'}`,
+          type: 'reminder',
+          title: 'Good Night Sleep & Healthy Breakfast Prep',
+          subtitle: 'Ensure child is well-rested and has a nutritious breakfast before testing',
+          date: parsed?.dateStr || '2026-08-19',
+          displayDate: parsed ? `${parsed.dateStr} · 8:00 PM` : 'Wed, Aug 19 · 8:00 PM',
+          allDay: false,
+          badgeLabel: 'PREP TASK',
+          defaultSelected: true,
+        },
+        {
+          id: `act_iready_event_${item.id || '1'}`,
+          type: 'event',
+          title: targetTitle,
+          subtitle: `School diagnostic testing assessment (${subject})`,
+          date: parsed?.dateStr || '2026-08-20',
+          displayDate: parsed?.displayDate || 'Thu, Aug 20 · All Day',
+          allDay: true,
+          badgeLabel: 'CALENDAR EVENT',
+          defaultSelected: true,
+        },
+      ],
+    }
   }
 
   // ── CASE 1: School Pictures (Bak MSOA / School Photo Day) ──
@@ -274,7 +404,8 @@ export function detectSuggestedActionBundle(item: PrepItem | null): SuggestedAct
 
   // ── CASE 4: Generic Appointment / Event Fallback ──
   if (item.source_pattern_key === 'event_suggestion' || item.type === 'appointment' || item.type === 'event_suggestion') {
-    const rawTitle = item.event_title || desc.replace(/^Suggested Appointment:\s*/i, '').split(' at ')[0].split(' — ')[0].trim() || 'Appointment'
+    const smart = extractSmartActionTitle(item)
+    const rawTitle = smart || (!isGenericNewsletterOrFragment(item.event_title) ? item.event_title : null) || desc.replace(/^Suggested Appointment:\s*/i, '').split(' at ')[0].split(' — ')[0].trim() || 'Appointment'
     const targetDateIso = item.event_date || item.due_by
     const parsed = parseDateSafe(targetDateIso)
     if (parsed) {
@@ -339,8 +470,10 @@ export function detectSuggestedEvent(item: PrepItem | null): SuggestedEventPlan 
   if (item?.due_by) {
     const parsed = parseDateSafe(item.due_by)
     if (parsed) {
+      const smartTitle = extractSmartActionTitle(item)
+      const title = smartTitle || (!isGenericNewsletterOrFragment(item.event_title) ? item.event_title : null) || item.description || 'Household Action Reminder'
       return {
-        title: item.event_title || item.description || 'Household Action Reminder',
+        title,
         date: parsed.dateStr,
         displayDate: parsed.displayDate,
         allDay: parsed.isAllDay,
@@ -368,7 +501,8 @@ export function synthesizeActionAnalysis(
   if (detailedItem?.gmailContext && detailedItem.gmailContext.subject) {
     const { subject, from_email, received_at, email_body } = detailedItem.gmailContext
     const fromName = from_email ? from_email.split('<')[0].replace(/"/g, '').trim() : 'Email Notification'
-    const cleanSubject = subject || desc || 'Email Action Item'
+    const smartSubject = extractSmartActionTitle(item)
+    const cleanSubject = smartSubject || (!isGenericNewsletterOrFragment(subject) ? subject : null) || (!isGenericNewsletterOrFragment(item?.event_title) ? item?.event_title : null) || desc || 'Email Action Item'
     
     return {
       senderLabel: fromName || 'Email Notification',
@@ -543,7 +677,8 @@ export function synthesizeActionAnalysis(
 
   // 2e. General / Truthful Dynamic Synthesis (NO FAKE HALLUCINATIONS)
   const isGmail = item?.source_type === 'gmail' || item?.source_ref?.startsWith('gmail:')
-  const derivedSubject = item?.event_title || (desc ? (desc.length > 70 ? desc.slice(0, 67) + '…' : desc) : 'Household Task')
+  const smartDerived = extractSmartActionTitle(item)
+  const derivedSubject = smartDerived || (!isGenericNewsletterOrFragment(item?.event_title) ? item?.event_title : null) || (desc ? (desc.length > 70 ? desc.slice(0, 67) + '…' : desc) : 'Household Task')
   const senderName = isGmail ? 'Email Notification' : 'Casa Household Assistant'
   const senderEmail = isGmail ? 'notifications@household.local' : 'assistant@casatabor.local'
 

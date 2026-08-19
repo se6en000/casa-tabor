@@ -50,6 +50,8 @@ import { useHouseholdCaptureRules } from '../../../hooks/useHouseholdCaptureRule
 import {
   synthesizeActionAnalysis,
   extractAmount,
+  extractSmartActionTitle,
+  isGenericNewsletterOrFragment,
   type ExtractedActionDocument,
   type SuggestedEventPlan,
 } from '../../../utils/actionInspectionSynthesis'
@@ -494,7 +496,7 @@ export default function ActionInspectionSidecar({
             onClick={() => {
               onSwitchToAi({
                 actionId: activeItem?.id || 'action-item',
-                title: activeItem?.description || activeItem?.event_title || analysis.subject,
+                title: extractSmartActionTitle(activeItem) || (!isGenericNewsletterOrFragment(activeItem?.event_title) ? activeItem?.event_title : null) || activeItem?.description || analysis.subject,
                 subject: analysis.subject,
                 sender: `${analysis.senderLabel} <${analysis.senderEmail}>`,
                 amount,
@@ -530,7 +532,7 @@ export default function ActionInspectionSidecar({
         {/* Title & Subject Hero */}
         <div className="space-y-2">
           <h2 className="font-display text-display-sm sm:text-display-md font-bold text-casa-navy leading-tight tracking-tight">
-            {activeItem?.description || activeItem?.event_title || analysis.subject}
+            {extractSmartActionTitle(activeItem) || (!isGenericNewsletterOrFragment(activeItem?.event_title) ? activeItem?.event_title : null) || activeItem?.description || analysis.subject}
           </h2>
 
           <div className="flex items-center gap-2 text-caption text-casa-muted flex-wrap">

@@ -2,6 +2,7 @@ import type { PrepItem } from '../types'
 import {
   detectSuggestedEvent,
   detectSuggestedActionBundle,
+  extractSmartActionTitle,
   type SuggestedEventPlan,
 } from './actionInspectionSynthesis.ts'
 
@@ -9,6 +10,7 @@ const SYNONYM_MAP: Record<string, string> = {
   // Math & testing
   mathematics: 'math',
   maths: 'math',
+  math: 'math',
   'i-ready': 'iready',
   i_ready: 'iready',
   iready: 'iready',
@@ -20,6 +22,14 @@ const SYNONYM_MAP: Record<string, string> = {
   examination: 'diagnostic',
   assessment: 'diagnostic',
   assessments: 'diagnostic',
+  inform: 'diagnostic',
+  screener: 'diagnostic',
+  benchmark: 'diagnostic',
+
+  // Reading / ELA
+  reading: 'reading',
+  ela: 'reading',
+  literacy: 'reading',
 
   // Photography / School Days
   picture: 'picture',
@@ -154,6 +164,41 @@ export function isFuzzyEventTitleMatch(candidateTitle: string, existingTitle: st
   return jaccard >= 0.5
 }
 
+/**
+ * Checks whether candidate text (such as an email description or extracted action summary)
+ * refers to the same scheduled event as an existing calendar event title.
+ */
+export function isEventContentMatch(candidateText: string, existingEventTitle: string): boolean {
+  if (!candidateText || !existingEventTitle) return false
+
+  // 1. Direct title comparison
+  if (isFuzzyEventTitleMatch(candidateText, existingEventTitle)) {
+    return true
+  }
+
+  // 2. Token overlap analysis against candidate description/text
+  const existingTokens = normalizeEventTokens(existingEventTitle)
+  const candidateTokens = normalizeEventTokens(candidateText)
+
+  if (existingTokens.size === 0 || candidateTokens.size === 0) return false
+
+  // Count how many of existing event's key tokens appear in the candidate text
+  let matchingExistingTokens = 0
+  for (const token of existingTokens) {
+    if (candidateTokens.has(token)) {
+      matchingExistingTokens++
+    }
+  }
+
+  // If at least 2 distinct semantic tokens match (or all tokens if existing has <= 2 tokens)
+  const minRequiredMatches = Math.min(2, existingTokens.size)
+  if (matchingExistingTokens >= minRequiredMatches && matchingExistingTokens >= 2) {
+    return true
+  }
+
+  return false
+}
+
 function extractDateKey(dateStr?: string | null): string | null {
   if (!dateStr) return null
   return dateStr.slice(0, 10) // 'YYYY-MM-DD'
@@ -176,7 +221,10 @@ export function findMatchingCalendarEvent<T extends { title?: string | null; sta
       continue
     }
 
-    if (isFuzzyEventTitleMatch(plan.title, event.title || '')) {
+    if (
+      isFuzzyEventTitleMatch(plan.title, event.title || '') ||
+      (plan.description && isEventContentMatch(plan.description, event.title || ''))
+    ) {
       return event
     }
   }
@@ -193,46 +241,47 @@ export function isItemAlreadyScheduled(
 ): boolean {
   if (!item || !Array.isArray(calendarEvents) || calendarEvents.length === 0) return false
 
-  // 1. Check compound action bundle
   const bundle = detectSuggestedActionBundle(item)
+  const plan = detectSuggestedEvent(item)
+  const targetDate = extractDateKey(plan?.date || item.event_date || item.due_by)
+  if (!targetDate) return false
+
+  // Filter calendar events to those occurring on the target date
+  const sameDayEvents = calendarEvents.filter(
+    (e) => extractDateKey(e.start_time) === targetDate
+  )
+  if (sameDayEvents.length === 0) return false
+
+  // Check 1: Compound bundle actions
   if (bundle) {
-    const eventAction = bundle.actions.find((a) => a.type === 'event')
-    if (eventAction && eventAction.date) {
-      const match = findMatchingCalendarEvent(
-        {
-          title: eventAction.title,
-          date: eventAction.date,
-          displayDate: eventAction.displayDate,
-          allDay: Boolean(eventAction.allDay),
-        },
-        calendarEvents
-      )
-      if (match) return true
+    for (const act of bundle.actions) {
+      if (act.type === 'event') {
+        const matchingEvt = sameDayEvents.find((e) =>
+          isEventContentMatch(act.title, e.title || '') ||
+          isEventContentMatch(act.subtitle || '', e.title || '')
+        )
+        if (matchingEvt) return true
+      }
     }
   }
 
-  // 2. Check individual suggested event plan
-  const plan = detectSuggestedEvent(item)
-  if (plan && plan.date) {
-    const match = findMatchingCalendarEvent(plan, calendarEvents)
-    if (match) return true
-  }
-
-  // 3. Check explicit event_date or due_by on prep item
-  const rawDate = extractDateKey(item.event_date || item.due_by)
-  const rawTitle = item.event_title || item.description
-  if (rawDate && rawTitle) {
-    const match = findMatchingCalendarEvent(
-      {
-        title: rawTitle,
-        date: rawDate,
-        displayDate: rawDate,
-        allDay: true,
-      },
-      calendarEvents
+  // Check 2: Suggested event plan title & description
+  if (plan) {
+    const matchingEvt = sameDayEvents.find((e) =>
+      isEventContentMatch(plan.title, e.title || '') ||
+      (plan.description && isEventContentMatch(plan.description, e.title || ''))
     )
-    if (match) return true
+    if (matchingEvt) return true
   }
 
-  return false
+  // Check 3: Raw prep item smart title & description
+  const smartTitle = extractSmartActionTitle(item)
+  const fullText = `${item.event_title || ''} ${item.description || ''} ${smartTitle || ''}`.trim()
+  
+  const matchingEvt = sameDayEvents.find((e) =>
+    (smartTitle && isEventContentMatch(smartTitle, e.title || '')) ||
+    isEventContentMatch(fullText, e.title || '')
+  )
+
+  return Boolean(matchingEvt)
 }
