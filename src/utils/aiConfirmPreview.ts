@@ -26,6 +26,10 @@ function formatTimedRange(startValue: string, endValue: string, relativeTo?: Dat
   const end = parseDate(endValue)
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 'Unknown time'
   const startLabel = `${formatDayLabel(start, relativeTo)} · ${format(start, 'h:mm a')}`
+  if (!isSameDay(start, end)) {
+    const endLabel = `${formatDayLabel(end, relativeTo)} · ${format(end, 'h:mm a')}`
+    return `${startLabel} → ${endLabel}`
+  }
   const endLabel = format(end, 'h:mm a')
   return `${startLabel} – ${endLabel}`
 }

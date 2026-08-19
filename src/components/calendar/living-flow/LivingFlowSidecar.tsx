@@ -48,6 +48,7 @@ export default function LivingFlowSidecar({
     setDriver,
     setVenue,
     setStartAndDuration,
+    setStartAndEnd,
     nudgeMinutes,
     setCategory,
     deleteEvent,
@@ -116,11 +117,13 @@ export default function LivingFlowSidecar({
           category={state.category}
           mode={state.mode}
           startDate={state.startDate}
+          endDate={state.endDate}
           durationMinutes={state.durationMinutes}
           isAllDay={state.isAllDay}
           sourceType={event?.source_type}
           onUpdateTitle={updateTitle}
           onSetStartAndDuration={setStartAndDuration}
+          onSetStartAndEnd={setStartAndEnd}
           onSelectCategory={setCategory}
           onNudgeTime={nudgeMinutes}
         />

@@ -262,6 +262,10 @@
       {
         "path": "src/components/calendar/WeekView.tsx",
         "reason": "The multi-day event block is a specialized absolutely positioned calendar span with runtime width, selection, and double-click edit behavior."
+      },
+      {
+        "path": "src/components/calendar/living-flow/components/LivingHeroTitleCard.tsx",
+        "reason": "Specialized inline micro-steppers, night preset chips, and living header pills for tactile kiosk event editing."
       }
     ]
   }

@@ -4098,10 +4098,11 @@ ${hasImages ? `\nIMAGE CONTEXT:
 - If the user provides screenshot(s) or photo(s) of an event, hotel/flight reservation, invitation, or appointment:
   - Extract ALL visible details:
     * title: Clear name of the venue, property, or event (e.g. "The Plymouth South Beach" or "Doctor Appointment")
-    * start: Precise start date/time ISO string
-    * end: Precise end date/time ISO string (or next-day checkout for hotel stays)
+    * start: Precise start date/time ISO string (e.g. for hotel check-in: start date with check-in time, default to 15:00 if time is not explicit)
+    * end: Precise end date/time ISO string (e.g. for hotel check-out: check-out date with check-out time, default to 11:00 if time is not explicit)
     * location: Complete property/venue address
     * notes: All confirmation numbers, room types, guest names, pricing/cost, and policy notes
+  - For multi-day reservations / hotel stays / trips: create_event should span from the check-in start date/time through the check-out end date/time with all_day=false.
   - Call create_event directly with these arguments so the user can verify the staged preflight confirmation card.
 - If this specific image is too unclear to interpret reliably, say that the image could not be read clearly and ask for a clearer upload. Do not guess.` : ''}
 ${cookingFrame ? `\nCOOKING SEMANTIC FRAME (Casa's normalized interpretation; answer the concept, not the wording):\nIntent: ${cookingFrame.intent}\nSlots: ${JSON.stringify(cookingFrame.slots)}${inheritedCookingFrame && cookingRequestText ? `\nOriginal request to retry: ${cookingRequestText}` : ''}${cookingGuidance ? `\nRequired handling: ${cookingGuidance}` : ''}` : ''}

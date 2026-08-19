@@ -950,6 +950,54 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     }
   }, [initialEvent, persistRecurringFieldMutation, queryClient, familyMembers])
 
+  // Set Start Time and End Time directly for multi-day spans
+  const setStartAndEnd = useCallback(async (startDate: Date, endDate: Date, isAllDayParam?: boolean) => {
+    const isAllDay = isAllDayParam !== undefined ? isAllDayParam : false
+    const diffMs = endDate.getTime() - startDate.getTime()
+    const durationMins = Math.max(15, Math.round(diffMs / (60 * 1000)))
+
+    setState(prev => ({
+      ...prev,
+      startDate,
+      endDate,
+      durationMinutes: durationMins,
+      isAllDay,
+    }))
+
+    const currentEvent = activeEventRef.current || initialEvent
+    if (!currentEvent?.id) return
+
+    activeEventRef.current = {
+      ...currentEvent,
+      start_time: startDate.toISOString(),
+      end_time: endDate.toISOString(),
+      all_day: isAllDay,
+    }
+
+    try {
+      if (currentEvent.id.startsWith('routine-')) {
+        const materialized = await materializeSyntheticRoutineEvent(
+          supabase,
+          queryClient,
+          currentEvent,
+          { startDate, endDate, durationMinutes: durationMins, isAllDay },
+          { familyMembers },
+        )
+        activeEventRef.current = materialized
+        currentEventIdRef.current = materialized.id
+        useAppStore.getState().setSelectedSidecarEventId(materialized.id)
+        return
+      }
+
+      const handled = await persistRecurringFieldMutation('schedule', { startDate, endDate, durationMinutes: durationMins, isAllDay })
+      if (!handled) {
+        await updateEventSchedule(supabase, queryClient, activeEventRef.current, startDate, endDate, isAllDay)
+      }
+    } catch (err) {
+      console.error('[LivingFlow] Failed to update multi-day event timing:', err)
+    }
+  }, [initialEvent, persistRecurringFieldMutation, queryClient, familyMembers])
+
   // Nudge Time (+/- 15m)
   const nudgeMinutes = useCallback((mins: number) => {
     setState(prev => {
@@ -1150,6 +1198,7 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     setDriver,
     setVenue,
     setStartAndDuration,
+    setStartAndEnd,
     nudgeMinutes,
     setCategory,
     deleteEvent: requestDelete,

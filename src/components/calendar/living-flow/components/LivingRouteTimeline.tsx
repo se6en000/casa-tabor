@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { format } from 'date-fns'
+import { format, isSameDay, differenceInDays } from 'date-fns'
 import {
   Car, Coffee, House, MapPin, ChevronDown, Clock, Users, Check, Plus, X,
   ArrowDown, ArrowUp, Repeat, Footprints,
@@ -77,6 +77,12 @@ export default function LivingRouteTimeline({
   const formattedArrive = !arrivalDate || isNaN(arrivalDate.getTime()) ? '--:--' : format(arrivalDate, 'h:mm a')
   const stayEndMs = arrivalDate && !isNaN(arrivalDate.getTime()) ? arrivalDate.getTime() + (durationMinutes || 60) * 60000 : null
   const formattedStayEnd = stayEndMs ? format(new Date(stayEndMs), 'h:mm a') : '--:--'
+
+  const isMultiDayStay = Boolean(stayEndMs && arrivalDate && !isSameDay(arrivalDate, new Date(stayEndMs)))
+  const stayNightsCount = isMultiDayStay && stayEndMs ? Math.max(1, differenceInDays(new Date(stayEndMs), arrivalDate)) : 0
+  const staySpanLabel = isMultiDayStay && stayEndMs
+    ? `${format(arrivalDate, 'EEE, MMM d · h:mm a')} → ${format(new Date(stayEndMs), 'EEE, MMM d · h:mm a')}`
+    : `${formattedArrive} – ${formattedStayEnd}`
 
   const calculatedPickupDepart = pickupDepartureDate ?? (stayEndMs && venue.driveMinutes
     ? new Date(stayEndMs - (venue.driveMinutes + 5) * 60000)
@@ -401,12 +407,16 @@ export default function LivingRouteTimeline({
               <div className="flex items-center justify-between">
                 <span className="text-sm font-bold text-slate-900">{venue.name}</span>
                 <span className="font-mono text-xs font-bold text-slate-900">
-                  {formattedArrive} – {formattedStayEnd}
+                  {staySpanLabel}
                 </span>
               </div>
               <span className="text-xs text-slate-900 font-semibold flex items-center gap-1">
                 <Coffee size={13} className="text-amber-700 shrink-0" />
-                <span>{driverLeg1} stays on site with {activeAttendees} ({Math.round(durationMinutes / 60)}h {durationMinutes % 60}m)</span>
+                <span>
+                  {driverLeg1} stays on site with {activeAttendees} {isMultiDayStay
+                    ? `(${stayNightsCount} night${stayNightsCount > 1 ? 's' : ''} · ${Math.round(durationMinutes / 60)}h stay)`
+                    : `(${Math.round(durationMinutes / 60)}h ${durationMinutes % 60}m)`}
+                </span>
               </span>
             </div>
           </div>

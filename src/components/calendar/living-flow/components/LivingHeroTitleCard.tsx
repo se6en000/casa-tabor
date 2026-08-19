@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
-import { format, addDays, isSameDay } from 'date-fns'
+import { format, addDays, isSameDay, differenceInDays } from 'date-fns'
 import {
   Calendar, Clock, ChevronDown, Minus, Plus, Tag,
   ShoppingBag, Trophy, Stethoscope, PartyPopper,
   GraduationCap, Utensils, Plane, Church, Pill,
   ShoppingCart, BookOpen, Wrench, PawPrint, ClipboardList,
-  Check, Bell, X, Pencil
+  Check, Bell, X, Pencil, Bed, Moon
 } from 'lucide-react'
 import type { LivingFlowMode } from '../types'
 import { EventProvenanceBadge } from '../../EventProvenanceBadge'
@@ -15,11 +15,13 @@ interface LivingHeroTitleCardProps {
   category: string
   mode: LivingFlowMode
   startDate: Date
+  endDate?: Date
   durationMinutes: number
   isAllDay?: boolean
   sourceType?: string
   onUpdateTitle: (newTitle: string) => void
   onSetStartAndDuration: (startDate: Date, durationMins: number, isAllDay?: boolean) => void
+  onSetStartAndEnd?: (startDate: Date, endDate: Date, isAllDay?: boolean) => void
   onSelectCategory: (catName: string, icon: string, mode: LivingFlowMode) => void
   onNudgeTime: (mins: number) => void
 }
@@ -49,37 +51,37 @@ export default function LivingHeroTitleCard({
   category,
   mode,
   startDate,
+  endDate,
   durationMinutes,
   isAllDay = false,
   sourceType,
   onUpdateTitle,
   onSetStartAndDuration,
+  onSetStartAndEnd,
   onSelectCategory,
   onNudgeTime
 }: LivingHeroTitleCardProps) {
-  const safeDate = !startDate || isNaN(new Date(startDate).getTime()) ? new Date() : new Date(startDate)
+  const safeStartDate = !startDate || isNaN(new Date(startDate).getTime()) ? new Date() : new Date(startDate)
+  const safeEndDate = !endDate || isNaN(new Date(endDate).getTime())
+    ? new Date(safeStartDate.getTime() + Math.max(15, durationMinutes) * 60000)
+    : new Date(endDate)
+
+  const isInitialMultiDay = !isSameDay(safeStartDate, safeEndDate) || durationMinutes >= 1440 || category.toLowerCase() === 'travel'
+
   const [localTitle, setLocalTitle] = useState(title)
   const [expandedSection, setExpandedSection] = useState<'datetime' | 'category' | null>(null)
-  const [currentDate, setCurrentDate] = useState<Date>(safeDate)
+  const [scheduleTab, setScheduleTab] = useState<'single' | 'multiday'>(isInitialMultiDay ? 'multiday' : 'single')
+  const [currentStartDate, setCurrentStartDate] = useState<Date>(safeStartDate)
+  const [currentEndDate, setCurrentEndDate] = useState<Date>(safeEndDate)
   const [duration, setDuration] = useState<number>(durationMinutes)
   const [localIsAllDay, setLocalIsAllDay] = useState<boolean>(Boolean(isAllDay))
   const [activeMode, setActiveMode] = useState<LivingFlowMode>(mode)
   const isEditingRef = useRef(false)
-  const dateInputRef = useRef<HTMLInputElement>(null)
+  const startDateInputRef = useRef<HTMLInputElement>(null)
+  const endDateInputRef = useRef<HTMLInputElement>(null)
 
-  const handleOpenDatePicker = () => {
-    if (dateInputRef.current) {
-      try {
-        if (typeof dateInputRef.current.showPicker === 'function') {
-          dateInputRef.current.showPicker()
-        } else {
-          dateInputRef.current.focus()
-        }
-      } catch {
-        dateInputRef.current.focus()
-      }
-    }
-  }
+  const isMultiDayActive = scheduleTab === 'multiday' || !isSameDay(currentStartDate, currentEndDate)
+  const nightsCount = Math.max(1, differenceInDays(currentEndDate, currentStartDate))
 
   useEffect(() => {
     if (!isEditingRef.current) {
@@ -88,9 +90,16 @@ export default function LivingHeroTitleCard({
   }, [title])
 
   useEffect(() => {
-    const d = !startDate || isNaN(new Date(startDate).getTime()) ? new Date() : new Date(startDate)
-    setCurrentDate(d)
-  }, [startDate])
+    const s = !startDate || isNaN(new Date(startDate).getTime()) ? new Date() : new Date(startDate)
+    const e = !endDate || isNaN(new Date(endDate).getTime())
+      ? new Date(s.getTime() + Math.max(15, durationMinutes) * 60000)
+      : new Date(endDate)
+    setCurrentStartDate(s)
+    setCurrentEndDate(e)
+    if (!isSameDay(s, e) || durationMinutes >= 1440) {
+      setScheduleTab('multiday')
+    }
+  }, [startDate, endDate, durationMinutes])
 
   useEffect(() => {
     setDuration(durationMinutes)
@@ -100,85 +109,211 @@ export default function LivingHeroTitleCard({
     setLocalIsAllDay(Boolean(isAllDay))
   }, [isAllDay])
 
-  const formattedDate = format(currentDate, 'EEE, MMM d')
-  const formattedTime = format(currentDate, 'h:mm a')
-
-  // Date / Time stepping
-  const hours24 = currentDate.getHours()
-  const hour12 = hours24 % 12 || 12
-  const minutes = currentDate.getMinutes()
-  const period = hours24 >= 12 ? 'PM' : 'AM'
-
-  const stepHour = (delta: number) => {
-    const next = new Date(currentDate)
-    next.setHours(next.getHours() + delta)
-    setCurrentDate(next)
-    setLocalIsAllDay(false)
-    onSetStartAndDuration(next, duration, false)
-  }
-
-  const stepMinute = (delta: number) => {
-    const next = new Date(currentDate)
-    next.setMinutes(next.getMinutes() + delta)
-    setCurrentDate(next)
-    setLocalIsAllDay(false)
-    onSetStartAndDuration(next, duration, false)
-  }
-
-  const togglePeriod = () => {
-    const next = new Date(currentDate)
-    if (period === 'AM') {
-      next.setHours(next.getHours() + 12)
-    } else {
-      next.setHours(next.getHours() - 12)
+  const handleOpenStartDatePicker = () => {
+    if (startDateInputRef.current) {
+      try {
+        if (typeof startDateInputRef.current.showPicker === 'function') {
+          startDateInputRef.current.showPicker()
+        } else {
+          startDateInputRef.current.focus()
+        }
+      } catch {
+        startDateInputRef.current.focus()
+      }
     }
-    setCurrentDate(next)
-    setLocalIsAllDay(false)
-    onSetStartAndDuration(next, duration, false)
   }
 
+  const handleOpenEndDatePicker = () => {
+    if (endDateInputRef.current) {
+      try {
+        if (typeof endDateInputRef.current.showPicker === 'function') {
+          endDateInputRef.current.showPicker()
+        } else {
+          endDateInputRef.current.focus()
+        }
+      } catch {
+        endDateInputRef.current.focus()
+      }
+    }
+  }
+
+  // Commit schedule changes to parent
+  const commitScheduleChange = (newStart: Date, newEnd: Date, newIsAllDay: boolean) => {
+    setCurrentStartDate(newStart)
+    setCurrentEndDate(newEnd)
+    setLocalIsAllDay(newIsAllDay)
+    const diffMins = Math.max(15, Math.round((newEnd.getTime() - newStart.getTime()) / 60000))
+    setDuration(diffMins)
+
+    if (onSetStartAndEnd) {
+      onSetStartAndEnd(newStart, newEnd, newIsAllDay)
+    } else {
+      onSetStartAndDuration(newStart, diffMins, newIsAllDay)
+    }
+  }
+
+  // Start Date / Time steppers
+  const startHours24 = currentStartDate.getHours()
+  const startHour12 = startHours24 % 12 || 12
+  const startMinutes = currentStartDate.getMinutes()
+  const startPeriod = startHours24 >= 12 ? 'PM' : 'AM'
+
+  const stepStartHour = (delta: number) => {
+    const nextStart = new Date(currentStartDate)
+    nextStart.setHours(nextStart.getHours() + delta)
+    const shiftMs = nextStart.getTime() - currentStartDate.getTime()
+    const nextEnd = scheduleTab === 'multiday'
+      ? currentEndDate
+      : new Date(currentEndDate.getTime() + shiftMs)
+    commitScheduleChange(nextStart, nextEnd, false)
+  }
+
+  const stepStartMinute = (delta: number) => {
+    const nextStart = new Date(currentStartDate)
+    nextStart.setMinutes(nextStart.getMinutes() + delta)
+    const shiftMs = nextStart.getTime() - currentStartDate.getTime()
+    const nextEnd = scheduleTab === 'multiday'
+      ? currentEndDate
+      : new Date(currentEndDate.getTime() + shiftMs)
+    commitScheduleChange(nextStart, nextEnd, false)
+  }
+
+  const toggleStartPeriod = () => {
+    const nextStart = new Date(currentStartDate)
+    if (startPeriod === 'AM') {
+      nextStart.setHours(nextStart.getHours() + 12)
+    } else {
+      nextStart.setHours(nextStart.getHours() - 12)
+    }
+    const shiftMs = nextStart.getTime() - currentStartDate.getTime()
+    const nextEnd = scheduleTab === 'multiday'
+      ? currentEndDate
+      : new Date(currentEndDate.getTime() + shiftMs)
+    commitScheduleChange(nextStart, nextEnd, false)
+  }
+
+  // End Date / Time steppers (Multi-Day)
+  const endHours24 = currentEndDate.getHours()
+  const endHour12 = endHours24 % 12 || 12
+  const endMinutes = currentEndDate.getMinutes()
+  const endPeriod = endHours24 >= 12 ? 'PM' : 'AM'
+
+  const stepEndHour = (delta: number) => {
+    const nextEnd = new Date(currentEndDate)
+    nextEnd.setHours(nextEnd.getHours() + delta)
+    if (nextEnd.getTime() <= currentStartDate.getTime()) {
+      nextEnd.setTime(currentStartDate.getTime() + 60 * 60000)
+    }
+    commitScheduleChange(currentStartDate, nextEnd, false)
+  }
+
+  const stepEndMinute = (delta: number) => {
+    const nextEnd = new Date(currentEndDate)
+    nextEnd.setMinutes(nextEnd.getMinutes() + delta)
+    if (nextEnd.getTime() <= currentStartDate.getTime()) {
+      nextEnd.setTime(currentStartDate.getTime() + 15 * 60000)
+    }
+    commitScheduleChange(currentStartDate, nextEnd, false)
+  }
+
+  const toggleEndPeriod = () => {
+    const nextEnd = new Date(currentEndDate)
+    if (endPeriod === 'AM') {
+      nextEnd.setHours(nextEnd.getHours() + 12)
+    } else {
+      nextEnd.setHours(nextEnd.getHours() - 12)
+    }
+    if (nextEnd.getTime() <= currentStartDate.getTime()) {
+      nextEnd.setTime(currentStartDate.getTime() + 60 * 60000)
+    }
+    commitScheduleChange(currentStartDate, nextEnd, false)
+  }
+
+  // Day Offset Selections (Single Day)
   const selectDayOffset = (days: number) => {
     const target = addDays(new Date(), days)
-    const next = new Date(currentDate)
-    next.setFullYear(target.getFullYear(), target.getMonth(), target.getDate())
-    setCurrentDate(next)
-    onSetStartAndDuration(next, duration, localIsAllDay)
+    const nextStart = new Date(currentStartDate)
+    nextStart.setFullYear(target.getFullYear(), target.getMonth(), target.getDate())
+    const nextEnd = new Date(nextStart.getTime() + duration * 60000)
+    commitScheduleChange(nextStart, nextEnd, localIsAllDay)
   }
 
-  const selectExplicitDate = (dateStr: string) => {
+  const selectExplicitStartDate = (dateStr: string) => {
     if (!dateStr) return
     const parts = dateStr.split('-').map(Number)
     if (parts.length === 3) {
-      const next = new Date(currentDate)
-      next.setFullYear(parts[0], parts[1] - 1, parts[2])
-      setCurrentDate(next)
-      onSetStartAndDuration(next, duration, localIsAllDay)
+      const nextStart = new Date(currentStartDate)
+      nextStart.setFullYear(parts[0], parts[1] - 1, parts[2])
+      let nextEnd = new Date(currentEndDate)
+      if (scheduleTab === 'multiday') {
+        const spanDays = Math.max(1, differenceInDays(currentEndDate, currentStartDate))
+        nextEnd = addDays(nextStart, spanDays)
+        nextEnd.setHours(currentEndDate.getHours(), currentEndDate.getMinutes(), 0, 0)
+      } else {
+        nextEnd = new Date(nextStart.getTime() + duration * 60000)
+      }
+      commitScheduleChange(nextStart, nextEnd, localIsAllDay)
     }
   }
 
+  const selectExplicitEndDate = (dateStr: string) => {
+    if (!dateStr) return
+    const parts = dateStr.split('-').map(Number)
+    if (parts.length === 3) {
+      const nextEnd = new Date(currentEndDate)
+      nextEnd.setFullYear(parts[0], parts[1] - 1, parts[2])
+      if (nextEnd.getTime() <= currentStartDate.getTime()) {
+        nextEnd.setHours(currentStartDate.getHours() + 2, currentStartDate.getMinutes(), 0, 0)
+      }
+      commitScheduleChange(currentStartDate, nextEnd, localIsAllDay)
+    }
+  }
+
+  // Duration Presets (Single Day)
   const selectDuration = (mins: number) => {
     if (mins >= 1440) {
-      setDuration(1440)
-      setLocalIsAllDay(true)
-      onSetStartAndDuration(currentDate, 1440, true)
+      const endOfDay = new Date(currentStartDate.getFullYear(), currentStartDate.getMonth(), currentStartDate.getDate(), 23, 59, 59)
+      commitScheduleChange(currentStartDate, endOfDay, true)
     } else {
-      setDuration(mins)
-      setLocalIsAllDay(false)
-      onSetStartAndDuration(currentDate, mins, false)
+      const nextEnd = new Date(currentStartDate.getTime() + mins * 60000)
+      commitScheduleChange(currentStartDate, nextEnd, false)
     }
   }
 
-  const isTodayActive = isSameDay(currentDate, new Date())
-  const isTomorrowActive = isSameDay(currentDate, addDays(new Date(), 1))
-  const isDay2Active = isSameDay(currentDate, addDays(new Date(), 2))
+  // Night Presets (Multi-Day Stay)
+  const selectNightsPreset = (nights: number) => {
+    const nextStart = new Date(currentStartDate)
+    if (nextStart.getHours() === 0 && nextStart.getMinutes() === 0) {
+      nextStart.setHours(15, 0, 0, 0) // Default 3:00 PM Check-in
+    }
+    const nextEnd = addDays(nextStart, nights)
+    nextEnd.setHours(11, 0, 0, 0) // Default 11:00 AM Check-out
+    commitScheduleChange(nextStart, nextEnd, false)
+  }
+
+  const isTodayActive = isSameDay(currentStartDate, new Date())
+  const isTomorrowActive = isSameDay(currentStartDate, addDays(new Date(), 1))
+  const isDay2Active = isSameDay(currentStartDate, addDays(new Date(), 2))
   const isOtherDayActive = !isTodayActive && !isTomorrowActive && !isDay2Active
+
+  // Header pill text calculations
+  const headerDateLabel = isMultiDayActive
+    ? `${format(currentStartDate, 'EEE, MMM d')} → ${format(currentEndDate, 'EEE, MMM d')}`
+    : format(currentStartDate, 'EEE, MMM d')
+
+  const headerTimeLabel = isMultiDayActive
+    ? localIsAllDay
+      ? `All Day (${nightsCount + 1}d)`
+      : `${format(currentStartDate, 'h:mm a')} → ${format(currentEndDate, 'h:mm a')}${nightsCount > 0 ? ` (${nightsCount}n)` : ''}`
+    : localIsAllDay
+      ? 'All Day'
+      : format(currentStartDate, 'h:mm a')
 
   return (
     <div className={`living-hero-title-card flex flex-col ${expandedSection ? 'has-expanded' : ''}`}>
       {/* In-Place Controlled Editable Title via Zero-Lag CSS Grid Auto-Sizing */}
       <div className="group relative w-full">
         <div className="grid grid-cols-1 grid-rows-1 relative w-full">
-          {/* Invisible shadow span that dictates the exact container height without white-space gaps */}
           <span
             aria-hidden="true"
             className="invisible col-start-1 row-start-1 living-event-title px-1.5 -mx-1.5 whitespace-pre-wrap select-none pointer-events-none pr-7"
@@ -186,7 +321,6 @@ export default function LivingHeroTitleCard({
             {localTitle || 'Event title…'}
           </span>
 
-          {/* Textarea that fills the grid cell exactly */}
           <textarea
             rows={1}
             value={localTitle}
@@ -234,23 +368,23 @@ export default function LivingHeroTitleCard({
           <ChevronDown size={12} className={expandedSection === 'category' ? 'rotate-180 transition-transform' : ''} />
         </button>
 
-        {/* Date Pill */}
+        {/* Date Pill (Adaptive Multi-Day) */}
         <button
           onClick={() => setExpandedSection(prev => prev === 'datetime' ? null : 'datetime')}
           className={`living-action-chip ${expandedSection === 'datetime' ? 'active' : ''}`}
         >
           <Calendar size={13} className={expandedSection === 'datetime' ? 'text-white' : 'text-slate-500'} />
-          <span>{formattedDate}</span>
+          <span className="truncate max-w-[200px]">{headerDateLabel}</span>
           <ChevronDown size={12} className={expandedSection === 'datetime' ? 'rotate-180 transition-transform' : 'text-slate-400'} />
         </button>
 
-        {/* Time Pill */}
+        {/* Time Pill (Adaptive Multi-Day) */}
         <button
           onClick={() => setExpandedSection(prev => prev === 'datetime' ? null : 'datetime')}
           className={`living-action-chip ${expandedSection === 'datetime' ? 'active' : ''}`}
         >
           <Clock size={13} className={expandedSection === 'datetime' ? 'text-white' : 'text-slate-500'} />
-          <span>{localIsAllDay ? 'All Day' : formattedTime}</span>
+          <span className="truncate max-w-[190px]">{headerTimeLabel}</span>
           <ChevronDown size={12} className={expandedSection === 'datetime' ? 'rotate-180 transition-transform' : 'text-slate-400'} />
         </button>
 
@@ -283,7 +417,7 @@ export default function LivingHeroTitleCard({
           <div className="living-inline-drawer-header">
             <span className="flex items-center gap-1.5">
               <Clock size={14} className="text-amber-700" />
-              <span>Schedule & Start Time</span>
+              <span>Schedule & Timing</span>
             </span>
             <button
               onClick={() => setExpandedSection(null)}
@@ -294,98 +428,293 @@ export default function LivingHeroTitleCard({
             </button>
           </div>
 
-          {/* 1. Day Selector Grid */}
-          <div className="day-selector-grid-exact">
-            <button onClick={() => selectDayOffset(0)} className={`day-select-pill-btn ${isTodayActive ? 'active' : ''}`}>
-              Today<small>{format(new Date(), 'EEE d')}</small>
-            </button>
-            <button onClick={() => selectDayOffset(1)} className={`day-select-pill-btn ${isTomorrowActive ? 'active' : ''}`}>
-              Tomorrow<small>{format(addDays(new Date(), 1), 'EEE d')}</small>
-            </button>
-            <button onClick={() => selectDayOffset(2)} className={`day-select-pill-btn ${isDay2Active ? 'active' : ''}`}>
-              {format(addDays(new Date(), 2), 'EEEE')}<small>{format(addDays(new Date(), 2), 'EEE d')}</small>
-            </button>
-            <label
-              onClick={handleOpenDatePicker}
-              className={`day-select-pill-btn relative cursor-pointer ${isOtherDayActive ? 'active' : ''}`}
+          {/* Mode Switcher: Single Day vs Multi-Day / Stay */}
+          <div className="grid grid-cols-2 bg-slate-100 border border-slate-200 rounded-full p-0.5 mb-3 gap-0.5">
+            <button
+              type="button"
+              onClick={() => {
+                setScheduleTab('single')
+                if (!isSameDay(currentStartDate, currentEndDate)) {
+                  const newEnd = new Date(currentStartDate.getTime() + 60 * 60000)
+                  commitScheduleChange(currentStartDate, newEnd, false)
+                }
+              }}
+              className={`py-1.5 px-3 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                scheduleTab === 'single'
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+              }`}
             >
-              <input
-                ref={dateInputRef}
-                type="date"
-                value={format(currentDate, 'yyyy-MM-dd')}
-                onChange={(e) => selectExplicitDate(e.target.value)}
-                className="absolute inset-0 opacity-0 pointer-events-none w-full h-full"
-                aria-label="Pick date"
-                tabIndex={-1}
-              />
-              <div className="flex flex-col items-center justify-center pointer-events-none">
-                <span>{isOtherDayActive ? format(currentDate, 'MMM d') : 'Pick Date'}</span>
-                <Calendar size={12} className="mt-0.5" />
-              </div>
-            </label>
+              <Clock size={13} />
+              <span>Single Day</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setScheduleTab('multiday')
+                if (isSameDay(currentStartDate, currentEndDate)) {
+                  selectNightsPreset(1)
+                }
+              }}
+              className={`py-1.5 px-3 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                scheduleTab === 'multiday'
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+              }`}
+            >
+              <Bed size={13} />
+              <span>Multi-Day / Stay</span>
+            </button>
           </div>
 
-          {/* 2. Touch Stepper Wheels (48px targets) */}
-          <div className="time-stepper-touch-grid">
-            {/* Hour Column */}
-            <div className="stepper-column-box">
-              <span className="stepper-label-tag">Hour</span>
-              <div className="stepper-number-display">{hour12 < 10 ? `0${hour12}` : hour12}</div>
-              <div className="stepper-buttons-row">
-                <button onClick={() => stepHour(-1)} className="stepper-arrow-btn" aria-label="Decrease hour">
-                  <Minus size={15} />
+          {/* ══════ SINGLE DAY MODE ══════ */}
+          {scheduleTab === 'single' ? (
+            <>
+              {/* Day Selector Grid */}
+              <div className="day-selector-grid-exact">
+                <button onClick={() => selectDayOffset(0)} className={`day-select-pill-btn ${isTodayActive ? 'active' : ''}`}>
+                  Today<small>{format(new Date(), 'EEE d')}</small>
                 </button>
-                <button onClick={() => stepHour(1)} className="stepper-arrow-btn" aria-label="Increase hour">
-                  <Plus size={15} />
+                <button onClick={() => selectDayOffset(1)} className={`day-select-pill-btn ${isTomorrowActive ? 'active' : ''}`}>
+                  Tomorrow<small>{format(addDays(new Date(), 1), 'EEE d')}</small>
                 </button>
-              </div>
-            </div>
-
-            {/* Minute Column */}
-            <div className="stepper-column-box">
-              <span className="stepper-label-tag">Minute</span>
-              <div className="stepper-number-display">{minutes < 10 ? `0${minutes}` : minutes}</div>
-              <div className="stepper-buttons-row">
-                <button onClick={() => stepMinute(-5)} className="stepper-arrow-btn" aria-label="Decrease 5 minutes">
-                  <Minus size={15} />
+                <button onClick={() => selectDayOffset(2)} className={`day-select-pill-btn ${isDay2Active ? 'active' : ''}`}>
+                  {format(addDays(new Date(), 2), 'EEEE')}<small>{format(addDays(new Date(), 2), 'EEE d')}</small>
                 </button>
-                <button onClick={() => stepMinute(5)} className="stepper-arrow-btn" aria-label="Increase 5 minutes">
-                  <Plus size={15} />
-                </button>
-              </div>
-            </div>
-
-            {/* Period Column */}
-            <div className="stepper-column-box">
-              <span className="stepper-label-tag">Period</span>
-              <div className="stepper-number-display">{period}</div>
-              <button onClick={togglePeriod} className="ampm-toggle-btn">
-                AM / PM
-              </button>
-            </div>
-          </div>
-
-          {/* 3. Duration Presets */}
-          <div className="duration-chips-row">
-            {[
-              { mins: 45, label: '45m' },
-              { mins: 90, label: '1h 30m' },
-              { mins: 160, label: '2h 40m' },
-              { mins: 240, label: '4h' },
-              { mins: 1440, label: 'All Day' }
-            ].map((item) => {
-              const isChipActive = item.mins >= 1440 ? localIsAllDay : (!localIsAllDay && duration === item.mins)
-              return (
-                <button
-                  key={item.mins}
-                  onClick={() => selectDuration(item.mins)}
-                  className={`dur-chip-btn ${isChipActive ? 'active' : ''}`}
+                <label
+                  onClick={handleOpenStartDatePicker}
+                  className={`day-select-pill-btn relative cursor-pointer ${isOtherDayActive ? 'active' : ''}`}
                 >
-                  {item.label}
-                </button>
-              )
-            })}
-          </div>
+                  <input
+                    ref={startDateInputRef}
+                    type="date"
+                    value={format(currentStartDate, 'yyyy-MM-dd')}
+                    onChange={(e) => selectExplicitStartDate(e.target.value)}
+                    className="absolute inset-0 opacity-0 pointer-events-none w-full h-full"
+                    aria-label="Pick date"
+                    tabIndex={-1}
+                  />
+                  <div className="flex flex-col items-center justify-center pointer-events-none">
+                    <span>{isOtherDayActive ? format(currentStartDate, 'MMM d') : 'Pick Date'}</span>
+                    <Calendar size={12} className="mt-0.5" />
+                  </div>
+                </label>
+              </div>
+
+              {/* Touch Stepper Wheels */}
+              <div className="time-stepper-touch-grid">
+                <div className="stepper-column-box">
+                  <span className="stepper-label-tag">Hour</span>
+                  <div className="stepper-number-display">{startHour12 < 10 ? `0${startHour12}` : startHour12}</div>
+                  <div className="stepper-buttons-row">
+                    <button onClick={() => stepStartHour(-1)} className="stepper-arrow-btn" aria-label="Decrease hour">
+                      <Minus size={15} />
+                    </button>
+                    <button onClick={() => stepStartHour(1)} className="stepper-arrow-btn" aria-label="Increase hour">
+                      <Plus size={15} />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="stepper-column-box">
+                  <span className="stepper-label-tag">Minute</span>
+                  <div className="stepper-number-display">{startMinutes < 10 ? `0${startMinutes}` : startMinutes}</div>
+                  <div className="stepper-buttons-row">
+                    <button onClick={() => stepStartMinute(-5)} className="stepper-arrow-btn" aria-label="Decrease 5 minutes">
+                      <Minus size={15} />
+                    </button>
+                    <button onClick={() => stepStartMinute(5)} className="stepper-arrow-btn" aria-label="Increase 5 minutes">
+                      <Plus size={15} />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="stepper-column-box">
+                  <span className="stepper-label-tag">Period</span>
+                  <div className="stepper-number-display">{startPeriod}</div>
+                  <button onClick={toggleStartPeriod} className="ampm-toggle-btn">
+                    AM / PM
+                  </button>
+                </div>
+              </div>
+
+              {/* Duration Presets */}
+              <div className="duration-chips-row">
+                {[
+                  { mins: 45, label: '45m' },
+                  { mins: 90, label: '1h 30m' },
+                  { mins: 160, label: '2h 40m' },
+                  { mins: 240, label: '4h' },
+                  { mins: 1440, label: 'All Day' }
+                ].map((item) => {
+                  const isChipActive = item.mins >= 1440 ? localIsAllDay : (!localIsAllDay && duration === item.mins)
+                  return (
+                    <button
+                      key={item.mins}
+                      onClick={() => selectDuration(item.mins)}
+                      className={`dur-chip-btn ${isChipActive ? 'active' : ''}`}
+                    >
+                      {item.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </>
+          ) : (
+            /* ══════ MULTI-DAY / STAY MODE ══════ */
+            <div className="space-y-3">
+              {/* Quick Night Presets */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                {[
+                  { nights: 1, label: '1 Night (Overnight)' },
+                  { nights: 2, label: '2 Nights (Weekend)' },
+                  { nights: 3, label: '3 Nights' },
+                  { nights: 4, label: '4 Nights' },
+                ].map((preset) => {
+                  const isPresetActive = nightsCount === preset.nights
+                  return (
+                    <button
+                      key={preset.nights}
+                      type="button"
+                      onClick={() => selectNightsPreset(preset.nights)}
+                      className={`py-1.5 px-2.5 rounded-xl text-xs font-bold transition-all border shrink-0 flex items-center gap-1 ${
+                        isPresetActive
+                          ? 'bg-amber-50 border-amber-400 text-amber-900 shadow-2xs'
+                          : 'bg-white border-slate-200 text-slate-700 hover:border-amber-300'
+                      }`}
+                    >
+                      <Moon size={11} className={isPresetActive ? 'text-amber-600' : 'text-slate-400'} />
+                      <span>{preset.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Check-In / Start Card */}
+              <div className="bg-white border border-slate-200 rounded-xl p-2.5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-900 uppercase tracking-wide flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                    Check-in / Start
+                  </span>
+                  <label
+                    onClick={handleOpenStartDatePicker}
+                    className="text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg border border-amber-300/80 cursor-pointer flex items-center gap-1"
+                  >
+                    <input
+                      ref={startDateInputRef}
+                      type="date"
+                      value={format(currentStartDate, 'yyyy-MM-dd')}
+                      onChange={(e) => selectExplicitStartDate(e.target.value)}
+                      className="absolute opacity-0 pointer-events-none w-0 h-0"
+                      aria-label="Pick start date"
+                      tabIndex={-1}
+                    />
+                    <Calendar size={12} />
+                    <span>{format(currentStartDate, 'EEE, MMM d, yyyy')}</span>
+                  </label>
+                </div>
+
+                <div className="time-stepper-touch-grid">
+                  <div className="stepper-column-box">
+                    <span className="stepper-label-tag">Hour</span>
+                    <div className="stepper-number-display">{startHour12 < 10 ? `0${startHour12}` : startHour12}</div>
+                    <div className="stepper-buttons-row">
+                      <button onClick={() => stepStartHour(-1)} className="stepper-arrow-btn" aria-label="Decrease start hour">
+                        <Minus size={15} />
+                      </button>
+                      <button onClick={() => stepStartHour(1)} className="stepper-arrow-btn" aria-label="Increase start hour">
+                        <Plus size={15} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="stepper-column-box">
+                    <span className="stepper-label-tag">Minute</span>
+                    <div className="stepper-number-display">{startMinutes < 10 ? `0${startMinutes}` : startMinutes}</div>
+                    <div className="stepper-buttons-row">
+                      <button onClick={() => stepStartMinute(-5)} className="stepper-arrow-btn" aria-label="Decrease start 5 minutes">
+                        <Minus size={15} />
+                      </button>
+                      <button onClick={() => stepStartMinute(5)} className="stepper-arrow-btn" aria-label="Increase start 5 minutes">
+                        <Plus size={15} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="stepper-column-box">
+                    <span className="stepper-label-tag">Period</span>
+                    <div className="stepper-number-display">{startPeriod}</div>
+                    <button onClick={toggleStartPeriod} className="ampm-toggle-btn">
+                      AM / PM
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Check-Out / End Card */}
+              <div className="bg-white border border-slate-200 rounded-xl p-2.5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-900 uppercase tracking-wide flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-amber-500" />
+                    Check-out / End
+                  </span>
+                  <label
+                    onClick={handleOpenEndDatePicker}
+                    className="text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg border border-amber-300/80 cursor-pointer flex items-center gap-1"
+                  >
+                    <input
+                      ref={endDateInputRef}
+                      type="date"
+                      value={format(currentEndDate, 'yyyy-MM-dd')}
+                      onChange={(e) => selectExplicitEndDate(e.target.value)}
+                      className="absolute opacity-0 pointer-events-none w-0 h-0"
+                      aria-label="Pick end date"
+                      tabIndex={-1}
+                    />
+                    <Calendar size={12} />
+                    <span>{format(currentEndDate, 'EEE, MMM d, yyyy')}</span>
+                  </label>
+                </div>
+
+                <div className="time-stepper-touch-grid">
+                  <div className="stepper-column-box">
+                    <span className="stepper-label-tag">Hour</span>
+                    <div className="stepper-number-display">{endHour12 < 10 ? `0${endHour12}` : endHour12}</div>
+                    <div className="stepper-buttons-row">
+                      <button onClick={() => stepEndHour(-1)} className="stepper-arrow-btn" aria-label="Decrease end hour">
+                        <Minus size={15} />
+                      </button>
+                      <button onClick={() => stepEndHour(1)} className="stepper-arrow-btn" aria-label="Increase end hour">
+                        <Plus size={15} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="stepper-column-box">
+                    <span className="stepper-label-tag">Minute</span>
+                    <div className="stepper-number-display">{endMinutes < 10 ? `0${endMinutes}` : endMinutes}</div>
+                    <div className="stepper-buttons-row">
+                      <button onClick={() => stepEndMinute(-5)} className="stepper-arrow-btn" aria-label="Decrease end 5 minutes">
+                        <Minus size={15} />
+                      </button>
+                      <button onClick={() => stepEndMinute(5)} className="stepper-arrow-btn" aria-label="Increase end 5 minutes">
+                        <Plus size={15} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="stepper-column-box">
+                    <span className="stepper-label-tag">Period</span>
+                    <div className="stepper-number-display">{endPeriod}</div>
+                    <button onClick={toggleEndPeriod} className="ampm-toggle-btn">
+                      AM / PM
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
