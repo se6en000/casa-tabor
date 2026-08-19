@@ -6,6 +6,9 @@ import { publishEventAggregatePatch } from '../../../../lib/eventAggregateCache'
 import type { EventWithDetails } from '../../../../hooks/useCalendarEvents'
 import type { EventChecklistItem } from '../../../../types'
 import { Button, IconButton, Chip, Input } from '../../../ui'
+import { useFamilyMembers } from '../../../../hooks/useFamilyMembers'
+import { useAppStore } from '../../../../stores/appStore'
+import { materializeSyntheticRoutineEvent } from '../../../../lib/eventMutations'
 import { cn } from '../../../../utils/cn'
 
 interface LivingPrepCardProps {
@@ -149,15 +152,37 @@ export default function LivingPrepCard({ event }: LivingPrepCardProps) {
     await invalidateChecklistQueries()
   }
 
+  const { data: familyMembers = [] } = useFamilyMembers()
+
   const addItem = async (labelToAdd?: string) => {
     const label = (labelToAdd ?? newLabel).trim()
     if (!label || !event?.id) return
     setSaveError(null)
+
+    let targetEventId = event.id
+    if (event.id.startsWith('routine-')) {
+      try {
+        const materialized = await materializeSyntheticRoutineEvent(
+          supabase,
+          qc,
+          event,
+          {},
+          { familyMembers }
+        )
+        targetEventId = materialized.id
+        useAppStore.getState().setSelectedSidecarEventId(materialized.id)
+      } catch (matErr) {
+        console.error('[LivingPrepCard] Failed to materialize routine event:', matErr)
+        setSaveError(`Could not save item for routine event.`)
+        return
+      }
+    }
+
     const nextSortOrder = visibleItems.reduce((max, i) => Math.max(max, i.sort_order), -1) + 1
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
     const optimisticItem: EventChecklistItem = {
       id: tempId,
-      event_id: event.id,
+      event_id: targetEventId,
       label,
       note: null,
       checked: false,
@@ -171,10 +196,15 @@ export default function LivingPrepCard({ event }: LivingPrepCardProps) {
     publishEventAggregatePatch(qc, event.id, {
       checklist: [...aggregateItems(), optimisticItem],
     })
+    if (targetEventId !== event.id) {
+      publishEventAggregatePatch(qc, targetEventId, {
+        checklist: [...aggregateItems(), optimisticItem],
+      })
+    }
 
     const { data, error } = await supabase
       .from('event_checklist_items')
-      .insert({ event_id: event.id, label, checked: false, sort_order: nextSortOrder })
+      .insert({ event_id: targetEventId, label, checked: false, sort_order: nextSortOrder })
       .select()
       .single()
 
@@ -184,12 +214,17 @@ export default function LivingPrepCard({ event }: LivingPrepCardProps) {
       publishEventAggregatePatch(qc, event.id, {
         checklist: aggregateItems().filter((a) => a.id !== tempId),
       })
+      if (targetEventId !== event.id) {
+        publishEventAggregatePatch(qc, targetEventId, {
+          checklist: aggregateItems().filter((a) => a.id !== tempId),
+        })
+      }
       return
     }
 
     const realItem = data as EventChecklistItem
     setAddedItems((prev) => prev.map((a) => (a.id === tempId ? realItem : a)))
-    publishEventAggregatePatch(qc, event.id, {
+    publishEventAggregatePatch(qc, targetEventId, {
       checklist: aggregateItems().map((a) => (a.id === tempId ? realItem : a)),
     })
     await invalidateChecklistQueries()
