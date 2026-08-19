@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { format, parseISO, differenceInMinutes, subMinutes } from 'date-fns'
 import {
   MapPin,
@@ -32,6 +32,7 @@ import TomorrowPrepWidget from './widgets/TomorrowPrepWidget'
 import MorningLaunchpadWidget from './widgets/MorningLaunchpadWidget'
 import MiddayLogisticsWidget from './widgets/MiddayLogisticsWidget'
 import { useFamilyRoutineIntelligence } from '../../hooks/useFamilyRoutineIntelligence'
+import { resolveEventDriver } from '../../lib/driverConflictEngine'
 import GmailSyncStatusIndicator from '../shared/GmailSyncStatusIndicator'
 
 interface CalmKioskViewProps {
@@ -165,6 +166,110 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
       minutesUntilNext !== null &&
       minutesUntilNext <= 75,
   )
+
+  // Concept A: Flight Deck Radar (Upcoming On-Deck Items within 2.5 hours)
+  const upcomingOnDeck = useMemo(() => {
+    if (!nextEvent) return []
+    const items: Array<{
+      id: string
+      title: string
+      subtitle?: string
+      timeFormatted: string
+      driverName: string
+      driverColor: string
+      leaveByText?: string
+      event?: EventWithDetails
+      minutesFromNow: number
+    }> = []
+
+    const currentEventStartTime = (() => {
+      try {
+        return parseISO(nextEvent.start_time).getTime()
+      } catch {
+        return now.getTime()
+      }
+    })()
+
+    // 1. Other daytime appointments today starting after current event or within 2.5 hours
+    for (const evt of upcomingAppointments) {
+      if (evt.id === nextEvent.id) continue
+      if (evt.all_day) continue
+      if (evt.id?.startsWith('routine-')) continue
+      try {
+        const start = parseISO(evt.start_time).getTime()
+        const minsAway = differenceInMinutes(parseISO(evt.start_time), now)
+        if (start >= currentEventStartTime - 15 * 60 * 1000 && minsAway <= 180 && minsAway > -30) {
+          const { name: dName } = resolveEventDriver(evt, familyMembers)
+          const dMember = familyMembers.find((m) => m.name.toLowerCase() === dName.toLowerCase())
+          const dColor = getDisplayMemberColor(dMember?.color_hex)
+          const leaveBy = evt.enrichment?.departure_time
+            ? `Leave by ${format(parseISO(evt.enrichment.departure_time), 'h:mm a')}`
+            : minsAway > 0
+            ? `Starts in ${formatDurationLong(minsAway)}`
+            : 'Starting soon'
+
+          items.push({
+            id: evt.id,
+            title: evt.title,
+            subtitle: evt.location_name || evt.address || undefined,
+            timeFormatted: format(parseISO(evt.start_time), 'h:mm a'),
+            driverName: dName,
+            driverColor: dColor,
+            leaveByText: leaveBy,
+            event: evt,
+            minutesFromNow: minsAway,
+          })
+        }
+      } catch {}
+    }
+
+    // 2. School dismissals within the next 3 hours
+    const rawStatuses = routineIntel.ambientStatuses || []
+    for (const status of rawStatuses) {
+      const isBak = status.venueName.toLowerCase().includes('bak')
+      const fallbackDriver = isBak ? 'Jake' : 'Giselle'
+      const driver = status.pickupDriverName || fallbackDriver
+      const dMember = familyMembers.find((m) => m.name.toLowerCase() === driver.toLowerCase())
+      const dColor = getDisplayMemberColor(dMember?.color_hex)
+
+      const dismissalTimeStr = status.endsAtFormatted
+      const match = dismissalTimeStr.match(/(\d+):(\d+)\s*(AM|PM)/i)
+      if (match) {
+        let hours = parseInt(match[1], 10)
+        const mins = parseInt(match[2], 10)
+        const period = match[3].toUpperCase()
+        if (period === 'PM' && hours !== 12) hours += 12
+        if (period === 'AM' && hours === 12) hours = 0
+        const dismissalMinutesFromMidnight = hours * 60 + mins
+        const nowMinutesFromMidnight = now.getHours() * 60 + now.getMinutes()
+        const diffMins = dismissalMinutesFromMidnight - nowMinutesFromMidnight
+
+        if (diffMins > 0 && diffMins <= 210) {
+          items.push({
+            id: `dismissal-${status.venueName}`,
+            title: status.venueName,
+            subtitle: `${status.childName} · School Dismissal`,
+            timeFormatted: status.endsAtFormatted,
+            driverName: `${driver} drives`,
+            driverColor: dColor,
+            leaveByText: isBak ? 'Leave by 3:08 PM' : 'Leave by 1:42 PM',
+            minutesFromNow: diffMins,
+          })
+        }
+      }
+    }
+
+    const seen = new Set<string>()
+    const deduped: typeof items = []
+    for (const it of items) {
+      const key = `${it.title}-${it.timeFormatted}`
+      if (!seen.has(key)) {
+        seen.add(key)
+        deduped.push(it)
+      }
+    }
+    return deduped.sort((a, b) => a.minutesFromNow - b.minutesFromNow).slice(0, 2)
+  }, [nextEvent, upcomingAppointments, routineIntel.ambientStatuses, familyMembers, now])
 
   return (
     <div className="w-full h-full flex flex-col justify-start p-4 sm:p-6 lg:p-8 xl:p-10 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-8 overflow-y-auto scrollbar-hide">
@@ -357,7 +462,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
             />
           ) : showMorningLaunchpad ? (
             <MorningLaunchpadWidget now={now} />
-          ) : routineIntel.isDaytime && (!nextEvent || (minutesUntilNext !== null && minutesUntilNext > 60) || nextEvent.all_day) ? (
+          ) : routineIntel.isDaytime && (!nextEvent || (minutesUntilNext !== null && minutesUntilNext > 30) || nextEvent.all_day) ? (
             <MiddayLogisticsWidget
               now={now}
               todayEvents={upcomingAppointments}
@@ -720,6 +825,76 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                         </div>
                       )
                     })}
+                  </div>
+                </div>
+              )}
+
+              {/* ── Concept A: Flight Deck Radar (Up Next on Deck Horizon) ── */}
+              {concurrentEvents.length === 0 && upcomingOnDeck.length > 0 && (
+                <div className="mt-5 pt-4 border-t border-white/10 space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Clock size={13} className="text-casa-gold" />
+                      <span className="text-caption font-bold uppercase tracking-widest text-casa-gold">
+                        Up Next on Deck ({upcomingOnDeck.length})
+                      </span>
+                    </div>
+                    <span className="text-3xs text-white/40 uppercase tracking-wider font-medium">
+                      Today's Follow-up Sequence
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {upcomingOnDeck.map((item) => (
+                      <div
+                        key={item.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (item.event) onOpenEvent(item.event)
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            if (item.event) onOpenEvent(item.event)
+                          }
+                        }}
+                        className="p-3 rounded-2xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 transition-all flex flex-col justify-between space-y-1.5 cursor-pointer shadow-2xs group/deck min-h-[44px]"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-caption font-mono font-bold text-white bg-white/10 px-2 py-0.5 rounded-md border border-white/10">
+                            {item.timeFormatted}
+                          </span>
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-caption font-bold bg-white/10 border border-white/15 text-white shadow-2xs">
+                            <span
+                              className="w-2 h-2 rounded-full shrink-0"
+                              style={{ backgroundColor: item.driverColor }}
+                            />
+                            <span>{item.driverName}</span>
+                          </span>
+                        </div>
+
+                        <div>
+                          <div className="text-body-sm font-bold text-white group-hover/deck:text-casa-gold transition-colors truncate">
+                            {item.title}
+                          </div>
+                          {item.subtitle && (
+                            <div className="text-caption text-white/60 truncate">
+                              {item.subtitle}
+                            </div>
+                          )}
+                        </div>
+
+                        {item.leaveByText && (
+                          <div className="text-caption text-casa-gold font-medium flex items-center gap-1.5 pt-1 border-t border-white/10">
+                            <Car size={12} className="text-casa-gold shrink-0" />
+                            <span>{item.leaveByText}</span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
