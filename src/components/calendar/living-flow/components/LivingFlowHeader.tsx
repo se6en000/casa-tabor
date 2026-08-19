@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { Link2, X, ChevronDown, Users, Star, Check, Plus, Rotate3d, Repeat } from 'lucide-react'
 import type { FamilyMember } from '../../../../types'
 import type { RecurrenceScope } from '../types'
-import { getDisplayMemberColor } from '../../../../design-system/memberColors'
+import { getDisplayMemberColor, getMemberRoleLabel } from '../../../../design-system/memberColors'
 import { Button, IconButton, Chip } from '../../../ui'
 
 interface LivingFlowHeaderProps {
@@ -151,9 +151,7 @@ export default function LivingFlowHeader({
               const isSelected = selectedMemberIds.includes(member.id)
               const isPrimary = member.id === primaryMemberId
               const initial = member.name.charAt(0).toUpperCase()
-              const roleLabel = member.role === 'parent' 
-                ? (member.can_drive ? 'Parent · Driver' : 'Parent')
-                : 'Child'
+              const roleLabel = getMemberRoleLabel(member)
 
               return (
                 <div

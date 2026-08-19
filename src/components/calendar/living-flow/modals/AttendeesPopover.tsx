@@ -1,7 +1,7 @@
 import { Users, X, Star, Check, Plus } from 'lucide-react'
 import type { FamilyMember } from '../../../../types'
 import type { RecurrenceScope } from '../types'
-import { getDisplayMemberColor } from '../../../../design-system/memberColors'
+import { getDisplayMemberColor, getMemberRoleLabel } from '../../../../design-system/memberColors'
 
 interface AttendeesPopoverProps {
   familyMembers: FamilyMember[]
@@ -52,9 +52,8 @@ export default function AttendeesPopover({
           const isSelected = selectedMemberIds.includes(member.id)
           const isPrimary = member.id === primaryMemberId
           const initial = member.name.charAt(0).toUpperCase()
-          const roleLabel = member.role === 'parent' 
-            ? (member.can_drive ? 'Parent · Driver' : 'Parent')
-            : 'Child'
+          const roleLabel = getMemberRoleLabel(member)
+
 
           return (
             <div

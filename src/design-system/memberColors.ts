@@ -27,3 +27,18 @@ export const getDisplayMemberColor = (hex?: string | null) =>
 
 export const getMemberColorName = (hex: string) =>
   MEMBER_COLOR_NAME_BY_HEX.get(hex) ?? hex
+
+export function getMemberRoleLabel(member: { role?: string | null; can_drive?: boolean | null }): string {
+  const role = member.role?.toLowerCase()
+  if (role === 'parent') {
+    return member.can_drive ? 'Parent · Driver' : 'Parent'
+  }
+  if (role === 'caregiver' || role === 'care_giver') {
+    return member.can_drive ? 'Caregiver · Driver' : 'Caregiver'
+  }
+  if (role === 'child') {
+    return member.can_drive ? 'Child · Driver' : 'Child'
+  }
+  const base = member.role ? member.role.charAt(0).toUpperCase() + member.role.slice(1) : 'Member'
+  return member.can_drive ? `${base} · Driver` : base
+}
