@@ -508,6 +508,9 @@ export function useAIAssistant(ctx: AssistantContext) {
           : prev
         const updated = [...revised, assistantMsg]
         if (activeSession) persistSessionMessages(activeSession.id, updated)
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('casa-event-mutated'))
+        }
         return updated
       })
     }
@@ -609,6 +612,9 @@ export function useAIAssistant(ctx: AssistantContext) {
                 ? revised.map(m => m.id === streamMsgId ? { ...finalMsg, streaming: false } : m)
                 : [...revised, { ...finalMsg, streaming: false }]
               if (activeSession) persistSessionMessages(activeSession.id, updated)
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('casa-event-mutated'))
+              }
               return updated
             })
           }

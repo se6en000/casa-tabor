@@ -23,8 +23,31 @@ Deno.serve(async (req) => {
     })
   }
 
-  const { query, city } = await req.json() as { query: string; city?: string }
+  const { query, city, lat, lng, radius } = await req.json() as {
+    query: string
+    city?: string
+    lat?: number
+    lng?: number
+    radius?: number
+  }
   const textQuery = city ? `${query} in ${city}` : query
+
+  const searchPayload: Record<string, unknown> = {
+    textQuery,
+    maxResultCount: 5,
+  }
+
+  if (typeof lat === 'number' && typeof lng === 'number' && Number.isFinite(lat) && Number.isFinite(lng)) {
+    searchPayload.locationBias = {
+      circle: {
+        center: {
+          latitude: lat,
+          longitude: lng,
+        },
+        radius: typeof radius === 'number' && Number.isFinite(radius) ? radius : 35000.0,
+      },
+    }
+  }
 
   const res = await mapsFetch('https://places.googleapis.com/v1/places:searchText', {
     method: 'POST',
@@ -33,7 +56,7 @@ Deno.serve(async (req) => {
       'X-Goog-Api-Key': apiKey,
       'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.addressComponents,places.location,places.id,places.nationalPhoneNumber,places.primaryType',
     },
-    body: JSON.stringify({ textQuery, maxResultCount: 5 }),
+    body: JSON.stringify(searchPayload),
   })
 
   const data = await res.json()

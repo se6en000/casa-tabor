@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { BadgeCheck, Loader2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { DEFAULT_HOUSEHOLD_COORDINATES } from '../../utils/geoDistance'
 import { Button, Input } from '../ui'
 
 interface GooglePlaceResult {
@@ -69,7 +70,13 @@ export default function GoogleAddressSearchInput({
     const requestId = ++requestIdRef.current
     const timer = window.setTimeout(async () => {
       setLoading(true)
-      const { data, error } = await supabase.functions.invoke('place-search', { body: { query: normalized } })
+      const { data, error } = await supabase.functions.invoke('place-search', {
+        body: {
+          query: normalized,
+          lat: DEFAULT_HOUSEHOLD_COORDINATES.lat,
+          lng: DEFAULT_HOUSEHOLD_COORDINATES.lng,
+        },
+      })
       if (requestId !== requestIdRef.current) return
       setLoading(false)
       if (error) { setSuggestions([]); setQueriedFor(normalized); return }
