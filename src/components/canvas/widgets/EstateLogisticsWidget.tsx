@@ -107,10 +107,21 @@ export default function EstateLogisticsWidget({
           const isGenericPaymentSummary = (summary?: string | null) =>
             !summary || /final charge|temporary hold|charge for your|receipt for/i.test(summary)
 
-          const mergedSummary = !isGenericPaymentSummary(transit.itemSummary)
-            ? transit.itemSummary
-            : existing.itemSummary
-          const mergedEta = transit.etaDisplay || existing.etaDisplay || null
+          const incomingLen = transit.itemSummary?.length ?? 0
+          const existingLen = existing.itemSummary?.length ?? 0
+          const mergedSummary = !isGenericPaymentSummary(transit.itemSummary) && (incomingLen >= existingLen || isGenericPaymentSummary(existing.itemSummary))
+            ? (transit.itemSummary ?? existing.itemSummary)
+            : (!isGenericPaymentSummary(existing.itemSummary) ? existing.itemSummary : transit.itemSummary)
+
+          const isDetailedEta = (eta?: string | null) =>
+            Boolean(eta && /between|by\s+\d|today/i.test(eta))
+
+          const mergedEta = isDetailedEta(transit.etaDisplay)
+            ? transit.etaDisplay
+            : isDetailedEta(existing.etaDisplay)
+            ? existing.etaDisplay
+            : transit.etaDisplay || existing.etaDisplay || null
+
           const newerDate =
             new Date(transit.occurredAt).getTime() >= new Date(existing.occurredAt).getTime()
               ? transit.occurredAt

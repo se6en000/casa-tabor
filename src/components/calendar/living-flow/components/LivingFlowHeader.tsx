@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Link2, X, ChevronDown, Users, Star, Check, Plus, Rotate3d, Repeat } from 'lucide-react'
 import type { FamilyMember } from '../../../../types'
 import type { RecurrenceScope } from '../types'
@@ -29,8 +29,13 @@ export default function LivingFlowHeader({
   onSwitchToAi
 }: LivingFlowHeaderProps) {
   const [attendeesExpanded, setAttendeesExpanded] = useState(false)
+  const visibleMembers = useMemo(
+    () => familyMembers.filter((m) => (m.show_on_home_sidebar ?? true) || selectedMemberIds.includes(m.id)),
+    [familyMembers, selectedMemberIds]
+  )
   const activeMembers = familyMembers.filter(m => selectedMemberIds.includes(m.id))
   const attendeeNames = activeMembers.map(m => m.name).join(' + ') || 'No Attendees'
+
 
   return (
     <div className="flex flex-col border-b border-slate-200 bg-white shrink-0 relative z-20">
@@ -142,7 +147,7 @@ export default function LivingFlowHeader({
 
           {/* 2x2 Family Members Grid */}
           <div className="living-member-grid">
-            {familyMembers.map((member) => {
+            {visibleMembers.map((member: FamilyMember) => {
               const isSelected = selectedMemberIds.includes(member.id)
               const isPrimary = member.id === primaryMemberId
               const initial = member.name.charAt(0).toUpperCase()

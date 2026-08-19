@@ -30,7 +30,8 @@ function legacyVendor(item: PrepItem) {
 
 function orderId(item: PrepItem) {
   const text = `${item.event_title ?? ''} ${item.description}`
-  return text.match(/\border\s*(?:number|no\.?)?\s*#?\s*([a-z0-9][a-z0-9-]{5,})\b/i)?.[1] ?? null
+  const match = text.match(/\border\s*(?:number|no\.?|id)?\s*[:#]?\s*#?([a-z0-9-]*\d[a-z0-9-]{3,})\b/i)
+  return match ? match[1] : null
 }
 
 function transactionDescriptor(item: PrepItem) {
@@ -61,26 +62,59 @@ function isDeliveryTransitStage(stage: string): stage is DeliveryTransitStage {
   return ['confirmed', 'payment', 'shipped', 'out_for_delivery', 'delivered', 'problem'].includes(stage)
 }
 
+function isAddressLike(text?: string | null): boolean {
+  if (!text) return false
+  const trimmed = text.trim()
+  return (
+    /^\d+\s+[A-Za-z]/i.test(trimmed) ||
+    /\b(Rd|Road|St|Street|Ave|Avenue|Dr|Drive|Blvd|Boulevard|Ln|Lane|Way|Ct|Court|Pl|Place|FL|Florida|\d{5})\b/i.test(trimmed)
+  )
+}
+
+function resolveVendorName(item: PrepItem): string {
+  const legacy = legacyVendor(item)
+  if (legacy) return legacy
+  if (item.attention_vendor && !isAddressLike(item.attention_vendor)) {
+    return item.attention_vendor.trim()
+  }
+  return 'Parcel'
+}
+
+function deliveryDateKey(item: PrepItem): string {
+  if (item.due_by) {
+    return item.due_by.slice(0, 10)
+  }
+  if (item.event_date) {
+    return item.event_date.slice(0, 10)
+  }
+  if (item.created_at) {
+    return item.created_at.slice(0, 10)
+  }
+  return new Date().toISOString().slice(0, 10)
+}
+
 export function vendorTransactionIdentity(item: PrepItem): VendorTransactionIdentity | null {
   if (item.source_type !== 'gmail') return null
 
-  const vendor = item.attention_vendor?.trim() || legacyVendor(item)
-  if (!vendor) return null
+  const vendor = resolveVendorName(item)
+  if (vendor === 'Parcel') return null
 
+  const vendorKey = normalizeKeyPart(vendor)
   const explicitKey = item.attention_thread_key?.trim()
-  const explicitMessageFallback = explicitKey?.includes(':message:') ? explicitKey : null
+  const explicitMessageFallback = explicitKey?.includes(':message:') || explicitKey?.includes('suggestion:') ? explicitKey : null
   const extractedOrderId = orderId(item)
   const descriptor = transactionDescriptor(item)
-  const key = (explicitKey && !explicitMessageFallback ? explicitKey : null)
-    || (extractedOrderId
-      ? `transaction:${normalizeKeyPart(vendor)}:${normalizeKeyPart(extractedOrderId)}`
-      : descriptor
-        ? `transaction:${normalizeKeyPart(vendor)}:items:${descriptor}`
-        : explicitMessageFallback || item.source_ref
-          ? explicitMessageFallback ?? `transaction:${normalizeKeyPart(vendor)}:message:${item.source_ref}`
-          : null)
+  const dateKey = deliveryDateKey(item)
 
-  return key ? { key, vendor, stage: transactionStage(item) } : null
+  const key =
+    (explicitKey && !explicitMessageFallback ? explicitKey : null)
+    || (extractedOrderId
+      ? `transaction:${vendorKey}:${normalizeKeyPart(extractedOrderId)}`
+      : descriptor
+        ? `transaction:${vendorKey}:items:${descriptor}`
+        : `delivery:${vendorKey}:${dateKey}`)
+
+  return { key, vendor, stage: transactionStage(item) }
 }
 
 export function isNewerTransactionUpdate(
@@ -112,9 +146,9 @@ export function isDeliveryTransitItem(item: PrepItem): boolean {
   if (/\b(inhome delivery|delivery window|grocery delivery|package delivery|courier delivery|out for delivery|shipped|en route)\b/.test(text)) {
     return true
   }
-  const vendor = item.attention_vendor || legacyVendor(item)
+  const vendor = resolveVendorName(item)
   // Vendor payment/pricing/charge notifications (e.g. "final charge for your Walmart order", "temporary hold is $138.65")
-  if (vendor && (
+  if (vendor !== 'Parcel' && (
     item.type === 'payment' ||
     /\b(charge|hold|total|receipt|order amount|temporary hold|final charge|order total|charged)\b/i.test(text)
   )) {
@@ -122,7 +156,7 @@ export function isDeliveryTransitItem(item: PrepItem): boolean {
   }
   const stage = transactionStage(item)
   if (stage === 'shipped' || stage === 'out_for_delivery' || stage === 'delivered') return true
-  if (vendor && (item.type === 'delivery' || item.attention_stage === 'confirmed' || item.attention_stage === 'shipped')) return true
+  if (vendor !== 'Parcel' && (item.type === 'delivery' || item.attention_stage === 'confirmed' || item.attention_stage === 'shipped')) return true
   return false
 }
 
@@ -160,25 +194,29 @@ export function stageStepIndex(stage: DeliveryTransitStage | null): number {
 
 export function buildDeliveryTransitItem(item: PrepItem): DeliveryTransitItem {
   const transaction = vendorTransactionIdentity(item)
-  const vendor = transaction?.vendor || item.attention_vendor || legacyVendor(item) || 'Parcel'
+  const vendor = transaction?.vendor || resolveVendorName(item)
   const stage = transaction?.stage || transactionStage(item) || 'shipped'
   const isPerish = isPerishableDelivery(item)
 
   // Extract clean summary
   const desc = item.description || ''
-  const itemMatch = desc.match(/(\d+\s+items?|[A-Za-z0-9\s™+'-]{3,40}(?:Book|Tools|Kit|Packs?|Order|Box))/i)
-  const itemSummary = itemMatch ? itemMatch[0].trim() : (isPerish ? 'Grocery Delivery' : 'Package')
+  const itemMatch = desc.match(/(?:delivered:\s*|delivery of\s+)([A-Za-z0-9\s™+'-]{2,60}?\+\s*\d+\s*items?)/i)
+    || desc.match(/(\d+\s+items?\s+including\s+[A-Za-z0-9\s™+'-]{3,40})/i)
+    || desc.match(/(Delivery of InHome order)/i)
+    || desc.match(/(\d+\s+items?|[A-Za-z0-9\s™+'-]{3,40}(?:Book|Tools|Kit|Packs?|Order|Box))/i)
+
+  const itemSummary = itemMatch ? itemMatch[1] || itemMatch[0].trim() : (isPerish ? 'Grocery Delivery' : 'Package')
 
   // Extract cost / amount
   const cost = extractAmount(desc) || (item.event_title ? extractAmount(item.event_title) : null)
 
   // Extract ETA or time window
-  const etaMatch = desc.match(/(?:between\s+[\d:apm\s-]+|today\s+by\s+[\d:apm]+|today\s+between\s+[\d:apm\s-]+|expected\s+today)/i)
-  const etaDisplay = etaMatch ? etaMatch[0] : (item.due_by ? new Date(item.due_by).toLocaleDateString() : null)
+  const etaMatch = desc.match(/(?:(?:delivery\s+)?window\s+(?:is\s+)?[\d:apm\s–-]+|between\s+[\d:apm\s–-]+|today\s+by\s+[\d:apm]+|today\s+between\s+[\d:apm\s–-]+|expected\s+today)/i)
+  const etaDisplay = etaMatch ? etaMatch[0].trim() : (item.due_by ? new Date(item.due_by).toLocaleDateString() : null)
 
   return {
     id: item.id,
-    threadKey: transaction?.key || item.id,
+    threadKey: transaction?.key || `delivery:${normalizeKeyPart(vendor)}:${deliveryDateKey(item)}`,
     vendor,
     title: item.event_title || `${vendor} Delivery`,
     itemSummary,

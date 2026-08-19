@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { CalendarDays, Plus, Camera, Sparkles } from 'lucide-react'
 import { addHours } from 'date-fns'
 import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
+import type { FamilyMember } from '../../types'
 import { useSavedPlaces, savedPlaceAddress } from '../../hooks/useSavedPlaces'
 import { resolveDirectoryPlaceSave, type DirectoryPlaceSelection } from '../../utils/directorySuggestions'
 import { normalizeAllDayEventRange } from '../../utils/allDayEventRange'
@@ -57,6 +58,11 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
   const [allDay, setAllDay] = useState(false)
   const [eventType, setEventType] = useState<'event' | 'reminder'>('event')
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([])
+  const visibleFamilyMembers = useMemo(
+    () => familyMembers.filter((m) => (m.show_on_home_sidebar ?? true) || selectedMemberIds.includes(m.id)),
+    [familyMembers, selectedMemberIds]
+  )
+
   const [placeSelection, setPlaceSelection] = useState<DirectoryPlaceSelection>(null)
   const [placeFieldKey, setPlaceFieldKey] = useState(0)
   const { data: savedPlaces = [] } = useSavedPlaces()
@@ -390,7 +396,7 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
 
         <Field label="People" hint="The first person selected is the primary attendee.">
           <div className="flex flex-wrap gap-2">
-            {familyMembers.map((member) => {
+            {visibleFamilyMembers.map((member: FamilyMember) => {
               const selected = selectedMemberIds.includes(member.id)
               return (
                 <Chip

@@ -82,7 +82,7 @@ Deno.serve(async (req) => {
       .eq('id', event_id)
       .single(),
     sb.from('settings').select('value').eq('key', 'llm_config').single(),
-    sb.from('family_members').select('id, name, full_name, role, phone, email, is_admin').order('sort_order'),
+    sb.from('family_members').select('id, name, full_name, role, phone, email, is_admin, show_on_home_sidebar').order('sort_order'),
     sb.from('settings').select('value').eq('key', 'home_config').single(),
     sb.from('saved_places').select('id, name, aliases, address, city, state, zip, category, notes').order('name'),
   ])
@@ -97,7 +97,9 @@ Deno.serve(async (req) => {
   }
   if (!llmConfig?.api_key) return new Response(JSON.stringify({ error: 'No LLM API key configured' }), { status: 422, headers: { ...CORS, 'content-type': 'application/json' } })
 
-  const familyMembers = (familyRes.data ?? []) as { id: string; name: string; full_name: string | null; role: string; phone: string | null; email: string | null; is_admin: boolean }[]
+  const rawFamilyMembers = (familyRes.data ?? []) as { id: string; name: string; full_name: string | null; role: string; phone: string | null; email: string | null; is_admin: boolean; show_on_home_sidebar?: boolean | null }[]
+  const familyMembers = rawFamilyMembers.filter((m) => (m.show_on_home_sidebar ?? true) && m.name.toLowerCase() !== 'tabor family')
+
   const homeConfig = homeRes.data?.value as { address?: string; city?: string; state?: string; zip?: string } | null
   const savedPlaces = (placesRes.data ?? []) as { id: string; name: string; aliases: string[]; address: string | null; city: string | null; state: string | null; zip: string | null; category: string; notes: string | null }[]
   let resolvedDestination: ResolvedDestination | null = null
@@ -286,7 +288,7 @@ Deno.serve(async (req) => {
 
   const nameToId = Object.fromEntries(familyMembers.map(m => [m.name.toLowerCase(), m.id]))
 
-  // Legacy prefix detection remains read-only during migration; assignments are stored separately.
+  // Name and prefix detection for primary attendee
   const titleStr = (event.title as string) ?? ''
   const titleSegments = titleStr.split('|').map((s: string) => s.trim())
   let serverDetectedPrimary: string | null = null
@@ -297,11 +299,33 @@ Deno.serve(async (req) => {
       m.full_name?.toLowerCase() === seg.toLowerCase()
     )
     if (matched && !serverDetectedPrimary) {
-      serverDetectedPrimary = matched.name  // first exact name match is primary
+      serverDetectedPrimary = matched.name  // first exact segment match is primary
     } else {
       descriptionSegments.push(seg)
     }
   }
+
+  // If no prefix match, scan the title (and description) using word boundaries
+  if (!serverDetectedPrimary) {
+    const combinedSearchText = `${titleStr} ${(event.description as string) ?? ''}`
+    for (const m of familyMembers) {
+      const escaped = m.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const wordRegex = new RegExp(`\\b${escaped}\\b`, 'i')
+      if (wordRegex.test(combinedSearchText)) {
+        serverDetectedPrimary = m.name
+        break
+      }
+      if (m.full_name) {
+        const escapedFull = m.full_name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        const fullRegex = new RegExp(`\\b${escapedFull}\\b`, 'i')
+        if (fullRegex.test(combinedSearchText)) {
+          serverDetectedPrimary = m.name
+          break
+        }
+      }
+    }
+  }
+
   const rawDescription = descriptionSegments.join(' | ').trim() || titleStr
   // Clean up the raw description: remove trailing digits/junk, fix title case
   const cleanTitleDescription = rawDescription
@@ -314,6 +338,7 @@ Deno.serve(async (req) => {
   // ── Guaranteed owner: server title detection → AI result → default owner ──
   const resolvedPrimary = serverDetectedPrimary
     ?? (aiPrimaryRaw && nameToId[aiPrimaryRaw.toLowerCase()] ? aiPrimaryRaw : defaultOwnerName)
+
 
   // Enrichment may infer structured assignments, but the user-authored event title remains authoritative.
   const finalTitle = normalizePossessiveSuffixCasing(
@@ -624,13 +649,25 @@ async function enrichEvent(
       }).join('\n  ')
     : 'family'
 
-  const titleAndDesc = `${event.title} ${event.description ?? ''}`.toLowerCase()
-  const mentionedMembers = familyMembers
-    .filter(m => titleAndDesc.includes(m.name.toLowerCase()) || (m.full_name && titleAndDesc.includes(m.full_name.toLowerCase())))
-    .map(m => m.name)
+  const titleAndDesc = `${event.title} ${event.description ?? ''}`
+  const mentionedMembers: string[] = []
+  for (const m of familyMembers) {
+    const escaped = m.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const wordRegex = new RegExp(`\\b${escaped}\\b`, 'i')
+    if (wordRegex.test(titleAndDesc)) {
+      mentionedMembers.push(m.name)
+    } else if (m.full_name) {
+      const escapedFull = m.full_name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const fullRegex = new RegExp(`\\b${escapedFull}\\b`, 'i')
+      if (fullRegex.test(titleAndDesc)) {
+        mentionedMembers.push(m.name)
+      }
+    }
+  }
   const linkedMembers = (event.event_members as { family_members: { name: string } }[] | undefined)
     ?.map(m => m.family_members?.name).filter(Boolean) ?? []
-  const whoLine = [...new Set([...mentionedMembers, ...linkedMembers])].join(', ') || 'whole family'
+  const allIdentified = [...new Set([...mentionedMembers, ...linkedMembers])]
+  const whoLine = allIdentified.length > 0 ? allIdentified.join(', ') : `${defaultOwner} (only)`
 
   const extraContextLine = extraContext?.trim()
     ? `\nEXTRA CONTEXT (treat as ground truth):\n"${extraContext.trim()}"\n`
@@ -714,13 +751,13 @@ Evidence priority (must follow this order):
 
 STEP 2 — Fill ALL of these fields:
 • primary_attendee (REQUIRED): The ONE person this event is for.
-    Rules (in order): 1) Name before "|", ":", or "@" in title → use that name; 2) Home service/maintenance → "${defaultOwner}"; 3) Child's school/activity → the child; 4) Unknown → "${defaultOwner}"
+    Rules (in order): 1) Name mentioned in title or description → use that name; 2) Child's school/activity → the child; 3) Home service/maintenance/chore → "${defaultOwner}"; 4) Unknown → "${defaultOwner}"
     Choose ONLY from: [${familyNamesList}]
 • concise_description (REQUIRED): 3–6 words describing event. NO person names. E.g. "Soccer Practice", "Dentist Checkup", "AC Service Call"
-• attendees: string[] — supporting people (drivers, chaperones). [] if none obvious. From: [${familyNamesList}]
+• attendees: string[] — ONLY additional supporting people (drivers, chaperones, co-attendees) who are explicitly mentioned in the title/notes or configured by routine. NEVER default to the whole household or assign all family members for routine chores, reminders, or single-person events. Return [] if none are specifically mentioned. From: [${familyNamesList}]
 • location_name: venue/business name (search Google if needed)
 • address: real full street address (search Google, NOT home address)
-• confidence: "low" | "medium" | "high"
+• confidence: "low" | "medium" | "high"`
 
 Category-specific guidance (fill relevant values, leave unknowns null):
 ${allFieldDescriptions}

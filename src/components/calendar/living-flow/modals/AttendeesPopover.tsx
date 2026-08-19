@@ -22,6 +22,10 @@ export default function AttendeesPopover({
   onSetRecurScope,
   onClose
 }: AttendeesPopoverProps) {
+  const visibleMembers = familyMembers.filter(
+    (member) => (member.show_on_home_sidebar ?? true) || selectedMemberIds.includes(member.id)
+  )
+
   return (
     <div 
       className="living-floating-card living-attendees-popover"
@@ -44,7 +48,7 @@ export default function AttendeesPopover({
 
       {/* 2x2 Family Members Grid */}
       <div className="living-member-grid">
-        {familyMembers.map((member) => {
+        {visibleMembers.map((member) => {
           const isSelected = selectedMemberIds.includes(member.id)
           const isPrimary = member.id === primaryMemberId
           const initial = member.name.charAt(0).toUpperCase()

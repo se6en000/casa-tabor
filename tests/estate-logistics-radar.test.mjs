@@ -167,3 +167,48 @@ test('Vendor order pricing/hold confirmation is routed to delivery transit items
   assert.equal(deliveryTransitItems.length, 1)
   assert.equal(deliveryTransitItems[0].cost, '$138.65')
 })
+
+test('Multiple delivery emails for the same vendor order (tracking notice + pricing hold) are combined into a single delivery card', () => {
+  const deliveryNoticeItem = {
+    id: 'prep-walmart-inhome-1',
+    type: 'appointment',
+    source_type: 'gmail',
+    source_pattern_key: 'event_suggestion',
+    description: 'Suggested Appointment: InHome delivery at 3209 Washington Rd West Palm Beach, FL 33405 — Delivery of InHome order including C2O Pure Coconut Water and 22 other items. Delivery window is 2pm – 6pm.',
+    event_title: 'Delivery of InHome order',
+    attention_vendor: '3209 Washington Rd West Palm Beach, FL 33405',
+    attention_stage: 'out_for_delivery',
+    event_date: '2026-08-19T19:00:00.000Z',
+    created_at: '2026-08-19T14:00:00Z',
+  }
+
+  const pricingHoldItem = {
+    id: 'prep-walmart-hold-1',
+    type: 'payment',
+    source_type: 'gmail',
+    description: 'The final charge for your Walmart order will be updated once finalized. The temporary hold is $138.65.',
+    event_title: 'The final charge for your Walmart order',
+    attention_vendor: 'Walmart',
+    created_at: '2026-08-19T14:30:00Z',
+  }
+
+  // Both items passed to splitActionableAndTransitItems
+  const { actionableItems, deliveryTransitItems } = splitActionableAndTransitItems([
+    deliveryNoticeItem,
+    pricingHoldItem,
+  ])
+
+  // 1. Both routed away from Action Queue
+  assert.equal(actionableItems.length, 0)
+
+  // 2. Must be combined into exactly ONE unified Delivery card
+  assert.equal(deliveryTransitItems.length, 1)
+
+  const combined = deliveryTransitItems[0]
+  assert.equal(combined.vendor, 'Walmart')
+  assert.equal(combined.stage, 'out_for_delivery')
+  assert.equal(combined.cost, '$138.65')
+  assert.equal(combined.isPerishable, true)
+  assert.match(combined.etaDisplay || '', /2pm [–-] 6pm/)
+})
+

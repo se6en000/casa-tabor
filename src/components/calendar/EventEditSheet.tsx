@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   X, Save, Sparkles, Trash2, Loader2,
@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { useEventDetails, type EventWithDetails } from '../../hooks/useCalendarEvents'
+import type { FamilyMember } from '../../types'
 import {
   getFieldsForCategory, FIELD_CONFIG, CATEGORY_LABEL,
   type EnrichmentFieldKey,
@@ -476,6 +477,11 @@ function EventEditSheetContent({
 
   // Selected members are attendees; transportation ownership is managed in The Plan.
   const [memberRoles, setMemberRoles] = useState<Record<string, 'attendee'>>({})
+  const visibleAttendingMembers = useMemo(
+    () => allMembers.filter((m) => (m.show_on_home_sidebar ?? true) || Boolean(memberRoles[m.id])),
+    [allMembers, memberRoles]
+  )
+
 
   // Date/time state uses local datetime strings shared by the touch dial.
   const toLocalDT = (iso: string, allDay = false) => {
@@ -1629,7 +1635,7 @@ function EventEditSheetContent({
                     Select everyone attending.
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    {allMembers.map(member => {
+                    {visibleAttendingMembers.map((member: FamilyMember) => {
                       const isAttending = memberRoles[member.id] === 'attendee'
 
                       return (

@@ -91,10 +91,21 @@ export function splitActionableAndTransitItems(items: PrepItem[]): {
         const isGenericPaymentSummary = (summary?: string | null) =>
           !summary || /final charge|temporary hold|charge for your|receipt for/i.test(summary)
 
-        const mergedSummary = !isGenericPaymentSummary(transitItem.itemSummary)
-          ? transitItem.itemSummary
-          : existing.itemSummary
-        const mergedEta = transitItem.etaDisplay || existing.etaDisplay || null
+        const incomingLen = transitItem.itemSummary?.length ?? 0
+        const existingLen = existing.itemSummary?.length ?? 0
+        const mergedSummary = !isGenericPaymentSummary(transitItem.itemSummary) && (incomingLen >= existingLen || isGenericPaymentSummary(existing.itemSummary))
+          ? (transitItem.itemSummary ?? existing.itemSummary)
+          : (!isGenericPaymentSummary(existing.itemSummary) ? existing.itemSummary : transitItem.itemSummary)
+
+        const isDetailedEta = (eta?: string | null) =>
+          Boolean(eta && /between|by\s+\d|today/i.test(eta))
+
+        const mergedEta = isDetailedEta(transitItem.etaDisplay)
+          ? transitItem.etaDisplay
+          : isDetailedEta(existing.etaDisplay)
+          ? existing.etaDisplay
+          : transitItem.etaDisplay || existing.etaDisplay || null
+
         const newerDate =
           new Date(transitItem.occurredAt).getTime() >= new Date(existing.occurredAt).getTime()
             ? transitItem.occurredAt
