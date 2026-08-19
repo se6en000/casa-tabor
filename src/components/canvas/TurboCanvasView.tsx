@@ -1,10 +1,11 @@
-import { useState } from 'react'
-import { Zap, Calendar } from 'lucide-react'
+import { useState, useMemo } from 'react'
+import { Zap, Truck } from 'lucide-react'
 import { useTurboCanvasPresenter } from '../../hooks/useTurboCanvasPresenter'
 import { clusterPrepItems } from '../../utils/prepItemClusters'
+import { splitActionableAndTransitItems } from '../../utils/needsYouFeed.ts'
 import { Button } from '../ui'
 import ActionQueueWidget from './widgets/ActionQueueWidget'
-import NowAndNextWidget from './widgets/NowAndNextWidget'
+import EstateLogisticsWidget from './widgets/EstateLogisticsWidget'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { cn } from '../../utils/cn'
 import GmailSyncStatusIndicator from '../shared/GmailSyncStatusIndicator'
@@ -14,17 +15,12 @@ interface TurboCanvasViewProps {
   onQuickCreate: () => void
 }
 
-export default function TurboCanvasView({ onOpenEvent, onQuickCreate }: TurboCanvasViewProps) {
+export default function TurboCanvasView({ onOpenEvent: _onOpenEvent, onQuickCreate: _onQuickCreate }: TurboCanvasViewProps) {
   const {
-    now,
-    todayEvents,
-    tomorrowEvents,
     activeConflicts,
     activePrep,
     pushedPrep,
     familyMembers,
-    highlightedEventId,
-    setHighlightedEventId,
     handleResolveConflict,
     handleCompletePrep,
     handleDownvotePrep,
@@ -36,10 +32,17 @@ export default function TurboCanvasView({ onOpenEvent, onQuickCreate }: TurboCan
     getDriverAvailabilities,
   } = useTurboCanvasPresenter()
 
-  // Mobile segmented tab switcher ('schedule' vs 'queue')
-  const [mobileTab, setMobileTab] = useState<'schedule' | 'queue'>('schedule')
-  const clusteredPrep = clusterPrepItems(activePrep)
+  // Mobile segmented tab switcher ('logistics' vs 'queue')
+  const [mobileTab, setMobileTab] = useState<'logistics' | 'queue'>('logistics')
+
+  const { actionableItems, deliveryTransitItems } = useMemo(
+    () => splitActionableAndTransitItems(activePrep),
+    [activePrep]
+  )
+
+  const clusteredPrep = useMemo(() => clusterPrepItems(actionableItems), [actionableItems])
   const totalActionable = activeConflicts.length + clusteredPrep.length
+  const totalDeliveries = deliveryTransitItems.length
 
   return (
     <div className="w-full h-full flex flex-col px-3 sm:px-4 md:px-5 pt-2 sm:pt-3 pb-3 overflow-hidden">
@@ -48,17 +51,17 @@ export default function TurboCanvasView({ onOpenEvent, onQuickCreate }: TurboCan
         <div className="inline-flex p-0.5 rounded-xl bg-casa-surface border border-casa-border/60 w-full sm:w-auto justify-center">
           <Button
             size="sm"
-            variant={mobileTab === 'schedule' ? 'primary' : 'ghost'}
-            onClick={() => setMobileTab('schedule')}
+            variant={mobileTab === 'logistics' ? 'primary' : 'ghost'}
+            onClick={() => setMobileTab('logistics')}
             className={cn(
               'flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1 rounded-lg text-caption font-bold transition-all min-h-[40px]',
-              mobileTab === 'schedule'
+              mobileTab === 'logistics'
                 ? 'bg-casa-gold/20 text-casa-navy border border-casa-gold/40 shadow-2xs'
                 : 'text-casa-muted'
             )}
           >
-            <Calendar size={13} className="text-casa-navy" />
-            <span>Schedule ({todayEvents.length})</span>
+            <Truck size={13} className="text-casa-navy" />
+            <span>Deliveries ({totalDeliveries})</span>
           </Button>
 
           <Button
@@ -83,17 +86,12 @@ export default function TurboCanvasView({ onOpenEvent, onQuickCreate }: TurboCan
 
       {/* ── 2-Pane Living Canvas Action Center Grid ── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 sm:gap-4 flex-1 min-h-0 items-stretch overflow-hidden">
-        {/* ── PANE 1 (Left 50%): Time-Anchored Now & Next Stream ── */}
-        <div className={cn('h-full min-h-0 lg:col-span-6 xl:col-span-6 flex flex-col overflow-hidden', mobileTab === 'schedule' ? 'flex' : 'hidden lg:flex')}>
-          <NowAndNextWidget
-            now={now}
-            todayEvents={todayEvents}
-            tomorrowEvents={tomorrowEvents}
+        {/* ── PANE 1 (Left 50%): Estate Logistics & Inbound Delivery Radar ── */}
+        <div className={cn('h-full min-h-0 lg:col-span-6 xl:col-span-6 flex flex-col overflow-hidden', mobileTab === 'logistics' ? 'flex' : 'hidden lg:flex')}>
+          <EstateLogisticsWidget
+            activePrep={activePrep}
             familyMembers={familyMembers}
-            highlightedEventId={highlightedEventId}
-            setHighlightedEventId={setHighlightedEventId}
-            onOpenEvent={onOpenEvent}
-            onQuickCreate={onQuickCreate}
+            onDismissDelivery={handleCompletePrep}
           />
         </div>
 
@@ -103,6 +101,7 @@ export default function TurboCanvasView({ onOpenEvent, onQuickCreate }: TurboCan
             activeConflicts={activeConflicts}
             activePrep={activePrep}
             pushedPrep={pushedPrep}
+            familyMembers={familyMembers}
             getDriverAvailabilities={getDriverAvailabilities}
             handleResolveConflict={handleResolveConflict}
             handleCompletePrep={handleCompletePrep}

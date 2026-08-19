@@ -104,7 +104,7 @@ export function isDeliveryTransitItem(item: PrepItem): boolean {
   const stage = transactionStage(item)
   if (stage === 'shipped' || stage === 'out_for_delivery' || stage === 'delivered') return true
   const vendor = item.attention_vendor || legacyVendor(item)
-  if (vendor && (item.type === 'payment' || item.type === 'delivery')) return true
+  if (vendor && (item.type === 'delivery' || item.attention_stage === 'confirmed' || item.attention_stage === 'shipped')) return true
   return false
 }
 
