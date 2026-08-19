@@ -145,15 +145,17 @@ export async function loadWritableGoogleConnection(
     .eq('is_enabled', true)
     .eq('access_mode', 'writable')
     .eq('adoption_policy', 'automatic')
-    .maybeSingle()
+    .order('updated_at', { ascending: false })
+    .limit(1)
   if (error) throw connectionError('GOOGLE_WRITABLE_CONNECTION_LOOKUP_FAILED', error.message)
-  if (!data) {
+  const connectionRecord = Array.isArray(data) ? data[0] : data
+  if (!connectionRecord) {
     throw connectionError(
       'GOOGLE_WRITABLE_CONNECTION_MISSING',
       'No writable Google Calendar connection is configured.',
     )
   }
-  return resolveGoogleConnection(sb, data as CalendarConnection)
+  return resolveGoogleConnection(sb, connectionRecord as CalendarConnection)
 }
 
 export async function loadMemberGoogleConnection(
