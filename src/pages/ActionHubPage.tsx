@@ -21,6 +21,7 @@ import { Button, SegmentedControl } from '../components/ui'
 import { PageShell } from '../components/ui/PageShell'
 import PrepItemAssigneeChip from '../components/shared/PrepItemAssigneeChip'
 import { isReadOnlyNeedsYouItem } from '../utils/needsYouFeed'
+import { isDeliveryTransitItem } from '../utils/vendorTransactions'
 import AttentionTopicEvidence from '../components/shared/AttentionTopicEvidence'
 import { detectSuggestedEvent } from '../utils/actionInspectionSynthesis'
 import type { PrepItem } from '../types'
@@ -75,10 +76,12 @@ export default function ActionHubPage() {
       const diff = +new Date(item.due_by) - nowTs
       return diff >= 0 && diff < 48 * 60 * 60 * 1000
     }).length
+    const deliveries = prepItems.filter(item => isDeliveryTransitItem(item)).length
     const billingQueue = prepItems.filter(item => getPrepCategoryConfig(item).key === 'bills_payments').length
     return [
       overdue > 0 ? `${overdue} overdue` : null,
       `${dueSoon} due soon`,
+      deliveries > 0 ? `${deliveries} in transit` : null,
       `${billingQueue} billing`,
       `${activeConflicts.length} conflicts`,
     ].filter((s): s is string => s !== null)

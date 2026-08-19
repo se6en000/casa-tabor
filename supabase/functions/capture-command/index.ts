@@ -369,8 +369,23 @@ Deno.serve(async (request) => {
         client_trace_source: 'capture-command',
       },
     })
-    if (error) throw new Error(error.message)
+    if (error) {
+      let detailedMessage = error.message
+      try {
+        const anyErr = error as unknown as { context?: { json?: () => Promise<{ error?: string }> } }
+        if (anyErr.context && typeof anyErr.context.json === 'function') {
+          const errBody = await anyErr.context.json()
+          if (errBody?.error) detailedMessage = errBody.error
+        }
+      } catch {
+        // use fallback message
+      }
+      throw new Error(detailedMessage)
+    }
     const payload = data && typeof data === 'object' ? data as Record<string, unknown> : {}
+    if (payload.success === false && typeof payload.error === 'string') {
+      throw new Error(payload.error)
+    }
     const responseText = buildExecutionResponse(route, payload)
     const spokenSummary = enforceSpokenBrevity(responseText)
     const createdEntities = route.tool === 'add_grocery_items'

@@ -95,6 +95,9 @@ test('common assistant domains select narrow profiles', () => {
   assert.equal(classifyAssistantIntent('What is on the grocery list?').profile, 'grocery')
   assert.equal(classifyAssistantIntent('Suggest a chicken dinner').profile, 'recipe')
   assert.equal(classifyAssistantIntent('What is the latest stock price?').profile, 'web')
+  assert.equal(classifyAssistantIntent('hey is there a ghost tour next to our hotel we can take?').profile, 'web')
+  assert.equal(classifyAssistantIntent('what are fun activities in South Beach?').profile, 'web')
+  assert.equal(classifyAssistantIntent('what are recent reviews for this place?').profile, 'web')
   assert.equal(classifyAssistantIntent('Explain photosynthesis').profile, 'general')
 })
 

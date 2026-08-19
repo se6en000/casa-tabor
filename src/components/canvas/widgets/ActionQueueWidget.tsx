@@ -25,6 +25,7 @@ import {
   RefreshCw,
   CloudOff,
   ShieldAlert,
+  Truck,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button, IconButton, StatusDot } from '../../ui'
@@ -40,6 +41,8 @@ import {
   type SuggestedActionBundle,
 } from '../../../utils/actionInspectionSynthesis'
 import { clusterPrepItems, buildGmailWebUrl, type PrepItemCluster } from '../../../utils/prepItemClusters'
+import { splitActionableAndTransitItems } from '../../../utils/needsYouFeed'
+import { stageStepIndex } from '../../../utils/vendorTransactions'
 import { useCreateSuggestedEvent } from '../../../hooks/useCreateSuggestedEvent'
 import { useAppStore } from '../../../stores/appStore'
 import { useGoogleSyncTriage } from '../../../hooks/useGoogleSyncTriage'
@@ -170,8 +173,14 @@ export default function ActionQueueWidget({
     [activePrep, optimisticDismissedIds]
   )
 
-  // Smart Thread-Clustered Prep Items
-  const clusteredPrep = useMemo(() => clusterPrepItems(visiblePrep), [visiblePrep])
+  // Separate pure Action Items from passive In-Transit Deliveries
+  const { actionableItems, deliveryTransitItems } = useMemo(
+    () => splitActionableAndTransitItems(visiblePrep),
+    [visiblePrep]
+  )
+
+  // Smart Thread-Clustered Prep Items (Pure Action Items only)
+  const clusteredPrep = useMemo(() => clusterPrepItems(actionableItems), [actionableItems])
 
   const { heroCluster, microClusters } = useMemo(() => {
     if (clusteredPrep.length === 0) {
@@ -197,6 +206,7 @@ export default function ActionQueueWidget({
   const totalUrgent = visibleConflicts.length + failedJobs.length
   const totalTasks = clusteredPrep.length
   const totalActionable = totalUrgent + totalTasks
+  const totalDeliveries = deliveryTransitItems.length
 
   const onInstantCompleteCluster = (cluster: PrepItemCluster) => {
     setOptimisticDismissedIds((prev) => {
@@ -301,6 +311,13 @@ export default function ActionQueueWidget({
               <Sparkles size={13} className="text-casa-gold" />
               <span>Auto-Triage</span>
             </Button>
+          )}
+
+          {totalDeliveries > 0 && (
+            <span className="hidden sm:inline-flex items-center gap-1 text-caption font-mono font-bold px-3 py-1.5 rounded-full bg-sky-50 text-sky-900 border border-sky-200 shadow-2xs">
+              <Truck size={12} className="text-sky-700" />
+              <span>{totalDeliveries} In Transit</span>
+            </span>
           )}
 
           <span
@@ -1239,6 +1256,167 @@ export default function ActionQueueWidget({
               <p className="text-caption text-emerald-700 mt-1 max-w-xs">
                 Zero pending conflicts or overdue preparation tasks.
               </p>
+            </div>
+          )}
+
+          {/* ── SECTION 3: PARCEL & LOGISTICS RADAR PLINTH ── */}
+          {deliveryTransitItems.length > 0 && (
+            <div className="p-4 sm:p-5 rounded-3xl bg-casa-surface border border-casa-border/80 shadow-sm space-y-3 mt-4">
+              <div className="flex items-center justify-between pb-2 border-b border-casa-border/50">
+                <div className="flex items-center gap-2">
+                  <Truck size={16} className="text-casa-gold" />
+                  <span className="text-caption font-bold uppercase tracking-wider text-casa-navy">
+                    Parcel &amp; Logistics Radar ({deliveryTransitItems.length})
+                  </span>
+                </div>
+                <span className="text-2xs font-mono font-medium text-casa-muted">
+                  Ambient Transit Tracker
+                </span>
+              </div>
+
+              <div className="space-y-3">
+                {deliveryTransitItems.map((item) => {
+                  const stepIdx = stageStepIndex(item.stage)
+                  const isDelivered = item.stage === 'delivered'
+                  const isOutForDelivery = item.stage === 'out_for_delivery'
+
+                  return (
+                    <div
+                      key={item.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => openActionInSidecar(item.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          openActionInSidecar(item.id)
+                        }
+                      }}
+                      className={cn(
+                        'p-4 rounded-2xl border transition-all cursor-pointer group shadow-2xs hover:shadow-card flex flex-col gap-3',
+                        isDelivered
+                          ? 'bg-emerald-50/30 border-emerald-200/80 hover:border-emerald-300'
+                          : isOutForDelivery
+                          ? 'bg-amber-50/25 border-amber-300/80 hover:border-amber-400'
+                          : 'bg-casa-surface border-casa-border/80 hover:border-casa-gold/60'
+                      )}
+                    >
+                      {/* Header row: Vendor, summary, tags, ETA */}
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div className="flex items-center gap-2 flex-wrap min-w-0">
+                          <span className="inline-flex items-center gap-1.5 text-body-sm font-bold text-casa-navy">
+                            <Package size={15} className="text-casa-gold shrink-0" />
+                            <span>{item.vendor}</span>
+                          </span>
+
+                          {item.itemSummary && (
+                            <>
+                              <span className="text-casa-muted/50">·</span>
+                              <span className="text-caption text-casa-muted font-medium truncate max-w-[220px]">
+                                {item.itemSummary}
+                              </span>
+                            </>
+                          )}
+
+                          {item.isPerishable && (
+                            <span className="inline-flex items-center gap-1 text-3xs font-bold text-emerald-800 bg-emerald-100/90 border border-emerald-200 px-2 py-0.5 rounded-full shadow-2xs">
+                              <Sparkles size={9} className="text-emerald-700" />
+                              <span>Perishable</span>
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          {item.etaDisplay && (
+                            <span
+                              className={cn(
+                                'text-2xs font-semibold px-2.5 py-1 rounded-full border',
+                                isDelivered
+                                  ? 'bg-emerald-100 text-emerald-950 border-emerald-300'
+                                  : isOutForDelivery
+                                  ? 'bg-amber-100 text-amber-950 border-amber-300 font-bold'
+                                  : 'bg-casa-bg text-casa-muted border-casa-border'
+                              )}
+                            >
+                              {isDelivered ? `Arrived · ${item.etaDisplay}` : item.etaDisplay}
+                            </span>
+                          )}
+
+                          <span className="text-caption text-casa-gold font-semibold opacity-75 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all">
+                            ›
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Visual 4-Step Progress Track */}
+                      <div className="flex items-center justify-between gap-1 pt-1">
+                        {[
+                          { label: 'Confirmed', step: 0 },
+                          { label: 'Shipped', step: 1 },
+                          { label: 'En Route', step: 2 },
+                          { label: 'Arrived', step: 3 },
+                        ].map((s, idx) => {
+                          const isCompleted = stepIdx >= s.step
+                          const isCurrent = stepIdx === s.step
+
+                          return (
+                            <div key={s.label} className="flex-1 flex flex-col items-center gap-1.5 min-w-0">
+                              <div className="w-full flex items-center">
+                                <div
+                                  className={cn(
+                                    'h-1 flex-1 rounded-full transition-colors',
+                                    idx === 0
+                                      ? 'opacity-0'
+                                      : stepIdx >= s.step
+                                      ? 'bg-casa-gold'
+                                      : 'bg-casa-border/40'
+                                  )}
+                                />
+                                <div
+                                  className={cn(
+                                    'w-3.5 h-3.5 rounded-full border-2 shrink-0 transition-transform flex items-center justify-center',
+                                    isCurrent
+                                      ? 'bg-casa-gold border-casa-navy scale-110 ring-2 ring-casa-gold/30'
+                                      : isCompleted
+                                      ? 'bg-casa-navy border-casa-gold'
+                                      : 'bg-casa-bg border-casa-border/60'
+                                  )}
+                                >
+                                  {isCompleted && !isCurrent && (
+                                    <Check size={8} className="text-white" />
+                                  )}
+                                </div>
+                                <div
+                                  className={cn(
+                                    'h-1 flex-1 rounded-full transition-colors',
+                                    idx === 3
+                                      ? 'opacity-0'
+                                      : stepIdx > s.step
+                                      ? 'bg-casa-gold'
+                                      : 'bg-casa-border/40'
+                                  )}
+                                />
+                              </div>
+                              <span
+                                className={cn(
+                                  'text-3xs font-medium truncate',
+                                  isCurrent
+                                    ? 'text-casa-navy font-bold'
+                                    : isCompleted
+                                    ? 'text-casa-muted font-medium'
+                                    : 'text-casa-muted/50'
+                                )}
+                              >
+                                {s.label}
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           )}
         </div>

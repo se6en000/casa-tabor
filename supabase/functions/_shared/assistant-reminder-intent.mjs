@@ -442,6 +442,9 @@ function parseUtcOffset(value) {
 
 function resolveReminderDate(text, baseDate) {
   const value = String(text ?? '').toLowerCase()
+  if (/\b(?:today|this\s+(?:morning|afternoon|evening)|tonight)\b/.test(value)) {
+    return { date: new Date(baseDate), reference: { kind: 'today' } }
+  }
   if (/\bday after tomorrow\b/.test(value)) {
     return { date: addLocalDays(baseDate, 2), reference: { kind: 'day_after_tomorrow' } }
   }

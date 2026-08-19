@@ -328,6 +328,44 @@ export type PrepItemCategory =
   | 'rsvp_response'
   | 'general_todo'
 
+export type DeliveryTransitStage =
+  | 'confirmed'
+  | 'payment'
+  | 'shipped'
+  | 'out_for_delivery'
+  | 'delivered'
+  | 'problem'
+
+export interface DeliveryTransitItem {
+  id: string
+  threadKey: string
+  vendor: string
+  title: string
+  itemSummary: string | null
+  stage: DeliveryTransitStage
+  trackingUrl?: string | null
+  carrier?: string | null
+  etaDisplay?: string | null
+  isPerishable?: boolean
+  occurredAt: string
+  rawItem: PrepItem
+}
+
+export type CategoryRoutingDirective =
+  | 'action_queue'
+  | 'logistics_radar'
+  | 'stage_calendar'
+  | 'passive_briefing'
+  | 'ignore'
+
+export interface HouseholdCapturePolicyMatrix {
+  senderDomain?: string
+  senderEmail?: string
+  categoryRouting: Partial<Record<string, CategoryRoutingDirective>>
+  confidence: number
+  autoTuned?: boolean
+}
+
 
 // ── Views ───────────────────────────────────────────────────
 

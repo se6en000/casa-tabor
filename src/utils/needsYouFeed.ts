@@ -1,14 +1,6 @@
-// Normalizes Conflict rows and directory_suggestions Notification rows into the
-// PrepItem shape so the existing Needs You card (Home rail + Action Hub) can render
-// all three "needs your attention" sources with zero visual special-casing. This is
-// the Phase 1 data-merge step of the Needs You feed unification: conflicts and
-// directory suggestions used to only appear in separate, disconnected UI (Action
-// Hub's ConflictAlertsSection and the Activity/notifications drawer). They are
-// intentionally read-only here — real inline Resolve/Review actions are Phase 2,
-// which needs its own UX review before shipping (a small card may not comfortably
-// fit "heavy" inline conflict-resolution or contact/place-confirmation actions).
-import type { Conflict, PrepItem } from '../types'
+import type { Conflict, PrepItem, DeliveryTransitItem } from '../types'
 import type { Notification } from '../hooks/useNotifications'
+import { isDeliveryTransitItem, buildDeliveryTransitItem } from './vendorTransactions.ts'
 
 export function conflictToNeedsYouItem(conflict: Conflict): PrepItem {
   return {
@@ -16,7 +8,7 @@ export function conflictToNeedsYouItem(conflict: Conflict): PrepItem {
     event_id: conflict.event_a_id,
     type: conflict.conflict_type,
     category: null,
-    emoji: '⚠️',
+    emoji: '',
     description: conflict.description,
     event_title: conflict.event_a?.title ?? null,
     event_date: conflict.event_a?.start_time ?? null,
@@ -36,7 +28,7 @@ export function directorySuggestionToNeedsYouItem(notification: Notification): P
     event_id: notification.event_id,
     type: 'directory_suggestion',
     category: null,
-    emoji: '📇',
+    emoji: '',
     description: notification.body ?? notification.title,
     event_title: notification.event?.title ?? null,
     event_date: notification.event?.start_time ?? null,
@@ -73,4 +65,32 @@ export function mergeNeedsYouItems(
     if (b.priority !== a.priority) return b.priority - a.priority
     return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   })
+}
+
+/** Separates high-agency Action Items from passive In-Transit Deliveries */
+export function splitActionableAndTransitItems(items: PrepItem[]): {
+  actionableItems: PrepItem[]
+  deliveryTransitItems: DeliveryTransitItem[]
+} {
+  const actionableItems: PrepItem[] = []
+  const transitMap = new Map<string, DeliveryTransitItem>()
+
+  for (const item of items) {
+    if (isDeliveryTransitItem(item)) {
+      const transitItem = buildDeliveryTransitItem(item)
+      const existing = transitMap.get(transitItem.threadKey)
+      if (!existing || new Date(transitItem.occurredAt) >= new Date(existing.occurredAt)) {
+        transitMap.set(transitItem.threadKey, transitItem)
+      }
+    } else {
+      actionableItems.push(item)
+    }
+  }
+
+  return {
+    actionableItems,
+    deliveryTransitItems: Array.from(transitMap.values()).sort(
+      (a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()
+    ),
+  }
 }

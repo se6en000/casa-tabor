@@ -28,6 +28,11 @@ import {
   CheckCheck,
   ThumbsDown,
   Undo2,
+  Sliders,
+  ShieldAlert,
+  Truck,
+  CheckCircle2,
+  FileSignature,
 } from 'lucide-react'
 import { Button, IconButton } from '../../ui'
 import { cn } from '../../../utils/cn'
@@ -99,6 +104,7 @@ export default function ActionInspectionSidecar({
   const [creatingEvent, setCreatingEvent] = useState(false)
   const [createdEventId, setCreatedEventId] = useState<string | null>(null)
   const [trainedSuccess, setTrainedSuccess] = useState<string | null>(null)
+  const [tunePolicyModalOpen, setTunePolicyModalOpen] = useState(false)
   const [selectedBundleActionIds, setSelectedBundleActionIds] = useState<Record<string, string[]>>({})
   const [bundleSuccess, setBundleSuccess] = useState(false)
 
@@ -895,7 +901,7 @@ export default function ActionInspectionSidecar({
           <p className="text-body-sm text-purple-950/80 leading-snug">
             {isAlreadyTrained
               ? `Casa has learned to automatically capture and structure incoming emails from @${senderDomain || analysis.senderLabel}.`
-              : `Teach Casa to automatically recognize emails from @${senderDomain || analysis.senderLabel}, or untrain/thumbs-down if captured incorrectly.`}
+              : `Teach Casa how to handle emails from @${senderDomain || analysis.senderLabel}. Fine-tune categories without losing critical school or medical forms.`}
           </p>
 
           {trainedSuccess ? (
@@ -905,6 +911,18 @@ export default function ActionInspectionSidecar({
             </div>
           ) : (
             <div className="flex flex-wrap gap-2 pt-1">
+              {/* Granular 2D Category Fine-Tuner */}
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={isSavingRule}
+                onClick={() => setTunePolicyModalOpen(true)}
+                className="min-h-[44px] sm:min-h-[48px] rounded-xl bg-white hover:bg-purple-100/60 border border-purple-300 text-purple-900 font-bold text-caption flex items-center gap-1.5 shadow-2xs"
+              >
+                <Sliders size={14} className="text-purple-600" />
+                <span>Fine-Tune Policy for @{senderDomain || analysis.senderLabel}</span>
+              </Button>
+
               {/* Positive Capture Training */}
               {senderDomain && !isAlreadyTrained && (
                 <Button
@@ -926,29 +944,6 @@ export default function ActionInspectionSidecar({
                 >
                   <BookmarkPlus size={14} className="text-purple-600" />
                   <span>Always Capture from @{senderDomain}</span>
-                </Button>
-              )}
-
-              {!isAlreadyTrained && (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={isSavingRule}
-                  onClick={async () => {
-                    await saveCaptureRule({
-                      pattern_type: 'sender',
-                      pattern_value: analysis.senderEmail.toLowerCase().trim() || analysis.senderLabel.toLowerCase().trim(),
-                      rule_directive: `Always extract tasks, forms, and calendar events from ${analysis.senderLabel}.`,
-                      origin: 'manual_teach',
-                      confidence: 1.0,
-                    })
-                    setTrainedSuccess(`Learned: Always scan ${analysis.senderLabel}`)
-                    setTimeout(() => setTrainedSuccess(null), 5000)
-                  }}
-                  className="min-h-[44px] sm:min-h-[48px] rounded-xl bg-white hover:bg-purple-100/60 border border-purple-300 text-purple-900 font-bold text-caption flex items-center gap-1.5 shadow-2xs"
-                >
-                  <Sparkles size={14} className="text-purple-600" />
-                  <span>Always Capture from {analysis.senderLabel}</span>
                 </Button>
               )}
 
@@ -979,29 +974,11 @@ export default function ActionInspectionSidecar({
                   size="sm"
                   variant="secondary"
                   disabled={isSavingRule}
-                  onClick={async () => {
-                    if (activeItem) {
-                      await downvote(activeItem.id)
-                    }
-                    if (senderDomain) {
-                      await saveCaptureRule({
-                        pattern_type: 'domain',
-                        pattern_value: senderDomain,
-                        rule_directive: `Ignore promotional and non-actionable emails from @${senderDomain}.`,
-                        origin: 'user_untrain',
-                        active: false,
-                      })
-                    }
-                    setTrainedSuccess('Dismissed & Learned: Casa will ignore similar items in future scans.')
-                    setTimeout(() => {
-                      setTrainedSuccess(null)
-                      onClose()
-                    }, 1800)
-                  }}
+                  onClick={() => setTunePolicyModalOpen(true)}
                   className="min-h-[44px] sm:min-h-[48px] rounded-xl bg-white hover:bg-rose-50 border border-rose-200 text-rose-800 font-bold text-caption flex items-center gap-1.5 shadow-2xs"
                 >
                   <ThumbsDown size={14} className="text-rose-600" />
-                  <span>Not Actionable (Thumbs Down)</span>
+                  <span>Not Relevant / Adjust</span>
                 </Button>
               )}
             </div>
@@ -1220,6 +1197,186 @@ export default function ActionInspectionSidecar({
                 className="rounded-full min-h-[44px] px-5 font-bold"
               >
                 Sign &amp; Complete Task
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════ 2D CATEGORY POLICY MATRIX TUNING MODAL ══════ */}
+      {tunePolicyModalOpen && (
+        <div className="fixed inset-0 z-modal bg-casa-navy/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-casa-surface rounded-3xl border border-casa-gold/40 shadow-modal max-w-xl w-full p-6 space-y-4 animate-in fade-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-2 border-b border-casa-border/60">
+              <div className="flex items-center gap-2">
+                <Sliders size={18} className="text-casa-gold" />
+                <h3 className="font-display text-body-lg font-bold text-casa-navy">
+                  Tune Capture Policy: @{senderDomain || analysis.senderLabel}
+                </h3>
+              </div>
+              <IconButton
+                size="sm"
+                variant="ghost"
+                onClick={() => setTunePolicyModalOpen(false)}
+                aria-label="Close policy modal"
+                icon={<X size={16} />}
+              />
+            </div>
+
+            <p className="text-caption text-casa-muted leading-relaxed">
+              Customize how Casa handles emails from this sender. You can silence routine newsletters without missing vital school waivers, payments, or calendar events.
+            </p>
+
+            <div className="space-y-2.5 pt-1">
+              {/* Option 1: Keep Waivers & Events Only (Recommended) */}
+              <button
+                type="button"
+                onClick={async () => {
+                  if (activeItem) await downvote(activeItem.id)
+                  if (senderDomain) {
+                    await saveCaptureRule({
+                      pattern_type: 'domain',
+                      pattern_value: senderDomain,
+                      rule_directive: `Keep waivers, medical forms, deadlines, and calendar events. Mute routine newsletters, fundraising, and promotional updates from @${senderDomain}.`,
+                      origin: 'user_untrain',
+                      confidence: 1.0,
+                    })
+                  }
+                  setTunePolicyModalOpen(false)
+                  setTrainedSuccess(`Policy Updated: Muting newsletters, keeping waivers & events from @${senderDomain || analysis.senderLabel}`)
+                  setTimeout(() => setTrainedSuccess(null), 5000)
+                }}
+                className="w-full text-left p-3.5 rounded-2xl bg-casa-bg hover:bg-casa-gold/10 border border-casa-border/80 hover:border-casa-gold transition-all flex items-start gap-3.5 group shadow-2xs cursor-pointer min-h-[56px]"
+              >
+                <div className="w-9 h-9 rounded-xl bg-casa-gold/15 text-casa-navy flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform mt-0.5">
+                  <FileSignature size={18} className="text-casa-gold" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-body-sm font-bold text-casa-navy group-hover:text-casa-gold-hover">
+                      Keep Waivers &amp; Events Only
+                    </span>
+                    <span className="text-3xs font-bold px-2 py-0.5 rounded-full bg-casa-gold/20 text-casa-navy border border-casa-gold/40">
+                      Recommended
+                    </span>
+                  </div>
+                  <p className="text-caption text-casa-muted mt-0.5 leading-snug">
+                    Mute newsletters, updates, and announcements, but keep all waivers, medical forms, and calendar dates.
+                  </p>
+                </div>
+              </button>
+
+              {/* Option 2: Track Orders in Logistics Radar */}
+              <button
+                type="button"
+                onClick={async () => {
+                  if (activeItem) await completePrepItem(activeItem.id)
+                  if (senderDomain) {
+                    await saveCaptureRule({
+                      pattern_type: 'domain',
+                      pattern_value: senderDomain,
+                      rule_directive: `Route package transit, shipment tracking, and grocery deliveries quietly into Logistics Radar without creating urgent Action Queue prompts.`,
+                      origin: 'user_untrain',
+                      confidence: 1.0,
+                    })
+                  }
+                  setTunePolicyModalOpen(false)
+                  setTrainedSuccess(`Policy Updated: Tracking @${senderDomain || analysis.senderLabel} in Logistics Radar`)
+                  setTimeout(() => setTrainedSuccess(null), 5000)
+                }}
+                className="w-full text-left p-3.5 rounded-2xl bg-casa-bg hover:bg-sky-50 border border-casa-border/80 hover:border-sky-300 transition-all flex items-start gap-3.5 group shadow-2xs cursor-pointer min-h-[56px]"
+              >
+                <div className="w-9 h-9 rounded-xl bg-sky-100 text-sky-900 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform mt-0.5">
+                  <Truck size={18} className="text-sky-700" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="text-body-sm font-bold text-casa-navy group-hover:text-sky-900">
+                    Quiet Logistics &amp; Parcel Radar
+                  </span>
+                  <p className="text-caption text-casa-muted mt-0.5 leading-snug">
+                    Track shipments and delivery status ambiently on the dashboard without urgent action prompts.
+                  </p>
+                </div>
+              </button>
+
+              {/* Option 3: Only Alert on Urgent Deadlines & Signatures */}
+              <button
+                type="button"
+                onClick={async () => {
+                  if (activeItem) await downvote(activeItem.id)
+                  if (senderDomain) {
+                    await saveCaptureRule({
+                      pattern_type: 'domain',
+                      pattern_value: senderDomain,
+                      rule_directive: `Only alert on required digital signatures, legal forms, and urgent payment deadlines from @${senderDomain}.`,
+                      origin: 'user_untrain',
+                      confidence: 1.0,
+                    })
+                  }
+                  setTunePolicyModalOpen(false)
+                  setTrainedSuccess(`Policy Updated: Only alert on signatures and urgent deadlines from @${senderDomain || analysis.senderLabel}`)
+                  setTimeout(() => setTrainedSuccess(null), 5000)
+                }}
+                className="w-full text-left p-3.5 rounded-2xl bg-casa-bg hover:bg-amber-50 border border-casa-border/80 hover:border-amber-300 transition-all flex items-start gap-3.5 group shadow-2xs cursor-pointer min-h-[56px]"
+              >
+                <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-950 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform mt-0.5">
+                  <CheckCircle2 size={18} className="text-amber-700" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="text-body-sm font-bold text-casa-navy group-hover:text-amber-950">
+                    Only Urgent Deadlines &amp; Signatures
+                  </span>
+                  <p className="text-caption text-casa-muted mt-0.5 leading-snug">
+                    Ignore general notices; only alert if an immediate signature or payment deadline is required.
+                  </p>
+                </div>
+              </button>
+
+              {/* Option 4: Completely Mute Sender */}
+              <button
+                type="button"
+                onClick={async () => {
+                  if (activeItem) await downvote(activeItem.id)
+                  if (senderDomain) {
+                    await saveCaptureRule({
+                      pattern_type: 'domain',
+                      pattern_value: senderDomain,
+                      rule_directive: `Ignore promotional and non-actionable emails from @${senderDomain}.`,
+                      origin: 'user_untrain',
+                      active: false,
+                    })
+                  }
+                  setTunePolicyModalOpen(false)
+                  setTrainedSuccess(`Policy Updated: Muted all emails from @${senderDomain || analysis.senderLabel}`)
+                  setTimeout(() => {
+                    setTrainedSuccess(null)
+                    onClose()
+                  }, 1800)
+                }}
+                className="w-full text-left p-3.5 rounded-2xl bg-casa-bg hover:bg-rose-50 border border-casa-border/80 hover:border-rose-200 transition-all flex items-start gap-3.5 group shadow-2xs cursor-pointer min-h-[56px]"
+              >
+                <div className="w-9 h-9 rounded-xl bg-rose-100 text-rose-800 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform mt-0.5">
+                  <ShieldAlert size={18} className="text-rose-600" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="text-body-sm font-bold text-rose-900">
+                    Mute All Emails from this Sender
+                  </span>
+                  <p className="text-caption text-rose-800/80 mt-0.5 leading-snug">
+                    Completely ignore all incoming emails and suggestions from @{senderDomain || analysis.senderLabel}.
+                  </p>
+                </div>
+              </button>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setTunePolicyModalOpen(false)}
+                className="rounded-full min-h-[44px] px-4"
+              >
+                Cancel
               </Button>
             </div>
           </div>

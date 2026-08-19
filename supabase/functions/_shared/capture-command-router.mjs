@@ -159,6 +159,20 @@ function formatExactDate(value) {
 }
 
 function captureTemporalProvenance(input, range, options) {
+  const start = ensureOffsetIso(range?.start, options.utcOffset)
+  const end = ensureOffsetIso(range?.end, options.utcOffset)
+  const localStartDate = typeof start === 'string' ? start.slice(0, 10) : ''
+  const localEndDate = typeof end === 'string' ? end.slice(0, 10) : localStartDate
+  if (localStartDate) {
+    return {
+      sourceMessageId: 'capture-command',
+      sourceText: input,
+      rangeStart: localStartDate,
+      rangeEnd: localEndDate,
+      resolutionKind: 'relative',
+      requiresExactDateConfirmation: false,
+    }
+  }
   const direct = extractUserTemporalEvidence({
     id: 'capture-command',
     role: 'user',
@@ -170,16 +184,7 @@ function captureTemporalProvenance(input, range, options) {
       requiresExactDateConfirmation: false,
     }
   }
-  const start = ensureOffsetIso(range?.start, options.utcOffset)
-  const localDate = String(start).slice(0, 10)
-  return {
-    sourceMessageId: 'capture-command',
-    sourceText: input,
-    rangeStart: localDate,
-    rangeEnd: localDate,
-    resolutionKind: 'relative',
-    requiresExactDateConfirmation: false,
-  }
+  return null
 }
 
 function looksLikeGroceryCommand(input) {

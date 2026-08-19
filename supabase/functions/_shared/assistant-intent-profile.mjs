@@ -33,7 +33,7 @@ export function classifyAssistantIntent(text, options = {}) {
   const hasRecipeIntent = assistantMode === 'chef' ||
     /\b(recipe|cook|meal|dinner|lunch|breakfast|ingredient|servings?)\b/i.test(input)
   const hasPlaceIntent = /\b(address|phone number|where is|find (?:a|an|the)?\s*(?:restaurant|store|business|place)|nearby)\b/i.test(input)
-  const hasWebIntent = /\b(latest|news|score|stock price|current price|recent review|look it up|search the web)\b/i.test(input)
+  const hasWebIntent = /\b(latest|news|score|stock price|current price|recent review|reviews?|tours?|attractions?|things to do|activities|recommendations?|look it up|search the web|search online|find online|web search)\b/i.test(input)
   const matchedDomains = [
     hasEventIntent,
     hasWeatherIntent,

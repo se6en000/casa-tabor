@@ -532,24 +532,28 @@ async function persistInboxActions(
   clusterId: string | null = null,
 ): Promise<number> {
   if (actions.length === 0) return 0
-  const rows = actions.map((a) => {
+  let persistedCount = 0
+
+  for (const a of actions) {
     const owner = familyMembers.find((m) =>
       a.assigned_member && m.name.toLowerCase().includes(a.assigned_member.toLowerCase()),
     )
     const dueBy = parseDueDateOrFallback(a.due_datetime, receivedAtIso, eventDate)
     const title = a.title?.trim() || subject.slice(0, 80)
     const description = a.description.trim()
-    const emoji = a.type === 'payment' ? '💳'
-      : a.type === 'rsvp' ? '📩'
-      : a.type === 'forms' ? '📝'
+    const emoji =
+      a.type === 'forms' ? '📝'
+      : a.type === 'payment' ? '💳'
+      : a.type === 'rsvp' ? '✉️'
       : a.type === 'deadline' ? '⏰'
       : a.type === 'delivery' ? '📦'
       : a.type === 'renewal' ? '🔄'
-      : '📌'
+      : '📋'
     const normalizedPriority: 1 | 2 | 3 = a.priority === 3 ? 3 : a.priority === 1 ? 1 : 2
     const sourceRef = `gmail:${sourceOwnerMemberId ?? 'household'}:${messageId}`
     const transaction = transactionIdentity(a, sourceRef)
-    return {
+
+    const rowData = {
       event_id: eventId,
       type: a.type,
       emoji,
@@ -568,17 +572,58 @@ async function persistInboxActions(
       is_user_labeled: isUserLabeled,
       cluster_id: clusterId,
     }
-  })
-  try {
-    const { data, error } = await sb.from('prep_items').insert(rows).select('id')
-    if (!error) return data?.length ?? 0
-  } catch {}
 
-  // Fallback without new columns if table migration is pending
-  const fallbackRows = rows.map(({ is_user_labeled: _u, cluster_id: _c, ...rest }) => rest)
-  const { data, error } = await sb.from('prep_items').insert(fallbackRows).select('id')
-  if (error) throw error
-  return data?.length ?? 0
+    // Idempotent state progression: If transaction thread already exists in active prep items, update it
+    if (transaction.threadKey && !transaction.threadKey.includes(':message:')) {
+      const { data: existing } = await sb
+        .from('prep_items')
+        .select('id, attention_stage, type, description')
+        .eq('attention_thread_key', transaction.threadKey)
+        .eq('dismissed', false)
+        .limit(1)
+        .maybeSingle()
+
+      if (existing) {
+        const stageRank = ['confirmed', 'payment', 'shipped', 'out_for_delivery', 'delivered', 'problem']
+        const currentRank = stageRank.indexOf(existing.attention_stage ?? '')
+        const newRank = stageRank.indexOf(transaction.stage ?? '')
+
+        // If newer stage or same stage with richer description, update in place
+        if (newRank >= currentRank || transaction.stage === 'delivered' || a.type === 'delivery') {
+          await sb
+            .from('prep_items')
+            .update({
+              attention_stage: transaction.stage || existing.attention_stage,
+              description: description.length >= existing.description.length ? description : existing.description,
+              event_title: rowData.event_title,
+              source_ref: sourceRef,
+              due_by: dueBy ?? undefined,
+            })
+            .eq('id', existing.id)
+          persistedCount++
+          continue
+        }
+      }
+    }
+
+    // Otherwise insert new item
+    try {
+      const { data, error } = await sb.from('prep_items').insert([rowData]).select('id')
+      if (!error && data) {
+        persistedCount += data.length
+        continue
+      }
+    } catch {}
+
+    // Fallback without newly added schema columns if migration pending
+    const { is_user_labeled: _u, cluster_id: _c, ...fallbackRow } = rowData
+    const { data: fbData, error: fbErr } = await sb.from('prep_items').insert([fallbackRow]).select('id')
+    if (!fbErr && fbData) {
+      persistedCount += fbData.length
+    }
+  }
+
+  return persistedCount
 }
 
 async function persistEventSuggestions(

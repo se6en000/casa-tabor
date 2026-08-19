@@ -1,18 +1,22 @@
-import type { PrepItem } from '../types'
+import type { PrepItem, DeliveryTransitItem, DeliveryTransitStage } from '../types'
 
 export interface VendorTransactionIdentity {
   key: string
   vendor: string
-  stage: string | null
+  stage: DeliveryTransitStage | null
 }
 
 const VENDOR_ALIASES = [
   { vendor: 'Walmart', aliases: ['walmart.com', 'walmart+', 'walmart', 'inhome'] },
-  { vendor: 'Amazon', aliases: ['amazon.com', 'amazon'] },
+  { vendor: 'Amazon', aliases: ['amazon.com', 'amazon', 'prime'] },
+  { vendor: 'HelloFresh', aliases: ['hellofresh', 'hello fresh'] },
   { vendor: 'Target', aliases: ['target.com', 'target'] },
   { vendor: 'Instacart', aliases: ['instacart'] },
   { vendor: 'DoorDash', aliases: ['doordash'] },
-  { vendor: 'Uber Eats', aliases: ['uber eats'] },
+  { vendor: 'Uber Eats', aliases: ['uber eats', 'ubereats'] },
+  { vendor: 'FedEx', aliases: ['fedex'] },
+  { vendor: 'UPS', aliases: ['ups'] },
+  { vendor: 'USPS', aliases: ['usps', 'postal service'] },
 ] as const
 
 function normalizeKeyPart(value: string) {
@@ -37,18 +41,24 @@ function transactionDescriptor(item: PrepItem) {
   return descriptor ? normalizeKeyPart(descriptor) : null
 }
 
-function transactionStage(item: PrepItem) {
-  if (item.attention_stage) return item.attention_stage
+export function transactionStage(item: PrepItem): DeliveryTransitStage | null {
+  if (item.attention_stage && isDeliveryTransitStage(item.attention_stage)) {
+    return item.attention_stage as DeliveryTransitStage
+  }
   if (item.type === 'payment') return 'payment'
   if (item.type === 'cancellation') return 'problem'
   const text = `${item.event_title ?? ''} ${item.description}`.toLowerCase()
   if (/\b(cancelled|canceled|failed|problem|issue|missing|damaged)\b/.test(text)) return 'problem'
   if (/\bdelivered\b/.test(text)) return 'delivered'
-  if (/\bout for delivery\b/.test(text)) return 'out_for_delivery'
-  if (/\bshipped\b/.test(text)) return 'shipped'
+  if (/\bout for delivery\b|\barriving today\b|\ben route\b/.test(text)) return 'out_for_delivery'
+  if (/\bshipped\b|\bpackage on the way\b|\btransit\b/.test(text)) return 'shipped'
   if (/\b(payment|charged|temporary hold)\b/.test(text)) return 'payment'
-  if (/\b(confirmed|scheduled|placed)\b/.test(text)) return 'confirmed'
+  if (/\b(confirmed|scheduled|placed|order received)\b/.test(text)) return 'confirmed'
   return null
+}
+
+function isDeliveryTransitStage(stage: string): stage is DeliveryTransitStage {
+  return ['confirmed', 'payment', 'shipped', 'out_for_delivery', 'delivered', 'problem'].includes(stage)
 }
 
 export function vendorTransactionIdentity(item: PrepItem): VendorTransactionIdentity | null {
@@ -85,6 +95,76 @@ export function isNewerTransactionUpdate(
     return itemCreated > currentCreated
   }
 
-  const stageRank = ['confirmed', 'payment', 'shipped', 'out_for_delivery', 'delivered', 'problem']
-  return stageRank.indexOf(itemStage ?? '') > stageRank.indexOf(currentStage ?? '')
+  const stageRank: DeliveryTransitStage[] = ['confirmed', 'payment', 'shipped', 'out_for_delivery', 'delivered', 'problem']
+  return stageRank.indexOf(itemStage as DeliveryTransitStage ?? 'confirmed') > stageRank.indexOf(currentStage as DeliveryTransitStage ?? 'confirmed')
+}
+
+export function isDeliveryTransitItem(item: PrepItem): boolean {
+  if (item.type === 'delivery') return true
+  const stage = transactionStage(item)
+  if (stage === 'shipped' || stage === 'out_for_delivery' || stage === 'delivered') return true
+  const vendor = item.attention_vendor || legacyVendor(item)
+  if (vendor && (item.type === 'payment' || item.type === 'delivery')) return true
+  return false
+}
+
+export function isPerishableDelivery(item: PrepItem): boolean {
+  const text = `${item.event_title ?? ''} ${item.description}`.toLowerCase()
+  return (
+    text.includes('inhome') ||
+    text.includes('hellofresh') ||
+    text.includes('instacart') ||
+    text.includes('perishable') ||
+    text.includes('refrigerat') ||
+    text.includes('fresh') ||
+    text.includes('grocer') ||
+    text.includes('produce')
+  )
+}
+
+export function stageStepIndex(stage: DeliveryTransitStage | null): number {
+  switch (stage) {
+    case 'confirmed':
+    case 'payment':
+      return 0
+    case 'shipped':
+      return 1
+    case 'out_for_delivery':
+      return 2
+    case 'delivered':
+      return 3
+    case 'problem':
+      return -1
+    default:
+      return 0
+  }
+}
+
+export function buildDeliveryTransitItem(item: PrepItem): DeliveryTransitItem {
+  const transaction = vendorTransactionIdentity(item)
+  const vendor = transaction?.vendor || item.attention_vendor || legacyVendor(item) || 'Parcel'
+  const stage = transaction?.stage || transactionStage(item) || 'shipped'
+  const isPerish = isPerishableDelivery(item)
+
+  // Extract clean summary
+  const desc = item.description || ''
+  const itemMatch = desc.match(/(\d+\s+items?|[A-Za-z0-9\s™+'-]{3,40}(?:Book|Tools|Kit|Packs?|Order|Box))/i)
+  const itemSummary = itemMatch ? itemMatch[0].trim() : (isPerish ? 'Grocery Delivery' : 'Package')
+
+  // Extract ETA or time window
+  const etaMatch = desc.match(/(?:between\s+[\d:apm\s-]+|today\s+by\s+[\d:apm]+|today\s+between\s+[\d:apm\s-]+|expected\s+today)/i)
+  const etaDisplay = etaMatch ? etaMatch[0] : (item.due_by ? new Date(item.due_by).toLocaleDateString() : null)
+
+  return {
+    id: item.id,
+    threadKey: transaction?.key || item.id,
+    vendor,
+    title: item.event_title || `${vendor} Delivery`,
+    itemSummary,
+    stage,
+    isPerishable: isPerish,
+    etaDisplay,
+    occurredAt: item.created_at,
+    rawItem: item,
+  }
 }

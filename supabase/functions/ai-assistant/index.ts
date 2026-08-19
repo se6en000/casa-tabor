@@ -3888,7 +3888,7 @@ Deno.serve(async (req) => {
     weather: ['get_weather_forecast'],
     travel: ['get_travel_eta'],
     places: ['search_places'],
-    web: ['search_web'],
+    web: [],
     recipe: recipeToolNames,
     general: [],
     talk_plan: safeFullProfileToolNames(tools[0].function_declarations.map((tool) => tool.name)),
@@ -4161,7 +4161,7 @@ INSTRUCTIONS:
 - Never use search_web for weather unless get_weather_forecast fails.
 - For commute/traffic timing ("when should we leave", "how long will it take", "do we have enough buffer"), call get_travel_eta with destination and relevant arrival/departure time.
 - For upcoming events with a destination, proactively offer a leave-by recommendation when useful.
-- For live/public info requests (latest news, current prices, recent reviews, sports scores, stock prices), use search_web first. For local business lookups (address/phone/location), use search_places. When using search_web, cite the source links you used in your reply.
+- For live/public info requests (local tours, attractions, activities, upcoming events, recent reviews, latest news, current prices, sports scores), leverage live web search grounding. When an active event or hotel is selected in context, ground local inquiries against that location. Cite relevant sources/links when helpful.
 - DISMISSAL PHRASES ("never mind", "forget it", "cancel that", "actually never mind", "stop", "nvm"): respond with a brief acknowledgment ONLY — do not search, do not list events, do not take any action. Example: "No problem!" or "Got it, ignoring that."
 - GROCERY LIST READS ("how many items", "what's on the grocery list", "show me the grocery list", "what do I need to buy"): answer directly from GROCERY LIST context above — enumerate the items. Do NOT call search_events.
 - RELATIVE DATE RESOLUTION: for "next weekend", "this Saturday", "next Friday", call search_events with the correct concrete date — do NOT ask the user what date they mean. Use the TEMPORAL ASSUMPTIONS and current date to resolve it first.${customInstructions ? `\n\nUSER'S CUSTOM RULES (always apply, override defaults if they conflict):\n${customInstructions}` : ''}
@@ -4634,7 +4634,55 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         return { results: [], count: 0, math_query: true, hint: 'This is a math/calculation query. Answer directly from reasoning — no web search needed.' }
       }
 
-      if (!braveKey) return { results: [], count: 0, error: 'BRAVE_API_KEY not configured' }
+      if (!braveKey && provider === 'gemini' && apiKey) {
+        try {
+          const subUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
+          const subRes = await providerFetch(subUrl, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: `Search the web and provide comprehensive, factual findings with key sources, dates, and locations for: ${query}` }] }],
+              tools: [{ google_search: {} }],
+              generationConfig: {
+                maxOutputTokens: 1024,
+                temperature: 0.3,
+                thinkingConfig: { thinkingBudget: 0 },
+              },
+            }),
+          }, { correlationId: cid, lane: experienceMode, callIndex: llmTelemetry.llm_calls + 1 })
+          const subData = await subRes.json()
+          if (!subRes.ok) {
+            const message = subData?.error?.message ?? 'Google Search failed'
+            console.log(`[ai-assistant][${cid}] stage=read_tool name=${name} ms=${Date.now() - stageStartMs} results=0 error=provider message=${message}`)
+            return { results: [], count: 0, error: message }
+          }
+          const cand = subData?.candidates?.[0]
+          const parts = cand?.content?.parts ?? []
+          const text = parts.map((p: { text?: string }) => p.text ?? '').join('').trim()
+          const metadata = cand?.groundingMetadata
+          const chunks = (metadata?.groundingChunks ?? []) as Array<{ web?: { title?: string; uri?: string } }>
+          const results = chunks.slice(0, maxResults).map((chunk, idx) => ({
+            title: chunk.web?.title ?? `Source ${idx + 1}`,
+            url: chunk.web?.uri ?? '',
+            snippet: text.slice(0, 300),
+            source: chunk.web?.title ?? 'Google Search',
+            age: null,
+          }))
+          const payload = {
+            results,
+            count: results.length > 0 ? results.length : (text ? 1 : 0),
+            query,
+            findings: text,
+          }
+          console.log(`[ai-assistant][${cid}] stage=read_tool name=${name} ms=${Date.now() - stageStartMs} results=${payload.count} via=gemini_google_search`)
+          return payload
+        } catch {
+          console.log(`[ai-assistant][${cid}] stage=read_tool name=${name} ms=${Date.now() - stageStartMs} results=0 error=gemini_google_search_failed`)
+          return { results: [], count: 0, error: 'Google Search failed' }
+        }
+      }
+
+      if (!braveKey) return { results: [], count: 0, error: 'Web search provider not configured' }
 
       try {
         const url = new URL('https://api.search.brave.com/res/v1/web/search')
@@ -4812,13 +4860,17 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
         : { kind: 'budget', value: intentRouting.profile === 'full' ? 512 : 0 },
       temperature: experienceMode === 'talk_plan' ? undefined : 0.4,
     })
+    const hasFunctionDeclarations = primaryTools.length > 0
+    const enableGoogleSearchGrounding = !hasFunctionDeclarations && provider === 'gemini' && Boolean(apiKey) && !directReminderCreateFlow
     const body = {
       system_instruction: { parts: [{ text: systemInstruction }] },
       contents: budgetedConversation.contents,
       generation_config: generationConfig,
-      ...(primaryTools.length > 0 ? {
+      ...(hasFunctionDeclarations ? {
         tools: primaryTools,
         tool_config: primaryToolConfig,
+      } : enableGoogleSearchGrounding ? {
+        tools: [{ google_search: {} }],
       } : {}),
     }
     appendServerTrace(
