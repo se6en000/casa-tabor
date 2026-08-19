@@ -230,6 +230,56 @@ export function mergeDeliveryTransitItem(
   }
 }
 
+export function consolidateTransitItems(items: DeliveryTransitItem[]): DeliveryTransitItem[] {
+  const transitMap = new Map<string, DeliveryTransitItem>()
+
+  for (const item of items) {
+    const existing = transitMap.get(item.threadKey)
+    if (!existing) {
+      transitMap.set(item.threadKey, item)
+    } else {
+      transitMap.set(item.threadKey, mergeDeliveryTransitItem(existing, item))
+    }
+  }
+
+  // Second pass: Merge generic delivery:${vendor}:${date} items into specific transaction:${vendor}:${orderId} on that same date
+  const consolidated = Array.from(transitMap.values())
+  const finalMap = new Map<string, DeliveryTransitItem>()
+
+  for (const item of consolidated) {
+    const isGenericDateKey = /^delivery:[a-z0-9-]+:\d{4}-\d{2}-\d{2}$/.test(item.threadKey)
+    if (isGenericDateKey) {
+      const vendorKey = normalizeKeyPart(item.vendor)
+      const dateKey = deliveryDateKey(item.rawItem)
+      // Check if there is an explicit order transaction for this vendor on this date
+      const matchingExplicit = consolidated.find(
+        (other) =>
+          other !== item &&
+          normalizeKeyPart(other.vendor) === vendorKey &&
+          deliveryDateKey(other.rawItem) === dateKey &&
+          !/^delivery:[a-z0-9-]+:\d{4}-\d{2}-\d{2}$/.test(other.threadKey)
+      )
+
+      if (matchingExplicit) {
+        const existingInFinal = finalMap.get(matchingExplicit.threadKey) || matchingExplicit
+        finalMap.set(matchingExplicit.threadKey, mergeDeliveryTransitItem(existingInFinal, item))
+        continue
+      }
+    }
+
+    const existing = finalMap.get(item.threadKey)
+    if (!existing) {
+      finalMap.set(item.threadKey, item)
+    } else {
+      finalMap.set(item.threadKey, mergeDeliveryTransitItem(existing, item))
+    }
+  }
+
+  return Array.from(finalMap.values()).sort(
+    (a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()
+  )
+}
+
 export function isNewerTransactionUpdate(
   item: PrepItem,
   current: PrepItem,

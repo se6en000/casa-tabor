@@ -3,7 +3,7 @@ import type { Notification } from '../hooks/useNotifications'
 import {
   isDeliveryTransitItem,
   buildDeliveryTransitItem,
-  mergeDeliveryTransitItem,
+  consolidateTransitItems,
 } from './vendorTransactions.ts'
 
 export function conflictToNeedsYouItem(conflict: Conflict): PrepItem {
@@ -77,17 +77,11 @@ export function splitActionableAndTransitItems(items: PrepItem[]): {
   deliveryTransitItems: DeliveryTransitItem[]
 } {
   const actionableItems: PrepItem[] = []
-  const transitMap = new Map<string, DeliveryTransitItem>()
+  const rawTransitItems: DeliveryTransitItem[] = []
 
   for (const item of items) {
     if (isDeliveryTransitItem(item)) {
-      const transitItem = buildDeliveryTransitItem(item)
-      const existing = transitMap.get(transitItem.threadKey)
-      if (!existing) {
-        transitMap.set(transitItem.threadKey, transitItem)
-      } else {
-        transitMap.set(transitItem.threadKey, mergeDeliveryTransitItem(existing, transitItem))
-      }
+      rawTransitItems.push(buildDeliveryTransitItem(item))
     } else {
       actionableItems.push(item)
     }
@@ -95,8 +89,6 @@ export function splitActionableAndTransitItems(items: PrepItem[]): {
 
   return {
     actionableItems,
-    deliveryTransitItems: Array.from(transitMap.values()).sort(
-      (a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()
-    ),
+    deliveryTransitItems: consolidateTransitItems(rawTransitItems),
   }
 }

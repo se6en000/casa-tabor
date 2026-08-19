@@ -18,7 +18,7 @@ import type { PrepItem, DeliveryTransitItem, DeliveryTransitStage, FamilyMember 
 import {
   isDeliveryTransitItem,
   buildDeliveryTransitItem,
-  mergeDeliveryTransitItem,
+  consolidateTransitItems,
   stageStepIndex,
 } from '../../../utils/vendorTransactions.ts'
 import { buildGmailWebUrl } from '../../../utils/prepItemClusters'
@@ -87,7 +87,7 @@ export default function EstateLogisticsWidget({
 
   // Extract and build unique transit items
   const allTransitItems = useMemo<DeliveryTransitItem[]>(() => {
-    const transitMap = new Map<string, DeliveryTransitItem>()
+    const rawTransit: DeliveryTransitItem[] = []
 
     for (const item of activePrep) {
       if (isDeliveryTransitItem(item)) {
@@ -95,18 +95,11 @@ export default function EstateLogisticsWidget({
         if (optimisticallyDismissedKeys.has(transit.threadKey) || optimisticallyDismissedKeys.has(item.id)) {
           continue
         }
-        const existing = transitMap.get(transit.threadKey)
-        if (!existing) {
-          transitMap.set(transit.threadKey, transit)
-        } else {
-          transitMap.set(transit.threadKey, mergeDeliveryTransitItem(existing, transit))
-        }
+        rawTransit.push(transit)
       }
     }
 
-    return Array.from(transitMap.values()).sort(
-      (a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()
-    )
+    return consolidateTransitItems(rawTransit)
   }, [activePrep, optimisticallyDismissedKeys])
 
   // Sub-counts for filter badges
