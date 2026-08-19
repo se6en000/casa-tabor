@@ -31,6 +31,17 @@ interface SmartPlaceInputProps {
   onChange: (place: TransportationPlace) => void
 }
 
+function shouldAppendCityContext(query: string): boolean {
+  const q = query.toLowerCase().trim()
+  if (q.includes(',')) return false
+  if (/\b\d{5}\b/.test(q)) return false
+  const explicitLocations = [
+    'fl', 'florida', 'west palm', 'palm beach', 'miami', 'orlando', 'tampa',
+    'boca', 'jupiter', 'delray', 'wellington', 'atlanta', 'dallas', 'ny', 'california', 'texas',
+  ]
+  return !explicitLocations.some((loc) => q.includes(loc))
+}
+
 function matchesQuery(place: PlaceSuggestion, query: string): boolean {
   const needle = query.trim().toLowerCase()
   if (!needle) return true
@@ -97,9 +108,11 @@ export default function SmartPlaceInput({
     const timer = window.setTimeout(async () => {
       setLoadingGoogle(true)
       setLookupError(null)
+      const needsCity = shouldAppendCityContext(search)
       const { data, error } = await supabase.functions.invoke('place-search', {
         body: {
           query: search,
+          city: needsCity ? 'West Palm Beach, FL' : undefined,
           lat: DEFAULT_HOUSEHOLD_COORDINATES.lat,
           lng: DEFAULT_HOUSEHOLD_COORDINATES.lng,
         },

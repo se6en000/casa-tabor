@@ -418,7 +418,11 @@ function useEventsForRange(queryKey: readonly unknown[], start: Date, end: Date)
       .filter((re) => !isDuplicateOrHandled(re))
       .map((re) => ({ ...re, source_type: 'routine' as const }))
 
-    return [...enrichedBaseEvents, ...newRoutineEvents].sort(
+    const filteredBaseEvents = enrichedBaseEvents.filter(
+      (event) => event.status !== 'cancelled' && !event.deleted_at && eventOverlapsRange(event, start, end)
+    )
+
+    return [...filteredBaseEvents, ...newRoutineEvents].sort(
       (a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime(),
     )
   }, [eventsQuery.data, transportationQuery.data, routineEventsInRange])

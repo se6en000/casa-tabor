@@ -65,6 +65,60 @@ export function getMinutesFromMidnight(dateOrIso: string | Date): number {
 }
 
 /**
+ * Canonical driver resolution for any event across Casa Tabor.
+ * Checks transportation plan overrides, driver overrides, event_members roles,
+ * attendee capabilities, and default parent drivers.
+ */
+export function resolveEventDriver(
+  evt: EventWithDetails | null | undefined,
+  familyMembers: FamilyMember[] = [],
+): { id: string | null; name: string } {
+  if (!evt) return { id: null, name: 'Jake' }
+
+  // 1. Check transportation plan override (Leg 1 / active driving leg)
+  const planLegs = evt.plan_override?.transportation_plan?.legs
+  if (Array.isArray(planLegs) && planLegs.length > 0) {
+    const activeLeg = planLegs.find((l) => l.driverName && l.driverName.trim())
+    if (activeLeg?.driverName) {
+      const match = familyMembers.find(
+        (m) =>
+          m.name.toLowerCase() === activeLeg.driverName.toLowerCase() ||
+          m.full_name?.toLowerCase() === activeLeg.driverName.toLowerCase(),
+      )
+      return { id: match?.id ?? null, name: activeLeg.driverName }
+    }
+  }
+
+  // 2. Check driver_overrides in plan_override
+  const overrideId = evt.plan_override?.driver_overrides?.[0] ?? evt.plan_override?.driver_overrides?.['0']
+  if (overrideId) {
+    const match = familyMembers.find((m) => m.id === overrideId)
+    if (match) return { id: match.id, name: match.name }
+  }
+
+  // 3. Check event_members with role 'driver'
+  const driverMember = evt.members?.find((m) => m.role === 'driver')?.family_member
+  if (driverMember?.name) {
+    return { id: driverMember.id, name: driverMember.name }
+  }
+
+  // 4. Check primary attendee or first member if they are a parent or can drive
+  const primaryMember = evt.members?.find((m) => m.role === 'primary')?.family_member
+  if (primaryMember?.name && (primaryMember.can_drive || primaryMember.role === 'parent')) {
+    return { id: primaryMember.id, name: primaryMember.name }
+  }
+
+  const anyDriverMember = evt.members?.find((m) => m.family_member?.can_drive && m.family_member?.role === 'parent')?.family_member
+  if (anyDriverMember?.name) {
+    return { id: anyDriverMember.id, name: anyDriverMember.name }
+  }
+
+  // 5. Default household parent driver
+  const parentDriver = familyMembers.find((m) => m.role === 'parent' && m.can_drive)
+  return { id: parentDriver?.id ?? null, name: parentDriver?.name || 'Jake' }
+}
+
+/**
  * Evaluates driver commitments across events for a specific day and detects collisions.
  */
 export function analyzeDriverSchedule(
@@ -79,25 +133,11 @@ export function analyzeDriverSchedule(
   events.forEach((evt) => {
     if (evt.all_day) return
 
-    // Find assigned driver from members or enrichment
-    const driverMemberObj = evt.members?.find((m) => m.role === 'driver')?.family_member
-    let driverName = driverMemberObj?.name || (evt.enrichment as { driver_name?: string | null } | null)?.driver_name || null
-    let driverId = driverMemberObj?.id || null
+    const { id: resolvedDriverId, name: effectiveDriverName } = resolveEventDriver(evt, familyMembers)
+    if (!effectiveDriverName) return
 
-    if (!driverName && !driverId) {
-      // Fallback: check if primary attendee is a parent driver
-      const primaryAttendee = evt.members?.find((m) => m.role === 'primary')?.family_member || evt.members?.[0]?.family_member
-      if (primaryAttendee && primaryAttendee.role === 'parent') {
-        driverName = primaryAttendee.name
-        driverId = primaryAttendee.id
-      }
-    }
-
-    if (!driverName && !driverId) return
-
-    const effectiveDriverName = driverName || 'Driver'
     const normalizedDriverId =
-      driverId?.toLowerCase() ||
+      resolvedDriverId?.toLowerCase() ||
       nameToMember.get(effectiveDriverName.toLowerCase())?.id.toLowerCase() ||
       effectiveDriverName.toLowerCase()
     const resolvedMember =
@@ -118,7 +158,7 @@ export function analyzeDriverSchedule(
       eventId: evt.id,
       title: evt.title,
       driverId: normalizedDriverId,
-      driverName: resolvedMember?.name || driverName || 'Driver',
+      driverName: resolvedMember?.name || effectiveDriverName || 'Driver',
       driverColor: resolvedMember?.color_hex || 'var(--color-casa-navy)',
       driverAvatar: resolvedMember?.name?.[0]?.toUpperCase() || 'D',
       startMin,

@@ -14,7 +14,7 @@ import { cn } from '../../../utils/cn'
 import type { EventWithDetails } from '../../../hooks/useCalendarEvents'
 import type { FamilyMember } from '../../../types'
 import { useFamilyRoutineIntelligence } from '../../../hooks/useFamilyRoutineIntelligence'
-import { analyzeDriverSchedule, type DriverConflictItem } from '../../../lib/driverConflictEngine'
+import { analyzeDriverSchedule, resolveEventDriver, type DriverConflictItem } from '../../../lib/driverConflictEngine'
 
 import { Button } from '../../ui'
 
@@ -235,8 +235,7 @@ export default function MiddayLogisticsWidget({
         {afternoonPickups.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             {afternoonPickups.map((evt) => {
-              const driverObj = evt.members?.find((m) => m.role === 'driver')?.family_member
-              const driverName = driverObj?.name || 'Giselle'
+              const { name: driverName } = resolveEventDriver(evt, familyMembers)
 
               return (
                 <div

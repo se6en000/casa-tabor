@@ -15,6 +15,7 @@ import {
   type AmbientRoutineStatus,
 } from '../lib/familyRoutines'
 import type { FamilyMember, MemberAvailabilityException } from '../types'
+import { resolveEventDriver } from '../lib/driverConflictEngine'
 
 export interface DepartureItem {
   id: string
@@ -174,9 +175,9 @@ function deriveDeparturesForDate(
       effVenueName = earlyEvt.location_name || earlyEvt.address || routine.venueName
       effVenueAddress = earlyEvt.address || routine.venueAddress
 
-      const driverAttendee = earlyEvt.members?.find((m) => m.role === 'driver')?.family_member
-      effDropDriverName = driverAttendee?.name || routine.dropoffDriverName || 'Jake'
-      effDropDriverId = driverAttendee?.id || routine.dropoffDriverId || null
+      const { id: resolvedDriverId, name: resolvedDriverName } = resolveEventDriver(earlyEvt, familyMembers)
+      effDropDriverName = resolvedDriverName || routine.dropoffDriverName || 'Jake'
+      effDropDriverId = resolvedDriverId || routine.dropoffDriverId || null
 
       const cleanedTitle = earlyEvt.title
         .replace(new RegExp(`^${child.name}\\s*([0-9]+(:[0-9]+)?\\s*(am|pm)?:?)?\\s*:?\\s*`, 'i'), '')

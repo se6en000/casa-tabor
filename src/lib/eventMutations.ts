@@ -703,6 +703,29 @@ export async function toggleEventAttendee(
     .filter((m) => nextMemberIds.includes(m.id))
     .map((m) => m.name)
 
+  // 0ms Optimistic UI cache update for attendee avatars and chips
+  const targetMember = allFamilyMembers.find((m) => m.id === memberId)
+  let nextMembers = event.members ?? []
+  if (isSelected && targetMember) {
+    if (!nextMembers.some(m => (m.family_member?.id || m.id) === memberId)) {
+      nextMembers = [
+        ...nextMembers,
+        {
+          id: crypto.randomUUID(),
+          role: 'attendee',
+          family_member: targetMember,
+        },
+      ]
+    }
+  } else if (!isSelected) {
+    nextMembers = nextMembers.filter(m => (m.family_member?.id || m.id) !== memberId)
+  }
+
+  publishEventAggregatePatch(queryClient, event.id, {
+    members: nextMembers,
+    updated_at: new Date().toISOString(),
+  })
+
   // 1. Sync transportation plan attendee roster and passengers
   if (event.plan_override?.transportation_plan) {
     const updatedPlan = syncTransportationAttendees(
@@ -751,6 +774,17 @@ export async function updateEventCategory(
   mode: 'reminder' | 'event',
 ) {
   const catSlug = catName.toLowerCase().replace(/\s+/g, '_')
+
+  // 0ms Optimistic UI cache update for category and mode switch
+  publishEventAggregatePatch(queryClient, eventId, {
+    event_type: mode === 'reminder' ? 'reminder' : 'event',
+    enrichment: {
+      category: catSlug,
+      category_locked: true,
+      updated_at: new Date().toISOString(),
+    } as any,
+    updated_at: new Date().toISOString(),
+  })
 
   const { error: eventError } = await supabase
     .from('events')

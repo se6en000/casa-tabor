@@ -51,6 +51,17 @@ const DEFAULT_HOUSEHOLD_PLACES: VenueInfo[] = [
   },
 ]
 
+function shouldAppendCityContext(query: string): boolean {
+  const q = query.toLowerCase().trim()
+  if (q.includes(',')) return false
+  if (/\b\d{5}\b/.test(q)) return false
+  const explicitLocations = [
+    'fl', 'florida', 'west palm', 'palm beach', 'miami', 'orlando', 'tampa',
+    'boca', 'jupiter', 'delray', 'wellington', 'atlanta', 'dallas', 'ny', 'california', 'texas',
+  ]
+  return !explicitLocations.some((loc) => q.includes(loc))
+}
+
 export default function LivingVenueCard({
   venue,
   onSelectVenue,
@@ -66,6 +77,13 @@ export default function LivingVenueCard({
 
   // Attempt to resolve live GPS or household anchor coordinates
   useEffect(() => {
+    const home = savedPlaces.find(
+      (p) => p.name.toLowerCase().includes('home') && p.lat && p.lng,
+    )
+    if (home?.lat && home?.lng) {
+      setUserCoords({ lat: home.lat, lng: home.lng })
+    }
+
     if (typeof navigator !== 'undefined' && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
@@ -75,10 +93,6 @@ export default function LivingVenueCard({
           })
         },
         () => {
-          // Fallback to home place or default household coordinates
-          const home = savedPlaces.find(
-            (p) => p.name.toLowerCase().includes('home') && p.lat && p.lng,
-          )
           if (home?.lat && home?.lng) {
             setUserCoords({ lat: home.lat, lng: home.lng })
           }
@@ -115,16 +129,25 @@ export default function LivingVenueCard({
     }))
   }, [savedPlaces, userCoords])
 
-  // Context-aware pre-fill: when opening for an unmapped venue with a name, prefill search
+  const searchInputRef = useRef<HTMLInputElement>(null)
+
+  // Context-aware pre-fill: load the current place name or street address into the search bar
   const handleOpenChange = () => {
     const nextState = !isChanging
     setIsChanging(nextState)
     if (nextState) {
-      if (!venue.address && venue.name && venue.name !== 'Unset' && venue.name !== 'New Event') {
+      const isGenericName = !venue.name || ['unset', 'new event', 'destination', 'home'].includes(venue.name.trim().toLowerCase())
+      if (!isGenericName && venue.name) {
         setSearchTerm(venue.name)
       } else {
-        setSearchTerm('')
+        setSearchTerm(venue.address || '')
       }
+      setTimeout(() => {
+        if (searchInputRef.current) {
+          searchInputRef.current.focus()
+          searchInputRef.current.select()
+        }
+      }, 50)
     } else {
       setSearchTerm('')
     }
@@ -144,9 +167,11 @@ export default function LivingVenueCard({
 
     const timer = window.setTimeout(async () => {
       try {
+        const needsCity = shouldAppendCityContext(trimmed)
         const { data, error } = await supabase.functions.invoke('place-search', {
           body: {
             query: trimmed,
+            city: needsCity ? 'West Palm Beach, FL' : undefined,
             lat: userCoords.lat,
             lng: userCoords.lng,
           },
@@ -173,11 +198,17 @@ export default function LivingVenueCard({
               )
               return {
                 ...item,
+                distanceMiles: dist,
                 distanceText: formatDistanceMiles(dist),
               }
             }
-            return item
+            return {
+              ...item,
+              distanceMiles: 99999,
+              distanceText: null,
+            }
           })
+          withDistances.sort((a, b) => (a.distanceMiles ?? 99999) - (b.distanceMiles ?? 99999))
           setGoogleResults(withDistances)
         } else {
           setGoogleResults([])
@@ -292,6 +323,7 @@ export default function LivingVenueCard({
               <Search size={16} className="text-slate-500 shrink-0" />
             )}
             <input
+              ref={searchInputRef}
               type="text"
               autoFocus
               value={searchTerm}
@@ -302,11 +334,14 @@ export default function LivingVenueCard({
             {searchTerm && (
               <button
                 type="button"
-                onClick={() => setSearchTerm('')}
-                className="text-xs text-slate-400 hover:text-slate-700 p-1.5 min-w-[28px] min-h-[28px] flex items-center justify-center rounded-md"
+                onClick={() => {
+                  setSearchTerm('')
+                  searchInputRef.current?.focus()
+                }}
+                className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 active:bg-slate-200 p-1 min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg transition-colors cursor-pointer"
                 aria-label="Clear destination search query"
               >
-                <X size={14} />
+                <X size={16} />
               </button>
             )}
           </div>

@@ -25,10 +25,19 @@ function patchEventCollection(
   if (Array.isArray(value)) {
     return value.map((entry) => patchEventRecord(entry, eventId, patch))
   }
-  if (isRecord(value) && Array.isArray(value.events)) {
-    return {
-      ...value,
-      events: value.events.map((entry) => patchEventRecord(entry, eventId, patch)),
+  if (isRecord(value)) {
+    if (Array.isArray(value.active) || Array.isArray(value.cancelled)) {
+      return {
+        ...value,
+        ...(Array.isArray(value.active) ? { active: value.active.map((entry) => patchEventRecord(entry, eventId, patch)) } : {}),
+        ...(Array.isArray(value.cancelled) ? { cancelled: value.cancelled.map((entry) => patchEventRecord(entry, eventId, patch)) } : {}),
+      }
+    }
+    if (Array.isArray(value.events)) {
+      return {
+        ...value,
+        events: value.events.map((entry) => patchEventRecord(entry, eventId, patch)),
+      }
     }
   }
   return patchEventRecord(value, eventId, patch)

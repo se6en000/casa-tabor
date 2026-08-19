@@ -39,7 +39,7 @@ import {
   triggerGoogleEventSync,
   invalidateAllCalendarQueries,
 } from '../../../../lib/eventMutations'
-import { evictEventFromAllCaches } from '../../../../lib/eventAggregateCache'
+import { evictEventFromAllCaches, publishEventAggregatePatch } from '../../../../lib/eventAggregateCache'
 
 
 const DEFAULT_VENUE: VenueInfo = {
@@ -471,8 +471,31 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
         (newBehavior !== 'dropoff_only' && driver2Member?.id) ? driver2Member.id : null,
       ].filter((id): id is string => Boolean(id))
 
+      const existingMembers = currentEvent.members || []
+      const nextMembers = [...existingMembers]
       if (relevantDriverIds.length > 0) {
-        const existingMembers = currentEvent.members || []
+        for (const drvId of relevantDriverIds) {
+          const matchedMember = familyMembers.find(m => m.id === drvId)
+          if (matchedMember && !nextMembers.some(m => (m.family_member?.id || m.id) === drvId)) {
+            nextMembers.push({
+              id: crypto.randomUUID(),
+              role: 'driver',
+              family_member: matchedMember,
+            })
+          }
+        }
+      }
+
+      activeEventRef.current = {
+        ...currentEvent,
+        members: nextMembers,
+      }
+
+      publishEventAggregatePatch(queryClient, currentEvent.id, {
+        members: nextMembers,
+      })
+
+      if (relevantDriverIds.length > 0) {
         const existingMemberIds = new Set(existingMembers.map(m => m.family_member?.id || m.id))
         for (const drvId of relevantDriverIds) {
           if (!existingMemberIds.has(drvId)) {
@@ -627,6 +650,27 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
       recurrence_lines: recurringContext.series.recurrence_lines,
     }
 
+    if (scope === 'this') {
+      const patchedMembers = memberIds.map((mid) => ({
+        id: crypto.randomUUID(),
+        role: 'attendee',
+        family_member: familyMembers.find(m => m.id === mid)!,
+      })).filter(m => Boolean(m.family_member))
+
+      publishEventAggregatePatch(queryClient, initialEvent.id, {
+        title: newTitle,
+        start_time: newStart,
+        end_time: newEnd,
+        all_day: newIsAllDay,
+        event_type: values.mode === 'reminder' ? 'reminder' : 'event',
+        location_name: newLocation,
+        address: newAddress,
+        members: patchedMembers,
+        enrichment: enrichment as any,
+        updated_at: new Date().toISOString(),
+      })
+    }
+
     const actionId = crypto.randomUUID()
     const result = await saveRecurringEditorMutation({
       selected_event_id: initialEvent.id,
@@ -654,7 +698,7 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
 
     invalidateCalendar()
     return true
-  }, [initialEvent, isCanonicalOccurrence, recurringEditorEnabled, recurringEditorWritable, recurringContext, state, invalidateCalendar])
+  }, [initialEvent, isCanonicalOccurrence, recurringEditorEnabled, recurringEditorWritable, recurringContext, state, familyMembers, queryClient, invalidateCalendar])
 
   // Update Title
   const updateTitle = useCallback(async (newTitle: string) => {
@@ -697,6 +741,28 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     setState(prev => ({ ...prev, selectedMemberIds: nextIds }))
     const currentEvent = activeEventRef.current || initialEvent
     if (!currentEvent?.id) return
+
+    const targetMember = familyMembers.find(m => m.id === memberId)
+    let nextMembers = currentEvent.members ?? []
+    if (!isSelected && targetMember) {
+      if (!nextMembers.some(m => (m.family_member?.id || m.id) === memberId)) {
+        nextMembers = [
+          ...nextMembers,
+          {
+            id: crypto.randomUUID(),
+            role: 'attendee',
+            family_member: targetMember,
+          },
+        ]
+      }
+    } else if (isSelected) {
+      nextMembers = nextMembers.filter(m => (m.family_member?.id || m.id) !== memberId)
+    }
+
+    activeEventRef.current = {
+      ...currentEvent,
+      members: nextMembers,
+    }
 
     try {
       if (currentEvent.id.startsWith('routine-')) {
@@ -853,6 +919,13 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     const currentEvent = activeEventRef.current || initialEvent
     if (!currentEvent?.id) return
 
+    activeEventRef.current = {
+      ...currentEvent,
+      start_time: startDate.toISOString(),
+      end_time: endDate.toISOString(),
+      all_day: isAllDay,
+    }
+
     try {
       if (currentEvent.id.startsWith('routine-')) {
         const materialized = await materializeSyntheticRoutineEvent(
@@ -870,7 +943,7 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
 
       const handled = await persistRecurringFieldMutation('schedule', { startDate, endDate, durationMinutes: durationMins, isAllDay })
       if (!handled) {
-        await updateEventSchedule(supabase, queryClient, currentEvent, startDate, endDate, isAllDay)
+        await updateEventSchedule(supabase, queryClient, activeEventRef.current, startDate, endDate, isAllDay)
       }
     } catch (err) {
       console.error('[LivingFlow] Failed to update event timing:', err)
@@ -892,6 +965,15 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     setState(prev => ({ ...prev, category: catName, categoryIcon: icon, mode }))
     const currentEvent = activeEventRef.current || initialEvent
     if (!currentEvent?.id) return
+
+    activeEventRef.current = {
+      ...currentEvent,
+      event_type: mode === 'reminder' ? 'reminder' : 'event',
+      enrichment: currentEvent.enrichment ? {
+        ...currentEvent.enrichment,
+        category: catName.toLowerCase().replace(/\s+/g, '_'),
+      } : null,
+    }
 
     try {
       if (currentEvent.id.startsWith('routine-')) {
@@ -1023,11 +1105,12 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
 
   // Mark Completed / Done
   const markCompleted = useCallback(async () => {
-    if (!initialEvent?.id) return
+    const currentEvent = activeEventRef.current || initialEvent
+    if (!currentEvent?.id) return
     onClose?.()
 
     try {
-      await completeEventOrReminder(supabase, queryClient, initialEvent)
+      await completeEventOrReminder(supabase, queryClient, currentEvent)
     } catch (err) {
       console.error('[LivingFlow] Failed to complete event:', err)
     }
@@ -1035,15 +1118,21 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
 
   // Snooze Reminder
   const snoozeReminder = useCallback(async (durationMinutes: number = 60) => {
-    if (!initialEvent?.id) return
+    const currentEvent = activeEventRef.current || initialEvent
+    if (!currentEvent?.id) return
     onClose?.()
 
     try {
-      await snoozeEventOrReminder(supabase, queryClient, initialEvent, durationMinutes)
+      const eventToSnooze: EventWithDetails = {
+        ...currentEvent,
+        start_time: state.startDate ? state.startDate.toISOString() : currentEvent.start_time,
+        end_time: state.endDate ? state.endDate.toISOString() : currentEvent.end_time,
+      }
+      await snoozeEventOrReminder(supabase, queryClient, eventToSnooze, durationMinutes)
     } catch (err) {
       console.error('[LivingFlow] Failed to snooze reminder:', err)
     }
-  }, [initialEvent, queryClient, onClose])
+  }, [initialEvent, state.startDate, state.endDate, queryClient, onClose])
 
   const setRecurScope = useCallback((scope: RecurrenceScope) => {
     setState(prev => ({ ...prev, recurScope: scope }))

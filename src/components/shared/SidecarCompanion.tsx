@@ -118,10 +118,17 @@ export default function SidecarCompanion({
 
     // Search any active event queries cached in queryClient
     let foundInCachedList: EventWithDetails | null = null
-    const allEventQueries = queryClient.getQueriesData<EventWithDetails[]>({ queryKey: ['events'] })
-    for (const [, cachedList] of allEventQueries) {
-      if (Array.isArray(cachedList)) {
-        const found = cachedList.find((e) => e?.id === selectedSidecarEventId)
+    const allEventQueries = queryClient.getQueriesData<any>({ queryKey: ['events'] })
+    for (const [, cachedData] of allEventQueries) {
+      const list = Array.isArray(cachedData)
+        ? cachedData
+        : Array.isArray(cachedData?.active)
+        ? cachedData.active
+        : Array.isArray(cachedData?.events)
+        ? cachedData.events
+        : null
+      if (list) {
+        const found = list.find((e: any) => e?.id === selectedSidecarEventId)
         if (found && found.start_time) {
           foundInCachedList = found
           break

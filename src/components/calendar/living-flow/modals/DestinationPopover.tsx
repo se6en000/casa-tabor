@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { MapPin, X, Search, ShoppingBag, Target, Trees, GraduationCap } from 'lucide-react'
 import type { VenueInfo } from '../types'
 import { useSavedPlaces, savedPlaceAddress } from '../../../../hooks/useSavedPlaces'
@@ -46,7 +46,12 @@ export default function DestinationPopover({
   onClose
 }: DestinationPopoverProps) {
   const [searchTerm, setSearchTerm] = useState(currentVenue.name)
+  const inputRef = useRef<HTMLInputElement>(null)
   const { data: savedPlaces = [] } = useSavedPlaces()
+
+  useEffect(() => {
+    inputRef.current?.select()
+  }, [])
 
   const favorites = savedPlaces.length > 0
     ? savedPlaces.map(p => ({
@@ -84,10 +89,12 @@ export default function DestinationPopover({
       </div>
 
       {/* Search Field */}
-      <div className="flex items-center gap-2.5 bg-slate-50 border-2 border-amber-400 p-2.5 rounded-xl">
-        <Search size={16} className="text-slate-500" />
+      <div className="flex items-center gap-2.5 bg-slate-50 border-2 border-amber-400 p-2.5 rounded-xl min-h-[48px]">
+        <Search size={16} className="text-slate-500 shrink-0" />
         <input
+          ref={inputRef}
           type="text"
+          autoFocus
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           placeholder="Search address, mall, school, park…"
@@ -95,11 +102,15 @@ export default function DestinationPopover({
         />
         {searchTerm && (
           <button
-            onClick={() => setSearchTerm('')}
-            className="text-xs text-slate-400 hover:text-slate-700"
+            type="button"
+            onClick={() => {
+              setSearchTerm('')
+              inputRef.current?.focus()
+            }}
+            className="text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 p-1 min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg transition-colors cursor-pointer"
             aria-label="Clear destination search"
           >
-            <X size={14} />
+            <X size={16} />
           </button>
         )}
       </div>
