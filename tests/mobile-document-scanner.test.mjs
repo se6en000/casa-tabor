@@ -72,11 +72,11 @@ test('QuickCreateSheet contains Scanner integration card with camera icon', () =
   assert.match(quickCreateContent, /Camera/)
 })
 
-test('MobileTodayView contains Scanner shortcut card', () => {
-  const mobileTodayContent = readFileSync('src/components/mobile/MobileTodayView.tsx', 'utf-8')
-  assert.match(mobileTodayContent, /MobileDocumentScanSheet/)
-  assert.match(mobileTodayContent, /Scan Document or Card/)
-  assert.match(mobileTodayContent, /Camera/)
+test('MobileTopBar contains Scanner shortcut with camera icon', () => {
+  const mobileTopBarContent = readFileSync('src/components/layout/MobileTopBar.tsx', 'utf-8')
+  assert.match(mobileTopBarContent, /MobileDocumentScanSheet/)
+  assert.match(mobileTopBarContent, /Scan Document or Card/)
+  assert.match(mobileTopBarContent, /Camera/)
 })
 
 test('1-to-Many simulated AI extraction structures both events and reminders with discrete date and time', () => {

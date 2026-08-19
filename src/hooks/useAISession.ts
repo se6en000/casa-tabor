@@ -19,6 +19,7 @@ export interface AIMessage {
   role: 'user' | 'assistant'
   content: string
   imageDataUrl?: string
+  imageDataUrls?: string[]
   streaming?: boolean
   evidence?: FamilyEvidence[]
   sourcesConsidered?: string[]

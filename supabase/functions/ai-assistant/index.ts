@@ -381,7 +381,8 @@ Deno.serve(async (req) => {
   const {
     messages,
     context,
-    image,
+    image: singleImageRaw,
+    images: imagesArrayRaw,
     correlation_id: correlationId,
     trace_id: traceIdRaw,
     turn_id: turnIdRaw,
@@ -397,6 +398,14 @@ Deno.serve(async (req) => {
     model_access_check: modelAccessCheckRaw,
     private_conversation_id: privateConversationIdRaw,
   } = await req.json()
+
+  const rawImagesList: ImagePayload[] = Array.isArray(imagesArrayRaw)
+    ? (imagesArrayRaw as ImagePayload[]).filter((img): img is ImagePayload => Boolean(img && typeof img.data === 'string' && typeof img.mimeType === 'string'))
+    : singleImageRaw && typeof (singleImageRaw as ImagePayload).data === 'string' && typeof (singleImageRaw as ImagePayload).mimeType === 'string'
+      ? [singleImageRaw as ImagePayload]
+      : []
+  const hasImages = rawImagesList.length > 0
+  const image = hasImages ? rawImagesList[0] : null
   const wantStream = streamRaw === true
   // Assigned by the SSE ReadableStream controller when streaming; no-op otherwise.
   // Token-producing LLM calls forward text deltas through this so the client can
@@ -4071,7 +4080,18 @@ ${includeEventContext ? `UPCOMING EVENTS SNAPSHOT (next ${PROMPT_EVENT_WINDOW_DA
 ${includeGroceryContext ? `\nGROCERY LIST (unchecked items):\n${groceryText}\n${defaultListId ? `Default list ID: ${defaultListId}` : ''}` : ''}
 ${includeRecipeContext ? `\nRECIPE LIBRARY SNAPSHOT (recent):\n${recipesText || 'No recipes saved yet.'}` : ''}
 ${includeFoodProfileContext && foodProfileText ? `\nFOOD PROFILE (household dietary needs & preferences — honor for all meal/grocery/recipe suggestions):\n${foodProfileText}` : ''}
-${image ? `\nIMAGE CONTEXT:\n- Casa supplied ${imageContext === 'conversation' ? 'the most recent image from this conversation' : 'an image attached to this turn'} for direct visual analysis.\n- You can analyze this image. Never claim that you cannot see, read, or interpret images.\n- If this specific image is too unclear to interpret reliably, say that the image could not be read clearly and ask for a clearer upload. Do not guess.` : ''}
+${hasImages ? `\nIMAGE CONTEXT:
+- Casa supplied ${rawImagesList.length > 1 ? `${rawImagesList.length} images` : imageContext === 'conversation' ? 'the most recent image from this conversation' : 'an image attached to this turn'} for direct visual analysis.
+- You can analyze these images. Never claim that you cannot see, read, or interpret images.
+- If the user provides screenshot(s) or photo(s) of an event, hotel/flight reservation, invitation, or appointment:
+  - Extract ALL visible details:
+    * title: Clear name of the venue, property, or event (e.g. "The Plymouth South Beach" or "Doctor Appointment")
+    * start: Precise start date/time ISO string
+    * end: Precise end date/time ISO string (or next-day checkout for hotel stays)
+    * location: Complete property/venue address
+    * notes: All confirmation numbers, room types, guest names, pricing/cost, and policy notes
+  - Call create_event directly with these arguments so the user can verify the staged preflight confirmation card.
+- If this specific image is too unclear to interpret reliably, say that the image could not be read clearly and ask for a clearer upload. Do not guess.` : ''}
 ${cookingFrame ? `\nCOOKING SEMANTIC FRAME (Casa's normalized interpretation; answer the concept, not the wording):\nIntent: ${cookingFrame.intent}\nSlots: ${JSON.stringify(cookingFrame.slots)}${inheritedCookingFrame && cookingRequestText ? `\nOriginal request to retry: ${cookingRequestText}` : ''}${cookingGuidance ? `\nRequired handling: ${cookingGuidance}` : ''}` : ''}
 ${cookingPolicy ? `\n${cookingPolicy}` : ''}
 ${includeAvailabilityContext && availabilityText ? `\nMEMBER AVAILABILITY (recurring rules + upcoming overrides — use to warn about conflicts and pick times people are free):\n${availabilityText}` : ''}
@@ -4165,10 +4185,13 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
     history.shift()
   }
 
-  // Add current user message with optional image
+  // Add current user message with optional image(s)
   const lastMsg = history[history.length - 1]
-  if (lastMsg?.role === 'user' && image) {
-    lastMsg.parts.unshift({ inlineData: { mimeType: (image as ImagePayload).mimeType, data: (image as ImagePayload).data } })
+  if (lastMsg?.role === 'user' && hasImages) {
+    for (let i = rawImagesList.length - 1; i >= 0; i--) {
+      const img = rawImagesList[i]
+      lastMsg.parts.unshift({ inlineData: { mimeType: img.mimeType, data: img.data } })
+    }
   }
 
   // Helper: execute read-only tools server-side
@@ -5400,7 +5423,8 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
             { start, end },
             { now, utcOffset: context?.utcOffset },
           )
-          if (!temporalEvidence.allowed) {
+          const allowImageTemporalProvenance = hasImages || imageDirectEventCreateFlow
+          if (!temporalEvidence.allowed && !allowImageTemporalProvenance) {
             const traceEvent = temporalEvidence.status === 'mismatch'
               ? 'date_mismatch_blocked'
               : 'date_clarification_required'
@@ -5437,7 +5461,18 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
                 : `What date should I use for "${title || 'that event'}"? Nothing was added to the calendar.`,
             }
           }
-          args.temporal_provenance = temporalEvidence
+          if (allowImageTemporalProvenance && !temporalEvidence.allowed) {
+            args.temporal_provenance = {
+              sourceMessageId: turnId ?? `img-${Date.now().toString(36)}`,
+              sourceText: '(visual attachment)',
+              rangeStart: start ? start.slice(0, 10) : null,
+              rangeEnd: end ? end.slice(0, 10) : (start ? start.slice(0, 10) : null),
+              resolutionKind: 'image_provenance',
+              requiresExactDateConfirmation: false,
+            }
+          } else {
+            args.temporal_provenance = temporalEvidence
+          }
           if (experienceMode === 'talk_plan' && activeMemberId && privateConversationId && !dryRun) {
             const draftItemId = await findUndatedCalendarDraft(sb, {
               memberId: activeMemberId,

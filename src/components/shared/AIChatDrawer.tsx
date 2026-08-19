@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import type React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIcon, Camera, Mic, Keyboard, RotateCcw, Plus, Square, Calendar, CalendarDays, Car, ShoppingCart, ChefHat, Pencil, AlertTriangle, Clock3, Utensils, Bell, UserPlus, MapPin, Mail, Activity, ChevronRight, Navigation, Rotate3d, BookOpen, Lock } from 'lucide-react'
+import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIcon, Camera, Mic, Keyboard, RotateCcw, Plus, Square, Calendar, CalendarDays, Car, ShoppingCart, ChefHat, Pencil, AlertTriangle, Clock3, Utensils, Bell, UserPlus, MapPin, Mail, Activity, ChevronRight, Navigation, Rotate3d, BookOpen, Lock, Building2, Users, FileText } from 'lucide-react'
 import { format } from 'date-fns'
 import { useNavigate } from 'react-router-dom'
 import { cn } from '../../utils/cn'
@@ -92,7 +92,7 @@ export default function AIChatDrawer({
   })
   const interimRef = useRef('')
   const hadUserInteractionRef = useRef(false)
-  const [attachedImage, setAttachedImage] = useState<{ dataUrl: string; mimeType: string } | null>(null)
+  const [attachedImages, setAttachedImages] = useState<Array<{ dataUrl: string; mimeType: string }>>([])
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false)
   const [nudgeDismissed, setNudgeDismissed] = useState(false)
   const [historyModalOpen, setHistoryModalOpen] = useState(false)
@@ -453,7 +453,7 @@ export default function AIChatDrawer({
 
   const sendTraced = useCallback((
     text: string,
-    image?: { dataUrl: string; mimeType: string },
+    image?: { dataUrl: string; mimeType: string } | Array<{ dataUrl: string; mimeType: string }>,
     fromVoice = false,
   ) => {
     const baseTrace = activeTraceRef.current ?? createAssistantTraceContext({
@@ -812,7 +812,7 @@ export default function AIChatDrawer({
       clearVoiceTranscript()
       pendingLowConfidenceRef.current = null
       latestVoiceConfidenceRef.current = null
-      setAttachedImage(null)
+      setAttachedImages([])
       setAttachmentMenuOpen(false)
       firedChefGreetRef.current = null
     }
@@ -963,39 +963,58 @@ export default function AIChatDrawer({
 
   const handlePaste = useCallback(async (e: React.ClipboardEvent) => {
     const items = Array.from(e.clipboardData.items)
-    const imageItem = items.find(i => i.type.startsWith('image/'))
-    if (imageItem) {
+    const imageItems = items.filter(i => i.type.startsWith('image/'))
+    if (imageItems.length > 0) {
       e.preventDefault()
-      const blob = imageItem.getAsFile()
-      if (blob) {
-        markUserInteraction()
-        setAttachedImage(await readImageFile(blob))
+      markUserInteraction()
+      const newImages: Array<{ dataUrl: string; mimeType: string }> = []
+      for (const item of imageItems) {
+        const blob = item.getAsFile()
+        if (blob) {
+          const img = await readImageFile(blob)
+          newImages.push(img)
+        }
+      }
+      if (newImages.length > 0) {
+        setAttachedImages(prev => [...prev, ...newImages])
       }
     }
   }, [readImageFile, markUserInteraction])
 
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file && file.type.startsWith('image/')) {
+    const files = Array.from(e.target.files ?? [])
+    const imageFiles = files.filter(f => f.type.startsWith('image/'))
+    if (imageFiles.length > 0) {
       markUserInteraction()
-      setAttachedImage(await readImageFile(file))
+      const newImages: Array<{ dataUrl: string; mimeType: string }> = []
+      for (const file of imageFiles) {
+        const img = await readImageFile(file)
+        newImages.push(img)
+      }
+      if (newImages.length > 0) {
+        setAttachedImages(prev => [...prev, ...newImages])
+      }
     }
     e.target.value = ''
   }, [readImageFile, markUserInteraction])
 
+  const handleRemoveImage = useCallback((indexToRemove: number) => {
+    setAttachedImages(prev => prev.filter((_, idx) => idx !== indexToRemove))
+  }, [])
+
   const handleSend = useCallback((e?: React.MouseEvent) => {
     e?.stopPropagation()
     const text = (textareaRef.current?.value ?? input).trim()
-    const img = attachedImage
-    if ((!text && !img) || loading) return
+    const imgs = attachedImages
+    if ((!text && imgs.length === 0) || loading) return
     markUserInteraction()
     setInput('')
     interimRef.current = ''
     if (textareaRef.current) textareaRef.current.value = ''
-    setAttachedImage(null)
-    if (!img && dispatchPendingConfirmation(text)) return
-    void sendTraced(text || '(see attached image)', img ?? undefined)
-  }, [input, attachedImage, loading, sendTraced, markUserInteraction, dispatchPendingConfirmation])
+    setAttachedImages([])
+    if (imgs.length === 0 && dispatchPendingConfirmation(text)) return
+    void sendTraced(text || (imgs.length > 1 ? '(see attached images)' : '(see attached image)'), imgs.length > 0 ? imgs : undefined)
+  }, [input, attachedImages, loading, sendTraced, markUserInteraction, dispatchPendingConfirmation])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -1685,31 +1704,48 @@ export default function AIChatDrawer({
             {/* Input */}
             <div className="relative px-4 pb-5 pt-3 border-t border-casa-border">
               <AnimatePresence>
-                {attachedImage && (
+                {attachedImages.length > 0 && (
                   <motion.div
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
                     exit={{ opacity: 0, height: 0 }}
-                    className="mb-2 overflow-hidden"
+                    className="mb-2.5 overflow-hidden"
                   >
-                    <div className="relative inline-block">
-                      <img
-                        src={attachedImage.dataUrl}
-                        alt="Attached"
-                        className="h-20 w-auto rounded-lg border border-casa-border object-cover"
-                      />
-                      <Button variant="ghost"
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1.5 pt-0.5 scrollbar-thin">
+                      {attachedImages.map((img, index) => (
+                        <div key={index} className="relative inline-block shrink-0 rounded-xl border border-casa-border overflow-hidden group shadow-2xs">
+                          <img
+                            src={img.dataUrl}
+                            alt={`Attached ${index + 1}`}
+                            className="h-20 w-24 object-cover"
+                          />
+                          <Button
+                            variant="ghost"
+                            type="button"
+                            onClick={() => handleRemoveImage(index)}
+                            className="absolute top-1 right-1 size-6 rounded-full bg-black/70 hover:bg-red-600 text-white flex items-center justify-center shadow outline-none transition-colors"
+                            aria-label={`Remove attached image ${index + 1}`}
+                          >
+                            <X size={12} />
+                          </Button>
+                          <div className="absolute bottom-1 left-1 flex items-center gap-1 bg-black/60 backdrop-blur-xs rounded px-1.5 py-0.5">
+                            <ImageIcon size={9} className="text-white" />
+                            <span className="text-3xs text-white font-semibold">Photo {index + 1}</span>
+                          </div>
+                        </div>
+                      ))}
+
+                      <Button
+                        variant="subtle"
                         type="button"
-                        onClick={() => setAttachedImage(null)}
-                        className="absolute -top-3 -right-3 size-control rounded-button bg-casa-error text-white flex items-center justify-center shadow outline-none focus-visible:ring-2 focus-visible:ring-casa-gold"
-                        aria-label="Remove attached image"
+                        onClick={() => setAttachmentMenuOpen(true)}
+                        className="h-20 w-16 shrink-0 rounded-xl border border-dashed border-casa-gold/50 bg-casa-gold/5 hover:bg-casa-gold/15 text-casa-gold flex flex-col items-center justify-center gap-1 transition-colors"
+                        title="Add another photo or attachment"
+                        aria-label="Add another photo or attachment"
                       >
-                        <X size={10} />
+                        <Plus size={16} />
+                        <span className="text-3xs font-bold">+ Add</span>
                       </Button>
-                      <div className="absolute bottom-1 left-1 flex items-center gap-1 bg-black/50 rounded px-1 py-0.5">
-                        <ImageIcon size={9} className="text-white" />
-                        <span className="text-caption text-white font-medium">Image attached</span>
-                      </div>
                     </div>
                   </motion.div>
                 )}
@@ -1727,7 +1763,7 @@ export default function AIChatDrawer({
                 )}
                 style={presenceStyle}
               >
-                <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+                <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFileChange} />
                 <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileChange} />
 
                 {voiceComposerActive ? (
@@ -1780,7 +1816,7 @@ export default function AIChatDrawer({
                             }}
                             className="min-h-control flex-1 gap-2 text-body-sm rounded-xl border border-casa-gold/30 bg-white text-casa-navy font-semibold hover:bg-casa-gold/10"
                           >
-                            <Paperclip size={16} /> Attach image
+                            <Paperclip size={16} /> Attach images
                           </Button>
                           <Button
                             variant="subtle"
@@ -1804,7 +1840,7 @@ export default function AIChatDrawer({
                         value={input}
                         onChange={e => handleInputChange(e.target.value)}
                         onKeyDown={handleKeyDown}
-                        placeholder={attachedImage ? 'Ask Copilot about this image…' : 'Ask Copilot anything or speak…'}
+                        placeholder={attachedImages.length > 0 ? 'Ask Copilot about these attachments…' : 'Ask Copilot anything or speak…'}
                         rows={2}
                         aria-label="Assistant message"
                         className="w-full min-h-[44px] max-h-[160px] bg-transparent text-body text-casa-navy placeholder:text-casa-muted/80 outline-none resize-none leading-relaxed px-1 py-0.5 font-medium"
@@ -1826,9 +1862,9 @@ export default function AIChatDrawer({
                         >
                           <Plus size={18} />
                         </Button>
-                        {attachedImage && (
-                          <span className="text-caption text-casa-gold-hover font-semibold truncate max-w-[120px]">
-                            1 image attached
+                        {attachedImages.length > 0 && (
+                          <span className="text-caption text-casa-gold-hover font-semibold truncate max-w-[140px]">
+                            {attachedImages.length === 1 ? '1 image attached' : `${attachedImages.length} images attached`}
                           </span>
                         )}
                       </div>
@@ -1865,10 +1901,10 @@ export default function AIChatDrawer({
                           variant="ghost"
                           type="button"
                           onClick={handleSend}
-                          disabled={(!input.trim() && !attachedImage) || loading}
+                          disabled={(!input.trim() && attachedImages.length === 0) || loading}
                           className={cn(
                             'size-control rounded-full flex items-center justify-center outline-none transition-all shrink-0 focus-visible:ring-2 focus-visible:ring-casa-gold',
-                            (input.trim() || attachedImage) && !loading
+                            (input.trim() || attachedImages.length > 0) && !loading
                               ? 'bg-gradient-to-r from-casa-gold to-amber-600 text-white hover:brightness-105 shadow-xs active:scale-95'
                               : 'bg-casa-divider text-casa-muted opacity-50'
                           )}
@@ -2095,7 +2131,7 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
   const hasPendingAction = !!ta && ta.status === 'pending'
   const showQuickSaveRecipe = !isUser && !ta && Boolean(onQuickSaveRecipe) && Boolean(enableQuickSaveRecipe) && looksLikeRecipeSuggestion(msg.content)
   // A plain user text message can be tapped to edit + resend (no images / tool actions).
-  const canEdit = isUser && !ta && !msg.imageDataUrl && Boolean(onEditMessage) && msg.content !== '(see attached image)' && Boolean(msg.content?.trim())
+  const canEdit = isUser && !ta && !msg.imageDataUrl && !(msg.imageDataUrls && msg.imageDataUrls.length > 0) && Boolean(onEditMessage) && msg.content !== '(see attached image)' && msg.content !== '(see attached images)' && Boolean(msg.content?.trim())
   const isStaleError = !!ta?.errorMsg && ta.errorMsg.toLowerCase().includes('changed since')
   const preferredEventId = msg.conversationState?.activeEntityType === 'event'
     ? msg.conversationState.activeEventId
@@ -2168,10 +2204,36 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
         onClick={canEdit ? () => onEditMessage?.(msg.content) : undefined}
         title={canEdit ? 'Tap to edit and resend' : undefined}
       >
-        {msg.imageDataUrl && (
-          <img src={msg.imageDataUrl} alt="Attached" className="max-h-40 w-auto rounded-lg mb-2 object-cover" />
-        )}
-        {!ta && msg.content !== '(see attached image)' && msg.content && (
+        {(() => {
+          const images = msg.imageDataUrls && msg.imageDataUrls.length > 0
+            ? msg.imageDataUrls
+            : msg.imageDataUrl
+              ? [msg.imageDataUrl]
+              : []
+          if (images.length === 0) return null
+          if (images.length === 1) {
+            return (
+              <img
+                src={images[0]}
+                alt="Attached"
+                className="max-h-48 w-auto rounded-xl mb-2 object-cover border border-white/10 shadow-2xs"
+              />
+            )
+          }
+          return (
+            <div className="grid grid-cols-2 gap-1.5 mb-2.5 max-w-[280px]">
+              {images.map((url, idx) => (
+                <img
+                  key={idx}
+                  src={url}
+                  alt={`Attached ${idx + 1}`}
+                  className="h-24 w-full rounded-lg object-cover border border-white/10 shadow-2xs"
+                />
+              ))}
+            </div>
+          )
+        })()}
+        {!ta && msg.content !== '(see attached image)' && msg.content !== '(see attached images)' && msg.content && (
           isUser
             ? <p className="whitespace-pre-wrap">{msg.content}</p>
             : (
@@ -2927,17 +2989,66 @@ function ToolActionPreview({ tool, args, events }: { tool: string; args: Record<
     const activeConflict = preflightConflict ?? conflict
     const activeDuplicate = preflightDuplicate ?? duplicate
     const isExactMatch = activeDuplicate && activeDuplicate.title?.trim().toLowerCase() === titleStr.toLowerCase()
+    const isHotelOrStay = /\b(?:hotel|resort|inn|suite|suites|motel|stay|lodge|airbnb|reservation|flight|booking)\b/i.test(titleStr) ||
+      (typeof args.notes === 'string' && /\b(?:conf(?:irmation)?|room|check-in|checkout)\b/i.test(args.notes))
 
     return (
       <div className="space-y-3">
-        <ConfirmationHeading kind={isReminder ? 'reminder' : 'calendar'}>
+        <ConfirmationHeading kind={isReminder ? 'reminder' : isHotelOrStay ? 'recipe' : 'calendar'}>
           {activeDuplicate
             ? (isReminder ? 'Duplicate Reminder Detected' : 'Duplicate Event Detected')
             : activeConflict
               ? 'Calendar Conflict Detected'
-              : preview.heading}
+              : isHotelOrStay
+                ? `Confirm Reservation: "${titleStr || 'Reservation'}"`
+                : preview.heading}
         </ConfirmationHeading>
-        {preview.when && <p className="text-body-sm font-semibold text-casa-navy">{preview.when}</p>}
+
+        {/* Structured Preflight Card */}
+        <div className="rounded-2xl border border-casa-gold/30 bg-gradient-to-br from-amber-500/5 via-casa-surface to-casa-surface p-3.5 space-y-2.5 shadow-2xs">
+          <div className="flex items-start justify-between gap-2">
+            <div className="space-y-0.5 min-w-0">
+              <span className="text-body font-bold text-casa-navy block truncate">
+                {titleStr || 'New Event'}
+              </span>
+              {preview.when && (
+                <p className="text-caption font-semibold text-casa-gold-hover flex items-center gap-1.5">
+                  <CalendarDays size={13} className="shrink-0" />
+                  <span>{preview.when}</span>
+                </p>
+              )}
+            </div>
+            {isHotelOrStay && (
+              <span className="text-2xs font-bold px-2 py-0.5 rounded-full bg-casa-surface border border-casa-gold/40 text-casa-navy shrink-0 shadow-2xs flex items-center gap-1">
+                <Building2 size={11} className="text-casa-gold" />
+                Stay / Reservation
+              </span>
+            )}
+          </div>
+
+          {Boolean(args.location || args.address) && (
+            <div className="flex items-start gap-1.5 text-caption text-casa-text-secondary">
+              <MapPin size={13} className="text-casa-muted shrink-0 mt-0.5" />
+              <span className="leading-snug">{String(args.location ?? args.address)}</span>
+            </div>
+          )}
+
+          {membersArg.length > 0 && (
+            <div className="flex items-center gap-1.5 text-caption text-casa-text-secondary">
+              <Users size={13} className="text-casa-muted shrink-0" />
+              <span>{membersArg.join(', ')}</span>
+            </div>
+          )}
+
+          {Boolean(args.notes || args.description) && (
+            <div className="flex items-start gap-1.5 text-caption text-casa-text-secondary pt-2 border-t border-casa-border/50">
+              <FileText size={13} className="text-casa-muted shrink-0 mt-0.5" />
+              <p className="whitespace-pre-wrap leading-relaxed line-clamp-4 font-mono text-2xs text-casa-navy/80">
+                {String(args.notes ?? args.description)}
+              </p>
+            </div>
+          )}
+        </div>
 
         {activeDuplicate ? (
           <div className="rounded-xl border border-amber-300/80 bg-amber-500/10 p-3 text-caption text-amber-900 dark:text-amber-200 space-y-1.5 shadow-2xs">
@@ -2982,7 +3093,7 @@ function ToolActionPreview({ tool, args, events }: { tool: string; args: Record<
           </div>
         ) : null}
 
-        {preview.details.length > 0 && (
+        {preview.details.length > 0 && !isHotelOrStay && (
           <div className="flex flex-wrap gap-1.5">
             {preview.details.map((detail) => (
               <span key={detail} className="inline-flex items-center rounded-full bg-casa-surface border border-casa-border px-2.5 py-1 text-caption font-medium text-casa-navy">

@@ -1,7 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   Home,
-  Calendar,
   ShoppingCart,
   ChefHat,
   Settings,
@@ -9,7 +8,6 @@ import {
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { cn } from '../../utils/cn'
-import { useCalendarStore } from '../../stores/calendarStore'
 import { useAppStore } from '../../stores/appStore'
 import { Button } from '../ui'
 
@@ -19,7 +17,6 @@ interface MobileFloatingDockProps {
 
 export default function MobileFloatingDock({ onOpenQuickCreate }: MobileFloatingDockProps) {
   const location = useLocation()
-  const { setActiveView } = useCalendarStore()
   const { setCanvasSubmode } = useAppStore()
 
   const triggerHaptic = () => {
@@ -30,7 +27,7 @@ export default function MobileFloatingDock({ onOpenQuickCreate }: MobileFloating
     }
   }
 
-  // 5 Tabs in exact requested order: Today / Agenda / Grocery / Cooking / More (NO BADGES)
+  // 4 Tabs in exact requested order: Today / Grocery / Cooking / More (NO BADGES)
   const navTabs = [
     {
       to: '/',
@@ -40,16 +37,6 @@ export default function MobileFloatingDock({ onOpenQuickCreate }: MobileFloating
       onClick: () => {
         triggerHaptic()
         setCanvasSubmode('calm')
-      },
-    },
-    {
-      to: '/calendar',
-      icon: Calendar,
-      label: 'Calendar',
-      isActive: location.pathname.startsWith('/calendar'),
-      onClick: () => {
-        triggerHaptic()
-        setActiveView('today')
       },
     },
     {

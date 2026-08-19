@@ -9,6 +9,7 @@ import { usePushNotifications } from './hooks/usePushNotifications'
 import { useAppUpdater } from './hooks/useAppUpdater'
 import { ThemeProvider, useTheme } from './contexts/ThemeContext'
 import LuxuryTopBar from './components/shared/LuxuryTopBar'
+import MobileTopBar from './components/layout/MobileTopBar'
 import PinGate from './components/shared/PinGate'
 import ArtScreensaver from './components/shared/ArtScreensaver'
 import QuickCreateSheet from './components/shared/QuickCreateSheet'
@@ -181,8 +182,11 @@ function AppShell() {
 
   return (
     <div className="app-shell flex flex-col overflow-hidden bg-casa-bg">
-      {/* Full-width luxury top bar — adapts to experience mode */}
+      {/* Full-width luxury top bar — adapts to experience mode (desktop >= lg) */}
       <LuxuryTopBar />
+
+      {/* Global luxury concierge top bar (< lg) */}
+      <MobileTopBar />
 
       <div className="app-shell-main flex flex-1 min-h-0 relative overflow-hidden">
         {experienceMode === 'classic' && <TabletSidebar aiDrawerOpen={aiDrawerOpen} />}

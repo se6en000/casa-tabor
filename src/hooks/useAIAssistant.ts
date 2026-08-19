@@ -283,6 +283,7 @@ export function useAIAssistant(ctx: AssistantContext) {
   const messagesRef = useRef(messages)
   const ctxRef = useRef(ctx)
   const activeImageRef = useRef<{ dataUrl: string; mimeType: string } | null>(null)
+  const activeImagesRef = useRef<Array<{ dataUrl: string; mimeType: string }>>([])
   useEffect(() => { sessionRef.current = session }, [session])
   useEffect(() => { messagesRef.current = messages }, [messages])
   useEffect(() => { ctxRef.current = ctx })
@@ -307,7 +308,7 @@ export function useAIAssistant(ctx: AssistantContext) {
 
   const startFresh = useCallback(() => {
     endSession()   // clear localStorage so next open is truly blank
-    activeImageRef.current = null
+    activeImagesRef.current = []
     setMessages([])
     startNewSession()
   }, [endSession, startNewSession])
@@ -319,7 +320,7 @@ export function useAIAssistant(ctx: AssistantContext) {
 
   const resumePrivateConversation = useCallback(async (conversationId: string) => {
     const resumed = await privateHistory.resumeConversation(conversationId)
-    activeImageRef.current = null
+    activeImagesRef.current = []
     sessionRef.current = resumed
     setSession(resumed)
     setMessages(resumed.messages)
@@ -332,16 +333,21 @@ export function useAIAssistant(ctx: AssistantContext) {
 
   const send = useCallback(async (
     text: string,
-    image?: { dataUrl: string; mimeType: string },
+    image?: { dataUrl: string; mimeType: string } | Array<{ dataUrl: string; mimeType: string }>,
     sendTrace?: AssistantSendTrace,
     options?: {
       replayExistingUserMessage?: boolean
       talkPlanIntentResolution?: 'confirmed_action' | 'conversation_only'
     },
   ) => {
-    if (image) activeImageRef.current = image
-    const activeImage = image ?? activeImageRef.current ?? undefined
-    const imageContext = image ? 'current_turn' : activeImage ? 'conversation' : 'none'
+    const activeImage = image ?? activeImageRef.current
+    const singleResolved = (Array.isArray(activeImage) ? activeImage[0] : activeImage) ?? null
+    if (singleResolved) activeImageRef.current = singleResolved
+    const imagesList = Array.isArray(image) ? image : image ? [image] : activeImageRef.current ? [activeImageRef.current] : []
+    if (imagesList.length > 0) activeImagesRef.current = imagesList
+    const activeImages = imagesList.length > 0 ? imagesList : activeImagesRef.current
+    const hasActiveImages = activeImages.length > 0
+    const imageContext = imagesList.length > 0 ? 'current_turn' : hasActiveImages ? 'conversation' : 'none'
     const trace = createAssistantTraceContext({
       traceId: sendTrace?.traceId,
       turnId: sendTrace?.turnId ?? genId(),
@@ -352,14 +358,15 @@ export function useAIAssistant(ctx: AssistantContext) {
     })
     emitAssistantTrace('turn_started', trace, {
       payload: {
-        has_image: Boolean(activeImage),
+        has_image: hasActiveImages,
+        image_count: activeImages.length,
         image_context: imageContext,
         word_count: text.trim().split(/\s+/).filter(Boolean).length,
       },
     })
     // Check for goodbye phrase → end session
     if (GOODBYE_PHRASES.test(text)) {
-      activeImageRef.current = null
+      activeImagesRef.current = []
       const farewell: AIMessage = { id: genId(), role: 'assistant', content: "You're welcome! Session saved. Say hi when you need me 👋" }
       setMessages(prev => {
         const updated = [...prev, { id: genId(), role: 'user' as const, content: text }, farewell]
@@ -376,7 +383,13 @@ export function useAIAssistant(ctx: AssistantContext) {
     }
 
     const replayExistingUserMessage = options?.replayExistingUserMessage === true
-    const userMsg: AIMessage = { id: genId(), role: 'user', content: text, imageDataUrl: image?.dataUrl }
+    const userMsg: AIMessage = {
+      id: genId(),
+      role: 'user',
+      content: text,
+      imageDataUrl: imagesList[0]?.dataUrl,
+      imageDataUrls: imagesList.length > 0 ? imagesList.map((img) => img.dataUrl) : undefined,
+    }
 
     let activeSession = sessionRef.current
     if (!activeSession) {
@@ -384,7 +397,7 @@ export function useAIAssistant(ctx: AssistantContext) {
     }
 
     // Instant deterministic resolution for focused event inquiries (driver, buffer, notes, conflicts)
-    if (!image && !activeImage) {
+    if (!hasActiveImages) {
       const deterministicEventAnswer = resolveFocusedEventDeterministicAnswer(
         text,
         ctxRef.current.focusedEvent,
@@ -412,9 +425,11 @@ export function useAIAssistant(ctx: AssistantContext) {
     if (!replayExistingUserMessage) setMessages(prev => [...prev, userMsg])
     setLoading(true)
 
-    const imagePayload = activeImage
-      ? { mimeType: activeImage.mimeType, data: activeImage.dataUrl.replace(/^data:[^;]+;base64,/, '') }
-      : undefined
+    const imagePayloads = activeImages.map((img) => ({
+      mimeType: img.mimeType,
+      data: img.dataUrl.replace(/^data:[^;]+;base64,/, ''),
+    }))
+    const singleImagePayload = imagePayloads[0] ?? undefined
 
     const currentMessages = replayExistingUserMessage
       ? messagesRef.current
@@ -436,7 +451,8 @@ export function useAIAssistant(ctx: AssistantContext) {
           ? { talk_plan_intent_resolution: options.talkPlanIntentResolution }
           : {}),
       },
-      image: imagePayload,
+      image: singleImagePayload,
+      images: imagePayloads.length > 0 ? imagePayloads : undefined,
       image_context: imageContext,
       session_id: activeSession.id,
       private_conversation_id: privateConversationId,

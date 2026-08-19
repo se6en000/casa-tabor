@@ -2,11 +2,9 @@ import { useState, useMemo } from 'react'
 import { format, addDays, differenceInMinutes } from 'date-fns'
 import {
   ChevronRight,
-  Camera,
   Check,
   CheckCircle2,
   CheckSquare,
-  Sparkles,
 } from 'lucide-react'
 import { useRollingEvents, type EventWithDetails } from '../../hooks/useCalendarEvents'
 import { getEventStartDate, getEventEndDate, eventOverlapsDay } from '../../utils/eventTime'
@@ -15,11 +13,9 @@ import { inferEventMode, inferEventPlanKind } from '../../lib/eventCommandCenter
 import { isReminderOrChore } from '../../lib/heroFocus.mjs'
 import { openEventDetails } from '../../utils/openEventDetails'
 import { useReminderNeedsYouActions } from '../../hooks/useReminderNeedsYouActions'
-import { useAppStore } from '../../stores/appStore'
 import GmailSyncStatusIndicator from '../shared/GmailSyncStatusIndicator'
 import { EventSyncStatusDot } from '../calendar/EventSyncStatusDot'
-import { IconButton, Button } from '../ui'
-import MobileDocumentScanSheet from './MobileDocumentScanSheet'
+import { IconButton } from '../ui'
 import { cn } from '../../utils/cn'
 
 export function isHeroTravel(ev: EventWithDetails | null | undefined): boolean {
@@ -55,9 +51,7 @@ export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate 
   const now = useLiveClock(30_000)
   const { data: rollingEvents = [] } = useRollingEvents(now)
   const { completeReminder } = useReminderNeedsYouActions()
-  const { openAiInSidecar } = useAppStore()
 
-  const [scanSheetOpen, setScanSheetOpen] = useState(false)
   const [completedTodoIds, setCompletedTodoIds] = useState<Set<string>>(new Set())
 
   // Toggle To-Do completion with haptic feedback
@@ -125,53 +119,7 @@ export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate 
   }, [next7Days, rollingEvents])
 
   return (
-    <div className="w-full flex flex-col gap-4 px-4 pb-36 overflow-y-auto overscroll-contain">
-      {/* ── Sticky Luxury Concierge Mobile Header Bar ── */}
-      <header className="sticky top-0 z-sticky -mx-4 px-4 pt-[calc(0.5rem+env(safe-area-inset-top))] pb-3 floating-dock-glass border-b border-casa-gold/20 shadow-[0_4px_20px_rgba(27,42,74,0.04)] flex items-center justify-between gap-3">
-        {/* Left: Brand + Realtime Pulse + Date */}
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="flex flex-col min-w-0">
-            <div className="flex items-center gap-1.5">
-              <span className="font-serif text-lg font-bold text-casa-navy tracking-tight leading-none">
-                Casa Tabor
-              </span>
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" title="Connected & Synced" />
-            </div>
-            <span className="text-3xs font-mono font-medium text-casa-muted/90 truncate mt-0.5">
-              {format(now, 'EEEE, MMM d')}
-            </span>
-          </div>
-        </div>
-
-        {/* Right Action Cluster: Document Scan + Copilot Launcher */}
-        <div className="flex items-center gap-2 shrink-0">
-          {/* Quick Scan Icon Button */}
-          <IconButton
-            variant="ghost"
-            size="sm"
-            onClick={() => setScanSheetOpen(true)}
-            aria-label="Scan Document or Card"
-            title="Scan Document or Card"
-            icon={<Camera size={18} strokeWidth={2} />}
-            className="w-9 h-9 rounded-xl border border-casa-border/60 bg-casa-surface/80 text-casa-navy hover:text-casa-gold hover:border-casa-gold/40 hover:bg-casa-surface active:scale-95 transition-all"
-          />
-
-          {/* Ask Casa / Copilot Sparkle Pill */}
-          <Button
-            variant="champagne"
-            size="sm"
-            onClick={() => {
-              openAiInSidecar({ source: 'mobile-header', agent: 'general' })
-            }}
-            aria-label="Open Casa AI Copilot"
-            className="h-9 px-3 rounded-xl font-semibold text-xs text-casa-navy border border-casa-gold/40 bg-gradient-to-r from-casa-gold/20 via-casa-gold/15 to-casa-gold/25 shadow-2xs hover:brightness-105 active:scale-95 transition-all flex items-center gap-1.5"
-          >
-            <Sparkles size={14} className="text-casa-gold fill-casa-gold/30 shrink-0" />
-            <span>Copilot</span>
-          </Button>
-        </div>
-      </header>
-
+    <div className="w-full flex flex-col gap-4 px-4 pt-3 pb-36 overflow-y-auto overscroll-contain">
       {/* ── Gmail Sync Health Warning Banner ── */}
       <GmailSyncStatusIndicator variant="compact" />
 
@@ -369,12 +317,6 @@ export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate 
           </section>
         )
       })}
-
-      {/* ── Document / Card Scanner Sheet ── */}
-      <MobileDocumentScanSheet
-        open={scanSheetOpen}
-        onClose={() => setScanSheetOpen(false)}
-      />
     </div>
   )
 }
