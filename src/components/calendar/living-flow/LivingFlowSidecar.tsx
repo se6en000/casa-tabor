@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Sparkles, Trash2, Check } from 'lucide-react'
+import { Sparkles, Trash2, Navigation } from 'lucide-react'
 import type { LivingFlowProps } from './types'
 import type { FamilyMember } from '../../../types'
 import { useLivingFlowState } from './hooks/useLivingFlowState'
@@ -8,9 +8,10 @@ import LivingHeroTitleCard from './components/LivingHeroTitleCard'
 import LivingDepartureHero from './components/LivingDepartureHero'
 import LivingRouteTimeline from './components/LivingRouteTimeline'
 import LivingVenueCard from './components/LivingVenueCard'
+import LivingPrepCard from './components/LivingPrepCard'
 import LivingReminderCard from './components/LivingReminderCard'
 import RecurrenceScopeDialog from '../RecurrenceScopeDialog'
-import { ConfirmationDialog } from '../../ui'
+import { Button, IconButton, ConfirmationDialog } from '../../ui'
 
 import './living-flow.css'
 
@@ -75,6 +76,17 @@ export default function LivingFlowSidecar({
     .join(' + ') || 'Family'
 
   const isDrivingOuting = state.venue.driveMinutes > 0 && state.venue.name !== 'Home'
+
+  const hasOffsiteDestination = Boolean(
+    (state.venue.address && state.venue.address.trim()) ||
+    (state.venue.name && state.venue.name.trim().toLowerCase() !== 'home')
+  )
+
+  const handleOpenDirections = () => {
+    const dest = state.venue.address?.trim() || state.venue.name || ''
+    if (!dest) return
+    window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}`, '_blank')
+  }
 
   const content = (
     <aside 
@@ -148,6 +160,9 @@ export default function LivingFlowSidecar({
               />
             ) : null}
 
+            {/* Living Prep & What to Bring Checklist */}
+            <LivingPrepCard event={event} />
+
             {/* Venue & Address Card (With Live Google Places Search) */}
             <LivingVenueCard
               venue={state.venue}
@@ -167,41 +182,44 @@ export default function LivingFlowSidecar({
 
       </div>
 
-      {/* Action Footer: Copilot + Quick Actions */}
+      {/* Action Footer: Delete on Left, Directions in Center (if offsite), Copilot on Right */}
       <footer className="p-3 bg-white border-t border-slate-200 flex items-center gap-2 shrink-0 z-20">
-        <button
+        <IconButton
+          variant="secondary"
+          size="md"
+          icon={<Trash2 size={18} />}
           onClick={deleteEvent}
           disabled={deleting}
-          className="living-footer-action-btn delete-btn disabled:opacity-50 disabled:cursor-not-allowed"
           aria-label="Delete this event"
           title="Delete this event"
-        >
-          <Trash2 size={18} />
-        </button>
+          className="text-casa-muted hover:text-casa-error hover:border-red-300 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+        />
 
-        {state.mode === 'event' && (
-          <button
-            onClick={markCompleted}
-            className="living-footer-action-btn done-btn"
-            aria-label="Mark event complete"
-            title="Mark event complete"
+        {state.mode === 'event' && hasOffsiteDestination && (
+          <Button
+            variant="secondary"
+            size="md"
+            leadingIcon={<Navigation size={15} className="text-casa-navy" />}
+            onClick={handleOpenDirections}
+            className="flex-1 text-casa-navy font-bold text-caption shadow-xs"
           >
-            <Check size={18} />
-          </button>
+            Directions
+          </Button>
         )}
 
-        <button
-          type="button"
+        <Button
+          variant="champagne"
+          size="md"
+          leadingIcon={<Sparkles size={15} className="text-casa-gold" />}
           onClick={() => {
             if (onSwitchToAi) onSwitchToAi()
             else onAskAi?.()
           }}
-          className="flex-1 py-2 px-4 rounded-full bg-casa-accent-subtle hover:bg-casa-accent-soft border border-casa-gold/40 text-casa-navy font-bold text-caption flex items-center justify-center gap-2 shadow-xs transition-all min-h-control"
-          aria-label="Switch to Copilot"
+          className="flex-1 text-casa-navy font-bold text-caption shadow-xs"
+          aria-label="Ask Copilot about this…"
         >
-          <Sparkles size={15} className="text-casa-gold" />
-          <span>Ask Copilot about this…</span>
-        </button>
+          Ask Copilot about this…
+        </Button>
       </footer>
 
     </aside>

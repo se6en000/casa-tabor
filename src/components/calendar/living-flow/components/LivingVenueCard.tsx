@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { MapPin, Pencil, Navigation, Compass, Search, X, Loader2, Star } from 'lucide-react'
+import { MapPin, Pencil, Search, X, Loader2, Star } from 'lucide-react'
 import type { VenueInfo } from '../types'
 import { supabase } from '../../../../lib/supabase'
 import { useSavedPlaces, savedPlaceAddress } from '../../../../hooks/useSavedPlaces'
@@ -106,18 +106,6 @@ export default function LivingVenueCard({
     return () => window.clearTimeout(timer)
   }, [searchTerm, isChanging])
 
-  const openAppleMaps = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    const query = encodeURIComponent(venue.address || venue.name)
-    window.open(`http://maps.apple.com/?q=${query}`, '_blank')
-  }
-
-  const openGoogleMaps = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    const query = encodeURIComponent(venue.address || venue.name)
-    window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank')
-  }
-
   // Filter household places locally
   const filteredHousehold = householdFavorites.filter(p =>
     p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -175,26 +163,6 @@ export default function LivingVenueCard({
           </button>
         </div>
       </div>
-
-      {/* 1-Tap Maps Launch Buttons */}
-      {!isChanging && (
-        <div className="flex gap-2 mt-1">
-          <button
-            onClick={openAppleMaps}
-            className="flex-1 bg-amber-50 border border-amber-300 text-amber-900 py-1.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 hover:bg-white transition-all shadow-sm"
-          >
-            <Navigation size={13} className="text-amber-800" />
-            <span>Apple Maps</span>
-          </button>
-          <button
-            onClick={openGoogleMaps}
-            className="flex-1 bg-white border border-slate-200 text-slate-800 py-1.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 hover:border-amber-400 hover:bg-amber-50/50 transition-all shadow-sm"
-          >
-            <Compass size={13} className="text-slate-700" />
-            <span>Google Maps</span>
-          </button>
-        </div>
-      )}
 
       {/* ══════ INLINE GOOGLE MAPS PLACE SEARCH ══════ */}
       {isChanging && (
