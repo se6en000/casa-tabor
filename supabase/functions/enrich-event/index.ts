@@ -757,7 +757,7 @@ STEP 2 — Fill ALL of these fields:
 • attendees: string[] — ONLY additional supporting people (drivers, chaperones, co-attendees) who are explicitly mentioned in the title/notes or configured by routine. NEVER default to the whole household or assign all family members for routine chores, reminders, or single-person events. Return [] if none are specifically mentioned. From: [${familyNamesList}]
 • location_name: venue/business name (search Google if needed)
 • address: real full street address (search Google, NOT home address)
-• confidence: "low" | "medium" | "high"`
+• confidence: "low" | "medium" | "high"
 
 Category-specific guidance (fill relevant values, leave unknowns null):
 ${allFieldDescriptions}
