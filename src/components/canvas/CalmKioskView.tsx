@@ -27,6 +27,7 @@ import { useCalendarStore } from '../../stores/calendarStore'
 import { cn } from '../../utils/cn'
 import { formatDurationLong } from '../../utils/eventTime'
 import { Button, IconButton, PersonAvatarStack, JourneyProgressBar } from '../ui'
+import { getDisplayMemberColor } from '../../design-system/memberColors'
 import TomorrowPrepWidget from './widgets/TomorrowPrepWidget'
 import MorningLaunchpadWidget from './widgets/MorningLaunchpadWidget'
 import MiddayLogisticsWidget from './widgets/MiddayLogisticsWidget'
@@ -181,14 +182,22 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
               {format(now, 'EEEE, MMMM d, yyyy')}
               {weather && ` · ${weather.condition || 'Clear'}, ${weather.temp}°F`}
             </p>
-            {ambientRoutineStatuses.map((status, idx) => (
-              <span
-                key={idx}
-                className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-900 text-caption font-semibold shadow-2xs"
-              >
-                <span>{status.text}</span>
-              </span>
-            ))}
+            {ambientRoutineStatuses.map((status, idx) => {
+              const childMember = familyMembers.find((m) => m.name.toLowerCase() === status.childName.toLowerCase())
+              const childDotColor = getDisplayMemberColor(childMember?.color_hex)
+              return (
+                <span
+                  key={idx}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-casa-surface-subtle border border-casa-border/50 text-casa-navy text-caption font-medium shadow-2xs"
+                >
+                  <span
+                    className="w-2 h-2 rounded-full shrink-0"
+                    style={{ backgroundColor: childDotColor }}
+                  />
+                  <span>{status.text}</span>
+                </span>
+              )
+            })}
           </div>
         </div>
 
@@ -1435,8 +1444,11 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
 
                         <div className="flex items-center gap-1.5 shrink-0">
                           {driverMember?.family_member?.name && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-semibold bg-amber-500/10 text-amber-900 border border-amber-500/20 hidden sm:inline-flex">
-                              <Car size={11} className="text-amber-800 shrink-0" />
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-caption font-bold bg-white text-casa-navy border border-casa-border/60 shadow-2xs hidden sm:inline-flex">
+                              <span
+                                className="w-2 h-2 rounded-full shrink-0"
+                                style={{ backgroundColor: driverMember.family_member.color_hex || 'var(--color-casa-navy)' }}
+                              />
                               <span>{driverMember.family_member.name} drives</span>
                             </span>
                           )}
