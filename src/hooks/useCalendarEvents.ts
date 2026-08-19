@@ -17,6 +17,7 @@ import {
   generateConsolidatedRoutineActionEvents,
   type FamilyRoutine,
 } from '../lib/familyRoutines'
+import { usePageVisibility } from './usePageVisibility'
 
 export interface EventWithDetails extends Omit<CalendarEvent, 'members' | 'enrichment'> {
   members: {
@@ -241,6 +242,7 @@ interface EventTransportationPlanRow {
 }
 
 function useEventTransportationPlans(anchor: Date) {
+  const isPageVisible = usePageVisibility()
   const rangeStart = startOfMonth(anchor)
   const rangeEnd = addDays(rangeStart, 46)
 
@@ -262,16 +264,21 @@ function useEventTransportationPlans(anchor: Date) {
         transportation_plan: row.transportation_plan,
       }))
     },
-    staleTime: 5 * 60_000,
+    staleTime: 60_000,
+    refetchInterval: isPageVisible ? 60_000 : false,
+    refetchIntervalInBackground: false,
   })
 }
 
 function useEventsForRange(queryKey: readonly unknown[], start: Date, end: Date) {
   useRealtimeEventInvalidation()
+  const isPageVisible = usePageVisibility()
   const eventsQuery = useQuery({
     queryKey,
     queryFn: () => fetchEventsForRange(start, end),
-    staleTime: 60_000,
+    staleTime: 20_000,
+    refetchInterval: isPageVisible ? 20_000 : false,
+    refetchIntervalInBackground: false,
   })
   const transportationQuery = useEventTransportationPlans(start)
   const { data: familyMembers = [] } = useFamilyMembers()
@@ -461,6 +468,7 @@ export interface WeekEventIndexItem {
 
 /** Minimal seven-day index used only for Home's event-count buttons. */
 export function useWeekEventIndex(selectedDate: Date) {
+  const isPageVisible = usePageVisibility()
   const weekStart = startOfWeek(selectedDate, { weekStartsOn: 0 })
   const weekEnd = addDays(endOfWeek(selectedDate, { weekStartsOn: 0 }), 1)
   useRealtimeEventInvalidation()
@@ -481,7 +489,9 @@ export function useWeekEventIndex(selectedDate: Date) {
       if (error) throw error
       return data ?? []
     },
-    staleTime: 60_000,
+    staleTime: 30_000,
+    refetchInterval: isPageVisible ? 30_000 : false,
+    refetchIntervalInBackground: false,
   })
 }
 
@@ -499,6 +509,7 @@ const _queryClientInstances = new Set<ReturnType<typeof useQueryClient>>()
 let _debounceTimer: ReturnType<typeof setTimeout> | null = null
 let _planDebounceTimer: ReturnType<typeof setTimeout> | null = null
 let _reconnectTimer: ReturnType<typeof setTimeout> | null = null
+let _heartbeatTimer: ReturnType<typeof setInterval> | null = null
 
 function _evictDeletedEventFromCache(deletedId: string) {
   if (!deletedId) return
@@ -570,6 +581,19 @@ function _subscribeRealtimeChannel() {
         }
       }
     })
+
+  if (!_heartbeatTimer) {
+    _heartbeatTimer = setInterval(() => {
+      if (_realtimeSubscribers > 0 && typeof document !== 'undefined' && document.visibilityState !== 'hidden') {
+        if (!_realtimeChannel || _realtimeChannel.state === 'closed' || _realtimeChannel.state === 'errored') {
+          console.log('[CalendarRealtime] Heartbeat reconnecting idle/dropped channel...')
+          try { if (_realtimeChannel) supabase.removeChannel(_realtimeChannel) } catch {}
+          _realtimeChannel = null
+          _subscribeRealtimeChannel()
+        }
+      }
+    }, 45_000)
+  }
 }
 
 function useRealtimeEventInvalidation() {
@@ -606,6 +630,10 @@ function useRealtimeEventInvalidation() {
       _queryClientInstances.delete(qc)
       _realtimeSubscribers--
       if (_realtimeSubscribers === 0) {
+        if (_heartbeatTimer) {
+          clearInterval(_heartbeatTimer)
+          _heartbeatTimer = null
+        }
         if (_reconnectTimer) {
           clearTimeout(_reconnectTimer)
           _reconnectTimer = null

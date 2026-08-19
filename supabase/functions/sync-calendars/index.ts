@@ -41,7 +41,21 @@ Deno.serve(async (req) => {
   const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
   const body = req.method === 'POST' ? await req.json().catch(() => ({})) : {}
   const results: Record<string, unknown> = {}
-  if (body.family_member_id) {
+  if (body.connection_id) {
+    try {
+      const { data: connection, error: connErr } = await sb
+        .from('calendar_connections')
+        .select('*')
+        .eq('id', body.connection_id)
+        .single()
+      if (connErr || !connection) throw new Error(connErr?.message || 'Connection not found')
+      const resolved = await resolveGoogleConnection(sb, connection as CalendarConnection)
+      results[connection.family_member_id] = await syncOne(sb, resolved)
+    } catch (cause) {
+      const message = toErrorMessage(cause)
+      results[body.connection_id] = { error: message }
+    }
+  } else if (body.family_member_id) {
     try {
       const resolved = await loadMemberGoogleConnection(sb, body.family_member_id)
       results[body.family_member_id] = await syncOne(sb, resolved)
@@ -64,6 +78,20 @@ Deno.serve(async (req) => {
         const syncErrorMessage = toErrorMessage(cause)
         results[connection.family_member_id] = { error: syncErrorMessage }
       }
+    }
+
+    // Auto-renew or register webhook push notification channels
+    const nowMs = Date.now()
+    const needsWebhookRenew = (connections ?? []).some((c: any) => {
+      if (!c.webhook_expires_at || c.webhook_status !== 'active') return true
+      const expMs = new Date(c.webhook_expires_at).getTime()
+      return isNaN(expMs) || expMs < nowMs + 24 * 3600 * 1000
+    })
+
+    if (needsWebhookRenew) {
+      sb.functions.invoke('register-google-calendar-webhook', { body: {} }).catch((whErr: unknown) => {
+        console.warn('[sync-calendars] Webhook auto-registration notice:', whErr)
+      })
     }
   }
   return new Response(JSON.stringify({ ok: true, results }), { headers: { ...CORS, 'content-type': 'application/json' } })

@@ -9,6 +9,12 @@ verify_jwt = false
 [functions.sync-calendars]
 verify_jwt = true
 
+[functions.google-calendar-webhook]
+verify_jwt = false
+
+[functions.register-google-calendar-webhook]
+verify_jwt = false
+
 [functions.ai-assistant]
 verify_jwt = false
 
