@@ -82,7 +82,16 @@ function resolveVendorName(item: PrepItem): string {
   const legacy = legacyVendor(item)
   if (legacy) return legacy
   if (item.attention_vendor && !isAddressLike(item.attention_vendor)) {
-    return item.attention_vendor.trim()
+    const raw = item.attention_vendor.trim()
+    if (/walmart/i.test(raw)) return 'Walmart'
+    if (/amazon/i.test(raw)) return 'Amazon'
+    if (/target/i.test(raw)) return 'Target'
+    if (/hello\s*fresh/i.test(raw)) return 'HelloFresh'
+    if (/instacart/i.test(raw)) return 'Instacart'
+    if (/fedex/i.test(raw)) return 'FedEx'
+    if (/ups/i.test(raw)) return 'UPS'
+    if (/usps/i.test(raw)) return 'USPS'
+    return raw
   }
   return 'Parcel'
 }
@@ -104,6 +113,12 @@ function deliveryDateKey(item: PrepItem): string {
   return new Date().toISOString().slice(0, 10)
 }
 
+function extractOrderIdFromExplicitKey(explicitKey?: string | null): string | null {
+  if (!explicitKey) return null
+  const match = explicitKey.match(/^transaction:[a-z0-9-]+:([a-z0-9-]*\d{6,}[a-z0-9-]*)$/i)
+  return match ? match[1] : null
+}
+
 export function vendorTransactionIdentity(item: PrepItem): VendorTransactionIdentity | null {
   if (item.source_type !== 'gmail') return null
 
@@ -112,22 +127,15 @@ export function vendorTransactionIdentity(item: PrepItem): VendorTransactionIden
 
   const vendorKey = normalizeKeyPart(vendor)
   const explicitKey = item.attention_thread_key?.trim()
-  const explicitMessageFallback = explicitKey?.includes(':message:') || explicitKey?.includes('suggestion:') ? explicitKey : null
+  const explicitOrderNumber = extractOrderIdFromExplicitKey(explicitKey)
   const extractedOrderId = orderId(item)
   const dateKey = deliveryDateKey(item)
 
-  // A canonical transaction key has an actual numeric order ID (e.g. transaction:walmart:2000151-91693117)
-  const isCanonicalOrderKey = Boolean(
-    explicitKey &&
-    !explicitMessageFallback &&
-    /^transaction:[a-z0-9-]+:[a-z0-9-]*\d{6,}[a-z0-9-]*$/i.test(explicitKey)
-  )
+  const finalOrderNumber = explicitOrderNumber || extractedOrderId
 
-  const key =
-    (isCanonicalOrderKey ? explicitKey : null)
-    || (extractedOrderId
-      ? `transaction:${vendorKey}:${normalizeKeyPart(extractedOrderId)}`
-      : `delivery:${vendorKey}:${dateKey}`)
+  const key = finalOrderNumber
+    ? `transaction:${vendorKey}:${normalizeKeyPart(finalOrderNumber)}`
+    : `delivery:${vendorKey}:${dateKey}`
 
   return { key, vendor, stage: transactionStage(item) }
 }
@@ -163,6 +171,36 @@ export function mergeItemSummary(summaryA?: string | null, summaryB?: string | n
   return summaryA.length >= summaryB.length ? summaryA : summaryB
 }
 
+export function mergeEtaDisplay(etaA?: string | null, etaB?: string | null): string | null {
+  if (!etaA && !etaB) return null
+  if (!etaA) return etaB!
+  if (!etaB) return etaA
+
+  const isSpecificTime = (s: string) => /\b\d{1,2}:\d{2}(?:am|pm)?\b/i.test(s)
+  const isWindow = (s: string) => /\b(?:between|window|2pm\s*–\s*6pm)\b/i.test(s)
+
+  const aIsSpecific = isSpecificTime(etaA)
+  const bIsSpecific = isSpecificTime(etaB)
+  const aIsWindow = isWindow(etaA)
+  const bIsWindow = isWindow(etaB)
+
+  if (aIsSpecific && bIsWindow && !aIsWindow) {
+    const timeMatch = etaA.match(/(?:expected\s+)?by\s+\d{1,2}:\d{2}(?:am|pm)?(?:\s+today)?/i)?.[0] || etaA
+    return `${timeMatch} · ${etaB}`
+  }
+  if (bIsSpecific && aIsWindow && !bIsWindow) {
+    const timeMatch = etaB.match(/(?:expected\s+)?by\s+\d{1,2}:\d{2}(?:am|pm)?(?:\s+today)?/i)?.[0] || etaB
+    return `${timeMatch} · ${etaA}`
+  }
+
+  if (aIsSpecific && !bIsSpecific) return etaA
+  if (bIsSpecific && !aIsSpecific) return etaB
+  if (aIsWindow && !bIsWindow) return etaA
+  if (bIsWindow && !aIsWindow) return etaB
+
+  return etaA.length >= etaB.length ? etaA : etaB
+}
+
 export function mergeDeliveryTransitItem(
   existing: DeliveryTransitItem,
   incoming: DeliveryTransitItem
@@ -174,15 +212,7 @@ export function mergeDeliveryTransitItem(
 
   const mergedCost = incoming.cost || existing.cost || null
   const mergedSummary = mergeItemSummary(existing.itemSummary, incoming.itemSummary)
-
-  const isDetailedEta = (eta?: string | null) =>
-    Boolean(eta && /between|by\s+\d|today|\d{1,2}:\d{2}/i.test(eta))
-
-  const mergedEta = isDetailedEta(incoming.etaDisplay)
-    ? incoming.etaDisplay
-    : isDetailedEta(existing.etaDisplay)
-    ? existing.etaDisplay
-    : incoming.etaDisplay || existing.etaDisplay || null
+  const mergedEta = mergeEtaDisplay(existing.etaDisplay, incoming.etaDisplay)
 
   const newerDate =
     new Date(incoming.occurredAt).getTime() >= new Date(existing.occurredAt).getTime()
@@ -294,7 +324,7 @@ export function buildDeliveryTransitItem(item: PrepItem): DeliveryTransitItem {
   const cost = extractAmount(fullText)
 
   // Extract ETA or time window
-  const etaMatch = fullText.match(/(?:(?:delivery\s+)?window\s+(?:is\s+)?[\d:apm\s–-]+|between\s+[\d:apm\s–-]+|today\s+by\s+[\d:apm]+|today\s+between\s+[\d:apm\s–-]+|expected\s+today)/i)
+  const etaMatch = fullText.match(/(?:(?:arrive|expected|arriving|delivery)\s+(?:today\s+)?by\s+[\d:apm\s–-]+|today\s+by\s+[\d:apm]+|(?:delivery\s+)?window\s+(?:is\s+)?[\d:apm\s–-]+|between\s+[\d:apm\s–-]+|today\s+between\s+[\d:apm\s–-]+|expected\s+today)/i)
   const etaDisplay = etaMatch ? etaMatch[0].trim() : (item.due_by ? new Date(item.due_by).toLocaleDateString() : null)
 
   return {
