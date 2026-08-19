@@ -48,7 +48,6 @@ import {
   PageShell,
   Sheet,
   Text,
-  Toast,
   Textarea,
 } from '../components/ui'
 import { useTactileSwapState } from '../components/ui/TactileSwap'
@@ -566,7 +565,6 @@ export default function GroceryPage() {
   const [pantryReconcileDraft, setPantryReconcileDraft] = useState<PantryReconcileDraft | null>(null)
   const [pantryReconcileMessage, setPantryReconcileMessage] = useState<string | null>(null)
   const [pantryReconcileError, setPantryReconcileError] = useState<string | null>(null)
-  const [groceryToastMessage, setGroceryToastMessage] = useState<string | null>(null)
   const [expandedReconcileQtyIds, setExpandedReconcileQtyIds] = useState<Set<string>>(new Set())
   const [showCompletedArchive, setShowCompletedArchive] = useState(false)
   const [dragState, setDragState] = useState<{
@@ -682,7 +680,6 @@ export default function GroceryPage() {
       if (options?.spotlightOnDuplicate !== false) {
         spotlightItem(suggestion.id)
       }
-      setGroceryToastMessage(`“${suggestion.name}” is already on your list`)
       return
     }
     const category = inferCategoryFromName(trimmedName)
@@ -691,7 +688,6 @@ export default function GroceryPage() {
       setInputValue('')
       inputRef.current?.focus()
     }
-    setGroceryToastMessage(`Added “${trimmedName}” to ${category}`)
   }, [addItem, defaultListId, findMergeSuggestion, spotlightItem])
 
   const [stagedVoiceItems, setStagedVoiceItems] = useState<ParsedVoiceGroceryItem[]>([])
@@ -726,7 +722,6 @@ export default function GroceryPage() {
       })
       triggerItemMoved(item.id, 'move')
     }
-    setGroceryToastMessage(`Added ${itemsToCommit.length} provisions to your list`)
     setStagedVoiceItems([])
     setInputValue('')
   }, [addItem, defaultListId, triggerItemMoved])
@@ -2596,12 +2591,6 @@ export default function GroceryPage() {
           Move “{dragState.itemName}”
         </div>
       )}
-      <Toast
-        open={Boolean(groceryToastMessage)}
-        tone="success"
-        message={groceryToastMessage ?? ''}
-        onClose={() => setGroceryToastMessage(null)}
-      />
     </div>
   )
 }
