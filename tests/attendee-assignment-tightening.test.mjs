@@ -1,16 +1,17 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { getMemberRoleLabel } from '../src/design-system/memberColors.mjs'
 
 // Mock household roster representing Casa Tabor
 const mockFamilyMembers = [
-  { id: 'parent-jake-id', name: 'Jake', full_name: 'Jake Tabor', role: 'parent', is_admin: true, show_on_home_sidebar: true },
-  { id: 'parent-kelly-id', name: 'Kelly', full_name: 'Kelly Tabor', role: 'parent', is_admin: false, show_on_home_sidebar: true },
-  { id: 'child-liv-id', name: 'Liv', full_name: 'Liv Tabor', role: 'child', is_admin: false, show_on_home_sidebar: true },
-  { id: 'child-emme-id', name: 'Emme', full_name: 'Emme Tabor', role: 'child', is_admin: false, show_on_home_sidebar: true },
-  { id: 'child-owen-id', name: 'Owen', full_name: 'Owen Tabor', role: 'child', is_admin: false, show_on_home_sidebar: true },
-  { id: 'meta-tabor-family-id', name: 'Tabor Family', full_name: 'Tabor Family Feed', role: 'child', is_admin: false, show_on_home_sidebar: false },
-  { id: 'caregiver-giselle-id', name: 'Giselle', full_name: 'Giselle Caregiver', role: 'caregiver', is_admin: false, show_on_home_sidebar: true },
-  { id: 'pet-milo-id', name: 'Milo', full_name: 'Milo the Dog', role: 'child', is_admin: false, show_on_home_sidebar: false },
+  { id: 'parent-jake-id', name: 'Jake', full_name: 'Jake Tabor', role: 'parent', can_drive: true, is_admin: true, show_on_home_sidebar: true },
+  { id: 'parent-kelly-id', name: 'Kelly', full_name: 'Kelly Tabor', role: 'parent', can_drive: true, is_admin: false, show_on_home_sidebar: true },
+  { id: 'child-liv-id', name: 'Liv', full_name: 'Liv Tabor', role: 'child', can_drive: false, is_admin: false, show_on_home_sidebar: true },
+  { id: 'child-emme-id', name: 'Emme', full_name: 'Emme Tabor', role: 'child', can_drive: false, is_admin: false, show_on_home_sidebar: true },
+  { id: 'child-owen-id', name: 'Owen', full_name: 'Owen Tabor', role: 'child', can_drive: false, is_admin: false, show_on_home_sidebar: true },
+  { id: 'meta-tabor-family-id', name: 'Tabor Family', full_name: 'Tabor Family Feed', role: 'child', can_drive: false, is_admin: false, show_on_home_sidebar: false },
+  { id: 'caregiver-giselle-id', name: 'Giselle', full_name: 'Giselle Caregiver', role: 'caregiver', can_drive: true, is_admin: false, show_on_home_sidebar: true },
+  { id: 'pet-milo-id', name: 'Milo', full_name: 'Milo the Dog', role: 'child', can_drive: false, is_admin: false, show_on_home_sidebar: false },
 ]
 
 /**
@@ -127,4 +128,24 @@ test('attendee popover preserves already selected member even if sidebar toggle 
 
   assert.ok(names.includes('Milo'), 'Already selected Milo should remain visible')
   assert.ok(!names.includes('Tabor Family'), 'Unselected non-sidebar member should remain hidden')
+})
+
+test('getMemberRoleLabel correctly derives profile roles and driver capabilities', () => {
+  const giselle = mockFamilyMembers.find((m) => m.name === 'Giselle')
+  assert.equal(getMemberRoleLabel(giselle), 'Caregiver · Driver')
+
+  const nonDriverCaregiver = { role: 'caregiver', can_drive: false }
+  assert.equal(getMemberRoleLabel(nonDriverCaregiver), 'Caregiver')
+
+  const jake = mockFamilyMembers.find((m) => m.name === 'Jake')
+  assert.equal(getMemberRoleLabel(jake), 'Parent · Driver')
+
+  const nonDriverParent = { role: 'parent', can_drive: false }
+  assert.equal(getMemberRoleLabel(nonDriverParent), 'Parent')
+
+  const liv = mockFamilyMembers.find((m) => m.name === 'Liv')
+  assert.equal(getMemberRoleLabel(liv), 'Child')
+
+  const teenDriver = { role: 'child', can_drive: true }
+  assert.equal(getMemberRoleLabel(teenDriver), 'Child · Driver')
 })
