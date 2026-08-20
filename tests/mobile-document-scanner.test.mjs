@@ -65,12 +65,7 @@ test('kiosk-ux-refactor guardrail: scan-document-events edge function contains N
   assert.equal(matches, null, `Found raw Unicode emoji in scan-document-events: ${matches?.[0]}`)
 })
 
-test('QuickCreateSheet contains Scanner integration card with camera icon', () => {
-  const quickCreateContent = readFileSync('src/components/shared/QuickCreateSheet.tsx', 'utf-8')
-  assert.match(quickCreateContent, /MobileDocumentScanSheet/)
-  assert.match(quickCreateContent, /Scan Document or Card/)
-  assert.match(quickCreateContent, /Camera/)
-})
+
 
 test('MobileTopBar contains Scanner shortcut with camera icon', () => {
   const mobileTopBarContent = readFileSync('src/components/layout/MobileTopBar.tsx', 'utf-8')

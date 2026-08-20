@@ -34,6 +34,7 @@ import MiddayLogisticsWidget from './widgets/MiddayLogisticsWidget'
 import { useFamilyRoutineIntelligence } from '../../hooks/useFamilyRoutineIntelligence'
 import { resolveEventDriver } from '../../lib/driverConflictEngine'
 import GmailSyncStatusIndicator from '../shared/GmailSyncStatusIndicator'
+import AmbientQuickCaptureBar from './AmbientQuickCaptureBar'
 
 interface CalmKioskViewProps {
   onOpenEvent: (event: EventWithDetails) => void
@@ -272,12 +273,12 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
   }, [nextEvent, upcomingAppointments, routineIntel.ambientStatuses, familyMembers, now])
 
   return (
-    <div className="w-full h-full flex flex-col justify-start p-4 sm:p-6 lg:p-8 xl:p-10 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-8 overflow-y-auto scrollbar-hide">
+    <div className="w-full h-full flex flex-col justify-start px-4 sm:px-6 lg:px-8 xl:px-10 pt-5 sm:pt-6 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-8 overflow-y-auto scrollbar-hide">
       {/* ── Gmail Sync Health Warning Banner ── */}
       <GmailSyncStatusIndicator variant="banner" className="mb-5 shrink-0" />
 
-      {/* ── Top Section: 12-Col Grid Alignment (7 cols Greeting, 5 cols Tonight's Kitchen) ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 xl:gap-10 pb-5 border-b border-casa-border/40 shrink-0 items-center">
+      {/* ── Top Section: 12-Col Grid Alignment (7 cols Greeting, 5 cols Tonight's Kitchen + Intake) ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 xl:gap-10 pb-5 sm:pb-6 border-b border-casa-border/40 shrink-0 items-center">
         <div className="lg:col-span-7">
           <h1 className="font-display text-display-lg sm:text-display-xl text-casa-navy font-semibold tracking-tight leading-none">
             {greeting}, <span className="italic font-normal">Tabor Family</span>
@@ -306,8 +307,9 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
           </div>
         </div>
 
-        {/* ── Luxury Tonight's Kitchen Editorial Showcase (Aligned with Right Rail 5 Cols) ── */}
-        <div className="hidden lg:flex lg:col-span-5 items-center">
+        {/* ── Luxury Tonight's Kitchen & Quick Intake Stacked (Aligned with Right Rail 5 Cols) ── */}
+        <div className="hidden lg:flex lg:col-span-5 flex-col gap-2.5 justify-center">
+          {/* Tonight's Kitchen Editorial Showcase */}
           <div className="w-full flex items-center justify-between gap-3 px-3.5 py-2 rounded-2xl bg-gradient-to-r from-casa-surface to-amber-500/[0.08] border border-casa-gold/35 shadow-2xs transition-all hover:border-casa-gold/60">
             <div className="flex items-center gap-3 min-w-0 flex-1">
               <div className="w-9 h-9 rounded-xl bg-casa-gold/20 text-casa-navy flex items-center justify-center font-bold shadow-2xs border border-casa-gold/30 shrink-0">
@@ -334,17 +336,32 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                     {isDinnerPast ? 'Dinner Completed' : dinnerPlan.targetTime || '6:30 PM Target'}
                   </span>
                 </div>
-                <h3 className="font-display text-heading sm:text-body-lg lg:text-heading font-semibold text-casa-navy truncate leading-tight">
+                <h3
+                  onClick={() => {
+                    if (dinnerPlan.mode === 'cook') {
+                      if (dinnerPlan.recipeId) {
+                        navigateTo(`/cook?recipe=${encodeURIComponent(dinnerPlan.recipeId)}&autocook=true`)
+                      } else {
+                        navigateTo('/cook')
+                      }
+                    }
+                  }}
+                  className={cn(
+                    'font-display text-heading sm:text-body-lg lg:text-heading font-semibold text-casa-navy truncate leading-tight',
+                    dinnerPlan.mode === 'cook' && 'cursor-pointer hover:text-amber-900 transition-colors'
+                  )}
+                >
                   {dinnerPlan.title}
                 </h3>
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 pl-2.5 border-l border-casa-border/40 shrink-0">
+            <div className="flex items-center gap-1 shrink-0">
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation()
                   document.dispatchEvent(
                     new CustomEvent('open-ai-chat', {
                       detail: {
@@ -357,13 +374,13 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                     })
                   )
                 }}
-                className="text-caption font-medium text-casa-muted hover:text-casa-navy transition-colors h-8 min-h-0 px-2 rounded-lg"
+                className="text-caption font-medium text-casa-muted hover:text-casa-navy transition-colors h-7 min-h-0 px-2 rounded-lg"
               >
                 <span>Change</span>
               </Button>
               {dinnerPlan.mode === 'cook' && (
                 <Button
-                  variant="secondary"
+                  variant="ghost"
                   size="sm"
                   onClick={() => {
                     if (dinnerPlan.recipeId) {
@@ -372,14 +389,17 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                       navigateTo('/cook')
                     }
                   }}
-                  className="text-caption font-bold bg-casa-navy text-white hover:bg-casa-navy-dark hover:text-casa-gold h-8 min-h-0 px-3 rounded-xl shadow-2xs flex items-center gap-1 shrink-0"
+                  className="text-caption font-semibold text-casa-navy hover:text-casa-gold transition-colors h-7 min-h-0 px-2 rounded-lg flex items-center gap-1 group/recipe"
                 >
                   <span>Recipe</span>
-                  <ChevronRight size={12} />
+                  <ChevronRight size={13} className="text-casa-muted group-hover/recipe:text-casa-gold transition-colors" />
                 </Button>
               )}
             </div>
           </div>
+
+          {/* Quick Intake Bar */}
+          <AmbientQuickCaptureBar />
         </div>
       </div>
 

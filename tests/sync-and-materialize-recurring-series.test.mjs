@@ -22,15 +22,6 @@ test('syncAndMaterializeRecurringSeries is exported from eventMutations.ts and i
     'EventEditSheet.tsx must call syncAndMaterializeRecurringSeries when saving recurring events'
   )
 
-  const quickCreateFile = resolve('src/components/shared/QuickCreateSheet.tsx')
-  const quickCreateContent = readFileSync(quickCreateFile, 'utf8')
-
-  assert.match(
-    quickCreateContent,
-    /syncAndMaterializeRecurringSeries/,
-    'QuickCreateSheet.tsx must call syncAndMaterializeRecurringSeries when creating recurring events'
-  )
-
   const livingFlowFile = resolve('src/components/calendar/living-flow/hooks/useLivingFlowState.ts')
   const livingFlowContent = readFileSync(livingFlowFile, 'utf8')
 

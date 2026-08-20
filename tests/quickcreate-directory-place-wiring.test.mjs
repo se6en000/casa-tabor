@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 const source = readFileSync(
-  new URL('../src/components/shared/QuickCreateSheet.tsx', import.meta.url),
+  new URL('../src/components/calendar/PalmBeachFolioCard.tsx', import.meta.url),
   'utf8',
 )
 

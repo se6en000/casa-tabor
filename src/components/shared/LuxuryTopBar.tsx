@@ -7,6 +7,7 @@ import {
   AlertCircle,
   AlertTriangle,
   RefreshCw,
+  Plus,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useLiveClock } from '../../hooks/useLiveClock'
@@ -315,7 +316,7 @@ function UtilityTrack({
 }) {
   const navigate = useNavigate()
   const location = useLocation()
-  const { canvasSubmode, setCanvasSubmode } = useAppStore()
+  const { canvasSubmode, setCanvasSubmode, openQuickCreate } = useAppStore()
   const isSettings = location.pathname.startsWith('/settings')
 
   const now = useLiveClock(60_000)
@@ -395,6 +396,19 @@ function UtilityTrack({
           )}
         />
       )}
+
+      {/* Quick Add Event / Reminder */}
+      <IconButton
+        icon={<Plus size={19} strokeWidth={2.2} className="text-casa-gold" />}
+        aria-label="Add Event or Reminder"
+        onClick={() => openQuickCreate()}
+        title="Add Event or Reminder (C or N)"
+        variant="ghost"
+        className={cn(
+          iconCn(false),
+          'hover:bg-casa-gold/20 active:scale-95 text-casa-gold'
+        )}
+      />
 
       {/* Refresh Screen */}
       <IconButton

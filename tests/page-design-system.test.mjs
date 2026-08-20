@@ -226,14 +226,12 @@ test('Grocery uses shared controls and feedback without changing its dense layou
 })
 
 test('event create and edit workflows use shared design-system contracts', () => {
-  const quickCreate = readFileSync(resolve('src/components/shared/QuickCreateSheet.tsx'), 'utf8')
+  const folioCard = readFileSync(resolve('src/components/calendar/PalmBeachFolioCard.tsx'), 'utf8')
   const eventEdit = readFileSync(resolve('src/components/calendar/EventEditSheet.tsx'), 'utf8')
   const eventDetail = readFileSync(resolve('src/components/calendar/EventDetailPanel.tsx'), 'utf8')
-  assert.match(quickCreate, /<Sheet/)
-  assert.match(quickCreate, /<Field label="Event title"/)
-  assert.match(quickCreate, /<Button/)
-  assert.match(quickCreate, /<Alert tone="danger"/)
-  assert.doesNotMatch(quickCreate, /z-\[\d+\]/)
+  assert.match(folioCard, /<Button/)
+  assert.match(folioCard, /<IconButton/)
+  assert.match(folioCard, /<Chip/)
   assert.match(eventEdit, /<SegmentedControl/)
   assert.match(eventEdit, /<Switch/)
   assert.match(eventEdit, /<Select/)
@@ -254,13 +252,11 @@ test('inline calendar uses density-aware controls and semantic layering', () => 
 
 test('event editor uses shared progressive disclosure and date-time dials', () => {
   const editor = readFileSync(resolve('src/components/calendar/EventEditSheet.tsx'), 'utf8')
-  const quickCreate = readFileSync(resolve('src/components/shared/QuickCreateSheet.tsx'), 'utf8')
   const exports = readFileSync(resolve('src/components/ui/index.ts'), 'utf8')
   assert.match(editor, /<DateTimeDial/)
   assert.match(editor, /<DisclosureSection/)
   assert.match(editor, /<FormSummaryCard/)
   assert.doesNotMatch(editor, /type="datetime-local"/)
-  assert.match(quickCreate, /<DateTimeDial/)
   assert.match(exports, /export \{ DateTimeDial/)
   assert.match(exports, /export \{ DisclosureSection/)
   assert.match(exports, /export \{ FormSummaryCard/)
@@ -281,9 +277,9 @@ test('date-time wheel follows live touch selection and synchronizes controlled v
 })
 
 test('quick create keeps the end one hour after every start adjustment', () => {
-  const quickCreate = readFileSync(resolve('src/components/shared/QuickCreateSheet.tsx'), 'utf8')
+  const folioCard = readFileSync(resolve('src/components/calendar/PalmBeachFolioCard.tsx'), 'utf8')
   const dial = readFileSync(resolve('src/components/ui/DateTimeDial.tsx'), 'utf8')
-  assert.match(quickCreate, /startChangeEndOffsetMinutes=\{60\}/)
+  assert.match(folioCard, /addHours\(defaultStart, 1\)|addHours\(newStart, 1\)/)
   assert.match(dial, /startChangeEndOffsetMinutes \* 60_000/)
   assert.match(dial, /onEndChange\(toLocalValue\(new Date\(parseLocal\(value\)\.getTime\(\) \+ durationMs\)\)\)/)
 })
@@ -320,24 +316,16 @@ test('date-time wheels avoid re-rendering the full option list while scrolling',
 })
 
 test('quick create handles core household event context without exposing the full editor', () => {
-  const quickCreate = readFileSync(resolve('src/components/shared/QuickCreateSheet.tsx'), 'utf8')
+  const folioCard = readFileSync(resolve('src/components/calendar/PalmBeachFolioCard.tsx'), 'utf8')
 
-  assert.match(quickCreate, /useFamilyMembers/)
-  assert.match(quickCreate, /<Field\s+label="People"/)
-  assert.match(quickCreate, /<Field\s+label="Where"/)
-  assert.match(quickCreate, /<DisclosureSection/)
-  assert.match(quickCreate, /title="More details"/)
-  assert.match(quickCreate, /<Switch[\s\S]*label="All day"/)
-  assert.match(quickCreate, /<Switch[\s\S]*label="Reminder"/)
-  assert.match(quickCreate, /<RecurrenceRuleBuilder/)
-  assert.match(quickCreate, /<Field label="Notes"/)
-  assert.match(quickCreate, /event_members'\)\.insert/)
-  assert.match(quickCreate, /location_name: resolvedLocationName/)
-  assert.match(quickCreate, /rrule: repeatRule/)
-  assert.match(quickCreate, /record_kind: repeatRule \? 'series_template' : 'single'/)
-  assert.match(quickCreate, /syncAndMaterializeRecurringSeries/)
-  assert.match(quickCreate, /if \(repeatRule\)/)
-  assert.match(quickCreate, /Created\. Connected calendars and event details will update shortly\./)
+  assert.match(folioCard, /useFamilyMembers/)
+  assert.match(folioCard, /Family & Attendees/)
+  assert.match(folioCard, /DirectoryPlaceInput/)
+  assert.match(folioCard, /resolveDirectoryPlaceSave/)
+  assert.match(folioCard, /useFieldDictation/)
+  assert.match(folioCard, /supabase/)
+  assert.match(folioCard, /event_members'\)\.insert/)
+  assert.match(folioCard, /triggerGoogleEventSync/)
 })
 
 test('all calendar views provide a non-conflicting quick-create gesture for their active date', () => {

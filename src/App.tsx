@@ -91,9 +91,53 @@ function AppShell() {
     openActionInSidecar,
     openAiInSidecar,
     experienceMode,
+    quickCreateOpen,
+    quickCreateInitialStart,
+    quickCreateInitialQuery,
+    openQuickCreate,
+    closeQuickCreate,
   } = useAppStore()
-  const [quickCreateOpen, setQuickCreateOpen] = useState(false)
   const location = useLocation()
+
+  // Global keyboard shortcut ('C' or 'N' to open rapid intake)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (screensaverActive || quickCreateOpen || aiDrawerOpen) return
+      // Ignore if user is actively typing in a form control
+      const target = e.target as HTMLElement | null
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable ||
+          target.closest('[role="dialog"]') ||
+          target.closest('[data-touch-keyboard]'))
+      ) {
+        return
+      }
+
+      if (e.key === 'c' || e.key === 'C' || e.key === 'n' || e.key === 'N') {
+        if (!e.metaKey && !e.ctrlKey && !e.altKey) {
+          e.preventDefault()
+          openQuickCreate()
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [screensaverActive, quickCreateOpen, aiDrawerOpen, openQuickCreate])
+
+  // Global "open quick create" custom event
+  useEffect(() => {
+    const onOpenQuickCreate = (e: Event) => {
+      const detail = (e as CustomEvent<{ initialStart?: Date; initialQuery?: string }>).detail
+      openQuickCreate(detail?.initialStart, detail?.initialQuery)
+    }
+    document.addEventListener('casa:open-quick-create', onOpenQuickCreate)
+    return () => document.removeEventListener('casa:open-quick-create', onOpenQuickCreate)
+  }, [openQuickCreate])
 
   useEffect(() => {
     setRoomToneZone(currentZone)
@@ -204,12 +248,14 @@ function AppShell() {
 
       {/* Dynamic Floating Navigation Capsule on mobile viewports (< lg) */}
       {!screensaverActive && (
-        <MobileFloatingDock onOpenQuickCreate={() => setQuickCreateOpen(true)} />
+        <MobileFloatingDock onOpenQuickCreate={() => openQuickCreate()} />
       )}
 
       <QuickCreateSheet
         open={quickCreateOpen}
-        onClose={() => setQuickCreateOpen(false)}
+        onClose={closeQuickCreate}
+        initialStart={quickCreateInitialStart}
+        initialQuery={quickCreateInitialQuery}
       />
 
       <SyncTriageModal />

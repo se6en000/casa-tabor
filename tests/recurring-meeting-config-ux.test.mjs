@@ -17,12 +17,11 @@ test('RecurrenceRuleBuilder component exists and exports builder UI', () => {
   assert.match(content, /SegmentedControl/, 'Must use luxury SegmentedControl UI')
 })
 
-test('QuickCreateSheet embeds RecurrenceRuleBuilder and updates Google Calendar payload', () => {
-  const quickCreatePath = resolve('src/components/shared/QuickCreateSheet.tsx')
-  const content = readFileSync(quickCreatePath, 'utf8')
-  assert.match(content, /import RecurrenceRuleBuilder from '\.\.\/calendar\/RecurrenceRuleBuilder'/, 'QuickCreateSheet must import RecurrenceRuleBuilder')
-  assert.match(content, /<RecurrenceRuleBuilder/, 'QuickCreateSheet must render RecurrenceRuleBuilder')
-  assert.match(content, /rrule: repeatRule/, 'QuickCreateSheet must write rrule to event creation payload')
+test('Calendar sheets embed RecurrenceRuleBuilder and update Google Calendar payload', () => {
+  const editSheetPath = resolve('src/components/calendar/EventEditSheet.tsx')
+  const content = readFileSync(editSheetPath, 'utf8')
+  assert.match(content, /import RecurrenceRuleBuilder from '\.\/RecurrenceRuleBuilder'/, 'EventEditSheet must import RecurrenceRuleBuilder')
+  assert.match(content, /<RecurrenceRuleBuilder/, 'EventEditSheet must render RecurrenceRuleBuilder')
 })
 
 test('EventEditSheet embeds RecurrenceRuleBuilder in Schedule & Timing UI', () => {

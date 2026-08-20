@@ -2,11 +2,12 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useCalendarStore } from '../stores/calendarStore'
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, addDays, subDays, addMonths, subMonths } from 'date-fns'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import WeekView from '../components/calendar/WeekView'
 import StackedView from '../components/calendar/StackedView'
 import DayView from '../components/calendar/DayView'
 import MonthView from '../components/calendar/MonthView'
+import PalmBeachFolioCard from '../components/calendar/PalmBeachFolioCard'
 import { Button, IconButton, SegmentedControl } from '../components/ui'
 import RecurringDeleteUndoHost from '../components/calendar/RecurringDeleteUndoHost'
 
@@ -19,6 +20,7 @@ const CALENDAR_VIEW_OPTIONS = [
 
 export default function CalendarPage() {
   const { activeView, setActiveView, selectedDate, setSelectedDate } = useCalendarStore()
+  const [folioOpen, setFolioOpen] = useState(false)
 
 
   // Track slide direction: 1 = forward (next), -1 = backward (prev), 0 = today jump
@@ -123,13 +125,43 @@ export default function CalendarPage() {
           </h2>
         </div>
 
-        <div className="w-full sm:w-auto overflow-x-auto scrollbar-hide">
+        <div className="relative flex items-center gap-2 w-full sm:w-auto shrink-0">
+          {/* Circle '+' button styled like the switches on the LEFT side */}
+          <IconButton
+            icon={<Plus size={18} strokeWidth={2.4} />}
+            aria-label="Add new event or reminder"
+            onClick={() => setFolioOpen((prev) => !prev)}
+            variant="secondary"
+            size="sm"
+            className="w-10 h-10 rounded-full shadow-card bg-casa-surface hover:bg-casa-surface border border-casa-border hover:border-casa-gold/60 text-casa-text hover:text-casa-gold shrink-0 transition-all active:scale-95"
+          />
+
           <SegmentedControl
             aria-label="Calendar view"
             value={activeView}
             options={CALENDAR_VIEW_OPTIONS}
             onChange={setActiveView}
           />
+
+          {/* Anchored Popover for PalmBeachFolioCard */}
+          <AnimatePresence>
+            {folioOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-40 bg-black/20 backdrop-blur-2xs"
+                  onClick={() => setFolioOpen(false)}
+                />
+                <div className="absolute right-0 top-full mt-2 z-50">
+                  <PalmBeachFolioCard
+                    contextDate={selectedDate}
+                    initialStart={selectedDate}
+                    mode="popover"
+                    onClose={() => setFolioOpen(false)}
+                  />
+                </div>
+              </>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 

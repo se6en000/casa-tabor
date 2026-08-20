@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
-import { format, addHours, setHours, setMinutes, isToday, isTomorrow } from 'date-fns'
+import { format, addHours, addDays, setHours, setMinutes, isToday, isTomorrow, isSameDay } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Mic, Sparkles, Clock,
@@ -23,6 +23,7 @@ export interface PalmBeachFolioCardProps {
   contextDate: Date
   initialStart?: Date
   initialEventType?: 'event' | 'reminder'
+  initialQuery?: string
   mode?: 'inline' | 'popover'
   onClose: () => void
   onSaved?: (eventId: string) => void
@@ -46,6 +47,7 @@ export default function PalmBeachFolioCard({
   contextDate,
   initialStart,
   initialEventType = 'event',
+  initialQuery,
   mode = 'inline',
   onClose,
   onSaved,
@@ -68,6 +70,7 @@ export default function PalmBeachFolioCard({
   const [notes, setNotes] = useState('')
   const [showAdvancedTime, setShowAdvancedTime] = useState(false)
   const [showNotes, setShowNotes] = useState(false)
+  const [showDatePicker, setShowDatePicker] = useState(false)
 
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
@@ -118,13 +121,32 @@ export default function PalmBeachFolioCard({
     },
   })
 
-  // Focus title on mount
+  // Focus title on mount & parse initialQuery if provided
   useEffect(() => {
+    if (initialQuery && initialQuery.trim()) {
+      handleDictationComplete(initialQuery)
+    }
     const timer = setTimeout(() => {
       inputRef.current?.focus()
     }, 100)
     return () => clearTimeout(timer)
-  }, [])
+  }, [initialQuery, handleDictationComplete])
+
+  // Date change handler (scoped specifically to this entry card)
+  const handleDateChange = (newDate: Date) => {
+    const currentStart = new Date(startDT)
+    const currentEnd = new Date(endDT)
+
+    const updatedStart = new Date(newDate)
+    updatedStart.setHours(currentStart.getHours(), currentStart.getMinutes(), 0, 0)
+
+    const duration = currentEnd.getTime() - currentStart.getTime()
+    const updatedEnd = new Date(updatedStart.getTime() + (duration > 0 ? duration : 3600000))
+
+    setStartDT(toLocalDT(updatedStart))
+    setEndDT(toLocalDT(updatedEnd))
+    setShowDatePicker(false)
+  }
 
   // Time preset handlers
   const applyPresetTime = (hour: number, minute: number = 0) => {
@@ -254,11 +276,20 @@ export default function PalmBeachFolioCard({
     setTimeout(onClose, 350)
   }
 
+  const currentDate = useMemo(() => {
+    try {
+      const d = new Date(startDT)
+      return Number.isNaN(d.getTime()) ? contextDate : d
+    } catch {
+      return contextDate
+    }
+  }, [startDT, contextDate])
+
   const formattedDate = useMemo(() => {
-    if (isToday(contextDate)) return 'Today'
-    if (isTomorrow(contextDate)) return 'Tomorrow'
-    return format(contextDate, 'EEEE, MMM d')
-  }, [contextDate])
+    if (isToday(currentDate)) return 'Today'
+    if (isTomorrow(currentDate)) return 'Tomorrow'
+    return format(currentDate, 'EEEE, MMM d')
+  }, [currentDate])
 
   const parsedStartTime = useMemo(() => {
     try {
@@ -287,14 +318,91 @@ export default function PalmBeachFolioCard({
     >
       {/* ── Header: Context Date & Event/Reminder Switch ── */}
       <div className="flex items-center justify-between gap-2 pb-3 mb-3 border-b border-casa-divider/70">
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="w-2.5 h-2.5 rounded-full bg-casa-gold shrink-0 animate-pulse" />
-          <span className="font-display font-bold text-body text-casa-navy tracking-tight truncate">
-            {formattedDate}
-          </span>
-          <span className="text-3xs uppercase font-bold tracking-wider text-casa-gold/90 bg-casa-gold/10 px-2 py-0.5 rounded-full">
+        <div className="relative flex items-center min-w-0">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowDatePicker((prev) => !prev)}
+            aria-label="Click to change entry date"
+            className="flex items-center gap-1.5 px-2 py-1 -ml-1 h-auto min-h-0 rounded-xl bg-casa-sand/40 hover:bg-casa-sand border border-casa-border/60 hover:border-casa-gold/60 text-casa-navy hover:text-casa-gold transition-all cursor-pointer group select-none"
+          >
+            <div className="w-2.5 h-2.5 rounded-full bg-casa-gold shrink-0 animate-pulse" />
+            <span className="font-display font-bold text-body tracking-tight truncate max-w-[130px] sm:max-w-[160px]">
+              {formattedDate}
+            </span>
+            <ChevronDown size={13} className={cn('text-casa-muted group-hover:text-casa-navy transition-transform', showDatePicker && 'rotate-180')} />
+          </Button>
+
+          <span className="text-3xs uppercase font-bold tracking-wider text-casa-gold/90 bg-casa-gold/10 px-2 py-0.5 rounded-full ml-1.5 hidden sm:inline-block">
             ✦ Quick Add
           </span>
+
+          {/* Date Picker Dropdown Popover */}
+          <AnimatePresence>
+            {showDatePicker && (
+              <>
+                <div
+                  className="fixed inset-0 z-30"
+                  onClick={() => setShowDatePicker(false)}
+                />
+                <motion.div
+                  initial={{ opacity: 0, y: 6, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 4, scale: 0.96 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute left-0 top-full mt-1.5 z-40 p-3 rounded-2xl bg-casa-surface border border-casa-gold/50 shadow-modal w-64 space-y-2.5"
+                >
+                  <div className="text-3xs uppercase font-bold tracking-wider text-casa-muted flex items-center justify-between">
+                    <span>Change Entry Date</span>
+                  </div>
+
+                  {/* 1-Tap Quick Date Chips */}
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {[
+                      { label: 'Today', date: new Date() },
+                      { label: 'Tomorrow', date: addDays(new Date(), 1) },
+                      { label: format(addDays(new Date(), 2), 'EEEE'), date: addDays(new Date(), 2) },
+                      { label: format(addDays(new Date(), 3), 'EEEE'), date: addDays(new Date(), 3) },
+                    ].map((preset) => {
+                      const isSel = isSameDay(currentDate, preset.date)
+                      return (
+                        <Button
+                          key={preset.label}
+                          type="button"
+                          size="sm"
+                          variant={isSel ? 'primary' : 'secondary'}
+                          onClick={() => handleDateChange(preset.date)}
+                          className={cn(
+                            'h-8 min-h-0 text-caption font-bold px-2 justify-center rounded-xl',
+                            isSel && 'bg-casa-navy text-white'
+                          )}
+                        >
+                          {preset.label}
+                        </Button>
+                      )
+                    })}
+                  </div>
+
+                  {/* Custom Calendar Date Selector */}
+                  <div className="pt-2 border-t border-casa-border/40 space-y-1">
+                    <span className="text-3xs font-semibold text-casa-muted">Choose date:</span>
+                    <input
+                      type="date"
+                      value={startDT.slice(0, 10)}
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          const [y, m, d] = e.target.value.split('-').map(Number)
+                          handleDateChange(new Date(y, m - 1, d))
+                        }
+                      }}
+                      className="w-full px-2.5 py-1.5 rounded-xl border border-casa-border bg-white text-caption font-bold text-casa-text focus:border-casa-gold outline-hidden"
+                    />
+                  </div>
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Tactile Event / Reminder Segmented Capsule */}
@@ -458,27 +566,46 @@ export default function PalmBeachFolioCard({
           ) : (
             /* Custom Time / Duration Inputs */
             <div className="p-2.5 rounded-xl bg-casa-sand/60 border border-casa-border/80 space-y-2">
-              <div className="flex items-center gap-2">
-                <input
-                  type="time"
-                  value={startDT.slice(11, 16)}
-                  onChange={(e) => {
-                    const [h, m] = e.target.value.split(':').map(Number)
-                    applyPresetTime(h, m)
-                  }}
-                  className="flex-1 px-2.5 py-1.5 rounded-lg border border-casa-border bg-white text-caption font-bold text-casa-text"
-                />
-                <span className="text-caption text-casa-muted">to</span>
-                <input
-                  type="time"
-                  value={endDT.slice(11, 16)}
-                  onChange={(e) => {
-                    const [h, m] = e.target.value.split(':').map(Number)
-                    const baseEnd = new Date(endDT)
-                    setEndDT(toLocalDT(setMinutes(setHours(baseEnd, h), m)))
-                  }}
-                  className="flex-1 px-2.5 py-1.5 rounded-lg border border-casa-border bg-white text-caption font-bold text-casa-text"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div>
+                  <span className="text-3xs text-casa-muted uppercase font-bold block mb-0.5">Date</span>
+                  <input
+                    type="date"
+                    value={startDT.slice(0, 10)}
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        const [y, m, d] = e.target.value.split('-').map(Number)
+                        handleDateChange(new Date(y, m - 1, d))
+                      }
+                    }}
+                    className="w-full px-2 py-1.5 rounded-lg border border-casa-border bg-white text-caption font-bold text-casa-text"
+                  />
+                </div>
+                <div>
+                  <span className="text-3xs text-casa-muted uppercase font-bold block mb-0.5">Start</span>
+                  <input
+                    type="time"
+                    value={startDT.slice(11, 16)}
+                    onChange={(e) => {
+                      const [h, m] = e.target.value.split(':').map(Number)
+                      applyPresetTime(h, m)
+                    }}
+                    className="w-full px-2 py-1.5 rounded-lg border border-casa-border bg-white text-caption font-bold text-casa-text"
+                  />
+                </div>
+                <div>
+                  <span className="text-3xs text-casa-muted uppercase font-bold block mb-0.5">End</span>
+                  <input
+                    type="time"
+                    value={endDT.slice(11, 16)}
+                    onChange={(e) => {
+                      const [h, m] = e.target.value.split(':').map(Number)
+                      const baseEnd = new Date(endDT)
+                      setEndDT(toLocalDT(setMinutes(setHours(baseEnd, h), m)))
+                    }}
+                    className="w-full px-2 py-1.5 rounded-lg border border-casa-border bg-white text-caption font-bold text-casa-text"
+                  />
+                </div>
               </div>
               <div className="flex items-center gap-1.5 flex-wrap">
                 {[

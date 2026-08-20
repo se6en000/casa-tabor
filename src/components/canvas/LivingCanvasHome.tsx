@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAppStore } from '../../stores/appStore'
 import CalmKioskView from './CalmKioskView'
@@ -6,11 +6,9 @@ import TurboCanvasView from './TurboCanvasView'
 import MobileTodayView from '../mobile/MobileTodayView'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { openEventDetails } from '../../utils/openEventDetails'
-import QuickCreateSheet from '../shared/QuickCreateSheet'
 
 export default function LivingCanvasHome() {
-  const { canvasSubmode } = useAppStore()
-  const [quickCreateOpen, setQuickCreateOpen] = useState(false)
+  const { canvasSubmode, openQuickCreate } = useAppStore()
 
   const handleOpenEvent = useCallback((event: EventWithDetails) => {
     openEventDetails(event.id)
@@ -20,7 +18,7 @@ export default function LivingCanvasHome() {
     <div className="w-full h-full relative overflow-hidden bg-casa-bg flex flex-col">
       {/* ── Mobile Streamlined Today View (< lg) ── */}
       <div className="lg:hidden w-full h-full flex-1 overflow-y-auto">
-        <MobileTodayView onOpenQuickCreate={() => setQuickCreateOpen(true)} />
+        <MobileTodayView onOpenQuickCreate={() => openQuickCreate()} />
       </div>
 
       {/* ── Desktop & Kiosk Living Canvas Views (>= lg) ── */}
@@ -48,17 +46,12 @@ export default function LivingCanvasHome() {
             >
               <TurboCanvasView
                 onOpenEvent={handleOpenEvent}
-                onQuickCreate={() => setQuickCreateOpen(true)}
+                onQuickCreate={() => openQuickCreate()}
               />
             </motion.div>
           )}
         </AnimatePresence>
       </div>
-
-      <QuickCreateSheet
-        open={quickCreateOpen}
-        onClose={() => setQuickCreateOpen(false)}
-      />
     </div>
   )
 }

@@ -55,6 +55,13 @@ interface AppStore {
   setCanvasSubmode: (submode: CanvasSubmode) => void
   toggleCanvasSubmode: () => void
 
+  // Universal Quick Capture state
+  quickCreateOpen: boolean
+  quickCreateInitialStart?: Date
+  quickCreateInitialQuery?: string
+  openQuickCreate: (initialStart?: Date, initialQuery?: string) => void
+  closeQuickCreate: () => void
+
   // Tonight's Kitchen state
   dinnerPlan: DinnerPlan
   setDinnerPlan: (plan: DinnerPlan, options?: { localOnly?: boolean }) => void
@@ -174,6 +181,24 @@ export const useAppStore = create<AppStore>((set, get) => ({
       localStorage.setItem('casa-canvas-submode', next)
     } catch {}
     set({ canvasSubmode: next })
+  },
+
+  quickCreateOpen: false,
+  quickCreateInitialStart: undefined,
+  quickCreateInitialQuery: undefined,
+  openQuickCreate: (initialStart, initialQuery) => {
+    set({
+      quickCreateOpen: true,
+      quickCreateInitialStart: initialStart,
+      quickCreateInitialQuery: initialQuery,
+    })
+  },
+  closeQuickCreate: () => {
+    set({
+      quickCreateOpen: false,
+      quickCreateInitialStart: undefined,
+      quickCreateInitialQuery: undefined,
+    })
   },
 
   dinnerPlan: getInitialDinnerPlan(),
