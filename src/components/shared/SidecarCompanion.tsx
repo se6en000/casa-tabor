@@ -487,11 +487,11 @@ export default function SidecarCompanion({
     <motion.aside
       key="sidecar-desktop-companion"
       data-sidecar-companion="true"
-      initial={{ width: 0, opacity: 0 }}
-      animate={{ width: sidecarWidth, opacity: 1 }}
-      exit={{ width: 0, opacity: 0 }}
-      transition={{ duration: 0.26, ease: [0.32, 0.72, 0, 1] }}
-      className="hidden sm:flex flex-col flex-shrink-0 h-full overflow-hidden border-l border-casa-border bg-casa-surface relative z-10 shadow-lg"
+      initial={{ x: '100%', opacity: 0.9 }}
+      animate={{ x: 0, opacity: 1 }}
+      exit={{ x: '100%', opacity: 0.9 }}
+      transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+      className="hidden sm:flex flex-col flex-shrink-0 h-full overflow-hidden border-l border-casa-border bg-casa-surface relative z-10 shadow-lg w-[var(--ai-sidecar-width,420px)] [will-change:transform]"
       data-panel-overlay
       data-touch-keyboard="ignore"
     >

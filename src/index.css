@@ -284,6 +284,19 @@ html.midnight-gallery .luxury-topbar {
     0 2px 6px rgba(0, 0, 0, 0.35);
 }
 
+/* ── Kiosk GPU Performance: Bypass expensive framebuffer blur passes ── */
+html[data-density="kiosk"] [class*="backdrop-blur"],
+html[data-density="kiosk"] .luxury-topbar,
+html[data-density="kiosk"] .floating-dock-glass,
+html[data-density="kiosk"] .living-flow-glass {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+html[data-density="kiosk"] .floating-dock-glass {
+  background-color: rgba(250, 247, 242, 0.98);
+}
+
 .topbar-gold-divider {
   width: 1px;
   height: 60%;
