@@ -20,11 +20,13 @@ import {
   buildDeliveryTransitItem,
   consolidateTransitItems,
   stageStepIndex,
+  isItemArrivingToday,
+  isItemInTransit,
+  isItemDelivered,
 } from '../../../utils/vendorTransactions.ts'
 import { buildGmailWebUrl } from '../../../utils/prepItemClusters'
 import { useAppStore } from '../../../stores/appStore'
 import { useLiveClock } from '../../../hooks/useLiveClock'
-import { isToday } from 'date-fns'
 
 export type LogisticsFilterTab = 'all' | 'today' | 'in_transit' | 'delivered'
 
@@ -43,23 +45,6 @@ function resolveVendorIcon(vendor: string) {
     return Truck
   }
   return Package
-}
-
-function isItemArrivingToday(item: DeliveryTransitItem, _now: Date): boolean {
-  if (item.stage === 'out_for_delivery') return true
-  const text = `${item.title} ${item.itemSummary} ${item.etaDisplay || ''}`.toLowerCase()
-  if (text.includes('today') || text.includes('arriving today')) return true
-  if (item.rawItem.due_by && isToday(new Date(item.rawItem.due_by))) return true
-  if (item.rawItem.event_date && isToday(new Date(item.rawItem.event_date))) return true
-  return false
-}
-
-function isItemInTransit(item: DeliveryTransitItem): boolean {
-  return item.stage === 'shipped' || item.stage === 'out_for_delivery' || item.stage === 'confirmed' || item.stage === 'payment'
-}
-
-function isItemDelivered(item: DeliveryTransitItem): boolean {
-  return item.stage === 'delivered'
 }
 
 export default function EstateLogisticsWidget({
@@ -91,7 +76,7 @@ export default function EstateLogisticsWidget({
 
     for (const item of activePrep) {
       if (isDeliveryTransitItem(item)) {
-        const transit = buildDeliveryTransitItem(item)
+        const transit = buildDeliveryTransitItem(item, now)
         if (optimisticallyDismissedKeys.has(transit.threadKey) || optimisticallyDismissedKeys.has(item.id)) {
           continue
         }
@@ -100,7 +85,7 @@ export default function EstateLogisticsWidget({
     }
 
     return consolidateTransitItems(rawTransit)
-  }, [activePrep, optimisticallyDismissedKeys])
+  }, [activePrep, optimisticallyDismissedKeys, now])
 
   // Sub-counts for filter badges
   const todayItems = useMemo(
@@ -108,12 +93,12 @@ export default function EstateLogisticsWidget({
     [allTransitItems, now]
   )
   const inTransitItems = useMemo(
-    () => allTransitItems.filter(isItemInTransit),
-    [allTransitItems]
+    () => allTransitItems.filter((i) => isItemInTransit(i, now)),
+    [allTransitItems, now]
   )
   const deliveredItems = useMemo(
-    () => allTransitItems.filter(isItemDelivered),
-    [allTransitItems]
+    () => allTransitItems.filter((i) => isItemDelivered(i, now)),
+    [allTransitItems, now]
   )
 
   // Filtered view
@@ -134,17 +119,36 @@ export default function EstateLogisticsWidget({
   // Pick the top priority delivery for the Hero Spotlight slot
   const { heroItem, ledgerItems } = useMemo(() => {
     if (filteredItems.length === 0) return { heroItem: null, ledgerItems: [] }
-    // Priority: Perishable -> Out for delivery today -> In Transit -> First item
-    const heroIdx = filteredItems.findIndex((i) => i.isPerishable) >= 0
-      ? filteredItems.findIndex((i) => i.isPerishable)
-      : filteredItems.findIndex((i) => i.stage === 'out_for_delivery') >= 0
-      ? filteredItems.findIndex((i) => i.stage === 'out_for_delivery')
-      : 0
+
+    let heroIdx = -1
+
+    if (activeTab === 'delivered') {
+      heroIdx = 0
+    } else {
+      // Prioritize urgent/imminent deliveries ARRIVING TODAY:
+      // 1. Perishable arriving today
+      // 2. Out for delivery arriving today
+      // 3. Any active in-transit arriving today
+      heroIdx = filteredItems.findIndex((i) => isItemArrivingToday(i, now) && i.isPerishable)
+      if (heroIdx === -1) {
+        heroIdx = filteredItems.findIndex((i) => isItemArrivingToday(i, now) && i.stage === 'out_for_delivery')
+      }
+      if (heroIdx === -1) {
+        heroIdx = filteredItems.findIndex((i) => isItemArrivingToday(i, now) && isItemInTransit(i, now))
+      }
+      // If nothing arriving today, and in 'all' view, pick the next active in-transit item
+      if (heroIdx === -1 && activeTab === 'all') {
+        heroIdx = filteredItems.findIndex((i) => isItemInTransit(i, now))
+      }
+      if (heroIdx === -1) {
+        heroIdx = 0
+      }
+    }
 
     const hero = filteredItems[heroIdx]
     const remaining = filteredItems.filter((_, idx) => idx !== heroIdx)
     return { heroItem: hero, ledgerItems: remaining }
-  }, [filteredItems])
+  }, [filteredItems, activeTab, now])
 
   // Partition ledger items by temporal bucket
   const { todayLedger, upcomingLedger, deliveredLedger } = useMemo(() => {
@@ -153,7 +157,7 @@ export default function EstateLogisticsWidget({
     const delivered: DeliveryTransitItem[] = []
 
     for (const item of ledgerItems) {
-      if (item.stage === 'delivered') {
+      if (isItemDelivered(item, now)) {
         delivered.push(item)
       } else if (isItemArrivingToday(item, now)) {
         today.push(item)
@@ -262,7 +266,10 @@ export default function EstateLogisticsWidget({
               const HeroIcon = resolveVendorIcon(heroItem.vendor)
               const step = stageStepIndex(heroItem.stage as DeliveryTransitStage)
               const isSelected = selectedSidecarActionId === heroItem.id && sidecarTab === 'action'
+              const isDelivered = heroItem.stage === 'delivered'
               const isOutForDelivery = heroItem.stage === 'out_for_delivery'
+              const isArrivingToday = isItemArrivingToday(heroItem, now)
+              const isImminent = isArrivingToday && (isOutForDelivery || heroItem.isPerishable)
 
               return (
                 <div
@@ -272,7 +279,9 @@ export default function EstateLogisticsWidget({
                     'p-4.5 sm:p-5 rounded-2xl transition-all flex flex-col gap-3 relative cursor-pointer group',
                     isSelected
                       ? 'bg-casa-gold/15 border-2 border-casa-gold ring-2 ring-casa-gold/30'
-                      : isOutForDelivery
+                      : isDelivered
+                      ? 'bg-emerald-50/40 border border-emerald-300/60 hover:border-emerald-400'
+                      : isOutForDelivery && isArrivingToday
                       ? 'bg-amber-50/60 border border-amber-300/80 hover:border-amber-400'
                       : 'bg-casa-surface-subtle/70 border border-casa-border/80 hover:border-casa-gold/60'
                   )}
@@ -295,17 +304,24 @@ export default function EstateLogisticsWidget({
                         </span>
                       )}
 
-                      {isOutForDelivery && (
+                      {isDelivered ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-3xs font-bold bg-emerald-100 text-emerald-950 border border-emerald-300">
+                          <CheckCircle2 size={10} className="text-emerald-700" />
+                          <span>Delivered</span>
+                        </span>
+                      ) : isOutForDelivery && isArrivingToday ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-3xs font-bold bg-amber-100 text-amber-950 border border-amber-300">
                           <Clock size={10} className="text-amber-700 animate-pulse" />
                           <span>Out for Delivery</span>
                         </span>
-                      )}
+                      ) : null}
 
-                      <span className="inline-flex items-center gap-1 text-3xs font-semibold px-2 py-0.5 rounded-full bg-casa-gold/15 text-casa-top-pick-band border border-casa-gold/30">
-                        <Sparkles size={9} className="text-casa-gold" />
-                        <span>Imminent Arrival</span>
-                      </span>
+                      {isImminent && (
+                        <span className="inline-flex items-center gap-1 text-3xs font-semibold px-2 py-0.5 rounded-full bg-casa-gold/15 text-casa-top-pick-band border border-casa-gold/30">
+                          <Sparkles size={9} className="text-casa-gold" />
+                          <span>Imminent Arrival</span>
+                        </span>
+                      )}
 
                       {heroItem.cost && (
                         <span className="inline-flex items-center gap-1 text-3xs font-mono font-bold px-2 py-0.5 rounded-full bg-casa-surface border border-casa-border/90 text-casa-navy shadow-2xs">
@@ -376,15 +392,15 @@ export default function EstateLogisticsWidget({
                         { label: 'En Route', index: 2 },
                         { label: 'Arrived', index: 3 },
                       ].map((st, idx) => {
-                        const isPast = step >= st.index
-                        const isCurrent = step === st.index
+                        const isPast = step >= st.index || (isDelivered && st.index <= 3)
+                        const isCurrent = (step === st.index && !isDelivered) || (isDelivered && st.index === 3)
                         return (
                           <div key={st.label} className="flex flex-col items-center gap-1 relative">
                             {idx > 0 && (
                               <div
                                 className={cn(
                                   'absolute -left-1/2 top-1.5 w-full h-[2px] -translate-y-1/2 -z-0 transition-colors',
-                                  step >= st.index ? 'bg-casa-gold' : 'bg-casa-border/70'
+                                  (step >= st.index || isDelivered) ? (isDelivered ? 'bg-emerald-600' : 'bg-casa-gold') : 'bg-casa-border/70'
                                 )}
                               />
                             )}
@@ -393,9 +409,9 @@ export default function EstateLogisticsWidget({
                               className={cn(
                                 'w-3.5 h-3.5 rounded-full flex items-center justify-center transition-all z-10',
                                 isCurrent
-                                  ? 'bg-casa-gold text-white ring-4 ring-casa-gold/20 scale-110 shadow-xs'
+                                  ? (isDelivered ? 'bg-emerald-700 text-white ring-4 ring-emerald-700/20 scale-110 shadow-xs' : 'bg-casa-gold text-white ring-4 ring-casa-gold/20 scale-110 shadow-xs')
                                   : isPast
-                                  ? 'bg-casa-navy text-white'
+                                  ? (isDelivered ? 'bg-emerald-700 text-white' : 'bg-casa-navy text-white')
                                   : 'bg-casa-surface border-2 border-casa-border text-transparent'
                               )}
                             >
@@ -406,9 +422,9 @@ export default function EstateLogisticsWidget({
                               className={cn(
                                 'text-3xs font-bold uppercase tracking-wider',
                                 isCurrent
-                                  ? 'text-casa-gold'
+                                  ? (isDelivered ? 'text-emerald-700' : 'text-casa-gold')
                                   : isPast
-                                  ? 'text-casa-navy'
+                                  ? (isDelivered ? 'text-emerald-900' : 'text-casa-navy')
                                   : 'text-casa-muted/70'
                               )}
                             >
@@ -596,13 +612,15 @@ function LedgerRow({
             className={cn(
               'text-2xs font-semibold px-2 py-0.5 rounded-full border',
               isDelivered
-                ? 'bg-emerald-50 text-emerald-950 border-emerald-200'
+                ? 'bg-emerald-50 text-emerald-950 border-emerald-200 font-medium'
                 : isOutForDelivery
                 ? 'bg-amber-50 text-amber-950 border-amber-200 font-bold'
                 : 'bg-casa-bg text-casa-muted border-casa-border'
             )}
           >
-            {isDelivered ? `Delivered` : item.etaDisplay}
+            {isDelivered
+              ? (item.etaDisplay.includes('Delivered') || item.etaDisplay.includes('Yesterday') ? item.etaDisplay : 'Delivered')
+              : item.etaDisplay}
           </span>
         ) : (
           <span className="text-2xs font-semibold px-2 py-0.5 rounded-full bg-casa-bg text-casa-muted border border-casa-border">

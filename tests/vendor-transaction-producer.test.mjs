@@ -173,3 +173,63 @@ test('real Supabase records with Walmart+ InHome compound keys merge seamlessly 
   assert.match(hero.etaDisplay, /2pm\s*[-–]\s*6pm/i)
 })
 
+test('past out-for-delivery records automatically transition to delivered when evaluated on next day', async () => {
+  const {
+    buildDeliveryTransitItem,
+    isItemArrivingToday,
+    isItemDelivered,
+    isItemInTransit,
+    resolveEffectiveStage,
+  } = await import('../src/utils/vendorTransactions.ts')
+
+  const yesterdayRow = {
+    id: 'walmart-yesterday-1',
+    type: 'delivery',
+    event_title: 'Your InHome delivery should arrive by 3:44pm 🚗',
+    description: 'Your Walmart+ InHome delivery with 27 items is out for delivery and expected by 3:44pm today.',
+    event_date: '2026-08-19T20:44:00+00:00',
+    due_by: '2026-08-19T20:44:00+00:00',
+    created_at: '2026-08-19T19:15:00+00:00',
+    source_type: 'gmail',
+    attention_thread_key: 'transaction:walmart:2000154-80824348',
+    attention_vendor: 'Walmart',
+    attention_stage: 'out_for_delivery',
+    dismissed: false,
+    priority: 1,
+  }
+
+  const todayRow = {
+    id: 'jiffy-today-1',
+    type: 'delivery',
+    event_title: 'Jiffy Transfers order is out for delivery',
+    description: 'Arriving today by 2:00pm',
+    event_date: '2026-08-20T18:00:00+00:00',
+    due_by: '2026-08-20T18:00:00+00:00',
+    created_at: '2026-08-20T14:00:00+00:00',
+    source_type: 'gmail',
+    attention_thread_key: 'transaction:jiffy:order-12345',
+    attention_vendor: 'Jiffy.com',
+    attention_stage: 'out_for_delivery',
+    dismissed: false,
+    priority: 1,
+  }
+
+  const evaluationDate = new Date('2026-08-20T18:30:00-04:00')
+
+  const yesterdayTransit = buildDeliveryTransitItem(yesterdayRow, evaluationDate)
+  const todayTransit = buildDeliveryTransitItem(todayRow, evaluationDate)
+
+  // Yesterday's delivery must resolve to delivered on August 20
+  assert.equal(yesterdayTransit.stage, 'delivered')
+  assert.equal(isItemArrivingToday(yesterdayTransit, evaluationDate), false)
+  assert.equal(isItemDelivered(yesterdayTransit, evaluationDate), true)
+  assert.equal(isItemInTransit(yesterdayTransit, evaluationDate), false)
+  assert.match(yesterdayTransit.etaDisplay, /Delivered yesterday/i)
+
+  // Today's delivery must remain out_for_delivery and arriving today
+  assert.equal(todayTransit.stage, 'out_for_delivery')
+  assert.equal(isItemArrivingToday(todayTransit, evaluationDate), true)
+  assert.equal(isItemDelivered(todayTransit, evaluationDate), false)
+  assert.equal(isItemInTransit(todayTransit, evaluationDate), true)
+})
+

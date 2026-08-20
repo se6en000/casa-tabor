@@ -339,15 +339,23 @@ async function classifyEmail(
   matchingRules: HouseholdCaptureRule[] = [],
   usage?: UsageAccumulator,
 ): Promise<EmailIntent | null> {
-  const today = new Date().toISOString().slice(0, 10)
+  const emailDate = date ? new Date(date) : new Date()
+  const emailDateIso = !isNaN(emailDate.getTime()) ? emailDate.toISOString() : new Date().toISOString()
+  const emailDateFormatted = emailDateIso.slice(0, 10)
   const rulesBlock = matchingRules.length > 0
     ? `\nHOUSEHOLD LEARNED RULES FOR THIS SENDER:\n${matchingRules.map(r => `- [${r.pattern_type}: ${r.pattern_value}] ${r.rule_directive}`).join('\n')}\n`
     : ''
 
-  const prompt = `You are the inbox classifier for a family calendar app. Today is ${today}.
+  const prompt = `You are the inbox classifier for a family calendar app.
+EMAIL SENT DATE: ${emailDateFormatted} (Header: ${date || emailDateIso})
 Family members: ${familyMembers.map(m => `${m.name} (${m.role})`).join(', ')}
 ${rulesBlock}
 Classify this email. Note: An email may contain ONE or MULTIPLE distinct family events/dates (for example: School Pictures, Grade 6 Open House, and Grades 7 & 8 Open House).
+
+CRITICAL DATE ANCHORING:
+- All relative dates/times in the email body (such as "today", "tonight", "this morning", "this afternoon", "tomorrow", "this Friday", "next week") MUST be resolved relative to the EMAIL SENT DATE (${emailDateFormatted}), NEVER relative to the current scan date.
+- If an email sent on ${emailDateFormatted} mentions an event "today at 3pm", its start_datetime must be on ${emailDateFormatted} (e.g. ${emailDateFormatted}T15:00:00).
+- If an email was sent in the past and describes something that already occurred on that day, accurately record that past date.
 
 Primary intent:
 - "new_event": Brand-new appointment, booking, school event, picture day, open house, meeting, game, tryout with specific dates/times. If multiple dates/events exist, return them ALL under "events".
@@ -414,12 +422,15 @@ async function extractInboxActions(
   matchingRules: HouseholdCaptureRule[] = [],
   usage?: UsageAccumulator,
 ): Promise<InboxActionItem[]> {
-  const today = new Date().toISOString().slice(0, 10)
+  const emailDate = date ? new Date(date) : new Date()
+  const emailDateIso = !isNaN(emailDate.getTime()) ? emailDate.toISOString() : new Date().toISOString()
+  const emailDateFormatted = emailDateIso.slice(0, 10)
   const rulesBlock = matchingRules.length > 0
     ? `\nHOUSEHOLD LEARNED RULES FOR THIS SENDER:\n${matchingRules.map(r => `- [${r.pattern_type}: ${r.pattern_value}] ${r.rule_directive}`).join('\n')}\n`
     : ''
 
-  const prompt = `You extract actionable family inbox tasks. Today is ${today}.
+  const prompt = `You extract actionable family inbox tasks.
+EMAIL SENT DATE: ${emailDateFormatted} (Header: ${date || emailDateIso})
 Family members: ${familyMembers.map(m => `${m.name} (${m.role})`).join(', ')}
 ${rulesBlock}
 Return ALL tasks that require family follow-up:
@@ -427,11 +438,14 @@ Return ALL tasks that require family follow-up:
 - payment (bill, statement, tuition, dues, membership fees, school donations/supplies)
 - rsvp (sports league registrations, fall registration, tryouts, confirmations)
 - deadline (order deadlines, picture orders, submit/apply by date)
-- delivery (package/order shipped, tracking)
+- delivery (package/order shipped, tracking, grocery arrival window)
 - renewal (subscriptions, memberships)
 - general (school dismissal adjustments, teacher notes requiring parent action)
 
-When an email is a school newsletter or sports league announcement, extract each distinct form, fee, registration, or required supply item.
+CRITICAL DATE ANCHORING:
+- All relative dates/times in the email body (such as "today", "tonight", "this morning", "this afternoon", "tomorrow", "due today", "arriving today between 2pm-6pm") MUST be resolved relative to the EMAIL SENT DATE (${emailDateFormatted}), NEVER relative to the current scan date.
+- If an email sent on ${emailDateFormatted} mentions a delivery "today by 3:44pm", its due_datetime must be on ${emailDateFormatted} (e.g. ${emailDateFormatted}T15:44:00), NOT today's date.
+- When an email is a school newsletter or sports league announcement, extract each distinct form, fee, registration, or required supply item.
 
 EMAIL:
 Subject: ${subject}
@@ -501,6 +515,9 @@ function parseDueDateOrFallback(due: string | undefined, receivedAtIso: string, 
   if (due) {
     const parsed = new Date(due)
     if (!isNaN(parsed.getTime())) return parsed.toISOString()
+    const datePrefix = receivedAtIso.slice(0, 10)
+    const combined = new Date(`${datePrefix}T${due}`)
+    if (!isNaN(combined.getTime())) return combined.toISOString()
   }
   if (eventStartIso) {
     const parsedEvent = new Date(eventStartIso)

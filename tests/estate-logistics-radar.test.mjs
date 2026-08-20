@@ -212,3 +212,12 @@ test('Multiple delivery emails for the same vendor order (tracking notice + pric
   assert.match(combined.etaDisplay || '', /2pm [–-] 6pm/)
 })
 
+test('EstateLogisticsWidget uses date-aware delivery status and hero spotlight prioritization', () => {
+  assert.match(estateLogisticsWidget, /isItemArrivingToday/)
+  assert.match(estateLogisticsWidget, /isItemInTransit/)
+  assert.match(estateLogisticsWidget, /isItemDelivered/)
+  assert.match(estateLogisticsWidget, /isItemArrivingToday\(i, now\)/)
+  assert.match(estateLogisticsWidget, /isItemArrivingToday\(heroItem, now\)/)
+})
+
+

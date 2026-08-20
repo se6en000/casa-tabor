@@ -110,7 +110,7 @@ export default function GroceryItemRow({
       transition={TACTILE_SPRING_TRANSITION}
       animate={isJustMoved ? TACTILE_SWAP_SCALE_ANIMATION : undefined}
       className={cn(
-        'flex flex-col px-4 py-3 hover:bg-casa-surface-subtle transition-all duration-200 ease-out group will-change-transform relative',
+        'flex flex-col px-4 py-3 hover:bg-casa-surface-subtle transition-all duration-200 ease-out group will-change-transform relative cv-auto-row',
         (visualChecked || isDeleting) && 'opacity-50 bg-stone-50/50',
         dismissPhase === 'queued' && 'bg-casa-accent-subtle',
         dismissPhase === 'exiting' && 'opacity-0 translate-y-1 scale-[0.985] max-h-0 py-0',

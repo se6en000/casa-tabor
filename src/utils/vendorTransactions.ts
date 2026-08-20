@@ -1,4 +1,13 @@
 import type { PrepItem, DeliveryTransitItem, DeliveryTransitStage } from '../types'
+import {
+  isToday,
+  isYesterday,
+  isTomorrow,
+  format,
+  isBefore,
+  startOfDay,
+  isSameDay,
+} from 'date-fns'
 
 export interface VendorTransactionIdentity {
   key: string
@@ -351,11 +360,113 @@ export function stageStepIndex(stage: DeliveryTransitStage | null): number {
   }
 }
 
-export function buildDeliveryTransitItem(item: PrepItem): DeliveryTransitItem {
+export function resolveDeliveryDate(item: PrepItem): Date | null {
+  if (item.due_by) {
+    const d = new Date(item.due_by)
+    if (!isNaN(d.getTime())) return d
+  }
+  if (item.event_date) {
+    const d = new Date(item.event_date)
+    if (!isNaN(d.getTime())) return d
+  }
+  if (item.created_at) {
+    const d = new Date(item.created_at)
+    if (!isNaN(d.getTime())) return d
+  }
+  return null
+}
+
+export function resolveEffectiveStage(
+  rawStage: DeliveryTransitStage,
+  deliveryDate: Date | null,
+  now?: Date
+): DeliveryTransitStage {
+  if (rawStage === 'delivered' || rawStage === 'problem') {
+    return rawStage
+  }
+  if (!deliveryDate || !now) {
+    return rawStage
+  }
+
+  // If the delivery target date is strictly in the past (before today's start-of-day in local time)
+  // and it was marked out for delivery, shipped, or confirmed without issues,
+  // same-day and courier deliveries have completed.
+  const todayStart = startOfDay(now)
+  if (isBefore(deliveryDate, todayStart)) {
+    if (rawStage === 'out_for_delivery' || rawStage === 'shipped' || rawStage === 'confirmed' || rawStage === 'payment') {
+      return 'delivered'
+    }
+  }
+
+  return rawStage
+}
+
+export function formatDeliveryEta(
+  rawEta: string | null,
+  deliveryDate: Date | null,
+  stage: DeliveryTransitStage,
+  now?: Date
+): string | null {
+  if (stage === 'delivered') {
+    if (!deliveryDate) return 'Delivered'
+    if (now && isToday(deliveryDate)) return 'Delivered today'
+    if (now && isYesterday(deliveryDate)) return 'Delivered yesterday'
+    return `Delivered ${format(deliveryDate, 'MMM d')}`
+  }
+
+  if (stage === 'problem') {
+    return 'Delivery exception'
+  }
+
+  if (!deliveryDate) {
+    return rawEta || null
+  }
+
+  if (now) {
+    if (isToday(deliveryDate)) {
+      return rawEta || 'Today'
+    }
+    if (isYesterday(deliveryDate)) {
+      return rawEta ? `Yesterday (${rawEta})` : 'Yesterday'
+    }
+    if (isTomorrow(deliveryDate)) {
+      return rawEta ? `Tomorrow (${rawEta})` : 'Tomorrow'
+    }
+    if (isBefore(deliveryDate, startOfDay(now))) {
+      return `Delivered ${format(deliveryDate, 'MMM d')}`
+    }
+  }
+
+  return rawEta || format(deliveryDate, 'EEE, MMM d')
+}
+
+export function isItemArrivingToday(item: DeliveryTransitItem, now: Date): boolean {
+  const targetDate = resolveDeliveryDate(item.rawItem)
+  const effectiveStage = resolveEffectiveStage(item.stage, targetDate, now)
+  if (effectiveStage === 'delivered' || effectiveStage === 'problem') return false
+  if (!targetDate) return false
+  return isSameDay(targetDate, now)
+}
+
+export function isItemInTransit(item: DeliveryTransitItem, now?: Date): boolean {
+  const targetDate = resolveDeliveryDate(item.rawItem)
+  const effectiveStage = resolveEffectiveStage(item.stage, targetDate, now)
+  return effectiveStage === 'shipped' || effectiveStage === 'out_for_delivery' || effectiveStage === 'confirmed' || effectiveStage === 'payment'
+}
+
+export function isItemDelivered(item: DeliveryTransitItem, now?: Date): boolean {
+  const targetDate = resolveDeliveryDate(item.rawItem)
+  const effectiveStage = resolveEffectiveStage(item.stage, targetDate, now)
+  return effectiveStage === 'delivered'
+}
+
+export function buildDeliveryTransitItem(item: PrepItem, now?: Date): DeliveryTransitItem {
   const transaction = vendorTransactionIdentity(item)
   const vendor = transaction?.vendor || resolveVendorName(item)
-  const stage = transaction?.stage || transactionStage(item) || 'shipped'
+  const rawStage = transaction?.stage || transactionStage(item) || 'shipped'
   const isPerish = isPerishableDelivery(item)
+  const targetDate = resolveDeliveryDate(item)
+  const effectiveStage = resolveEffectiveStage(rawStage, targetDate, now)
 
   // Extract clean summary from combined title & description
   const fullText = `${item.event_title ?? ''} ${item.description ?? ''}`.trim()
@@ -371,7 +482,8 @@ export function buildDeliveryTransitItem(item: PrepItem): DeliveryTransitItem {
 
   // Extract ETA or time window
   const etaMatch = fullText.match(/(?:(?:arrive|expected|arriving|delivery)\s+(?:today\s+)?by\s+[\d:apm\s–-]+|today\s+by\s+[\d:apm]+|(?:delivery\s+)?window\s+(?:is\s+)?[\d:apm\s–-]+|between\s+[\d:apm\s–-]+|today\s+between\s+[\d:apm\s–-]+|expected\s+today)/i)
-  const etaDisplay = etaMatch ? etaMatch[0].trim() : (item.due_by ? new Date(item.due_by).toLocaleDateString() : null)
+  const rawEta = etaMatch ? etaMatch[0].trim() : (item.due_by ? new Date(item.due_by).toLocaleDateString() : null)
+  const etaDisplay = now ? formatDeliveryEta(rawEta, targetDate, effectiveStage, now) : rawEta
 
   return {
     id: item.id,
@@ -379,7 +491,7 @@ export function buildDeliveryTransitItem(item: PrepItem): DeliveryTransitItem {
     vendor,
     title: item.event_title || `${vendor} Delivery`,
     itemSummary,
-    stage,
+    stage: effectiveStage,
     cost,
     isPerishable: isPerish,
     etaDisplay,
