@@ -35,15 +35,44 @@ export function useCalendarQuickCreateGesture<T>({
   const onPointerDown = useCallback((event: ReactPointerEvent, context: T) => {
     if (event.pointerType === 'mouse' || shouldIgnore(event.target)) return
     originRef.current = { x: event.clientX, y: event.clientY, context }
+
+    const cleanupWindowListeners = () => {
+      window.removeEventListener('pointermove', onWindowPointerMove)
+      window.removeEventListener('pointerup', onWindowPointerUp)
+      window.removeEventListener('pointercancel', onWindowPointerUp)
+    }
+
+    const onWindowPointerMove = (e: PointerEvent) => {
+      const origin = originRef.current
+      if (!origin) {
+        cleanupWindowListeners()
+        return
+      }
+      if (Math.hypot(e.clientX - origin.x, e.clientY - origin.y) > MOVE_TOLERANCE_PX) {
+        cancel()
+        cleanupWindowListeners()
+      }
+    }
+
+    const onWindowPointerUp = () => {
+      cancel()
+      cleanupWindowListeners()
+    }
+
+    window.addEventListener('pointermove', onWindowPointerMove, { passive: true })
+    window.addEventListener('pointerup', onWindowPointerUp, { passive: true })
+    window.addEventListener('pointercancel', onWindowPointerUp, { passive: true })
+
     timerRef.current = setTimeout(() => {
       const origin = originRef.current
       timerRef.current = null
       originRef.current = null
+      cleanupWindowListeners()
       if (!origin) return
       navigator.vibrate?.(30)
       onCreate(resolveStart(origin.context, origin.x, origin.y))
     }, LONG_PRESS_MS)
-  }, [onCreate, resolveStart, shouldIgnore])
+  }, [cancel, onCreate, resolveStart, shouldIgnore])
 
   const onPointerMove = useCallback((event: ReactPointerEvent) => {
     const origin = originRef.current
