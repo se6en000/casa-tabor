@@ -51,7 +51,6 @@ export default function LivingFlowSidecar({
     setStartAndEnd,
     nudgeMinutes,
     setCategory,
-    setRecurrenceRule,
     deleteEvent,
     handleDelete,
     handleRecurringDelete,
@@ -124,7 +123,6 @@ export default function LivingFlowSidecar({
           isAllDay={state.isAllDay}
           rrule={state.rrule}
           sourceType={event?.source_type}
-          rrule={state.rrule}
           onUpdateTitle={updateTitle}
           onSetStartAndDuration={setStartAndDuration}
           onSetStartAndEnd={setStartAndEnd}

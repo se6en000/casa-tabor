@@ -38,9 +38,10 @@ import {
   deleteCalendarEvent,
   triggerGoogleEventSync,
   invalidateAllCalendarQueries,
+  syncAndMaterializeRecurringSeries,
 } from '../../../../lib/eventMutations'
 import { evictEventFromAllCaches, publishEventAggregatePatch } from '../../../../lib/eventAggregateCache'
-import { parseRrule, expandRruleInstances, type RecurrenceConfig } from '../../../../utils/recurrenceUtils'
+import { parseRrule, type RecurrenceConfig } from '../../../../utils/recurrenceUtils'
 
 const DEFAULT_VENUE: VenueInfo = {
   name: 'Home',
@@ -252,16 +253,9 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
         setRecurringEditorEnabled(result.enabled)
         setRecurringEditorWritable(Boolean(result.writable))
         setRecurringDeleteEnabled(Boolean(result.deletable))
-        setRecurringContext(result.context ?? null)
-        const activeCanonicalRrule = result.context?.series.recurrence_lines
-          .find((line) => line.startsWith('RRULE:'))
-          ?.slice('RRULE:'.length) ?? null
-        if (activeCanonicalRrule) {
-          setState(prev => ({
-            ...prev,
-            rrule: activeCanonicalRrule,
-            recurrenceConfig: parseRrule(activeCanonicalRrule),
-          }))
+        if (result.context?.series?.recurrence_lines?.[0]) {
+          const seriesRrule = result.context.series.recurrence_lines[0]
+          setState(prev => ({ ...prev, rrule: prev.rrule || seriesRrule }))
         }
       })
       .catch((error: Error) => {
@@ -1203,12 +1197,13 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
   }, [initialEvent, state.startDate, state.endDate, queryClient, onClose])
 
   // Set Recurrence Rule (RFC 5545 RRULE)
-  const setRecurrenceRule = useCallback(async (newRrule: string | null, config: RecurrenceConfig, targetScope?: RecurrenceScope) => {
+  const setRecurrenceRule = useCallback(async (newRrule: string | null, config?: RecurrenceConfig, targetScope?: RecurrenceScope) => {
     const scopeToUse = targetScope || state.recurScope
     setState(prev => ({
       ...prev,
       rrule: newRrule,
       recurrenceConfig: config,
+      recurScope: 'all',
     }))
 
     const currentEvent = activeEventRef.current || initialEvent
@@ -1264,10 +1259,22 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
         return
       }
 
-      // Standard / Master Event Recurrence handling
-      const masterIdToUpdate = (isCanonicalOccurrence || currentEvent.recurrence_master_id)
-        ? currentEvent.recurrence_master_id!
+      let targetMasterId = (currentEvent.record_kind === 'occurrence' && (currentEvent.recurrence_master_id || recurringContext?.series?.template_event_id))
+        ? (currentEvent.recurrence_master_id || recurringContext?.series?.template_event_id!)
         : currentEvent.id
+
+      if (currentEvent.record_kind === 'occurrence' && targetMasterId === currentEvent.id && (currentEvent as any).series_id) {
+        const { data: foundSeries } = await supabase
+          .from('event_series')
+          .select('template_event_id')
+          .eq('id', (currentEvent as any).series_id)
+          .maybeSingle()
+        if (foundSeries?.template_event_id) {
+          targetMasterId = foundSeries.template_event_id
+        }
+      }
+
+      const masterIdToUpdate = targetMasterId
 
       const fallbackMemberId = state.selectedMemberIds[0] || currentEvent.source_member_id || null
 
@@ -1291,46 +1298,7 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
 
         // 3. For offline / standalone Casa events only, expand local occurrence copies
         if (!isGoogleLinked) {
-          const masterStart = currentEvent.start_time || state.startDate.toISOString()
-          const masterEnd = currentEvent.end_time || state.endDate.toISOString()
-          const occurrences = expandRruleInstances(masterStart, masterEnd, newRrule, 24)
-
-          if (occurrences.length > 0) {
-            const eventCopies = occurrences.map(occ => ({
-              title: currentEvent.title || state.title,
-              description: currentEvent.description ?? null,
-              start_time: occ.start,
-              end_time: occ.end,
-              all_day: state.isAllDay ?? currentEvent.all_day ?? false,
-              event_type: currentEvent.event_type ?? state.mode,
-              location_name: currentEvent.location_name ?? (state.venue.name !== 'Home' ? state.venue.name : null),
-              address: currentEvent.address ?? state.venue.address ?? null,
-              lat: currentEvent.lat ?? null,
-              lng: currentEvent.lng ?? null,
-              google_calendar_id: currentEvent.google_calendar_id ?? null,
-              source_member_id: currentEvent.source_member_id ?? fallbackMemberId,
-              status: 'confirmed' as const,
-              is_enriched: true,
-              rrule: null,
-              recurrence_master_id: masterIdToUpdate,
-            }))
-
-            const { data: newEvents, error: insertErr } = await supabase.from('events').insert(eventCopies).select('id')
-
-            if (!insertErr && newEvents?.length && state.selectedMemberIds.length > 0) {
-              const memberCopies = newEvents.flatMap(ev =>
-                state.selectedMemberIds.map(memberId => ({
-                  event_id: ev.id,
-                  family_member_id: memberId,
-                  role: 'attendee',
-                  rsvp_status: 'accepted',
-                }))
-              )
-              if (memberCopies.length > 0) {
-                await supabase.from('event_members').insert(memberCopies)
-              }
-            }
-          }
+          await syncAndMaterializeRecurringSeries(supabase, targetMasterId)
         }
 
         // 4. Immediately refresh local cache and views (<50ms response)
@@ -1348,7 +1316,7 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
           void supabase.functions.invoke('update-recurring-google', {
             body: { master_event_id: masterIdToUpdate }
           }).catch(() => {
-            triggerGoogleEventSync(supabase, masterIdToUpdate)
+            triggerGoogleEventSync(supabase, targetMasterId)
           })
         }
       } else {
@@ -1358,6 +1326,11 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
           updated_at: new Date().toISOString(),
         }).eq('id', masterIdToUpdate)
 
+        await supabase
+          .from('event_series')
+          .delete()
+          .or(`template_event_id.eq.${targetMasterId},id.eq.${(currentEvent as any).series_id || recurringContext?.series?.id || '00000000-0000-0000-0000-000000000000'}`)
+
         // Delete all child instances
         await supabase.from('events').delete().eq('recurrence_master_id', masterIdToUpdate)
 
@@ -1366,6 +1339,7 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
           updated_at: new Date().toISOString(),
         })
         invalidateCalendar()
+        triggerGoogleEventSync(supabase, targetMasterId)
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('casa-event-mutated', { detail: { eventId: currentEvent.id } }))
         }
