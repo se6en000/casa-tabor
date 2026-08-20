@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { CalendarDays, Plus, Camera, Sparkles } from 'lucide-react'
 import { addHours } from 'date-fns'
+import { cn } from '../../utils/cn'
 import { supabase } from '../../lib/supabase'
 import { syncAndMaterializeRecurringSeries, triggerGoogleEventSync } from '../../lib/eventMutations'
 import { useQueryClient } from '@tanstack/react-query'
@@ -33,8 +34,11 @@ interface Props {
   initialStart?: Date
 }
 
+function pad(n: number): string {
+  return String(n).padStart(2, '0')
+}
+
 function toLocalDT(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
@@ -358,12 +362,43 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
           <div className="flex-1 h-px bg-casa-border" />
         </div>
 
+        {/* Event vs Reminder Segmented Switch */}
+        <div className="flex items-center justify-between pb-1">
+          <span className="text-caption font-bold text-casa-muted">Type</span>
+          <div className="flex items-center bg-casa-sand/80 p-0.5 rounded-xl border border-casa-border/60">
+            <Button
+              type="button"
+              size="sm"
+              variant={eventType === 'event' ? 'primary' : 'ghost'}
+              onClick={() => setEventType('event')}
+              className={cn(
+                'px-3 py-1 min-h-[36px] text-caption font-bold rounded-lg transition-all',
+                eventType !== 'event' && 'text-casa-muted hover:text-casa-navy',
+              )}
+            >
+              Event
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={eventType === 'reminder' ? 'secondary' : 'ghost'}
+              onClick={() => setEventType('reminder')}
+              className={cn(
+                'px-3 py-1 min-h-[36px] text-caption font-bold rounded-lg transition-all',
+                eventType === 'reminder' ? 'bg-casa-gold text-casa-navy shadow-2xs' : 'text-casa-muted hover:text-casa-navy',
+              )}
+            >
+              Reminder
+            </Button>
+          </div>
+        </div>
+
         <Field label="Event title" required>
           <Input
             value={title}
             onChange={e => setTitle(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') void handleSave() }}
-            placeholder="What's happening?"
+            placeholder={eventType === 'reminder' ? 'What do you need to remember?' : "What's happening?"}
             disabled={saving || Boolean(saveSuccess)}
           />
         </Field>

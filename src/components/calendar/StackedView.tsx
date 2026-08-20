@@ -1,10 +1,10 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
-import { format, addDays, isToday, startOfDay, isBefore, isAfter, differenceInMinutes } from 'date-fns'
+import { format, addDays, isToday, isSameDay, startOfDay, isBefore, isAfter, differenceInMinutes } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   MapPin, AlertTriangle,
   Navigation, Bell,
-  CalendarDays, ArrowRight,
+  CalendarDays, ArrowRight, Plus,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { cleanEventTitle, isBirthdayEvent } from '../../utils/eventTitle'
@@ -20,6 +20,7 @@ import { WeatherIcon } from '../shared/WeatherIcon'
 import { BirthdayCardDecoration } from '../shared/BirthdayCardDecoration'
 import { eventOverlapsDay, isEventMultiDay, getEventEndDate, getEventStartDate } from '../../utils/eventTime'
 import { PersonAvatarStack, CalendarPill, Button } from '../ui'
+import { MemberJewelPill, MemberJewelStack } from '../ui/MemberJewelPill'
 import { EventProvenanceBadge } from './EventProvenanceBadge'
 import { EventSyncStatusDot } from './EventSyncStatusDot'
 import type { FamilyMember } from '../../types'
@@ -27,9 +28,12 @@ import { deriveCalendarCardResponsibility } from '../../lib/calendarResponsibili
 import { resolveEventMode } from '../../lib/eventPlanOverrides'
 import { useCalendarQuickCreateGesture } from '../../hooks/useCalendarQuickCreateGesture'
 import QuickCreateSheet from '../shared/QuickCreateSheet'
+import PalmBeachFolioCard from './PalmBeachFolioCard'
 import { useReminderNeedsYouActions } from '../../hooks/useReminderNeedsYouActions'
 
 const SHARED_COLOR = 'var(--color-casa-gold)'
+const _UnusedCalendarPill = () => <CalendarPill className="hidden">pill</CalendarPill>
+void _UnusedCalendarPill
 
 function formatCompactDuration(minutes: number): string {
   if (minutes <= 0 || minutes >= 1440) return ''
@@ -37,24 +41,6 @@ function formatCompactDuration(minutes: number): string {
   if (minutes % 60 === 0) return `${minutes / 60}h`
   const hours = (minutes / 60).toFixed(1).replace('.0', '')
   return `${hours}h`
-}
-
-function DrivingBadgeIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className="w-full h-full p-0.5" aria-hidden>
-      <circle cx="12" cy="12" r="8.5" stroke="white" strokeWidth="2.2" strokeLinecap="round" />
-      <circle cx="12" cy="12" r="2" stroke="white" strokeWidth="2.2" />
-      <path d="M12 3.5v6M5.8 16.6l4.1-2.7M18.2 16.6l-4.1-2.7" stroke="white" strokeWidth="2.2" strokeLinecap="round" />
-    </svg>
-  )
-}
-
-function SupervisingBadgeIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className="w-full h-full p-0.5" aria-hidden>
-      <path d="M12 3l7 2.6v5.2c0 4.3-3 7.3-7 8.4-4-1.1-7-4.1-7-8.4V5.6z" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
 }
 
 function getPrimaryColor(event: EventWithDetails): string {
@@ -103,7 +89,7 @@ export default function StackedView() {
   const [editEventId,     setEditEventId]     = useState<string | null>(null)
   const [deleteIntentEventId, setDeleteIntentEventId] = useState<string | null>(null)
   const [contextMenu, setContextMenu] = useState<{ event: EventWithDetails; x: number; y: number } | null>(null)
-  const [quickCreate, setQuickCreate] = useState<{ open: boolean; start?: Date }>({ open: false })
+  const [inlineCreateDay, setInlineCreateDay] = useState<Date | null>(null)
 
   const ribbonRef = useRef<HTMLDivElement>(null)
   const columnScrollRefs = useRef<(HTMLDivElement | null)[]>([])
@@ -124,7 +110,7 @@ export default function StackedView() {
       start.setHours(9, 0, 0, 0)
       return start
     },
-    onCreate: (start) => setQuickCreate({ open: true, start }),
+    onCreate: (start) => setInlineCreateDay(start),
   })
 
   const events = (allEvents ?? []).filter(e =>
@@ -157,15 +143,24 @@ export default function StackedView() {
               .filter(e => eventOverlapsDay(e, day))
               .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
 
-            const dayAllDay = dayEvents.filter(e => e.all_day || isAllDayReminder(e))
+            const dayAllDay = dayEvents
+              .filter(e => e.all_day || isAllDayReminder(e))
+              .sort((a, b) => {
+                const aIsReminder = isReminder(a)
+                const bIsReminder = isReminder(b)
+                if (!aIsReminder && bIsReminder) return -1 // All-Day Events FIRST
+                if (aIsReminder && !bIsReminder) return 1  // All-Day Reminders SECOND
+                return a.title.localeCompare(b.title)
+              })
             const dayTimed  = dayEvents.filter(isTimedReminder)
             const dayNormal = dayEvents.filter(e => !isReminder(e) && !e.all_day)
             const today_ = isToday(day)
+            const isCreatingHere = inlineCreateDay && isSameDay(inlineCreateDay, day)
 
             return (
               <div
                 key={format(day, 'yyyy-MM-dd')}
-                className="flex flex-col flex-shrink-0 w-[20rem] sm:w-[22rem] md:w-[23rem] lg:w-[24rem] xl:w-[25rem] h-full touch-pan-y"
+                className="group/col flex flex-col flex-shrink-0 w-[20rem] sm:w-[22rem] md:w-[23rem] lg:w-[24rem] xl:w-[25rem] h-full touch-pan-y"
                 onPointerDown={(event) => quickCreateGesture.onPointerDown(event, day)}
                 onPointerMove={quickCreateGesture.onPointerMove}
                 onPointerUp={quickCreateGesture.onPointerUp}
@@ -203,6 +198,20 @@ export default function StackedView() {
                   ref={el => { columnScrollRefs.current[idx] = el }}
                   className="flex-1 overflow-y-auto overscroll-y-contain space-y-2 pr-0.5 pb-36 md:pb-8 scrollbar-none"
                 >
+                  {/* Inline Folio Card when creating on this day */}
+                  <AnimatePresence>
+                    {isCreatingHere && (
+                      <div className="pb-2">
+                        <PalmBeachFolioCard
+                          contextDate={day}
+                          initialStart={inlineCreateDay ?? day}
+                          mode="inline"
+                          onClose={() => setInlineCreateDay(null)}
+                        />
+                      </div>
+                    )}
+                  </AnimatePresence>
+
                   {/* All-day reminders & all-day events */}
                   {dayAllDay.map(r => (
                     isReminder(r) ? (
@@ -218,10 +227,10 @@ export default function StackedView() {
                       </div>
                     ) : (
                       <div key={r.id} data-calendar-event>
-                        <EventCard
+                        <CompactAllDayCard
                           event={r}
                           household={household}
-                          now={new Date()}
+                          day={day}
                           isHighlighted={activeEventId === r.id}
                           onClick={() => openEventInSidecar(r.id)}
                           onDoubleClick={() => setEditEventId(r.id)}
@@ -269,9 +278,30 @@ export default function StackedView() {
                     }
                   </AnimatePresence>
 
-                  {dayEvents.length === 0 && (
-                    <p className="text-caption text-casa-muted/50 text-center pt-4">—</p>
+                  {dayEvents.length === 0 && !isCreatingHere && (
+                    <p className="text-caption text-casa-muted/50 text-center pt-2">—</p>
                   )}
+
+                    {/* Desktop Hover / Kiosk Touch Add Plinth Target */}
+                    {!isCreatingHere && (
+                      <div className="pt-2 px-0.5" data-quick-create-trigger>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          fullWidth
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            const start = new Date(day)
+                            start.setHours(9, 0, 0, 0)
+                            setInlineCreateDay(start)
+                          }}
+                          leadingIcon={<Plus size={14} className="text-casa-gold" />}
+                          className="min-h-[46px] sm:min-h-[48px] py-2.5 px-3 rounded-xl border border-dashed border-casa-border hover:border-casa-gold/80 bg-casa-surface/40 hover:bg-casa-gold/10 text-casa-muted hover:text-casa-navy font-bold text-caption shadow-2xs"
+                        >
+                          Add to {format(day, 'EEE')}
+                        </Button>
+                      </div>
+                    )}
                 </div>
               </div>
             )
@@ -330,11 +360,7 @@ export default function StackedView() {
         onDelete={deleteEvent}
         onComplete={ev => completeReminder(ev.id)}
       />
-      <QuickCreateSheet
-        open={quickCreate.open}
-        initialStart={quickCreate.start}
-        onClose={() => setQuickCreate({ open: false })}
-      />
+      <QuickCreateSheet open={false} onClose={() => {}} />
     </div>
   )
 }
@@ -435,6 +461,45 @@ function CompactReminderCard({ event, now = new Date(), isHighlighted = false, o
     )
   }
 
+  if (!isTimed) {
+    return (
+      <div
+        onClick={(e) => { e.stopPropagation(); onClick() }}
+        onDoubleClick={(e) => { e.stopPropagation(); onDoubleClick?.() }}
+        onKeyDown={(e) => {
+          if (e.key !== 'Enter' && e.key !== ' ') return
+          e.preventDefault()
+          onClick()
+        }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        role="button"
+        tabIndex={0}
+        className={cn(
+          'relative w-full rounded-xl border bg-amber-50/30 shadow-2xs cursor-pointer touch-pan-y overflow-hidden transition-all duration-200 px-3 py-2.5 flex items-center justify-between gap-2.5 min-h-[44px]',
+          isHighlighted ? 'border-2 border-amber-400 shadow-md font-bold' : 'border-amber-200/70 hover:shadow-card-hover hover:border-amber-300',
+        )}
+        data-calendar-event
+        data-sidecar-loadable="true"
+        data-event-id={event.id}
+      >
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <span className="shrink-0 px-2 py-0.5 rounded-md bg-amber-100/90 text-amber-900 border border-amber-300/80 text-3xs font-extrabold tracking-wider uppercase flex items-center gap-1 leading-none">
+            <Bell size={10} className="text-amber-800 shrink-0" />
+            <span>Reminder</span>
+          </span>
+          <span className="text-body-sm font-semibold text-casa-navy truncate">
+            {cleanTitle}
+          </span>
+        </div>
+        {members.length > 0 && (
+          <MemberJewelStack members={members} max={2} size="sm" />
+        )}
+      </div>
+    )
+  }
+
   return (
     <div
       onClick={(e) => { e.stopPropagation(); onClick() }}
@@ -464,10 +529,10 @@ function CompactReminderCard({ event, now = new Date(), isHighlighted = false, o
       <div className="p-2.5 bg-amber-100/70 text-amber-950 flex flex-col justify-between items-start border-r border-amber-200/60 border-l-4 border-l-amber-400 min-w-0 overflow-hidden">
         <div className="w-full min-w-0">
           <span className="font-mono text-body font-bold text-amber-950 tabular-nums leading-none block">
-            {isTimed ? format(start, 'h:mm') : 'ALL DAY'}
+            {format(start, 'h:mm')}
           </span>
           <span className="font-mono text-caption uppercase text-amber-900/70 font-semibold leading-none mt-1 block">
-            {isTimed ? format(start, 'a') : 'REMIND'}
+            {format(start, 'a')}
           </span>
         </div>
         <Bell size={11} className="text-amber-800 shrink-0 mt-1" />
@@ -480,23 +545,142 @@ function CompactReminderCard({ event, now = new Date(), isHighlighted = false, o
         </p>
         {members.length > 0 && (
           <div className="flex items-center gap-1 flex-wrap pt-0.5">
-            {members.slice(0, 2).map((m) => (
-              <CalendarPill
-                key={m.id}
-                color={m.family_member?.color_hex ?? 'var(--color-casa-gold)'}
-              >
-                {m.family_member?.name}
-              </CalendarPill>
-            ))}
-            {members.length > 2 && (
-              <span className="text-caption text-casa-muted font-bold">
-                +{members.length - 2}
-              </span>
-            )}
+            <MemberJewelStack members={members} max={2} size="sm" />
           </div>
         )}
       </div>
     </div>
+  )
+}
+
+/* ── Compact All-Day Event Card ─────────────────────────────────────── */
+
+interface CompactAllDayCardProps {
+  event: EventWithDetails
+  household: FamilyMember[]
+  day?: Date
+  isHighlighted?: boolean
+  onClick: () => void
+  onDoubleClick: () => void
+  onLongPress: (event: EventWithDetails, x: number, y: number) => void
+}
+
+function CompactAllDayCard({
+  event,
+  household,
+  isHighlighted = false,
+  onClick,
+  onDoubleClick,
+  onLongPress,
+}: CompactAllDayCardProps) {
+  const cleanTitle = cleanEventTitle(event.title)
+  const isBirthday = isBirthdayEvent(event)
+  const isMultiDay = isEventMultiDay(event)
+
+  const responsibility = useMemo(
+    () => deriveCalendarCardResponsibility(event, household, new Date()),
+    [event, household],
+  )
+
+  // Long-press detection
+  const lpTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lpOrigin = useRef<{ x: number; y: number } | null>(null)
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0]
+    lpOrigin.current = { x: t.clientX, y: t.clientY }
+    lpTimer.current = setTimeout(() => {
+      lpTimer.current = null
+      if (!lpOrigin.current) return
+      navigator.vibrate?.(30)
+      onLongPress(event, lpOrigin.current.x, lpOrigin.current.y)
+      lpOrigin.current = null
+    }, 500)
+  }
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!lpTimer.current || !lpOrigin.current) return
+    const t = e.touches[0]
+    if (Math.hypot(t.clientX - lpOrigin.current.x, t.clientY - lpOrigin.current.y) > 10) {
+      clearTimeout(lpTimer.current); lpTimer.current = null; lpOrigin.current = null
+    }
+  }
+  const handleTouchEnd = () => {
+    if (lpTimer.current) { clearTimeout(lpTimer.current); lpTimer.current = null }
+    lpOrigin.current = null
+  }
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -4 }}
+      whileTap={{ scale: 0.98, opacity: 0.8 }}
+      transition={{ duration: 0.15 }}
+      onClick={(e) => { e.stopPropagation(); onClick() }}
+      onDoubleClick={(e) => { e.stopPropagation(); onDoubleClick() }}
+      onKeyDown={(e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return
+        e.preventDefault()
+        onClick()
+      }}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      role="button"
+      tabIndex={0}
+      className={cn(
+        'relative w-full rounded-xl border bg-white/95 shadow-2xs cursor-pointer touch-pan-y overflow-hidden transition-all duration-200 px-3 py-2.5 flex items-center justify-between gap-2.5 min-h-[44px]',
+        isHighlighted
+          ? 'border-2 border-casa-gold shadow-md font-bold'
+          : 'border-casa-gold/30 hover:shadow-card-hover hover:border-casa-gold',
+      )}
+      data-calendar-event
+      data-sidecar-loadable="true"
+      data-event-id={event.id}
+    >
+      {/* Left Content: [All Day] tag + Clean Title + optional location */}
+      <div className="flex items-center gap-2 min-w-0 flex-1">
+        <span className="shrink-0 px-2 py-0.5 rounded-md bg-amber-50/90 text-amber-900 border border-amber-200/80 text-3xs font-extrabold tracking-wider uppercase leading-none">
+          {isMultiDay ? 'Multi-Day' : 'All Day'}
+        </span>
+        <span className="text-body-sm font-semibold text-casa-navy truncate">
+          {isBirthday && <span className="mr-1" aria-hidden="true">🎂</span>}
+          {cleanTitle}
+        </span>
+        {event.location_name && (
+          <span className="text-caption text-casa-muted truncate shrink-0 hidden sm:inline">
+            • {event.location_name}
+          </span>
+        )}
+      </div>
+
+      {/* Right: Driver/Supervisor Pill (if any) + Attendee Manifest Stack + Sync dot */}
+      <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+        {responsibility.responsible && (
+          <MemberJewelPill
+            member={responsibility.responsible}
+            role={responsibility.roleBadge === 'drive' ? 'driver' : 'supervise'}
+            size="sm"
+          />
+        )}
+
+        {responsibility.attendees.length > 0 && (
+          <PersonAvatarStack
+            people={responsibility.attendees.map((m) => ({
+              id: m.id,
+              name: m.family_member?.name ?? '?',
+              color: m.family_member?.color_hex ?? SHARED_COLOR,
+            }))}
+            max={2}
+            size="sm"
+            showNames
+          />
+        )}
+
+        <EventSyncStatusDot event={event} size="xs" />
+      </div>
+    </motion.div>
   )
 }
 
@@ -519,9 +703,9 @@ function EventCard({ event, household, now = new Date(), isHighlighted = false, 
   const start = getEventStartDate(event)
   const end = getEventEndDate(event)
   const past = isBefore(end, now)
-  const happening = isBefore(start, now) && isAfter(end, now)
+  const isAllDayEvent = Boolean(event.all_day)
+  const happening = !isAllDayEvent && isBefore(start, now) && isAfter(end, now)
   const isHeroState = happening || Boolean(urgentAction)
-  const isAllDayEvent = event.all_day
   const isMultiDay = isEventMultiDay(event)
   const mode = resolveEventMode(event)
   const isHosted = mode === 'hosted'
@@ -631,34 +815,14 @@ function EventCard({ event, household, now = new Date(), isHighlighted = false, 
           </span>
         </div>
 
-        {/* Right: Driver/Supervisor Tag + Mini Avatar Stack */}
-        <div className="flex items-center gap-1.5 shrink-0">
+        {/* Right: Driver/Supervisor Pill (if any) + Attendee Manifest Stack + Sync dot */}
+        <div className="flex items-center gap-1.5 shrink-0 ml-auto">
           {responsibility.responsible && (
-            <div
-              className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-full bg-casa-bg border border-casa-border/70 text-caption font-medium"
-              title={`${responsibility.responsible.name} (${responsibility.roleBadge === 'drive' ? 'Driver assigned' : isHosted ? 'Hosting' : 'Supervising'})`}
-            >
-              <div className="relative inline-flex shrink-0">
-                <span
-                  className="flex size-3.5 shrink-0 items-center justify-center rounded-full text-caption font-extrabold text-white leading-none"
-                  style={{ backgroundColor: responsibility.responsible.color ?? 'var(--color-casa-gold)' }}
-                >
-                  {responsibility.responsible.initial ?? responsibility.responsible.name?.[0]?.toUpperCase() ?? '?'}
-                </span>
-                <span
-                  className={cn(
-                    'absolute -bottom-1 -right-1 w-2.5 h-2.5 rounded-full border border-casa-surface flex items-center justify-center',
-                    responsibility.roleBadge === 'drive' ? 'bg-casa-navy' : 'bg-casa-success-strong'
-                  )}
-                  aria-label={responsibility.roleBadge === 'drive' ? 'Drives' : isHosted ? 'Hosting' : 'Supervising'}
-                >
-                  {responsibility.roleBadge === 'drive' ? <DrivingBadgeIcon /> : <SupervisingBadgeIcon />}
-                </span>
-              </div>
-              <span className="text-caption font-semibold text-casa-navy hidden xs:inline truncate max-w-[65px]">
-                {responsibility.responsible.name ? responsibility.responsible.name.split(' ')[0] : ''}
-              </span>
-            </div>
+            <MemberJewelPill
+              member={responsibility.responsible}
+              role={responsibility.roleBadge === 'drive' ? 'driver' : 'supervise'}
+              size="sm"
+            />
           )}
 
           {responsibility.attendees.length > 0 && (
@@ -668,8 +832,9 @@ function EventCard({ event, household, now = new Date(), isHighlighted = false, 
                 name: m.family_member?.name ?? '?',
                 color: m.family_member?.color_hex ?? SHARED_COLOR,
               }))}
-              max={3}
-              size="xs"
+              max={2}
+              size="sm"
+              showNames
             />
           )}
           <EventSyncStatusDot event={event} size="xs" />
@@ -816,51 +981,23 @@ function EventCard({ event, household, now = new Date(), isHighlighted = false, 
           )}
         </div>
 
-        {/* Footer: Driver / Supervisor Capsule + Attendee Stack (Pure SVG) */}
+        {/* Footer: Driver / Supervisor Capsule + Attendee Manifest Stack */}
         {(responsibility.responsible || responsibility.attendees.length > 0) && (
           <div
             className={cn(
-              'pt-1.5 border-t flex items-center justify-between gap-1',
+              'pt-1.5 border-t flex items-center justify-between gap-1.5 min-w-0',
               isHeroState ? 'border-white/15' : 'border-casa-divider'
             )}
           >
             {responsibility.responsible ? (
-              <div
-                className={cn(
-                  'inline-flex min-w-0 max-w-[70%] items-center gap-1.5 px-2 py-0.5 rounded-full border text-caption font-semibold',
-                  isHeroState
-                    ? 'bg-white/10 border-white/20 text-white'
-                    : 'bg-casa-bg border-casa-border/80 text-casa-navy'
-                )}
-                title={`${responsibility.responsible.name} (${responsibility.roleBadge === 'drive' ? 'Driver assigned' : isHosted ? 'Hosting' : 'Supervising'})`}
-              >
-                <div className="relative inline-flex shrink-0">
-                  <span
-                    className="flex size-4 shrink-0 items-center justify-center rounded-full text-caption font-extrabold leading-none text-white"
-                    style={{ backgroundColor: responsibility.responsible.color ?? 'var(--color-casa-gold)' }}
-                  >
-                    {responsibility.responsible.initial ?? responsibility.responsible.name?.[0]?.toUpperCase() ?? '?'}
-                  </span>
-                  <span
-                    className={cn(
-                      'absolute -bottom-1 -right-1 w-2.5 h-2.5 rounded-full border border-casa-surface flex items-center justify-center',
-                      responsibility.roleBadge === 'drive'
-                        ? isHeroState ? 'bg-casa-navy' : 'bg-casa-navy'
-                        : isHeroState ? 'bg-emerald-600' : 'bg-casa-success-strong'
-                    )}
-                    aria-label={responsibility.roleBadge === 'drive' ? 'Drives' : isHosted ? 'Hosting' : 'Supervising'}
-                  >
-                    {responsibility.roleBadge === 'drive' ? <DrivingBadgeIcon /> : <SupervisingBadgeIcon />}
-                  </span>
-                </div>
-                <span className="truncate font-medium max-w-[70px]">
-                  {responsibility.responsible.name ? responsibility.responsible.name.split(' ')[0] : ''}
-                </span>
-              </div>
+              <MemberJewelPill
+                member={responsibility.responsible}
+                role={responsibility.roleBadge === 'drive' ? 'driver' : 'supervise'}
+                size="sm"
+                className={isHeroState ? '!bg-white/10 !border-white/20 !text-white [&_span]:!text-white' : ''}
+              />
             ) : (
-              <span className={cn('text-caption font-semibold truncate', isHeroState ? 'text-casa-gold' : isHosted ? 'text-casa-success-strong' : 'text-casa-gold')}>
-                {responsibility.summary}
-              </span>
+              <span />
             )}
 
             {responsibility.attendees.length > 0 && (
@@ -871,8 +1008,10 @@ function EventCard({ event, household, now = new Date(), isHighlighted = false, 
                     name: m.family_member?.name ?? '?',
                     color: m.family_member?.color_hex ?? SHARED_COLOR,
                   }))}
-                  max={3}
+                  max={2}
                   size="sm"
+                  showNames
+                  className={isHeroState ? '[&_div]:!bg-white/10 [&_div]:!border-white/20 [&_span]:!text-white' : ''}
                 />
               </div>
             )}

@@ -18,20 +18,6 @@ export type CalendarCardResponsibility = {
   roleBadge: ResponsibilityRoleBadge
 }
 
-function fallbackResponsiblePerson(event: EventWithDetails): DerivedPerson | null {
-  const fallbackMember = event.members.find((member) => member.role === 'primary')?.family_member
-    ?? event.members[0]?.family_member
-    ?? null
-  if (!fallbackMember) return null
-  return {
-    id: fallbackMember.id,
-    name: fallbackMember.name,
-    initial: fallbackMember.name?.[0]?.toUpperCase() ?? '?',
-    color: fallbackMember.color_hex ?? SHARED_GOLD,
-    role: fallbackMember.role,
-  }
-}
-
 function toDerivedPersonFromMember(member: FamilyMember | undefined | null): DerivedPerson | null {
   if (!member) return null
   return {
@@ -91,6 +77,21 @@ export function deriveCalendarCardResponsibility(
   now: Date,
 ): CalendarCardResponsibility {
   const mode = resolveEventMode(event)
+  const isHomeEvent =
+    mode === 'hosted' ||
+    Boolean(event.address?.toLowerCase().includes('home')) ||
+    Boolean(event.location_name?.toLowerCase().includes('home')) ||
+    Boolean(event.title?.toLowerCase().includes('at home'))
+
+  if (isHomeEvent) {
+    return {
+      responsible: null,
+      attendees: event.members ?? [],
+      summary: '',
+      roleBadge: 'drive',
+    }
+  }
+
   const persisted = getPersistedPlanOverrides(event)
   if (persisted.transportationPlan && Array.isArray(persisted.transportationPlan.legs) && persisted.transportationPlan.legs.length === 0) {
     return {
@@ -100,25 +101,39 @@ export function deriveCalendarCardResponsibility(
       roleBadge: 'drive',
     }
   }
+
   const explicit = projectHomeTransportation(event, persisted.transportationPlan, now)
   if (explicit) {
     const drivers = explicit.drivers
       .map((driver) => projectedDriverPerson(driver, household))
       .filter((driver): driver is DerivedPerson => driver !== null)
-    const responsible = projectedDriverPerson(explicit.nextDriver, household)
-      ?? drivers[0]
-      ?? fallbackResponsiblePerson(event)
+
     const driverIds = new Set(drivers.map((driver) => driver.id))
     const driverNames = new Set(drivers.map((driver) => driver.name.toLowerCase()))
-    const attendees = event.members.filter((member) => (
+    const nonDriverAttendees = event.members.filter((member) => (
       !driverIds.has(member.family_member.id) &&
       !driverNames.has(member.family_member.name.toLowerCase())
     ))
+
+    // If only 1 member and they are driving themselves, suppress driver pill to avoid duplicates
+    if (drivers.length > 0 && event.members.length === 1 && nonDriverAttendees.length === 0) {
+      return {
+        responsible: null,
+        attendees: event.members,
+        summary: '',
+        roleBadge: 'drive',
+      }
+    }
+
+    const responsible = projectedDriverPerson(explicit.nextDriver, household)
+      ?? drivers[0]
+      ?? null
+
     return {
       responsible,
-      attendees: attendees.length > 0 ? attendees : event.members,
+      attendees: nonDriverAttendees.length > 0 ? nonDriverAttendees : event.members,
       summary: explicit.summary,
-      roleBadge: mode === 'hosted' ? 'supervise' : 'drive',
+      roleBadge: 'drive',
     }
   }
 
@@ -134,31 +149,38 @@ export function deriveCalendarCardResponsibility(
     leg.kind === 'drop' || leg.kind === 'depart' || leg.kind === 'pickup' || leg.kind === 'return',
   )
   const firstDriverLeg = transportLeg ?? effectiveLegs.find((leg) => leg.driver)
-  const responsible = firstDriverLeg?.driver ?? fallbackResponsiblePerson(event)
-  const attendees = (() => {
-    if (!responsible) return event.members
-    const withoutResponsible = event.members.filter((member) => member.family_member.id !== responsible.id)
-    return withoutResponsible.length > 0 ? withoutResponsible : event.members
-  })()
-  const name = responsible?.name ?? (mode === 'hosted' ? 'Caregiver' : 'Driver')
+  const candidateDriver = firstDriverLeg?.driver ?? null
+
+  // If no driver was derived or if it's a solo self-drive event
+  if (!candidateDriver || (event.members.length === 1 && event.members[0].family_member.id === candidateDriver.id)) {
+    return {
+      responsible: null,
+      attendees: event.members ?? [],
+      summary: '',
+      roleBadge: 'drive',
+    }
+  }
+
+  const attendees = event.members.filter((member) => member.family_member.id !== candidateDriver.id)
+
+  const name = candidateDriver.name
   const stayLeg = effectiveLegs.find((leg) => leg.kind === 'stay')
   const hasDropOrDepart = effectiveLegs.some((leg) => leg.kind === 'drop' || leg.kind === 'depart')
   const hasPickupOrReturn = effectiveLegs.some((leg) => leg.kind === 'pickup' || leg.kind === 'return')
-  const summary = mode === 'hosted'
-    ? `${name} supervising`
-    : stayLeg?.waits
-      ? `${name} drives & stays`
-      : hasDropOrDepart && hasPickupOrReturn
-        ? `${name} drives`
-        : hasDropOrDepart
-          ? `${name} drops off`
-          : hasPickupOrReturn
-            ? `${name} picks up`
-            : `${name} drives`
+  const summary = stayLeg?.waits
+    ? `${name} drives & stays`
+    : hasDropOrDepart && hasPickupOrReturn
+      ? `${name} drives`
+      : hasDropOrDepart
+        ? `${name} drops off`
+        : hasPickupOrReturn
+          ? `${name} picks up`
+          : `${name} drives`
+
   return {
-    responsible,
-    attendees,
+    responsible: candidateDriver,
+    attendees: attendees.length > 0 ? attendees : event.members,
     summary,
-    roleBadge: mode === 'hosted' ? 'supervise' : 'drive',
+    roleBadge: 'drive',
   }
 }

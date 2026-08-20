@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
-import { format, addDays, isSameDay, differenceInDays } from 'date-fns'
+import { format, addDays, isSameDay, differenceInCalendarDays } from 'date-fns'
 import {
   Calendar, Clock, ChevronDown, Minus, Plus, Tag,
   ShoppingBag, Trophy, Stethoscope, PartyPopper,
   GraduationCap, Utensils, Plane, Church, Pill,
   ShoppingCart, BookOpen, Wrench, PawPrint, ClipboardList,
-  Check, Bell, X, Pencil, Bed, Moon, Repeat
+  Check, Bell, X, Pencil, Bed, Moon, Repeat, Sun
 } from 'lucide-react'
 import type { LivingFlowMode } from '../types'
 import { EventProvenanceBadge } from '../../EventProvenanceBadge'
@@ -28,13 +28,13 @@ interface LivingHeroTitleCardProps {
   durationMinutes: number
   isAllDay?: boolean
   rrule?: string | null
-  sourceType?: string
+  sourceType?: string | null
   onUpdateTitle: (newTitle: string) => void
-  onSetStartAndDuration: (startDate: Date, durationMins: number, isAllDay?: boolean) => void
+  onSetStartAndDuration: (startDate: Date, durationMinutes: number, isAllDay?: boolean) => void
   onSetStartAndEnd?: (startDate: Date, endDate: Date, isAllDay?: boolean) => void
   onSelectCategory: (catName: string, icon: string, mode: LivingFlowMode) => void
-  onNudgeTime: (mins: number) => void
-  onUpdateRecurrence?: (newRrule: string | null, config: RecurrenceConfig) => void
+  onNudgeTime: (deltaMinutes: number) => void
+  onUpdateRecurrence: (rrule: string | null, config: RecurrenceConfig) => void
 }
 
 const EVENT_CATEGORIES = [
@@ -64,8 +64,8 @@ export default function LivingHeroTitleCard({
   startDate,
   endDate,
   durationMinutes,
-  isAllDay = false,
-  rrule = null,
+  isAllDay,
+  rrule,
   sourceType,
   onUpdateTitle,
   onSetStartAndDuration,
@@ -79,7 +79,7 @@ export default function LivingHeroTitleCard({
     ? new Date(safeStartDate.getTime() + Math.max(15, durationMinutes) * 60000)
     : new Date(endDate)
 
-  const isInitialMultiDay = !isSameDay(safeStartDate, safeEndDate) || durationMinutes >= 1440 || category.toLowerCase() === 'travel'
+  const isInitialMultiDay = !isSameDay(safeStartDate, safeEndDate) && differenceInCalendarDays(safeEndDate, safeStartDate) >= 1
 
   const [localTitle, setLocalTitle] = useState(title)
   const [expandedSection, setExpandedSection] = useState<'datetime' | 'category' | 'recurrence' | null>(null)
@@ -95,8 +95,8 @@ export default function LivingHeroTitleCard({
   const endDateInputRef = useRef<HTMLInputElement>(null)
   const recurrenceEndDateInputRef = useRef<HTMLInputElement>(null)
 
-  const isMultiDayActive = scheduleTab === 'multiday' || !isSameDay(currentStartDate, currentEndDate)
-  const nightsCount = Math.max(1, differenceInDays(currentEndDate, currentStartDate))
+  const isMultiDayActive = scheduleTab === 'multiday' && !isSameDay(currentStartDate, currentEndDate)
+  const nightsCount = Math.max(1, differenceInCalendarDays(currentEndDate, currentStartDate))
 
   useEffect(() => {
     if (!isEditingRef.current) {
@@ -111,9 +111,6 @@ export default function LivingHeroTitleCard({
       : new Date(endDate)
     setCurrentStartDate(s)
     setCurrentEndDate(e)
-    if (!isSameDay(s, e) || durationMinutes >= 1440) {
-      setScheduleTab('multiday')
-    }
   }, [startDate, endDate, durationMinutes])
 
   useEffect(() => {
@@ -157,7 +154,7 @@ export default function LivingHeroTitleCard({
     setCurrentStartDate(newStart)
     setCurrentEndDate(newEnd)
     setLocalIsAllDay(newIsAllDay)
-    const diffMins = Math.max(15, Math.round((newEnd.getTime() - newStart.getTime()) / 60000))
+    const diffMins = newIsAllDay ? 1440 : Math.max(15, Math.round((newEnd.getTime() - newStart.getTime()) / 60000))
     setDuration(diffMins)
 
     if (onSetStartAndEnd) {
@@ -175,6 +172,9 @@ export default function LivingHeroTitleCard({
 
   const stepStartHour = (delta: number) => {
     const nextStart = new Date(currentStartDate)
+    if (localIsAllDay && nextStart.getHours() === 0 && nextStart.getMinutes() === 0) {
+      nextStart.setHours(9, 0, 0, 0)
+    }
     nextStart.setHours(nextStart.getHours() + delta)
     const shiftMs = nextStart.getTime() - currentStartDate.getTime()
     const nextEnd = scheduleTab === 'multiday'
@@ -185,6 +185,9 @@ export default function LivingHeroTitleCard({
 
   const stepStartMinute = (delta: number) => {
     const nextStart = new Date(currentStartDate)
+    if (localIsAllDay && nextStart.getHours() === 0 && nextStart.getMinutes() === 0) {
+      nextStart.setHours(9, 0, 0, 0)
+    }
     nextStart.setMinutes(nextStart.getMinutes() + delta)
     const shiftMs = nextStart.getTime() - currentStartDate.getTime()
     const nextEnd = scheduleTab === 'multiday'
@@ -195,6 +198,9 @@ export default function LivingHeroTitleCard({
 
   const toggleStartPeriod = () => {
     const nextStart = new Date(currentStartDate)
+    if (localIsAllDay && nextStart.getHours() === 0 && nextStart.getMinutes() === 0) {
+      nextStart.setHours(9, 0, 0, 0)
+    }
     if (startPeriod === 'AM') {
       nextStart.setHours(nextStart.getHours() + 12)
     } else {
@@ -249,8 +255,14 @@ export default function LivingHeroTitleCard({
     const target = addDays(new Date(), days)
     const nextStart = new Date(currentStartDate)
     nextStart.setFullYear(target.getFullYear(), target.getMonth(), target.getDate())
-    const nextEnd = new Date(nextStart.getTime() + duration * 60000)
-    commitScheduleChange(nextStart, nextEnd, localIsAllDay)
+    if (localIsAllDay) {
+      nextStart.setHours(0, 0, 0, 0)
+      const nextEnd = new Date(nextStart.getFullYear(), nextStart.getMonth(), nextStart.getDate(), 23, 59, 59)
+      commitScheduleChange(nextStart, nextEnd, true)
+    } else {
+      const nextEnd = new Date(nextStart.getTime() + duration * 60000)
+      commitScheduleChange(nextStart, nextEnd, false)
+    }
   }
 
   const selectExplicitStartDate = (dateStr: string) => {
@@ -261,13 +273,20 @@ export default function LivingHeroTitleCard({
       nextStart.setFullYear(parts[0], parts[1] - 1, parts[2])
       let nextEnd = new Date(currentEndDate)
       if (scheduleTab === 'multiday') {
-        const spanDays = Math.max(1, differenceInDays(currentEndDate, currentStartDate))
+        const spanDays = Math.max(1, differenceInCalendarDays(currentEndDate, currentStartDate))
         nextEnd = addDays(nextStart, spanDays)
         nextEnd.setHours(currentEndDate.getHours(), currentEndDate.getMinutes(), 0, 0)
+        commitScheduleChange(nextStart, nextEnd, localIsAllDay)
       } else {
-        nextEnd = new Date(nextStart.getTime() + duration * 60000)
+        if (localIsAllDay) {
+          nextStart.setHours(0, 0, 0, 0)
+          nextEnd = new Date(nextStart.getFullYear(), nextStart.getMonth(), nextStart.getDate(), 23, 59, 59)
+          commitScheduleChange(nextStart, nextEnd, true)
+        } else {
+          nextEnd = new Date(nextStart.getTime() + duration * 60000)
+          commitScheduleChange(nextStart, nextEnd, false)
+        }
       }
-      commitScheduleChange(nextStart, nextEnd, localIsAllDay)
     }
   }
 
@@ -287,11 +306,16 @@ export default function LivingHeroTitleCard({
   // Duration Presets (Single Day)
   const selectDuration = (mins: number) => {
     if (mins >= 1440) {
+      const startOfDay = new Date(currentStartDate.getFullYear(), currentStartDate.getMonth(), currentStartDate.getDate(), 0, 0, 0)
       const endOfDay = new Date(currentStartDate.getFullYear(), currentStartDate.getMonth(), currentStartDate.getDate(), 23, 59, 59)
-      commitScheduleChange(currentStartDate, endOfDay, true)
+      commitScheduleChange(startOfDay, endOfDay, true)
     } else {
-      const nextEnd = new Date(currentStartDate.getTime() + mins * 60000)
-      commitScheduleChange(currentStartDate, nextEnd, false)
+      let nextStart = new Date(currentStartDate)
+      if (localIsAllDay && nextStart.getHours() === 0 && nextStart.getMinutes() === 0) {
+        nextStart.setHours(9, 0, 0, 0) // Default 9:00 AM when unchecking All Day
+      }
+      const nextEnd = new Date(nextStart.getTime() + mins * 60000)
+      commitScheduleChange(nextStart, nextEnd, false)
     }
   }
 
@@ -581,8 +605,14 @@ export default function LivingHeroTitleCard({
               onClick={() => {
                 setScheduleTab('single')
                 if (!isSameDay(currentStartDate, currentEndDate)) {
-                  const newEnd = new Date(currentStartDate.getTime() + 60 * 60000)
-                  commitScheduleChange(currentStartDate, newEnd, false)
+                  if (localIsAllDay) {
+                    const startOfDay = new Date(currentStartDate.getFullYear(), currentStartDate.getMonth(), currentStartDate.getDate(), 0, 0, 0)
+                    const endOfDay = new Date(currentStartDate.getFullYear(), currentStartDate.getMonth(), currentStartDate.getDate(), 23, 59, 59)
+                    commitScheduleChange(startOfDay, endOfDay, true)
+                  } else {
+                    const newEnd = new Date(currentStartDate.getTime() + Math.min(duration, 240) * 60000)
+                    commitScheduleChange(currentStartDate, newEnd, false)
+                  }
                 }
               }}
               className={`py-1.5 px-3 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
@@ -647,42 +677,54 @@ export default function LivingHeroTitleCard({
                 </label>
               </div>
 
-              {/* Touch Stepper Wheels */}
-              <div className="time-stepper-touch-grid">
-                <div className="stepper-column-box">
-                  <span className="stepper-label-tag">Hour</span>
-                  <div className="stepper-number-display">{startHour12 < 10 ? `0${startHour12}` : startHour12}</div>
-                  <div className="stepper-buttons-row">
-                    <button onClick={() => stepStartHour(-1)} className="stepper-arrow-btn" aria-label="Decrease hour">
-                      <Minus size={15} />
-                    </button>
-                    <button onClick={() => stepStartHour(1)} className="stepper-arrow-btn" aria-label="Increase hour">
-                      <Plus size={15} />
+              {/* Touch Stepper Wheels (or All-Day Active Banner) */}
+              {localIsAllDay ? (
+                <div className="p-3.5 bg-amber-50/70 border border-amber-200/90 rounded-2xl text-center flex flex-col items-center justify-center gap-1">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-amber-950">
+                    <Sun size={15} className="text-amber-600 shrink-0" />
+                    <span>All-Day Event</span>
+                  </div>
+                  <span className="text-3xs font-medium text-amber-800/80">
+                    Scheduled for the full day on {format(currentStartDate, 'EEEE, MMMM d')}
+                  </span>
+                </div>
+              ) : (
+                <div className="time-stepper-touch-grid">
+                  <div className="stepper-column-box">
+                    <span className="stepper-label-tag">Hour</span>
+                    <div className="stepper-number-display">{startHour12 < 10 ? `0${startHour12}` : startHour12}</div>
+                    <div className="stepper-buttons-row">
+                      <button onClick={() => stepStartHour(-1)} className="stepper-arrow-btn" aria-label="Decrease hour">
+                        <Minus size={15} />
+                      </button>
+                      <button onClick={() => stepStartHour(1)} className="stepper-arrow-btn" aria-label="Increase hour">
+                        <Plus size={15} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="stepper-column-box">
+                    <span className="stepper-label-tag">Minute</span>
+                    <div className="stepper-number-display">{startMinutes < 10 ? `0${startMinutes}` : startMinutes}</div>
+                    <div className="stepper-buttons-row">
+                      <button onClick={() => stepStartMinute(-5)} className="stepper-arrow-btn" aria-label="Decrease 5 minutes">
+                        <Minus size={15} />
+                      </button>
+                      <button onClick={() => stepStartMinute(5)} className="stepper-arrow-btn" aria-label="Increase 5 minutes">
+                        <Plus size={15} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="stepper-column-box">
+                    <span className="stepper-label-tag">Period</span>
+                    <div className="stepper-number-display">{startPeriod}</div>
+                    <button onClick={toggleStartPeriod} className="ampm-toggle-btn">
+                      AM / PM
                     </button>
                   </div>
                 </div>
-
-                <div className="stepper-column-box">
-                  <span className="stepper-label-tag">Minute</span>
-                  <div className="stepper-number-display">{startMinutes < 10 ? `0${startMinutes}` : startMinutes}</div>
-                  <div className="stepper-buttons-row">
-                    <button onClick={() => stepStartMinute(-5)} className="stepper-arrow-btn" aria-label="Decrease 5 minutes">
-                      <Minus size={15} />
-                    </button>
-                    <button onClick={() => stepStartMinute(5)} className="stepper-arrow-btn" aria-label="Increase 5 minutes">
-                      <Plus size={15} />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="stepper-column-box">
-                  <span className="stepper-label-tag">Period</span>
-                  <div className="stepper-number-display">{startPeriod}</div>
-                  <button onClick={toggleStartPeriod} className="ampm-toggle-btn">
-                    AM / PM
-                  </button>
-                </div>
-              </div>
+              )}
 
               {/* Duration Presets */}
               <div className="duration-chips-row">

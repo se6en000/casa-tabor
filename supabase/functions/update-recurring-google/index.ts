@@ -46,11 +46,11 @@ Deno.serve(async (req) => {
 
     // Build start/end for Google
     const start = isAllDay
-      ? { date: new Date(master.start_time).toISOString().slice(0, 10) }
-      : { dateTime: new Date(master.start_time).toISOString(), timeZone: TZ }
+      ? { date: new Date(master.start_time).toISOString().slice(0, 10), dateTime: null, timeZone: null }
+      : { dateTime: new Date(master.start_time).toISOString(), timeZone: TZ, date: null }
     const end = isAllDay
-      ? { date: toGoogleAllDayEndDate(master.end_time as string) }
-      : { dateTime: new Date(master.end_time).toISOString(), timeZone: TZ }
+      ? { date: toGoogleAllDayEndDate(master.end_time as string), dateTime: null, timeZone: null }
+      : { dateTime: new Date(master.end_time).toISOString(), timeZone: TZ, date: null }
 
     const location = googleLocationForEvent(master, bundle)
 
@@ -98,6 +98,7 @@ Deno.serve(async (req) => {
           google_calendar_id: calendarId,
           updated_at: new Date().toISOString(),
         }).eq('id', master_event_id)
+        await sb.from('google_sync_jobs').delete().eq('event_id', master_event_id)
         await markGoogleConnectionHealthy(sb, connection.id)
         console.log('[update-recurring-google] patched:', targetGoogleId)
         return ok({ patched: targetGoogleId })

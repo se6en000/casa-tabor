@@ -130,11 +130,11 @@ Deno.serve(async (req) => {
     summary,
     ...(location !== undefined ? { location } : {}),
     start: isAllDay
-      ? { date: toGoogleAllDayDate(event.start_time as string) }
-      : { dateTime: toISO(event.start_time), timeZone: TZ },
+      ? { date: toGoogleAllDayDate(event.start_time as string), dateTime: null, timeZone: null }
+      : { dateTime: toISO(event.start_time), timeZone: TZ, date: null },
     end: isAllDay
-      ? { date: toGoogleAllDayEndDate(event.end_time as string) }
-      : { dateTime: toISO(event.end_time), timeZone: TZ },
+      ? { date: toGoogleAllDayEndDate(event.end_time as string), dateTime: null, timeZone: null }
+      : { dateTime: toISO(event.end_time), timeZone: TZ, date: null },
     ...(recurrence.length > 0 ? { recurrence } : {}),
   }
 
@@ -173,6 +173,7 @@ Deno.serve(async (req) => {
       google_calendar_id: calendarId,
       updated_at: new Date().toISOString(),
     }).eq('id', event_id)
+    await sb.from('google_sync_jobs').delete().eq('event_id', event_id)
   } catch (err) {
     const msg = (err as Error).message ?? String(err)
     // Legacy events may still point at a different Google account's event ID.
@@ -189,8 +190,12 @@ Deno.serve(async (req) => {
           existingDescription: event.description ?? '',
           eventId: event.id,
         }),
-        start: projectionFields.start,
-        end: projectionFields.end,
+        start: isAllDay
+          ? { date: toGoogleAllDayDate(event.start_time as string) }
+          : { dateTime: toISO(event.start_time), timeZone: TZ },
+        end: isAllDay
+          ? { date: toGoogleAllDayEndDate(event.end_time as string) }
+          : { dateTime: toISO(event.end_time), timeZone: TZ },
       },
     })
     await sb.from('events').update({
@@ -200,6 +205,7 @@ Deno.serve(async (req) => {
       source_member_id: connection.family_member_id,
       updated_at: new Date().toISOString(),
     }).eq('id', event_id)
+    await sb.from('google_sync_jobs').delete().eq('event_id', event_id)
   }
   await markGoogleConnectionHealthy(sb, connection.id)
 

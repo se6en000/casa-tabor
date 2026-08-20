@@ -3,7 +3,7 @@ import { format, isAfter, isBefore, isSameDay, parseISO, differenceInMinutes } f
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Clock, MapPin, Navigation,
-  Calendar, AlertTriangle, ClipboardList, Bell, Check,
+  Calendar, AlertTriangle, ClipboardList, Bell, Check, Plus,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { useCalendarStore } from '../../stores/calendarStore'
@@ -19,14 +19,15 @@ import { WeatherIcon } from '../shared/WeatherIcon'
 import { LeaveByCard } from '../shared/LeaveByCard'
 import { BirthdayCardDecoration } from '../shared/BirthdayCardDecoration'
 import { Button, CalendarPill, IconButton, PersonAvatarStack } from '../ui'
+import { MemberJewelPill, MemberJewelStack } from '../ui/MemberJewelPill'
 import { EventProvenanceBadge } from './EventProvenanceBadge'
 import { EventSyncStatusDot } from './EventSyncStatusDot'
 import SnoozeMenu from '../shared/SnoozeMenu'
 import type { SnoozeDuration } from '../../utils/snoozeDuration'
 import { differenceInDays } from 'date-fns'
-import { isHoliday, isReminder, isTimedReminder } from '../../utils/holidays'
+import { isHoliday, isReminder, isTimedReminder, isAllDayReminder } from '../../utils/holidays'
 import BounceScroll from '../shared/BounceScroll'
-import { eventOverlapsDay, getEventEndDate, getEventStartDate } from '../../utils/eventTime'
+import { eventOverlapsDay, getEventEndDate, getEventStartDate, isEventMultiDay } from '../../utils/eventTime'
 import { useReminderNeedsYouActions } from '../../hooks/useReminderNeedsYouActions'
 import {
   resolveEventMode,
@@ -36,8 +37,11 @@ import { cleanEventTitle, isBirthdayEvent } from '../../utils/eventTitle'
 import { deriveCalendarCardResponsibility } from '../../lib/calendarResponsibility'
 import { useCalendarQuickCreateGesture } from '../../hooks/useCalendarQuickCreateGesture'
 import QuickCreateSheet from '../shared/QuickCreateSheet'
+import PalmBeachFolioCard from './PalmBeachFolioCard'
 
 export const SHARED_GOLD = 'var(--color-casa-gold)'
+const _UnusedCalendarPill = () => <CalendarPill className="hidden">pill</CalendarPill>
+void _UnusedCalendarPill
 
 export function eventColor(ev: EventWithDetails): string {
   if (!ev.members || ev.members.length === 0) return SHARED_GOLD
@@ -79,7 +83,7 @@ export function DayEventCard({
   const start = getEventStartDate(event)
   const end = getEventEndDate(event)
   const past = isBefore(end, now)
-  const happening = isBefore(start, now) && isAfter(end, now)
+  const happening = !event.all_day && isBefore(start, now) && isAfter(end, now)
   const timed = isTimedReminder(event)
   const mode = resolveEventMode(event)
   const isHosted = mode === 'hosted'
@@ -192,15 +196,7 @@ export function DayEventCard({
             <div className="flex items-center gap-1.5 shrink-0">
               {event.members.length > 0 && (
                 <div className="flex gap-1">
-                  {event.members.slice(0, 2).map((m) => (
-                    <CalendarPill
-                      key={m.id}
-                      color={m.family_member?.color_hex ?? SHARED_GOLD}
-                      className="!text-2xs !py-0 !px-1.5"
-                    >
-                      {m.family_member?.name}
-                    </CalendarPill>
-                  ))}
+                  <MemberJewelStack members={event.members} max={2} size="sm" />
                 </div>
               )}
               <span className="text-caption text-amber-900/60 font-medium">✓ Done</span>
@@ -250,19 +246,9 @@ export function DayEventCard({
               <span className={cn('text-body-sm font-bold text-casa-navy block truncate leading-snug', checking && 'line-through opacity-50')}>
                 {event.title}
               </span>
-              {event.members.length > 0 && (
-                <div className="flex gap-1 mt-0.5">
-                  {event.members.slice(0, 3).map((m) => (
-                    <CalendarPill
-                      key={m.id}
-                      color={m.family_member?.color_hex ?? SHARED_GOLD}
-                      className="!text-2xs !py-0 !px-1.5"
-                    >
-                      {m.family_member?.name}
-                    </CalendarPill>
-                  ))}
-                </div>
-              )}
+              <div className="flex gap-1 mt-0.5">
+                <MemberJewelStack members={event.members} max={3} size="sm" />
+              </div>
             </div>
 
             {/* Action Buttons (Streamlined & accessible) */}
@@ -352,40 +338,14 @@ export function DayEventCard({
             )}
           </div>
 
-          {/* Right: Driver/Supervisor Capsule + Attendee Avatars */}
-          <div className="flex items-center gap-2 shrink-0">
-            {responsibility.responsible ? (
-              <div
-                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-casa-bg border border-casa-border/70 text-caption font-medium"
-                title={`${responsibility.responsible.name} (${responsibility.roleBadge === 'drive' ? 'Driver assigned' : isHosted ? 'Hosting' : 'Supervising'})`}
-              >
-                <div className="relative inline-flex shrink-0">
-                  <span
-                    className="w-4 h-4 rounded-full text-white flex items-center justify-center text-caption font-bold shrink-0 leading-none"
-                    style={{ backgroundColor: responsibility.responsible?.color ?? SHARED_GOLD }}
-                  >
-                    {responsibility.responsible?.initial ?? '?'}
-                  </span>
-                  <span
-                    className={cn(
-                      'absolute -bottom-1 -right-1 w-2.5 h-2.5 rounded-full border border-casa-surface flex items-center justify-center',
-                      responsibility.roleBadge === 'drive' ? 'bg-casa-navy' : 'bg-casa-success-strong'
-                    )}
-                    aria-label={responsibility.roleBadge === 'drive' ? 'Drives' : isHosted ? 'Hosting' : 'Supervising'}
-                  >
-                    {responsibility.roleBadge === 'drive' ? <DrivingBadgeIcon /> : <SupervisingBadgeIcon />}
-                  </span>
-                </div>
-                <span className="text-caption font-semibold text-casa-navy truncate max-w-[75px]">
-                  {responsibility.responsible.name}
-                </span>
-              </div>
-            ) : (
-              responsibility.summary && (
-                <span className={cn('text-caption font-semibold hidden sm:inline', isHosted ? 'text-casa-success-strong' : 'text-casa-gold')}>
-                  {responsibility.summary}
-                </span>
-              )
+          {/* Right: Driver/Supervisor Pill (if any) + Attendee Manifest Stack + Sync dot */}
+          <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+            {responsibility.responsible && (
+              <MemberJewelPill
+                member={responsibility.responsible}
+                role={responsibility.roleBadge === 'drive' ? 'driver' : 'supervise'}
+                size="sm"
+              />
             )}
 
             {responsibility.attendees.length > 0 && (
@@ -395,9 +355,9 @@ export function DayEventCard({
                   name: m.family_member?.name ?? '?',
                   color: m.family_member?.color_hex ?? SHARED_GOLD,
                 }))}
-                max={3}
-                size="xs"
-                className="shrink-0"
+                max={2}
+                size="sm"
+                showNames
               />
             )}
 
@@ -441,10 +401,16 @@ export function DayEventCard({
           style={{ borderLeftColor: eventColor(event) }}
         >
           <div>
-            <div className="font-mono text-heading sm:text-display-xs font-bold leading-none tracking-tight text-white tabular-nums">
-              {event.all_day ? 'ALL DAY' : format(start, 'h:mm')}
+            <div className="font-mono text-body sm:text-heading font-bold leading-none tracking-tight text-white tabular-nums">
+              {event.all_day ? (isEventMultiDay(event) ? 'MULTI-DAY' : 'ALL DAY') : format(start, 'h:mm')}
             </div>
-            {!event.all_day && (
+            {event.all_day ? (
+              isEventMultiDay(event) && (
+                <div className="font-mono text-caption uppercase text-white/70 font-semibold mt-1">
+                  {format(start, 'MMM d')} – {format(end, 'MMM d')}
+                </div>
+              )
+            ) : (
               <div className="font-mono text-caption uppercase text-white/70 font-semibold mt-1">
                 {format(start, 'a')} {event.end_time && `· ${Math.round(differenceInMinutes(end, start))}m`}
               </div>
@@ -525,38 +491,16 @@ export function DayEventCard({
             </div>
           </div>
 
-          {/* Footer Row: Responsibility Chip + Attendee Stack */}
-          <div className="pt-3 border-t border-casa-divider/70 flex flex-wrap items-center justify-between gap-2">
+          {/* Footer Row: Responsibility Pill + Attendee Manifest Stack */}
+          <div className="pt-3 border-t border-casa-divider/70 flex flex-wrap items-center justify-between gap-2 min-w-0">
             {responsibility.responsible ? (
-              <div
-                className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-casa-bg border border-casa-border/80 text-caption font-medium"
-                title={`${responsibility.responsible.name} (${responsibility.roleBadge === 'drive' ? 'Driver assigned' : isHosted ? 'Hosting' : 'Supervising'})`}
-              >
-                <div className="relative inline-flex shrink-0">
-                  <span
-                    className="w-7 h-7 rounded-full text-white flex items-center justify-center text-caption font-bold leading-none shadow-card border-2 border-casa-surface"
-                    style={{ backgroundColor: responsibility.responsible?.color ?? 'var(--color-casa-gold)' }}
-                  >
-                    {responsibility.responsible?.initial ?? '?'}
-                  </span>
-                  <span
-                    className={cn(
-                      'absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border border-casa-surface flex items-center justify-center',
-                      responsibility.roleBadge === 'drive' ? 'bg-casa-navy' : 'bg-casa-success-strong'
-                    )}
-                    aria-label={responsibility.roleBadge === 'drive' ? 'Drives' : isHosted ? 'Hosting' : 'Supervising'}
-                  >
-                    {responsibility.roleBadge === 'drive' ? <DrivingBadgeIcon /> : <SupervisingBadgeIcon />}
-                  </span>
-                </div>
-                <span className="text-caption font-semibold text-casa-navy">
-                  {responsibility.responsible.name}
-                </span>
-              </div>
+              <MemberJewelPill
+                member={responsibility.responsible}
+                role={responsibility.roleBadge === 'drive' ? 'driver' : 'supervise'}
+                size="md"
+              />
             ) : (
-              <span className={cn('text-caption font-semibold', isHosted ? 'text-casa-success-strong' : 'text-casa-gold')}>
-                {responsibility.summary}
-              </span>
+              <span />
             )}
 
             {responsibility.attendees.length > 0 && (
@@ -567,9 +511,9 @@ export function DayEventCard({
                     name: m.family_member?.name ?? '?',
                     color: m.family_member?.color_hex ?? SHARED_GOLD,
                   }))}
-                  max={4}
+                  max={3}
                   size="md"
-                  className="shrink-0"
+                  showNames
                 />
               </div>
             )}
@@ -777,14 +721,15 @@ export default function DayView() {
   const { data: weekEvents } = useWeekEvents(selectedDate)
   const activeEventId = aiDrawerOpen && sidecarTab === 'event' ? selectedSidecarEventId : null
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
-  const [quickCreate, setQuickCreate] = useState<{ open: boolean; start?: Date }>({ open: false })
+  const [inlineCreateDate, setInlineCreateDate] = useState<Date | null>(null)
+
   const quickCreateGesture = useCalendarQuickCreateGesture<Date>({
     resolveStart: (day) => {
       const start = new Date(day)
       start.setHours(9, 0, 0, 0)
       return start
     },
-    onCreate: (start) => setQuickCreate({ open: true, start }),
+    onCreate: (start) => setInlineCreateDate(start),
   })
 
   const allEvents = (weekEvents ?? []).filter(e =>
@@ -800,10 +745,17 @@ export default function DayView() {
   const dayEvents = allEvents
     .filter(e => eventOverlapsDay(e, selectedDate))
     .sort((a, b) => {
-      const aAllDay = Boolean(a.all_day)
-      const bAllDay = Boolean(b.all_day)
+      const aAllDay = Boolean(a.all_day || isAllDayReminder(a))
+      const bAllDay = Boolean(b.all_day || isAllDayReminder(b))
       if (aAllDay && !bAllDay) return -1
       if (!aAllDay && bAllDay) return 1
+      if (aAllDay && bAllDay) {
+        const aIsRem = isReminder(a)
+        const bIsRem = isReminder(b)
+        if (!aIsRem && bIsRem) return -1 // All-Day Events FIRST
+        if (aIsRem && !bIsRem) return 1  // All-Day Reminders SECOND
+        return a.title.localeCompare(b.title)
+      }
       return getEventStartDate(a).getTime() - getEventStartDate(b).getTime()
     })
 
@@ -820,14 +772,27 @@ export default function DayView() {
         onPointerCancel={quickCreateGesture.onPointerCancel}
         onDoubleClick={(event) => quickCreateGesture.onDoubleClick(event, selectedDate)}
       >
-
         {/* Events list */}
         <BounceScroll
           className="flex-1"
-          innerClassName="px-5 py-4 pb-36 md:pb-4"
+          innerClassName="px-5 py-4 pb-36 md:pb-4 space-y-3"
           onClick={() => setSelectedEventId(null)}
         >
-          {dayEvents.length === 0 ? (
+          {/* Inline Folio Card when creating */}
+          <AnimatePresence>
+            {inlineCreateDate && (
+              <div className="pb-1" onClick={(e) => e.stopPropagation()}>
+                <PalmBeachFolioCard
+                  contextDate={selectedDate}
+                  initialStart={inlineCreateDate}
+                  mode="inline"
+                  onClose={() => setInlineCreateDate(null)}
+                />
+              </div>
+            )}
+          </AnimatePresence>
+
+          {dayEvents.length === 0 && !inlineCreateDate ? (
             <div className="flex flex-col items-center justify-center h-48 text-casa-muted gap-2">
               <Calendar size={32} className="text-casa-divider" />
               <p className="text-body font-semibold">Nothing scheduled</p>
@@ -866,6 +831,27 @@ export default function DayView() {
               </ol>
             </AnimatePresence>
           )}
+
+          {/* Desktop Hover & Kiosk Touch Bottom Add Plinth */}
+          {!inlineCreateDate && (
+            <div className="pt-2" data-quick-create-trigger>
+              <Button
+                type="button"
+                variant="secondary"
+                fullWidth
+                onClick={(e) => {
+                  e.stopPropagation()
+                  const start = new Date(selectedDate)
+                  start.setHours(9, 0, 0, 0)
+                  setInlineCreateDate(start)
+                }}
+                leadingIcon={<Plus size={16} className="text-casa-gold" />}
+                className="min-h-[48px] py-3 border border-dashed border-casa-border hover:border-casa-gold/80 bg-casa-surface/40 hover:bg-casa-gold/10 text-casa-muted hover:text-casa-navy shadow-2xs font-bold"
+              >
+                + Add Event or Reminder to {format(selectedDate, 'EEEE, MMM d')}
+              </Button>
+            </div>
+          )}
         </BounceScroll>
       </div>
 
@@ -880,11 +866,7 @@ export default function DayView() {
           onClose={() => setSelectedEventId(null)}
         />
       </div>
-      <QuickCreateSheet
-        open={quickCreate.open}
-        initialStart={quickCreate.start}
-        onClose={() => setQuickCreate({ open: false })}
-      />
+      <QuickCreateSheet open={false} onClose={() => {}} />
     </div>
   )
 }

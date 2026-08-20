@@ -43,7 +43,7 @@ import { clusterPrepItems, buildGmailWebUrl, type PrepItemCluster } from '../../
 import { splitActionableAndTransitItems } from '../../../utils/needsYouFeed'
 import { useCreateSuggestedEvent } from '../../../hooks/useCreateSuggestedEvent'
 import { useAppStore } from '../../../stores/appStore'
-import { useGoogleSyncTriage } from '../../../hooks/useGoogleSyncTriage'
+import { useGoogleSyncTriage, formatSyncError } from '../../../hooks/useGoogleSyncTriage'
 
 interface ActionQueueWidgetProps {
   activeConflicts: Conflict[]
@@ -329,7 +329,7 @@ export default function ActionQueueWidget({
         {failedJobs.length > 0 && (
           <div className="space-y-3">
             <div className="flex items-center gap-2 px-1">
-              <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse" />
               <h3 className="text-caption font-bold uppercase tracking-wider text-rose-700">
                 Google Calendar Sync Triage ({failedJobs.length})
               </h3>
@@ -340,6 +340,7 @@ export default function ActionQueueWidget({
                 const title = job.event?.title || 'Calendar Event'
                 const isRetrying = retrySync.isPending && retrySync.variables === job.event_id
                 const isKeepingLocal = keepLocalOnly.isPending && keepLocalOnly.variables === job.event_id
+                const errorInfo = formatSyncError(job.last_error)
 
                 return (
                   <motion.div
@@ -348,43 +349,46 @@ export default function ActionQueueWidget({
                     initial={{ opacity: 0, y: 12, scale: 0.98 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, x: 90, scale: 0.94 }}
-                    className="p-4 rounded-2xl bg-rose-50/80 border border-rose-300 shadow-2xs space-y-3"
+                    className="p-4 sm:p-5 rounded-2xl bg-rose-50/90 border border-rose-300 shadow-2xs space-y-3.5"
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
+                      <div className="min-w-0 flex-1 space-y-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5 text-2xs font-bold text-rose-800 border border-rose-300">
-                            <ShieldAlert size={10} className="text-rose-600" />
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-100 px-2.5 py-0.5 text-2xs font-bold text-rose-800 border border-rose-300">
+                            <ShieldAlert size={12} className="text-rose-600 shrink-0" />
                             <span>SYNC DESYNCED</span>
                           </span>
-                          <span className="text-caption font-bold text-casa-navy truncate">
+                          <span className="text-body-sm font-bold text-casa-navy truncate">
                             {title}
                           </span>
                         </div>
-                        <p className="text-caption text-rose-900/80 mt-1 line-clamp-2">
-                          {job.last_error || 'Write target rejected sync. Event remains in Casa.'}
+                        <p className="text-caption font-semibold text-rose-950">
+                          {errorInfo.title}
+                        </p>
+                        <p className="text-caption text-rose-900/80 line-clamp-2 leading-relaxed">
+                          {errorInfo.detail}
                         </p>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 pt-1">
+                    <div className="flex flex-wrap items-center gap-2.5 pt-1">
                       <Button
-                        size="sm"
+                        size="md"
                         variant="primary"
                         disabled={isRetrying || isKeepingLocal}
                         onClick={() => retrySync.mutate(job.event_id)}
-                        className="bg-rose-600 hover:bg-rose-700 text-white min-h-[40px] px-3 font-bold"
-                        leadingIcon={<RefreshCw size={13} className={isRetrying ? 'animate-spin' : ''} />}
+                        className="bg-rose-600 hover:bg-rose-700 text-white min-h-[48px] px-4 font-bold rounded-xl shadow-xs transition-all flex items-center gap-2"
+                        leadingIcon={<RefreshCw size={15} className={isRetrying ? 'animate-spin' : ''} />}
                       >
-                        {isRetrying ? 'Retrying…' : 'Retry Push'}
+                        {isRetrying ? 'Retrying Push…' : 'Retry Push'}
                       </Button>
                       <Button
-                        size="sm"
+                        size="md"
                         variant="secondary"
                         disabled={isRetrying || isKeepingLocal}
                         onClick={() => keepLocalOnly.mutate(job.event_id)}
-                        className="border-rose-300 hover:bg-rose-100/60 text-casa-navy min-h-[40px] px-3"
-                        leadingIcon={<CloudOff size={13} />}
+                        className="border-rose-300 bg-white hover:bg-rose-100/70 text-casa-navy min-h-[48px] px-4 font-semibold rounded-xl transition-all flex items-center gap-2"
+                        leadingIcon={<CloudOff size={15} />}
                       >
                         {isKeepingLocal ? 'Saving…' : 'Keep Casa Only'}
                       </Button>

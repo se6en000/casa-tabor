@@ -15,6 +15,44 @@ export interface FailedSyncJob {
   event?: CalendarEvent | null
 }
 
+export function formatSyncError(error?: string | null): { title: string; detail: string } {
+  if (!error) {
+    return {
+      title: 'Sync Rejected by Google Calendar',
+      detail: 'The Google Calendar target rejected this sync update. Event remains safe in Casa.',
+    }
+  }
+  const low = error.toLowerCase()
+  if (low.includes('invalid start time') || low.includes('invalid end time')) {
+    return {
+      title: 'All-Day / Time Format Conflict',
+      detail: 'Google Calendar rejected the date/time transition. Retrying will now automatically normalize the format.',
+    }
+  }
+  if (low.includes('reauthorization_required') || low.includes('token') || low.includes('auth')) {
+    return {
+      title: 'Google Authorization Expired',
+      detail: 'Google Calendar connection needs to be re-authorized in Settings.',
+    }
+  }
+  if (low.includes('not found') || low.includes('404')) {
+    return {
+      title: 'Google Event Not Found',
+      detail: 'The matching event was deleted or moved in Google Calendar. Retrying will recreate it cleanly.',
+    }
+  }
+  if (low.includes('non-2xx')) {
+    return {
+      title: 'Temporary Sync Engine Hiccup',
+      detail: 'The sync service encountered an intermittent error. Click Retry Push to reconnect.',
+    }
+  }
+  return {
+    title: 'Google Calendar Sync Error',
+    detail: error.replace(/\n/g, ' ').slice(0, 140),
+  }
+}
+
 export function useGoogleSyncTriage() {
   const qc = useQueryClient()
   const [selectedTriageEvent, setSelectedTriageEvent] = useState<CalendarEvent | null>(null)
@@ -39,16 +77,42 @@ export function useGoogleSyncTriage() {
     },
   })
 
-  // Retry an individual event sync
+  // Retry an individual event sync with optimistic dismissal
   const retrySync = useMutation({
     mutationFn: async (eventId: string) => {
       const { data, error } = await supabase.functions.invoke('sync-event-to-google', {
-        body: { event_id: eventId, enqueue_on_failure: true },
+        body: { event_id: eventId, enqueue_on_failure: false },
       })
-      if (error) throw error
+      if (error) {
+        let msg = error.message
+        try {
+          if (error.context && typeof error.context.json === 'function') {
+            const parsed = await error.context.json()
+            msg = parsed?.error || parsed?.message || msg
+          }
+        } catch {
+          // ignore
+        }
+        throw new Error(msg)
+      }
+      // Delete from google_sync_jobs
+      await supabase.from('google_sync_jobs').delete().eq('event_id', eventId)
       return data
     },
-    onSuccess: () => {
+    onMutate: async (eventId: string) => {
+      await qc.cancelQueries({ queryKey: ['google-sync-triage'] })
+      const previousJobs = qc.getQueryData<FailedSyncJob[]>(['google-sync-triage'])
+      qc.setQueryData<FailedSyncJob[]>(['google-sync-triage'], (old = []) =>
+        old.filter((j) => j.event_id !== eventId)
+      )
+      return { previousJobs }
+    },
+    onError: (_err, _eventId, context) => {
+      if (context?.previousJobs) {
+        qc.setQueryData(['google-sync-triage'], context.previousJobs)
+      }
+    },
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: ['google-sync-triage'] })
       qc.invalidateQueries({ queryKey: ['events'] })
       setSelectedTriageEvent(null)
@@ -75,7 +139,20 @@ export function useGoogleSyncTriage() {
 
       if (error) throw error
     },
-    onSuccess: () => {
+    onMutate: async (eventId: string) => {
+      await qc.cancelQueries({ queryKey: ['google-sync-triage'] })
+      const previousJobs = qc.getQueryData<FailedSyncJob[]>(['google-sync-triage'])
+      qc.setQueryData<FailedSyncJob[]>(['google-sync-triage'], (old = []) =>
+        old.filter((j) => j.event_id !== eventId)
+      )
+      return { previousJobs }
+    },
+    onError: (_err, _eventId, context) => {
+      if (context?.previousJobs) {
+        qc.setQueryData(['google-sync-triage'], context.previousJobs)
+      }
+    },
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: ['google-sync-triage'] })
       qc.invalidateQueries({ queryKey: ['events'] })
       setSelectedTriageEvent(null)
@@ -92,7 +169,7 @@ export function useGoogleSyncTriage() {
       if (error) throw error
       return data
     },
-    onSuccess: () => {
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: ['google-sync-triage'] })
       qc.invalidateQueries({ queryKey: ['events'] })
       refetch()
@@ -109,5 +186,6 @@ export function useGoogleSyncTriage() {
     keepLocalOnly,
     retryAll,
     refetch,
+    formatSyncError,
   }
 }

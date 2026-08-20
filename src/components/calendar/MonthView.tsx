@@ -4,7 +4,7 @@ import {
   addDays, isSameMonth, isToday,
 } from 'date-fns'
 import { AnimatePresence, motion } from 'framer-motion'
-import { X, Clock, MapPin, Navigation } from 'lucide-react'
+import { X, Clock, MapPin, Navigation, Plus } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { useCalendarStore } from '../../stores/calendarStore'
 import { useAppStore } from '../../stores/appStore'
@@ -15,11 +15,13 @@ import { cleanEventTitle } from '../../utils/eventTitle'
 import { eventOverlapsDay, getEventStartDate } from '../../utils/eventTime'
 import { useCalendarQuickCreateGesture } from '../../hooks/useCalendarQuickCreateGesture'
 import EventDetailPanel from './EventDetailPanel'
-import QuickCreateSheet from '../shared/QuickCreateSheet'
+import PalmBeachFolioCard from './PalmBeachFolioCard'
 import { Button, CalendarPill, IconButton } from '../ui'
+import { MemberJewelStack } from '../ui/MemberJewelPill'
 import { EventSyncStatusDot } from './EventSyncStatusDot'
 
 const SHARED_COLOR = 'var(--color-casa-gold)'
+void CalendarPill
 
 function getPrimaryColor(event: EventWithDetails): string {
   if (!event.members || event.members.length === 0) return SHARED_COLOR
@@ -55,9 +57,10 @@ interface DayPopoverProps {
   onClose: () => void
   onSelectDay: (day: Date) => void
   onSelectEvent: (event: EventWithDetails) => void
+  onQuickAdd: (day: Date) => void
 }
 
-function DayPopover({ day, events, activeEventId, onClose, onSelectDay, onSelectEvent }: DayPopoverProps) {
+function DayPopover({ day, events, activeEventId, onClose, onSelectDay, onSelectEvent, onQuickAdd }: DayPopoverProps) {
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.95, y: 6 }}
@@ -77,6 +80,23 @@ function DayPopover({ day, events, activeEventId, onClose, onSelectDay, onSelect
           {format(day, 'EEEE, MMMM d')}
         </Button>
         <IconButton onClick={onClose} aria-label="Close day preview" icon={<X size={14} />} />
+      </div>
+
+      {/* Quick Add action inside popover */}
+      <div className="p-2.5 border-b border-casa-border bg-casa-sand/30">
+        <Button
+          type="button"
+          variant="secondary"
+          fullWidth
+          onClick={() => {
+            onQuickAdd(day)
+            onClose()
+          }}
+          leadingIcon={<Plus size={13} className="text-casa-gold" />}
+          className="py-2 rounded-xl border border-dashed border-casa-border hover:border-casa-gold bg-white hover:bg-casa-gold/10 text-caption font-bold text-casa-navy hover:text-casa-gold shadow-2xs"
+        >
+          + Add Event or Reminder
+        </Button>
       </div>
 
       {/* Event list */}
@@ -160,14 +180,7 @@ function DayPopover({ day, events, activeEventId, onClose, onSelectDay, onSelect
                 </div>
                 {event.members.length > 0 && (
                   <div className="flex gap-1 mt-1 flex-wrap">
-                    {event.members.map(m => (
-                      <CalendarPill
-                        key={m.id}
-                        color={m.family_member?.color_hex || SHARED_COLOR}
-                      >
-                        {m.family_member?.name?.split(' ')[0] ?? '?'}
-                      </CalendarPill>
-                    ))}
+                    <MemberJewelStack members={event.members} max={3} size="sm" />
                   </div>
                 )}
               </div>
@@ -205,6 +218,7 @@ interface DayCellProps {
   onClose: () => void
   onDrillIn: (day: Date) => void
   onSelectEvent: (event: EventWithDetails) => void
+  onQuickAdd: (day: Date) => void
   onTouchStart: (e: React.TouchEvent) => void
   onTouchMove: (e: React.TouchEvent) => void
   onTouchEnd: () => void
@@ -226,6 +240,7 @@ function DayCell({
   onClose,
   onDrillIn,
   onSelectEvent,
+  onQuickAdd,
   onTouchStart,
   onTouchMove,
   onTouchEnd,
@@ -255,7 +270,7 @@ function DayCell({
         onContextMenu={onContextMenu}
         onDoubleClick={onDoubleClick}
       >
-        {/* Date number */}
+        {/* Date number header */}
         <div className="flex items-start justify-end mb-1 shrink-0">
           <span className={cn(
             'w-8 h-8 flex items-center justify-center rounded-full font-semibold leading-none',
@@ -365,6 +380,7 @@ function DayCell({
             onClose={onClose}
             onSelectDay={onDrillIn}
             onSelectEvent={onSelectEvent}
+            onQuickAdd={onQuickAdd}
           />
         )}
       </AnimatePresence>
@@ -381,7 +397,7 @@ export default function MonthView() {
   const [openPopoverKey, setOpenPopoverKey] = useState<string | null>(null)
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [expandedDayKeys, setExpandedDayKeys] = useState<Set<string>>(new Set())
-  const [quickCreate, setQuickCreate] = useState<{ open: boolean; start?: Date }>({ open: false })
+  const [folioPopover, setFolioPopover] = useState<{ open: boolean; start: Date } | null>(null)
 
   const toggleDayExpanded = useCallback((dayKey: string) => {
     setExpandedDayKeys(prev => {
@@ -400,7 +416,7 @@ export default function MonthView() {
     },
     onCreate: (start) => {
       setOpenPopoverKey(null)
-      setQuickCreate({ open: true, start })
+      setFolioPopover({ open: true, start })
     },
     ignoreSelector: '[data-event-pill]',
   })
@@ -419,7 +435,7 @@ export default function MonthView() {
       const start = new Date(day)
       start.setHours(9, 0, 0, 0)
       setOpenPopoverKey(null)
-      setQuickCreate({ open: true, start })
+      setFolioPopover({ open: true, start })
     }, 500)
   }, [])
 
@@ -467,7 +483,20 @@ export default function MonthView() {
 
   function eventsForDay(day: Date): EventWithDetails[] {
     return events.filter(e => eventOverlapsDay(e, day))
-      .sort((a, b) => getEventStartDate(a).getTime() - getEventStartDate(b).getTime())
+      .sort((a, b) => {
+        const aAllDay = Boolean(a.all_day || isAllDayReminder(a))
+        const bAllDay = Boolean(b.all_day || isAllDayReminder(b))
+        if (aAllDay && !bAllDay) return -1
+        if (!aAllDay && bAllDay) return 1
+        if (aAllDay && bAllDay) {
+          const aIsRem = isReminder(a)
+          const bIsRem = isReminder(b)
+          if (!aIsRem && bIsRem) return -1 // All-Day Events FIRST
+          if (aIsRem && !bIsRem) return 1  // All-Day Reminders SECOND
+          return a.title.localeCompare(b.title)
+        }
+        return getEventStartDate(a).getTime() - getEventStartDate(b).getTime()
+      })
   }
 
   function drillIntoDay(day: Date) {
@@ -511,6 +540,10 @@ export default function MonthView() {
                 onOpen={() => setOpenPopoverKey(key)}
                 onClose={() => setOpenPopoverKey(null)}
                 onDrillIn={drillIntoDay}
+                onQuickAdd={(targetDay) => {
+                  setOpenPopoverKey(null)
+                  setFolioPopover({ open: true, start: targetDay })
+                }}
                 onSelectEvent={ev => {
                   openEventInSidecar(ev.id)
                   setSelectedEventId(ev.id)
@@ -537,12 +570,22 @@ export default function MonthView() {
         />
       </div>
 
-      {/* Quick create (long-press empty cell) */}
-      <QuickCreateSheet
-        open={quickCreate.open}
-        initialStart={quickCreate.start}
-        onClose={() => setQuickCreate({ open: false })}
-      />
+      {/* Palm Beach Folio Popover for Month View */}
+      {folioPopover?.open && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-casa-navy/40 backdrop-blur-xs"
+          onClick={() => setFolioPopover(null)}
+        >
+          <div onClick={(e) => e.stopPropagation()}>
+            <PalmBeachFolioCard
+              contextDate={folioPopover.start}
+              initialStart={folioPopover.start}
+              mode="popover"
+              onClose={() => setFolioPopover(null)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -10,7 +10,7 @@ import {
   ShieldAlert,
 } from 'lucide-react'
 import { Modal, Button, Alert } from '../ui'
-import { useGoogleSyncTriage } from '../../hooks/useGoogleSyncTriage'
+import { useGoogleSyncTriage, formatSyncError } from '../../hooks/useGoogleSyncTriage'
 import type { CalendarEvent } from '../../types'
 import { cleanEventTitle } from '../../utils/eventTitle'
 
@@ -65,6 +65,7 @@ export function SyncTriageModal({
 
   const isBusy = retrySync.isPending || keepLocalOnly.isPending
   const startDate = currentEvent.start_time ? new Date(currentEvent.start_time) : null
+  const errorInfo = formatSyncError(currentError)
 
   return (
     <Modal
@@ -74,14 +75,14 @@ export function SyncTriageModal({
     >
       <div className="space-y-4 pt-2">
         {/* Event Summary Card */}
-        <div className="rounded-xl border border-casa-border/70 bg-casa-bg p-3.5 space-y-2">
+        <div className="rounded-2xl border border-casa-border/70 bg-casa-bg p-4 space-y-2">
           <div className="flex items-start justify-between gap-2">
             <div>
               <h3 className="font-bold text-body text-casa-navy leading-tight">
                 {cleanEventTitle(currentEvent.title)}
               </h3>
               {startDate && (
-                <p className="mt-1 flex items-center gap-1.5 text-caption text-casa-muted">
+                <p className="mt-1.5 flex items-center gap-1.5 text-caption text-casa-muted">
                   <Calendar size={13} className="shrink-0 text-casa-navy" />
                   <span>{format(startDate, 'EEEE, MMMM d, yyyy')}</span>
                   {!currentEvent.all_day && (
@@ -94,9 +95,9 @@ export function SyncTriageModal({
                 </p>
               )}
             </div>
-            <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-caption font-bold text-rose-700 border border-rose-200/80 shrink-0">
-              <ShieldAlert size={12} className="text-rose-600 shrink-0" />
-              <span>Sync Error</span>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-2.5 py-0.5 text-caption font-bold text-rose-700 border border-rose-200/80 shrink-0">
+              <ShieldAlert size={13} className="text-rose-600 shrink-0" />
+              <span>Sync Desynced</span>
             </span>
           </div>
         </div>
@@ -104,19 +105,18 @@ export function SyncTriageModal({
         {/* Error Detail Alert */}
         <Alert
           tone="danger"
-          title="Sync Problem Detected"
+          title={errorInfo.title}
         >
-          {currentError ||
-            'The Google Calendar write target rejected or failed to process this event. You can retry pushing to Google or keep this event in Casa only.'}
+          {errorInfo.detail}
         </Alert>
 
         {/* Action Buttons: 1-Tap Resolution */}
-        <div className="space-y-2.5 pt-1">
-          <p className="text-caption font-semibold uppercase tracking-wider text-casa-muted">
+        <div className="space-y-3 pt-1">
+          <p className="text-caption font-bold uppercase tracking-wider text-casa-muted">
             Resolution Options
           </p>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             {/* Retry Button */}
             <Button
               variant="strong"
@@ -126,8 +126,8 @@ export function SyncTriageModal({
                 await retrySync.mutateAsync(currentEvent.id)
                 handleClose()
               }}
-              leadingIcon={<RefreshCw size={15} className={retrySync.isPending ? 'animate-spin' : ''} />}
-              className="w-full min-h-[44px]"
+              leadingIcon={<RefreshCw size={16} className={retrySync.isPending ? 'animate-spin' : ''} />}
+              className="w-full min-h-[48px] font-bold rounded-xl"
             >
               {retrySync.isPending ? 'Retrying…' : 'Retry Google Sync'}
             </Button>
@@ -141,8 +141,8 @@ export function SyncTriageModal({
                 await keepLocalOnly.mutateAsync(currentEvent.id)
                 handleClose()
               }}
-              leadingIcon={<CloudOff size={15} />}
-              className="w-full min-h-[44px]"
+              leadingIcon={<CloudOff size={16} />}
+              className="w-full min-h-[48px] font-semibold rounded-xl"
             >
               {keepLocalOnly.isPending ? 'Saving…' : 'Keep Casa Local Only'}
             </Button>
@@ -153,10 +153,10 @@ export function SyncTriageModal({
             <Link
               to="/settings/google"
               onClick={handleClose}
-              className="inline-flex items-center gap-1.5 text-caption font-medium text-casa-navy hover:underline"
+              className="inline-flex items-center gap-1.5 text-caption font-medium text-casa-navy hover:underline min-h-[44px] px-2 py-1"
             >
               <span>Manage Google Accounts & Write Target in Settings</span>
-              <ExternalLink size={12} />
+              <ExternalLink size={13} />
             </Link>
           </div>
         </div>

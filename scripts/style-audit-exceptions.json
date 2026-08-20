@@ -50,6 +50,10 @@
         "reason": "Dynamic icon size and caller style passthrough."
       },
       {
+        "path": "src/components/ui/MemberJewelPill.tsx",
+        "reason": "Family-member avatar colors and indicators are selected from runtime household data."
+      },
+      {
         "path": "src/components/ui/JourneyProgressBar.tsx",
         "reason": "Segmented dynamic journey progress bar widths are runtime-calculated."
       },

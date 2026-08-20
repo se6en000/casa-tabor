@@ -21,6 +21,8 @@ export interface PersonAvatarStackProps extends HTMLAttributes<HTMLDivElement> {
    * position is ambiguous.
    */
   badgeClassName?: string | null
+  showNames?: boolean
+  variant?: 'stack' | 'pills'
 }
 
 const sizeClass = {
@@ -50,6 +52,8 @@ export function PersonAvatarStack({
   size = 'md',
   emptyLabel = 'No person assigned',
   badgeClassName,
+  showNames = false,
+  variant = 'stack',
   className,
   ...rest
 }: PersonAvatarStackProps) {
@@ -58,7 +62,54 @@ export function PersonAvatarStack({
   const label = people.length > 0
     ? people.map((person) => person?.name ?? '').filter(Boolean).join(', ')
     : emptyLabel
-  const showBadge = !!badgeClassName && people.length === 1
+  const showBadge = !showNames && !!badgeClassName && people.length === 1
+
+  if (showNames || variant === 'pills') {
+    return (
+      <div
+        role="img"
+        aria-label={label}
+        className={cn('flex items-center gap-1 shrink-0 flex-wrap', className)}
+        {...rest}
+      >
+        {visible.map((person) => {
+          const firstName = person.name.split(' ')[0]
+          return (
+            <div
+              key={person.id}
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-full bg-casa-bg border border-casa-border/80 text-caption font-medium shadow-2xs select-none transition-all',
+                size === 'xs' || size === 'sm' ? 'px-1.5 py-0.5 min-h-[22px]' : 'px-2 py-1 min-h-[26px]',
+              )}
+              title={person.name}
+            >
+              <span
+                aria-hidden="true"
+                className={cn(
+                  'flex shrink-0 items-center justify-center rounded-full font-bold text-white leading-none shadow-2xs',
+                  size === 'xs' || size === 'sm' ? 'size-4 text-3xs' : 'size-5 text-2xs',
+                )}
+                style={{ backgroundColor: person.color || 'var(--color-casa-navy)' }}
+              >
+                {person?.name?.[0]?.toUpperCase() || '?'}
+              </span>
+              <span className="text-caption font-semibold text-casa-navy truncate max-w-[68px] leading-tight">
+                {firstName}
+              </span>
+            </div>
+          )
+        })}
+        {overflow > 0 && (
+          <span
+            aria-hidden="true"
+            className="inline-flex items-center justify-center px-1.5 py-0.5 rounded-full bg-casa-bg border border-casa-border/80 text-3xs font-extrabold text-casa-muted leading-none shadow-2xs"
+          >
+            +{overflow}
+          </span>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div

@@ -8,7 +8,7 @@ import { supabase } from '../../lib/supabase'
 import EventBlock from './EventBlock'
 import EventDetailPanel from './EventDetailPanel'
 import EventEditSheet from './EventEditSheet'
-import QuickCreateSheet from '../shared/QuickCreateSheet'
+import PalmBeachFolioCard from './PalmBeachFolioCard'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { cn } from '../../utils/cn'
 import { cleanEventTitle } from '../../utils/eventTitle'
@@ -99,8 +99,8 @@ export default function WeekView() {
   const selectedEvent = selectedEventId ? (events?.find(e => e.id === selectedEventId) ?? null) : null
   const editEvent = editEventId ? (events?.find(e => e.id === editEventId) ?? null) : null
 
-  // ── Quick create (long-press empty slot) ─────────────────────
-  const [quickCreate, setQuickCreate] = useState<{ open: boolean; start?: Date }>({ open: false })
+  // ── Quick create (Folio popover) ─────────────────────
+  const [folioPopover, setFolioPopover] = useState<{ open: boolean; start: Date } | null>(null)
   const slotLongPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const slotLongPressOrigin = useRef<{ x: number; y: number; day: Date } | null>(null)
 
@@ -124,7 +124,7 @@ export default function WeekView() {
       const start = new Date(origin.day)
       start.setHours(hours, minutes, 0, 0)
       navigator.vibrate?.(30)
-      setQuickCreate({ open: true, start })
+      setFolioPopover({ open: true, start })
     }, 500)
   }, [])
 
@@ -165,7 +165,7 @@ export default function WeekView() {
       const minutes = snapped % 1 === 0.5 ? 30 : 0
       const start = new Date(origin.day)
       start.setHours(hours, minutes, 0, 0)
-      setQuickCreate({ open: true, start })
+      setFolioPopover({ open: true, start })
     }, 500)
   }, [])
 
@@ -187,7 +187,7 @@ export default function WeekView() {
     const minutes = snapped % 1 === 0.5 ? 30 : 0
     const start = new Date(day)
     start.setHours(hours, minutes, 0, 0)
-    setQuickCreate({ open: true, start })
+    setFolioPopover({ open: true, start })
   }, [])
 
   // Prevent browser context menu on right-click over the calendar grid
@@ -609,12 +609,22 @@ export default function WeekView() {
         />
       )}
 
-      {/* Quick create (long-press empty slot) */}
-      <QuickCreateSheet
-        open={quickCreate.open}
-        initialStart={quickCreate.start}
-        onClose={() => setQuickCreate({ open: false })}
-      />
+      {/* Palm Beach Folio Popover */}
+      {folioPopover?.open && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-casa-navy/40 backdrop-blur-xs"
+          onClick={() => setFolioPopover(null)}
+        >
+          <div onClick={(e) => e.stopPropagation()}>
+            <PalmBeachFolioCard
+              contextDate={folioPopover.start}
+              initialStart={folioPopover.start}
+              mode="popover"
+              onClose={() => setFolioPopover(null)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   )
 }

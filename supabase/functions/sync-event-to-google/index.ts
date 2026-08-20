@@ -77,11 +77,36 @@ Deno.serve(async (req) => {
   const syncRes = await sb.functions.invoke(targetFn, {
     body: { event_id, title_only: title_only === true },
   }).catch((err: Error) => ({ data: null, error: err }))
-  const syncError = syncRes?.error?.message ?? syncRes?.data?.error ?? null
+
+  let syncError: string | null = null
+  if (syncRes?.error) {
+    try {
+      if (syncRes.error.context && typeof syncRes.error.context.json === 'function') {
+        const body = await syncRes.error.context.json()
+        syncError = body?.error || body?.message || syncRes.error.message
+      } else if (syncRes.error.context && typeof syncRes.error.context.text === 'function') {
+        const txt = await syncRes.error.context.text()
+        try {
+          const parsed = JSON.parse(txt)
+          syncError = parsed?.error || parsed?.message || txt
+        } catch {
+          syncError = txt || syncRes.error.message
+        }
+      } else {
+        syncError = syncRes.error.message
+      }
+    } catch {
+      syncError = syncRes.error.message
+    }
+  } else if (syncRes?.data?.error) {
+    syncError = syncRes.data.error
+  }
+
   const skipped = typeof syncRes?.data?.skipped === 'string' ? syncRes.data.skipped : null
 
   const successSkips = new Set(['already has google_event_id', 'reminder', 'immutable_google_event'])
   if (!syncError && (!skipped || successSkips.has(skipped))) {
+    await sb.from('google_sync_jobs').delete().eq('event_id', event_id)
     return json({
       ok: true,
       sync_status: 'synced',

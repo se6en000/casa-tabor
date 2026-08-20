@@ -299,3 +299,45 @@ test('deriveCalendarCardResponsibility suppresses driver assignment when transpo
   assert.equal(resp.responsible, null)
 })
 
+test('deriveCalendarCardResponsibility suppresses driver on solo self-drive events', async () => {
+  const { deriveCalendarCardResponsibility } = await import('../src/lib/calendarResponsibility.ts')
+  const soloEvent = {
+    ...mockEvent,
+    id: 'pickleball-event',
+    title: 'Pickleball at Amped',
+    location_type: 'custom',
+    location_name: 'Amped Fitness Signature',
+    address: '123 Palm Beach Blvd',
+    members: [{ id: 'm1', role: 'primary', family_member: { id: 'jake-id', name: 'Jake', role: 'parent' } }],
+  }
+  const household = [
+    { id: 'jake-id', name: 'Jake', role: 'parent' },
+    { id: 'liv-id', name: 'Liv', role: 'child' },
+  ]
+  const resp = deriveCalendarCardResponsibility(soloEvent, household, new Date())
+  assert.equal(resp.responsible, null, 'Solo adult should not have a redundant driver badge assigned to themselves')
+  assert.equal(resp.attendees.length, 1)
+  assert.equal(resp.attendees[0].family_member.name, 'Jake')
+})
+
+test('deriveCalendarCardResponsibility suppresses driver on At Home events', async () => {
+  const { deriveCalendarCardResponsibility } = await import('../src/lib/calendarResponsibility.ts')
+  const homeEvent = {
+    ...mockEvent,
+    id: 'violin-event',
+    title: 'Emme Practice Violin with Meredith',
+    location_type: 'home',
+    location_name: 'Home',
+    address: 'AT HOME',
+    members: [{ id: 'm2', role: 'primary', family_member: { id: 'emme-id', name: 'Emme', role: 'child' } }],
+  }
+  const household = [
+    { id: 'jake-id', name: 'Jake', role: 'parent' },
+    { id: 'emme-id', name: 'Emme', role: 'child' },
+  ]
+  const resp = deriveCalendarCardResponsibility(homeEvent, household, new Date())
+  assert.equal(resp.responsible, null, 'At Home events should not have a driver assigned')
+  assert.equal(resp.attendees.length, 1)
+  assert.equal(resp.attendees[0].family_member.name, 'Emme')
+})
+
