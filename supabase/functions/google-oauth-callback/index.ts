@@ -37,7 +37,26 @@ Deno.serve(async (req) => {
     // Enable Gmail scan if gmail scope was granted (either via gmail flow or standard connect)
     const hasGmailScope = (tokens.scope ?? '').includes('gmail') || includesGmail
     if (hasGmailScope) tokenRow.gmail_scan_enabled = true
-    const policy = googleConnectionPolicy(String(email), TARGET_SYNC_GOOGLE_EMAIL)
+    // Auto-discover if a calendar named "Casa Tabor" exists in this Google account
+    let targetCalendarId = normalizedEmail
+    try {
+      const calListRes = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=writer', {
+        headers: { authorization: 'Bearer ' + tokens.access_token },
+      })
+      if (calListRes.ok) {
+        const calList = await calListRes.json()
+        const casaCal = (calList.items ?? []).find((c: any) =>
+          (c.summaryOverride || c.summary || '').trim().toLowerCase() === 'casa tabor'
+        )
+        if (casaCal?.id) {
+          targetCalendarId = casaCal.id
+        }
+      }
+    } catch (e) {
+      console.warn('[google-oauth-callback] calendarList auto-discovery notice:', e)
+    }
+
+    const policy = googleConnectionPolicy(String(email), TARGET_SYNC_GOOGLE_EMAIL, targetCalendarId)
     const normalizedEmail = policy.googleEmail
     const { error: tokenError } = await sb.from('google_tokens').upsert({
       ...tokenRow,

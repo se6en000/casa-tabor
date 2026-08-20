@@ -128,6 +128,67 @@ test('resolveCaptureCommand resolves relative event dates directly without confi
   assert.equal(result.args.temporal_provenance?.requiresExactDateConfirmation, false)
 })
 
+test('resolveCaptureCommand parses grocery adds with typo in shoppping list', () => {
+  const result = resolveCaptureCommand('add apples to the shoppping list', OPTIONS)
+  assert.equal(result.status, 'execute')
+  assert.equal(result.tool, 'add_grocery_items')
+  assert.deepEqual(result.args, {
+    items: [{ name: 'apples', category: 'other' }],
+  })
+})
+
+test('resolveCaptureCommand parses spelled-out month appointment for september 9th at 10am', () => {
+  const result = resolveCaptureCommand('create an Dr hanna appointment for september 9th at 10am', OPTIONS)
+  assert.equal(result.status, 'execute')
+  assert.equal(result.tool, 'create_event')
+  assert.equal(result.args.title, 'Dr hanna appointment')
+  assert.equal(result.args.event_type, 'event')
+  assert.equal(result.args.start, '2026-09-09T10:00:00.000-04:00')
+  assert.equal(result.args.end, '2026-09-09T11:00:00.000-04:00')
+})
+
+test('resolveCaptureCommand parses standalone month appointment without create prefix', () => {
+  const result = resolveCaptureCommand('Dr Hanna appointment September 9 at 10am', OPTIONS)
+  assert.equal(result.status, 'execute')
+  assert.equal(result.tool, 'create_event')
+  assert.equal(result.args.title, 'Dr Hanna appointment')
+  assert.equal(result.args.event_type, 'event')
+  assert.equal(result.args.start, '2026-09-09T10:00:00.000-04:00')
+  assert.equal(result.args.end, '2026-09-09T11:00:00.000-04:00')
+})
+
+test('resolveCaptureCommand parses relative tomorrow morning reminder', () => {
+  const result = resolveCaptureCommand('remind me tomorrow morning to clean the pool', OPTIONS)
+  assert.equal(result.status, 'execute')
+  assert.equal(result.tool, 'create_event')
+  assert.equal(result.args.title, 'Clean the pool')
+  assert.equal(result.args.event_type, 'reminder')
+  assert.equal(result.args.start, '2026-08-09T09:00:00-04:00')
+  assert.equal(result.args.end, '2026-08-09T09:15:00-04:00')
+})
+
+test('resolveCaptureCommand attributes target family member in reminder', () => {
+  const result = resolveCaptureCommand('remind Owen to pack his cleats tonight', OPTIONS)
+  assert.equal(result.status, 'execute')
+  assert.equal(result.tool, 'create_event')
+  assert.equal(result.args.title, 'Pack his cleats')
+  assert.deepEqual(result.args.members, ['Owen'])
+  assert.equal(result.args.event_type, 'reminder')
+  assert.equal(result.args.start, '2026-08-08T20:00:00-04:00')
+  assert.equal(result.args.end, '2026-08-08T20:15:00-04:00')
+})
+
+test('resolveCaptureCommand attributes target family member Kelly in reminder', () => {
+  const result = resolveCaptureCommand('remind Kelly to call Dr Hanna tomorrow at 10am', OPTIONS)
+  assert.equal(result.status, 'execute')
+  assert.equal(result.tool, 'create_event')
+  assert.equal(result.args.title, 'Call Dr Hanna')
+  assert.deepEqual(result.args.members, ['Kelly'])
+  assert.equal(result.args.event_type, 'reminder')
+  assert.ok(result.args.start.startsWith('2026-08-09T10:00:00'))
+  assert.ok(result.args.end.startsWith('2026-08-09T10:15:00'))
+})
+
 test('resolveCaptureCommand rejects unsupported commands outside quick actions', () => {
   const result = resolveCaptureCommand('Delete my dentist appointment tomorrow', OPTIONS)
   assert.deepEqual(result, {
@@ -135,3 +196,4 @@ test('resolveCaptureCommand rejects unsupported commands outside quick actions',
     message: 'Quick Actions can create events, reminders, and grocery items right now.',
   })
 })
+

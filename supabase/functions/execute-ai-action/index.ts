@@ -751,30 +751,37 @@ Deno.serve(async (req) => {
             headers: { ...CORS, 'content-type': 'application/json' },
         })
       }
-      if (calendarPreflight.status === 'requires_confirmation' && args.allow_calendar_conflicts !== true) {
-        const result = {
-          success: false,
-          error: 'A probable duplicate or calendar conflict requires explicit keep-both confirmation.',
-          code: 'calendar_conflict_confirmation_required',
-          calendar_preflight: calendarPreflight,
-          correlation_id: cid,
+      const isQuickCapture = clientTraceSource === 'capture-command'
+      let conflictTitle: string | null = null
+      if (calendarPreflight.status === 'requires_confirmation') {
+        const conflictCandidates = Array.isArray(calendarPreflight.conflicts) ? calendarPreflight.conflicts : []
+        const firstConflict = conflictCandidates.find((c: { title?: string }) => Boolean(c?.title))
+        conflictTitle = firstConflict?.title ?? null
+        if (!isQuickCapture && args.allow_calendar_conflicts !== true) {
+          const result = {
+            success: false,
+            error: 'A probable duplicate or calendar conflict requires explicit keep-both confirmation.',
+            code: 'calendar_conflict_confirmation_required',
+            calendar_preflight: calendarPreflight,
+            correlation_id: cid,
+          }
+          await auditEventCreate(sb, {
+            actionId: createActionId,
+            sessionId,
+            args,
+            status: 'failed',
+            result,
+            errorMessage: result.error,
+            confirmedByUser,
+          })
+          appendActionTrace('probable_duplicate_blocked', normalizedTitle, {
+            calendar_preflight: calendarPreflight,
+          })
+          return new Response(JSON.stringify(result), {
+            status: 409,
+            headers: { ...CORS, 'content-type': 'application/json' },
+          })
         }
-        await auditEventCreate(sb, {
-          actionId: createActionId,
-          sessionId,
-          args,
-          status: 'failed',
-          result,
-          errorMessage: result.error,
-          confirmedByUser,
-        })
-        appendActionTrace('probable_duplicate_blocked', normalizedTitle, {
-          calendar_preflight: calendarPreflight,
-        })
-        return new Response(JSON.stringify(result), {
-          status: 409,
-          headers: { ...CORS, 'content-type': 'application/json' },
-        })
       }
 
       // Prefer an existing saved_places match over the raw typed/spoken
@@ -878,6 +885,7 @@ Deno.serve(async (req) => {
         draft_promoted: draftPromoted,
         sync_status: 'synced',
         correlation_id: cid,
+        conflict_title: conflictTitle ?? undefined,
       }
       await auditEventCreate(sb, {
         actionId: createActionId,

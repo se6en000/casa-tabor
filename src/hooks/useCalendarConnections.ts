@@ -19,6 +19,8 @@ export interface ConnectionStatus {
   last_error_at: string | null
   last_error_code: string | null
   reauthorization_required: boolean
+  read_calendar_ids?: string[]
+  read_calendar_metadata?: Array<{ id: string; summary: string; backgroundColor?: string }>
 }
 
 export interface MemberWithConnection extends FamilyMember {
@@ -117,3 +119,79 @@ export function useDisconnect() {
     },
   })
 }
+
+export interface GoogleCalendarItem {
+  id: string
+  summary: string
+  description: string | null
+  primary: boolean
+  accessRole: string
+  backgroundColor: string | null
+  foregroundColor?: string | null
+  is_selected?: boolean
+  is_write_target?: boolean
+  is_read_selected?: boolean
+  can_write?: boolean
+}
+
+export interface GoogleCalendarListResponse {
+  ok: boolean
+  reauth_required?: boolean
+  error?: string
+  connection_id?: string
+  current_calendar_id?: string
+  read_calendar_ids?: string[]
+  calendars?: GoogleCalendarItem[]
+}
+
+export function useGoogleCalendarList(familyMemberId?: string, enabled = true) {
+  return useQuery({
+    queryKey: ['google-calendar-list', familyMemberId],
+    enabled: Boolean(familyMemberId) && enabled,
+    staleTime: 60_000,
+    queryFn: async (): Promise<GoogleCalendarListResponse> => {
+      const { data, error } = await supabase.functions.invoke('list-google-calendars', {
+        body: { family_member_id: familyMemberId },
+      })
+      if (error) throw error
+      return data as GoogleCalendarListResponse
+    },
+  })
+}
+
+export function useSelectGoogleCalendar() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({
+      familyMemberId,
+      writeCalendarId,
+      readCalendarIds,
+      readCalendarMetadata,
+    }: {
+      familyMemberId: string
+      writeCalendarId: string
+      readCalendarIds?: string[]
+      readCalendarMetadata?: Array<{ id: string; summary: string; backgroundColor?: string }>
+    }) => {
+      const { data, error } = await supabase.functions.invoke('list-google-calendars', {
+        body: {
+          family_member_id: familyMemberId,
+          select_calendar_id: writeCalendarId,
+          select_read_calendar_ids: readCalendarIds ?? [],
+          read_calendar_metadata: readCalendarMetadata ?? [],
+          save_selection: true,
+        },
+      })
+      if (error) throw error
+      if (data?.error) throw new Error(data.error)
+      return data
+    },
+    onSuccess: (_, variables) => {
+      qc.invalidateQueries({ queryKey: ['google-services'] })
+      qc.invalidateQueries({ queryKey: ['calendar-connections'] })
+      qc.invalidateQueries({ queryKey: ['google-calendar-list', variables.familyMemberId] })
+      qc.invalidateQueries({ queryKey: ['events'] })
+    },
+  })
+}
+

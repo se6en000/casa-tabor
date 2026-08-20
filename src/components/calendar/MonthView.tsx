@@ -454,7 +454,12 @@ export default function MonthView() {
   const grid = buildMonthGrid(selectedDate)
 
   const events = (allEvents ?? []).filter(e =>
-    isHoliday(e) || isReminder(e) || visibleMembers.length === 0 || e.members.some(m => visibleMembers.includes(m.family_member?.id ?? ''))
+    isHoliday(e) ||
+    isReminder(e) ||
+    visibleMembers.length === 0 ||
+    e.members.length === 0 ||
+    e.members.some(m => visibleMembers.includes(m.family_member?.id ?? '')) ||
+    (Boolean(e.source_member_id) && visibleMembers.includes(e.source_member_id!))
   )
 
   const activeEventId = aiDrawerOpen && sidecarTab === 'event' ? selectedSidecarEventId : null

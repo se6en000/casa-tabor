@@ -195,9 +195,49 @@ async function syncOne(sb: SupabaseClient, resolved: ResolvedGoogleConnection) {
     }
 
     for (const ev of pendingCancellations) {
-      await upsertEvent(sb, connection, ev, accessToken, emailToId)
+      await upsertEvent(sb, connection, ev, accessToken, emailToId, connection.calendar_id, false)
       upserted++
     }
+
+    // Sync secondary read-only calendars
+    const readIds = (connection.read_calendar_ids || []).filter(
+      (id) => id && id !== connection.calendar_id
+    )
+    for (const readCalId of readIds) {
+      try {
+        const readParams = new URLSearchParams({
+          singleEvents: 'true',
+          showDeleted: 'true',
+          maxResults: '2500',
+          timeMin: new Date(now - INITIAL_SYNC_PAST_DAYS * 86400000).toISOString(),
+          timeMax: new Date(now + INITIAL_SYNC_FUTURE_DAYS * 86400000).toISOString(),
+        })
+        const readRes = await fetch(
+          `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(readCalId)}/events?${readParams}`,
+          { headers: { authorization: 'Bearer ' + accessToken } },
+        )
+        if (readRes.ok) {
+          const readPage = await readRes.json()
+          pulled += readPage.items?.length ?? 0
+          for (const ev of readPage.items ?? []) {
+            if (ev.status === 'cancelled') {
+              await sb
+                .from('events')
+                .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+                .eq('google_connection_id', connection.id)
+                .eq('google_calendar_id', readCalId)
+                .eq('google_event_id', ev.id)
+              continue
+            }
+            await upsertEvent(sb, connection, ev, accessToken, emailToId, readCalId, true)
+            upserted++
+          }
+        }
+      } catch (readErr) {
+        console.warn(`[sync-calendars] Secondary calendar sync notice for ${readCalId}:`, readErr)
+      }
+    }
+
     const syncedAt = new Date().toISOString()
     await markGoogleConnectionHealthy(sb, connection.id, {
       sync_token: syncToken,
@@ -303,12 +343,15 @@ async function upsertEvent(
   ev: Record<string, unknown>,
   accessToken: string,
   emailToId: Map<string, string>,
+  calendarId: string = connection.calendar_id,
+  isReadOnly: boolean = false,
 ) {
   const sourceMemberId = connection.family_member_id
   if (await linkCanonicalOccurrence(sb, connection, ev)) return
   if (ev.status === 'cancelled') {
     await sb.from('events').update({ status: 'cancelled', updated_at: new Date().toISOString() })
       .eq('google_connection_id', connection.id)
+      .eq('google_calendar_id', calendarId)
       .eq('google_event_id', ev.id)
     return
   }
@@ -322,6 +365,7 @@ async function upsertEvent(
     .from('events')
     .select('id, is_enriched, updated_at, source_member_id, google_connection_id')
     .eq('google_connection_id', connection.id)
+    .eq('google_calendar_id', calendarId)
     .eq('google_event_id', ev.id)
     .maybeSingle()
   if (!existing) {
@@ -350,12 +394,28 @@ async function upsertEvent(
         all_day: !start?.dateTime,
         status: 'confirmed',
         google_connection_id: connection.id,
-        google_calendar_id: connection.calendar_id,
+        google_calendar_id: calendarId,
+        is_read_only: isReadOnly || connection.access_mode !== 'writable',
         source_member_id: sourceMemberId,
         updated_at: new Date().toISOString(),
       }).eq('id', eventId)
     } else {
-      const row = { title: (ev.summary as string) ?? '(untitled)', description: (ev.description as string) ?? null, start_time: startTime, end_time: endTime, all_day: !start?.dateTime, location_name: (ev.location as string) ?? null, address: (ev.location as string) ?? null, google_event_id: ev.id as string, google_calendar_id: connection.calendar_id, google_connection_id: connection.id, source_member_id: sourceMemberId, status: 'confirmed', updated_at: new Date().toISOString() }
+      const row = {
+        title: (ev.summary as string) ?? '(untitled)',
+        description: (ev.description as string) ?? null,
+        start_time: startTime,
+        end_time: endTime,
+        all_day: !start?.dateTime,
+        location_name: (ev.location as string) ?? null,
+        address: (ev.location as string) ?? null,
+        google_event_id: ev.id as string,
+        google_calendar_id: calendarId,
+        google_connection_id: connection.id,
+        is_read_only: isReadOnly || connection.access_mode !== 'writable',
+        source_member_id: sourceMemberId,
+        status: 'confirmed',
+        updated_at: new Date().toISOString(),
+      }
       await sb.from('events').update(row).eq('id', eventId)
       const attendees = ev.attendees as Array<{ email: string }> | undefined
       const emails = new Set((attendees ?? []).map(a => a.email.toLowerCase()))
@@ -364,7 +424,6 @@ async function upsertEvent(
       await sb.from('event_members').delete().eq('event_id', eventId)
       await sb.from('event_members').insert([...memberIds].map(fm => ({ event_id: eventId, family_member_id: fm, role: 'attendee', rsvp_status: 'accepted' })))
     }
-  } else {
     // New event — check for an existing event at this time for this member.
     // If one exists and is enriched, patch the incoming Google event with our canonical data
     // so both calendar entries stay consistent. Then skip the DB insert.
@@ -377,7 +436,7 @@ async function upsertEvent(
     const existingAtTime = existingAtTimeList?.[0] ?? null
 
     if (existingAtTime) {
-      if (existingAtTime.is_enriched && connection.access_mode === 'writable') {
+      if (!isReadOnly && existingAtTime.is_enriched && connection.access_mode === 'writable') {
         const enr = (existingAtTime.event_enrichments as Record<string, string>[] | null)?.[0]
         const patch: Record<string, unknown> = { summary: existingAtTime.title }
         if (existingAtTime.location_name || existingAtTime.address) {
@@ -394,12 +453,27 @@ async function upsertEvent(
           headers: { authorization: 'Bearer ' + accessToken, 'content-type': 'application/json' },
           body: JSON.stringify(patch),
         }).catch(() => {})
+        return
       }
-      return
     }
 
     // Genuinely new event — insert
-    const row = { title: (ev.summary as string) ?? '(untitled)', description: (ev.description as string) ?? null, start_time: startTime, end_time: endTime, all_day: !start?.dateTime, location_name: (ev.location as string) ?? null, address: (ev.location as string) ?? null, google_event_id: ev.id as string, google_calendar_id: connection.calendar_id, google_connection_id: connection.id, source_member_id: sourceMemberId, status: 'confirmed', updated_at: new Date().toISOString() }
+    const row = {
+      title: (ev.summary as string) ?? '(untitled)',
+      description: (ev.description as string) ?? null,
+      start_time: startTime,
+      end_time: endTime,
+      all_day: !start?.dateTime,
+      location_name: (ev.location as string) ?? null,
+      address: (ev.location as string) ?? null,
+      google_event_id: ev.id as string,
+      google_calendar_id: calendarId,
+      google_connection_id: connection.id,
+      is_read_only: isReadOnly || connection.access_mode !== 'writable',
+      source_member_id: sourceMemberId,
+      status: 'confirmed',
+      updated_at: new Date().toISOString()
+    }
     const { data: ins, error } = await sb.from('events').insert({ ...row, is_enriched: false }).select('id').single()
     if (error) throw new Error(error.message)
     eventId = ins.id

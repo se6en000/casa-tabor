@@ -9,7 +9,15 @@ import {
 } from 'lucide-react'
 import type { LivingFlowMode } from '../types'
 import { EventProvenanceBadge } from '../../EventProvenanceBadge'
-import RecurrenceRuleBuilder, { parseRrule } from '../../RecurrenceRuleBuilder'
+import {
+  parseRrule,
+  buildRrule,
+  formatRecurrenceSummary,
+  formatRecurrencePillLabel,
+  type RecurrenceConfig,
+  type RecurrenceFrequency,
+  type RecurrenceEndType,
+} from '../../../../utils/recurrenceUtils'
 
 interface LivingHeroTitleCardProps {
   title: string
@@ -19,14 +27,14 @@ interface LivingHeroTitleCardProps {
   endDate?: Date
   durationMinutes: number
   isAllDay?: boolean
-  sourceType?: string
   rrule?: string | null
+  sourceType?: string
   onUpdateTitle: (newTitle: string) => void
   onSetStartAndDuration: (startDate: Date, durationMins: number, isAllDay?: boolean) => void
   onSetStartAndEnd?: (startDate: Date, endDate: Date, isAllDay?: boolean) => void
   onSelectCategory: (catName: string, icon: string, mode: LivingFlowMode) => void
   onNudgeTime: (mins: number) => void
-  onUpdateRecurrence?: (rruleStr: string | null) => void
+  onUpdateRecurrence?: (newRrule: string | null, config: RecurrenceConfig) => void
 }
 
 const EVENT_CATEGORIES = [
@@ -57,14 +65,14 @@ export default function LivingHeroTitleCard({
   endDate,
   durationMinutes,
   isAllDay = false,
-  sourceType,
   rrule = null,
+  sourceType,
   onUpdateTitle,
   onSetStartAndDuration,
   onSetStartAndEnd,
   onSelectCategory,
   onNudgeTime,
-  onUpdateRecurrence
+  onUpdateRecurrence,
 }: LivingHeroTitleCardProps) {
   const safeStartDate = !startDate || isNaN(new Date(startDate).getTime()) ? new Date() : new Date(startDate)
   const safeEndDate = !endDate || isNaN(new Date(endDate).getTime())
@@ -74,17 +82,18 @@ export default function LivingHeroTitleCard({
   const isInitialMultiDay = !isSameDay(safeStartDate, safeEndDate) || durationMinutes >= 1440 || category.toLowerCase() === 'travel'
 
   const [localTitle, setLocalTitle] = useState(title)
-  const [localRrule, setLocalRrule] = useState<string | null>(rrule)
   const [expandedSection, setExpandedSection] = useState<'datetime' | 'category' | 'recurrence' | null>(null)
   const [scheduleTab, setScheduleTab] = useState<'single' | 'multiday'>(isInitialMultiDay ? 'multiday' : 'single')
   const [currentStartDate, setCurrentStartDate] = useState<Date>(safeStartDate)
   const [currentEndDate, setCurrentEndDate] = useState<Date>(safeEndDate)
   const [duration, setDuration] = useState<number>(durationMinutes)
   const [localIsAllDay, setLocalIsAllDay] = useState<boolean>(Boolean(isAllDay))
+  const [localRecur, setLocalRecur] = useState<RecurrenceConfig>(() => parseRrule(rrule))
   const [activeMode, setActiveMode] = useState<LivingFlowMode>(mode)
   const isEditingRef = useRef(false)
   const startDateInputRef = useRef<HTMLInputElement>(null)
   const endDateInputRef = useRef<HTMLInputElement>(null)
+  const recurrenceEndDateInputRef = useRef<HTMLInputElement>(null)
 
   const isMultiDayActive = scheduleTab === 'multiday' || !isSameDay(currentStartDate, currentEndDate)
   const nightsCount = Math.max(1, differenceInDays(currentEndDate, currentStartDate))
@@ -94,10 +103,6 @@ export default function LivingHeroTitleCard({
       setLocalTitle(title)
     }
   }, [title])
-
-  useEffect(() => {
-    setLocalRrule(rrule)
-  }, [rrule])
 
   useEffect(() => {
     const s = !startDate || isNaN(new Date(startDate).getTime()) ? new Date() : new Date(startDate)
@@ -301,6 +306,122 @@ export default function LivingHeroTitleCard({
     commitScheduleChange(nextStart, nextEnd, false)
   }
 
+  // ══════ RECURRENCE STATE HANDLERS ══════
+  const recurDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    setLocalRecur(parseRrule(rrule))
+  }, [rrule])
+
+  useEffect(() => {
+    return () => {
+      if (recurDebounceTimerRef.current) {
+        clearTimeout(recurDebounceTimerRef.current)
+      }
+    }
+  }, [])
+
+  const commitRecurrenceChange = (nextConfig: RecurrenceConfig, immediate = false) => {
+    setLocalRecur(nextConfig)
+    const newRrule = buildRrule(nextConfig)
+    if (!onUpdateRecurrence) return
+
+    if (recurDebounceTimerRef.current) {
+      clearTimeout(recurDebounceTimerRef.current)
+      recurDebounceTimerRef.current = null
+    }
+
+    if (immediate) {
+      onUpdateRecurrence(newRrule, nextConfig)
+    } else {
+      recurDebounceTimerRef.current = setTimeout(() => {
+        recurDebounceTimerRef.current = null
+        onUpdateRecurrence(newRrule, nextConfig)
+      }, 300)
+    }
+  }
+
+  const handleSelectPresetFrequency = (freq: RecurrenceFrequency, interval = 1, byDay?: number[]) => {
+    const currentDay = currentStartDate.getDay()
+    const effectiveByDay = byDay !== undefined ? byDay : (freq === 'weekly' ? (localRecur.byDay.length > 0 ? localRecur.byDay : [currentDay]) : [])
+    const nextConfig: RecurrenceConfig = {
+      ...localRecur,
+      freq,
+      interval,
+      byDay: effectiveByDay,
+    }
+    commitRecurrenceChange(nextConfig, true)
+  }
+
+  const handleToggleDay = (dayIndex: number) => {
+    let nextByDay: number[]
+    if (localRecur.byDay.includes(dayIndex)) {
+      nextByDay = localRecur.byDay.filter(d => d !== dayIndex)
+      if (nextByDay.length === 0) {
+        nextByDay = [currentStartDate.getDay()]
+      }
+    } else {
+      nextByDay = [...localRecur.byDay, dayIndex].sort((a, b) => a - b)
+    }
+    commitRecurrenceChange({
+      ...localRecur,
+      freq: 'weekly',
+      byDay: nextByDay,
+    })
+  }
+
+  const handleStepInterval = (delta: number) => {
+    const nextInterval = Math.max(1, Math.min(99, localRecur.interval + delta))
+    commitRecurrenceChange({
+      ...localRecur,
+      interval: nextInterval,
+    })
+  }
+
+  const handleSetEndType = (endType: RecurrenceEndType) => {
+    let defaultEndDate = localRecur.endDate
+    if (endType === 'date' && !defaultEndDate) {
+      defaultEndDate = format(addDays(currentStartDate, 30), 'yyyy-MM-dd')
+    }
+    commitRecurrenceChange({
+      ...localRecur,
+      endType,
+      endDate: defaultEndDate,
+      count: localRecur.count || 10,
+    })
+  }
+
+  const handleSetEndDate = (dateStr: string) => {
+    commitRecurrenceChange({
+      ...localRecur,
+      endType: 'date',
+      endDate: dateStr,
+    })
+  }
+
+  const handleStepCount = (delta: number) => {
+    const nextCount = Math.max(1, Math.min(999, (localRecur.count || 10) + delta))
+    commitRecurrenceChange({
+      ...localRecur,
+      endType: 'count',
+      count: nextCount,
+    })
+  }
+
+  const handleOpenRecurrenceEndDatePicker = () => {
+    if (recurrenceEndDateInputRef.current) {
+      try {
+        if (typeof recurrenceEndDateInputRef.current.showPicker === 'function') {
+          recurrenceEndDateInputRef.current.showPicker()
+        } else {
+          recurrenceEndDateInputRef.current.focus()
+        }
+      } catch {
+        recurrenceEndDateInputRef.current.focus()
+      }
+    }
+  }
+
   const isTodayActive = isSameDay(currentStartDate, new Date())
   const isTomorrowActive = isSameDay(currentStartDate, addDays(new Date(), 1))
   const isDay2Active = isSameDay(currentStartDate, addDays(new Date(), 2))
@@ -318,6 +439,10 @@ export default function LivingHeroTitleCard({
     : localIsAllDay
       ? 'All Day'
       : format(currentStartDate, 'h:mm a')
+
+  const isRecurringActive = localRecur.freq !== 'none'
+  const recurrenceSummary = formatRecurrenceSummary(localRecur, currentStartDate)
+  const recurrencePillLabel = formatRecurrencePillLabel(localRecur, currentStartDate)
 
   return (
     <div className={`living-hero-title-card flex flex-col ${expandedSection ? 'has-expanded' : ''}`}>
@@ -401,21 +526,12 @@ export default function LivingHeroTitleCard({
         {/* Repeat / Recurrence Pill */}
         <button
           onClick={() => setExpandedSection(prev => prev === 'recurrence' ? null : 'recurrence')}
-          className={`living-action-chip ${expandedSection === 'recurrence' ? 'active' : (localRrule ? 'gold-active shadow-sm' : '')}`}
+          className={`living-action-chip ${expandedSection === 'recurrence' ? 'active' : isRecurringActive ? 'gold-active shadow-sm' : ''}`}
+          aria-label="Repeat schedule"
         >
-          <Repeat size={13} className={expandedSection === 'recurrence' ? 'text-white' : (localRrule ? 'text-amber-800' : 'text-slate-500')} />
-          <span className="truncate max-w-[180px]">
-            {(() => {
-              const parsed = parseRrule(localRrule)
-              if (parsed.freq === 'none') return 'Does not repeat'
-              if (parsed.freq === 'daily') return parsed.interval > 1 ? `Every ${parsed.interval} days` : 'Daily'
-              if (parsed.freq === 'weekly') return parsed.interval > 1 ? `Every ${parsed.interval} weeks` : 'Weekly'
-              if (parsed.freq === 'monthly') return parsed.interval > 1 ? `Every ${parsed.interval} months` : 'Monthly'
-              if (parsed.freq === 'yearly') return parsed.interval > 1 ? `Every ${parsed.interval} years` : 'Yearly'
-              return 'Repeats'
-            })()}
-          </span>
-          <ChevronDown size={12} className={expandedSection === 'recurrence' ? 'rotate-180 transition-transform' : 'text-slate-400'} />
+          <Repeat size={13} className={expandedSection === 'recurrence' ? 'text-white' : isRecurringActive ? 'text-amber-800' : 'text-slate-500'} />
+          <span className="truncate max-w-[170px]">{recurrencePillLabel}</span>
+          <ChevronDown size={12} className={expandedSection === 'recurrence' ? 'rotate-180 transition-transform' : isRecurringActive ? 'text-amber-700' : 'text-slate-400'} />
         </button>
 
         {/* Micro Steppers */}
@@ -745,54 +861,6 @@ export default function LivingHeroTitleCard({
               </div>
             </div>
           )}
-
-          {/* Quick Recurrence Trigger Row inside Schedule & Timing */}
-          <div className="mt-3 pt-3 border-t border-slate-200/80 flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-600 flex items-center gap-1.5">
-              <Repeat size={13} className="text-amber-700" />
-              <span>Repeat:</span>
-              <strong className="text-slate-900">
-                {parseRrule(localRrule).freq === 'none' ? 'Does not repeat' : `Repeats ${parseRrule(localRrule).freq}`}
-              </strong>
-            </span>
-            <button
-              type="button"
-              onClick={() => setExpandedSection('recurrence')}
-              className="text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg border border-amber-300/80 transition-colors flex items-center gap-1"
-            >
-              <span>Configure Repeat</span>
-              <ChevronDown size={12} className="-rotate-90" />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ══════ INLINE RECURRENCE EXPANSION DRAWER ══════ */}
-      {expandedSection === 'recurrence' && (
-        <div className="living-inline-drawer p-4 bg-white border border-slate-200 rounded-2xl shadow-sm mt-3 space-y-3">
-          <div className="living-inline-drawer-header flex items-center justify-between pb-2 border-b border-slate-100">
-            <span className="flex items-center gap-1.5 font-bold text-xs text-amber-900 uppercase tracking-wide">
-              <Repeat size={14} className="text-amber-700" />
-              <span>Repeat &amp; Recurrence Rule</span>
-            </span>
-            <button
-              onClick={() => setExpandedSection(null)}
-              className="text-xs text-slate-500 hover:text-slate-900 font-bold flex items-center gap-0.5"
-            >
-              <span>Done</span>
-              <X size={13} />
-            </button>
-          </div>
-
-          <RecurrenceRuleBuilder
-            value={localRrule}
-            onChange={(newRruleStr) => {
-              setLocalRrule(newRruleStr)
-              onUpdateRecurrence?.(newRruleStr)
-            }}
-            startDate={format(currentStartDate, 'yyyy-MM-dd')}
-            className="border-0 shadow-none bg-transparent p-0"
-          />
         </div>
       )}
 
@@ -858,6 +926,323 @@ export default function LivingHeroTitleCard({
               )
             })}
           </div>
+        </div>
+      )}
+
+      {/* ══════ INLINE RECURRENCE & REPEAT EXPANSION DRAWER ══════ */}
+      {expandedSection === 'recurrence' && (
+        <div className="living-inline-drawer">
+          <div className="living-inline-drawer-header">
+            <span className="flex items-center gap-1.5">
+              <Repeat size={14} className="text-amber-700" />
+              <span>Repeat & Recurrence</span>
+            </span>
+            <button
+              onClick={() => {
+                commitRecurrenceChange(localRecur, true)
+                setExpandedSection(null)
+              }}
+              className="text-xs text-slate-500 hover:text-slate-900 font-bold flex items-center gap-0.5 cursor-pointer"
+            >
+              <span>Done</span>
+              <X size={13} />
+            </button>
+          </div>
+
+          {/* Live Summary Card */}
+          <div className="living-recurrence-summary-card">
+            <div className="living-recurrence-summary-icon">
+              <Repeat size={16} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-2xs font-extrabold uppercase tracking-wider text-amber-800/80">
+                Current Repeat Schedule
+              </div>
+              <div className="text-xs font-bold text-slate-900 truncate">
+                {recurrenceSummary}
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Frequency Presets Grid */}
+          <div>
+            <div className="text-xs font-bold text-slate-500 uppercase mb-1.5 tracking-wider">
+              Frequency
+            </div>
+            <div className="recur-preset-grid">
+              <button
+                type="button"
+                onClick={() => handleSelectPresetFrequency('none')}
+                className={`recur-preset-pill ${localRecur.freq === 'none' ? 'active' : ''}`}
+              >
+                <span>Does not repeat</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSelectPresetFrequency('daily', 1)}
+                className={`recur-preset-pill ${localRecur.freq === 'daily' && localRecur.interval === 1 ? 'active' : ''}`}
+              >
+                <span>Daily</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSelectPresetFrequency('weekly', 1, [currentStartDate.getDay()])}
+                className={`recur-preset-pill ${localRecur.freq === 'weekly' && localRecur.interval === 1 ? 'active' : ''}`}
+              >
+                <span>Weekly</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSelectPresetFrequency('weekly', 2, [currentStartDate.getDay()])}
+                className={`recur-preset-pill ${localRecur.freq === 'weekly' && localRecur.interval === 2 ? 'active' : ''}`}
+              >
+                <span>Every 2 Wks</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSelectPresetFrequency('monthly', 1)}
+                className={`recur-preset-pill ${localRecur.freq === 'monthly' && localRecur.interval === 1 ? 'active' : ''}`}
+              >
+                <span>Monthly</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSelectPresetFrequency('yearly', 1)}
+                className={`recur-preset-pill ${localRecur.freq === 'yearly' && localRecur.interval === 1 ? 'active' : ''}`}
+              >
+                <span>Yearly</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Detailed Recurrence Controls when repeating */}
+          {localRecur.freq !== 'none' && (
+            <div className="space-y-3 pt-1">
+              {/* Interval Stepper Box */}
+              <div className="bg-white border border-slate-200 rounded-xl p-2.5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+                    Repeat Every
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs font-bold text-amber-900 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
+                      {localRecur.interval} {localRecur.freq === 'daily' ? (localRecur.interval === 1 ? 'day' : 'days') : localRecur.freq === 'weekly' ? (localRecur.interval === 1 ? 'week' : 'weeks') : localRecur.freq === 'monthly' ? (localRecur.interval === 1 ? 'month' : 'months') : (localRecur.interval === 1 ? 'year' : 'years')}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center bg-slate-50 border border-slate-200 rounded-xl p-1 gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleStepInterval(-1)}
+                      disabled={localRecur.interval <= 1}
+                      className="min-w-[44px] min-h-[44px] rounded-lg bg-white border border-slate-200 text-slate-800 font-bold flex items-center justify-center hover:bg-amber-50 hover:border-amber-300 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all active:scale-95 shadow-2xs"
+                      aria-label="Decrease interval"
+                    >
+                      <Minus size={16} />
+                    </button>
+                    <span className="w-12 text-center font-mono font-extrabold text-base text-slate-900">
+                      {localRecur.interval}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleStepInterval(1)}
+                      disabled={localRecur.interval >= 99}
+                      className="min-w-[44px] min-h-[44px] rounded-lg bg-white border border-slate-200 text-slate-800 font-bold flex items-center justify-center hover:bg-amber-50 hover:border-amber-300 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all active:scale-95 shadow-2xs"
+                      aria-label="Increase interval"
+                    >
+                      <Plus size={16} />
+                    </button>
+                  </div>
+
+                  {/* Frequency Unit Selector */}
+                  <div className="grid grid-cols-4 gap-1 flex-1">
+                    {(['daily', 'weekly', 'monthly', 'yearly'] as const).map((unit) => (
+                      <button
+                        key={unit}
+                        type="button"
+                        onClick={() => handleSelectPresetFrequency(unit, localRecur.interval)}
+                        className={`py-2 px-1 rounded-lg text-2xs font-bold capitalize transition-all border text-center cursor-pointer ${
+                          localRecur.freq === unit
+                            ? 'bg-slate-900 border-slate-900 text-white shadow-2xs'
+                            : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-white'
+                        }`}
+                      >
+                        {unit === 'daily' ? 'Days' : unit === 'weekly' ? 'Weeks' : unit === 'monthly' ? 'Months' : 'Years'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Day of Week Selector for Weekly */}
+              {localRecur.freq === 'weekly' && (
+                <div className="bg-white border border-slate-200 rounded-xl p-2.5 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+                      Repeat on Days
+                    </span>
+                    {/* Quick Day Presets */}
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => commitRecurrenceChange({ ...localRecur, byDay: [1, 2, 3, 4, 5] })}
+                        className="text-2xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 px-2 py-0.5 rounded border border-amber-200 cursor-pointer transition-colors"
+                      >
+                        Weekdays
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => commitRecurrenceChange({ ...localRecur, byDay: [0, 6] })}
+                        className="text-2xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 px-2 py-0.5 rounded border border-amber-200 cursor-pointer transition-colors"
+                      >
+                        Weekends
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="recur-days-row">
+                    {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((dayInitial, idx) => {
+                      const isSelected = localRecur.byDay.includes(idx)
+                      return (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => handleToggleDay(idx)}
+                          className={`recur-day-circle-btn ${isSelected ? 'active' : ''}`}
+                          aria-label={`Toggle ${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][idx]}`}
+                        >
+                          <span>{dayInitial}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* End Condition Box */}
+              <div className="bg-white border border-slate-200 rounded-xl p-2.5 space-y-2">
+                <div className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+                  End Condition
+                </div>
+
+                <div className="recur-end-tabs-grid">
+                  <button
+                    type="button"
+                    onClick={() => handleSetEndType('never')}
+                    className={`recur-end-tab-btn ${localRecur.endType === 'never' ? 'active' : ''}`}
+                  >
+                    <span>Never</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSetEndType('date')}
+                    className={`recur-end-tab-btn ${localRecur.endType === 'date' ? 'active' : ''}`}
+                  >
+                    <span>On Date</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSetEndType('count')}
+                    className={`recur-end-tab-btn ${localRecur.endType === 'count' ? 'active' : ''}`}
+                  >
+                    <span>After Count</span>
+                  </button>
+                </div>
+
+                {/* Sub-controls for On Date */}
+                {localRecur.endType === 'date' && (
+                  <div className="space-y-2 pt-1">
+                    <div className="flex items-center gap-2">
+                      <label
+                        onClick={handleOpenRecurrenceEndDatePicker}
+                        className="flex-1 text-xs font-bold text-slate-800 bg-slate-50 hover:bg-amber-50/60 px-3 py-2 rounded-lg border border-slate-200 hover:border-amber-300 cursor-pointer flex items-center justify-between transition-colors"
+                      >
+                        <input
+                          ref={recurrenceEndDateInputRef}
+                          type="date"
+                          value={localRecur.endDate || format(addDays(currentStartDate, 30), 'yyyy-MM-dd')}
+                          onChange={(e) => handleSetEndDate(e.target.value)}
+                          className="absolute opacity-0 pointer-events-none w-0 h-0"
+                          aria-label="Pick recurrence end date"
+                          tabIndex={-1}
+                        />
+                        <span className="flex items-center gap-1.5">
+                          <Calendar size={13} className="text-amber-700" />
+                          <span>
+                            {localRecur.endDate
+                              ? format(new Date(localRecur.endDate + 'T12:00:00'), 'EEE, MMM d, yyyy')
+                              : 'Select End Date'}
+                          </span>
+                        </span>
+                        <Pencil size={11} className="text-slate-400" />
+                      </label>
+                    </div>
+
+                    {/* Quick Date Presets */}
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+                      {[
+                        { label: '+1 Month', days: 30 },
+                        { label: '+3 Months', days: 90 },
+                        { label: '+6 Months', days: 180 },
+                        { label: 'End of Year', date: `${currentStartDate.getFullYear()}-12-31` },
+                      ].map((preset, idx) => {
+                        const targetDateStr = preset.date || format(addDays(currentStartDate, preset.days!), 'yyyy-MM-dd')
+                        const isPresetActive = localRecur.endDate === targetDateStr
+                        return (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => handleSetEndDate(targetDateStr)}
+                            className={`px-2 py-1 rounded-md text-2xs font-bold transition-all border whitespace-nowrap cursor-pointer ${
+                              isPresetActive
+                                ? 'bg-amber-100 border-amber-400 text-amber-900'
+                                : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-white'
+                            }`}
+                          >
+                            {preset.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Sub-controls for After Count */}
+                {localRecur.endType === 'count' && (
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-xs font-semibold text-slate-600">
+                      Total Occurrences
+                    </span>
+                    <div className="flex items-center bg-slate-50 border border-slate-200 rounded-xl p-1 gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleStepCount(-1)}
+                        disabled={(localRecur.count || 10) <= 1}
+                        className="min-w-[44px] min-h-[44px] rounded-lg bg-white border border-slate-200 text-slate-800 font-bold flex items-center justify-center hover:bg-amber-50 hover:border-amber-300 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all active:scale-95 shadow-2xs"
+                        aria-label="Decrease occurrences"
+                      >
+                        <Minus size={14} />
+                      </button>
+                      <span className="w-10 text-center font-mono font-extrabold text-sm text-slate-900">
+                        {localRecur.count || 10}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleStepCount(1)}
+                        disabled={(localRecur.count || 10) >= 999}
+                        className="min-w-[44px] min-h-[44px] rounded-lg bg-white border border-slate-200 text-slate-800 font-bold flex items-center justify-center hover:bg-amber-50 hover:border-amber-300 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all active:scale-95 shadow-2xs"
+                        aria-label="Increase occurrences"
+                      >
+                        <Plus size={14} />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

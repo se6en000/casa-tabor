@@ -1,10 +1,11 @@
 /**
  * GoogleServicesPage
  *
- * High-density, zero-clutter Google Services management.
+ * High-density, touch-optimized Google Services & Calendar management.
+ * - Complies with kiosk-ux-refactor design system (>=48px touch targets, zero raw emojis, fluid rem scaling)
+ * - Interactive Google Calendar target selector (supports dedicated 'Casa Tabor' calendar)
  * - Single universal "Sync all services" header action
  * - Compact connected account cards with inline status and Switch toggle
- * - Clean, space-efficient list for unconnected family members with modal setup
  * - Safe confirmation dialog on disconnect
  */
 
@@ -13,18 +14,20 @@ import { useSearchParams } from 'react-router-dom'
 import {
   Calendar, Mail, Check,
   RefreshCw, Unlink, AlertCircle, Layers,
+  ChevronRight, ShieldCheck,
 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Alert, Button, Chip, ConfirmationDialog, Modal,
   Switch, Checkbox,
 } from '../components/ui'
-import { SettingsPageHeader, RecurrenceOperationsCard } from '../components/settings'
+import { SettingsPageHeader } from '../components/settings'
 import { formatDistanceToNow } from 'date-fns'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
 import type { FamilyMember } from '../types'
 import { FALLBACK_PROFILE_COLOR } from '../design-system/memberColors'
+import { useGoogleCalendarList, useSelectGoogleCalendar } from '../hooks/useCalendarConnections'
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -42,6 +45,7 @@ interface GoogleStatus {
   is_enabled: boolean | null
   health_status: 'connected' | 'healthy' | 'degraded' | 'reauthorization_required' | 'disabled' | null
   reauthorization_required: boolean
+  read_calendar_ids?: string[]
   gmail_last_scan_attempt_at: string | null
   gmail_last_scan_success_at: string | null
   gmail_last_scan_error: string | null
@@ -94,6 +98,7 @@ export default function GoogleServicesPage() {
   const [syncResult, setSyncResult] = useState<{ tone: 'success' | 'danger'; title: string; message?: string } | null>(null)
   const [memberToDisconnect, setMemberToDisconnect] = useState<MemberWithStatus | null>(null)
   const [connectingMember, setConnectingMember] = useState<MemberWithStatus | null>(null)
+  const [memberForCalendarPicker, setMemberForCalendarPicker] = useState<MemberWithStatus | null>(null)
   const [connectWithGmail, setConnectWithGmail] = useState(true)
   const qc = useQueryClient()
 
@@ -270,7 +275,7 @@ export default function GoogleServicesPage() {
   }, [members])
 
   return (
-    <>
+    <div className="w-full max-w-4xl mx-auto space-y-6 px-1 sm:px-4 py-2">
       <SettingsPageHeader
         title="Google Services"
         description="Connect family Google accounts for calendar sync and Gmail event imports."
@@ -278,10 +283,11 @@ export default function GoogleServicesPage() {
           connectedMembers.length > 0 ? (
             <Button
               variant="subtle"
-              size="sm"
+              size="md"
               onClick={handleSyncAll}
               disabled={isSyncingAll}
-              leadingIcon={<RefreshCw size={14} className={isSyncingAll ? 'animate-spin' : ''} />}
+              className="min-h-[44px] sm:min-h-[48px] px-4 font-semibold text-body-sm"
+              leadingIcon={<RefreshCw size={15} className={isSyncingAll ? 'animate-spin' : ''} />}
             >
               {isSyncingAll ? 'Syncing all…' : 'Sync all services'}
             </Button>
@@ -292,19 +298,19 @@ export default function GoogleServicesPage() {
       {/* Status feedback alerts */}
       {connectedParam && (
         <Alert
-          className="mt-6"
+          className="mt-4"
           tone="success"
           title={gmailParam ? 'Calendar sync and Gmail scan are active' : 'Calendar sync is active'}
         />
       )}
       {errorParam && (
-        <Alert className="mt-6" tone="danger" title="Google connection failed">
+        <Alert className="mt-4" tone="danger" title="Google connection failed">
           {errorParam.replace(/_/g, ' ')}
         </Alert>
       )}
       {syncResult && (
         <Alert
-          className="mt-6"
+          className="mt-4"
           tone={syncResult.tone}
           title={syncResult.title}
         >
@@ -312,40 +318,45 @@ export default function GoogleServicesPage() {
         </Alert>
       )}
 
-      {/* Overview status strip (compact, zero duplicate buttons) */}
+      {/* Overview status strip */}
       {!isLoading && members.length > 0 && connectedMembers.length > 0 && (
-        <div className="mt-6 flex items-center gap-3 rounded-card border border-casa-border bg-casa-surface/60 px-4 py-3 shadow-card">
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-casa-bg text-casa-navy">
-            <Layers size={16} />
+        <div className="flex items-center gap-3 rounded-card border border-casa-border bg-casa-surface/80 p-4 shadow-card">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-casa-bg text-casa-navy">
+            <Layers size={18} />
           </div>
           <div className="min-w-0 flex-1 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-body-sm font-semibold text-casa-navy">
-              {connectedMembers.length} of {members.length} accounts connected
-            </p>
-            <p className="text-caption text-casa-muted">
-              {gmailActiveCount} active inbox {gmailActiveCount === 1 ? 'monitor' : 'monitors'} ·{' '}
-              {latestSyncDate ? `Last sync ${formatDistanceToNow(latestSyncDate)} ago` : 'Ready to sync'}
-            </p>
+            <div>
+              <p className="text-body font-semibold text-casa-navy">
+                {connectedMembers.length} of {members.length} accounts connected
+              </p>
+              <p className="text-caption text-casa-muted mt-0.5">
+                {gmailActiveCount} active inbox {gmailActiveCount === 1 ? 'monitor' : 'monitors'} ·{' '}
+                {latestSyncDate ? `Last sync ${formatDistanceToNow(latestSyncDate)} ago` : 'Ready to sync'}
+              </p>
+            </div>
           </div>
         </div>
       )}
 
       {isLoading ? (
-        <p className="mt-6 text-body-sm text-casa-muted">Loading…</p>
+        <div className="py-12 text-center text-body-sm text-casa-muted flex items-center justify-center gap-2">
+          <RefreshCw size={16} className="animate-spin" />
+          <span>Loading Google Services…</span>
+        </div>
       ) : members.length === 0 ? (
-        <p className="mt-6 text-body-sm text-casa-muted">No family members found.</p>
+        <p className="text-body-sm text-casa-muted">No family members found.</p>
       ) : (
-        <div className="mt-6 space-y-6">
+        <div className="space-y-6">
           {/* ── Section 1: Connected Accounts ── */}
           {connectedMembers.length > 0 && (
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h2 className="font-semibold text-body-sm text-casa-navy uppercase tracking-wide">
+              <div className="flex items-center justify-between px-1">
+                <h2 className="font-semibold text-caption text-casa-muted uppercase tracking-wider">
                   Connected Accounts ({connectedMembers.length})
                 </h2>
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {connectedMembers.map((member) => (
                   <ConnectedMemberCard
                     key={member.id}
@@ -353,6 +364,7 @@ export default function GoogleServicesPage() {
                     onToggleGmail={(enabled) => toggleGmail.mutate({ memberId: member.id, enabled })}
                     onReconnect={() => connectGoogle.mutate({ memberId: member.id, includeGmail: Boolean(member.status?.gmail_scan_enabled) })}
                     onRequestDisconnect={() => setMemberToDisconnect(member)}
+                    onOpenCalendarPicker={() => setMemberForCalendarPicker(member)}
                     isBusy={
                       (disconnect.isPending && disconnect.variables === member.id) ||
                       (toggleGmail.isPending && (toggleGmail.variables as { memberId: string })?.memberId === member.id) ||
@@ -368,8 +380,8 @@ export default function GoogleServicesPage() {
           {/* ── Section 2: Unconnected Family Members ── */}
           {unconnectedMembers.length > 0 && (
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h2 className="font-semibold text-body-sm text-casa-navy uppercase tracking-wide">
+              <div className="flex items-center justify-between px-1">
+                <h2 className="font-semibold text-caption text-casa-muted uppercase tracking-wider">
                   Available Members ({unconnectedMembers.length} not connected)
                 </h2>
               </div>
@@ -378,24 +390,25 @@ export default function GoogleServicesPage() {
                 {unconnectedMembers.map((member) => (
                   <div
                     key={member.id}
-                    className="flex items-center justify-between gap-3 p-3.5 sm:px-4"
+                    className="flex items-center justify-between gap-3 p-4"
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       <div
-                        className="flex size-8 shrink-0 items-center justify-center rounded-full font-semibold text-caption text-white"
+                        className="flex size-10 shrink-0 items-center justify-center rounded-full font-bold text-body-sm text-white"
                         style={{ backgroundColor: member.color_hex ?? FALLBACK_PROFILE_COLOR }}
                       >
                         {member.name.charAt(0).toUpperCase()}
                       </div>
                       <div className="min-w-0">
-                        <p className="font-semibold text-body-sm text-casa-navy leading-none truncate">{member.name}</p>
-                        <p className="mt-1 text-caption text-casa-muted">Not connected</p>
+                        <p className="font-semibold text-body text-casa-navy leading-none truncate">{member.name}</p>
+                        <p className="mt-1 text-caption text-casa-muted">Google account not connected</p>
                       </div>
                     </div>
 
                     <Button
                       variant="secondary"
-                      size="sm"
+                      size="md"
+                      className="min-h-[44px] sm:min-h-[48px] px-4 font-medium"
                       onClick={() => {
                         setConnectingMember(member)
                         setConnectWithGmail(true)
@@ -410,10 +423,21 @@ export default function GoogleServicesPage() {
               </div>
             </div>
           )}
-
-          {/* ── Recurrence & Synchronization Engine Health ── */}
-          <RecurrenceOperationsCard />
         </div>
+      )}
+
+      {/* ── Target Calendar Selector Modal (1-click calendar picker) ── */}
+      {memberForCalendarPicker && (
+        <CalendarSelectorModal
+          member={memberForCalendarPicker}
+          onClose={() => setMemberForCalendarPicker(null)}
+          onRefetchParent={refetch}
+          onReconnect={() => {
+            const m = memberForCalendarPicker
+            setMemberForCalendarPicker(null)
+            setConnectingMember(m)
+          }}
+        />
       )}
 
       {/* ── Connect Account Modal (Keeps page compact) ── */}
@@ -424,16 +448,16 @@ export default function GoogleServicesPage() {
           title={`Connect ${connectingMember.name}'s Google Account`}
         >
           <div className="space-y-4 pt-2">
-            <p className="text-body-sm text-casa-muted">
-              Link Google Calendar and optionally enable Gmail event detection.
+            <p className="text-body-sm text-casa-muted leading-relaxed">
+              Link Google Calendar and optionally enable Gmail event detection. Casa will automatically discover and link to your dedicated <strong>Casa Tabor</strong> calendar if one exists in your account.
             </p>
-            <div className="space-y-2.5 rounded-xl border border-casa-border/60 bg-casa-bg p-3.5">
+            <div className="space-y-3 rounded-card border border-casa-border/60 bg-casa-bg p-4">
               <div className="flex items-center gap-2.5 opacity-90">
-                <div className="flex size-4 shrink-0 items-center justify-center rounded border-2 border-casa-navy bg-casa-navy">
-                  <Check size={10} className="text-white" />
+                <div className="flex size-5 shrink-0 items-center justify-center rounded border-2 border-casa-navy bg-casa-navy">
+                  <Check size={12} className="text-white" />
                 </div>
                 <span className="font-semibold text-body-sm text-casa-navy">Google Calendar Sync</span>
-                <span className="rounded-full bg-casa-divider px-1.5 py-0.5 text-caption text-casa-muted">Required</span>
+                <span className="rounded-full bg-casa-divider px-2 py-0.5 text-caption font-medium text-casa-muted">Required</span>
               </div>
 
               <Checkbox
@@ -447,14 +471,16 @@ export default function GoogleServicesPage() {
             <div className="flex justify-end gap-2 pt-2">
               <Button
                 variant="secondary"
-                size="sm"
+                size="md"
+                className="min-h-[44px] sm:min-h-[48px] px-4"
                 onClick={() => setConnectingMember(null)}
               >
                 Cancel
               </Button>
               <Button
                 variant="strong"
-                size="sm"
+                size="md"
+                className="min-h-[44px] sm:min-h-[48px] px-5 font-semibold"
                 onClick={() => {
                   const memberId = connectingMember.id
                   setConnectingMember(null)
@@ -483,7 +509,7 @@ export default function GoogleServicesPage() {
           loading={disconnect.isPending}
         />
       )}
-    </>
+    </div>
   )
 }
 
@@ -494,12 +520,14 @@ function ConnectedMemberCard({
   onToggleGmail,
   onReconnect,
   onRequestDisconnect,
+  onOpenCalendarPicker,
   isBusy,
 }: {
   member: MemberWithStatus
   onToggleGmail: (enabled: boolean) => void
   onReconnect: () => void
   onRequestDisconnect: () => void
+  onOpenCalendarPicker: () => void
   isBusy: boolean
 }) {
   const s = member.status!
@@ -507,33 +535,35 @@ function ConnectedMemberCard({
   const gmailActive = Boolean(s.gmail_scan_enabled)
   const reauthRequired = Boolean(s.reauthorization_required)
 
+  const isDedicatedCasaCalendar = Boolean(s.calendar_id && s.calendar_id !== s.google_email)
+
   return (
     <div
       className={cn(
-        'rounded-card border bg-casa-surface p-4 shadow-card transition-all',
+        'rounded-card border bg-casa-surface p-4 sm:p-5 shadow-card transition-all space-y-4',
         reauthRequired ? 'border-casa-gold/60 ring-1 ring-casa-gold/30' : 'border-casa-border',
       )}
     >
       {/* ── Top Header Row ── */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         {/* Identity */}
-        <div className="flex min-w-0 items-center gap-3">
+        <div className="flex min-w-0 items-center gap-3.5">
           <div
-            className="flex size-9 shrink-0 items-center justify-center rounded-full font-semibold text-body-sm text-white"
+            className="flex size-11 shrink-0 items-center justify-center rounded-full font-bold text-body text-white shadow-sm"
             style={{ backgroundColor: member.color_hex ?? FALLBACK_PROFILE_COLOR }}
           >
             {member.name.charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="font-semibold text-body-sm text-casa-navy leading-none">{member.name}</span>
+              <span className="font-bold text-body text-casa-navy leading-none">{member.name}</span>
               {s.access_mode === 'writable' ? (
                 <Chip tone="accent">Casa write target</Chip>
               ) : (
                 <Chip tone="neutral">Read-only</Chip>
               )}
             </div>
-            <p className="mt-1 truncate text-caption text-casa-muted">{s.google_email}</p>
+            <p className="mt-1 truncate text-body-sm text-casa-muted">{s.google_email}</p>
           </div>
         </div>
 
@@ -542,7 +572,8 @@ function ConnectedMemberCard({
           {reauthRequired ? (
             <Button
               variant="strong"
-              size="sm"
+              size="md"
+              className="min-h-[44px] sm:min-h-[48px] px-4 font-semibold"
               onClick={onReconnect}
               disabled={isBusy}
               leadingIcon={<GoogleIcon />}
@@ -552,12 +583,12 @@ function ConnectedMemberCard({
           ) : (
             <Button
               variant="ghost"
-              size="sm"
+              size="md"
               onClick={onRequestDisconnect}
               disabled={isBusy}
-              className="text-casa-error hover:bg-casa-error/10 text-caption"
+              className="min-h-[44px] sm:min-h-[48px] text-casa-error hover:bg-casa-error/10 text-body-sm px-3"
               title="Disconnect Google account"
-              leadingIcon={<Unlink size={13} />}
+              leadingIcon={<Unlink size={15} />}
             >
               Disconnect
             </Button>
@@ -566,61 +597,388 @@ function ConnectedMemberCard({
       </div>
 
       {reauthRequired && (
-        <div className="mt-3 flex items-center gap-2 rounded-lg bg-casa-gold/10 p-2.5 text-caption text-casa-navy">
-          <AlertCircle size={15} className="shrink-0 text-casa-gold" />
+        <div className="flex items-center gap-2.5 rounded-xl bg-casa-gold/10 p-3 text-body-sm text-casa-navy">
+          <AlertCircle size={17} className="shrink-0 text-casa-gold" />
           <span>Google session expired. Reconnect to resume calendar sync and Gmail scan.</span>
         </div>
       )}
 
-      {/* ── Inline Services Bar (Side-by-side on tablet/desktop) ── */}
-      <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 border-t border-casa-border/50 pt-3">
-        {/* Calendar Sync */}
-        <div className="flex items-center justify-between rounded-lg border border-casa-border/40 bg-casa-bg px-3 py-2">
-          <div className="flex min-w-0 items-center gap-2">
-            <Calendar size={15} className="shrink-0 text-casa-navy" />
-            <span className="font-medium text-body-sm text-casa-navy truncate">Calendar Sync</span>
+      {/* ── Inline Services Bar (Touch-friendly cards) ── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 border-t border-casa-border/50 pt-3.5">
+        {/* Target Calendar Selector Trigger */}
+        <div
+          role="button"
+          tabIndex={isBusy || reauthRequired ? -1 : 0}
+          onClick={() => !isBusy && !reauthRequired && onOpenCalendarPicker()}
+          onKeyDown={(e) => {
+            if (!isBusy && !reauthRequired && (e.key === 'Enter' || e.key === ' ')) {
+              e.preventDefault()
+              onOpenCalendarPicker()
+            }
+          }}
+          className={cn(
+            'flex items-center justify-between rounded-xl border p-3.5 text-left transition-all cursor-pointer select-none',
+            'min-h-[48px] sm:min-h-[52px]',
+            'bg-casa-bg hover:border-casa-navy/40 hover:bg-casa-surface/80 active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-casa-navy/20',
+            (isBusy || reauthRequired) && 'opacity-60 pointer-events-none',
+            isDedicatedCasaCalendar ? 'border-casa-navy/30' : 'border-casa-border/60',
+          )}
+        >
+          <div className="flex min-w-0 items-center gap-3">
+            <div className={cn(
+              'flex size-9 shrink-0 items-center justify-center rounded-lg',
+              isDedicatedCasaCalendar ? 'bg-casa-navy text-white' : 'bg-casa-surface text-casa-navy border border-casa-border',
+            )}>
+              <Calendar size={17} />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-body-sm text-casa-navy truncate">
+                  {isDedicatedCasaCalendar ? 'Casa Tabor (Primary Write)' : 'Primary Calendar'}
+                </span>
+                {isDedicatedCasaCalendar ? (
+                  <span className="rounded-full bg-emerald-500/10 text-emerald-700 px-2 py-0.5 text-caption font-semibold flex items-center gap-1">
+                    <ShieldCheck size={11} /> Dedicated
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-casa-divider px-1.5 py-0.5 text-caption text-casa-muted">Personal</span>
+                )}
+              </div>
+              <p className="text-caption text-casa-muted truncate mt-0.5">
+                {s.read_calendar_ids && s.read_calendar_ids.length > 0
+                  ? `+ ${s.read_calendar_ids.length} imported calendar${s.read_calendar_ids.length > 1 ? 's' : ''} (read-only)`
+                  : calendarActive
+                    ? s.last_sync_at
+                      ? `Synced ${formatDistanceToNow(new Date(s.last_sync_at))} ago`
+                      : 'Sync active'
+                    : 'Sync paused'} · Tap to configure
+              </p>
+            </div>
           </div>
-          <span className="flex shrink-0 items-center gap-1.5 text-caption text-casa-muted">
-            <span
-              className={cn(
-                'size-1.5 rounded-full',
-                calendarActive ? 'bg-emerald-500' : 'bg-casa-muted',
-              )}
-            />
-            {calendarActive
-              ? s.last_sync_at
-                ? `${formatDistanceToNow(new Date(s.last_sync_at))} ago`
-                : 'Active'
-              : 'Paused'}
-          </span>
+          <ChevronRight size={18} className="shrink-0 text-casa-muted ml-2" />
         </div>
 
-        {/* Gmail Inbox Scan */}
-        <div className="flex items-center justify-between rounded-lg border border-casa-border/40 bg-casa-bg px-3 py-2">
-          <div className="flex min-w-0 items-center gap-2">
-            <Mail size={15} className="shrink-0 text-casa-navy" />
-            <span className="font-medium text-body-sm text-casa-navy truncate">Gmail Scan</span>
+        {/* Gmail Inbox Scan Card */}
+        <div className="flex items-center justify-between rounded-xl border border-casa-border/60 bg-casa-bg p-3.5 min-h-[48px] sm:min-h-[52px]">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-casa-surface text-casa-navy border border-casa-border">
+              <Mail size={17} />
+            </div>
+            <div className="min-w-0">
+              <span className="font-semibold text-body-sm text-casa-navy truncate block">Gmail Scan</span>
+              <span className="flex items-center gap-1.5 text-caption text-casa-muted mt-0.5">
+                {gmailActive && <span className="size-2 rounded-full bg-emerald-500" />}
+                {gmailActive
+                  ? s.gmail_last_scan_success_at
+                    ? `Scanned ${formatDistanceToNow(new Date(s.gmail_last_scan_success_at))} ago`
+                    : 'Active monitoring'
+                  : 'Monitoring off'}
+              </span>
+            </div>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <span className="flex items-center gap-1.5 text-caption text-casa-muted">
-              {gmailActive && <span className="size-1.5 rounded-full bg-emerald-500" />}
-              {gmailActive
-                ? s.gmail_last_scan_success_at
-                  ? `${formatDistanceToNow(new Date(s.gmail_last_scan_success_at))} ago`
-                  : 'Active'
-                : 'Off'}
-            </span>
-            <Switch
-              label=""
-              checked={gmailActive}
-              onCheckedChange={(checked) => onToggleGmail(checked)}
-              disabled={isBusy || reauthRequired}
-              aria-label={`Toggle Gmail scanning for ${member.name}`}
-            />
-          </div>
+          <Switch
+            label=""
+            checked={gmailActive}
+            onCheckedChange={(checked) => onToggleGmail(checked)}
+            disabled={isBusy || reauthRequired}
+            aria-label={`Toggle Gmail scanning for ${member.name}`}
+          />
         </div>
       </div>
     </div>
+  )
+}
+
+// ── Calendar Selector Modal (2-Tier Multi-Calendar Ingestion) ───────
+
+function CalendarSelectorModal({
+  member,
+  onClose,
+  onRefetchParent,
+  onReconnect,
+}: {
+  member: MemberWithStatus
+  onClose: () => void
+  onRefetchParent: () => void
+  onReconnect: () => void
+}) {
+  const { data, isLoading, isError, error, refetch } = useGoogleCalendarList(member.id, true)
+  const selectMutation = useSelectGoogleCalendar()
+
+  const [writeCalId, setWriteCalId] = useState<string>('')
+  const [readCalIds, setReadCalIds] = useState<string[]>([])
+  const [hasInitialized, setHasInitialized] = useState(false)
+
+  useEffect(() => {
+    if (data?.ok && data.calendars && !hasInitialized) {
+      const initialWrite =
+        data.current_calendar_id ||
+        member.status?.calendar_id ||
+        data.calendars.find((c) => c.summary.trim().toLowerCase() === 'casa tabor')?.id ||
+        data.calendars.find((c) => c.primary)?.id ||
+        data.calendars[0]?.id ||
+        ''
+      setWriteCalId(initialWrite)
+      setReadCalIds(data.read_calendar_ids || member.status?.read_calendar_ids || [])
+      setHasInitialized(true)
+    }
+  }, [data, member.status, hasInitialized])
+
+  function toggleReadCalendar(id: string) {
+    setReadCalIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    )
+  }
+
+  async function handleSave() {
+    if (!writeCalId) return
+    const readMetadata = (data?.calendars ?? [])
+      .filter((c) => readCalIds.includes(c.id) && c.id !== writeCalId)
+      .map((c) => ({
+        id: c.id,
+        summary: c.summary,
+        backgroundColor: c.backgroundColor || undefined,
+      }))
+
+    await selectMutation.mutateAsync({
+      familyMemberId: member.id,
+      writeCalendarId: writeCalId,
+      readCalendarIds: readCalIds.filter((id) => id !== writeCalId),
+      readCalendarMetadata: readMetadata,
+    })
+    onRefetchParent()
+    onClose()
+  }
+
+  const isReauth =
+    data?.reauth_required || (error instanceof Error && error.message.includes('expired'))
+
+  const calendars = data?.calendars ?? []
+  const writableCalendars = calendars.filter((c) => c.can_write !== false)
+  const otherCalendars = calendars.filter((c) => c.id !== writeCalId)
+
+  return (
+    <Modal open={true} onClose={onClose} title="Configure Google Calendars">
+      <div className="space-y-5 pt-2">
+        <p className="text-body-sm text-casa-muted leading-relaxed">
+          Configure how Casa Tabor connects with <strong>{member.name}</strong>’s Google Calendar account.
+        </p>
+
+        {isLoading ? (
+          <div className="py-12 text-center text-body-sm text-casa-muted flex items-center justify-center gap-2">
+            <RefreshCw size={18} className="animate-spin text-casa-navy" />
+            <span>Discovering Google Calendars…</span>
+          </div>
+        ) : isError || data?.ok === false ? (
+          <div className="space-y-3">
+            <Alert
+              tone={isReauth ? 'warning' : 'danger'}
+              title={isReauth ? 'Re-authorization Required' : 'Could not list Google Calendars'}
+            >
+              {data?.error || (error instanceof Error ? error.message : 'Please check your connection and try again.')}
+            </Alert>
+            <div className="flex justify-end gap-2">
+              <Button variant="secondary" size="md" onClick={() => refetch()} leadingIcon={<RefreshCw size={14} />}>
+                Retry
+              </Button>
+              <Button
+                variant="strong"
+                size="md"
+                className="min-h-[44px] sm:min-h-[48px] px-4 font-semibold"
+                onClick={onReconnect}
+                leadingIcon={<GoogleIcon />}
+              >
+                Reconnect Account
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-5 max-h-[60vh] overflow-y-auto pr-1">
+            {/* ── Tier 1: Primary Write Target ── */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="flex size-5 shrink-0 items-center justify-center rounded bg-casa-navy text-white text-caption font-bold">
+                  1
+                </div>
+                <span className="font-semibold text-body-sm text-casa-navy">
+                  Primary Write Calendar
+                </span>
+                <span className="rounded-full bg-casa-gold/15 text-casa-gold px-2 py-0.5 text-caption font-semibold">
+                  Where Casa saves events
+                </span>
+              </div>
+              <p className="text-caption text-casa-muted leading-relaxed pl-7">
+                All events, routines, and chores created in Casa push <strong>strictly</strong> to this calendar. Your other personal calendars remain untouched.
+              </p>
+
+              <div className="space-y-2 pl-7 pt-1">
+                {writableCalendars.map((cal) => {
+                  const isSelected = cal.id === writeCalId
+                  const isCasaTabor = cal.summary.trim().toLowerCase() === 'casa tabor'
+
+                  return (
+                    <div
+                      key={cal.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setWriteCalId(cal.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          setWriteCalId(cal.id)
+                        }
+                      }}
+                      className={cn(
+                        'w-full flex items-center justify-between p-3.5 rounded-xl border text-left transition-all cursor-pointer select-none min-h-[48px] sm:min-h-[52px]',
+                        isSelected
+                          ? 'border-casa-navy bg-casa-navy/5 ring-1 ring-casa-navy/20'
+                          : 'border-casa-border/60 bg-casa-surface hover:border-casa-navy/30 hover:bg-casa-bg',
+                      )}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div
+                          className={cn(
+                            'flex size-5 shrink-0 items-center justify-center rounded-full border',
+                            isSelected
+                              ? 'border-casa-navy bg-casa-navy text-white'
+                              : 'border-casa-border bg-casa-bg',
+                          )}
+                        >
+                          {isSelected && <Check size={12} />}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-body-sm text-casa-navy truncate">
+                              {cal.summary}
+                            </span>
+                            {isCasaTabor && (
+                              <span className="rounded-full bg-emerald-500/10 text-emerald-700 px-2 py-0.5 text-caption font-semibold flex items-center gap-1">
+                                <ShieldCheck size={11} /> Recommended
+                              </span>
+                            )}
+                            {cal.primary && (
+                              <span className="rounded-full bg-casa-divider px-1.5 py-0.5 text-caption text-casa-muted">
+                                Personal
+                              </span>
+                            )}
+                          </div>
+                          {cal.description && (
+                            <p className="text-caption text-casa-muted truncate mt-0.5">
+                              {cal.description}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* ── Tier 2: Also Import / Read From ── */}
+            {otherCalendars.length > 0 && (
+              <div className="space-y-2 pt-3 border-t border-casa-border/50">
+                <div className="flex items-center gap-2">
+                  <div className="flex size-5 shrink-0 items-center justify-center rounded bg-casa-surface border border-casa-border text-casa-navy text-caption font-bold">
+                    2
+                  </div>
+                  <span className="font-semibold text-body-sm text-casa-navy">
+                    Also Display on Kiosk (Read-Only)
+                  </span>
+                </div>
+                <p className="text-caption text-casa-muted leading-relaxed pl-7">
+                  Check any calendars below to display their activities on your smart kiosk. Casa will read these events without ever modifying them in Google.
+                </p>
+
+                <div className="space-y-2 pl-7 pt-1">
+                  {otherCalendars.map((cal) => {
+                    const isChecked = readCalIds.includes(cal.id)
+
+                    return (
+                      <div
+                        key={cal.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => toggleReadCalendar(cal.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            toggleReadCalendar(cal.id)
+                          }
+                        }}
+                        className={cn(
+                          'w-full flex items-center justify-between p-3 rounded-xl border text-left transition-all cursor-pointer select-none min-h-[48px] sm:min-h-[50px]',
+                          isChecked
+                            ? 'border-casa-border bg-casa-bg'
+                            : 'border-casa-border/40 bg-casa-surface/60 hover:bg-casa-surface',
+                        )}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div
+                            className={cn(
+                              'flex size-5 shrink-0 items-center justify-center rounded border',
+                              isChecked
+                                ? 'border-casa-navy bg-casa-navy text-white'
+                                : 'border-casa-border bg-casa-bg',
+                            )}
+                          >
+                            {isChecked && <Check size={12} />}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              {cal.backgroundColor && (
+                                <span
+                                  className="size-2.5 rounded-full shrink-0"
+                                  style={{ backgroundColor: cal.backgroundColor }}
+                                />
+                              )}
+                              <span className="font-medium text-body-sm text-casa-navy truncate">
+                                {cal.summary}
+                              </span>
+                              {cal.primary && (
+                                <span className="rounded-full bg-casa-divider px-1.5 py-0.5 text-caption text-casa-muted">
+                                  Personal
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <span className="text-caption text-casa-muted shrink-0 ml-2">
+                          {isChecked ? 'Importing' : 'Ignored'}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="flex items-center justify-between pt-3 border-t border-casa-border/50">
+          <Button
+            variant="secondary"
+            size="md"
+            className="min-h-[44px] sm:min-h-[48px] px-4"
+            onClick={onClose}
+            disabled={selectMutation.isPending}
+          >
+            Cancel
+          </Button>
+
+          <Button
+            variant="strong"
+            size="md"
+            className="min-h-[44px] sm:min-h-[48px] px-5 font-semibold"
+            onClick={handleSave}
+            disabled={selectMutation.isPending || isLoading || !writeCalId}
+            leadingIcon={selectMutation.isPending ? <RefreshCw size={14} className="animate-spin" /> : <Check size={14} />}
+          >
+            {selectMutation.isPending ? 'Saving…' : 'Save Calendar Setup'}
+          </Button>
+        </div>
+      </div>
+    </Modal>
   )
 }
 
@@ -628,7 +986,7 @@ function ConnectedMemberCard({
 
 function GoogleIcon() {
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="var(--color-casa-info)" />
       <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="var(--color-casa-success)" />
       <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="var(--color-casa-gold)" />

@@ -128,7 +128,11 @@ export default function StackedView() {
   })
 
   const events = (allEvents ?? []).filter(e =>
-    isReminder(e) || visibleMembers.length === 0 || e.members.some(m => visibleMembers.includes(m.family_member?.id ?? ''))
+    isReminder(e) ||
+    visibleMembers.length === 0 ||
+    e.members.length === 0 ||
+    e.members.some(m => visibleMembers.includes(m.family_member?.id ?? '')) ||
+    (Boolean(e.source_member_id) && visibleMembers.includes(e.source_member_id!))
   )
 
   const editEvent = editEventId ? (events.find(e => e.id === editEventId) ?? null) : null

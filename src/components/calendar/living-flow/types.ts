@@ -32,6 +32,7 @@ export interface LivingFlowState {
   primaryMemberId: string | null
   isAllDay?: boolean
   rrule?: string | null
+  recurrenceConfig?: import('../../../utils/recurrenceUtils').RecurrenceConfig
 }
 
 export interface LivingFlowProps {

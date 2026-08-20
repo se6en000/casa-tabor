@@ -85,7 +85,11 @@ export default function WeekView() {
     if (!allEvents) return []
     if (visibleMembers.length === 0) return allEvents
     return allEvents.filter((ev) =>
-      isHoliday(ev) || isReminder(ev) || ev.members?.some((m) => visibleMembers.includes(m.family_member.id)),
+      isHoliday(ev) ||
+      isReminder(ev) ||
+      ev.members?.length === 0 ||
+      ev.members?.some((m) => visibleMembers.includes(m.family_member?.id)) ||
+      (Boolean(ev.source_member_id) && visibleMembers.includes(ev.source_member_id!))
     )
   }, [allEvents, visibleMembers])
 

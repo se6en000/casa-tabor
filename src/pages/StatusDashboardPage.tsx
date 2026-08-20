@@ -36,7 +36,7 @@ import {
   SegmentedControl,
   SkeletonRow,
 } from '../components/ui'
-import { SettingsPageHeader } from '../components/settings'
+import { SettingsPageHeader, RecurrenceOperationsCard } from '../components/settings'
 
 type TrustStatus = 'verified' | 'provisional' | 'incomplete' | 'stale' | 'error'
 
@@ -1023,6 +1023,8 @@ export default function StatusDashboardPage() {
               </div>
             </DisclosureSection>
           </Card>
+
+          <RecurrenceOperationsCard />
 
           <p className="text-caption text-casa-muted text-center pb-4">
             <RefreshCw size={14} className="inline mr-1" aria-hidden="true" />

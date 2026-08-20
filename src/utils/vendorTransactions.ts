@@ -97,10 +97,6 @@ function resolveVendorName(item: PrepItem): string {
 }
 
 function deliveryDateKey(item: PrepItem): string {
-  const text = `${item.event_title ?? ''} ${item.description}`.toLowerCase()
-  if (text.includes('today') || text.includes('arriving today')) {
-    return new Date().toISOString().slice(0, 10)
-  }
   if (item.due_by) {
     return item.due_by.slice(0, 10)
   }

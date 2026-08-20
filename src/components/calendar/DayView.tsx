@@ -788,7 +788,12 @@ export default function DayView() {
   })
 
   const allEvents = (weekEvents ?? []).filter(e =>
-    isHoliday(e) || isReminder(e) || visibleMembers.length === 0 || e.members.some(m => visibleMembers.includes(m.family_member?.id ?? ''))
+    isHoliday(e) ||
+    isReminder(e) ||
+    visibleMembers.length === 0 ||
+    e.members.length === 0 ||
+    e.members.some(m => visibleMembers.includes(m.family_member?.id ?? '')) ||
+    (Boolean(e.source_member_id) && visibleMembers.includes(e.source_member_id!))
   )
 
   // Events for the currently selected day

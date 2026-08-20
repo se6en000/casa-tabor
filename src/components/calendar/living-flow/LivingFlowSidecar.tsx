@@ -51,6 +51,7 @@ export default function LivingFlowSidecar({
     setStartAndEnd,
     nudgeMinutes,
     setCategory,
+    setRecurrenceRule,
     deleteEvent,
     handleDelete,
     handleRecurringDelete,
@@ -112,7 +113,7 @@ export default function LivingFlowSidecar({
       {/* ══════ SCROLLABLE CONTENT BODY ══════ */}
       <div className="living-sidecar-body">
         
-        {/* Hero Title Block (With Inline Date/Time & Category Steppers) */}
+        {/* Hero Title Block (With Inline Date/Time, Recurrence & Category Steppers) */}
         <LivingHeroTitleCard
           title={state.title}
           category={state.category}
@@ -121,6 +122,7 @@ export default function LivingFlowSidecar({
           endDate={state.endDate}
           durationMinutes={state.durationMinutes}
           isAllDay={state.isAllDay}
+          rrule={state.rrule}
           sourceType={event?.source_type}
           rrule={state.rrule}
           onUpdateTitle={updateTitle}

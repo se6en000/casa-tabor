@@ -143,6 +143,19 @@ export function explicitReminderSubject(text) {
   return null
 }
 
+export function extractReminderMember(text, familyNames = []) {
+  const value = String(text ?? '').replace(/\s+/g, ' ').trim()
+  const match = value.match(/\bremind\s+([a-z]+)\s+to\b/i) ||
+    value.match(/\breminder\s+for\s+([a-z]+)\s+to\b/i)
+  if (!match) return null
+  const candidate = match[1].toLowerCase()
+  if (['me', 'us', 'him', 'her', 'them', 'myself', 'ourselves'].includes(candidate)) return null
+  const matchedFamily = (Array.isArray(familyNames) ? familyNames : []).find(
+    (name) => name.toLowerCase() === candidate,
+  )
+  return matchedFamily ?? (candidate.charAt(0).toUpperCase() + candidate.slice(1))
+}
+
 export function hardenExplicitReminderTurn(turn, text, options = {}) {
   if (!turn || typeof turn !== 'object') return turn
   if (isExplicitReminderCompletion(text)) return { ...turn, action: 'complete' }

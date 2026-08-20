@@ -13,6 +13,7 @@ export interface CalendarConnection {
   health_status: 'connected' | 'healthy' | 'degraded' | 'reauthorization_required' | 'disabled'
   sync_token: string | null
   recurrence_sync_token: string | null
+  read_calendar_ids?: string[]
 }
 
 export interface GoogleToken {

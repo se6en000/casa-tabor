@@ -1,10 +1,12 @@
-export function googleConnectionPolicy(googleEmail, writableTargetEmail) {
+export function googleConnectionPolicy(googleEmail, writableTargetEmail, customCalendarId) {
   const normalizedEmail = googleEmail.trim().toLowerCase()
   const normalizedTarget = writableTargetEmail.trim().toLowerCase()
   const writable = normalizedEmail === normalizedTarget
   return {
     googleEmail: normalizedEmail,
-    calendarId: normalizedEmail,
+    calendarId: (customCalendarId && typeof customCalendarId === 'string' && customCalendarId.trim())
+      ? customCalendarId.trim()
+      : normalizedEmail,
     accessMode: writable ? 'writable' : 'read_only',
     adoptionPolicy: writable ? 'automatic' : 'explicit',
   }

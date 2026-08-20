@@ -429,7 +429,28 @@ function useEventsForRange(queryKey: readonly unknown[], start: Date, end: Date)
       (event) => event.status !== 'cancelled' && !event.deleted_at && eventOverlapsRange(event, start, end)
     )
 
-    return [...filteredBaseEvents, ...newRoutineEvents].sort(
+    // Deduplicate any overlapping identical events on the exact same date/time/title
+    // (e.g. if an event has a Google-synced occurrence and a local placeholder occurrence, prefer Google)
+    const seenEventKeys = new Map<string, EventWithDetails>()
+    for (const ev of filteredBaseEvents) {
+      const cleanTitle = (ev.title || '').trim().toLowerCase()
+      const startTime = ev.start_time
+      const key = `${cleanTitle}__${startTime}`
+      
+      const existing = seenEventKeys.get(key)
+      if (!existing) {
+        seenEventKeys.set(key, ev)
+      } else {
+        // If one has a google_event_id or series_id, prefer it over the local placeholder
+        const isBetter = Boolean(ev.google_event_id || ev.series_id) && !existing.google_event_id && !existing.series_id
+        if (isBetter) {
+          seenEventKeys.set(key, ev)
+        }
+      }
+    }
+    const deduplicatedBaseEvents = Array.from(seenEventKeys.values())
+
+    return [...deduplicatedBaseEvents, ...newRoutineEvents].sort(
       (a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime(),
     )
   }, [eventsQuery.data, transportationQuery.data, routineEventsInRange])
