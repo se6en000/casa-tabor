@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Loader2, MapPin, Search, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { savedPlaceAddress, useSavedPlaces } from '../../hooks/useSavedPlaces'
+import { DEFAULT_HOUSEHOLD_COORDINATES } from '../../utils/geoDistance'
 import type { TransportationPlace } from '../../lib/eventTransportation'
 import { Button, IconButton, Input } from '../ui'
 
@@ -97,7 +98,11 @@ export default function SmartPlaceInput({
       setLoadingGoogle(true)
       setLookupError(null)
       const { data, error } = await supabase.functions.invoke('place-search', {
-        body: { query: search },
+        body: {
+          query: search,
+          lat: DEFAULT_HOUSEHOLD_COORDINATES.lat,
+          lng: DEFAULT_HOUSEHOLD_COORDINATES.lng,
+        },
       })
       if (requestId !== requestIdRef.current) return
       setLoadingGoogle(false)

@@ -26,7 +26,7 @@ test('drawer morphs one composer between voice and editable text modes', () => {
   assert.match(drawer, /phase=\{voiceDisplayPhase\}/)
   assert.match(drawer, /volume=\{speech\.volume\}/)
   assert.match(drawer, /Type instead/)
-  assert.match(drawer, /Ask Casa anything/)
+  assert.match(drawer, /Ask (Casa|Copilot) (anything|AI|about)/)
   assert.doesNotMatch(drawer, /text-transparent caret-transparent/)
   assert.match(drawer, /aria-label="Assistant message"/)
   assert.match(drawer, /onChange=\{e => handleInputChange\(e\.target\.value\)\}/)

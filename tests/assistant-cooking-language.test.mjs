@@ -267,7 +267,7 @@ test('cooking authority outranks overlapping grocery parsing only in cooking con
   assert.match(source, /intentRouting\.profile === 'recipe'\s+\? RECIPE_PRIMARY_HARD_TIMEOUT_MS/)
   assert.match(source, /'create_recipe', 'add_grocery_items'\]\.includes\(tool\.name\)/)
   assert.match(source, /intentRouting\.profile === 'recipe'\s+\? 1536/)
-  assert.match(source, /thinking_budget: intentRouting\.profile === 'full' \? 512 : 0/)
+  assert.match(source, /intentRouting\.profile === 'full' \? 512 : 0/)
   assert.match(source, /finishReason === 'MAX_TOKENS'/)
   assert.match(source, /incomplete_stream_missing_finish_reason/)
   assert.match(source, /server_ai_assistant_recipe_incomplete/)

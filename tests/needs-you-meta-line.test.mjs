@@ -5,7 +5,7 @@ import { conflictMetaLine, directorySuggestionMetaLine, prepMetaLine } from '../
 
 test('prepMetaLine shows a plain "Today · h:mm a" line when due_by is later today', () => {
   const dueBy = new Date()
-  dueBy.setHours(dueBy.getHours() + 1, 0, 0, 0)
+  dueBy.setHours(12, 0, 0, 0)
   const line = prepMetaLine({ source_type: 'reminder_manual', due_by: dueBy.toISOString() })
   assert.match(line.text, /^Today · \d{1,2}:\d{2} (AM|PM)$/)
 })

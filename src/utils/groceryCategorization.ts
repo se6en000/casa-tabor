@@ -34,16 +34,21 @@ const TOKEN_CORRECTIONS: Record<string, string> = {
   applesause: 'applesauce',
   hommus: 'hummus',
   almondmilk: 'almondmilk',
+  hamberburger: 'hamburger',
+  hamberburgers: 'hamburgers',
+  hamberger: 'hamburger',
+  hambergers: 'hamburgers',
+  hotdogs: 'hot dogs',
 }
 
 const CATEGORY_PHRASES: Record<Exclude<GroceryCategoryKey, 'other'>, string[]> = {
   produce: ['blue berries', 'straw berries', 'rasp berries', 'black berries', 'water melon', 'spring mix', 'baby spinach', 'fresh basil', 'fresh cilantro', 'fresh parsley', 'ginger root', 'romaine hearts', 'brussels sprouts', 'fresh asparagus', 'green cabbage', 'butternut squash', 'yellow squash'],
   dairy: ['half and half', 'half half', 'heavy cream', 'cottage cheese', 'sour cream', 'almond milk', 'oat milk'],
-  meat: ['ground beef', 'ground turkey', 'chicken breast', 'salmon fillet', 'rib eye', 'ribeye'],
+  meat: ['ground beef', 'ground turkey', 'ground chicken', 'ground pork', 'chicken breast', 'salmon fillet', 'rib eye', 'ribeye', 'hot dogs', 'hot dog', 'hamburger patties'],
   bakery: ['sourdough bread', 'hamburger buns', 'hot dog buns', 'garlic bread'],
   frozen: ['frozen pizza', 'frozen fries', 'frozen berries', 'frozen cauliflower', 'riced cauliflower', 'dino nuggets', 'chicken nuggets'],
   pantry: ['olive oil', 'peanut butter', 'beef ramen', 'tuna canned', 'apple sauce', 'applesauce pouches', 'dried oregano', 'dried basil', 'italian seasoning', 'firm tofu', 'extra firm tofu', 'original hummus', 'mild salsa'],
-  beverages: ['sparkling water', 'coffee pods', 'espresso coffee', 'nespresso pods', 'coca cola', 'diet coke', 'coke zero', 'sprite soda', 'dr pepper'],
+  beverages: ['apple juice', 'orange juice', 'grapefruit juice', 'cranberry juice', 'lemon juice', 'lime juice', 'tomato juice', 'grape juice', 'sparkling water', 'cold brew', 'iced coffee', 'green tea', 'black tea', 'coconut water', 'coffee pods', 'espresso coffee', 'nespresso pods', 'coca cola', 'diet coke', 'coke zero', 'sprite soda', 'dr pepper'],
   snacks: ['potato chips', 'tortilla chips', 'granola bars', 'protein bar', 'fruit snacks', 'trail mix'],
   deli: ['rotisserie chicken', 'lunch meat', 'deli turkey', 'prepared salad', 'mac and cheese prepared', 'genoa salami', 'cooked ham'],
   household: ['paper towels', 'toilet paper', 'dish soap', 'trash bags', 'laundry detergent'],
@@ -63,7 +68,7 @@ const CATEGORY_TOKENS: Record<Exclude<GroceryCategoryKey, 'other'>, Set<string>>
     'zucchini', 'potato', 'potatoes', 'mushroom', 'mushrooms', 'herb', 'herbs', 'basil', 'cilantro', 'parsley', 'dill', 'chive', 'chives', 'mint',
   ]),
   dairy: new Set(['milk', 'cheese', 'butter', 'cream', 'yogurt', 'yoghurt', 'egg', 'eggs', 'mozzarella', 'cheddar', 'parmesan', 'cottage', 'ricotta', 'gouda', 'buttermilk', 'creamer', 'almond', 'oatmilk', 'soymilk']),
-  meat: new Set(['chicken', 'beef', 'steak', 'pork', 'fish', 'salmon', 'tuna', 'shrimp', 'turkey', 'bacon', 'sausage', 'lamb', 'rib', 'ribeye', 'mahi', 'cod', 'tilapia', 'halibut', 'trout']),
+  meat: new Set(['chicken', 'beef', 'steak', 'pork', 'fish', 'salmon', 'tuna', 'shrimp', 'turkey', 'bacon', 'sausage', 'lamb', 'rib', 'ribeye', 'mahi', 'cod', 'tilapia', 'halibut', 'trout', 'hamburger', 'hamburgers', 'burger', 'burgers', 'hotdog', 'hotdogs', 'frank', 'franks', 'bratwurst', 'patty', 'patties']),
   bakery: new Set(['bread', 'bagel', 'bagels', 'muffin', 'muffins', 'croissant', 'bun', 'buns', 'roll', 'rolls', 'tortilla', 'tortillas', 'pita']),
   frozen: new Set(['frozen', 'ice', 'pizza', 'fries', 'waffle', 'waffles', 'popsicle', 'hashbrown', 'slider', 'ravioli', 'meatball', 'nugget', 'nuggets', 'dino']),
   pantry: new Set(['pasta', 'rice', 'cereal', 'oat', 'oats', 'flour', 'sugar', 'salt', 'oil', 'vinegar', 'sauce', 'soup', 'broth', 'stock', 'bean', 'beans', 'lentil', 'lentils', 'spice', 'seasoning', 'ketchup', 'mustard', 'mayo', 'mayonnaise', 'ramen', 'applesauce', 'oregano', 'thyme', 'rosemary', 'tofu', 'orzo', 'quinoa', 'honey', 'olive', 'spaghetti', 'fusilli', 'penne', 'salsa', 'sweetener', 'hummus', 'hommus', 'spread', 'raisin', 'shell', 'shells', 'taco', 'pie', 'crust', 'amino', 'tempeh', 'edamame', 'rotini', 'saffron', 'seitan', 'chorizo', 'horseradish', 'quiche', 'ranch', 'pistachio', 'walnut']),
@@ -115,12 +120,20 @@ function hasPhraseMatch(normalizedName: string, phrase: string): boolean {
   return pattern.test(normalizedName)
 }
 
+const SORTED_CATEGORY_PHRASES: Array<{ phrase: string; category: Exclude<GroceryCategoryKey, 'other'> }> = (
+  Object.entries(CATEGORY_PHRASES) as Array<[Exclude<GroceryCategoryKey, 'other'>, string[]]>
+)
+  .flatMap(([category, phrases]) =>
+    phrases.map((phrase) => ({ phrase, category })),
+  )
+  .sort((a, b) => b.phrase.length - a.phrase.length)
+
 export function inferCategoryFromName(name: string): GroceryCategoryKey {
   const normalizedName = normalizeComparableName(name)
   if (!normalizedName) return 'other'
 
-  for (const [category, phrases] of Object.entries(CATEGORY_PHRASES) as Array<[Exclude<GroceryCategoryKey, 'other'>, string[]]>) {
-    if (phrases.some((phrase) => hasPhraseMatch(normalizedName, phrase))) return category
+  for (const { phrase, category } of SORTED_CATEGORY_PHRASES) {
+    if (hasPhraseMatch(normalizedName, phrase)) return category
   }
 
   const tokens = tokenize(name)

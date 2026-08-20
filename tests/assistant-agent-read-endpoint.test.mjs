@@ -39,7 +39,7 @@ test('active reminder completion runs before generic active-event mutation handl
 test('agent read endpoint keeps the authoritative annual event window available to search', () => {
   assert.match(endpoint, /body\.authoritative_data\.events\.slice\(0, 500\)/)
   assert.doesNotMatch(endpoint, /body\.authoritative_data\.events\.slice\(0, 100\)/)
-  assert.match(assistantEndpoint, /\['event', 'full', 'travel', 'general'\]\.includes\(intentRouting\.profile\)/)
+  assert.match(assistantEndpoint, /\['event', 'full', 'travel', 'general'[\s\S]*?\]\.includes\(intentRouting\.profile\)/)
 })
 
 test('agent read endpoint cannot invoke the write executor', () => {

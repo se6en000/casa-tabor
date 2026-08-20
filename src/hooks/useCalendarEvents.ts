@@ -2,7 +2,7 @@
 import { useEffect, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
-import { startOfWeek, endOfWeek, addDays, startOfDay, startOfMonth, endOfMonth } from 'date-fns'
+import { startOfWeek, endOfWeek, addDays, startOfDay, startOfMonth, endOfMonth, eachDayOfInterval, format } from 'date-fns'
 import { eventOverlapsRange } from '../utils/eventTime'
 import { normalizePossessiveSuffixCasing } from '../utils/eventTitle'
 import type {
@@ -10,6 +10,14 @@ import type {
   EventLogistic, EventChecklistItem, EventActionItem,
 } from '../types'
 import type { EventTransportationPlan } from '../lib/eventTransportation'
+import { useFamilyMembers } from './useFamilyMembers'
+import { useMemberAvailability } from './useMemberAvailability'
+import {
+  deserializeRoutineFromAvailabilityRules,
+  generateConsolidatedRoutineActionEvents,
+  type FamilyRoutine,
+} from '../lib/familyRoutines'
+import { usePageVisibility } from './usePageVisibility'
 
 export interface EventWithDetails extends Omit<CalendarEvent, 'members' | 'enrichment'> {
   members: {
@@ -33,7 +41,8 @@ export interface EventPlanOverride {
   two_driver_confirmed: boolean
   transportation_plan: EventTransportationPlan | null
   location_signature: string | null
-  location_projection_blocked: boolean
+  location_projection_blocked?: boolean
+  created_at?: string
   updated_at: string
 }
 
@@ -174,26 +183,33 @@ function normalizeEventRow(row: any): EventWithDetails {
   }
 }
 
-async function fetchEventsForRange(start: Date, end: Date): Promise<EventWithDetails[]> {
+interface RangeEventsResult {
+  active: EventWithDetails[]
+  cancelled: EventWithDetails[]
+}
+
+async function fetchEventsForRange(start: Date, end: Date): Promise<RangeEventsResult> {
   const { data: events, error } = await supabase
     .from('events')
     .select(EVENT_SUMMARY_SELECT)
     .lt('start_time', end.toISOString())
     .gt('end_time', start.toISOString())
-    .is('deleted_at', null)
-    .neq('status', 'cancelled')
     .neq('record_kind', 'series_template')
     .order('start_time')
 
   if (error) throw error
 
-  return (events || [])
-    .map(normalizeEventRow)
-    // Keep all-day events anchored to their configured local date portion.
+  const normalized = (events || []).map(normalizeEventRow)
+  const active = normalized
+    .filter((event) => event.status !== 'cancelled' && !event.deleted_at)
     .filter((event) => eventOverlapsRange(event, start, end))
+  const cancelled = normalized
+    .filter((event) => event.status === 'cancelled' || Boolean(event.deleted_at))
+
+  return { active, cancelled }
 }
 
-async function fetchEventDetails(eventId: string): Promise<EventWithDetails> {
+export async function fetchEventDetails(eventId: string): Promise<EventWithDetails | null> {
   const { data, error } = await supabase
     .from('events')
     .select(EVENT_DETAIL_SELECT)
@@ -201,15 +217,20 @@ async function fetchEventDetails(eventId: string): Promise<EventWithDetails> {
     .is('deleted_at', null)
     .single()
 
-  if (error) throw error
-  return normalizeEventRow(data)
+  if (error) {
+    if (error.code === 'PGRST116' || error.message?.includes('Cannot coerce the result to a single JSON object')) {
+      return null
+    }
+    throw error
+  }
+  return data ? normalizeEventRow(data) : null
 }
 
 export function useEventDetails(event: EventWithDetails | null, enabled = true) {
   return useQuery({
     queryKey: ['event-details', event?.id],
     queryFn: () => fetchEventDetails(event!.id),
-    enabled: enabled && Boolean(event),
+    enabled: enabled && Boolean(event?.id),
     staleTime: 5 * 60_000,
   })
 }
@@ -220,6 +241,7 @@ interface EventTransportationPlanRow {
 }
 
 function useEventTransportationPlans(anchor: Date) {
+  const isPageVisible = usePageVisibility()
   const rangeStart = startOfMonth(anchor)
   const rangeEnd = addDays(rangeStart, 46)
 
@@ -241,28 +263,115 @@ function useEventTransportationPlans(anchor: Date) {
         transportation_plan: row.transportation_plan,
       }))
     },
-    staleTime: 5 * 60_000,
+    staleTime: 60_000,
+    refetchInterval: isPageVisible ? 60_000 : false,
+    refetchIntervalInBackground: false,
   })
 }
 
 function useEventsForRange(queryKey: readonly unknown[], start: Date, end: Date) {
   useRealtimeEventInvalidation()
+  const isPageVisible = usePageVisibility()
   const eventsQuery = useQuery({
     queryKey,
     queryFn: () => fetchEventsForRange(start, end),
-    staleTime: 60_000,
+    staleTime: 20_000,
+    refetchInterval: isPageVisible ? 20_000 : false,
+    refetchIntervalInBackground: false,
   })
   const transportationQuery = useEventTransportationPlans(start)
+  const { data: familyMembers = [] } = useFamilyMembers()
+  const memberIds = useMemo(() => familyMembers.map((m) => m.id), [familyMembers])
+  const { rules: availabilityRules = [] } = useMemberAvailability(memberIds)
+
+  const familyRoutines = useMemo<FamilyRoutine[]>(() => {
+    return familyMembers
+      .map((m) => deserializeRoutineFromAvailabilityRules(m.id, availabilityRules))
+      .filter((r): r is FamilyRoutine => Boolean(r && r.enabled))
+  }, [familyMembers, availabilityRules])
+
+  const routineEventsInRange = useMemo<EventWithDetails[]>(() => {
+    if (familyRoutines.length === 0 || familyMembers.length === 0) return []
+    const intervalEnd = new Date(end.getTime() - 1)
+    if (intervalEnd < start) return []
+    const days = eachDayOfInterval({ start: startOfDay(start), end: startOfDay(intervalEnd) })
+    return days.flatMap((day) => {
+      const rawEvents = generateConsolidatedRoutineActionEvents({
+        routines: familyRoutines,
+        members: familyMembers,
+        date: day,
+        filterBySyncMode: true,
+      })
+      return rawEvents.map((ev): EventWithDetails => ({
+        ...ev,
+        members: (ev.members || []).map((m, idx) => ({
+          id: m.id || `m-${idx}`,
+          role: m.role || 'passenger',
+          family_member: m.family_member || familyMembers.find(f => f.id === m.family_member_id)!,
+        })).filter(m => Boolean(m.family_member)),
+        enrichment: ev.enrichment || null,
+        plan_override: (ev as any).plan_override || null,
+        logistics: [],
+        checklist: [],
+        actions: [],
+      }))
+    }).filter((event) => eventOverlapsRange(event, start, end))
+  }, [familyRoutines, familyMembers, start, end])
+
   const events = useMemo(() => {
-    if (!eventsQuery.data) return eventsQuery.data
+    if (!eventsQuery.data) return undefined
+    const baseEvents = eventsQuery.data.active
+    const cancelledEvents = eventsQuery.data.cancelled
     const plansByEventId = new Map(
       (transportationQuery.data ?? []).map((row) => [row.event_id, row.transportation_plan]),
     )
-    return eventsQuery.data.map((event) => {
+    const deriveEventSourceType = (event: any): 'routine' | 'google' | 'gmail' | 'casa' => {
+      if (event.source_type) return event.source_type
+      const title = (event.title || '').toLowerCase()
+      const desc = (event.description || '').toLowerCase()
+      const enrichedBy = event.enrichment?.enriched_by || ''
+
+      // 1. Routine Origination: Any school/camp/work routines, strings orchestra exceptions, drop-off/pickup
+      if (
+        event.id?.startsWith('routine-') ||
+        enrichedBy === 'family_routines' ||
+        title.includes('beethoven strings') ||
+        title.includes('strings @ pbp') ||
+        title.includes('late strings') ||
+        title.includes('early strings') ||
+        (title.includes('drop off') && (title.includes('palm beach') || title.includes('bak') || title.includes('tri-rail') || title.includes('school'))) ||
+        (title.includes('pick up') && (title.includes('palm beach') || title.includes('bak') || title.includes('tri-rail') || title.includes('school')))
+      ) {
+        return 'routine'
+      }
+
+      // 2. Gmail Origination: Flights, hotel confirmations, orders, email extractions
+      if (
+        event.flight_number ||
+        event.confirmation_number ||
+        desc.includes('from: ') ||
+        desc.includes('order confirmation') ||
+        title.includes('ordered:')
+      ) {
+        return 'gmail'
+      }
+
+      // 3. Google Calendar Origination: Imported external Google Calendar entries
+      if (event.raw_google_json) {
+        return 'google'
+      }
+
+      // 4. Casa Native: Manually created in Casa (e.g. Drop off Election Ballots)
+      return 'casa'
+    }
+
+    const enrichedBaseEvents = baseEvents.map((event) => {
       const transportationPlan = plansByEventId.get(event.id)
-      if (!transportationPlan) return event
+      const sourceType = event.source_type || deriveEventSourceType(event)
+      if (!transportationPlan) return { ...event, source_type: sourceType }
       return {
         ...event,
+        source_type: sourceType,
         plan_override: {
           event_id: event.id,
           verified: null,
@@ -278,7 +387,81 @@ function useEventsForRange(queryKey: readonly unknown[], start: Date, end: Date)
         },
       }
     })
-  }, [eventsQuery.data, transportationQuery.data])
+
+    const allHandled = [...enrichedBaseEvents, ...cancelledEvents]
+
+    const isDuplicateOrHandled = (re: EventWithDetails) => {
+      const reDate = format(new Date(re.start_time), 'yyyy-MM-dd')
+      const reTitle = (re.title || '').toLowerCase()
+      const isReDrop = reTitle.includes('drop off') || reTitle.includes('dropoff')
+      const isRePick = reTitle.includes('pick up') || reTitle.includes('picked up') || reTitle.includes('pickup')
+      const isReStrings = reTitle.includes('string')
+
+      return allHandled.some((be) => {
+        const beDate = format(new Date(be.start_time), 'yyyy-MM-dd')
+        if (beDate !== reDate) return false
+        const beTitle = (be.title || '').toLowerCase()
+        if (beTitle === reTitle) return true
+
+        // Match Strings / music exception title variations
+        if (isReStrings && beTitle.includes('string')) {
+          if (reTitle.includes('emme') || beTitle.includes('emme')) return true
+        }
+
+        if (isReDrop && (beTitle.includes('drop off') || beTitle.includes('dropped off') || beTitle.includes('dropoff') || (beTitle.includes('strings') && beTitle.includes('emme')))) {
+          if ((reTitle.includes('palm beach') || reTitle.includes('pbp')) && (beTitle.includes('palm beach') || beTitle.includes('pbp') || beTitle.includes('strings'))) return true
+          if (reTitle.includes('bak') && beTitle.includes('bak')) return true
+        }
+        if (isRePick && (beTitle.includes('pick up') || beTitle.includes('picked up') || beTitle.includes('pickup') || (beTitle.includes('strings') && beTitle.includes('emme')))) {
+          if ((reTitle.includes('palm beach') || reTitle.includes('pbp')) && (beTitle.includes('palm beach') || beTitle.includes('pbp') || beTitle.includes('owen & emme') || beTitle.includes('strings') || beTitle.includes('giselle'))) return true
+          if (reTitle.includes('bak') && beTitle.includes('bak')) return true
+        }
+        return false
+      })
+    }
+
+    const newRoutineEvents = routineEventsInRange
+      .filter((re) => !isDuplicateOrHandled(re))
+      .map((re) => ({ ...re, source_type: 'routine' as const }))
+
+    const filteredBaseEvents = enrichedBaseEvents.filter(
+      (event) => event.status !== 'cancelled' && !event.deleted_at && eventOverlapsRange(event, start, end)
+    )
+
+    // Deduplicate any overlapping identical events on the exact same date/time/title or pickup/dropoff collisions
+    // (e.g. if an event has a Google-synced occurrence and a local placeholder occurrence, prefer Google)
+    const seenEventKeys = new Map<string, EventWithDetails>()
+    for (const ev of filteredBaseEvents) {
+      const cleanTitle = (ev.title || '').trim().toLowerCase()
+      const startTime = ev.start_time
+      const isPickup = cleanTitle.includes('pick up') || cleanTitle.includes('picked up')
+      const isDropoff = cleanTitle.includes('drop off') || cleanTitle.includes('dropped off')
+      
+      // Normalized key for exact matches or routine collisions on identical start times
+      const semanticKey = isPickup && (cleanTitle.includes('palm beach') || cleanTitle.includes('pbp') || cleanTitle.includes('owen') || cleanTitle.includes('emme'))
+        ? `pbp_pickup__${startTime}`
+        : isDropoff && (cleanTitle.includes('palm beach') || cleanTitle.includes('pbp') || cleanTitle.includes('owen') || cleanTitle.includes('emme'))
+        ? `pbp_dropoff__${startTime}`
+        : `${cleanTitle}__${startTime}`
+      
+      const existing = seenEventKeys.get(semanticKey)
+      if (!existing) {
+        seenEventKeys.set(semanticKey, ev)
+      } else {
+        // If one has a google_event_id or is verified, prefer it over the unlinked placeholder
+        const isBetter = (Boolean(ev.google_event_id) && !existing.google_event_id) ||
+          (Boolean(ev.series_id) && !existing.series_id && !existing.google_event_id)
+        if (isBetter) {
+          seenEventKeys.set(semanticKey, ev)
+        }
+      }
+    }
+    const deduplicatedBaseEvents = Array.from(seenEventKeys.values())
+
+    return [...deduplicatedBaseEvents, ...newRoutineEvents].sort(
+      (a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime(),
+    )
+  }, [eventsQuery.data, transportationQuery.data, routineEventsInRange])
 
   const error = eventsQuery.error ?? transportationQuery.error
   return {
@@ -314,6 +497,7 @@ export interface WeekEventIndexItem {
 
 /** Minimal seven-day index used only for Home's event-count buttons. */
 export function useWeekEventIndex(selectedDate: Date) {
+  const isPageVisible = usePageVisibility()
   const weekStart = startOfWeek(selectedDate, { weekStartsOn: 0 })
   const weekEnd = addDays(endOfWeek(selectedDate, { weekStartsOn: 0 }), 1)
   useRealtimeEventInvalidation()
@@ -334,7 +518,9 @@ export function useWeekEventIndex(selectedDate: Date) {
       if (error) throw error
       return data ?? []
     },
-    staleTime: 60_000,
+    staleTime: 30_000,
+    refetchInterval: isPageVisible ? 30_000 : false,
+    refetchIntervalInBackground: false,
   })
 }
 
@@ -348,15 +534,35 @@ let _realtimeSubscribers = 0
 let _realtimeChannel: ReturnType<typeof supabase.channel> | null = null
 const _invalidateCallbacks = new Set<() => void>()
 const _planInvalidateCallbacks = new Set<() => void>()
+const _queryClientInstances = new Set<ReturnType<typeof useQueryClient>>()
 let _debounceTimer: ReturnType<typeof setTimeout> | null = null
 let _planDebounceTimer: ReturnType<typeof setTimeout> | null = null
+let _reconnectTimer: ReturnType<typeof setTimeout> | null = null
+let _heartbeatTimer: ReturnType<typeof setInterval> | null = null
+
+function _evictDeletedEventFromCache(deletedId: string) {
+  if (!deletedId) return
+  _queryClientInstances.forEach((qc) => {
+    qc.setQueriesData({ queryKey: ['events'] }, (old: any) => {
+      if (Array.isArray(old)) return old.filter((ev) => ev?.id !== deletedId)
+      if (old && Array.isArray(old.active)) {
+        return {
+          ...old,
+          active: old.active.filter((ev: any) => ev?.id !== deletedId),
+        }
+      }
+      return old
+    })
+    qc.removeQueries({ queryKey: ['event-details', deletedId] })
+  })
+}
 
 function _fireInvalidation() {
   if (_debounceTimer) clearTimeout(_debounceTimer)
   _debounceTimer = setTimeout(() => {
     _debounceTimer = null
     _invalidateCallbacks.forEach(f => f())
-  }, 600)
+  }, 80)
 }
 
 function _firePlanInvalidation() {
@@ -364,7 +570,59 @@ function _firePlanInvalidation() {
   _planDebounceTimer = setTimeout(() => {
     _planDebounceTimer = null
     _planInvalidateCallbacks.forEach(f => f())
-  }, 600)
+  }, 80)
+}
+
+function _subscribeRealtimeChannel() {
+  if (_realtimeChannel) return
+  _realtimeChannel = supabase
+    .channel('events-realtime-singleton')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, (payload: any) => {
+      if (payload?.eventType === 'DELETE' && payload.old?.id) {
+        _evictDeletedEventFromCache(payload.old.id)
+      } else if (payload?.eventType === 'UPDATE' && payload.new?.id && payload.new?.status === 'cancelled') {
+        _evictDeletedEventFromCache(payload.new.id)
+      }
+      _fireInvalidation()
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'event_members' }, _fireInvalidation)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'event_plan_overrides' }, _firePlanInvalidation)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'event_enrichments' }, _fireInvalidation)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'event_logistics' }, _fireInvalidation)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'event_checklist_items' }, _fireInvalidation)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'google_sync_jobs' }, _fireInvalidation)
+    .subscribe((status, err) => {
+      if (status === 'SUBSCRIBED') {
+        // Connected / reconnected: catch up on any missed updates
+        _fireInvalidation()
+        _firePlanInvalidation()
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        console.warn('[CalendarRealtime] Channel status:', status, err?.message ?? '')
+        if (_realtimeSubscribers > 0 && !_reconnectTimer) {
+          _reconnectTimer = setTimeout(() => {
+            _reconnectTimer = null
+            if (_realtimeSubscribers > 0 && _realtimeChannel) {
+              try { supabase.removeChannel(_realtimeChannel) } catch {}
+              _realtimeChannel = null
+              _subscribeRealtimeChannel()
+            }
+          }, 3000)
+        }
+      }
+    })
+
+  if (!_heartbeatTimer) {
+    _heartbeatTimer = setInterval(() => {
+      if (_realtimeSubscribers > 0 && typeof document !== 'undefined' && document.visibilityState !== 'hidden') {
+        if (!_realtimeChannel || _realtimeChannel.state === 'closed' || _realtimeChannel.state === 'errored') {
+          console.log('[CalendarRealtime] Heartbeat reconnecting idle/dropped channel...')
+          try { if (_realtimeChannel) supabase.removeChannel(_realtimeChannel) } catch {}
+          _realtimeChannel = null
+          _subscribeRealtimeChannel()
+        }
+      }
+    }, 45_000)
+  }
 }
 
 function useRealtimeEventInvalidation() {
@@ -373,33 +631,46 @@ function useRealtimeEventInvalidation() {
     const cb = () => {
       void qc.invalidateQueries({ queryKey: ['events'] })
       void qc.invalidateQueries({ queryKey: ['event-details'] })
+      void qc.refetchQueries({ queryKey: ['events'], type: 'active' })
     }
     const planCb = () => {
       void qc.invalidateQueries({ queryKey: ['event-transportation-plans'] })
       void qc.invalidateQueries({ queryKey: ['event-details'] })
     }
+    const onManualMutated = () => {
+      cb()
+      planCb()
+    }
+    window.addEventListener('casa-event-mutated', onManualMutated)
+
     _invalidateCallbacks.add(cb)
     _planInvalidateCallbacks.add(planCb)
+    _queryClientInstances.add(qc)
     _realtimeSubscribers++
 
     if (_realtimeSubscribers === 1) {
-      _realtimeChannel = supabase
-        .channel('events-realtime-singleton')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, _fireInvalidation)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'event_members' }, _fireInvalidation)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'event_plan_overrides' }, _firePlanInvalidation)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'event_enrichments' }, _fireInvalidation)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'event_checklist_items' }, _fireInvalidation)
-        .subscribe()
+      _subscribeRealtimeChannel()
     }
 
     return () => {
+      window.removeEventListener('casa-event-mutated', onManualMutated)
       _invalidateCallbacks.delete(cb)
       _planInvalidateCallbacks.delete(planCb)
+      _queryClientInstances.delete(qc)
       _realtimeSubscribers--
-      if (_realtimeSubscribers === 0 && _realtimeChannel) {
-        supabase.removeChannel(_realtimeChannel)
-        _realtimeChannel = null
+      if (_realtimeSubscribers === 0) {
+        if (_heartbeatTimer) {
+          clearInterval(_heartbeatTimer)
+          _heartbeatTimer = null
+        }
+        if (_reconnectTimer) {
+          clearTimeout(_reconnectTimer)
+          _reconnectTimer = null
+        }
+        if (_realtimeChannel) {
+          supabase.removeChannel(_realtimeChannel)
+          _realtimeChannel = null
+        }
         if (_debounceTimer) {
           clearTimeout(_debounceTimer)
           _debounceTimer = null
@@ -418,6 +689,13 @@ export function useTodayEvents(date: Date) {
   const dayEnd = addDays(dayStart, 1)
 
   return useEventsForRange(['events', 'today', dayStart.toISOString()], dayStart, dayEnd)
+}
+
+export function useTomorrowEvents(date: Date) {
+  const tomorrowStart = startOfDay(addDays(date, 1))
+  const tomorrowEnd = addDays(tomorrowStart, 1)
+
+  return useEventsForRange(['events', 'tomorrow', tomorrowStart.toISOString()], tomorrowStart, tomorrowEnd)
 }
 
 export function useMonthEvents(selectedDate: Date) {

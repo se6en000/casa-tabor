@@ -47,7 +47,7 @@ export function normalizeLlmWorkloadConfig(config = {}) {
 }
 
 function thinkingFor(model, preset) {
-  if (model === TALK_PLAN_GEMINI_MODEL) {
+  if (model === 'gemini-3.6-flash') {
     return {
       kind: 'level',
       value: preset === 'deep' ? 'high' : 'medium',

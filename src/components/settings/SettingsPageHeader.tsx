@@ -5,8 +5,9 @@ export interface SettingsPageHeaderProps {
   icon?: ElementType
   title: ReactNode
   description?: ReactNode
+  actions?: ReactNode
 }
 
-export function SettingsPageHeader({ icon: Icon, title, description }: SettingsPageHeaderProps) {
-  return <PageHeader icon={Icon} title={title} description={description} />
+export function SettingsPageHeader({ icon: Icon, title, description, actions }: SettingsPageHeaderProps) {
+  return <PageHeader icon={Icon} title={title} description={description} actions={actions} />
 }

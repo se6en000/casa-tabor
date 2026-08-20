@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { STT_TURN_PROTOCOL } from '../lib/sttTurnProtocol.mjs'
 
 /**
  * Lightweight speech-to-text for dictating into input fields (e.g. quick-add sheets).
  *
  * Dual path:
  *   • Pi kiosk (Chromium/Linux): Local DeepGram/Whisper bridge over WebSocket (ws://127.0.0.1:8767).
+ *     Sending {"type":"start", "turn_protocol":"candidate-v1", "utterance_id":"..."}
+ *     activates the Pi hardware LED light strip into "Alive Mode".
  *   • Mobile / Mac / PC browsers: Native Web Speech API.
  *
  * Ergonomics:
@@ -16,9 +19,15 @@ const BRIDGE = 'http://127.0.0.1:8766'
 const BRIDGE_WS = 'ws://127.0.0.1:8767'
 const SAFE_MODE = String(import.meta.env.VITE_SAFE_MODE ?? '').toLowerCase()
 const IS_SAFE_MODE = SAFE_MODE === '1' || SAFE_MODE === 'true' || SAFE_MODE === 'yes'
-const SILENCE_TIMEOUT_MS = 1800
+const DEFAULT_SILENCE_TIMEOUT_MS = 1800
 
 type DictationMode = 'unknown' | 'bridge' | 'webspeech'
+
+function createUtteranceId() {
+  return typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`
+}
 
 async function probeBridge(): Promise<boolean> {
   try {
@@ -39,28 +48,33 @@ function joinWords(...parts: string[]): string {
 export function useFieldDictation({
   onText,
   onFinal,
+  onComplete,
+  silenceTimeoutMs = DEFAULT_SILENCE_TIMEOUT_MS,
 }: {
   onText: (fullText: string) => void
   onFinal?: (fullText: string) => void
+  onComplete?: (fullText: string) => void
+  silenceTimeoutMs?: number
 }) {
   const [listening, setListening] = useState(false)
   const activeRef = useRef(false)
   const modeRef = useRef<DictationMode>('unknown')
   const baseRef = useRef('')
   const committedRef = useRef('')
+  const utteranceIdRef = useRef('')
   const wsRef = useRef<WebSocket | null>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null)
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const onTextRef = useRef(onText)
-  const onFinalRef = useRef(onFinal)
+  const onFinalRef = useRef(onFinal || onComplete)
   useEffect(() => {
     onTextRef.current = onText
   }, [onText])
   useEffect(() => {
-    onFinalRef.current = onFinal
-  }, [onFinal])
+    onFinalRef.current = onFinal || onComplete
+  }, [onFinal, onComplete])
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const WebSpeech = useRef<any>(
@@ -79,7 +93,6 @@ export function useFieldDictation({
     }
   }, [])
 
-  // ── Unified control ──────────────────────────────────────────────────────
   const stopWebSpeech = useCallback(() => {
     if (recognitionRef.current) {
       try { recognitionRef.current.onend = null } catch { /* ignore */ }
@@ -121,8 +134,8 @@ export function useFieldDictation({
       if (activeRef.current) {
         stop()
       }
-    }, SILENCE_TIMEOUT_MS)
-  }, [stopSilenceTimer, stop])
+    }, silenceTimeoutMs)
+  }, [stopSilenceTimer, stop, silenceTimeoutMs])
 
   const commitFinal = useCallback((text: string) => {
     const clean = text.trim()
@@ -168,7 +181,6 @@ export function useFieldDictation({
     }
 
     recognition.onend = () => {
-      // continuous can still end on silence — if user is still active, restart
       if (activeRef.current) {
         try { recognition.start() } catch { /* ignore */ }
       }
@@ -189,7 +201,16 @@ export function useFieldDictation({
     wsRef.current = ws
 
     ws.onopen = () => {
-      try { ws.send(JSON.stringify({ type: 'start' })) } catch { /* ignore */ }
+      utteranceIdRef.current = createUtteranceId()
+      try {
+        ws.send(
+          JSON.stringify({
+            type: 'start',
+            turn_protocol: STT_TURN_PROTOCOL,
+            utterance_id: utteranceIdRef.current,
+          }),
+        )
+      } catch { /* ignore */ }
     }
 
     ws.onmessage = (evt) => {
@@ -200,7 +221,6 @@ export function useFieldDictation({
           emit(msg.text)
           restartSilenceTimer()
         } else if (msg.type === 'final' && typeof msg.text === 'string') {
-          // If bridge returns cumulative text in legacy mode, replace committedRef
           committedRef.current = msg.text.trim()
           emit('')
           restartSilenceTimer()

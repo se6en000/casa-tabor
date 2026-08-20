@@ -17,11 +17,12 @@ export default function PassengerChipSelector({
   onToggle,
   onRemoveExternal,
 }: PassengerChipSelectorProps) {
+  const visibleMembers = members.filter((member) => (member.show_on_home_sidebar ?? true) || selectedNames.includes(member.name))
   const householdNames = new Set(members.map((member) => member.name))
   const externalNames = selectedNames.filter((name) => !householdNames.has(name))
   return (
     <div className="flex flex-wrap gap-2" role="group" aria-label="Passengers">
-      {members.map((member) => {
+      {visibleMembers.map((member) => {
         const selected = selectedNames.includes(member.name)
         const disabled = disabledNames.includes(member.name)
         return (

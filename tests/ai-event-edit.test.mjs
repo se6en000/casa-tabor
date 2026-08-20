@@ -38,8 +38,8 @@ test('buildValidatedUpdatePayload normalizes clears and list replacement', () =>
   assert.equal(normalized.enrichmentUpdates.prep_notes, null)
   assert.equal(normalized.enrichmentUpdates.what_to_bring, undefined)
   assert.deepEqual(normalized.checklistItems, [
-    { id: undefined, label: 'water bottle', note: null, checked: false, category: undefined },
-    { id: undefined, label: 'snacks', note: null, checked: false, category: undefined },
+    { id: undefined, label: 'water bottle', note: null, checked: false, category: 'bring' },
+    { id: undefined, label: 'snacks', note: null, checked: false, category: 'bring' },
   ])
   assert.deepEqual(normalized.actionItems, [
     { id: undefined, title: 'Text coach', description: null, due_date: undefined, is_urgent: false, completed: false, assigned_to: undefined },

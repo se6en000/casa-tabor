@@ -23,7 +23,19 @@ export { LiveTranscript, type LiveTranscriptProps } from './LiveTranscript'
 export { EmptyState, type EmptyStateProps } from './EmptyState'
 export { DateTimeDial, type DateTimeDialProps } from './DateTimeDial'
 export { DisclosureSection, type DisclosureSectionProps } from './DisclosureSection'
+export { StatusDot, type StatusDotProps } from './StatusDot'
+export { HeroCard, type HeroCardProps } from './HeroCard'
+export { JourneyProgressBar, type JourneyProgressBarProps } from './JourneyProgressBar'
+export { WidgetContainer, type WidgetContainerProps } from './WidgetContainer'
+export { ScheduleStreamItem, type ScheduleStreamItemProps } from './ScheduleStreamItem'
+export { ActionCard, type ActionCardProps, type ActionCardTone } from './ActionCard'
 export { FormSummaryCard, type FormSummaryCardProps } from './FormSummaryCard'
+export {
+  TactileSheenBeam,
+  TactileSwapBadge,
+  type TactileSheenBeamProps,
+  type TactileSwapBadgeProps,
+} from './TactileSwap'
 export {
   ConfirmationDialog,
   ContentSection,
@@ -43,3 +55,5 @@ export {
   type ThreeRailLayoutProps,
   type WorkflowActionsProps,
 } from './Patterns'
+export { JewelCapsuleCopilot, type JewelCapsuleCopilotProps } from './JewelCapsuleCopilot'
+export { CopilotIcon, type CopilotIconProps, type CopilotIconState, type CopilotShimmerSpeed, type CopilotGlowIntensity } from './CopilotIcon'

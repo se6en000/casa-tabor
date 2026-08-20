@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import type React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIcon, Camera, Mic, Keyboard, RotateCcw, MessagesSquare, Plus, Square, CalendarDays, ShoppingCart, ChefHat, Pencil, AlertTriangle, Clock3, Utensils, Bell, UserPlus, MapPin, Mail, Activity } from 'lucide-react'
+import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIcon, Camera, Mic, Keyboard, RotateCcw, Plus, Square, Calendar, CalendarDays, Car, ShoppingCart, ChefHat, Pencil, AlertTriangle, Clock3, Utensils, Bell, UserPlus, MapPin, Mail, Activity, ChevronRight, Navigation, Rotate3d, BookOpen, Lock, Building2, Users, FileText } from 'lucide-react'
 import { format } from 'date-fns'
+import { useNavigate } from 'react-router-dom'
 import { cn } from '../../utils/cn'
-import { useAIAssistant, type AIMessage } from '../../hooks/useAIAssistant'
+import { useAIAssistant, type AIMessage, type GroceryAssistantContext, type ActionAiContext } from '../../hooks/useAIAssistant'
 import type { PrivateConversation } from '../../hooks/useAIConversationHistory'
 import {
   useSpeechInput,
@@ -14,23 +15,28 @@ import {
 import { useLedStrip } from '../../hooks/useLedStrip'
 import { useProfileSession } from '../../contexts/ProfileSessionContext'
 import { supabase } from '../../lib/supabase'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
-import type { FamilyMember } from '../../types'
+import type { FamilyMember, DinnerPlan, DinnerMode } from '../../types'
+import { useAppStore } from '../../stores/appStore'
+import { getDisplayMemberColor } from '../../design-system/memberColors'
 import BounceScroll from '../shared/BounceScroll'
 import MarkdownContent from '../shared/MarkdownContent'
-import { Button, Card, Heading, IconButton, LiveTranscript, Modal, SegmentedControl, Text } from '../ui'
+import { Button, Card, Heading, IconButton, LiveTranscript, Modal, Text } from '../ui'
 import { formatTextForMarkdown, stripEvidenceCitationMarkers } from '../../lib/assistantMarkdown.mjs'
 import { createAssistantTraceContext, emitAssistantTrace, getAssistantDeviceId } from '../../lib/assistantTelemetry'
 import { classifyPendingConfirmation } from '../../lib/assistantConfirmation.mjs'
 import { conversationStateAfterCalendarAction } from '../../lib/assistantConversationState.mjs'
-import { linkAssistantEventMentions, parseAssistantEventHref } from '../../lib/assistantEventLinks'
+import { linkAssistantEventMentions, parseAssistantEventHref, parseAssistantHref } from '../../lib/assistantEntityLinks'
+import { openEventDetails } from '../../utils/openEventDetails'
 import { buildCreatePreviewCopy, buildDeleteManyPreviewCopy, buildDeletePreviewCopy, buildUpdatePreviewCopy } from '../../utils/aiConfirmPreview'
+import { matchDinnerPlanIntent, getDinnerPlanSuggestions } from '../../utils/dinnerPlanManager'
+import { saveTonightDinnerPlan } from '../../utils/dinnerPlanSync'
+import { invalidateAllCalendarQueries } from '../../lib/eventMutations'
 
 const LOW_CONFIDENCE_CONFIRM_PHRASES = /\b(yes|yeah|yep|ok|okay|use it|that one|correct|right|go ahead)\b/i
 const LOW_CONFIDENCE_REJECT_PHRASES = /\b(no|nope|try again|wrong|not that|cancel)\b/i
 
-const NO_ACTIVITY_AUTO_CLOSE_MS = 30_000
 const CONVERSATION_MODE_KEY = 'casa_ai_conversation_mode'
 type PendingVoiceAction = {
   messageId: string
@@ -41,27 +47,23 @@ type PendingVoiceAction = {
 
 
 
+import type { AIChatLaunchContext } from '../../stores/appStore'
+
 interface Props {
   open: boolean
   onClose: () => void
   anchor?: { right: number; top: number }
   page: string
-  launchContext?: {
-    launchId: string
-    prompt?: string
-    autoSend?: boolean
-    source?: string
-    page?: string
-    agent?: 'general' | 'chef'
-    traceId?: string
-    wakeAt?: number
-  }
+  launchContext?: AIChatLaunchContext
   events: EventWithDetails[]
   family: FamilyMember[]
   homeCity?: string
   onSleepCommand?: () => void
   focusedEvent?: EventWithDetails
+  focusedAction?: ActionAiContext
   onOpenEventDetails?: (event: EventWithDetails) => void
+  onSwitchToEvent?: () => void
+  embedded?: boolean
 }
 
 const SLEEP_PHRASES = /\b(sleep|goodnight|good night|art mode|screen saver|screensaver|night mode)\b/i
@@ -69,7 +71,7 @@ const SLEEP_PHRASES = /\b(sleep|goodnight|good night|art mode|screen saver|scree
 export default function AIChatDrawer({
   open,
   onClose,
-  anchor,
+  anchor: _anchor,
   page,
   launchContext,
   events,
@@ -77,7 +79,10 @@ export default function AIChatDrawer({
   homeCity,
   onSleepCommand,
   focusedEvent,
+  focusedAction,
   onOpenEventDetails,
+  onSwitchToEvent,
+  embedded = false,
 }: Props) {
   const [input, setInput] = useState('')
   const [voiceTranscript, setVoiceTranscript] = useState<VoiceTranscriptRevision>({
@@ -86,19 +91,15 @@ export default function AIChatDrawer({
     isFinal: false,
   })
   const interimRef = useRef('')
-  const idleAutoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hadUserInteractionRef = useRef(false)
-  const [attachedImage, setAttachedImage] = useState<{ dataUrl: string; mimeType: string } | null>(null)
+  const [attachedImages, setAttachedImages] = useState<Array<{ dataUrl: string; mimeType: string }>>([])
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false)
   const [nudgeDismissed, setNudgeDismissed] = useState(false)
   const [historyModalOpen, setHistoryModalOpen] = useState(false)
   const [historyUnlockError, setHistoryUnlockError] = useState<string | null>(null)
   const [historyConversations, setHistoryConversations] = useState<PrivateConversation[]>([])
   const [historyListLoading, setHistoryListLoading] = useState(false)
-  const [conversationMode, setConversationMode] = useState<boolean>(() => {
-    // Conversational by default: opening the assistant starts listening and
-    // re-arms between turns until dismissed. Users can opt into press-to-talk
-    // via the Convo toggle (persisted).
+  const [conversationMode] = useState<boolean>(() => {
     try {
       const stored = localStorage.getItem(CONVERSATION_MODE_KEY)
       return stored === null ? true : stored === '1'
@@ -116,6 +117,86 @@ export default function AIChatDrawer({
   const qc = useQueryClient()
   const { profile, signOut } = useProfileSession()
 
+  // ── Preload Real-Time Grocery List, Pantry Inventory, and Meal Plans for Copilot ──
+  const { data: copilotGroceryItems = [] } = useQuery({
+    queryKey: ['copilot-grocery-items'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('grocery_items')
+        .select('id,name,category,checked,quantity,unit,notes')
+        .order('created_at', { ascending: false })
+      if (error) return []
+      return (data ?? []) as Array<{ id: string; name: string; category: string; checked: boolean; quantity: string | null; unit: string | null; notes: string | null }>
+    },
+    staleTime: 20_000,
+  })
+
+  const { data: copilotPantrySettings } = useQuery({
+    queryKey: ['copilot-pantry-settings'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('settings')
+        .select('value')
+        .eq('key', 'pantry_inventory')
+        .maybeSingle()
+      return data?.value ?? null
+    },
+    staleTime: 60_000,
+  })
+
+  const { data: copilotMealPlans = [] } = useQuery({
+    queryKey: ['copilot-meal-plans'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('recipe_meal_plans')
+        .select('id,recipe_id,slot,recipes(name,cook_time,servings,recipe_ingredients(raw_text))')
+        .order('created_at', { ascending: false })
+      return (data ?? []) as any[]
+    },
+    staleTime: 60_000,
+  })
+
+  const groceryContext = useMemo<GroceryAssistantContext>(() => {
+    const toBuy = copilotGroceryItems.filter((i) => !i.checked)
+    const inCart = copilotGroceryItems.filter((i) => i.checked)
+
+    const pantryMap = (copilotPantrySettings && typeof copilotPantrySettings === 'object' ? copilotPantrySettings : {}) as Record<string, any>
+    const pantryInventory = Object.entries(pantryMap).map(([key, val]) => ({
+      name: val?.name ?? key,
+      category: val?.category ?? 'pantry',
+      currentStock: Number(val?.current_stock ?? val?.quantity ?? 0),
+      unit: String(val?.unit ?? 'pkg'),
+      lowStockThreshold: Number(val?.low_stock_threshold ?? 1),
+    }))
+
+    const plannedDinners = copilotMealPlans.map((plan: any) => ({
+      slot: plan.slot ?? 'tonight',
+      recipeName: plan.recipes?.name ?? 'Planned Recipe',
+      cookTime: plan.recipes?.cook_time ?? null,
+      servings: plan.recipes?.servings ?? null,
+      ingredientCount: plan.recipes?.recipe_ingredients?.length ?? 0,
+      ingredients: (plan.recipes?.recipe_ingredients ?? []).map((ing: any) => ing.raw_text).filter(Boolean),
+    }))
+
+    return {
+      totalItems: copilotGroceryItems.length,
+      toBuyCount: toBuy.length,
+      inCartCount: inCart.length,
+      items: copilotGroceryItems.map((item) => ({
+        id: item.id,
+        name: item.name,
+        category: item.category,
+        checked: item.checked,
+        quantity: item.quantity,
+        unit: item.unit,
+        notes: item.notes,
+      })),
+      pantryInventory,
+      plannedDinners,
+      recentAisleCategories: Array.from(new Set(copilotGroceryItems.map((i) => i.category))),
+    }
+  }, [copilotGroceryItems, copilotPantrySettings, copilotMealPlans])
+
   const {
     messages,
     loading,
@@ -127,7 +208,6 @@ export default function AIChatDrawer({
     primeMessages,
     appendSyntheticMessage,
     updateMessageToolStatus,
-    selectExperienceMode,
     privateHistory,
     resumePrivateConversation,
   } = useAIAssistant({
@@ -137,6 +217,8 @@ export default function AIChatDrawer({
     family,
     homeCity,
     focusedEvent,
+    focusedAction,
+    groceryContext,
     onSessionEnd: onClose,
   })
 
@@ -147,8 +229,37 @@ export default function AIChatDrawer({
     [open, events],
   )
 
+  const [windowWidth, setWindowWidth] = useState(() => typeof window !== 'undefined' ? window.innerWidth : 1280)
+  const isMobile = windowWidth < 640
+
   useEffect(() => {
-    if (!open) return
+    const handleResize = () => setWindowWidth(window.innerWidth)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  // Sidecar width scales as a responsive percentage of the screen (~33vw),
+  // clamped between 380px (tablet/laptop) and 720px for high-res kiosk screens.
+  const sidecarWidth = useMemo(() => {
+    if (isMobile) return windowWidth
+    return Math.min(720, Math.max(380, Math.round(windowWidth * 0.33)))
+  }, [isMobile, windowWidth])
+
+  useEffect(() => {
+    if (open && !isMobile) {
+      document.documentElement.style.setProperty('--ai-sidecar-width', `${sidecarWidth}px`)
+    } else {
+      document.documentElement.style.setProperty('--ai-sidecar-width', '0px')
+    }
+    return () => {
+      document.documentElement.style.setProperty('--ai-sidecar-width', '0px')
+    }
+  }, [open, isMobile, sidecarWidth])
+
+  useEffect(() => {
+    // Only lock background scroll on small mobile screens where the drawer is a modal bottom sheet.
+    // On tablet and desktop, the drawer is an in-flow sidecar companion panel, so the background remains fully interactive and scrollable.
+    if (!open || !isMobile) return
 
     const root = document.documentElement
     const body = document.body
@@ -181,11 +292,12 @@ export default function AIChatDrawer({
         appMain.style.overscrollBehavior = previous.appMainOverscroll
       }
     }
-  }, [open])
+  }, [open, isMobile])
 
+  const dinnerPlan = useAppStore((s) => s.dinnerPlan)
   const dynamicSuggestions = useMemo(
-    () => buildDynamicSuggestions(page, events, new Date()),
-    [page, events],
+    () => deriveDynamicFollowUpSuggestions(messages, page, events, new Date(), focusedEvent, launchContext?.source, dinnerPlan, focusedAction),
+    [messages, page, events, focusedEvent, launchContext?.source, dinnerPlan, focusedAction],
   )
   const eventById = useMemo(
     () => new Map(events.map((event) => [event.id, event])),
@@ -216,24 +328,59 @@ export default function AIChatDrawer({
     }
   }, [])
 
-  const clearIdleAutoCloseTimer = useCallback(() => {
-    if (idleAutoCloseTimerRef.current) {
-      clearTimeout(idleAutoCloseTimerRef.current)
-      idleAutoCloseTimerRef.current = null
-    }
-  }, [])
+  const navigate = useNavigate()
 
   const handleOpenEventDetails = useCallback((eventId: string) => {
     const event = eventById.get(eventId)
-    if (!event) return
-    onClose()
-    onOpenEventDetails?.(event)
-  }, [eventById, onClose, onOpenEventDetails])
+    if (embedded) {
+      if (event && onOpenEventDetails) {
+        onOpenEventDetails(event)
+      } else {
+        openEventDetails(eventId)
+      }
+    } else {
+      onClose()
+      if (event && onOpenEventDetails) {
+        onOpenEventDetails(event)
+      } else {
+        openEventDetails(eventId)
+      }
+    }
+  }, [embedded, eventById, onClose, onOpenEventDetails])
+
+  const handleLinkClick = useCallback((href: string) => {
+    const parsed = parseAssistantHref(href)
+    if (parsed.type === 'event') {
+      const event = eventById.get(parsed.idOrPath)
+      if (embedded) {
+        if (event && onOpenEventDetails) {
+          onOpenEventDetails(event)
+        } else {
+          openEventDetails(parsed.idOrPath)
+        }
+      } else {
+        onClose()
+        if (event && onOpenEventDetails) {
+          onOpenEventDetails(event)
+        } else {
+          openEventDetails(parsed.idOrPath)
+        }
+      }
+    } else if (parsed.type === 'recipe') {
+      if (!embedded) onClose()
+      navigate(`/cook?search=${encodeURIComponent(parsed.idOrPath)}`)
+    } else if (parsed.type === 'grocery') {
+      if (!embedded) onClose()
+      navigate('/grocery')
+    } else if (parsed.type === 'navigate') {
+      if (!embedded) onClose()
+      navigate(`/${parsed.idOrPath}`)
+    }
+  }, [embedded, eventById, onClose, onOpenEventDetails, navigate])
 
   const markUserInteraction = useCallback(() => {
     hadUserInteractionRef.current = true
-    clearIdleAutoCloseTimer()
-  }, [clearIdleAutoCloseTimer])
+  }, [])
 
   const clearVoiceTranscript = useCallback(() => {
     setVoiceTranscript({ committed: '', interim: '', isFinal: false })
@@ -244,6 +391,50 @@ export default function AIChatDrawer({
     .find(message => message.toolAction?.status === 'pending')
   const hasPendingToolAction = Boolean(activePendingToolMessage)
   const activePendingToolMessageId = activePendingToolMessage?.id
+
+  // Auto-execute grocery additions seamlessly with instant undo availability
+  const autoGroceryExecutingRef = useRef<Set<string>>(new Set())
+  const autoGroceryCreatedIdsRef = useRef<Map<string, string[]>>(new Map())
+  useEffect(() => {
+    const pendingGrocery = messages.find(
+      (m) => m.role === 'assistant' && m.toolAction?.tool === 'add_grocery_items' && m.toolAction.status === 'pending'
+    )
+    if (pendingGrocery && pendingGrocery.toolAction && !autoGroceryExecutingRef.current.has(pendingGrocery.id)) {
+      const messageId = pendingGrocery.id
+      const toolAction = pendingGrocery.toolAction
+      autoGroceryExecutingRef.current.add(messageId)
+      void (async () => {
+        updateMessageToolStatus(messageId, 'loading')
+        try {
+          const { data, error } = await supabase.functions.invoke('execute-ai-action', {
+            body: {
+              tool: toolAction.tool,
+              args: toolAction.args,
+              action_id: messageId,
+              session_id: session?.id ?? null,
+              correlation_id: buildCorrelationId(messageId),
+              confirmed_by_user: true,
+            },
+          })
+          if (error || data?.success === false) throw (error || new Error(data?.error ?? 'Failed to add grocery items'))
+
+          const createdIds = Array.isArray(data?.items)
+            ? data.items.map((i: any) => i.id).filter(Boolean)
+            : []
+
+          autoGroceryCreatedIdsRef.current.set(messageId, createdIds)
+
+          updateMessageToolStatus(messageId, 'done', {
+            actionId: messageId,
+            undoStatus: 'idle',
+          })
+          qc.invalidateQueries({ queryKey: ['grocery'] })
+        } catch (err) {
+          updateMessageToolStatus(messageId, 'error', { errorMsg: (err as Error).message })
+        }
+      })()
+    }
+  }, [messages, session?.id, updateMessageToolStatus, qc])
 
   const dispatchPendingConfirmation = useCallback((text: string) => {
     const intent = classifyPendingConfirmation(text)
@@ -262,7 +453,7 @@ export default function AIChatDrawer({
 
   const sendTraced = useCallback((
     text: string,
-    image?: { dataUrl: string; mimeType: string },
+    image?: { dataUrl: string; mimeType: string } | Array<{ dataUrl: string; mimeType: string }>,
     fromVoice = false,
   ) => {
     const baseTrace = activeTraceRef.current ?? createAssistantTraceContext({
@@ -284,6 +475,26 @@ export default function AIChatDrawer({
     const trimmed = text.trim()
     if (!trimmed) return
     if (dispatchPendingConfirmation(trimmed)) {
+      setInput('')
+      interimRef.current = ''
+      clearVoiceTranscript()
+      if (textareaRef.current) textareaRef.current.value = ''
+      return
+    }
+    const isDinnerScope = !focusedEvent && !focusedAction && (page === 'cook' || launchContext?.source === 'tonights-kitchen' || /\b(dinner|kitchen|recipe|cook tonight|takeout|flanigan|pizza|leftovers)\b/i.test(trimmed))
+    const dinnerIntent = isDinnerScope ? matchDinnerPlanIntent(trimmed, useAppStore.getState().dinnerPlan) : null
+    if (dinnerIntent) {
+      appendSyntheticMessage({
+        id: crypto.randomUUID(),
+        role: 'user',
+        content: trimmed,
+      })
+      appendSyntheticMessage({
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: dinnerIntent.assistantReply,
+        toolAction: dinnerIntent.toolAction,
+      })
       setInput('')
       interimRef.current = ''
       clearVoiceTranscript()
@@ -408,6 +619,25 @@ export default function AIChatDrawer({
     await sendTraced(prompt)
     await Promise.all([
       qc.invalidateQueries({ queryKey: ['cook-page-recipes'] }),
+      qc.invalidateQueries({ queryKey: ['recipe-library'] }),
+    ])
+  }, [loading, markUserInteraction, qc, sendTraced])
+
+  const quickSaveAndSetTonightRecipe = useCallback(async (recipeMessage: string) => {
+    if (loading) return
+    markUserInteraction()
+    const recipeExcerpt = recipeMessage.trim().slice(0, 3500)
+    const prompt = [
+      'Save this recipe to my Recipe Library AND schedule it as Tonight\'s Dinner.',
+      'Use your previous recipe details as the source of truth.',
+      'Include complete ingredients with quantities/units and full numbered cooking steps.',
+      'Update Tonight\'s Kitchen plan on the dashboard with this recipe so we are ready to cook immediately.',
+      recipeExcerpt ? `\nRecipe draft:\n${recipeExcerpt}` : '',
+    ].join('\n')
+    await sendTraced(prompt)
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ['cook-page-recipes'] }),
+      qc.invalidateQueries({ queryKey: ['cook-page-meal-plans'] }),
       qc.invalidateQueries({ queryKey: ['recipe-library'] }),
     ])
   }, [loading, markUserInteraction, qc, sendTraced])
@@ -557,12 +787,6 @@ export default function AIChatDrawer({
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    return () => {
-      clearIdleAutoCloseTimer()
-    }
-  }, [clearIdleAutoCloseTimer])
-
   // Keep speechStopRef current so the onFinalTranscript callback can stop the mic
   // without creating a circular dependency on the speech object.
   useEffect(() => { speechStopRef.current = speech.stop }, [speech.stop])
@@ -571,13 +795,6 @@ export default function AIChatDrawer({
     if (open) {
       hadUserInteractionRef.current = false
       setNudgeDismissed(false)
-      clearIdleAutoCloseTimer()
-      idleAutoCloseTimerRef.current = setTimeout(() => {
-        if (!hadUserInteractionRef.current) {
-          startFresh()
-          onClose()
-        }
-      }, NO_ACTIVITY_AUTO_CLOSE_MS)
       if (IS_SAFE_MODE) return
       // Launch intent controls the initial mode: wake word is voice-first;
       // manual opens remain text-first even when conversation mode is enabled.
@@ -587,7 +804,6 @@ export default function AIChatDrawer({
       // Focus textarea slightly after animation settles (UI only, doesn't affect mic)
       setTimeout(() => textareaRef.current?.focus(), 300)
     } else {
-      clearIdleAutoCloseTimer()
       speech.stop()
       led.off()
       reset()
@@ -596,12 +812,11 @@ export default function AIChatDrawer({
       clearVoiceTranscript()
       pendingLowConfidenceRef.current = null
       latestVoiceConfidenceRef.current = null
-      setAttachedImage(null)
+      setAttachedImages([])
       setAttachmentMenuOpen(false)
-      freshStartedRef.current = null  // allow fresh start next time this event is opened
       firedChefGreetRef.current = null
     }
-  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open])
 
   useEffect(() => {
     if (!open || !launchContext?.launchId) return
@@ -623,66 +838,75 @@ export default function AIChatDrawer({
     return `${sessionPart}:${suffix}:${Date.now().toString(36)}`
   }, [session?.id])
 
-  // When in event-edit mode, always start a fresh session so old conversations don't bleed in.
+  // Start a clean, focused session when switching events (silent executive standby)
   const firedEventGreetRef = useRef<string | null>(null)
-  const freshStartedRef = useRef<string | null>(null)
-  useEffect(() => {
-    if (!open || !focusedEvent) return
-    if (freshStartedRef.current === focusedEvent.id) return
-    freshStartedRef.current = focusedEvent.id
-    firedEventGreetRef.current = null  // reset so greet fires after fresh start
-    startFresh()
-  }, [open, focusedEvent?.id]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Once session is fresh (no messages), inject a deterministic event summary greeting
-  // so the user immediately sees what event the AI has loaded — no API round-trip needed.
   useEffect(() => {
     if (!open || !focusedEvent || loading) return
     if (firedEventGreetRef.current === focusedEvent.id) return
     if (sessionLoading) return
-    if (messages.length > 0) { firedEventGreetRef.current = focusedEvent.id; return }
     firedEventGreetRef.current = focusedEvent.id
 
-    const ev = focusedEvent
-    const memberNames = ev.members.map(m => m.family_member?.name).filter(Boolean).join(', ')
-    const start = new Date(ev.start_time)
-    const dateStr = start.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
-    const timeStr = ev.all_day ? 'All day' : start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+    // Start a clean, dedicated session for this event without synthetic message bloat
+    startFresh()
+  }, [open, focusedEvent?.id, sessionLoading, loading, startFresh])
 
-    const missing: string[] = []
-    if (!ev.location_name) missing.push('Location')
-    if (!memberNames) missing.push('Attendees')
-    if (!ev.enrichment?.category) missing.push('Category')
-    if (!ev.description && !ev.enrichment?.prep_notes) missing.push('Notes')
+  // Only prime an action greeting when launching AI from an action queue item
+  const firedActionGreetRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!open || !focusedAction || loading) return
+    const key = `${focusedAction.actionId}:${launchContext?.launchId || 'action'}`
+    if (firedActionGreetRef.current === key) return
+    if (sessionLoading) return
+    firedActionGreetRef.current = key
 
-    let content = `I'm ready to edit **${ev.title}** ✏️\n\n`
-    content += `📅 ${dateStr} at ${timeStr}\n`
-    if (ev.location_name) content += `📍 ${ev.location_name}\n`
-    if (memberNames) content += `👥 ${memberNames}\n`
-    if (ev.enrichment?.category) content += `🏷️ ${ev.enrichment.category}\n`
-    if (missing.length > 0) {
-      content += `\n⚠️ Missing: ${missing.join(', ')} — want me to help fill those in?\n`
-    } else {
-      content += `\nEverything looks filled in!`
-    }
-    content += `\n\nWhat would you like to change or add?`
+    // Start a clean, dedicated session for this action queue item
+    startFresh()
+
+    let content = `I'm reviewing the details for **${focusedAction.title}** 📋\n\n`
+    if (focusedAction.sender) content += `✉️ **From:** ${focusedAction.sender}\n`
+    if (focusedAction.amount) content += `💰 **Amount:** ${focusedAction.amount}\n`
+    if (focusedAction.urgency) content += `⚠️ **Urgency:** ${focusedAction.urgency}\n`
+    if (focusedAction.requiredAction) content += `⚡ **Required Action:** ${focusedAction.requiredAction}\n`
+    if (focusedAction.householdImpact) content += `🏡 **Household Impact:** ${focusedAction.householdImpact}\n`
+    content += `\nHow would you like to handle this action item?`
 
     primeMessages([{ id: crypto.randomUUID(), role: 'assistant', content }])
-  }, [open, focusedEvent?.id, sessionLoading, messages.length]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, focusedAction, launchContext?.launchId, sessionLoading, loading, startFresh, primeMessages])
 
   useEffect(() => {
-    if (!open || focusedEvent || loading) return
+    if (!open || focusedEvent || focusedAction || loading) return
     if (launchContext?.agent !== 'chef') return
     if (sessionLoading) return
-    if (messages.length > 0) return
+    if (!launchContext?.launchId) return
     if (firedChefGreetRef.current === launchContext.launchId) return
     firedChefGreetRef.current = launchContext.launchId
-    primeMessages([{
+
+    if (launchContext?.source === 'tonights-kitchen') {
+      const plan = useAppStore.getState().dinnerPlan
+      const msg: AIMessage = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: `**Tonight's Kitchen Planning**\n\nCurrently planned: **${plan.title}** (${plan.targetTime || '6:30 PM Target'}).\n\nWhat's the pivot for tonight? Tap a quick option below, generate an on-the-fly recipe from the pantry, or tell me what you'd like to switch to!`,
+      }
+      if (messages.length === 0) {
+        primeMessages([msg])
+      } else {
+        appendSyntheticMessage(msg)
+      }
+      return
+    }
+
+    const defaultChefMsg: AIMessage = {
       id: crypto.randomUUID(),
       role: 'assistant',
-      content: "Chef Agent online 👨‍🍳\n\nI can help you plan weeknight meals, optimize for budget/speed, build overlap-friendly grocery lists, and adapt dinners based on what's in your pantry.\n\nTry: “Plan 4 quick dinners under 30 minutes” or “Use what we already have and keep cost low.”",
-    }])
-  }, [open, focusedEvent, loading, launchContext?.agent, launchContext?.launchId, sessionLoading, messages.length, primeMessages])
+      content: "Chef Agent online.\n\nI can help you plan weeknight meals, generate custom recipes from what's in your pantry, optimize grocery lists, and manage tonight's dinner.\n\nTry: “Cook with what we have on hand” or “Plan 4 quick dinners under 30 minutes.”",
+    }
+    if (messages.length === 0) {
+      primeMessages([defaultChefMsg])
+    } else {
+      appendSyntheticMessage(defaultChefMsg)
+    }
+  }, [open, focusedEvent, loading, launchContext?.agent, launchContext?.launchId, launchContext?.source, sessionLoading, messages.length, primeMessages, appendSyntheticMessage])
 
   // While AI is thinking, suppress new voice input (don't stop the mic — avoids fade/blue flicker)
   useEffect(() => {
@@ -739,39 +963,58 @@ export default function AIChatDrawer({
 
   const handlePaste = useCallback(async (e: React.ClipboardEvent) => {
     const items = Array.from(e.clipboardData.items)
-    const imageItem = items.find(i => i.type.startsWith('image/'))
-    if (imageItem) {
+    const imageItems = items.filter(i => i.type.startsWith('image/'))
+    if (imageItems.length > 0) {
       e.preventDefault()
-      const blob = imageItem.getAsFile()
-      if (blob) {
-        markUserInteraction()
-        setAttachedImage(await readImageFile(blob))
+      markUserInteraction()
+      const newImages: Array<{ dataUrl: string; mimeType: string }> = []
+      for (const item of imageItems) {
+        const blob = item.getAsFile()
+        if (blob) {
+          const img = await readImageFile(blob)
+          newImages.push(img)
+        }
+      }
+      if (newImages.length > 0) {
+        setAttachedImages(prev => [...prev, ...newImages])
       }
     }
   }, [readImageFile, markUserInteraction])
 
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file && file.type.startsWith('image/')) {
+    const files = Array.from(e.target.files ?? [])
+    const imageFiles = files.filter(f => f.type.startsWith('image/'))
+    if (imageFiles.length > 0) {
       markUserInteraction()
-      setAttachedImage(await readImageFile(file))
+      const newImages: Array<{ dataUrl: string; mimeType: string }> = []
+      for (const file of imageFiles) {
+        const img = await readImageFile(file)
+        newImages.push(img)
+      }
+      if (newImages.length > 0) {
+        setAttachedImages(prev => [...prev, ...newImages])
+      }
     }
     e.target.value = ''
   }, [readImageFile, markUserInteraction])
 
+  const handleRemoveImage = useCallback((indexToRemove: number) => {
+    setAttachedImages(prev => prev.filter((_, idx) => idx !== indexToRemove))
+  }, [])
+
   const handleSend = useCallback((e?: React.MouseEvent) => {
     e?.stopPropagation()
     const text = (textareaRef.current?.value ?? input).trim()
-    const img = attachedImage
-    if ((!text && !img) || loading) return
+    const imgs = attachedImages
+    if ((!text && imgs.length === 0) || loading) return
     markUserInteraction()
     setInput('')
     interimRef.current = ''
     if (textareaRef.current) textareaRef.current.value = ''
-    setAttachedImage(null)
-    if (!img && dispatchPendingConfirmation(text)) return
-    void sendTraced(text || '(see attached image)', img ?? undefined)
-  }, [input, attachedImage, loading, sendTraced, markUserInteraction, dispatchPendingConfirmation])
+    setAttachedImages([])
+    if (imgs.length === 0 && dispatchPendingConfirmation(text)) return
+    void sendTraced(text || (imgs.length > 1 ? '(see attached images)' : '(see attached image)'), imgs.length > 0 ? imgs : undefined)
+  }, [input, attachedImages, loading, sendTraced, markUserInteraction, dispatchPendingConfirmation])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -812,31 +1055,7 @@ export default function AIChatDrawer({
     }, 80)
   }, [markUserInteraction, speech.stop])
 
-  // Conversation mode: hands-free loop that keeps the mic armed between turns.
-  // Enabling it immediately starts listening; disabling stops the mic.
-  const handleConversationToggle = useCallback(() => {
-    markUserInteraction()
-    setConversationMode(prev => {
-      const next = !prev
-      if (next) {
-        if (speech.supported && !speech.listening && !speech.connecting) speech.start()
-      } else {
-        speech.stop()
-      }
-      return next
-    })
-  }, [markUserInteraction, speech])
-
   const hasSession = !sessionLoading && !!session && session.messages.length > 0
-  const experienceMode = session?.experienceMode ?? 'do'
-  const showExperienceMode = !focusedEvent && (launchContext?.agent ?? 'general') === 'general'
-  const experienceModeOptions = useMemo(() => {
-    const disabled = loading || hasPendingToolAction
-    return [
-      { value: 'do', label: 'Do', disabled },
-      { value: 'talk_plan', label: 'Talk & Plan', disabled },
-    ] as const
-  }, [hasPendingToolAction, loading])
   const voiceLevel = Math.max(0, Math.min(1, speech.volume / 100))
 
   const loadHistoryConversations = useCallback(() => {
@@ -865,147 +1084,192 @@ export default function AIChatDrawer({
               : 'idle'
   const presenceStyle = { ['--voice-level' as '--voice-level']: String(voiceLevel) } as React.CSSProperties
 
-  return (
-    <AnimatePresence>
-      {open && (
-        <>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-scrim max-sm:bg-black/40 sm:bg-transparent"
+  const drawerBody = (
+    <>
+      {/* Drawer Header Bar */}
+      <div className="py-2 px-4 sm:px-5 flex items-center justify-between border-b border-casa-gold/20 bg-gradient-to-r from-casa-surface via-casa-bg to-casa-surface shrink-0 relative z-20 shadow-2xs min-h-[44px]">
+        <div className="flex items-center gap-2 min-w-0">
+          {focusedEvent && focusedEvent.members && focusedEvent.members.length > 0 && (
+            <div className="flex items-center gap-1.5 min-w-0">
+              <div className="flex items-center">
+                {focusedEvent.members.slice(0, 3).map((m) => (
+                  <div
+                    key={m.id || m.family_member?.id}
+                    className="w-5 h-5 rounded-full border border-white text-2xs font-extrabold flex items-center justify-center text-white shrink-0 -ml-1 first:ml-0 shadow-2xs"
+                    style={{ backgroundColor: getDisplayMemberColor(m.family_member?.color_hex) }}
+                  >
+                    {(m.family_member?.name ?? 'M').charAt(0).toUpperCase()}
+                  </div>
+                ))}
+              </div>
+              <span className="text-2xs font-extrabold text-casa-navy uppercase tracking-wider truncate">
+                {focusedEvent.members.map((m) => m.family_member?.name).filter(Boolean).join(' + ') || 'Event'}
+              </span>
+            </div>
+          )}
+
+          {loading && (
+            <span className="text-casa-gold text-2xs font-semibold animate-pulse flex items-center gap-1 shrink-0 px-2 py-0.5 rounded-full bg-casa-gold/10 border border-casa-gold/25">
+              <span className="w-1.5 h-1.5 rounded-full bg-casa-gold animate-pulse inline-block" />
+              thinking…
+            </span>
+          )}
+          {!loading && speech.listening && (
+            <span className="text-red-500 text-2xs font-semibold flex items-center gap-1 shrink-0 px-2 py-0.5 rounded-full bg-red-50 border border-red-200">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse inline-block" />
+              listening
+            </span>
+          )}
+        </div>
+
+        {/* Action Buttons: Hero Flip Action, Private History, New Session, Close */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {onSwitchToEvent && (Boolean(focusedEvent) || Boolean(focusedAction)) && (
+            <Button
+              variant="ghost"
+              type="button"
+              onClick={onSwitchToEvent}
+              title={`Flip to ${focusedEvent ? `event: ${focusedEvent.title}` : focusedAction ? `action: ${focusedAction.title}` : 'details'}`}
+              aria-label="Flip to event details"
+              className="min-h-[34px] px-3 py-1 flex items-center gap-1.5 rounded-full text-2xs font-bold text-casa-navy bg-casa-accent-subtle hover:bg-casa-accent-soft border border-casa-gold/40 shadow-2xs transition-all active:scale-95 group shrink-0"
+            >
+              <Rotate3d size={14} className="text-casa-gold transition-transform duration-300 group-hover:rotate-180" />
+              <span>Flip to {focusedEvent ? 'Event' : 'Action'}</span>
+            </Button>
+          )}
+
+          {Boolean(profile?.token || privateHistory.access) && (
+            <IconButton
+              variant="ghost"
+              onClick={() => {
+                setHistoryUnlockError(null)
+                setHistoryModalOpen(true)
+                loadHistoryConversations()
+              }}
+              title={`Open ${profile?.memberName ?? 'your'} private conversation history`}
+              aria-label="Private conversation history"
+              className="min-h-[32px] min-w-[32px] p-1.5 rounded-full hover:bg-amber-50 text-amber-900"
+              icon={<Lock size={15} className="text-amber-800" />}
+            />
+          )}
+
+          {(hasSession || messages.length > 0) && (
+            <IconButton
+              variant="ghost"
+              onClick={startFresh}
+              title="New conversation"
+              aria-label="New conversation"
+              className="min-h-[32px] min-w-[32px] p-1.5 rounded-full hover:bg-slate-100 group"
+              icon={<RotateCcw size={15} className="text-slate-800 transition-transform duration-300 group-hover:-rotate-90" />}
+            />
+          )}
+          <IconButton
+            variant="ghost"
             onClick={onClose}
+            className="min-h-[32px] min-w-[32px] p-1.5 rounded-full hover:bg-slate-100"
+            aria-label="Close assistant"
+            title="Close assistant"
+            icon={<X size={15} className="text-slate-800" />}
           />
+        </div>
+      </div>
 
-          <motion.div
-            initial={{ opacity: 0, y: -8, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -8, scale: 0.97 }}
-            transition={{ type: 'spring', damping: 28, stiffness: 260 }}
-            className={cn(
-              'fixed z-popover bg-casa-surface flex flex-col transition-shadow',
-              'max-sm:inset-x-0 max-sm:bottom-0 max-sm:rounded-t-2xl max-sm:w-full max-sm:shadow-modal',
-              'sm:rounded-2xl sm:w-[760px] sm:shadow-[0_8px_40px_rgba(0,0,0,0.22)] sm:border sm:border-casa-border',
-              loading && 'ai-thinking',
-            )}
-            data-panel-overlay
-            data-touch-keyboard="ignore"
-            style={{
-              ...(window.innerWidth < 640 ? {
-                maxHeight: '88vh',
-                paddingBottom: 'env(safe-area-inset-bottom)',
-              } : {
-                height: '72vh',
-                right: anchor ? Math.max(8, anchor.right) : 16,
-                top: anchor ? anchor.top + 6 : 56,
-              })
-            }}
-            onClick={e => e.stopPropagation()}
-            onPaste={handlePaste}
+      {/* Silent Executive Anchor HUD (Concept 2: Pure AI Mode) */}
+      {focusedEvent && (
+        <div className="border-b border-casa-gold/25 bg-gradient-to-r from-casa-surface-subtle via-casa-accent-subtle/40 to-casa-surface-subtle px-3.5 py-2.5 shrink-0 shadow-2xs backdrop-blur-sm flex items-center justify-between gap-2">
+          <div
+            onClick={() => handleOpenEventDetails(focusedEvent.id)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleOpenEventDetails(focusedEvent.id) }}
+            title="Tap to view event details"
+            className="flex items-center gap-2.5 min-w-0 flex-1 cursor-pointer hover:opacity-85 transition-opacity"
           >
-            {/* Drag handle — mobile only */}
-            <div className="flex justify-center pt-3 pb-1 sm:hidden flex-shrink-0">
-              <div className="w-9 h-1 bg-casa-divider rounded-full" />
+            <div className="w-7 h-7 rounded-lg bg-casa-gold/15 border border-casa-gold/30 flex items-center justify-center shrink-0">
+              <Calendar size={14} className="text-casa-gold" />
             </div>
-
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-casa-border">
-              <div className="flex items-center gap-2.5">
-                <div className={cn(
-                  'w-7 h-7 rounded-full bg-casa-gold/10 flex items-center justify-center transition-all',
-                  loading && 'bg-casa-gold/20',
-                )}>
-                  <Sparkles size={15} className={cn('text-casa-gold', loading && 'animate-pulse')} />
-                </div>
-                <p className="font-display text-heading text-casa-navy">
-                  Casa Tabor AI
-                  {loading && <span className="text-casa-gold text-caption font-normal ml-2">thinking…</span>}
-                  {!loading && speech.listening && (
-                    <span className="text-red-500 text-caption font-normal ml-2 flex items-center gap-1 inline-flex">
-                      <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse inline-block" />
-                      listening
-                    </span>
-                  )}
-                </p>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="font-extrabold text-caption text-casa-navy truncate leading-tight">
+                  {focusedEvent.title}
+                </span>
               </div>
-              <div className="flex items-center gap-1">
-                {speech.supported && (
-                  <Button variant="ghost"
-                    type="button"
-                    onClick={handleConversationToggle}
-                    aria-pressed={conversationMode}
-                    title={conversationMode
-                      ? 'Hands-free ON — mic stays armed for back-and-forth. Tap to turn off.'
-                      : 'Hands-free OFF — tap the microphone for each turn.'}
-                    className={cn(
-                      'h-7 px-2 flex items-center gap-1 rounded-full text-caption font-medium transition-colors',
-                      conversationMode
-                        ? 'bg-casa-gold text-white'
-                        : 'text-casa-muted hover:text-casa-navy hover:bg-casa-divider',
-                    )}
-                  >
-                    <MessagesSquare size={13} />
-                    {conversationMode && <span>Hands-free</span>}
-                  </Button>
+              <div className="flex items-center gap-2 text-2xs text-casa-muted font-medium truncate mt-0.5">
+                <span>{format(new Date(focusedEvent.start_time), 'EEE, MMM d · h:mm a')}</span>
+                {focusedEvent.location_name && (
+                  <span className="hidden sm:inline-flex items-center gap-1 text-casa-muted truncate">
+                    <span>·</span>
+                    <MapPin size={10} className="text-casa-gold shrink-0" />
+                    <span className="truncate">{focusedEvent.location_name}</span>
+                  </span>
                 )}
-                {showExperienceMode && (
-                  <Button
-                    variant="ghost"
-                    type="button"
-                    onClick={() => {
-                      setHistoryUnlockError(null)
-                      setHistoryModalOpen(true)
-                      loadHistoryConversations()
-                    }}
-                    title={`Open ${profile?.memberName ?? 'your'} private conversation history`}
-                    className="h-7 rounded-full bg-casa-gold/10 px-2 text-caption font-medium text-casa-gold transition-colors hover:bg-casa-gold/20"
-                  >
-                    Private
-                  </Button>
+                {Boolean(focusedEvent.plan_override?.transportation_plan?.legs?.[0]?.driverName) && (
+                  <span className="hidden md:inline-flex items-center gap-1 text-amber-900 bg-casa-gold/15 px-1.5 py-0.5 rounded-full font-bold">
+                    <Car size={10} className="text-casa-gold" />
+                    <span>{focusedEvent.plan_override?.transportation_plan?.legs?.[0]?.driverName}</span>
+                  </span>
                 )}
-                {hasSession && (
-                  <Button variant="ghost"
-                    type="button"
-                    onClick={startFresh}
-                    title="New conversation"
-                    className="size-control flex items-center justify-center text-casa-muted hover:text-casa-navy rounded-button hover:bg-casa-divider outline-none transition-colors focus-visible:ring-2 focus-visible:ring-casa-gold"
-                    aria-label="New conversation"
-                  >
-                    <RotateCcw size={14} />
-                  </Button>
-                )}
-                <Button variant="ghost"
-                  type="button"
-                  onClick={onClose}
-                  className="size-control flex items-center justify-center text-casa-muted hover:text-casa-navy rounded-button hover:bg-casa-divider outline-none transition-colors focus-visible:ring-2 focus-visible:ring-casa-gold"
-                  aria-label="Close assistant"
-                >
-                  <X size={18} />
-                </Button>
               </div>
             </div>
+          </div>
 
-            {showExperienceMode && (
-              <div className="border-b border-casa-border px-5 py-3">
-                <SegmentedControl
-                  aria-label="Assistant experience"
-                  value={experienceMode}
-                  options={experienceModeOptions}
-                  onChange={selectExperienceMode}
-                  fullWidth
-                />
-                <p className="mt-2 text-caption text-casa-muted">
-                  {experienceMode === 'talk_plan'
-                    ? 'Discuss, compare, and plan. Goals & decisions are captured directly to your Planning Projects.'
-                    : 'Fast commands, household actions, and quick answers.'}
-                </p>
-              </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {(focusedEvent.address || focusedEvent.location_name) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  const dest = encodeURIComponent(focusedEvent.address || focusedEvent.location_name || '')
+                  window.open(`https://www.google.com/maps/search/?api=1&query=${dest}`, '_blank')
+                }}
+                title="Open directions in Google Maps"
+                className="min-h-[30px] px-2.5 py-0.5 text-2xs font-bold rounded-lg bg-casa-surface hover:bg-casa-accent-subtle text-casa-navy border border-casa-border shadow-2xs flex items-center gap-1"
+              >
+                <Navigation size={11} className="text-casa-gold" />
+                <span className="hidden sm:inline">Directions</span>
+              </Button>
             )}
+          </div>
+        </div>
+      )}
 
-            {/* Messages */}
-            <BounceScroll nativeScroll className="flex-1 min-h-0" innerClassName="px-4 py-4 space-y-3">
-              {/* Session resume banner */}
-              {hasSession && messages.length > 0 && (
+      {/* Pinned Focused Action Subheader Bar */}
+      {focusedAction && !focusedEvent && (
+        <div className="border-b border-casa-gold/25 bg-gradient-to-b from-amber-50/60 via-white to-amber-50/30 px-4 py-3 shrink-0 shadow-2xs backdrop-blur-sm">
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="text-2xs uppercase tracking-wider font-extrabold px-2 py-0.5 rounded-full bg-casa-gold/15 text-casa-gold-hover border border-casa-gold/30 shrink-0">
+                ⚡ Action Item
+              </span>
+              {focusedAction.urgency && (
+                <span className="text-caption font-semibold text-casa-muted truncate">
+                  {focusedAction.urgency}
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="flex items-baseline justify-between gap-2">
+            <h3 className="font-extrabold text-body-sm text-casa-navy truncate">
+              {focusedAction.title}
+            </h3>
+            {focusedAction.amount && (
+              <span className="font-mono font-bold text-body-sm text-casa-gold-hover shrink-0">
+                {focusedAction.amount}
+              </span>
+            )}
+          </div>
+          {focusedAction.sender && (
+            <div className="text-caption text-casa-muted truncate mt-0.5 font-medium">
+              From: {focusedAction.sender}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Messages */}
+      <BounceScroll nativeScroll className="flex-1 min-h-0" innerClassName="px-4 py-4 space-y-3">
+        {/* Session resume banner */}
+              {hasSession && messages.length > 0 && !focusedEvent && !focusedAction && (
                 <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-casa-gold/8 border border-casa-gold/20 text-caption text-casa-muted">
                   <Sparkles size={11} className="text-casa-gold flex-shrink-0" />
                   <span>Resuming previous conversation</span>
@@ -1019,210 +1283,414 @@ export default function AIChatDrawer({
                 </div>
               )}
 
+              {/* Editorial Proactive Welcome & Travertine Plinths */}
               {messages.length === 0 && (
-                <div className="flex flex-col items-center gap-3 py-6 text-center">
-                  <Sparkles size={28} className="text-casa-gold opacity-60" />
-                  <p className="text-body-sm font-semibold text-casa-navy">What can I help with?</p>
-                  {proactiveNudge && !nudgeDismissed && (
-                    <div className="w-full flex items-start gap-2 px-3 py-2.5 rounded-2xl bg-casa-gold/8 border border-casa-gold/25 text-left">
-                      <Sparkles size={13} className="text-casa-gold flex-shrink-0 mt-0.5" />
-                      <Button variant="ghost"
-                        type="button"
-                        onClick={() => { markUserInteraction(); sendCurrentInput(proactiveNudge.prompt) }}
-                        className="flex-1 text-caption text-casa-navy leading-snug hover:underline"
-                      >
-                        {proactiveNudge.text}
-                      </Button>
-                      <Button variant="ghost"
-                        type="button"
-                        onClick={() => setNudgeDismissed(true)}
-                        aria-label="Dismiss"
-                        className="flex-shrink-0 text-casa-muted hover:text-casa-navy"
-                      >
-                        <X size={13} />
-                      </Button>
+                focusedEvent ? (
+                  <div className="flex flex-col gap-3.5 py-3 text-left">
+                    {/* Standby Card */}
+                    <div className="rounded-2xl bg-gradient-to-br from-casa-surface via-casa-surface-subtle to-casa-accent-subtle/30 border border-casa-gold/35 p-4 shadow-subtle space-y-1.5">
+                      <div className="flex items-center gap-1.5 text-2xs font-bold uppercase tracking-wider text-casa-gold-hover">
+                        <Sparkles size={13} className="text-casa-gold" />
+                        <span>Event Copilot Standby</span>
+                      </div>
+                      <h3 className="text-body font-bold text-casa-navy leading-snug">
+                        Ready to assist with {focusedEvent.title}
+                      </h3>
+                      <p className="text-caption text-casa-muted leading-relaxed">
+                        Ask a question, check conflicts, or tap a quick action below.
+                      </p>
                     </div>
-                  )}
-                  <div className="flex flex-wrap justify-center gap-2 mt-1">
-                    {dynamicSuggestions.map(s => (
-                      <Button variant="ghost"
-                        key={s}
-                        onClick={() => { markUserInteraction(); setInput(s); textareaRef.current?.focus() }}
-                        className="px-3 py-1.5 rounded-full border border-casa-border text-caption text-casa-muted hover:bg-casa-bg hover:text-casa-navy transition-colors"
-                      >
-                        {s}
-                      </Button>
-                    ))}
+
+                    {/* Dynamic Event Suggestion Pills */}
+                    <div className="space-y-2 pt-1">
+                      <p className="text-2xs uppercase tracking-widest font-bold text-casa-muted px-1">Suggested actions</p>
+                      <div className="flex flex-wrap gap-2">
+                        {dynamicSuggestions.map(s => (
+                          <Button
+                            variant="ghost"
+                            key={s}
+                            type="button"
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onClick={() => { markUserInteraction(); sendCurrentInput(s) }}
+                            className="min-h-control px-3.5 py-1.5 rounded-full border border-casa-gold/30 bg-casa-surface hover:bg-casa-accent-subtle hover:border-casa-gold/60 text-caption font-semibold text-casa-navy transition-all shadow-2xs touch-manipulation cursor-pointer flex items-center gap-1.5"
+                          >
+                            <Sparkles size={12} className="text-casa-gold shrink-0" />
+                            <span>{s}</span>
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="flex flex-col gap-3 py-2 text-left">
+                    {/* Salutation Card */}
+                    <div className="rounded-2xl bg-gradient-to-br from-casa-bg via-casa-surface-subtle to-casa-bg-2 border border-casa-gold/30 p-4 shadow-subtle space-y-1">
+                      <div className="flex items-center gap-1.5 text-2xs font-bold uppercase tracking-wider text-casa-gold-hover">
+                        <Sparkles size={13} className="text-casa-gold" />
+                        <span>Estate Intelligence</span>
+                      </div>
+                      <h3 className="text-body font-bold text-casa-navy leading-snug">
+                        {format(new Date(), 'EEEE, MMMM d')}
+                      </h3>
+                      <p className="text-caption text-casa-muted leading-relaxed">
+                        Schedules, meal planning, grocery coordination, and proactive family assistance.
+                      </p>
+                    </div>
+
+                    {/* Travertine Hero Plinth for Proactive Nudge */}
+                    {proactiveNudge && !nudgeDismissed && (
+                      <div className="rounded-2xl bg-casa-accent-subtle border border-casa-gold/45 p-4 shadow-card space-y-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 text-caption font-bold uppercase tracking-wide text-amber-900">
+                            <AlertTriangle size={15} className="text-casa-gold" />
+                            <span>Attention Recommended</span>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            type="button"
+                            onClick={() => setNudgeDismissed(true)}
+                            aria-label="Dismiss notification"
+                            className="text-casa-muted hover:text-casa-navy p-1 rounded-full hover:bg-black/5"
+                          >
+                            <X size={14} />
+                          </Button>
+                        </div>
+                        <p className="text-body-sm font-semibold text-casa-navy leading-snug">
+                          {proactiveNudge.text}
+                        </p>
+                        <Button
+                          variant="ghost"
+                          type="button"
+                          onClick={() => { markUserInteraction(); sendCurrentInput(proactiveNudge.prompt) }}
+                          className="w-full min-h-[44px] flex items-center justify-center gap-2 rounded-xl bg-white border border-casa-gold/40 text-casa-navy text-caption font-bold shadow-xs hover:bg-casa-gold/10 active:scale-[0.99] transition-all"
+                        >
+                          <Sparkles size={14} className="text-casa-gold" />
+                          <span>Review with Copilot</span>
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* Ambient Glance Cards */}
+                    <AmbientGlanceCards
+                      events={events}
+                      onPromptSelect={(prompt) => {
+                        markUserInteraction()
+                        sendCurrentInput(prompt)
+                      }}
+                    />
+
+                    {/* Dynamic Suggestion Pills */}
+                    <div className="space-y-1.5 pt-1">
+                      <p className="text-2xs uppercase tracking-widest font-bold text-casa-muted px-1">Suggested inquiries</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {dynamicSuggestions.map(s => (
+                          <Button
+                            variant="ghost"
+                            key={s}
+                            type="button"
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onClick={() => { markUserInteraction(); sendCurrentInput(s) }}
+                            className="min-h-[38px] px-3.5 py-1.5 rounded-full border border-casa-gold/30 bg-casa-bg text-caption font-semibold text-casa-navy hover:bg-white hover:border-casa-gold/60 transition-all shadow-2xs touch-manipulation cursor-pointer"
+                          >
+                            {s}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )
               )}
 
-              {messages.map((msg, messageIndex) => (
-                <MessageBubble
-                  key={msg.id}
-                  msg={msg}
-                  isActivePending={msg.id === activePendingToolMessageId}
-                  events={events}
-                  onOpenEventDetails={handleOpenEventDetails}
-                  enableQuickSaveRecipe={page === 'cook' || launchContext?.agent === 'chef'}
-                  editSeed={messages.slice(0, messageIndex).findLast((message) => message.role === 'user')?.content ?? ''}
-                  onQuickSaveRecipe={quickSaveRecipeSuggestion}
-                  onConfirmToolAction={async (messageId, tool, args) => {
-                    if (tool === 'confirm_talk_plan_action_intent') {
-                      updateMessageToolStatus(messageId, 'done')
-                      await send(String(args.original_request ?? ''), undefined, undefined, {
-                        replayExistingUserMessage: true,
-                        talkPlanIntentResolution: 'confirmed_action',
-                      })
-                      return true
-                    }
-                    updateMessageToolStatus(messageId, 'loading')
-                    const actionTrace = activeTraceRef.current
-                    const actionCorrelationId = buildCorrelationId(messageId)
-                    if (actionTrace) {
-                      emitAssistantTrace('confirmation_accepted', actionTrace, {
-                        detail: 'Confirmation accepted',
-                        payload: { message_id: messageId, tool },
-                      })
-                      emitAssistantTrace('action_execute_started', actionTrace, {
-                        detail: tool,
-                        payload: { message_id: messageId, tool, action_correlation_id: actionCorrelationId },
-                      })
-                    }
-                    try {
-                      const matchedEvent = tool === 'update_event'
-                        ? events.find((event) => event.id === String(args.id ?? ''))
-                        : undefined
-                      const requestArgs = tool === 'update_event' && matchedEvent
-                        ? { ...args, expected_updated_at: matchedEvent.updated_at }
-                        : tool === 'create_event' && args.calendar_preflight
-                          ? { ...args, allow_calendar_conflicts: true }
-                          : args
-                      const { data, error } = await supabase.functions.invoke('execute-ai-action', {
-                        body: {
-                          tool,
-                          args: requestArgs,
-                          action_id: messageId,
-                          session_id: session?.id ?? null,
-                          correlation_id: actionCorrelationId,
-                          trace_id: actionTrace?.traceId ?? null,
-                          turn_id: actionTrace?.turnId ?? null,
-                          lane: actionTrace?.lane ?? 'llm',
-                          device_id: getAssistantDeviceId(),
-                          client_trace_present: Boolean(actionTrace),
-                          client_build: typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'unknown',
-                          client_trace_source: actionTrace?.source ?? 'ai-drawer-confirmation',
-                          confirmed_by_user: true,
-                        },
-                      })
-                      if (error) throw error
-                      if (data?.success === false) throw new Error(data.error ?? 'Action failed')
-                      updateMessageToolStatus(messageId, 'done', {
-                        actionId: data?.action_id,
-                        resultEventId: data?.event_id,
-                        conversationState: conversationStateAfterCalendarAction(
-                          tool,
-                          requestArgs,
-                          data,
-                          new Date(),
-                          msg.conversationState,
-                        ),
-                        syncWarning: data?.duplicate ? data?.message : data?.sync_warning,
-                        syncStatus: data?.sync_status === 'queued' ? 'queued' : data?.sync_status === 'failed' ? 'failed' : 'synced',
-                        undoStatus: 'idle',
-                        undoErrorMsg: undefined,
-                      })
-                      qc.invalidateQueries({ queryKey: ['events'] })
-                      qc.invalidateQueries({ queryKey: ['grocery'] })
-                      if (actionTrace) {
-                        emitAssistantTrace('action_execute_completed', actionTrace, {
-                          detail: tool,
-                          payload: { message_id: messageId, tool, action_correlation_id: actionCorrelationId },
-                        })
-                      }
-                      return true
-                    } catch (err) {
-                      updateMessageToolStatus(messageId, 'error', { errorMsg: (err as Error).message })
-                      if (actionTrace) {
-                        emitAssistantTrace('action_execute_failed', actionTrace, {
-                          detail: (err as Error).message,
-                          payload: { message_id: messageId, tool, action_correlation_id: actionCorrelationId },
-                        })
-                      }
-                      return false
-                    }
-                  }}
-                  onUndoToolAction={async (messageId, actionId) => {
-                    updateMessageToolStatus(messageId, 'done', { undoStatus: 'loading', undoErrorMsg: undefined })
-                    try {
-                      const { data, error } = await supabase.functions.invoke('execute-ai-action', {
-                        body: {
-                          tool: 'undo_event_edit',
-                          args: { action_id: actionId },
-                          action_id: `${messageId}:undo`,
-                          session_id: session?.id ?? null,
-                          correlation_id: buildCorrelationId(`${messageId}:undo`),
-                        },
-                      })
-                      if (error) throw error
-                      if (data?.success === false) throw new Error(data.error ?? 'Undo failed')
-                      updateMessageToolStatus(messageId, 'done', {
-                        syncWarning: data?.sync_warning,
-                        syncStatus: data?.sync_status === 'queued' ? 'queued' : data?.sync_status === 'failed' ? 'failed' : 'synced',
-                        undoStatus: 'done',
-                        undoErrorMsg: undefined,
-                      })
-                      qc.invalidateQueries({ queryKey: ['events'] })
-                    } catch (err) {
-                      updateMessageToolStatus(messageId, 'done', {
-                        undoStatus: 'error',
-                        undoErrorMsg: (err as Error).message,
-                      })
-                    }
-                  }}
-                  onCancelToolAction={(messageId) => {
-                    const message = messages.find(item => item.id === messageId)
-                    updateMessageToolStatus(messageId, 'cancelled')
-                    const trace = activeTraceRef.current
-                    if (trace) {
-                      emitAssistantTrace('confirmation_cancelled', trace, {
-                        detail: 'Confirmation cancelled',
-                        payload: { message_id: messageId },
-                      })
-                    }
-                    if (message?.toolAction?.tool === 'confirm_talk_plan_action_intent') {
-                      void send(
-                        String(message.toolAction.args.original_request ?? ''),
-                        undefined,
-                        undefined,
-                        {
-                          replayExistingUserMessage: true,
-                          talkPlanIntentResolution: 'conversation_only',
-                        },
-                      )
-                    }
-                  }}
-                  onRefreshToolAction={() => {
-                    qc.invalidateQueries({ queryKey: ['events'] })
-                  }}
-                  registerPendingAction={registerPendingVoiceAction}
-                  onEditMessage={(content) => {
-                    markUserInteraction()
-                    if (speech.listening || speech.connecting) speech.stop()
-                    setInput(content)
-                    interimRef.current = content
-                    if (textareaRef.current) {
-                      textareaRef.current.value = content
-                      setTimeout(() => {
-                        const el = textareaRef.current
-                        if (!el) return
-                        el.focus()
-                        el.setSelectionRange(el.value.length, el.value.length)
-                      }, 0)
-                    }
-                  }}
-                />
-              ))}
+              {messages.map((msg, messageIndex) => {
+                const isLatestAssistant =
+                  messageIndex === messages.length - 1 &&
+                  msg.role === 'assistant' &&
+                  !msg.streaming &&
+                  !loading
+                return (
+                  <div key={msg.id} className="space-y-2">
+                    <MessageBubble
+                      msg={msg}
+                      isActivePending={msg.id === activePendingToolMessageId}
+                      events={events}
+                      onOpenEventDetails={handleOpenEventDetails}
+                      onLinkClick={handleLinkClick}
+                      enableQuickSaveRecipe={page === 'cook' || launchContext?.agent === 'chef'}
+                      editSeed={messages.slice(0, messageIndex).findLast((message) => message.role === 'user')?.content ?? ''}
+                      onQuickSaveRecipe={quickSaveRecipeSuggestion}
+                      onQuickSaveAndSetTonight={quickSaveAndSetTonightRecipe}
+                      onConfirmToolAction={async (messageId, tool, args) => {
+                        if (tool === 'confirm_talk_plan_action_intent') {
+                          updateMessageToolStatus(messageId, 'done')
+                          await send(String(args.original_request ?? ''), undefined, undefined, {
+                            replayExistingUserMessage: true,
+                            talkPlanIntentResolution: 'confirmed_action',
+                          })
+                          return true
+                        }
+                        if (tool === 'update_dinner_plan') {
+                          updateMessageToolStatus(messageId, 'loading')
+                          try {
+                            const defaultDriverOrChef = (args.mode === 'takeout' || args.mode === 'dineout') ? 'Jake' : 'Jake & Kelly'
+                            const plan: DinnerPlan = {
+                              mode: (args.mode as DinnerMode) || 'takeout',
+                              title: String(args.title || "Flanigan's Seafood Bar & Grill"),
+                              subtitle: String(args.subtitle || (args.mode === 'takeout' ? `Pickup: ${args.chefOrDriver || 'Jake'} · Order Window: 6:00–6:15 PM` : '25m prep · Pantry stock confirmed · Chef: Jake & Kelly')),
+                              targetTime: String(args.targetTime || '6:30 PM Target'),
+                              recipeId: args.recipeId ? String(args.recipeId) : undefined,
+                              chefOrDriver: args.chefOrDriver ? String(args.chefOrDriver) : defaultDriverOrChef,
+                              statusBadge: args.statusBadge ? String(args.statusBadge) : (args.mode === 'takeout' ? 'Order ready for pickup' : 'Ingredients ready'),
+                            }
+                            useAppStore.getState().setDinnerPlan(plan)
+                            void saveTonightDinnerPlan(plan)
+                            qc.invalidateQueries({ queryKey: ['copilot-meal-plans'] })
+                            qc.invalidateQueries({ queryKey: ['recipe-meal-plans'] })
+                            updateMessageToolStatus(messageId, 'done')
+                            return true
+                          } catch (err) {
+                            updateMessageToolStatus(messageId, 'error', { errorMsg: (err as Error).message })
+                            return false
+                          }
+                        }
+                        updateMessageToolStatus(messageId, 'loading')
+                        const actionTrace = activeTraceRef.current
+                        const actionCorrelationId = buildCorrelationId(messageId)
+                        if (actionTrace) {
+                          emitAssistantTrace('confirmation_accepted', actionTrace, {
+                            detail: 'Confirmation accepted',
+                            payload: { message_id: messageId, tool },
+                          })
+                          emitAssistantTrace('action_execute_started', actionTrace, {
+                            detail: tool,
+                            payload: { message_id: messageId, tool, action_correlation_id: actionCorrelationId },
+                          })
+                        }
+                        try {
+                          const matchedEvent = tool === 'update_event'
+                            ? events.find((event) => event.id === String(args.id ?? ''))
+                            : undefined
+                          const requestArgs = tool === 'update_event' && matchedEvent
+                            ? { ...args, expected_updated_at: matchedEvent.updated_at }
+                            : tool === 'create_event' && (args.calendar_preflight || args.allow_calendar_conflicts)
+                              ? { ...args, allow_calendar_conflicts: true }
+                              : args
+                          const { data, error } = await supabase.functions.invoke('execute-ai-action', {
+                            body: {
+                              tool,
+                              args: requestArgs,
+                              action_id: messageId,
+                              session_id: session?.id ?? null,
+                              correlation_id: actionCorrelationId,
+                              trace_id: actionTrace?.traceId ?? null,
+                              turn_id: actionTrace?.turnId ?? null,
+                              lane: actionTrace?.lane ?? 'llm',
+                              device_id: getAssistantDeviceId(),
+                              client_trace_present: Boolean(actionTrace),
+                              client_build: typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'unknown',
+                              client_trace_source: actionTrace?.source ?? 'ai-drawer-confirmation',
+                              confirmed_by_user: true,
+                            },
+                          })
+
+                          let responseData = data
+                          if (error && typeof error === 'object' && 'context' in error) {
+                            const resp = (error as { context?: unknown }).context
+                            if (resp && typeof resp === 'object' && 'json' in resp) {
+                              try {
+                                const readable = 'clone' in resp && typeof (resp as any).clone === 'function'
+                                  ? (resp as any).clone()
+                                  : resp
+                                const parsed = await (readable as { json: () => Promise<any> }).json()
+                                if (parsed && typeof parsed === 'object') {
+                                  responseData = parsed
+                                }
+                              } catch {
+                                // Fallback to raw error
+                              }
+                            }
+                          }
+
+                          // If the backend detected a conflict/duplicate requiring confirmation, transition to pending with preflight attached
+                          if (responseData?.code === 'calendar_conflict_confirmation_required' && responseData?.calendar_preflight) {
+                            updateMessageToolStatus(messageId, 'pending', {
+                              args: {
+                                ...requestArgs,
+                                calendar_preflight: responseData.calendar_preflight,
+                                allow_calendar_conflicts: true,
+                              },
+                            })
+                            if (actionTrace) {
+                              emitAssistantTrace('calendar_conflict_detected', actionTrace, {
+                                detail: 'Calendar conflict requires user confirmation',
+                                payload: { message_id: messageId, tool, preflight: responseData.calendar_preflight },
+                              })
+                            }
+                            return false
+                          }
+
+                          if (error && !responseData?.success) {
+                            const serverMsg = typeof responseData?.error === 'string' ? responseData.error : error.message
+                            throw new Error(serverMsg || 'Action failed')
+                          }
+                          if (responseData?.success === false) throw new Error(responseData.error ?? 'Action failed')
+                          updateMessageToolStatus(messageId, 'done', {
+                            actionId: responseData?.action_id,
+                            resultEventId: responseData?.event_id,
+                            conversationState: conversationStateAfterCalendarAction(
+                              tool,
+                              requestArgs,
+                              responseData,
+                              new Date(),
+                              msg.conversationState,
+                            ),
+                            syncWarning: data?.duplicate ? data?.message : (responseData?.duplicate ? responseData?.message : responseData?.sync_warning),
+                            syncStatus: responseData?.sync_status === 'queued' ? 'queued' : responseData?.sync_status === 'failed' ? 'failed' : 'synced',
+                            undoStatus: 'idle',
+                            undoErrorMsg: undefined,
+                          })
+                          invalidateAllCalendarQueries(qc, String(requestArgs?.event_id ?? requestArgs?.id ?? focusedEvent?.id ?? ''))
+                          qc.invalidateQueries({ queryKey: ['grocery'] })
+                          if (actionTrace) {
+                            emitAssistantTrace('action_execute_completed', actionTrace, {
+                              detail: tool,
+                              payload: { message_id: messageId, tool, action_correlation_id: actionCorrelationId },
+                            })
+                          }
+                          return true
+                        } catch (err) {
+                          updateMessageToolStatus(messageId, 'error', { errorMsg: (err as Error).message })
+                          if (actionTrace) {
+                            emitAssistantTrace('action_execute_failed', actionTrace, {
+                              detail: (err as Error).message,
+                              payload: { message_id: messageId, tool, action_correlation_id: actionCorrelationId },
+                            })
+                          }
+                          return false
+                        }
+                      }}
+                      onUndoToolAction={async (messageId, actionId) => {
+                        const targetMsg = messages.find((m) => m.id === messageId)
+                        if (targetMsg?.toolAction?.tool === 'add_grocery_items') {
+                          updateMessageToolStatus(messageId, 'done', { undoStatus: 'loading', undoErrorMsg: undefined })
+                          try {
+                            const createdIds = autoGroceryCreatedIdsRef.current.get(messageId) ?? []
+                            if (createdIds.length > 0) {
+                              const { error } = await supabase
+                                .from('grocery_items')
+                                .update({ deleted_at: new Date().toISOString(), last_modified_source: 'casa' })
+                                .in('id', createdIds)
+                              if (error) throw error
+                            }
+                            updateMessageToolStatus(messageId, 'done', {
+                              undoStatus: 'done',
+                              undoErrorMsg: undefined,
+                            })
+                            qc.invalidateQueries({ queryKey: ['grocery'] })
+                          } catch (err) {
+                            updateMessageToolStatus(messageId, 'done', {
+                              undoStatus: 'error',
+                              undoErrorMsg: (err as Error).message,
+                            })
+                          }
+                          return
+                        }
+
+                        updateMessageToolStatus(messageId, 'done', { undoStatus: 'loading', undoErrorMsg: undefined })
+                        try {
+                          const { data, error } = await supabase.functions.invoke('execute-ai-action', {
+                            body: {
+                              tool: 'undo_event_edit',
+                              args: { action_id: actionId },
+                              action_id: `${messageId}:undo`,
+                              session_id: session?.id ?? null,
+                              correlation_id: buildCorrelationId(`${messageId}:undo`),
+                            },
+                          })
+                          if (error) throw error
+                          if (data?.success === false) throw new Error(data.error ?? 'Undo failed')
+                          updateMessageToolStatus(messageId, 'done', {
+                            syncWarning: data?.sync_warning,
+                            syncStatus: data?.sync_status === 'queued' ? 'queued' : data?.sync_status === 'failed' ? 'failed' : 'synced',
+                            undoStatus: 'done',
+                            undoErrorMsg: undefined,
+                          })
+                          invalidateAllCalendarQueries(qc, focusedEvent?.id)
+                        } catch (err) {
+                          updateMessageToolStatus(messageId, 'done', {
+                            undoStatus: 'error',
+                            undoErrorMsg: (err as Error).message,
+                          })
+                        }
+                      }}
+                      onCancelToolAction={(messageId) => {
+                        const message = messages.find(item => item.id === messageId)
+                        updateMessageToolStatus(messageId, 'cancelled')
+                        const trace = activeTraceRef.current
+                        if (trace) {
+                          emitAssistantTrace('confirmation_cancelled', trace, {
+                            detail: 'Confirmation cancelled',
+                            payload: { message_id: messageId },
+                          })
+                        }
+                        if (message?.toolAction?.tool === 'confirm_talk_plan_action_intent') {
+                          void send(
+                            String(message.toolAction.args.original_request ?? ''),
+                            undefined,
+                            undefined,
+                            {
+                              replayExistingUserMessage: true,
+                              talkPlanIntentResolution: 'conversation_only',
+                            },
+                          )
+                        }
+                      }}
+                      onRefreshToolAction={() => {
+                        invalidateAllCalendarQueries(qc, focusedEvent?.id)
+                      }}
+                      registerPendingAction={registerPendingVoiceAction}
+                      onSelectSuggestion={(text) => {
+                        markUserInteraction()
+                        sendCurrentInput(text)
+                      }}
+                      onEditMessage={(content) => {
+                        markUserInteraction()
+                        if (speech.listening || speech.connecting) speech.stop()
+                        setInput(content)
+                        interimRef.current = content
+                        if (textareaRef.current) {
+                          textareaRef.current.value = content
+                          setTimeout(() => {
+                            const el = textareaRef.current
+                            if (!el) return
+                            el.focus()
+                            el.setSelectionRange(el.value.length, el.value.length)
+                          }, 0)
+                        }
+                      }}
+                    />
+                    {isLatestAssistant && !hasPendingToolAction && dynamicSuggestions.length > 0 && (
+                      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 pl-1">
+                        {dynamicSuggestions.map((s) => (
+                          <Button
+                            variant="ghost"
+                            key={s}
+                            type="button"
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onClick={() => {
+                              markUserInteraction()
+                              sendCurrentInput(s)
+                            }}
+                            className="px-3 py-1.5 rounded-full border border-casa-gold/30 bg-casa-gold/5 text-caption font-medium text-casa-navy hover:bg-casa-gold/15 hover:border-casa-gold/60 transition-all whitespace-nowrap shrink-0 shadow-xs touch-manipulation cursor-pointer"
+                          >
+                            <Sparkles size={11} className="inline mr-1 text-casa-gold" />
+                            {s}
+                          </Button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
 
               {loading && !messages.some(m => m.streaming) && (
                 <div className="flex items-center gap-2 text-casa-muted pl-1">
@@ -1236,31 +1704,48 @@ export default function AIChatDrawer({
             {/* Input */}
             <div className="relative px-4 pb-5 pt-3 border-t border-casa-border">
               <AnimatePresence>
-                {attachedImage && (
+                {attachedImages.length > 0 && (
                   <motion.div
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
                     exit={{ opacity: 0, height: 0 }}
-                    className="mb-2 overflow-hidden"
+                    className="mb-2.5 overflow-hidden"
                   >
-                    <div className="relative inline-block">
-                      <img
-                        src={attachedImage.dataUrl}
-                        alt="Attached"
-                        className="h-20 w-auto rounded-lg border border-casa-border object-cover"
-                      />
-                      <Button variant="ghost"
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1.5 pt-0.5 scrollbar-thin">
+                      {attachedImages.map((img, index) => (
+                        <div key={index} className="relative inline-block shrink-0 rounded-xl border border-casa-border overflow-hidden group shadow-2xs">
+                          <img
+                            src={img.dataUrl}
+                            alt={`Attached ${index + 1}`}
+                            className="h-20 w-24 object-cover"
+                          />
+                          <Button
+                            variant="ghost"
+                            type="button"
+                            onClick={() => handleRemoveImage(index)}
+                            className="absolute top-1 right-1 size-6 rounded-full bg-black/70 hover:bg-red-600 text-white flex items-center justify-center shadow outline-none transition-colors"
+                            aria-label={`Remove attached image ${index + 1}`}
+                          >
+                            <X size={12} />
+                          </Button>
+                          <div className="absolute bottom-1 left-1 flex items-center gap-1 bg-black/60 backdrop-blur-xs rounded px-1.5 py-0.5">
+                            <ImageIcon size={9} className="text-white" />
+                            <span className="text-3xs text-white font-semibold">Photo {index + 1}</span>
+                          </div>
+                        </div>
+                      ))}
+
+                      <Button
+                        variant="subtle"
                         type="button"
-                        onClick={() => setAttachedImage(null)}
-                        className="absolute -top-3 -right-3 size-control rounded-button bg-casa-error text-white flex items-center justify-center shadow outline-none focus-visible:ring-2 focus-visible:ring-casa-gold"
-                        aria-label="Remove attached image"
+                        onClick={() => setAttachmentMenuOpen(true)}
+                        className="h-20 w-16 shrink-0 rounded-xl border border-dashed border-casa-gold/50 bg-casa-gold/5 hover:bg-casa-gold/15 text-casa-gold flex flex-col items-center justify-center gap-1 transition-colors"
+                        title="Add another photo or attachment"
+                        aria-label="Add another photo or attachment"
                       >
-                        <X size={10} />
+                        <Plus size={16} />
+                        <span className="text-3xs font-bold">+ Add</span>
                       </Button>
-                      <div className="absolute bottom-1 left-1 flex items-center gap-1 bg-black/50 rounded px-1 py-0.5">
-                        <ImageIcon size={9} className="text-white" />
-                        <span className="text-caption text-white font-medium">Image attached</span>
-                      </div>
                     </div>
                   </motion.div>
                 )}
@@ -1268,8 +1753,8 @@ export default function AIChatDrawer({
 
               <div
                 className={cn(
-                  'ai-presence-composer relative overflow-hidden bg-casa-bg rounded-xl border border-casa-border transition-all duration-300',
-                  voiceComposerActive ? 'p-4' : 'px-3 py-2',
+                  'ai-presence-composer relative overflow-hidden bg-casa-bg rounded-2xl border border-casa-gold/30 transition-all duration-300 shadow-subtle focus-within:border-casa-gold focus-within:ring-2 focus-within:ring-casa-gold/20',
+                  voiceComposerActive ? 'p-4' : 'p-3',
                   aiPresence === 'listening' && 'ai-presence-listening',
                   aiPresence === 'voice_active' && 'ai-presence-voice',
                   aiPresence === 'processing' && 'ai-presence-processing',
@@ -1278,7 +1763,7 @@ export default function AIChatDrawer({
                 )}
                 style={presenceStyle}
               >
-                <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+                <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFileChange} />
                 <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileChange} />
 
                 {voiceComposerActive ? (
@@ -1295,7 +1780,7 @@ export default function AIChatDrawer({
                         variant="subtle"
                         type="button"
                         onClick={handleTypeInstead}
-                        className="min-h-control gap-2"
+                        className="min-h-control gap-2 rounded-xl border border-casa-gold/30 bg-white text-casa-navy font-semibold hover:bg-casa-gold/10"
                       >
                         <Keyboard size={16} />
                         Type instead
@@ -1304,7 +1789,7 @@ export default function AIChatDrawer({
                         variant="secondary"
                         type="button"
                         onClick={() => { markUserInteraction(); speech.finish() }}
-                        className="min-h-control gap-2"
+                        className="min-h-control gap-2 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 font-bold hover:bg-amber-100"
                       >
                         <Square size={14} />
                         Stop
@@ -1312,15 +1797,15 @@ export default function AIChatDrawer({
                     </div>
                   </div>
                 ) : (
-                  <div className="w-full">
+                  <div className="w-full flex flex-col gap-2">
                     <AnimatePresence initial={false}>
                       {attachmentMenuOpen && (
                         <motion.div
                           id="assistant-attachment-actions"
-                          initial={{ opacity: 0, y: 4 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: 4 }}
-                          className="mb-2 flex gap-2"
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="flex gap-2 overflow-hidden pb-1"
                         >
                           <Button
                             variant="subtle"
@@ -1329,9 +1814,9 @@ export default function AIChatDrawer({
                               setAttachmentMenuOpen(false)
                               fileInputRef.current?.click()
                             }}
-                            className="min-h-control flex-1 gap-2"
+                            className="min-h-control flex-1 gap-2 text-body-sm rounded-xl border border-casa-gold/30 bg-white text-casa-navy font-semibold hover:bg-casa-gold/10"
                           >
-                            <Paperclip size={16} /> Attach image
+                            <Paperclip size={16} /> Attach images
                           </Button>
                           <Button
                             variant="subtle"
@@ -1340,76 +1825,94 @@ export default function AIChatDrawer({
                               setAttachmentMenuOpen(false)
                               cameraInputRef.current?.click()
                             }}
-                            className="min-h-control flex-1 gap-2"
+                            className="min-h-control flex-1 gap-2 text-body-sm rounded-xl border border-casa-gold/30 bg-white text-casa-navy font-semibold hover:bg-casa-gold/10"
                           >
                             <Camera size={16} /> Take photo
                           </Button>
                         </motion.div>
                       )}
                     </AnimatePresence>
-                    <div className="flex items-end gap-2">
-                      <Button variant="ghost"
-                        type="button"
-                        onClick={() => setAttachmentMenuOpen(value => !value)}
-                        title="Add attachment"
-                        className="size-control rounded-button text-casa-muted outline-none transition-colors shrink-0 focus-visible:ring-2 focus-visible:ring-casa-gold"
-                        aria-label="Add attachment"
-                        aria-expanded={attachmentMenuOpen}
-                        aria-controls="assistant-attachment-actions"
-                      >
-                        <Plus size={16} />
-                      </Button>
-                      <div className="relative min-w-0 flex-1">
-                        <textarea
-                          ref={textareaRef}
-                          value={input}
-                          onChange={e => handleInputChange(e.target.value)}
-                          onKeyDown={handleKeyDown}
-                          placeholder={attachedImage ? 'Ask about this image…' : 'Ask Casa anything…'}
-                          rows={1}
-                          aria-label="Assistant message"
-                          className="w-full min-h-6 max-h-30 bg-transparent text-body text-casa-navy placeholder:text-casa-muted outline-none resize-none leading-relaxed"
-                        />
-                      </div>
-                      {speech.supported && (
-                        <Button variant="ghost"
+
+                    {/* Top: Full-width Textarea with ample room for multi-sentence prompts */}
+                    <div className="relative w-full">
+                      <textarea
+                        ref={textareaRef}
+                        value={input}
+                        onChange={e => handleInputChange(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        placeholder={attachedImages.length > 0 ? 'Ask Copilot about these attachments…' : 'Ask Copilot anything or speak…'}
+                        rows={2}
+                        aria-label="Assistant message"
+                        className="w-full min-h-[44px] max-h-[160px] bg-transparent text-body text-casa-navy placeholder:text-casa-muted/80 outline-none resize-none leading-relaxed px-1 py-0.5 font-medium"
+                      />
+                    </div>
+
+                    {/* Bottom: Dedicated Action Toolbar */}
+                    <div className="flex items-center justify-between pt-1.5 border-t border-casa-gold/15">
+                      <div className="flex items-center gap-1.5">
+                        <Button
+                          variant="ghost"
                           type="button"
-                          onClick={() => {
-                            markUserInteraction()
-                            setAttachmentMenuOpen(false)
-                            speech.start()
-                          }}
-                          title="Start voice input"
-                          className="min-h-control min-w-control rounded-button flex items-center justify-center gap-2 px-3 outline-none transition-all shrink-0 focus-visible:ring-2 focus-visible:ring-casa-gold bg-casa-divider text-casa-muted hover:text-casa-gold"
-                          aria-label="Start voice input"
+                          onClick={() => setAttachmentMenuOpen(value => !value)}
+                          title="Add attachment"
+                          className="size-control rounded-full text-casa-muted hover:text-casa-navy hover:bg-black/5 outline-none transition-colors shrink-0 focus-visible:ring-2 focus-visible:ring-casa-gold"
+                          aria-label="Add attachment"
+                          aria-expanded={attachmentMenuOpen}
+                          aria-controls="assistant-attachment-actions"
                         >
-                          <Mic size={14} />
-                          <span className="hidden md:inline">Speak</span>
+                          <Plus size={18} />
                         </Button>
-                      )}
-                      <Button variant="ghost"
-                        type="button"
-                        onClick={handleKeyboardToggle}
-                        title="Toggle on-screen keyboard"
-                        className="ai-composer-kiosk-only size-control rounded-button items-center justify-center outline-none transition-all shrink-0 bg-casa-divider text-casa-muted hover:text-casa-gold focus-visible:ring-2 focus-visible:ring-casa-gold"
-                        aria-label="Toggle on-screen keyboard"
-                      >
-                        <Keyboard size={14} />
-                      </Button>
-                      <Button variant="ghost"
-                        type="button"
-                        onClick={handleSend}
-                        disabled={(!input.trim() && !attachedImage) || loading}
-                        className={cn(
-                          'size-control rounded-button flex items-center justify-center outline-none transition-all shrink-0 focus-visible:ring-2 focus-visible:ring-casa-gold',
-                          (input.trim() || attachedImage) && !loading
-                            ? 'bg-casa-gold text-white hover:brightness-110'
-                            : 'bg-casa-divider text-casa-muted'
+                        {attachedImages.length > 0 && (
+                          <span className="text-caption text-casa-gold-hover font-semibold truncate max-w-[140px]">
+                            {attachedImages.length === 1 ? '1 image attached' : `${attachedImages.length} images attached`}
+                          </span>
                         )}
-                        aria-label="Send message"
-                      >
-                        <Send size={14} />
-                      </Button>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {speech.supported && (
+                          <Button
+                            variant="ghost"
+                            type="button"
+                            onClick={() => {
+                              markUserInteraction()
+                              setAttachmentMenuOpen(false)
+                              speech.start()
+                            }}
+                            title="Start voice input"
+                            className="min-h-control px-3 rounded-full flex items-center justify-center gap-1.5 outline-none transition-all shrink-0 focus-visible:ring-2 focus-visible:ring-casa-gold bg-gradient-to-r from-amber-50 to-amber-100/80 border border-amber-300 text-amber-900 hover:border-casa-gold hover:bg-amber-100 text-body-sm font-bold shadow-2xs active:scale-95"
+                            aria-label="Start voice input"
+                          >
+                            <Mic size={15} className="text-amber-700" />
+                            <span>Speak</span>
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          type="button"
+                          onClick={handleKeyboardToggle}
+                          title="Toggle on-screen keyboard"
+                          className="ai-composer-kiosk-only size-control rounded-full items-center justify-center outline-none transition-all shrink-0 bg-casa-surface border border-casa-gold/30 text-casa-muted hover:text-casa-navy focus-visible:ring-2 focus-visible:ring-casa-gold"
+                          aria-label="Toggle on-screen keyboard"
+                        >
+                          <Keyboard size={15} />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          type="button"
+                          onClick={handleSend}
+                          disabled={(!input.trim() && attachedImages.length === 0) || loading}
+                          className={cn(
+                            'size-control rounded-full flex items-center justify-center outline-none transition-all shrink-0 focus-visible:ring-2 focus-visible:ring-casa-gold',
+                            (input.trim() || attachedImages.length > 0) && !loading
+                              ? 'bg-gradient-to-r from-casa-gold to-amber-600 text-white hover:brightness-105 shadow-xs active:scale-95'
+                              : 'bg-casa-divider text-casa-muted opacity-50'
+                          )}
+                          aria-label="Send message"
+                        >
+                          <Send size={15} />
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -1508,8 +2011,86 @@ export default function AIChatDrawer({
                   </Button>
                 </div>
             </Modal>
-          </motion.div>
-        </>
+    </>
+  )
+
+  if (embedded) {
+    return (
+      <div
+        className={cn(
+          'flex flex-col flex-1 h-full w-full overflow-hidden bg-casa-surface relative',
+          loading && 'ai-thinking'
+        )}
+        data-panel-overlay
+        data-touch-keyboard="ignore"
+        onClick={e => e.stopPropagation()}
+        onPaste={handlePaste}
+      >
+        {drawerBody}
+      </div>
+    )
+  }
+
+  return (
+    <AnimatePresence>
+      {open && (
+        isMobile ? (
+          <>
+            <motion.div
+              key="ai-scrim-mobile"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-scrim bg-black/40 sm:hidden"
+              onClick={onClose}
+            />
+            <motion.div
+              key="ai-sheet-mobile"
+              initial={{ y: '100%', opacity: 0.95 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: '100%', opacity: 0.95 }}
+              transition={{ type: 'spring', damping: 30, stiffness: 320 }}
+              className={cn(
+                'fixed inset-x-0 bottom-0 z-popover bg-casa-surface flex flex-col sm:hidden shadow-modal rounded-t-2xl',
+                loading && 'ai-thinking',
+              )}
+              data-panel-overlay
+              data-touch-keyboard="ignore"
+              style={{
+                maxHeight: '88vh',
+                paddingBottom: 'env(safe-area-inset-bottom)',
+              }}
+              onClick={e => e.stopPropagation()}
+              onPaste={handlePaste}
+            >
+              {/* Drag handle — mobile only */}
+              <div className="flex justify-center pt-3 pb-1 sm:hidden flex-shrink-0">
+                <div className="w-9 h-1 bg-casa-divider rounded-full" />
+              </div>
+              {drawerBody}
+            </motion.div>
+          </>
+        ) : (
+          <motion.aside
+            key="ai-sidecar-desktop"
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width: sidecarWidth, opacity: 1 }}
+            exit={{ width: 0, opacity: 0 }}
+            transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
+            className={cn(
+              'hidden sm:flex flex-col flex-shrink-0 h-full overflow-hidden border-l border-casa-border bg-casa-surface relative z-10 shadow-lg',
+              loading && 'ai-thinking',
+            )}
+            data-panel-overlay
+            data-touch-keyboard="ignore"
+            onClick={e => e.stopPropagation()}
+            onPaste={handlePaste}
+          >
+            <div style={{ width: sidecarWidth }} className="h-full flex flex-col flex-shrink-0">
+              {drawerBody}
+            </div>
+          </motion.aside>
+        )
       )}
     </AnimatePresence>
   )
@@ -1519,14 +2100,16 @@ export default function AIChatDrawer({
 
 const MAX_VISIBLE_SOURCES = 3
 
-function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, events, onOpenEventDetails, onQuickSaveRecipe, onConfirmToolAction, onUndoToolAction, onCancelToolAction, onRefreshToolAction, registerPendingAction, onEditMessage }: {
+function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, events, onOpenEventDetails, onLinkClick, onQuickSaveRecipe, onQuickSaveAndSetTonight, onConfirmToolAction, onUndoToolAction, onCancelToolAction, onRefreshToolAction, registerPendingAction, onSelectSuggestion, onEditMessage }: {
   msg: AIMessage
   isActivePending: boolean
   enableQuickSaveRecipe?: boolean
   editSeed?: string
   events: EventWithDetails[]
   onOpenEventDetails?: (eventId: string) => void
+  onLinkClick?: (href: string) => void
   onQuickSaveRecipe?: (recipeMessage: string) => Promise<void>
+  onQuickSaveAndSetTonight?: (recipeMessage: string) => Promise<void>
   onConfirmToolAction: (messageId: string, tool: string, args: Record<string, unknown>) => Promise<boolean>
   onUndoToolAction: (messageId: string, actionId: string) => Promise<void>
   onCancelToolAction: (messageId: string) => void
@@ -1535,6 +2118,7 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
     messageId: string,
     handlers: Pick<PendingVoiceAction, 'confirm' | 'cancel'> | null,
   ) => void
+  onSelectSuggestion?: (text: string) => void
   onEditMessage?: (content: string) => void
 }) {
   const isUser = msg.role === 'user'
@@ -1547,12 +2131,12 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
   const hasPendingAction = !!ta && ta.status === 'pending'
   const showQuickSaveRecipe = !isUser && !ta && Boolean(onQuickSaveRecipe) && Boolean(enableQuickSaveRecipe) && looksLikeRecipeSuggestion(msg.content)
   // A plain user text message can be tapped to edit + resend (no images / tool actions).
-  const canEdit = isUser && !ta && !msg.imageDataUrl && Boolean(onEditMessage) && msg.content !== '(see attached image)' && Boolean(msg.content?.trim())
+  const canEdit = isUser && !ta && !msg.imageDataUrl && !(msg.imageDataUrls && msg.imageDataUrls.length > 0) && Boolean(onEditMessage) && msg.content !== '(see attached image)' && msg.content !== '(see attached images)' && Boolean(msg.content?.trim())
   const isStaleError = !!ta?.errorMsg && ta.errorMsg.toLowerCase().includes('changed since')
   const preferredEventId = msg.conversationState?.activeEntityType === 'event'
     ? msg.conversationState.activeEventId
     : ta?.resultEventId
-  const assistantContent = !isUser && !ta
+  const assistantContent = !isUser
     ? formatTextForMarkdown(linkAssistantEventMentions(
         stripEvidenceCitationMarkers(msg.content),
         events,
@@ -1572,20 +2156,32 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
   const doConfirm = useCallback(async () => {
     if (!ta || actionTransitionRef.current) return false
     actionTransitionRef.current = true
-    return onConfirmToolAction(msg.id, ta.tool, ta.args)
+    try {
+      return await onConfirmToolAction(msg.id, ta.tool, ta.args)
+    } finally {
+      actionTransitionRef.current = false
+    }
   }, [msg.id, ta, onConfirmToolAction])
 
   const doConfirmCandidate = useCallback(async (candidateArgs: Record<string, unknown>) => {
     if (!ta || actionTransitionRef.current) return false
     actionTransitionRef.current = true
-    return onConfirmToolAction(msg.id, ta.tool, candidateArgs)
+    try {
+      return await onConfirmToolAction(msg.id, ta.tool, candidateArgs)
+    } finally {
+      actionTransitionRef.current = false
+    }
   }, [msg.id, ta, onConfirmToolAction])
 
   const doCancel = useCallback(async () => {
     if (actionTransitionRef.current) return false
     actionTransitionRef.current = true
-    onCancelToolAction(msg.id)
-    return true
+    try {
+      onCancelToolAction(msg.id)
+      return true
+    } finally {
+      actionTransitionRef.current = false
+    }
   }, [msg.id, onCancelToolAction])
 
   useEffect(() => {
@@ -1599,28 +2195,57 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
     <div className={cn('flex', isUser ? 'justify-end' : 'justify-start')}>
       <div
         className={cn(
-          'max-w-[85%] rounded-2xl px-4 py-2.5 text-body-sm leading-relaxed',
+          'max-w-[85%] rounded-2xl px-4 py-3 text-body-sm leading-relaxed',
           isUser
-            ? 'bg-casa-navy text-white rounded-br-sm'
-            : 'bg-casa-bg border border-casa-border text-casa-navy rounded-bl-sm',
+            ? 'bg-casa-navy text-white rounded-br-sm shadow-xs border border-white/10'
+            : 'bg-casa-bg border border-casa-gold/30 text-casa-navy rounded-bl-sm shadow-subtle',
           canEdit && 'cursor-pointer hover:brightness-110 transition',
         )}
         onClick={canEdit ? () => onEditMessage?.(msg.content) : undefined}
         title={canEdit ? 'Tap to edit and resend' : undefined}
       >
-        {msg.imageDataUrl && (
-          <img src={msg.imageDataUrl} alt="Attached" className="max-h-40 w-auto rounded-lg mb-2 object-cover" />
-        )}
-        {!ta && msg.content !== '(see attached image)' && msg.content && (
+        {(() => {
+          const images = msg.imageDataUrls && msg.imageDataUrls.length > 0
+            ? msg.imageDataUrls
+            : msg.imageDataUrl
+              ? [msg.imageDataUrl]
+              : []
+          if (images.length === 0) return null
+          if (images.length === 1) {
+            return (
+              <img
+                src={images[0]}
+                alt="Attached"
+                className="max-h-48 w-auto rounded-xl mb-2 object-cover border border-white/10 shadow-2xs"
+              />
+            )
+          }
+          return (
+            <div className="grid grid-cols-2 gap-1.5 mb-2.5 max-w-[280px]">
+              {images.map((url, idx) => (
+                <img
+                  key={idx}
+                  src={url}
+                  alt={`Attached ${idx + 1}`}
+                  className="h-24 w-full rounded-lg object-cover border border-white/10 shadow-2xs"
+                />
+              ))}
+            </div>
+          )
+        })()}
+        {!ta && msg.content !== '(see attached image)' && msg.content !== '(see attached images)' && msg.content && (
           isUser
             ? <p className="whitespace-pre-wrap">{msg.content}</p>
             : (
               <MarkdownContent
                 content={assistantContent ?? formatTextForMarkdown(msg.content)}
                 onLinkClick={(href) => {
-                  const eventId = parseAssistantEventHref(href)
-                  if (!eventId) return
-                  onOpenEventDetails?.(eventId)
+                  if (onLinkClick) {
+                    onLinkClick(href)
+                  } else {
+                    const eventId = parseAssistantEventHref(href)
+                    if (eventId) onOpenEventDetails?.(eventId)
+                  }
                 }}
               />
             )
@@ -1732,8 +2357,23 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
           </span>
         )}
         {showQuickSaveRecipe && (
-          <div className="mt-2">
-            <Button variant="ghost"
+          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+            <Button
+              variant="champagne"
+              type="button"
+              disabled={quickSaving}
+              onClick={() => {
+                if (!onQuickSaveAndSetTonight) return
+                setQuickSaving(true)
+                void onQuickSaveAndSetTonight(msg.content).finally(() => setQuickSaving(false))
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-button text-caption font-bold shadow-2xs"
+            >
+              {quickSaving ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+              Set as Tonight's Dinner & Save
+            </Button>
+            <Button
+              variant="secondary"
               type="button"
               disabled={quickSaving}
               onClick={() => {
@@ -1741,11 +2381,57 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
                 setQuickSaving(true)
                 void onQuickSaveRecipe(msg.content).finally(() => setQuickSaving(false))
               }}
-              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-button border border-casa-gold/40 bg-casa-gold/10 text-caption font-semibold text-casa-navy hover:bg-casa-gold/15 disabled:opacity-60"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-button text-caption font-semibold text-casa-navy hover:bg-casa-gold/15 disabled:opacity-60"
             >
-              {quickSaving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
-              Save to Recipe Library (2 servings)
+              {quickSaving ? <Loader2 size={13} className="animate-spin" /> : <BookOpen size={13} />}
+              Save to Library Only
             </Button>
+          </div>
+        )}
+
+        {/* Disambiguation and clarification selection cards */}
+        {msg.conversationState?.activeEntityType === 'calendar_clarification' && Array.isArray(msg.conversationState.candidateEvents) && msg.conversationState.candidateEvents.length > 0 && (
+          <div className="mt-2.5 space-y-1.5 pt-2 border-t border-casa-border/50">
+            <p className="text-caption font-semibold text-casa-muted">Select an event:</p>
+            <div className="flex flex-col gap-1.5">
+              {msg.conversationState.candidateEvents.map((evt) => {
+                const timeLabel = evt.start ? format(new Date(evt.start), 'EEE, MMM d · h:mm a') : 'Scheduled'
+                return (
+                  <Button
+                    key={evt.id}
+                    variant="ghost"
+                    type="button"
+                    onClick={() => onSelectSuggestion?.(`Select "${evt.title}" on ${timeLabel}`)}
+                    className="flex items-center justify-between gap-2 p-2 rounded-lg border border-casa-border bg-casa-surface/80 hover:bg-casa-gold/10 hover:border-casa-gold/50 text-left transition-all"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-body-sm font-semibold text-casa-navy truncate">{evt.title}</p>
+                      <p className="text-caption text-casa-muted">{timeLabel}</p>
+                    </div>
+                    <ChevronRight size={14} className="text-casa-muted shrink-0" />
+                  </Button>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {msg.conversationState?.activeEntityType === 'grocery_clarification' && Array.isArray(msg.conversationState.candidateGroceryItems) && msg.conversationState.candidateGroceryItems.length > 0 && (
+          <div className="mt-2.5 space-y-1.5 pt-2 border-t border-casa-border/50">
+            <p className="text-caption font-semibold text-casa-muted">Select a grocery item:</p>
+            <div className="flex flex-wrap gap-1.5">
+              {msg.conversationState.candidateGroceryItems.map((item) => (
+                <Button
+                  key={item.id}
+                  variant="ghost"
+                  type="button"
+                  onClick={() => onSelectSuggestion?.(`Select ${item.name}`)}
+                  className="px-2.5 py-1 rounded-full border border-casa-border bg-casa-surface/80 hover:bg-casa-gold/10 hover:border-casa-gold/50 text-caption font-medium text-casa-navy transition-all"
+                >
+                  {item.name}
+                </Button>
+              ))}
+            </div>
           </div>
         )}
 
@@ -1754,23 +2440,37 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
           <div className="mt-2.5 pt-2.5 border-t border-casa-divider">
             {ta.status === 'done' ? (
               <div className="space-y-1">
-                <div className="flex items-center gap-1.5 text-emerald-600 text-caption font-semibold">
-                  <Check size={13} />
-                  {ta.tool === 'confirm_talk_plan_action_intent' ? 'Action intent confirmed'
-                    : ta.tool === 'create_event' ? 'Created & added to calendar ✓'
-                    : ta.tool === 'create_recipe' ? 'Saved to recipe library ✓'
-                    : ta.tool === 'update_event' ? 'Updated ✓'
-                    : ta.tool === 'bulk_update_events' ? 'Bulk updates applied ✓'
-                    : ta.tool === 'delete_event' ? 'Deleted ✓'
-                    : ta.tool === 'delete_events_by_title' ? 'Deleted matching events ✓'
-                    : ta.tool === 'add_grocery_items' ? 'Added to grocery list ✓'
-                    : ta.tool === 'check_grocery_item' ? 'Grocery item updated ✓'
-                    : ta.tool === 'remove_grocery_item' ? 'Removed from grocery list ✓'
-                    : ta.tool === 'update_grocery_item_quantity' ? 'Grocery quantity updated ✓'
-                    : ta.tool === 'associate_family_contact' ? 'Saved to Household Directory ✓'
-                    : ta.tool === 'associate_contact_place' ? 'Location saved ✓'
-                    : ta.tool === 'confirm_directory_entity' ? 'Added to Household Directory ✓'
-                    : 'Done ✓'}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 text-emerald-600 text-caption font-semibold">
+                    <Check size={13} />
+                    {ta.tool === 'confirm_talk_plan_action_intent' ? 'Action intent confirmed'
+                      : ta.tool === 'update_dinner_plan' ? 'Tonight’s Kitchen updated on Dashboard ✓'
+                      : ta.tool === 'create_event' ? 'Created & added to calendar ✓'
+                      : ta.tool === 'create_recipe' ? 'Saved to recipe library ✓'
+                      : ta.tool === 'update_event' ? 'Updated ✓'
+                      : ta.tool === 'bulk_update_events' ? 'Bulk updates applied ✓'
+                      : ta.tool === 'delete_event' ? 'Deleted ✓'
+                      : ta.tool === 'delete_events_by_title' ? 'Deleted matching events ✓'
+                      : ta.tool === 'add_grocery_items' ? 'Added to grocery list ✓'
+                      : ta.tool === 'check_grocery_item' ? 'Grocery item updated ✓'
+                      : ta.tool === 'remove_grocery_item' ? 'Removed from grocery list ✓'
+                      : ta.tool === 'update_grocery_item_quantity' ? 'Grocery quantity updated ✓'
+                      : ta.tool === 'associate_family_contact' ? 'Saved to Household Directory ✓'
+                      : ta.tool === 'associate_contact_place' ? 'Location saved ✓'
+                      : ta.tool === 'confirm_directory_entity' ? 'Added to Household Directory ✓'
+                      : 'Done ✓'}
+                  </div>
+                  {ta.tool === 'add_grocery_items' && ta.undoStatus !== 'done' && (
+                    <Button variant="ghost"
+                      type="button"
+                      onClick={() => onUndoToolAction(msg.id, ta.actionId ?? msg.id)}
+                      disabled={ta.undoStatus === 'loading'}
+                      className="flex items-center gap-1 px-2.5 py-0.5 rounded-button border border-casa-border text-casa-navy text-caption font-semibold hover:bg-casa-surface transition-all disabled:opacity-60 shrink-0"
+                    >
+                      {ta.undoStatus === 'loading' ? <Loader2 size={11} className="animate-spin" /> : <RotateCcw size={11} />}
+                      Undo
+                    </Button>
+                  )}
                 </div>
                 {ta.tool === 'create_event' && ta.resultEventId && (
                   <div className="space-y-1">
@@ -1784,6 +2484,22 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
                     >
                       Open appointment details
                     </Button>
+                  </div>
+                )}
+                {ta.tool === 'update_dinner_plan' && ta.args && (
+                  <div className="mt-1.5 p-2.5 rounded-xl bg-casa-card border border-casa-border text-caption space-y-1">
+                    <p className="font-semibold text-casa-navy">
+                      {String(ta.args.title)} {ta.args.targetTime ? `· ${String(ta.args.targetTime)}` : ''}
+                    </p>
+                    {Boolean(ta.args.subtitle) && (
+                      <p className="text-casa-muted">{String(ta.args.subtitle)}</p>
+                    )}
+                    {Boolean(ta.args.statusBadge) && (
+                      <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 font-medium text-caption">
+                        <Check size={11} />
+                        {String(ta.args.statusBadge)}
+                      </div>
+                    )}
                   </div>
                 )}
                 {ta.tool === 'create_recipe' && (
@@ -1816,6 +2532,9 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
                 )}
                 {ta.undoStatus === 'done' && (
                   <p className="text-caption text-casa-muted">Undo applied.</p>
+                )}
+                {ta.undoStatus === 'error' && ta.undoErrorMsg && ta.tool === 'add_grocery_items' && (
+                  <p className="text-caption text-red-500">{ta.undoErrorMsg}</p>
                 )}
               </div>
             ) : ta.status === 'cancelled' ? (
@@ -1859,36 +2578,53 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
               <>
                 <ToolActionPreview tool={ta.tool} args={ta.args} events={events} />
                 <div className="flex flex-wrap gap-2 mt-3">
-                  <Button variant="ghost"
-                    type="button"
-                    disabled={ta.status === 'loading'}
-                    onClick={doConfirm}
-                    className={cn(
-                      'min-h-control flex items-center gap-2 px-4 rounded-button text-body-sm font-semibold transition-colors disabled:opacity-50',
-                      isDestructiveAction
-                        ? 'bg-red-600 text-white hover:brightness-110'
-                        : 'bg-casa-gold text-white hover:brightness-110',
-                    )}
-                  >
-                    {ta.status === 'loading' ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
-                    {ta.status === 'loading'
-                      ? 'Working…'
-                      : isDestructiveAction
-                        ? ta.tool === 'delete_event'
-                          ? 'Delete event'
-                          : ta.tool === 'delete_events_by_title'
-                            ? 'Delete matching events'
-                          : 'Clear checked items'
-                        : ta.tool === 'confirm_talk_plan_action_intent'
-                          ? 'Yes, prepare it'
-                        : ta.tool === 'update_event'
-                          ? 'Apply change'
-                          : ta.tool === 'create_event'
-                            ? (ta.args as { event_type?: string })?.event_type === 'reminder'
-                              ? 'Create reminder'
-                              : 'Create event'
-                            : confirmActionLabel(ta.tool)}
-                  </Button>
+                  {(() => {
+                    const isReminderAction = (ta.args as { event_type?: string })?.event_type === 'reminder'
+                    const membersArg = Array.isArray(ta.args.members) ? ta.args.members : []
+                    const hasConflictOrDuplicate = Boolean(
+                      ta.tool === 'create_event' && (
+                        ta.args.calendar_preflight ||
+                        ta.args.allow_calendar_conflicts ||
+                        (!isReminderAction && findOverlappingEvent(events, ta.args.start ?? ta.args.start_time, ta.args.end ?? ta.args.end_time, null, membersArg, ta.args.event_type))
+                      )
+                    )
+                    return (
+                      <Button variant="ghost"
+                        type="button"
+                        disabled={ta.status === 'loading'}
+                        onClick={doConfirm}
+                        className={cn(
+                          'min-h-control flex items-center gap-2 px-4 rounded-button text-body-sm font-semibold transition-colors disabled:opacity-50',
+                          isDestructiveAction
+                            ? 'bg-red-600 text-white hover:brightness-110'
+                            : hasConflictOrDuplicate
+                              ? 'bg-amber-600 text-white hover:brightness-110'
+                              : 'bg-casa-gold text-white hover:brightness-110',
+                        )}
+                      >
+                        {ta.status === 'loading' ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                        {ta.status === 'loading'
+                          ? 'Working…'
+                          : isDestructiveAction
+                            ? ta.tool === 'delete_event'
+                              ? 'Delete event'
+                              : ta.tool === 'delete_events_by_title'
+                                ? 'Delete matching events'
+                              : 'Clear checked items'
+                            : ta.tool === 'confirm_talk_plan_action_intent'
+                              ? 'Yes, prepare it'
+                            : ta.tool === 'update_event'
+                              ? 'Apply change'
+                            : ta.tool === 'create_event'
+                              ? (ta.args as { event_type?: string })?.event_type === 'reminder'
+                                ? 'Create reminder'
+                                : hasConflictOrDuplicate
+                                  ? 'Create anyway (keep both)'
+                                  : 'Create event'
+                              : confirmActionLabel(ta.tool)}
+                      </Button>
+                    )
+                  })()}
                   {ta.tool !== 'confirm_talk_plan_action_intent' && !isDestructiveAction && onEditMessage && editSeed?.trim() && (
                     <Button
                       variant="secondary"
@@ -1937,6 +2673,7 @@ function recurrenceScopeLabel(scope: unknown) {
 }
 
 function confirmActionLabel(tool: string) {
+  if (tool === 'update_dinner_plan') return 'Apply to Dashboard'
   if (tool === 'create_recipe') return 'Save recipe'
   if (tool === 'add_grocery_items') return 'Add items'
   if (tool === 'check_grocery_item') return 'Update item'
@@ -1965,7 +2702,7 @@ function ConfirmationHeading({ kind, icon, children }: { kind: 'calendar' | 'rem
       : kind === 'grocery'
         ? 'Grocery list'
         : kind === 'recipe'
-          ? 'Recipe library'
+          ? 'Kitchen & Dinner'
           : kind === 'directory'
             ? 'Household Directory'
             : 'Review carefully'
@@ -2133,8 +2870,82 @@ function DirectorySuggestionCard({ tool, args, loading, onAccept, onCancel }: {
   )
 }
 
+function findOverlappingEvent(
+  events: EventWithDetails[],
+  startTimeStr: unknown,
+  endTimeStr: unknown,
+  ignoreEventId?: string | null,
+  targetMembers?: unknown,
+  eventTypeStr?: unknown,
+): EventWithDetails | null {
+  if (eventTypeStr === 'reminder') return null
+  if (!startTimeStr || typeof startTimeStr !== 'string') return null
+  const startMs = new Date(startTimeStr).getTime()
+  if (!Number.isFinite(startMs)) return null
+  const endMs = (typeof endTimeStr === 'string' && Number.isFinite(new Date(endTimeStr).getTime()))
+    ? new Date(endTimeStr).getTime()
+    : startMs + 3600_000
+
+  const cleanTargetMembers = (Array.isArray(targetMembers) ? targetMembers : [])
+    .map((m) => String(m).trim().toLowerCase())
+    .filter(Boolean)
+
+  if (cleanTargetMembers.length === 0) return null
+
+  return events.find((e) => {
+    if (ignoreEventId && e.id === ignoreEventId) return false
+    if (e.all_day || !e.start_time || e.event_type === 'reminder') return false
+    const eStart = new Date(e.start_time).getTime()
+    const eEnd = new Date(e.end_time ?? e.start_time).getTime()
+    if (!Number.isFinite(eStart) || !Number.isFinite(eEnd)) return false
+    const overlaps = Math.max(startMs, eStart) < Math.min(endMs, eEnd)
+    if (!overlaps) return false
+
+    const eMembers = (e.members ?? (e as any).event_members ?? []).map((m: any) =>
+      (m.family_member?.name ?? m.family_members?.name ?? m.name ?? '').trim().toLowerCase()
+    ).filter(Boolean)
+
+    if (eMembers.length === 0) return false
+    return cleanTargetMembers.some((tm) => eMembers.includes(tm))
+  }) ?? null
+}
+
 function ToolActionPreview({ tool, args, events }: { tool: string; args: Record<string, unknown>; events: EventWithDetails[] }) {
   const [expanded, setExpanded] = useState(false)
+
+  if (tool === 'update_dinner_plan') {
+    const mode = String(args.mode ?? 'takeout')
+    const title = String(args.title ?? "Flanigan's Seafood Bar & Grill")
+    const targetTime = String(args.targetTime ?? '6:30 PM Target')
+    const chefOrDriver = args.chefOrDriver ? String(args.chefOrDriver) : undefined
+    const subtitle = args.subtitle ? String(args.subtitle) : undefined
+
+    return (
+      <div className="space-y-3">
+        <ConfirmationHeading kind="recipe">Update Tonight's Kitchen Plan?</ConfirmationHeading>
+        <div className="rounded-2xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-casa-surface to-casa-surface p-4 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-body font-bold text-casa-navy">{title}</span>
+            <span className="text-caption font-semibold px-2.5 py-0.5 rounded-full bg-casa-surface border border-casa-border text-casa-navy shadow-2xs">
+              {mode === 'takeout' ? 'Takeout' : mode === 'leftovers' ? 'Leftovers' : mode === 'dineout' ? 'Dining Out' : 'Cooking'}
+            </span>
+          </div>
+          <div className="text-caption text-casa-text-secondary space-y-1">
+            <p><span className="font-semibold text-casa-navy">Time:</span> {targetTime}</p>
+            {chefOrDriver && (
+              <p><span className="font-semibold text-casa-navy">{mode === 'takeout' ? 'Pickup Driver:' : 'Chef:'}</span> {chefOrDriver}</p>
+            )}
+            {subtitle && (
+              <p className="text-casa-muted mt-1">{subtitle}</p>
+            )}
+          </div>
+        </div>
+        <p className="text-caption text-casa-muted">
+          Applying this will instantly update the Tonight's Kitchen card on the live dashboard.
+        </p>
+      </div>
+    )
+  }
 
   if (tool === 'confirm_talk_plan_action_intent') {
     return (
@@ -2153,11 +2964,136 @@ function ToolActionPreview({ tool, args, events }: { tool: string; args: Record<
   if (tool === 'create_event') {
     const preview = buildCreatePreviewCopy(args, { now: new Date() })
     const isReminder = args.event_type === 'reminder'
+    const startStr = (args.start ?? args.start_time) as string | undefined
+    const endStr = (args.end ?? args.end_time) as string | undefined
+    const titleStr = String(args.title ?? '').trim()
+    const membersArg = Array.isArray(args.members) ? args.members : []
+    const conflict = !isReminder ? findOverlappingEvent(events, startStr, endStr, null, membersArg, args.event_type) : null
+    const duplicate = !isReminder && startStr && titleStr ? events.find((e) => {
+      if (e.all_day || !e.start_time || e.event_type === 'reminder') return false
+      const sameDay = new Date(e.start_time).toDateString() === new Date(startStr).toDateString()
+      const sameTitle = e.title.trim().toLowerCase() === titleStr.toLowerCase()
+      return sameDay && sameTitle
+    }) : null
+
+    const preflight = args.calendar_preflight as {
+      status?: string
+      conflicts?: Array<{ id?: string; title?: string; start_time?: string; end_time?: string }>
+      probableDuplicates?: Array<{ id?: string; title?: string; start_time?: string; end_time?: string }>
+      exactDuplicate?: { id?: string; title?: string; start_time?: string; end_time?: string } | null
+    } | undefined
+
+    const preflightConflict = preflight?.conflicts?.[0]
+    const preflightDuplicate = preflight?.probableDuplicates?.[0] ?? preflight?.exactDuplicate
+
+    const activeConflict = preflightConflict ?? conflict
+    const activeDuplicate = preflightDuplicate ?? duplicate
+    const isExactMatch = activeDuplicate && activeDuplicate.title?.trim().toLowerCase() === titleStr.toLowerCase()
+    const isHotelOrStay = /\b(?:hotel|resort|inn|suite|suites|motel|stay|lodge|airbnb|reservation|flight|booking)\b/i.test(titleStr) ||
+      (typeof args.notes === 'string' && /\b(?:conf(?:irmation)?|room|check-in|checkout)\b/i.test(args.notes))
+
     return (
       <div className="space-y-3">
-        <ConfirmationHeading kind={isReminder ? 'reminder' : 'calendar'}>{preview.heading}</ConfirmationHeading>
-        {preview.when && <p className="text-body-sm font-semibold text-casa-navy">{preview.when}</p>}
-        {preview.details.length > 0 && (
+        <ConfirmationHeading kind={isReminder ? 'reminder' : isHotelOrStay ? 'recipe' : 'calendar'}>
+          {activeDuplicate
+            ? (isReminder ? 'Duplicate Reminder Detected' : 'Duplicate Event Detected')
+            : activeConflict
+              ? 'Calendar Conflict Detected'
+              : isHotelOrStay
+                ? `Confirm Reservation: "${titleStr || 'Reservation'}"`
+                : preview.heading}
+        </ConfirmationHeading>
+
+        {/* Structured Preflight Card */}
+        <div className="rounded-2xl border border-casa-gold/30 bg-gradient-to-br from-amber-500/5 via-casa-surface to-casa-surface p-3.5 space-y-2.5 shadow-2xs">
+          <div className="flex items-start justify-between gap-2">
+            <div className="space-y-0.5 min-w-0">
+              <span className="text-body font-bold text-casa-navy block truncate">
+                {titleStr || 'New Event'}
+              </span>
+              {preview.when && (
+                <p className="text-caption font-semibold text-casa-gold-hover flex items-center gap-1.5">
+                  <CalendarDays size={13} className="shrink-0" />
+                  <span>{preview.when}</span>
+                </p>
+              )}
+            </div>
+            {isHotelOrStay && (
+              <span className="text-2xs font-bold px-2 py-0.5 rounded-full bg-casa-surface border border-casa-gold/40 text-casa-navy shrink-0 shadow-2xs flex items-center gap-1">
+                <Building2 size={11} className="text-casa-gold" />
+                Stay / Reservation
+              </span>
+            )}
+          </div>
+
+          {Boolean(args.location || args.address) && (
+            <div className="flex items-start gap-1.5 text-caption text-casa-text-secondary">
+              <MapPin size={13} className="text-casa-muted shrink-0 mt-0.5" />
+              <span className="leading-snug">{String(args.location ?? args.address)}</span>
+            </div>
+          )}
+
+          {membersArg.length > 0 && (
+            <div className="flex items-center gap-1.5 text-caption text-casa-text-secondary">
+              <Users size={13} className="text-casa-muted shrink-0" />
+              <span>{membersArg.join(', ')}</span>
+            </div>
+          )}
+
+          {Boolean(args.notes || args.description) && (
+            <div className="flex items-start gap-1.5 text-caption text-casa-text-secondary pt-2 border-t border-casa-border/50">
+              <FileText size={13} className="text-casa-muted shrink-0 mt-0.5" />
+              <p className="whitespace-pre-wrap leading-relaxed line-clamp-4 font-mono text-2xs text-casa-navy/80">
+                {String(args.notes ?? args.description)}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {activeDuplicate ? (
+          <div className="rounded-xl border border-amber-300/80 bg-amber-500/10 p-3 text-caption text-amber-900 dark:text-amber-200 space-y-1.5 shadow-2xs">
+            <div className="flex items-center gap-1.5 font-semibold text-amber-800 dark:text-amber-300">
+              <AlertTriangle size={14} className="shrink-0 text-amber-600" />
+              <span>
+                {isExactMatch
+                  ? (isReminder ? 'A reminder with this name already exists' : 'An event with this name already exists')
+                  : (isReminder ? 'A similar reminder is already scheduled' : 'A similar event is already scheduled')}
+              </span>
+            </div>
+            <p className="text-body-sm font-bold text-casa-navy">
+              "{activeDuplicate.title}"
+            </p>
+            {activeDuplicate.start_time && (
+              <p className="text-caption text-casa-text-secondary">
+                Scheduled at {format(new Date(activeDuplicate.start_time), 'h:mm a · EEEE, MMM d')}
+              </p>
+            )}
+            <p className="pt-1 text-caption font-medium text-amber-900 dark:text-amber-100">
+              Do you still want to create this {isReminder ? 'reminder' : 'event'} and keep both?
+            </p>
+          </div>
+        ) : activeConflict ? (
+          <div className="rounded-xl border border-amber-300/80 bg-amber-500/10 p-3 text-caption text-amber-900 dark:text-amber-200 space-y-1.5 shadow-2xs">
+            <div className="flex items-center gap-1.5 font-semibold text-amber-800 dark:text-amber-300">
+              <AlertTriangle size={14} className="shrink-0 text-amber-600" />
+              <span>Time overlap on your calendar</span>
+            </div>
+            <p className="text-body-sm font-bold text-casa-navy">
+              "{activeConflict.title}"
+            </p>
+            {activeConflict.start_time && (
+              <p className="text-caption text-casa-text-secondary">
+                Scheduled for {format(new Date(activeConflict.start_time), 'h:mm a')}
+                {activeConflict.end_time ? ` – ${format(new Date(activeConflict.end_time), 'h:mm a')}` : ''}
+              </p>
+            )}
+            <p className="pt-1 text-caption font-medium text-amber-900 dark:text-amber-100">
+              There is something else already scheduled at this time for this member. Do you still want to create this event?
+            </p>
+          </div>
+        ) : null}
+
+        {preview.details.length > 0 && !isHotelOrStay && (
           <div className="flex flex-wrap gap-1.5">
             {preview.details.map((detail) => (
               <span key={detail} className="inline-flex items-center rounded-full bg-casa-surface border border-casa-border px-2.5 py-1 text-caption font-medium text-casa-navy">
@@ -2175,6 +3111,18 @@ function ToolActionPreview({ tool, args, events }: { tool: string; args: Record<
     const preview = buildUpdatePreviewCopy(args, matchedEvent)
     const changes = summarizeUpdateArgs(args)
     const scopeLabel = recurrenceScopeLabel(args.recurrence_scope)
+    const existingMembers = (matchedEvent?.members ?? []).map((m) => m.family_member?.name ?? '').filter(Boolean)
+    const membersArg = Array.isArray(args.members) ? args.members : existingMembers
+    const conflict = matchedEvent?.event_type !== 'reminder' && args.event_type !== 'reminder'
+      ? findOverlappingEvent(
+          events,
+          args.start_time ?? matchedEvent?.start_time,
+          args.end_time ?? matchedEvent?.end_time,
+          String(args.id ?? ''),
+          membersArg,
+          args.event_type ?? matchedEvent?.event_type,
+        )
+      : null
     const MAX_VISIBLE = 6
     const visibleChanges = expanded ? changes : changes.slice(0, MAX_VISIBLE)
     return (
@@ -2182,6 +3130,12 @@ function ToolActionPreview({ tool, args, events }: { tool: string; args: Record<
         <ConfirmationHeading kind="calendar">{preview.heading}?</ConfirmationHeading>
         {scopeLabel && (
           <p className="text-caption font-semibold text-casa-gold">{scopeLabel}</p>
+        )}
+        {conflict && (
+          <div className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-caption text-amber-900 font-medium">
+            <AlertTriangle size={14} className="text-amber-600 shrink-0" />
+            <span>Overlaps with "{conflict.title}" ({format(new Date(conflict.start_time), 'h:mm a')})</span>
+          </div>
         )}
         {preview.currentSpan && preview.nextSpan && (
           <div className="rounded-lg border border-casa-border bg-casa-surface px-3 py-2.5 text-caption text-casa-navy space-y-1">
@@ -2485,11 +3439,13 @@ function deriveProactiveNudge(events: EventWithDetails[], now: Date): ProactiveN
 }
 
 const SUGGESTIONS: Record<string, string[]> = {
-  home: ["What's next up today?", "Add an event tonight", "Any conflicts this week?"],
-  calendar: ["What does tomorrow look like?", "Add a new appointment", "Who's busiest this week?"],
-  briefing: ["Summarize today for me", "Add an event", "Any prep needed today?"],
-  grocery: ["Add milk and eggs", "What's on the list?", "Clear checked items"],
-  cook: ["Plan 4 quick weeknight dinners", "Optimize my meals for budget", "Build grocery list from the plan"],
+  home: ["What's next up today?", "Add an event tonight", "Any conflicts this week?", "Give me a quick rundown"],
+  calendar: ["What does tomorrow look like?", "Add a new appointment", "Who's busiest this week?", "Find free time Saturday"],
+  briefing: ["Summarize today for me", "What needs my attention?", "Walk me through today's timeline", "Any prep needed today?"],
+  grocery: ["Add milk and eggs", "What's on the list?", "Clear checked items", "Suggest pantry staples"],
+  cook: ["Plan 4 quick weeknight dinners", "Suggest a dinner with pantry items", "Optimize my meals for budget", "Build grocery list from the plan"],
+  kitchen: ["🥡 Takeout from Flanigan's", "🍕 Pizza Night", "🍲 Reheat Leftovers", "🍽️ Dining Out", "⏰ Push dinner to 7:00 PM"],
+  settings: ["How do I connect Google Calendars?", "Check sync status", "Set up family member PINs"],
   app: ["What's next up today?", "Add an event tonight", "What's on the grocery list?"],
 }
 
@@ -2522,3 +3478,254 @@ function buildDynamicSuggestions(page: string, events: EventWithDetails[], now: 
   const merged = [...dynamic, ...base.filter(s => !dynamic.includes(s))]
   return merged.slice(0, 4)
 }
+
+/**
+ * Derives dynamic follow-up chips based on the latest conversation turns,
+ * current schedule, and active context.
+ */
+function deriveDynamicFollowUpSuggestions(
+  messages: AIMessage[],
+  page: string,
+  events: EventWithDetails[],
+  now: Date,
+  focusedEvent?: EventWithDetails,
+  source?: string,
+  currentDinnerPlan?: DinnerPlan,
+  focusedAction?: ActionAiContext,
+): string[] {
+  if (focusedEvent) {
+    const titleLower = focusedEvent.title.toLowerCase()
+    const categoryLower = (focusedEvent.enrichment?.category || '').toLowerCase()
+    const isReminderOrChore = focusedEvent.event_type === 'reminder' || /trash|recycle|chore|meds|medication|clean|water|filter/i.test(titleLower)
+    const isSchoolOrPhotos = /photo|picture|school|bak|rehearsal|concert|strings|band/i.test(titleLower) || /school|milestone/i.test(categoryLower)
+    const isMedical = /dr|doctor|pediatric|dentist|appointment|clinic|therapy/i.test(titleLower) || /medical|health/i.test(categoryLower)
+
+    if (isReminderOrChore) {
+      return [
+        'Mark completed now',
+        'Snooze for 30 minutes',
+        'Reassign family member',
+        'Reschedule reminder',
+      ]
+    }
+
+    if (isSchoolOrPhotos) {
+      return [
+        'Who is driving?',
+        'Check for schedule overlaps',
+        'Search email for school forms',
+        'Adjust departure time',
+      ]
+    }
+
+    if (isMedical) {
+      return [
+        'Check driving time and buffer',
+        'Who is driving?',
+        'View preparation notes',
+        'Reschedule appointment',
+      ]
+    }
+
+    return [
+      'Who is driving?',
+      'Check for schedule conflicts',
+      'Adjust departure buffer',
+      'Add event notes or checklist',
+    ]
+  }
+
+  if (focusedAction) {
+    if (focusedAction.amount || /payment|loan|bill|auto-pay|due/i.test(focusedAction.title)) {
+      return [
+        'Verify checking balance',
+        'Mark payment as done',
+        'Snooze to tomorrow',
+        'Explain auto-pay terms',
+      ]
+    }
+    if (/waiver|release|medical|camp|permission/i.test(focusedAction.title)) {
+      return [
+        'Help me sign the waiver',
+        'Check equipment packing list',
+        'Confirm emergency contacts',
+        'Mark waiver as done',
+      ]
+    }
+    if (/spirit|pto|pta|school/i.test(focusedAction.title)) {
+      return [
+        'Confirm spirit day attire',
+        'Check school calendar',
+        'Set morning reminder',
+        'Mark item as done',
+      ]
+    }
+    return [
+      `Mark "${focusedAction.title}" done`,
+      'Snooze for 3 hours',
+      'Summarize full email',
+      'Set reminder for tomorrow',
+    ]
+  }
+
+  if (source === 'tonights-kitchen') {
+    const plan = currentDinnerPlan || useAppStore.getState().dinnerPlan
+    return getDinnerPlanSuggestions(plan)
+  }
+
+  if (!messages || messages.length === 0) {
+    return buildDynamicSuggestions(page, events, now)
+  }
+
+  const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant')
+  if (!lastAssistant) {
+    return buildDynamicSuggestions(page, events, now)
+  }
+
+  const ta = lastAssistant.toolAction
+  const content = (lastAssistant.content || '').toLowerCase()
+  const state = lastAssistant.conversationState
+
+  // 0. If dinner / kitchen plan or takeout in context
+  if (
+    content.includes("tonight's kitchen") ||
+    content.includes('kitchen') ||
+    content.includes('dinner') ||
+    content.includes('flanigan') ||
+    content.includes('takeout') ||
+    content.includes('leftover') ||
+    content.includes('pizza') ||
+    ta?.tool === 'update_dinner_plan'
+  ) {
+    const plan = currentDinnerPlan || useAppStore.getState().dinnerPlan
+    return getDinnerPlanSuggestions(plan)
+  }
+
+  // 1. If last action was creating / updating an event
+  if (ta?.tool === 'create_event' || ta?.tool === 'update_event' || state?.activeEntityType === 'event') {
+    return [
+      "Who's driving?",
+      "Add a 30m reminder",
+      "What else is on that day?",
+      "Any conflicts with this?",
+    ]
+  }
+
+  // 2. If last action was grocery addition or list read
+  if (
+    ta?.tool === 'add_grocery_items' ||
+    ta?.tool === 'check_grocery_item' ||
+    state?.activeEntityType === 'grocery_item' ||
+    content.includes('grocery') ||
+    content.includes('shopping list')
+  ) {
+    return [
+      "What else is on the list?",
+      "Clear checked items",
+      "Suggest weeknight dinner staples",
+      "Add milk and eggs",
+    ]
+  }
+
+  // 3. If last message was cooking / recipes
+  if (
+    page === 'cook' ||
+    ta?.tool === 'create_recipe' ||
+    content.includes('recipe') ||
+    content.includes('ingredients') ||
+    content.includes('dinner') ||
+    content.includes('cook')
+  ) {
+    return [
+      "Add ingredients to grocery list",
+      "What can I prep ahead?",
+      "Suggest a quick side dish",
+      "Scale this for 6 people",
+    ]
+  }
+
+  // 4. If last message was calendar rundown / queries
+  if (
+    content.includes('calendar') ||
+    content.includes('schedule') ||
+    content.includes('tomorrow') ||
+    content.includes('today') ||
+    content.includes('appointment')
+  ) {
+    return [
+      "Any conflicts this weekend?",
+      "What's on tomorrow?",
+      "Give me a full week overview",
+      "Find free time Saturday",
+    ]
+  }
+
+  return buildDynamicSuggestions(page, events, now)
+}
+
+function AmbientGlanceCards({
+  events,
+  onPromptSelect,
+}: {
+  events: EventWithDetails[]
+  onPromptSelect: (prompt: string) => void
+}) {
+  const now = new Date()
+  const nowMs = now.getTime()
+  const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59).getTime()
+
+  const nextEvent = useMemo(() => {
+    return (events ?? [])
+      .filter((e) => {
+        if (!e.start_time) return false
+        const t = new Date(e.start_time).getTime()
+        return Number.isFinite(t) && t >= nowMs && t <= todayEnd
+      })
+      .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())[0] ?? null
+  }, [events, nowMs, todayEnd])
+
+  return (
+    <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-2 text-left">
+      <Button
+        variant="ghost"
+        type="button"
+        onClick={() => onPromptSelect(nextEvent ? `Prep me for "${nextEvent.title}"` : "What's on our schedule today?")}
+        className="group flex items-start gap-3 p-3 min-h-[64px] rounded-2xl border border-casa-gold/35 bg-casa-bg hover:bg-white hover:border-casa-gold/60 transition-all shadow-subtle cursor-pointer text-left whitespace-normal justify-start active:scale-[0.99]"
+      >
+        <div className="p-2 rounded-xl bg-casa-gold/15 text-casa-gold shrink-0 group-hover:scale-105 transition-transform">
+          <CalendarDays size={16} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-2xs font-bold text-casa-gold-hover uppercase tracking-wider">
+            {nextEvent ? 'Next Up' : 'Schedule'}
+          </p>
+          <p className="text-body-sm font-semibold text-casa-navy truncate">
+            {nextEvent ? nextEvent.title : 'Free for today'}
+          </p>
+          {nextEvent && (
+            <p className="text-caption text-casa-muted font-medium">
+              {format(new Date(nextEvent.start_time), 'h:mm a')}
+            </p>
+          )}
+        </div>
+      </Button>
+
+      <Button
+        variant="ghost"
+        type="button"
+        onClick={() => onPromptSelect('Plan a quick weeknight dinner for tonight')}
+        className="group flex items-start gap-3 p-3 min-h-[64px] rounded-2xl border border-casa-gold/35 bg-casa-bg hover:bg-white hover:border-casa-gold/60 transition-all shadow-subtle cursor-pointer text-left whitespace-normal justify-start active:scale-[0.99]"
+      >
+        <div className="p-2 rounded-xl bg-amber-500/15 text-amber-700 shrink-0 group-hover:scale-105 transition-transform">
+          <Utensils size={16} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-2xs font-bold text-amber-800 uppercase tracking-wider">Tonight's Meal</p>
+          <p className="text-body-sm font-semibold text-casa-navy truncate">Dinner Plan</p>
+          <p className="text-caption text-casa-muted">Pantry-friendly & fast</p>
+        </div>
+      </Button>
+    </div>
+  )
+}
+

@@ -17,8 +17,59 @@ import {
 } from '../lib/assistantTelemetry'
 import { assistantErrorMessage } from '../lib/assistantErrors.mjs'
 import { useProfileSession } from '../contexts/ProfileSessionContext'
+import { resolveFocusedEventDeterministicAnswer, deriveEventTransportation } from '../lib/focusedEventDeterministicAnswer'
 
 export type { AIMessage }
+
+export interface GroceryAssistantContext {
+  totalItems: number
+  toBuyCount: number
+  inCartCount: number
+  items: Array<{
+    id: string
+    name: string
+    category: string
+    checked: boolean
+    quantity?: string | null
+    unit?: string | null
+    notes?: string | null
+  }>
+  pantryInventory?: Array<{
+    name: string
+    category: string
+    currentStock: number
+    unit: string
+    lowStockThreshold: number
+  }>
+  pantryCadencePredictions?: Array<{
+    name: string
+    cadenceDays: number
+    daysUntil: number
+    dueLabel?: string
+    confidence?: string
+  }>
+  plannedDinners?: Array<{
+    slot: string
+    recipeName: string
+    cookTime?: string | null
+    servings?: string | null
+    ingredientCount: number
+    ingredients: string[]
+  }>
+  recentAisleCategories?: string[]
+}
+
+export interface ActionAiContext {
+  actionId: string
+  title: string
+  subject?: string
+  sender?: string
+  amount?: string | null
+  urgency?: string
+  requiredAction?: string
+  householdImpact?: string
+  emailBody?: string
+}
 
 export interface AssistantContext {
   page: string
@@ -27,6 +78,8 @@ export interface AssistantContext {
   family: FamilyMember[]
   homeCity?: string
   focusedEvent?: EventWithDetails
+  focusedAction?: ActionAiContext
+  groceryContext?: GroceryAssistantContext
   onSessionEnd?: () => void
 }
 
@@ -121,43 +174,93 @@ function buildContext(ctx: AssistantContext, messages: AIMessage[], experienceMo
       tool: pendingAction.tool,
       args: pendingAction.args,
     } : undefined,
-    focusedEvent: ctx.focusedEvent ? {
-      id: ctx.focusedEvent.id,
-      title: ctx.focusedEvent.title,
-      start_time: ctx.focusedEvent.start_time,
-      end_time: ctx.focusedEvent.end_time,
-      updated_at: ctx.focusedEvent.updated_at,
-      all_day: ctx.focusedEvent.all_day,
-      location_name: ctx.focusedEvent.location_name ?? null,
-      address: ctx.focusedEvent.address ?? null,
-      description: ctx.focusedEvent.description ?? null,
-      members: ctx.focusedEvent.members.map(m => m.family_member?.name ?? '').filter(Boolean),
-      category: ctx.focusedEvent.enrichment?.category ?? null,
-      notes: ctx.focusedEvent.enrichment?.prep_notes ?? null,
-      what_to_bring: ctx.focusedEvent.enrichment?.what_to_bring ?? [],
-      outfit_suggestion: ctx.focusedEvent.enrichment?.outfit_suggestion ?? null,
-      parking_notes: ctx.focusedEvent.enrichment?.parking_notes ?? null,
-      contact_name: ctx.focusedEvent.enrichment?.contact_name ?? null,
-      contact_phone: ctx.focusedEvent.enrichment?.contact_phone ?? null,
-      cost_estimate: ctx.focusedEvent.enrichment?.cost_estimate ?? null,
-      dietary_notes: ctx.focusedEvent.enrichment?.dietary_notes ?? null,
-      meal_impact: ctx.focusedEvent.enrichment?.meal_impact ?? null,
-      checklist: ctx.focusedEvent.checklist.map(item => ({
-        id: item.id,
-        label: item.label,
-        note: item.note,
-        checked: item.checked,
-        category: item.category,
+    focusedAction: ctx.focusedAction ? {
+      id: ctx.focusedAction.actionId,
+      title: ctx.focusedAction.title,
+      subject: ctx.focusedAction.subject ?? null,
+      sender: ctx.focusedAction.sender ?? null,
+      amount: ctx.focusedAction.amount ?? null,
+      urgency: ctx.focusedAction.urgency ?? null,
+      required_action: ctx.focusedAction.requiredAction ?? null,
+      household_impact: ctx.focusedAction.householdImpact ?? null,
+      email_body: ctx.focusedAction.emailBody ?? null,
+    } : undefined,
+    focusedEvent: ctx.focusedEvent ? (() => {
+      const transport = deriveEventTransportation(ctx.focusedEvent, ctx.family)
+      return {
+        id: ctx.focusedEvent.id,
+        title: ctx.focusedEvent.title,
+        event_type: ctx.focusedEvent.event_type ?? 'event',
+        start_time: ctx.focusedEvent.start_time,
+        end_time: ctx.focusedEvent.end_time,
+        updated_at: ctx.focusedEvent.updated_at,
+        all_day: ctx.focusedEvent.all_day,
+        location_name: ctx.focusedEvent.location_name ?? null,
+        address: ctx.focusedEvent.address ?? null,
+        description: ctx.focusedEvent.description ?? null,
+        source_feed: ctx.focusedEvent.google_calendar_id ? 'Google Calendar Feed' : 'Casa Household Calendar',
+        driver: transport?.driverName ?? null,
+        leave_by: transport?.leaveTime ?? null,
+        drive_duration_min: transport?.driveMinutes ?? null,
+        members: ctx.focusedEvent.members.map(m => m.family_member?.name ?? '').filter(Boolean),
+        category: ctx.focusedEvent.enrichment?.category ?? null,
+        notes: ctx.focusedEvent.enrichment?.prep_notes ?? null,
+        what_to_bring: ctx.focusedEvent.enrichment?.what_to_bring ?? [],
+        outfit_suggestion: ctx.focusedEvent.enrichment?.outfit_suggestion ?? null,
+        parking_notes: ctx.focusedEvent.enrichment?.parking_notes ?? null,
+        contact_name: ctx.focusedEvent.enrichment?.contact_name ?? null,
+        contact_phone: ctx.focusedEvent.enrichment?.contact_phone ?? null,
+        cost_estimate: ctx.focusedEvent.enrichment?.cost_estimate ?? null,
+        dietary_notes: ctx.focusedEvent.enrichment?.dietary_notes ?? null,
+        meal_impact: ctx.focusedEvent.enrichment?.meal_impact ?? null,
+        surrounding_neighborhood: ctx.events.filter(e => {
+          if (e.id === ctx.focusedEvent?.id) return false
+          const targetStart = new Date(ctx.focusedEvent!.start_time).getTime()
+          const eStart = new Date(e.start_time).getTime()
+          return Math.abs(eStart - targetStart) <= 2.5 * 60 * 60 * 1000 // 2.5 hours
+        }).slice(0, 6).map(e => ({
+          id: e.id,
+          title: e.title,
+          start_time: e.start_time,
+          end_time: e.end_time,
+          location_name: e.location_name ?? null,
+          members: e.members.map(m => m.family_member?.name ?? '').filter(Boolean)
+        })),
+        checklist: ctx.focusedEvent.checklist.map(item => ({
+          id: item.id,
+          label: item.label,
+          note: item.note,
+          checked: item.checked,
+          category: item.category,
+        })),
+        actions: ctx.focusedEvent.actions.map(item => ({
+          id: item.id,
+          title: item.title,
+          description: item.description,
+          due_date: item.due_date,
+          is_urgent: item.is_urgent,
+          completed: item.completed,
+          assigned_to: item.assigned_to,
+        })),
+      }
+    })() : undefined,
+    grocery: ctx.groceryContext ? {
+      total_items: ctx.groceryContext.totalItems,
+      to_buy_count: ctx.groceryContext.toBuyCount,
+      in_cart_count: ctx.groceryContext.inCartCount,
+      items: ctx.groceryContext.items.slice(0, 100).map((i) => ({
+        id: i.id,
+        name: i.name,
+        category: i.category,
+        checked: i.checked,
+        quantity: i.quantity ?? null,
+        unit: i.unit ?? null,
+        notes: i.notes ?? null,
       })),
-      actions: ctx.focusedEvent.actions.map(item => ({
-        id: item.id,
-        title: item.title,
-        description: item.description,
-        due_date: item.due_date,
-        is_urgent: item.is_urgent,
-        completed: item.completed,
-        assigned_to: item.assigned_to,
-      })),
+      pantry_inventory: ctx.groceryContext.pantryInventory?.slice(0, 60),
+      pantry_cadence_predictions: ctx.groceryContext.pantryCadencePredictions?.slice(0, 25),
+      planned_dinners: ctx.groceryContext.plannedDinners?.slice(0, 10),
+      recent_aisle_categories: ctx.groceryContext.recentAisleCategories,
     } : undefined,
   }
 }
@@ -180,6 +283,7 @@ export function useAIAssistant(ctx: AssistantContext) {
   const messagesRef = useRef(messages)
   const ctxRef = useRef(ctx)
   const activeImageRef = useRef<{ dataUrl: string; mimeType: string } | null>(null)
+  const activeImagesRef = useRef<Array<{ dataUrl: string; mimeType: string }>>([])
   useEffect(() => { sessionRef.current = session }, [session])
   useEffect(() => { messagesRef.current = messages }, [messages])
   useEffect(() => { ctxRef.current = ctx })
@@ -204,7 +308,7 @@ export function useAIAssistant(ctx: AssistantContext) {
 
   const startFresh = useCallback(() => {
     endSession()   // clear localStorage so next open is truly blank
-    activeImageRef.current = null
+    activeImagesRef.current = []
     setMessages([])
     startNewSession()
   }, [endSession, startNewSession])
@@ -216,7 +320,7 @@ export function useAIAssistant(ctx: AssistantContext) {
 
   const resumePrivateConversation = useCallback(async (conversationId: string) => {
     const resumed = await privateHistory.resumeConversation(conversationId)
-    activeImageRef.current = null
+    activeImagesRef.current = []
     sessionRef.current = resumed
     setSession(resumed)
     setMessages(resumed.messages)
@@ -229,16 +333,21 @@ export function useAIAssistant(ctx: AssistantContext) {
 
   const send = useCallback(async (
     text: string,
-    image?: { dataUrl: string; mimeType: string },
+    image?: { dataUrl: string; mimeType: string } | Array<{ dataUrl: string; mimeType: string }>,
     sendTrace?: AssistantSendTrace,
     options?: {
       replayExistingUserMessage?: boolean
       talkPlanIntentResolution?: 'confirmed_action' | 'conversation_only'
     },
   ) => {
-    if (image) activeImageRef.current = image
-    const activeImage = image ?? activeImageRef.current ?? undefined
-    const imageContext = image ? 'current_turn' : activeImage ? 'conversation' : 'none'
+    const activeImage = image ?? activeImageRef.current
+    const singleResolved = (Array.isArray(activeImage) ? activeImage[0] : activeImage) ?? null
+    if (singleResolved) activeImageRef.current = singleResolved
+    const imagesList = Array.isArray(image) ? image : image ? [image] : activeImageRef.current ? [activeImageRef.current] : []
+    if (imagesList.length > 0) activeImagesRef.current = imagesList
+    const activeImages = imagesList.length > 0 ? imagesList : activeImagesRef.current
+    const hasActiveImages = activeImages.length > 0
+    const imageContext = imagesList.length > 0 ? 'current_turn' : hasActiveImages ? 'conversation' : 'none'
     const trace = createAssistantTraceContext({
       traceId: sendTrace?.traceId,
       turnId: sendTrace?.turnId ?? genId(),
@@ -249,14 +358,15 @@ export function useAIAssistant(ctx: AssistantContext) {
     })
     emitAssistantTrace('turn_started', trace, {
       payload: {
-        has_image: Boolean(activeImage),
+        has_image: hasActiveImages,
+        image_count: activeImages.length,
         image_context: imageContext,
         word_count: text.trim().split(/\s+/).filter(Boolean).length,
       },
     })
     // Check for goodbye phrase → end session
     if (GOODBYE_PHRASES.test(text)) {
-      activeImageRef.current = null
+      activeImagesRef.current = []
       const farewell: AIMessage = { id: genId(), role: 'assistant', content: "You're welcome! Session saved. Say hi when you need me 👋" }
       setMessages(prev => {
         const updated = [...prev, { id: genId(), role: 'user' as const, content: text }, farewell]
@@ -273,18 +383,53 @@ export function useAIAssistant(ctx: AssistantContext) {
     }
 
     const replayExistingUserMessage = options?.replayExistingUserMessage === true
-    const userMsg: AIMessage = { id: genId(), role: 'user', content: text, imageDataUrl: image?.dataUrl }
-    if (!replayExistingUserMessage) setMessages(prev => [...prev, userMsg])
-    setLoading(true)
+    const userMsg: AIMessage = {
+      id: genId(),
+      role: 'user',
+      content: text,
+      imageDataUrl: imagesList[0]?.dataUrl,
+      imageDataUrls: imagesList.length > 0 ? imagesList.map((img) => img.dataUrl) : undefined,
+    }
 
     let activeSession = sessionRef.current
     if (!activeSession) {
       activeSession = startNewSession()
     }
 
-    const imagePayload = activeImage
-      ? { mimeType: activeImage.mimeType, data: activeImage.dataUrl.replace(/^data:[^;]+;base64,/, '') }
-      : undefined
+    // Instant deterministic resolution for focused event inquiries (driver, buffer, notes, conflicts)
+    if (!hasActiveImages) {
+      const deterministicEventAnswer = resolveFocusedEventDeterministicAnswer(
+        text,
+        ctxRef.current.focusedEvent,
+        ctxRef.current.events,
+        ctxRef.current.family,
+      )
+      if (deterministicEventAnswer.matched && deterministicEventAnswer.content) {
+        const assistantMsg: AIMessage = {
+          id: genId(),
+          role: 'assistant',
+          content: deterministicEventAnswer.content,
+        }
+        setMessages(prev => {
+          const updated = replayExistingUserMessage ? [...prev, assistantMsg] : [...prev, userMsg, assistantMsg]
+          if (activeSession) persistSessionMessages(activeSession.id, updated)
+          return updated
+        })
+        emitAssistantTrace('turn_completed', trace, {
+          payload: { outcome: 'deterministic_event_resolved', result_type: 'text' },
+        })
+        return
+      }
+    }
+
+    if (!replayExistingUserMessage) setMessages(prev => [...prev, userMsg])
+    setLoading(true)
+
+    const imagePayloads = activeImages.map((img) => ({
+      mimeType: img.mimeType,
+      data: img.dataUrl.replace(/^data:[^;]+;base64,/, ''),
+    }))
+    const singleImagePayload = imagePayloads[0] ?? undefined
 
     const currentMessages = replayExistingUserMessage
       ? messagesRef.current
@@ -306,7 +451,8 @@ export function useAIAssistant(ctx: AssistantContext) {
           ? { talk_plan_intent_resolution: options.talkPlanIntentResolution }
           : {}),
       },
-      image: imagePayload,
+      image: singleImagePayload,
+      images: imagePayloads.length > 0 ? imagePayloads : undefined,
       image_context: imageContext,
       session_id: activeSession.id,
       private_conversation_id: privateConversationId,
@@ -378,6 +524,9 @@ export function useAIAssistant(ctx: AssistantContext) {
           : prev
         const updated = [...revised, assistantMsg]
         if (activeSession) persistSessionMessages(activeSession.id, updated)
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('casa-event-mutated'))
+        }
         return updated
       })
     }
@@ -479,6 +628,9 @@ export function useAIAssistant(ctx: AssistantContext) {
                 ? revised.map(m => m.id === streamMsgId ? { ...finalMsg, streaming: false } : m)
                 : [...revised, { ...finalMsg, streaming: false }]
               if (activeSession) persistSessionMessages(activeSession.id, updated)
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('casa-event-mutated'))
+              }
               return updated
             })
           }
@@ -568,16 +720,22 @@ export function useAIAssistant(ctx: AssistantContext) {
       undoStatus?: NonNullable<AIMessage['toolAction']>['undoStatus']
       undoErrorMsg?: string
       conversationState?: AIMessage['conversationState']
+      args?: Record<string, unknown>
     }
   ) => {
-    const { conversationState, ...toolActionExtra } = extra ?? {}
+    const { conversationState, args, ...toolActionExtra } = extra ?? {}
     setMessages(prev => {
       const updated = prev.map(m =>
         m.id === messageId && m.toolAction
           ? {
               ...m,
               conversationState: conversationState ?? m.conversationState,
-              toolAction: { ...m.toolAction, status, ...toolActionExtra },
+              toolAction: {
+                ...m.toolAction,
+                status,
+                ...(args ? { args: { ...m.toolAction.args, ...args } } : {}),
+                ...toolActionExtra,
+              },
             }
           : m
       )

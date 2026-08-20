@@ -12,6 +12,15 @@ const existing = {
   event_members: [{ family_members: { name: 'Jake' } }, { family_members: { name: 'Kelly' } }],
 }
 
+const existingReminder = {
+  id: 'reminder-1',
+  title: 'Submit Walmart Order',
+  start_time: '2026-08-15T09:30:00-04:00',
+  end_time: '2026-08-15T09:45:00-04:00',
+  event_type: 'reminder',
+  event_members: [{ family_members: { name: 'Kelly' } }],
+}
+
 test('preflight suppresses an exact title and start duplicate', () => {
   const result = assessCalendarCreatePreflight([existing], {
     title: ' dinner  at casa tua ',
@@ -38,7 +47,21 @@ test('preflight requires confirmation for a probable duplicate at a nearby time'
   assert.deepEqual(result.probableDuplicates.map((event) => event.id), ['event-1'])
 })
 
-test('preflight detects assigned-member overlaps even when titles differ', () => {
+test('preflight distinguishes different stores and tasks without false duplicate detection', () => {
+  const result = assessCalendarCreatePreflight([existingReminder], {
+    title: 'Submit Cosco Order',
+    start: '2026-08-15T08:55:00-04:00',
+    end: '2026-08-15T09:10:00-04:00',
+    members: ['Kelly'],
+    event_type: 'reminder',
+  })
+
+  assert.equal(result.status, 'clear')
+  assert.equal(result.probableDuplicates.length, 0)
+  assert.equal(result.conflicts.length, 0)
+})
+
+test('preflight detects assigned-member overlaps when the same person is double-booked', () => {
   const result = assessCalendarCreatePreflight([existing], {
     title: 'Bass Museum',
     start: '2026-08-29T19:30:00-04:00',
@@ -51,15 +74,29 @@ test('preflight detects assigned-member overlaps even when titles differ', () =>
   assert.deepEqual(result.conflicts.map((event) => event.id), ['event-1'])
 })
 
-test('preflight uses household-wide conflicts when no members are assigned', () => {
+test('preflight allows different family members to have simultaneous appointments at the same time', () => {
   const result = assessCalendarCreatePreflight([existing], {
-    title: 'Bass Museum',
-    start: '2026-08-29T19:30:00-04:00',
-    end: '2026-08-29T20:30:00-04:00',
-    members: [],
+    title: 'Piano Lesson',
+    start: '2026-08-29T19:00:00-04:00',
+    end: '2026-08-29T20:00:00-04:00',
+    members: ['Maya'],
     event_type: 'event',
   })
 
-  assert.equal(result.status, 'requires_confirmation')
-  assert.equal(result.conflicts.length, 1)
+  assert.equal(result.status, 'clear')
+  assert.equal(result.conflicts.length, 0)
 })
+
+test('reminders never trigger calendar conflicts with existing events', () => {
+  const result = assessCalendarCreatePreflight([existing], {
+    title: 'Take vitamins',
+    start: '2026-08-29T19:00:00-04:00',
+    end: '2026-08-29T19:15:00-04:00',
+    members: ['Jake'],
+    event_type: 'reminder',
+  })
+
+  assert.equal(result.status, 'clear')
+  assert.equal(result.conflicts.length, 0)
+})
+

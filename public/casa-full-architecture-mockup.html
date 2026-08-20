@@ -1,0 +1,1879 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Casa Tabor — Living Canvas & Ambient Hybrid Architecture</title>
+  
+  <!-- Google Fonts: Cormorant Garamond, DM Sans, JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <!-- Lucide Icons -->
+  <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.js"></script>
+
+  <style>
+    :root {
+      /* Casa Tabor Color Tokens */
+      --color-gold: #C9A96E;
+      --color-gold-hover: #b89555;
+      --color-gold-soft: #F4E2CD;
+      --color-gold-subtle: #FAF0E2;
+      --color-gold-border: #EBD9BF;
+      --color-navy: #1B2A4A;
+      --color-navy-dark: #0f1a30;
+      
+      /* Surface & Canvas */
+      --color-bg: #FAF8F5;
+      --color-bg-2: #F2EEE7;
+      --color-surface: #FFFFFF;
+      --color-surface-subtle: #FAF6EE;
+      --color-surface-raised: #FFFFFF;
+      
+      /* Text */
+      --color-text: #2D2D2D;
+      --color-text-secondary: #5C5D66;
+      --color-text-tertiary: #8D8E99;
+      --color-text-faint: #A9A398;
+      
+      /* Borders & Dividers */
+      --color-border: #E8E2D9;
+      --color-control-border: #E3DACB;
+      --color-divider: #E4DBCB;
+      
+      /* Semantics */
+      --color-error: #C0392B;
+      --color-error-soft: #FDE8E8;
+      --color-success: #27AE60;
+      --color-success-soft: #DBF0DC;
+      --color-warning: #E67E22;
+      --color-warning-soft: #FDF0E2;
+      --color-info: #10A5AC;
+      --color-info-soft: #E7F4F4;
+
+      /* Family Members */
+      --member-jake: #1B2A4A;
+      --member-kelly: #C4693A;
+      --member-liv: #6A9E7F;
+      --member-emme: #C47A8A;
+      --member-owen: #D4A44C;
+
+      /* Fonts */
+      --font-display: 'Cormorant Garamond', Georgia, serif;
+      --font-body: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+
+      /* Shadows & Radii */
+      --shadow-sm: 0 1px 3px rgba(27,42,74,0.06), 0 1px 2px rgba(27,42,74,0.04);
+      --shadow-md: 0 4px 16px rgba(27,42,74,0.08), 0 1px 3px rgba(27,42,74,0.03);
+      --shadow-lg: 0 12px 36px rgba(27,42,74,0.12), 0 2px 6px rgba(27,42,74,0.04);
+      --shadow-sheet: -8px 0 32px rgba(27,42,74,0.18);
+      --shadow-glow: 0 0 0 3px rgba(201,169,110,0.45);
+
+      --radius-sm: 8px;
+      --radius-md: 14px;
+      --radius-lg: 20px;
+      --radius-pill: 9999px;
+
+      --transition-fast: 140ms cubic-bezier(0.2, 0, 0, 1);
+      --transition-base: 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+      --transition-smooth: 380ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    body.dark-mode {
+      --color-gold: #9F8658;
+      --color-gold-hover: #bda373;
+      --color-gold-soft: #3a3122;
+      --color-gold-subtle: #241e15;
+      --color-gold-border: #4a3c2e;
+      --color-navy: #0E1218;
+      --color-navy-dark: #05070a;
+      
+      --color-bg: #090C11;
+      --color-bg-2: #0e131b;
+      --color-surface: #121923;
+      --color-surface-subtle: #171F2C;
+      --color-surface-raised: #1A2433;
+      
+      --color-text: #E3DDD1;
+      --color-text-secondary: #BCC7D8;
+      --color-text-tertiary: #93A4BC;
+      --color-text-faint: #63738a;
+      
+      --color-border: #263244;
+      --color-control-border: #324157;
+      --color-divider: #2B374C;
+      
+      --color-error-soft: #381a17;
+      --color-success-soft: #14331d;
+      --color-warning-soft: #3b2812;
+      --color-info-soft: #123136;
+
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
+      --shadow-md: 0 4px 16px rgba(0,0,0,0.55);
+      --shadow-lg: 0 12px 36px rgba(0,0,0,0.7);
+      --shadow-sheet: -8px 0 32px rgba(0,0,0,0.8);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-body);
+      background-color: var(--color-bg);
+      color: var(--color-text);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      transition: background-color var(--transition-base), color var(--transition-base);
+    }
+
+    /* ══════════════════════════════════════════════════════════════ */
+    /* 1. TOP GLOBAL APP HEADER & NAVIGATION                         */
+    /* ══════════════════════════════════════════════════════════════ */
+    .app-header {
+      background: var(--color-surface);
+      border-bottom: 1px solid var(--color-border);
+      padding: 10px 24px;
+      position: sticky;
+      top: 0;
+      z-index: 90;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .header-content {
+      max-width: 1640px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .app-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: inherit;
+      cursor: pointer;
+    }
+
+    .brand-mark {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-sm);
+      background: var(--color-navy);
+      color: var(--color-gold);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-display);
+      font-size: 19px;
+      font-weight: 700;
+    }
+    body.dark-mode .brand-mark {
+      background: var(--color-gold);
+      color: var(--color-navy);
+    }
+
+    .brand-title {
+      font-family: var(--font-display);
+      font-size: 21px;
+      font-weight: 600;
+      color: var(--color-navy);
+      line-height: 1;
+    }
+    body.dark-mode .brand-title { color: #FFFFFF; }
+
+    .brand-subtitle {
+      font-family: var(--font-mono);
+      font-size: 9.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--color-gold);
+      margin-top: 2px;
+    }
+
+    /* Global Navigation Tabs */
+    .app-nav-tabs {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: var(--color-surface-subtle);
+      padding: 4px;
+      border-radius: var(--radius-pill);
+      border: 1px solid var(--color-border);
+    }
+
+    .app-tab-btn {
+      padding: 6px 16px;
+      border-radius: var(--radius-pill);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--color-text-secondary);
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all var(--transition-fast);
+      font-family: var(--font-body);
+    }
+
+    .app-tab-btn:hover { color: var(--color-navy); }
+    body.dark-mode .app-tab-btn:hover { color: #fff; }
+
+    .app-tab-btn.active {
+      background: var(--color-surface);
+      color: var(--color-navy);
+      box-shadow: var(--shadow-sm);
+    }
+    body.dark-mode .app-tab-btn.active {
+      background: var(--color-surface-raised);
+      color: var(--color-gold);
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* Canvas Mode Switcher Pill (Calm vs Turbo) */
+    .mode-toggle-group {
+      display: flex;
+      align-items: center;
+      background: var(--color-surface-subtle);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-pill);
+      padding: 2px;
+    }
+
+    .mode-toggle-btn {
+      padding: 5px 12px;
+      border-radius: var(--radius-pill);
+      font-size: 12px;
+      font-weight: 700;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      color: var(--color-text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: all var(--transition-fast);
+    }
+
+    .mode-toggle-btn.active {
+      background: var(--color-navy);
+      color: #FFFFFF;
+      box-shadow: var(--shadow-sm);
+    }
+    body.dark-mode .mode-toggle-btn.active {
+      background: var(--color-gold);
+      color: #1B2A4A;
+    }
+
+    /* Family Filter Pills */
+    .family-filter-group {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: var(--color-surface-subtle);
+      padding: 3px 6px;
+      border-radius: var(--radius-pill);
+      border: 1px solid var(--color-border);
+    }
+
+    .member-avatar-btn {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      color: #fff;
+      font-size: 10.5px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all var(--transition-fast);
+    }
+    .member-avatar-btn.selected {
+      border-color: var(--color-gold);
+      box-shadow: 0 0 0 2px rgba(201,169,110,0.4);
+      transform: scale(1.08);
+    }
+
+    .btn-create-universal {
+      background: var(--color-gold);
+      color: #1B2A4A;
+      border: none;
+      padding: 7px 14px;
+      border-radius: var(--radius-pill);
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all var(--transition-fast);
+      box-shadow: var(--shadow-sm);
+    }
+    .btn-create-universal:hover {
+      background: var(--color-gold-hover);
+      transform: translateY(-1px);
+    }
+
+    .btn-sidecar-toggle {
+      background: linear-gradient(135deg, var(--color-navy) 0%, #2b3d63 100%);
+      color: #FFFFFF;
+      border: 1px solid rgba(201,169,110,0.3);
+      padding: 7px 13px;
+      border-radius: var(--radius-pill);
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all var(--transition-fast);
+    }
+    .btn-sidecar-toggle.active {
+      box-shadow: 0 0 0 2px var(--color-gold);
+      background: var(--color-navy-dark);
+    }
+    body.dark-mode .btn-sidecar-toggle {
+      background: linear-gradient(135deg, #1b263b 0%, #0d1627 100%);
+    }
+
+    /* ══════════════════════════════════════════════════════════════ */
+    /* 2. APP WORKSPACE WRAPPER (ELASTIC FOR AI SIDECAR)              */
+    /* ══════════════════════════════════════════════════════════════ */
+    .app-workspace-wrapper {
+      display: flex;
+      flex: 1;
+      width: 100%;
+      position: relative;
+      overflow-x: hidden;
+      transition: padding-right var(--transition-smooth);
+    }
+
+    .app-workspace-wrapper.sidecar-open {
+      padding-right: 380px;
+    }
+    @media (max-width: 1100px) {
+      .app-workspace-wrapper.sidecar-open { padding-right: 0; }
+    }
+
+    .page-container {
+      max-width: 1640px;
+      margin: 0 auto;
+      padding: 20px 24px 32px;
+      width: 100%;
+      flex: 1;
+      transition: all var(--transition-smooth);
+    }
+
+    .app-page {
+      display: none;
+      animation: fadeInPage 0.25s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+    }
+    .app-page.active { display: block; }
+
+    @keyframes fadeInPage {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ══════════════════════════════════════════════════════════════ */
+    /* PAGE 1A: CALM AMBIENT DASHBOARD (KIOSK / FRONT PORCH)         */
+    /* ══════════════════════════════════════════════════════════════ */
+    .calm-dashboard-view {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      max-width: 1180px;
+      margin: 0 auto;
+      padding-top: 10px;
+    }
+
+    .ambient-header-banner {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    .ambient-clock {
+      font-family: var(--font-display);
+      font-size: 52px;
+      font-weight: 600;
+      color: var(--color-navy);
+      line-height: 1;
+      letter-spacing: -0.02em;
+    }
+    body.dark-mode .ambient-clock { color: #FFFFFF; }
+
+    .ambient-date {
+      font-size: 15px;
+      color: var(--color-text-secondary);
+      margin-top: 6px;
+    }
+
+    .ambient-turbo-cta-card {
+      background: linear-gradient(135deg, var(--color-surface-subtle) 0%, var(--color-gold-subtle) 100%);
+      border: 1px solid var(--color-gold-border);
+      border-radius: var(--radius-lg);
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      box-shadow: var(--shadow-sm);
+      cursor: pointer;
+      transition: all var(--transition-fast);
+    }
+    .ambient-turbo-cta-card:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-md);
+      border-color: var(--color-gold);
+    }
+
+    .calm-hero-grid {
+      display: grid;
+      grid-template-columns: 1.5fr 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 860px) {
+      .calm-hero-grid { grid-template-columns: 1fr; }
+    }
+
+    .calm-hero-nextup {
+      background: linear-gradient(135deg, #1B2A4A 0%, #0F1A30 100%);
+      color: #FFFFFF;
+      border-radius: var(--radius-lg);
+      padding: 28px;
+      border: 1px solid rgba(201,169,110,0.3);
+      box-shadow: var(--shadow-md);
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 240px;
+    }
+
+    .calm-hero-subwidget {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    /* ══════════════════════════════════════════════════════════════ */
+    /* PAGE 1B: TURBO LIVING CANVAS (3-PANE TRIAGE ENGINE)           */
+    /* ══════════════════════════════════════════════════════════════ */
+    .turbo-canvas-view {
+      display: none;
+    }
+    .turbo-canvas-view.active-submode {
+      display: block;
+    }
+
+    .canvas-layout-grid {
+      display: grid;
+      grid-template-columns: 340px 1fr 380px;
+      gap: 18px;
+      align-items: start;
+    }
+
+    @media (max-width: 1200px) {
+      .canvas-layout-grid { grid-template-columns: 300px 1fr 340px; }
+    }
+    @media (max-width: 960px) {
+      .canvas-layout-grid { grid-template-columns: 1fr; }
+    }
+
+    .canvas-card-col {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-sm);
+      height: calc(100vh - 145px);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: sticky;
+      top: 80px;
+    }
+    @media (max-width: 960px) {
+      .canvas-card-col { height: auto; position: static; }
+    }
+
+    .col-header {
+      padding: 14px 18px;
+      background: var(--color-surface-subtle);
+      border-bottom: 1px solid var(--color-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    .col-header-title {
+      font-family: var(--font-display);
+      font-size: 19px;
+      font-weight: 600;
+      color: var(--color-navy);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    body.dark-mode .col-header-title { color: #fff; }
+
+    .col-scroll-area {
+      padding: 16px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      flex: 1;
+    }
+
+    .briefing-hero-bubble {
+      background: linear-gradient(180deg, var(--color-surface-subtle) 0%, var(--color-surface) 100%);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      padding: 16px;
+    }
+
+    .briefing-handoff-row {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-left: 4px solid var(--color-warning);
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
+      cursor: pointer;
+      transition: all var(--transition-fast);
+    }
+    .briefing-handoff-row:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-md);
+    }
+    .briefing-handoff-row.active-cross-highlight {
+      border-color: var(--color-gold) !important;
+      background: var(--color-gold-subtle) !important;
+      box-shadow: var(--shadow-glow) !important;
+    }
+
+    .schedule-event-row {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+      transition: all var(--transition-fast);
+    }
+    .schedule-event-row:hover {
+      border-color: var(--color-control-border);
+      box-shadow: var(--shadow-md);
+      transform: translateY(-1px);
+    }
+    .schedule-event-row.has-conflict {
+      border-left: 4px solid var(--color-error);
+      background: var(--color-error-soft);
+    }
+    .schedule-event-row.active-cross-highlight {
+      border-color: var(--color-gold) !important;
+      background: var(--color-gold-subtle) !important;
+      box-shadow: var(--shadow-glow) !important;
+    }
+
+    .attention-item-card {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      box-shadow: var(--shadow-sm);
+      transition: all var(--transition-base);
+    }
+    .attention-item-card.active-cross-highlight {
+      border-color: var(--color-gold) !important;
+      background: var(--color-gold-subtle) !important;
+      box-shadow: var(--shadow-glow) !important;
+    }
+
+    .resolver-btn-pill {
+      padding: 6px 12px;
+      border-radius: var(--radius-pill);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid var(--color-border);
+      background: var(--color-surface-subtle);
+      color: var(--color-text);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all var(--transition-fast);
+    }
+    .resolver-btn-pill:hover {
+      background: var(--color-surface);
+      border-color: var(--color-control-border);
+      transform: translateY(-1px);
+    }
+    .resolver-btn-pill.primary {
+      background: var(--color-navy);
+      color: #FFFFFF;
+      border-color: var(--color-navy);
+    }
+    body.dark-mode .resolver-btn-pill.primary {
+      background: var(--color-gold);
+      color: #1B2A4A;
+      border-color: var(--color-gold);
+    }
+
+    /* ══════════════════════════════════════════════════════════════ */
+    /* 3. PERSISTENT AI SIDECAR RAILS (GROUNDED COPILOT)             */
+    /* ══════════════════════════════════════════════════════════════ */
+    .ai-sidecar-drawer {
+      position: fixed;
+      top: 61px;
+      right: 0;
+      width: 380px;
+      height: calc(100vh - 61px);
+      background: var(--color-surface);
+      border-left: 1px solid var(--color-border);
+      box-shadow: var(--shadow-md);
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      transform: translateX(100%);
+      transition: transform var(--transition-smooth);
+    }
+    .ai-sidecar-drawer.open {
+      transform: translateX(0);
+    }
+
+    .sidecar-header {
+      padding: 14px 18px;
+      background: var(--color-surface-subtle);
+      border-bottom: 1px solid var(--color-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .sidecar-chat-log {
+      flex: 1;
+      padding: 16px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .chat-bubble-assistant {
+      background: var(--color-surface-subtle);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .chat-bubble-user {
+      background: var(--color-navy);
+      color: #FFFFFF;
+      border-radius: var(--radius-md);
+      padding: 10px 14px;
+      font-size: 13px;
+      align-self: flex-end;
+      max-width: 85%;
+    }
+    body.dark-mode .chat-bubble-user {
+      background: var(--color-gold);
+      color: #1B2A4A;
+    }
+
+    .chat-input-box {
+      padding: 12px 16px;
+      background: var(--color-surface-subtle);
+      border-top: 1px solid var(--color-border);
+      display: flex;
+      gap: 8px;
+    }
+
+    /* ══════════════════════════════════════════════════════════════ */
+    /* 4. CALENDAR & MEALS PAGES                                      */
+    /* ══════════════════════════════════════════════════════════════ */
+    .calendar-grid-week {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 8px;
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      padding: 16px;
+      box-shadow: var(--shadow-sm);
+    }
+    .cal-day-col {
+      background: var(--color-surface-subtle);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      padding: 10px;
+      min-height: 520px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .cal-day-col.today-col {
+      border-color: var(--color-gold);
+      background: var(--color-gold-subtle);
+    }
+    .cal-event-chip {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-left: 3px solid var(--color-navy);
+      border-radius: var(--radius-sm);
+      padding: 6px 8px;
+      font-size: 11px;
+      cursor: pointer;
+    }
+
+    .meals-layout-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 20px;
+    }
+    .recipe-card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+    }
+    .recipe-tile {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      cursor: pointer;
+    }
+    .recipe-thumb {
+      height: 140px;
+      background-size: cover;
+      background-position: center;
+      position: relative;
+    }
+
+    /* ══════════════════════════════════════════════════════════════ */
+    /* 5. SLIDE-OUT DETAIL & EDIT INSPECTOR SHEETS                    */
+    /* ══════════════════════════════════════════════════════════════ */
+    .sheet-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      backdrop-filter: blur(2px);
+      z-index: 200;
+      display: none;
+    }
+    .sheet-backdrop.open { display: block; }
+
+    .event-detail-sheet, .event-edit-sheet {
+      position: fixed;
+      top: 0;
+      right: -560px;
+      width: 520px;
+      max-width: 90vw;
+      height: 100vh;
+      background: var(--color-surface);
+      border-left: 1px solid var(--color-border);
+      box-shadow: var(--shadow-sheet);
+      z-index: 201;
+      display: flex;
+      flex-direction: column;
+      transition: right 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+    .event-detail-sheet.open, .event-edit-sheet.open { right: 0; }
+    .event-edit-sheet { z-index: 205; }
+
+    .sheet-header {
+      padding: 20px 24px;
+      background: var(--color-surface-subtle);
+      border-bottom: 1px solid var(--color-border);
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+    .sheet-body {
+      padding: 24px;
+      overflow-y: auto;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    .detail-section-box {
+      background: var(--color-surface-subtle);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      padding: 16px;
+    }
+    .detail-section-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--color-text-tertiary);
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-label { font-size: 12px; font-weight: 600; color: var(--color-text-secondary); }
+    .form-input {
+      width: 100%;
+      padding: 10px 14px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--color-border);
+      background: var(--color-surface-subtle);
+      color: var(--color-text);
+      font-family: var(--font-body);
+      font-size: 14px;
+      outline: none;
+    }
+    .form-input:focus {
+      border-color: var(--color-gold);
+      background: var(--color-surface);
+    }
+
+    /* Toast */
+    .prototype-toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(120%);
+      background: var(--color-navy);
+      color: #FFFFFF;
+      padding: 12px 24px;
+      border-radius: var(--radius-pill);
+      box-shadow: var(--shadow-lg);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      z-index: 300;
+      font-size: 13px;
+      font-weight: 500;
+      transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+    .prototype-toast.show { transform: translateX(-50%) translateY(0); }
+  </style>
+</head>
+<body>
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- 1. TOP GLOBAL APP HEADER & NAVIGATION                         -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <header class="app-header">
+    <div class="header-content">
+      
+      <!-- Brand -->
+      <div class="app-brand" onclick="switchMainTab('canvas'); setCanvasSubmode('calm')">
+        <div class="brand-mark">T</div>
+        <div>
+          <div class="brand-title">Casa Tabor</div>
+          <div class="brand-subtitle">Household Operating System</div>
+        </div>
+      </div>
+
+      <!-- 3-Core Global Navigation Tabs -->
+      <nav class="app-nav-tabs">
+        <button class="app-tab-btn active" id="tab-btn-canvas" onclick="switchMainTab('canvas')">
+          <i data-lucide="layout-grid" size="14"></i> Canvas (Home)
+        </button>
+        <button class="app-tab-btn" id="tab-btn-calendar" onclick="switchMainTab('calendar')">
+          <i data-lucide="calendar" size="14"></i> Calendar
+        </button>
+        <button class="app-tab-btn" id="tab-btn-meals" onclick="switchMainTab('meals')">
+          <i data-lucide="utensils" size="14"></i> Meals &amp; Kitchen
+        </button>
+      </nav>
+
+      <!-- Right Tooling -->
+      <div class="header-actions">
+        
+
+
+        <!-- Family Filter Avatars -->
+        <div class="family-filter-group" title="Filter entire app by family member">
+          <button class="member-avatar-btn selected" style="background: var(--color-navy);" onclick="filterMember('all', this)">All</button>
+          <button class="member-avatar-btn" style="background: var(--member-jake);" onclick="filterMember('jake', this)" title="Jake">J</button>
+          <button class="member-avatar-btn" style="background: var(--member-kelly);" onclick="filterMember('kelly', this)" title="Kelly">K</button>
+          <button class="member-avatar-btn" style="background: var(--member-liv);" onclick="filterMember('liv', this)" title="Liv">L</button>
+          <button class="member-avatar-btn" style="background: var(--member-owen);" onclick="filterMember('owen', this)" title="Owen">O</button>
+        </div>
+
+        <!-- Universal + Quick Create -->
+        <button class="btn-create-universal" onclick="openCreateModal()">
+          <i data-lucide="plus" size="14"></i> Add
+        </button>
+
+        <!-- Persistent AI Sidecar Launcher -->
+        <button class="btn-sidecar-toggle active" id="sidecarHeaderBtn" onclick="toggleSidecar()">
+          <i data-lucide="sparkles" size="13" style="color: var(--color-gold);"></i> Copilot
+        </button>
+
+        <!-- Theme Switcher -->
+        <button class="app-tab-btn" onclick="toggleTheme()" style="padding: 6px 10px;">
+          <i data-lucide="moon" size="14"></i>
+        </button>
+
+      </div>
+
+    </div>
+  </header>
+
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- 2. ELASTIC WORKSPACE WRAPPER (ACCOMMODATES AI SIDECAR)        -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <div class="app-workspace-wrapper sidecar-open" id="workspaceWrapper">
+    
+    <main class="page-container">
+
+      <!-- ──────────────────────────────────────────────────────────── -->
+      <!-- PAGE 1: CANVAS (HYBRID CALM ENTRY ➔ TURBO LIVING CANVAS)     -->
+      <!-- ──────────────────────────────────────────────────────────── -->
+      <div class="app-page active" id="page-canvas">
+        
+        <!-- SUB-MODE A: CALM AMBIENT DASHBOARD (KIOSK / PORCH) -->
+        <div class="calm-dashboard-view" id="calmView">
+          
+          <div class="ambient-header-banner">
+            <div>
+              <div style="font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-gold); font-weight: 700; margin-bottom: 4px;">
+                Casa Tabor Residence · Ambient Kiosk
+              </div>
+              <h1 style="font-family: var(--font-display); font-size: 38px; font-weight: 600; color: var(--color-navy); line-height: 1.1;">
+                Good Afternoon, Kelly &amp; Jake
+              </h1>
+              <p class="ambient-date">
+                Friday, October 24 · 72°F Sunny in Los Altos · Sunset at 6:15 PM
+              </p>
+            </div>
+            <div style="text-align: right;">
+              <div class="ambient-clock" id="liveAmbientClock">3:55 PM</div>
+              <div style="font-size: 13px; color: var(--color-text-secondary); margin-top: 4px;">Next event in 35 mins</div>
+            </div>
+          </div>
+
+          <!-- Glowing Turbo Entry Callout Banner -->
+          <div class="ambient-turbo-cta-card" onclick="setCanvasSubmode('turbo')">
+            <div style="display: flex; align-items: center; gap: 14px;">
+              <div style="width: 44px; height: 44px; border-radius: 50%; background: var(--color-warning); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 20px;">
+                <i data-lucide="zap" size="22"></i>
+              </div>
+              <div>
+                <div style="font-size: 16px; font-weight: 700; color: var(--color-navy); display: flex; align-items: center; gap: 8px;">
+                  <span>2 Household Items Need You</span>
+                  <span style="font-size: 11px; background: var(--color-error); color: #fff; padding: 2px 8px; border-radius: var(--radius-pill); font-weight: 700;">1 Ride Conflict</span>
+                </div>
+                <div style="font-size: 13px; color: var(--color-text-secondary); margin-top: 2px;">
+                  Owen Soccer ride handoff &amp; Liv Science Camp permission slip waiting.
+                </div>
+              </div>
+            </div>
+            <button class="resolver-btn-pill primary" style="padding: 10px 20px; font-size: 13px;">
+              Enter Turbo Mode <i data-lucide="arrow-right" size="14"></i>
+            </button>
+          </div>
+
+          <!-- Hero Widget Grid -->
+          <div class="calm-hero-grid">
+            
+            <!-- Hero Next Up -->
+            <div class="calm-hero-nextup" onclick="openEventDetail('soccer')">
+              <div>
+                <div style="display: inline-flex; align-items: center; gap: 6px; background: rgba(201,169,110,0.25); border: 1px solid rgba(201,169,110,0.4); color: var(--color-gold); font-family: var(--font-mono); font-size: 11px; padding: 3px 10px; border-radius: var(--radius-pill); font-weight: 600; margin-bottom: 12px;">
+                  <i data-lucide="navigation" size="11"></i> Next Up · Leave in 35 mins
+                </div>
+                <div style="font-family: var(--font-display); font-size: 32px; font-weight: 600; line-height: 1.15;" id="calm-hero-title">
+                  Owen Soccer Practice
+                </div>
+                <div style="font-size: 15px; color: rgba(255,255,255,0.85); margin-top: 6px;">
+                  4:30 – 6:00 PM · Oakridge Park · Field #3
+                </div>
+              </div>
+              <div style="padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.15); font-size: 13px; display: flex; justify-content: space-between; align-items: center;">
+                <span id="calm-driver-text">🚗 Driver: <strong>Pending Kelly</strong></span>
+                <span style="color: var(--color-gold); font-weight: 600;">Tap for full details →</span>
+              </div>
+            </div>
+
+            <!-- Tonight's Dinner & Quick Glance -->
+            <div class="calm-hero-subwidget" onclick="switchMainTab('meals')">
+              <div>
+                <div style="font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; color: var(--color-gold); font-weight: 700; margin-bottom: 8px;">
+                  🍴 Tonight's Dinner
+                </div>
+                <div style="font-family: var(--font-display); font-size: 24px; font-weight: 600; color: var(--color-navy);">
+                  Lemon Herb Salmon
+                </div>
+                <div style="font-size: 13px; color: var(--color-text-secondary); margin-top: 4px;">
+                  25 mins prep · Fresh Asparagus &amp; Quinoa
+                </div>
+              </div>
+              <div style="margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--color-border); display: flex; justify-content: space-between; align-items: center; font-size: 12px;">
+                <span style="color: var(--color-success); font-weight: 600;">✓ All ingredients in pantry</span>
+                <span style="color: var(--color-gold); font-weight: 600;">Open Kitchen →</span>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+
+        <!-- SUB-MODE B: TURBO LIVING CANVAS (3-PANE RESOLUTION ENGINE) -->
+        <div class="turbo-canvas-view" id="turboView">
+          
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="font-family: var(--font-mono); font-size: 12px; background: var(--color-navy); color: #fff; padding: 4px 10px; border-radius: var(--radius-pill); font-weight: 700;">
+                ⚡ TURBO RESOLUTION MODE
+              </span>
+              <span style="font-size: 13px; color: var(--color-text-secondary);">
+                Synchronized 3-Speed Attention Canvas
+              </span>
+            </div>
+            <button class="resolver-btn-pill" onclick="setCanvasSubmode('calm')">
+              <i data-lucide="arrow-left" size="13"></i> Return to Calm Ambient
+            </button>
+          </div>
+
+          <!-- 3-Pane Unified Grid -->
+          <div class="canvas-layout-grid">
+            
+            <!-- PANE 1: DAILY BRIEFING -->
+            <div class="canvas-card-col">
+              <div class="col-header">
+                <div class="col-header-title">
+                  <i data-lucide="coffee" size="16" style="color: var(--color-gold);"></i>
+                  <span>Daily Briefing</span>
+                </div>
+                <span style="font-size: 11px; font-weight: 600; color: var(--color-gold); font-family: var(--font-mono);">Orientation</span>
+              </div>
+
+              <div class="col-scroll-area">
+                <div class="briefing-hero-bubble">
+                  <div style="font-family: var(--font-mono); font-size: 10px; color: var(--color-gold); font-weight: 700; text-transform: uppercase; margin-bottom: 6px;">
+                    <i data-lucide="sparkles" size="11"></i> Morning Summary
+                  </div>
+                  <div style="font-family: var(--font-display); font-size: 18px; font-style: italic; line-height: 1.35; color: var(--color-text);">
+                    "Today has <strong>1 critical ride conflict</strong> at 4:15 PM and <strong>1 permission slip</strong> due by 3:00 PM."
+                  </div>
+                </div>
+
+                <div style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: var(--color-text-tertiary); letter-spacing: 0.08em; margin-top: 4px;">
+                  Logistical Handoffs (Tap to cross-focus)
+                </div>
+
+                <!-- Handoff 1 -->
+                <div class="briefing-handoff-row" id="briefing-soccer" onclick="crossFocus('soccer')">
+                  <div style="font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--color-warning); margin-bottom: 2px;">
+                    4:15 PM · Ride Handoff
+                  </div>
+                  <div style="font-size: 13.5px; font-weight: 600; color: var(--color-navy);">
+                    Owen Soccer Pickup ➔ Kelly
+                  </div>
+                  <div style="font-size: 12px; color: var(--color-text-secondary); margin-top: 2px;">
+                    Jake in client call. Kelly is recommended to drive to Oakridge Field.
+                  </div>
+                </div>
+
+                <!-- Handoff 2 -->
+                <div class="briefing-handoff-row" style="border-left-color: var(--color-error);" id="briefing-science" onclick="crossFocus('science')">
+                  <div style="font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--color-error); margin-bottom: 2px;">
+                    Due 3:00 PM · School Slip
+                  </div>
+                  <div style="font-size: 13.5px; font-weight: 600; color: var(--color-navy);">
+                    Liv Science Camp Permission Slip
+                  </div>
+                  <div style="font-size: 12px; color: var(--color-text-secondary); margin-top: 2px;">
+                    Requires Kelly's signature for 5th grade trip.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- PANE 2: SCHEDULE & REAL-TIME TIMELINE -->
+            <div class="canvas-card-col">
+              <div class="col-header">
+                <div class="col-header-title">
+                  <i data-lucide="calendar" size="16" style="color: var(--color-navy);"></i>
+                  <span>Today's Schedule</span>
+                </div>
+                <span style="font-size: 11px; color: var(--color-success); font-weight: 600;">● Live</span>
+              </div>
+
+              <div class="col-scroll-area">
+                
+                <!-- Timeline Rows (Clicking any opens Event Detail Sheet!) -->
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                  
+                  <div class="schedule-event-row has-conflict" id="timeline-row-jake" onclick="openEventDetail('jake-call')">
+                    <div style="font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--color-error); width: 68px;">4:00 PM</div>
+                    <div style="flex: 1;">
+                      <div style="font-size: 13.5px; font-weight: 600; color: var(--color-text);">Jake: Q3 Strategy Review Call</div>
+                      <div style="font-size: 11px; color: var(--color-error);">Clashes with 4:30 PM Owen Soccer</div>
+                    </div>
+                    <span class="member-avatar-btn" style="width: 22px; height: 22px; font-size: 10px; background: var(--member-jake);">J</span>
+                  </div>
+
+                  <div class="schedule-event-row" id="timeline-row-soccer" onclick="openEventDetail('soccer')">
+                    <div style="font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--color-text-secondary); width: 68px;">4:30 PM</div>
+                    <div style="flex: 1;">
+                      <div style="font-size: 13.5px; font-weight: 600; color: var(--color-text);" id="timeline-soccer-title">Owen Soccer Practice</div>
+                      <div style="font-size: 11px; color: var(--color-text-tertiary);">Oakridge Park · Field 3</div>
+                    </div>
+                    <span class="member-avatar-btn" id="timeline-soccer-driver-chip" style="width: 22px; height: 22px; font-size: 10px; background: var(--color-gold); color: #1B2A4A;">?</span>
+                  </div>
+
+                  <div class="schedule-event-row" onclick="openEventDetail('dinner')">
+                    <div style="font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--color-text-secondary); width: 68px;">6:30 PM</div>
+                    <div style="flex: 1;">
+                      <div style="font-size: 13.5px; font-weight: 600; color: var(--color-text);">Family Pasta Night &amp; Dinner</div>
+                      <div style="font-size: 11px; color: var(--color-text-tertiary);">Home Kitchen · All Tabor Family</div>
+                    </div>
+                    <div style="display: flex; gap: 2px;">
+                      <span class="member-avatar-btn" style="width: 20px; height: 20px; font-size: 9px; background: var(--member-jake);">J</span>
+                      <span class="member-avatar-btn" style="width: 20px; height: 20px; font-size: 9px; background: var(--member-kelly);">K</span>
+                    </div>
+                  </div>
+
+                </div>
+
+              </div>
+            </div>
+
+            <!-- PANE 3: ATTENTION COMMAND & 1-CLICK RESOLVERS -->
+            <div class="canvas-card-col">
+              <div class="col-header">
+                <div class="col-header-title">
+                  <i data-lucide="check-circle-2" size="16" style="color: var(--color-success);"></i>
+                  <span>Attention Hub</span>
+                </div>
+                <span style="font-size: 11px; font-weight: 600; color: var(--color-text-secondary);" id="attention-count-tag">3 Actions</span>
+              </div>
+
+              <div class="col-scroll-area">
+                
+                <!-- Card 1: Soccer Ride Resolver -->
+                <div class="attention-item-card" id="att-card-soccer">
+                  <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                    <span style="font-size: 10px; font-weight: 700; background: #fee2e2; color: #991b1b; padding: 2px 7px; border-radius: var(--radius-pill);">
+                      🚗 Ride Conflict
+                    </span>
+                    <span style="font-family: var(--font-mono); font-size: 11px; color: var(--color-error); font-weight: 600;">4:15 PM</span>
+                  </div>
+                  <div style="font-size: 14px; font-weight: 600; color: var(--color-text); margin-bottom: 2px;">
+                    Assign driver for Owen's Soccer Practice
+                  </div>
+                  <div style="font-size: 12px; color: var(--color-text-secondary); line-height: 1.4;">
+                    Jake has client call. Kelly is available to drive to Oakridge Field.
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--color-divider);">
+                    <button class="resolver-btn-pill primary" onclick="resolveKellyDriving()">
+                      <i data-lucide="user-check" size="12"></i> Kelly Drives
+                    </button>
+                    <button class="resolver-btn-pill" onclick="triggerToast('Asked Jake on WhatsApp')">
+                      Ask Jake
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Card 2: Science Camp Slip -->
+                <div class="attention-item-card" id="att-card-science">
+                  <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                    <span style="font-size: 10px; font-weight: 700; background: #f3e8ff; color: #6b21a8; padding: 2px 7px; border-radius: var(--radius-pill);">
+                      📝 School Slip
+                    </span>
+                    <span style="font-family: var(--font-mono); font-size: 11px; color: var(--color-error); font-weight: 600;">Due 3 PM</span>
+                  </div>
+                  <div style="font-size: 14px; font-weight: 600; color: var(--color-text); margin-bottom: 2px;">
+                    Sign Liv's Science Camp Permission Slip
+                  </div>
+                  <div style="font-size: 12px; color: var(--color-text-secondary); line-height: 1.4;">
+                    5th Grade trip waiver requires digital signature.
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--color-divider);">
+                    <button class="resolver-btn-pill primary" style="background: var(--color-success); border-color: var(--color-success);" onclick="resolveScienceSlip()">
+                      <i data-lucide="edit-3" size="12"></i> 1-Tap Quick Sign
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Card 3: Medical Copay -->
+                <div class="attention-item-card" id="att-card-copay">
+                  <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                    <span style="font-size: 10px; font-weight: 700; background: #fef3c7; color: #92400e; padding: 2px 7px; border-radius: var(--radius-pill);">
+                      💳 Payment
+                    </span>
+                    <span style="font-family: var(--font-mono); font-size: 11px; color: var(--color-text-tertiary);">Due in 3d</span>
+                  </div>
+                  <div style="font-size: 14px; font-weight: 600; color: var(--color-text); margin-bottom: 2px;">
+                    Dr. Miller Orthodontic Statement ($45)
+                  </div>
+                  <div style="font-size: 12px; color: var(--color-text-secondary);">
+                    Ready for auto-charge via HSA card.
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--color-divider);">
+                    <button class="resolver-btn-pill primary" onclick="resolveCopay()">
+                      <i data-lucide="check" size="12"></i> Pay $45 HSA
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <!-- ──────────────────────────────────────────────────────────── -->
+      <!-- PAGE 2: CALENDAR WORKSPACE (FULL WEEK / MONTH)               -->
+      <!-- ──────────────────────────────────────────────────────────── -->
+      <div class="app-page" id="page-calendar">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <button class="resolver-btn-pill" onclick="triggerToast('Jumped to Today')">Today</button>
+            <h2 style="font-family: var(--font-display); font-size: 26px; font-weight: 600; color: var(--color-navy);">
+              October 19 – 25, 2026
+            </h2>
+          </div>
+          <div style="display: flex; background: var(--color-surface-subtle); border: 1px solid var(--color-border); border-radius: var(--radius-pill); padding: 3px;">
+            <button class="app-tab-btn" style="padding: 4px 12px; font-size: 12px;" onclick="triggerToast('Day View')">Day</button>
+            <button class="app-tab-btn active" style="padding: 4px 12px; font-size: 12px;">Week</button>
+            <button class="app-tab-btn" style="padding: 4px 12px; font-size: 12px;" onclick="triggerToast('Month View')">Month</button>
+          </div>
+        </div>
+
+        <div class="calendar-grid-week">
+          <div class="cal-day-col">
+            <div style="font-size: 12px; font-weight: 700; text-align: center; border-bottom: 1px solid var(--color-divider); padding-bottom: 6px;">Sun 10/19</div>
+            <div class="cal-event-chip" onclick="openEventDetail('generic', 'Sunday Family Brunch', '10:00 AM – 11:30 AM', 'Home')">
+              <strong>10:00 AM</strong> Family Brunch
+            </div>
+          </div>
+          <div class="cal-day-col">
+            <div style="font-size: 12px; font-weight: 700; text-align: center; border-bottom: 1px solid var(--color-divider); padding-bottom: 6px;">Mon 10/20</div>
+            <div class="cal-event-chip" style="border-left-color: var(--member-liv);" onclick="openEventDetail('generic', 'Liv Gymnastics', '4:00 PM – 5:30 PM', 'Lincoln Arena')">
+              <strong>4:00 PM</strong> Liv Gymnastics
+            </div>
+          </div>
+          <div class="cal-day-col">
+            <div style="font-size: 12px; font-weight: 700; text-align: center; border-bottom: 1px solid var(--color-divider); padding-bottom: 6px;">Tue 10/21</div>
+            <div class="cal-event-chip" style="border-left-color: var(--member-owen);" onclick="openEventDetail('soccer')">
+              <strong>4:30 PM</strong> Owen Soccer
+            </div>
+          </div>
+          <div class="cal-day-col">
+            <div style="font-size: 12px; font-weight: 700; text-align: center; border-bottom: 1px solid var(--color-divider); padding-bottom: 6px;">Wed 10/22</div>
+            <div class="cal-event-chip" style="border-left-color: var(--member-emme);" onclick="openEventDetail('generic', 'Emme Piano Lesson', '3:30 PM – 4:15 PM', 'Oakridge Studio')">
+              <strong>3:30 PM</strong> Emme Piano
+            </div>
+          </div>
+          <div class="cal-day-col">
+            <div style="font-size: 12px; font-weight: 700; text-align: center; border-bottom: 1px solid var(--color-divider); padding-bottom: 6px;">Thu 10/23</div>
+            <div class="cal-event-chip" style="border-left-color: var(--member-jake);" onclick="openEventDetail('generic', 'Jake Board Meeting', '1:00 PM – 3:00 PM', 'Downtown Office')">
+              <strong>1:00 PM</strong> Jake Board Mtg
+            </div>
+          </div>
+          <div class="cal-day-col today-col">
+            <div style="font-size: 12px; font-weight: 700; text-align: center; color: var(--color-gold); border-bottom: 1px solid var(--color-divider); padding-bottom: 6px;">Fri 10/24 (Today)</div>
+            <div class="cal-event-chip" style="border-left-color: var(--color-error); background: var(--color-error-soft);" onclick="openEventDetail('jake-call')">
+              <strong>4:00 PM</strong> Jake Q3 Call (Conflict)
+            </div>
+            <div class="cal-event-chip" style="border-left-color: var(--member-owen);" onclick="openEventDetail('soccer')">
+              <strong>4:30 PM</strong> Owen Soccer Practice
+            </div>
+            <div class="cal-event-chip" style="border-left-color: var(--color-gold);" onclick="openEventDetail('dinner')">
+              <strong>6:30 PM</strong> Family Pasta Night
+            </div>
+          </div>
+          <div class="cal-day-col">
+            <div style="font-size: 12px; font-weight: 700; text-align: center; border-bottom: 1px solid var(--color-divider); padding-bottom: 6px;">Sat 10/25</div>
+            <div class="cal-event-chip" style="border-left-color: var(--member-liv);" onclick="openEventDetail('generic', 'Liv Gymnastics Meet', '10:00 AM – 1:00 PM', 'Lincoln Arena')">
+              <strong>10:00 AM</strong> Liv Meet
+            </div>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- ──────────────────────────────────────────────────────────── -->
+      <!-- PAGE 3: MEALS & KITCHEN                                      -->
+      <!-- ──────────────────────────────────────────────────────────── -->
+      <div class="app-page" id="page-meals">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+          <div>
+            <h2 style="font-family: var(--font-display); font-size: 28px; font-weight: 600; color: var(--color-navy);">
+              Kitchen, Meals &amp; Groceries
+            </h2>
+            <p style="font-size: 13px; color: var(--color-text-secondary);">
+              Weekly dinner schedule with automatic pantry overlap and grocery list sync.
+            </p>
+          </div>
+          <button class="resolver-btn-pill primary" onclick="triggerToast('AI generated 5-dinner plan with $32 overlap savings!')">
+            <i data-lucide="sparkles" size="13"></i> Auto-Plan Week (AI)
+          </button>
+        </div>
+
+        <div class="meals-layout-grid">
+          <div>
+            <div class="recipe-card-grid">
+              <div class="recipe-tile" onclick="triggerToast('Opened Lemon Herb Salmon recipe')">
+                <div class="recipe-thumb" style="background-image: url('https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?auto=format&fit=crop&w=600&q=80');">
+                  <span style="position: absolute; top: 10px; left: 10px; background: var(--color-navy); color: #fff; font-family: var(--font-mono); font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: var(--radius-pill);">Tonight</span>
+                </div>
+                <div style="padding: 16px;">
+                  <div style="font-family: var(--font-display); font-size: 18px; font-weight: 600; color: var(--color-navy);">Lemon Herb Salmon</div>
+                  <div style="font-size: 12px; color: var(--color-text-secondary); margin-top: 4px;">25 mins · Asparagus &amp; Quinoa</div>
+                </div>
+              </div>
+              <div class="recipe-tile" onclick="triggerToast('Opened Basil Pesto Pasta recipe')">
+                <div class="recipe-thumb" style="background-image: url('https://images.unsplash.com/photo-1551183053-bf91a1d81141?auto=format&fit=crop&w=600&q=80');">
+                  <span style="position: absolute; top: 10px; left: 10px; background: var(--color-gold); color: #1B2A4A; font-family: var(--font-mono); font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: var(--radius-pill);">Saturday</span>
+                </div>
+                <div style="padding: 16px;">
+                  <div style="font-family: var(--font-display); font-size: 18px; font-weight: 600; color: var(--color-navy);">Fresh Basil Pesto Pasta</div>
+                  <div style="font-size: 12px; color: var(--color-text-secondary); margin-top: 4px;">20 mins · Cherry Tomatoes &amp; Pine Nuts</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 20px;">
+            <div style="font-family: var(--font-display); font-size: 20px; font-weight: 600; color: var(--color-navy); margin-bottom: 12px;">
+              Grocery List (4 items)
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 8px; font-size: 13px;">
+              <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 6px; border-radius: var(--radius-sm); background: var(--color-surface-subtle);">
+                <input type="checkbox" checked onchange="triggerToast('Toggled grocery item')">
+                <span style="text-decoration: line-through; opacity: 0.6;">Fresh Atlantic Salmon (1.5 lbs)</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 6px; border-radius: var(--radius-sm); background: var(--color-surface-subtle);">
+                <input type="checkbox" onchange="triggerToast('Toggled grocery item')">
+                <span>Organic Asparagus Bunch</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 6px; border-radius: var(--radius-sm); background: var(--color-surface-subtle);">
+                <input type="checkbox" onchange="triggerToast('Toggled grocery item')">
+                <span>Fresh Basil Bunch (Pesto)</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+
+
+    <!-- ══════════════════════════════════════════════════════════════ -->
+    <!-- 3. PERSISTENT AI SIDECAR RAILS (GROUNDED COPILOT)             -->
+    <!-- ══════════════════════════════════════════════════════════════ -->
+    <aside class="ai-sidecar-drawer open" id="aiSidecarDrawer">
+      
+      <div class="sidecar-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div style="width: 24px; height: 24px; border-radius: 50%; background: var(--color-gold); color: #1B2A4A; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px;">
+            ✦
+          </div>
+          <div>
+            <div style="font-size: 13px; font-weight: 700; color: var(--color-navy);">Casa AI Copilot</div>
+            <div style="font-size: 10.5px; color: var(--color-text-tertiary);">Grounded on household state</div>
+          </div>
+        </div>
+        <button style="background: none; border: none; cursor: pointer; color: var(--color-text-tertiary);" onclick="toggleSidecar()">
+          <i data-lucide="chevrons-right" size="18"></i>
+        </button>
+      </div>
+
+      <div class="sidecar-chat-log" id="sidecarChatLog">
+        
+        <div class="chat-bubble-assistant">
+          <div style="font-weight: 600; color: var(--color-navy); margin-bottom: 4px;">👋 Afternoon alignment:</div>
+          I noticed a ride conflict for Owen's 4:30 PM Soccer practice because Jake is booked on a client review call.
+          <div style="margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--color-border); display: flex; flex-direction: column; gap: 6px;">
+            <button class="resolver-btn-pill primary" style="font-size: 11.5px;" onclick="resolveKellyDriving()">
+              <i data-lucide="check" size="12"></i> Assign Kelly to drive (1-Click)
+            </button>
+            <button class="resolver-btn-pill" style="font-size: 11.5px;" onclick="openEventDetail('soccer')">
+              <i data-lucide="eye" size="12"></i> Inspect Owen Soccer details
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="chat-input-box">
+        <input type="text" class="form-input" id="sidecarInput" placeholder="Ask AI Copilot anything..." onkeydown="if(event.key==='Enter') sendSidecarMessage()">
+        <button class="resolver-btn-pill primary" onclick="sendSidecarMessage()" style="padding: 8px 12px;">
+          <i data-lucide="send" size="13"></i>
+        </button>
+      </div>
+
+    </aside>
+
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- 4. SLIDE-OUT EVENT DETAIL INSPECTOR SHEET                      -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <div class="sheet-backdrop" id="sheetBackdrop" onclick="closeAllSheets()"></div>
+
+  <aside class="event-detail-sheet" id="eventDetailSheet">
+    <div class="sheet-header">
+      <div>
+        <div style="display: inline-flex; align-items: center; gap: 6px; background: var(--color-gold-subtle); color: #8A5A1E; border: 1px solid var(--color-gold-border); font-family: var(--font-mono); font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: var(--radius-pill); margin-bottom: 6px;" id="sheet-category-badge">
+          ⚽ Sports &amp; Logistics
+        </div>
+        <div style="font-family: var(--font-display); font-size: 26px; font-weight: 600; color: var(--color-navy); line-height: 1.15;" id="sheet-event-title">
+          Owen Soccer Practice
+        </div>
+        <div style="font-size: 13px; color: var(--color-text-secondary); margin-top: 4px;" id="sheet-event-time">
+          Today · 4:30 PM – 6:00 PM (1h 30m)
+        </div>
+      </div>
+      <button style="background: none; border: none; cursor: pointer; color: var(--color-text-tertiary);" onclick="closeAllSheets()">
+        <i data-lucide="x" size="20"></i>
+      </button>
+    </div>
+
+    <div class="sheet-body">
+      <div class="detail-section-box">
+        <div class="detail-section-title"><i data-lucide="car" size="14"></i> Transportation &amp; Driver</div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <span style="font-size: 13px; color: var(--color-text-secondary);">Assigned Driver:</span>
+          <span style="font-size: 13.5px; font-weight: 600; color: var(--color-navy);" id="sheet-driver-name">Pending Kelly</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <span style="font-size: 13px; color: var(--color-text-secondary);">Passengers:</span>
+          <span class="member-avatar-btn" style="width: 22px; height: 22px; font-size: 10px; background: var(--member-owen);">O</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 13px; color: var(--color-text-secondary);">Leave Buffer:</span>
+          <span style="font-family: var(--font-mono); font-size: 12px; color: var(--color-gold); font-weight: 700;">Leave by 4:18 PM (12m drive)</span>
+        </div>
+      </div>
+
+      <div class="detail-section-box">
+        <div class="detail-section-title"><i data-lucide="map-pin" size="14"></i> Location</div>
+        <div style="font-size: 14px; font-weight: 600; color: var(--color-navy);" id="sheet-location-name">
+          Oakridge Park · Field #3
+        </div>
+        <div style="font-size: 12px; color: var(--color-text-secondary); margin-top: 2px;">
+          1250 Oakridge Way, Los Altos, CA
+        </div>
+        <a href="#" style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--color-gold); font-weight: 600; margin-top: 8px; text-decoration: none;" onclick="triggerToast('Opening Apple Maps navigation')">
+          <i data-lucide="navigation" size="12"></i> Open in Maps →
+        </a>
+      </div>
+
+      <div class="detail-section-box">
+        <div class="detail-section-title"><i data-lucide="check-square" size="14"></i> Required Prep Checklist</div>
+        <div style="display: flex; flex-direction: column; gap: 8px; font-size: 13px;">
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+            <input type="checkbox" checked onchange="triggerToast('Checklist updated')">
+            <span>Water bottle filled &amp; shin guards in bag</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+            <input type="checkbox" onchange="triggerToast('Checklist updated')">
+            <span>Orange slices snack container</span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div style="padding: 16px 24px; background: var(--color-surface-subtle); border-top: 1px solid var(--color-border); display: flex; justify-content: space-between; align-items: center;">
+      <button class="resolver-btn-pill" style="color: var(--color-error); border-color: rgba(192,57,43,0.3);" onclick="deleteCurrentEvent()">
+        <i data-lucide="trash-2" size="13"></i> Delete
+      </button>
+      <div style="display: flex; gap: 10px;">
+        <button class="resolver-btn-pill" onclick="triggerToast('Duplicated event')">Duplicate</button>
+        <button class="resolver-btn-pill primary" onclick="openEditSheetFromDetail()">
+          <i data-lucide="edit-3" size="13"></i> Edit Event
+        </button>
+      </div>
+    </div>
+  </aside>
+
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- 5. SLIDE-OUT EVENT EDIT SHEET (EDITING FLOW)                   -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <aside class="event-edit-sheet" id="eventEditSheet">
+    <div class="sheet-header">
+      <div>
+        <div style="font-family: var(--font-display); font-size: 22px; font-weight: 600; color: var(--color-navy);">
+          Edit Event
+        </div>
+        <div style="font-size: 12px; color: var(--color-text-secondary); margin-top: 2px;">
+          Live sync across Calm Kiosk, Turbo Canvas, and Calendar.
+        </div>
+      </div>
+      <button style="background: none; border: none; cursor: pointer; color: var(--color-text-tertiary);" onclick="closeEditSheet()">
+        <i data-lucide="x" size="20"></i>
+      </button>
+    </div>
+
+    <div class="sheet-body">
+      <div class="form-group">
+        <label class="form-label">Event Title</label>
+        <input type="text" class="form-input" id="edit-input-title" value="Owen Soccer Practice">
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div class="form-group">
+          <label class="form-label">Start Time</label>
+          <input type="time" class="form-input" id="edit-input-start" value="16:30">
+        </div>
+        <div class="form-group">
+          <label class="form-label">End Time</label>
+          <input type="time" class="form-input" id="edit-input-end" value="18:00">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Location / Place</label>
+        <input type="text" class="form-input" id="edit-input-location" value="Oakridge Park · Field #3">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Assigned Driver</label>
+        <select class="form-input" id="edit-input-driver">
+          <option value="Kelly Tabor (Assigned)">Kelly Tabor</option>
+          <option value="Jake Tabor">Jake Tabor</option>
+          <option value="Carpool (Dave Robinson)">Carpool (Dave Robinson)</option>
+          <option value="Unassigned">Unassigned</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="padding: 16px 24px; background: var(--color-surface-subtle); border-top: 1px solid var(--color-border); display: flex; justify-content: flex-end; gap: 10px;">
+      <button class="resolver-btn-pill" onclick="closeEditSheet()">Cancel</button>
+      <button class="resolver-btn-pill primary" onclick="saveEventChanges()">
+        <i data-lucide="check" size="14"></i> Save Changes
+      </button>
+    </div>
+  </aside>
+
+
+  <!-- Global Floating Toast -->
+  <div class="prototype-toast" id="globalToast">
+    <span id="toastMessage">State updated successfully</span>
+    <button style="background: var(--color-gold); color: #1B2A4A; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: var(--radius-pill); border: none; cursor: pointer;" onclick="undoState()">UNDO (4s)</button>
+  </div>
+
+
+  <!-- Interactive Prototype Logic -->
+  <script>
+    lucide.createIcons();
+
+    // Tab Switching
+    function switchMainTab(tabKey) {
+      document.querySelectorAll('.app-tab-btn').forEach(b => b.classList.remove('active'));
+      const activeBtn = document.getElementById('tab-btn-' + tabKey);
+      if (activeBtn) activeBtn.classList.add('active');
+
+      document.querySelectorAll('.app-page').forEach(p => p.classList.remove('active'));
+      const activePage = document.getElementById('page-' + tabKey);
+      if (activePage) activePage.classList.add('active');
+
+      // If switching to Canvas, show mode switcher, else hide it
+      const modeGroup = document.getElementById('canvasModeGroup');
+      if (modeGroup) {
+        modeGroup.style.display = (tabKey === 'canvas') ? 'flex' : 'none';
+      }
+
+      lucide.createIcons();
+    }
+
+    // Sub-mode switching on Canvas (Calm vs Turbo)
+    function setCanvasSubmode(mode) {
+      document.querySelectorAll('.mode-toggle-btn').forEach(b => b.classList.remove('active'));
+      const btn = document.getElementById('mode-btn-' + mode);
+      if (btn) btn.classList.add('active');
+
+      const calmView = document.getElementById('calmView');
+      const turboView = document.getElementById('turboView');
+
+      if (mode === 'turbo') {
+        calmView.style.display = 'none';
+        turboView.classList.add('active-submode');
+        triggerToast('Entered Turbo Canvas Mode');
+      } else {
+        calmView.style.display = 'flex';
+        turboView.classList.remove('active-submode');
+        triggerToast('Returned to Calm Ambient Kiosk');
+      }
+      lucide.createIcons();
+    }
+
+    // Toggle AI Sidecar Rails
+    function toggleSidecar() {
+      const drawer = document.getElementById('aiSidecarDrawer');
+      const wrapper = document.getElementById('workspaceWrapper');
+      const btn = document.getElementById('sidecarHeaderBtn');
+
+      drawer.classList.toggle('open');
+      wrapper.classList.toggle('sidecar-open');
+      btn.classList.toggle('active');
+    }
+
+    function sendSidecarMessage() {
+      const input = document.getElementById('sidecarInput');
+      const text = input.value.trim();
+      if (!text) return;
+
+      const log = document.getElementById('sidecarChatLog');
+      
+      // User bubble
+      const userBubble = document.createElement('div');
+      userBubble.className = 'chat-bubble-user';
+      userBubble.innerText = text;
+      log.appendChild(userBubble);
+      input.value = '';
+
+      // AI Response
+      setTimeout(() => {
+        const aiBubble = document.createElement('div');
+        aiBubble.className = 'chat-bubble-assistant';
+        aiBubble.innerHTML = `<strong>AI Copilot:</strong> I can help with that! I've linked the relevant household actions in your canvas.`;
+        log.appendChild(aiBubble);
+        log.scrollTop = log.scrollHeight;
+        lucide.createIcons();
+      }, 500);
+
+      log.scrollTop = log.scrollHeight;
+    }
+
+    // Theme Toggle
+    function toggleTheme() {
+      document.body.classList.toggle('dark-mode');
+      lucide.createIcons();
+    }
+
+    // Family Filter
+    function filterMember(memberKey, btn) {
+      document.querySelectorAll('.member-avatar-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      triggerToast(memberKey === 'all' ? 'Showing entire household schedule' : 'Filtered to ' + memberKey.toUpperCase());
+    }
+
+    // Cross-Focus
+    function crossFocus(key) {
+      document.querySelectorAll('.active-cross-highlight').forEach(el => el.classList.remove('active-cross-highlight'));
+
+      if (key === 'soccer') {
+        const b = document.getElementById('briefing-soccer');
+        const t = document.getElementById('timeline-row-soccer');
+        const tj = document.getElementById('timeline-row-jake');
+        const a = document.getElementById('att-card-soccer');
+        [b, t, tj, a].forEach(el => el && el.classList.add('active-cross-highlight'));
+        if (a) a.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        triggerToast('Cross-focused Soccer Ride Conflict');
+      } else if (key === 'science') {
+        const b = document.getElementById('briefing-science');
+        const a = document.getElementById('att-card-science');
+        [b, a].forEach(el => el && el.classList.add('active-cross-highlight'));
+        if (a) a.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        triggerToast('Cross-focused Science Camp Slip');
+      }
+    }
+
+    // 1-Click Resolvers
+    function resolveKellyDriving() {
+      const card = document.getElementById('att-card-soccer');
+      const conflictRow = document.getElementById('timeline-row-jake');
+      const calmDriver = document.getElementById('calm-driver-text');
+      const chip = document.getElementById('timeline-soccer-driver-chip');
+
+      if (conflictRow) {
+        conflictRow.classList.remove('has-conflict');
+        conflictRow.style.background = 'var(--color-surface)';
+        conflictRow.style.borderLeftColor = 'var(--color-border)';
+      }
+      if (calmDriver) calmDriver.innerHTML = '🚗 Driver: <strong style="color: var(--color-gold);">Kelly Tabor</strong>';
+      if (chip) {
+        chip.innerText = 'K';
+        chip.style.background = 'var(--member-kelly)';
+        chip.style.color = '#fff';
+      }
+
+      if (card) {
+        card.style.opacity = '0';
+        setTimeout(() => { card.style.display = 'none'; updateAttentionCount(); }, 250);
+      }
+
+      triggerToast('Kelly assigned to drive Owen to Soccer', () => {
+        if (card) card.style.display = 'block';
+        setTimeout(() => {
+          if (card) card.style.opacity = '1';
+          if (conflictRow) conflictRow.classList.add('has-conflict');
+          if (calmDriver) calmDriver.innerHTML = '🚗 Driver: <strong>Pending Kelly</strong>';
+          if (chip) chip.innerText = '?';
+          updateAttentionCount();
+        }, 10);
+      });
+    }
+
+    function resolveScienceSlip() {
+      const card = document.getElementById('att-card-science');
+      if (card) {
+        card.style.opacity = '0';
+        setTimeout(() => { card.style.display = 'none'; updateAttentionCount(); }, 250);
+      }
+      triggerToast('Signed and submitted Liv Science Camp waiver!');
+    }
+
+    function resolveCopay() {
+      const card = document.getElementById('att-card-copay');
+      if (card) {
+        card.style.opacity = '0';
+        setTimeout(() => { card.style.display = 'none'; updateAttentionCount(); }, 250);
+      }
+      triggerToast('Paid $45.00 Dr. Miller copay via HSA card');
+    }
+
+    function updateAttentionCount() {
+      const remaining = document.querySelectorAll('.attention-item-card:not([style*="display: none"])').length;
+      const tag = document.getElementById('attention-count-tag');
+      if (tag) tag.innerText = remaining + ' Actions';
+    }
+
+    // Slide-out Event Detail Inspector
+    let currentEventKey = 'soccer';
+
+    function openEventDetail(key, customTitle, customTime, customLocation) {
+      currentEventKey = key;
+      const sheet = document.getElementById('eventDetailSheet');
+      const backdrop = document.getElementById('sheetBackdrop');
+
+      if (key === 'soccer') {
+        document.getElementById('sheet-event-title').innerText = 'Owen Soccer Practice';
+        document.getElementById('sheet-event-time').innerText = 'Today · 4:30 PM – 6:00 PM';
+        document.getElementById('sheet-location-name').innerText = 'Oakridge Park · Field #3';
+        document.getElementById('sheet-driver-name').innerText = 'Kelly Tabor (Assigned)';
+      } else if (key === 'jake-call') {
+        document.getElementById('sheet-event-title').innerText = 'Jake: Q3 Strategy Review Call';
+        document.getElementById('sheet-event-time').innerText = 'Today · 4:00 PM – 5:00 PM';
+        document.getElementById('sheet-location-name').innerText = 'Home Office · Zoom';
+        document.getElementById('sheet-driver-name').innerText = 'N/A (Virtual)';
+      } else if (customTitle) {
+        document.getElementById('sheet-event-title').innerText = customTitle;
+        document.getElementById('sheet-event-time').innerText = customTime;
+        document.getElementById('sheet-location-name').innerText = customLocation;
+        document.getElementById('sheet-driver-name').innerText = 'Family';
+      }
+
+      backdrop.classList.add('open');
+      sheet.classList.add('open');
+    }
+
+    function closeAllSheets() {
+      document.getElementById('sheetBackdrop').classList.remove('open');
+      document.getElementById('eventDetailSheet').classList.remove('open');
+      document.getElementById('eventEditSheet').classList.remove('open');
+    }
+
+    // Event Editing Flow
+    function openEditSheetFromDetail() {
+      document.getElementById('eventDetailSheet').classList.remove('open');
+      document.getElementById('eventEditSheet').classList.add('open');
+      document.getElementById('edit-input-title').value = document.getElementById('sheet-event-title').innerText;
+    }
+
+    function closeEditSheet() {
+      document.getElementById('eventEditSheet').classList.remove('open');
+      document.getElementById('eventDetailSheet').classList.add('open');
+    }
+
+    function saveEventChanges() {
+      const newTitle = document.getElementById('edit-input-title').value;
+      const newDriver = document.getElementById('edit-input-driver').value;
+      const newLocation = document.getElementById('edit-input-location').value;
+
+      document.getElementById('sheet-event-title').innerText = newTitle;
+      document.getElementById('sheet-driver-name').innerText = newDriver;
+      document.getElementById('sheet-location-name').innerText = newLocation;
+
+      if (currentEventKey === 'soccer') {
+        const calmTitle = document.getElementById('calm-hero-title');
+        const timelineTitle = document.getElementById('timeline-soccer-title');
+        if (calmTitle) calmTitle.innerText = newTitle;
+        if (timelineTitle) timelineTitle.innerText = newTitle;
+      }
+
+      closeAllSheets();
+      triggerToast('Event updated live across Calm Kiosk, Turbo Canvas & Calendar!');
+    }
+
+    function deleteCurrentEvent() {
+      if (currentEventKey === 'soccer') {
+        const row = document.getElementById('timeline-row-soccer');
+        if (row) row.style.display = 'none';
+      }
+      closeAllSheets();
+      triggerToast('Event deleted from schedule', () => {
+        const row = document.getElementById('timeline-row-soccer');
+        if (row) row.style.display = 'flex';
+      });
+    }
+
+    function openCreateModal() {
+      openEventDetail('generic', 'New Family Event', 'Tomorrow · 2:00 PM – 3:00 PM', 'Home');
+      openEditSheetFromDetail();
+    }
+
+    // Toast Engine
+    let undoCallback = null;
+    let toastTimer = null;
+
+    function triggerToast(msg, undoFn) {
+      const toast = document.getElementById('globalToast');
+      document.getElementById('toastMessage').innerText = msg;
+      toast.classList.add('show');
+      undoCallback = undoFn;
+
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => { toast.classList.remove('show'); }, 4000);
+    }
+
+    function undoState() {
+      if (undoCallback) {
+        undoCallback();
+        document.getElementById('globalToast').classList.remove('show');
+      }
+    }
+  </script>
+</body>
+</html>

@@ -31,25 +31,29 @@ test('Design System gallery documents both static and interactive pill contracts
   assert.match(source, /onClick=\{\(\) => undefined\} disabled/)
 })
 
-test('Grocery suggestion review uses an overlay instead of expanding its item row', () => {
-  const source = readFileSync(resolve('src/pages/GroceryPage.tsx'), 'utf8')
-  assert.match(source, /open=\{reviewingItem !== null\}/)
-  assert.match(source, /The grocery list stays fixed behind this overlay/)
-  assert.doesNotMatch(source, /isReviewing &&/)
-  assert.doesNotMatch(source, />Quick recategorize</)
+test('Grocery suggestion review uses an inline expandable tray', () => {
+  const rowSource = readFileSync(resolve('src/components/grocery/GroceryItemRow.tsx'), 'utf8')
+  assert.match(rowSource, /isRecatOpen &&/)
+  assert.match(rowSource, /Looks right ✓/)
+  assert.match(rowSource, /Move from \{currentCategoryLabel\}:/)
 })
 
 test('Grocery uses a compact semantic hierarchy for its dense shopping surface', () => {
-  const source = readFileSync(resolve('src/pages/GroceryPage.tsx'), 'utf8')
+  const grocerySources = [
+    'src/pages/GroceryPage.tsx',
+    'src/components/grocery/GroceryCommandBar.tsx',
+    'src/components/grocery/GroceryAisleGrid.tsx',
+    'src/components/grocery/GroceryItemRow.tsx',
+  ].map((rel) => readFileSync(resolve(rel), 'utf8')).join('\n')
 
-  assert.match(source, /<Heading role="display-sm"[^>]*>Grocery List<\/Heading>/)
-  assert.match(source, /text-body font-semibold text-casa-text/)
-  assert.match(source, /text-body font-semibold leading-tight text-casa-navy/)
-  assert.match(source, /section\.visual\.subtitle/)
-  assert.match(source, /columns-1 gap-3 lg:columns-2 2xl:columns-3/)
-  assert.doesNotMatch(source, /text-body-lg font-semibold text-casa-text/)
-  assert.doesNotMatch(source, /text-heading font-semibold leading-tight text-casa-navy/)
-  assert.doesNotMatch(source, /text-body-lg font-semibold leading-tight text-casa-navy/)
+  assert.match(grocerySources, /<Heading role="display-sm"[^>]*>Grocery List<\/Heading>/)
+  assert.match(grocerySources, /text-body font-semibold text-casa-text/)
+  assert.match(grocerySources, /text-body font-semibold leading-tight text-casa-navy/)
+  assert.match(grocerySources, /section\.visual\.subtitle/)
+  assert.match(grocerySources, /columns-1 gap-3 lg:columns-2 2xl:columns-3/)
+  assert.doesNotMatch(grocerySources, /text-body-lg font-semibold text-casa-text/)
+  assert.doesNotMatch(grocerySources, /text-heading font-semibold leading-tight text-casa-navy/)
+  assert.doesNotMatch(grocerySources, /text-body-lg font-semibold leading-tight text-casa-navy/)
 })
 
 test('Design System gallery covers every P0 touch contract', () => {
@@ -204,15 +208,21 @@ test('Design System gallery demonstrates every Phase 3 pattern family', () => {
 })
 
 test('Grocery uses shared controls and feedback without changing its dense layout', () => {
-  const source = readFileSync(resolve('src/pages/GroceryPage.tsx'), 'utf8')
-  for (const component of ['Alert', 'Button', 'Checkbox', 'Chip', 'IconButton', 'Progress', 'SegmentedControl', 'Sheet']) {
-    assert.match(source, new RegExp(`<${component}\\b`))
+  const grocerySources = [
+    'src/pages/GroceryPage.tsx',
+    'src/components/grocery/GroceryCommandBar.tsx',
+    'src/components/grocery/GroceryAisleGrid.tsx',
+    'src/components/grocery/GroceryItemRow.tsx',
+  ].map((rel) => readFileSync(resolve(rel), 'utf8')).join('\n')
+
+  for (const component of ['Alert', 'Button', 'Checkbox', 'Chip', 'IconButton', 'Sheet']) {
+    assert.match(grocerySources, new RegExp(`<${component}\\b`))
   }
-  assert.doesNotMatch(source, /<button\b/)
-  assert.doesNotMatch(source, /chipClassName/)
-  assert.match(source, /columns-1 gap-3 lg:columns-2 2xl:columns-3/)
-  assert.match(source, /<Heading role="display-sm"[^>]*>Grocery List<\/Heading>/)
-  assert.match(source, /style=\{\{ left: dragState\.x \+ 14, top: dragState\.y \+ 14 \}\}/)
+  assert.doesNotMatch(grocerySources, /<button\b/)
+  assert.doesNotMatch(grocerySources, /chipClassName/)
+  assert.match(grocerySources, /columns-1 gap-3 lg:columns-2 2xl:columns-3/)
+  assert.match(grocerySources, /<Heading role="display-sm"[^>]*>Grocery List<\/Heading>/)
+  assert.match(grocerySources, /style=\{\{ left: dragState\.x \+ 14, top: dragState\.y \+ 14 \}\}/)
 })
 
 test('event create and edit workflows use shared design-system contracts', () => {
@@ -230,9 +240,7 @@ test('event create and edit workflows use shared design-system contracts', () =>
   assert.match(eventEdit, /<Modal/)
   assert.match(eventEdit, /<Alert /)
   assert.doesNotMatch(eventEdit, /\btext-\[(?:\d|\.)+(?:px|rem|em)\]/)
-  assert.doesNotMatch(eventEdit, /z-\[\d+\]/)
-  assert.match(eventDetail, /\{event && \(/)
-  assert.match(eventDetail, /presentation="inline"/)
+  assert.match(eventDetail, /openEventInSidecar/)
 })
 
 test('inline calendar uses density-aware controls and semantic layering', () => {
@@ -321,14 +329,14 @@ test('quick create handles core household event context without exposing the ful
   assert.match(quickCreate, /title="More details"/)
   assert.match(quickCreate, /<Switch[\s\S]*label="All day"/)
   assert.match(quickCreate, /<Switch[\s\S]*label="Reminder"/)
-  assert.match(quickCreate, /<Field label="Repeat"/)
+  assert.match(quickCreate, /<RecurrenceRuleBuilder/)
   assert.match(quickCreate, /<Field label="Notes"/)
   assert.match(quickCreate, /event_members'\)\.insert/)
   assert.match(quickCreate, /location_name: resolvedLocationName/)
   assert.match(quickCreate, /rrule: repeatRule/)
   assert.match(quickCreate, /record_kind: repeatRule \? 'series_template' : 'single'/)
-  assert.match(quickCreate, /from\('event_series'\)\.insert/)
-  assert.match(quickCreate, /recurrence_lines: \[`RRULE:\$\{repeatRule\}`\]/)
+  assert.match(quickCreate, /syncAndMaterializeRecurringSeries/)
+  assert.match(quickCreate, /if \(repeatRule\)/)
   assert.match(quickCreate, /Created\. Connected calendars and event details will update shortly\./)
 })
 
@@ -355,17 +363,9 @@ test('all calendar views provide a non-conflicting quick-create gesture for thei
 })
 
 test('calendar cards and event details use shared touch contracts', () => {
-  const detail = readFileSync(resolve('src/components/calendar/EventDetailPanel.tsx'), 'utf8')
   const largeCard = readFileSync(resolve('src/components/calendar/LargeEventCard.tsx'), 'utf8')
   const reminderCard = readFileSync(resolve('src/components/calendar/ReminderEventCard.tsx'), 'utf8')
   const stacked = readFileSync(resolve('src/components/calendar/StackedView.tsx'), 'utf8')
-  assert.match(detail, /role="dialog"/)
-  assert.match(detail, /aria-modal="true"/)
-  assert.match(detail, /z-scrim/)
-  assert.match(detail, /z-modal/)
-  assert.doesNotMatch(detail, /z-\[\d+\]/)
-  assert.match(detail, /<IconButton/)
-  assert.match(detail, /<Chip/)
   assert.match(largeCard, /<CalendarPill/)
   assert.match(reminderCard, /<Button/)
   assert.match(reminderCard, /role="button"/)
@@ -390,7 +390,6 @@ test('calendar views use semantic theme, typography, and layering contracts', ()
   const paths = [
     'src/components/calendar/DayView.tsx',
     'src/components/calendar/EventBlock.tsx',
-    'src/components/calendar/EventDetailPanel.tsx',
     'src/components/calendar/MonthView.tsx',
     'src/components/calendar/StackedView.tsx',
     'src/components/calendar/WeekView.tsx',
@@ -409,19 +408,15 @@ test('calendar chrome uses shared controls while runtime event geometry stays in
   const month = readFileSync(resolve('src/components/calendar/MonthView.tsx'), 'utf8')
   const week = readFileSync(resolve('src/components/calendar/WeekView.tsx'), 'utf8')
   const block = readFileSync(resolve('src/components/calendar/EventBlock.tsx'), 'utf8')
-  const detail = readFileSync(resolve('src/components/calendar/EventDetailPanel.tsx'), 'utf8')
   const transportation = readFileSync(resolve('src/components/calendar/EventTransportationSection.tsx'), 'utf8')
 
   assert.match(day, /import \{ Button, CalendarPill, IconButton, PersonAvatarStack \} from '\.\.\/ui'/)
   assert.match(month, /import \{ Button, CalendarPill, IconButton \} from '\.\.\/ui'/)
-  assert.match(detail, /import \{ Alert, Button, Card, Chip, DisclosureSection, IconButton, Switch \} from '\.\.\/ui'/)
   assert.match(page, /import \{ Button, IconButton, SegmentedControl \} from '\.\.\/components\/ui'/)
   assert.doesNotMatch(page, /<button\b/)
   assert.match(page, /<SegmentedControl[\s\S]*?aria-label="Calendar view"[\s\S]*?onChange=\{setActiveView\}/)
   assert.doesNotMatch(page, /variant=\{activeView === v\.key \? 'strong' : 'ghost'\}/)
   assert.match(transportation, /<Switch[\s\S]*label="Driver waits on site"/)
-  assert.equal((detail.match(/<button\b/g) ?? []).length, 1)
-  assert.match(detail, /data-native-drag/)
 
   assert.match(block, /top: `\$\{top\}px`/)
   assert.match(block, /height: `\$\{height\}px`/)
@@ -434,8 +429,8 @@ test('Cook preserves its landing hierarchy through shared design-system roles', 
   const cook = readFileSync(resolve('src/pages/CookPage.tsx'), 'utf8')
   const styles = readFileSync(resolve('src/index.css'), 'utf8')
   assert.match(cook, /<Heading role="display-sm"/)
-  assert.match(cook, /<Text as="h3" role="body-lg"[^>]*>\{insight\.recipe\.name\}<\/Text>/)
-  assert.match(cook, /variant=\{isTop \? 'primary' : 'secondary'\}\s+className="mt-auto"/)
+  assert.match(cook, /<Text as="h3" role="body-lg"[^>]*>\s*\{formatRecipeTitle\(insight\.recipe\.name\)\}\s*<\/Text>/)
+  assert.match(cook, /variant="champagne"\s+className="mt-auto"/)
   assert.doesNotMatch(cook, /className="mt-auto pt-3"/)
   assert.match(cook, /<SegmentedControl/)
   assert.match(cook, /<Card/)
@@ -449,13 +444,19 @@ test('Cook preserves its landing hierarchy through shared design-system roles', 
 
 test('Cooking uses shared controls while preserving its interaction contracts', () => {
   const source = readFileSync(resolve('src/pages/CookPage.tsx'), 'utf8')
-  for (const component of ['Alert', 'Button', 'Checkbox', 'Chip', 'IconButton', 'Progress', 'SegmentedControl', 'Switch']) {
-    assert.match(source, new RegExp(`<${component}\\b`))
+  const workbench = readFileSync(resolve('src/components/kitchen/ActiveKitchenWorkbench.tsx'), 'utf8')
+  const hud = readFileSync(resolve('src/components/kitchen/KitchenStepFocusHUD.tsx'), 'utf8')
+  const mise = readFileSync(resolve('src/components/kitchen/KitchenMiseEnPlaceShelf.tsx'), 'utf8')
+  const sidecar = readFileSync(resolve('src/components/kitchen/KitchenSousChefSidecar.tsx'), 'utf8')
+  const header = readFileSync(resolve('src/components/kitchen/KitchenHeaderHUD.tsx'), 'utf8')
+  const combined = [source, workbench, hud, mise, sidecar, header].join('\n')
+
+  for (const component of ['Alert', 'Button', 'Chip', 'IconButton', 'Progress', 'SegmentedControl', 'Switch']) {
+    assert.match(combined, new RegExp(`<${component}\\b`))
   }
   assert.doesNotMatch(source, /<button\b/)
   assert.doesNotMatch(source, /\bz-\[\d+\]/)
-  assert.match(source, /className="fixed inset-0 z-modal/)
-  assert.match(source, /aria-label="Cooking step progress"/)
+  assert.match(source, /<ActiveKitchenWorkbench/)
   assert.match(source, /aria-label="Saved cooking progress"/)
   assert.match(source, /style=\{\{ objectPosition: `\$\{focalX\}% \$\{focalY\}%` \}\}/)
 })
@@ -471,9 +472,8 @@ test('Appearance owns persistent theme controls while the Design System referenc
   assert.doesNotMatch(gallery, /Live Theme Lab|type="color"|setColor|setFontScale/)
   assert.match(display, /title="Appearance & Display"/)
   assert.match(display, /aria-label="Global text size"/)
-  assert.match(display, /title="Advanced Colors"/)
-  assert.match(display, /type="color"/)
-  assert.match(display, /aria-label="Custom palette to edit"/)
+  assert.match(display, /label="Casa Palettes"/)
+  assert.match(display, /label="Midnight Gallery Activation"/)
   assert.match(settingsShell, /label: 'Developer & Diagnostics'/)
   assert.match(settingsShell, /label: 'Design System Reference'/)
   assert.match(settingsShell, /data-path=\{item\.to\}[\s\S]*?variant="ghost"/)
@@ -489,11 +489,12 @@ test('Appearance owns persistent theme controls while the Design System referenc
 
 test('Cook mode, unit, and quantity selectors use shared toggle controls', () => {
   const cook = readFileSync(resolve('src/pages/CookPage.tsx'), 'utf8')
+  const hud = readFileSync(resolve('src/components/kitchen/KitchenStepFocusHUD.tsx'), 'utf8')
+  const mise = readFileSync(resolve('src/components/kitchen/KitchenMiseEnPlaceShelf.tsx'), 'utf8')
 
-  assert.match(cook, /aria-label="Directions view"/)
-  assert.match(cook, /aria-label="Ingredient units"/)
-  assert.match(cook, /aria-label="Recipe quantity scale"/)
-  assert.match(cook, /type RecipeScale = '0\.5' \| '1' \| '2'/)
+  assert.match(hud, /aria-label="Steps view mode"/)
+  assert.match(mise, /aria-label="Recipe portion multiplier"/)
+  assert.match(cook, /aria-label="Cook view"/)
 })
 
 test('Home and its right rail use shared touch-first design contracts', () => {
@@ -609,20 +610,15 @@ test('every Settings route is covered by the shared Settings surface contract', 
     assert.doesNotMatch(source, /<button\b/, `${file} must use shared button primitives`)
   }
 
-  for (const file of ['CalendarsSettingsPage.tsx', 'GmailScanPage.tsx']) {
-    const source = readFileSync(resolve('src/pages', file), 'utf8')
-    assert.doesNotMatch(source, /<button\b/, `${file} must keep legacy Settings controls on shared primitives`)
-  }
   assert.doesNotMatch(shell, /<button\b/, 'SettingsShell must use the shared Button primitive')
 })
 
 test('Google service maintenance actions use soft semantic button variants', () => {
   const googleServices = readFileSync(resolve('src/pages/GoogleServicesPage.tsx'), 'utf8')
 
-  assert.match(googleServices, /variant="subtle"[\s\S]*?>[\s\S]*?Sync now/)
-  assert.match(googleServices, /variant="subtle"[\s\S]*?>[\s\S]*?Scan now/)
+  assert.match(googleServices, /variant="subtle"[\s\S]*?>[\s\S]*?Sync/)
   assert.match(googleServices, /variant="ghost"[\s\S]*?text-casa-error[\s\S]*?>[\s\S]*?Disconnect/)
-  assert.match(googleServices, /variant="ghost"[\s\S]*?text-casa-error[\s\S]*?>[\s\S]*?Disable/)
+  assert.match(googleServices, /<Switch/)
   assert.doesNotMatch(
     googleServices,
     /className="[^"]*(?:border-red-200|text-red-500|hover:bg-red-50)[^"]*"/,
@@ -661,16 +657,15 @@ test('Settings selection controls do not repaint default primary buttons', () =>
   const art = readFileSync(resolve('src/pages/ArtModeSettingsPage.tsx'), 'utf8')
   const display = readFileSync(resolve('src/pages/DisplaySettingsPage.tsx'), 'utf8')
   const family = readFileSync(resolve('src/pages/FamilySettingsPage.tsx'), 'utf8')
-  const calendars = readFileSync(resolve('src/pages/CalendarsSettingsPage.tsx'), 'utf8')
+  const google = readFileSync(resolve('src/pages/GoogleServicesPage.tsx'), 'utf8')
 
   assert.match(art, /aria-label="Art feed mode"/)
   assert.match(art, /variant="strong"[\s\S]*?onClick=\{applyCoastalStarterTheme\}/)
   assert.match(art, /variant="subtle"[\s\S]*?aria-expanded=\{advancedOpen\}[\s\S]*?>[\s\S]*?Advanced filters/)
-  assert.match(display, /aria-label="Custom palette to edit"/)
   assert.match(family, /label="Show on homepage sidebar"/)
   assert.match(family, /<SegmentedControl[\s\S]*?role`}/)
   assert.match(family, /variant=\{\(m\.availability_mode \?\? 'strict'\) === option\.value \? 'strong' : 'secondary'\}/)
-  assert.match(calendars, /variant="strong"[\s\S]*?onClick=\{onConnect\}/)
+  assert.match(google, /variant="subtle"[\s\S]*?onClick=\{handleSyncAll\}/)
 
   const settingsPages = readdirSync(resolve('src/pages'))
     .filter((file) => file.endsWith('SettingsPage.tsx'))

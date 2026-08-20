@@ -120,15 +120,40 @@ export function explicitReminderSubject(text) {
   const subject = clauses
     .map((match) => stripTrailingReminderTiming(match[1]))
     .findLast((candidate) =>
-      candidate.length >= 2 && !/^(?:be\s+)?reminded\b|^remember\b/i.test(candidate)
+      candidate.length >= 2 &&
+      !/^(?:me|us|him|her|them|myself|ourselves)$/i.test(candidate) &&
+      !/^(?:be\s+)?reminded\b|^remember\b/i.test(candidate)
     )
   if (subject) return capitalizeReminderSubject(subject)
+
+  const forClauses = [...value.matchAll(/\bfor\s+([^.!?]+?)(?=$|[.!?])/gi)]
+  const forSubject = forClauses
+    .map((match) => stripTrailingReminderTiming(match[1]))
+    .findLast((candidate) =>
+      candidate.length >= 2 &&
+      !reminderHasTiming(candidate) &&
+      !/^(?:me|us|him|her|them|myself|ourselves)$/i.test(candidate)
+    )
+  if (forSubject) return capitalizeReminderSubject(forSubject)
 
   const reminderFor = value.match(/\breminder\s+for\s+([^.!?]+?)(?=$|[.!?])/i)?.[1]?.trim() ?? ''
   if (reminderFor.length >= 2 && !reminderHasTiming(reminderFor)) {
     return capitalizeReminderSubject(reminderFor)
   }
   return null
+}
+
+export function extractReminderMember(text, familyNames = []) {
+  const value = String(text ?? '').replace(/\s+/g, ' ').trim()
+  const match = value.match(/\bremind\s+([a-z]+)\s+to\b/i) ||
+    value.match(/\breminder\s+for\s+([a-z]+)\s+to\b/i)
+  if (!match) return null
+  const candidate = match[1].toLowerCase()
+  if (['me', 'us', 'him', 'her', 'them', 'myself', 'ourselves'].includes(candidate)) return null
+  const matchedFamily = (Array.isArray(familyNames) ? familyNames : []).find(
+    (name) => name.toLowerCase() === candidate,
+  )
+  return matchedFamily ?? (candidate.charAt(0).toUpperCase() + candidate.slice(1))
 }
 
 export function hardenExplicitReminderTurn(turn, text, options = {}) {
@@ -290,7 +315,7 @@ export function fallbackExplicitRelativeReminderTurn(text) {
 
 export function isExplicitReminderCompletion(text) {
   const value = String(text ?? '')
-  return /\b(?:mark|check)\b.*\breminder\b.*\b(?:done|complete|off)\b|\bcomplete\b.*\breminder\b/i.test(value)
+  return /\b(?:mark|check|cross)\b.*\breminder\b.*\b(?:done|complete|off)\b|\bcomplete\b.*\breminder\b/i.test(value)
 }
 
 export function isReminderCompletionFollowUp(text, conversationState) {
@@ -356,7 +381,7 @@ const isExplicitReminder = isExplicitReminderRequest
 
 function isCompletionLanguage(text) {
   const value = String(text ?? '')
-  return /\b(?:mark|check)\b.*\b(?:done|complete|completed|off)\b|\b(?:complete|finish)\b.*|\b(?:is|are)\s+(?:done|complete|completed)\b/i.test(value)
+  return /\b(?:mark|check|cross)\b.*\b(?:done|complete|completed|off)\b|\b(?:complete|finish)\b.*|\b(?:is|are)\s+(?:done|complete|completed)\b/i.test(value)
 }
 
 function reminderHasTiming(text) {
@@ -430,6 +455,9 @@ function parseUtcOffset(value) {
 
 function resolveReminderDate(text, baseDate) {
   const value = String(text ?? '').toLowerCase()
+  if (/\b(?:today|this\s+(?:morning|afternoon|evening)|tonight)\b/.test(value)) {
+    return { date: new Date(baseDate), reference: { kind: 'today' } }
+  }
   if (/\bday after tomorrow\b/.test(value)) {
     return { date: addLocalDays(baseDate, 2), reference: { kind: 'day_after_tomorrow' } }
   }

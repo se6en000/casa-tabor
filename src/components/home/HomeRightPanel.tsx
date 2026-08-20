@@ -52,6 +52,7 @@ interface Props {
   now: Date
   allTodayEvents: EventWithDetails[]
   onSelectPrepItem?: (item: PrepItem) => void
+  className?: string
 }
 
 interface GmailConnectionStatus {
@@ -190,7 +191,7 @@ function PrepAssignPicker({
   )
 }
 
-export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }: Props) {
+export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem, className }: Props) {
   const navigate = useNavigate()
   const isPageVisible = usePageVisibility()
   const { data: rawPrepItems = [] } = usePrepItems()
@@ -390,7 +391,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
   }
 
   return (
-    <SecondaryRail className="flex-col border-l border-casa-border bg-surface-subtle self-stretch overflow-hidden">
+    <SecondaryRail className={cn('flex-col border-l border-casa-border bg-surface-subtle self-stretch overflow-hidden', className)}>
       <BounceScroll className="flex-1 min-h-0">
         <section className="px-4 py-4">
           <div className="flex items-center justify-between">
@@ -435,13 +436,13 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
         <section className="px-4 py-4">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
-              <Heading role="heading">Needs you</Heading>
+              <Heading role="heading">Action Queue</Heading>
               <p className="text-caption text-casa-muted mt-0.5 truncate">
                 {nextEvent ? `Up next: ${nextEvent.title}` : 'Nothing left today'}
               </p>
             </div>
             <Link to="/actions" className="text-caption font-semibold text-casa-gold whitespace-nowrap">
-              See all
+              Open Queue →
             </Link>
           </div>
           {gmailActivity?.gmailHealth && gmailActivity.gmailHealth.status !== 'healthy' && gmailActivity.gmailHealth.status !== 'off' && (
@@ -754,7 +755,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem }
               <div className="mt-4 pt-4 border-t border-casa-border">
                 <Link
                   to="/actions#recent-activity"
-                  className="block rounded-modal bg-casa-navy px-3.5 pb-3.5 pt-4 text-white shadow-modal hover:brightness-105 transition"
+                  className="block rounded-modal bg-casa-navy px-3.5 pb-3.5 pt-4 text-white shadow-modal hover:brightness-105 transition-all duration-150 active:scale-[0.97] active:opacity-75"
                 >
                   <div className="flex items-center gap-2.5">
                     <Sparkles size={15} className="text-white/90 shrink-0" />

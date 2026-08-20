@@ -25,10 +25,19 @@ function patchEventCollection(
   if (Array.isArray(value)) {
     return value.map((entry) => patchEventRecord(entry, eventId, patch))
   }
-  if (isRecord(value) && Array.isArray(value.events)) {
-    return {
-      ...value,
-      events: value.events.map((entry) => patchEventRecord(entry, eventId, patch)),
+  if (isRecord(value)) {
+    if (Array.isArray(value.active) || Array.isArray(value.cancelled)) {
+      return {
+        ...value,
+        ...(Array.isArray(value.active) ? { active: value.active.map((entry) => patchEventRecord(entry, eventId, patch)) } : {}),
+        ...(Array.isArray(value.cancelled) ? { cancelled: value.cancelled.map((entry) => patchEventRecord(entry, eventId, patch)) } : {}),
+      }
+    }
+    if (Array.isArray(value.events)) {
+      return {
+        ...value,
+        events: value.events.map((entry) => patchEventRecord(entry, eventId, patch)),
+      }
     }
   }
   return patchEventRecord(value, eventId, patch)
@@ -61,6 +70,14 @@ export function applyEventAggregatePatch(
 ) {
   queryClient.setQueriesData(
     { queryKey: ['events'] },
+    (current) => patchEventCollection(current, eventId, patch),
+  )
+  queryClient.setQueriesData(
+    { queryKey: ['today-events'] },
+    (current) => patchEventCollection(current, eventId, patch),
+  )
+  queryClient.setQueriesData(
+    { queryKey: ['rolling-events'] },
     (current) => patchEventCollection(current, eventId, patch),
   )
   queryClient.setQueryData(
@@ -99,3 +116,57 @@ export function publishEventAggregatePatch(
     detail: { eventId },
   }))
 }
+
+export function evictEventFromAllCaches(
+  queryClient: QueryClient,
+  eventId: string,
+  target: EventTarget | null = typeof window === 'undefined' ? null : window,
+) {
+  const filterOut = (value: unknown): unknown => {
+    if (Array.isArray(value)) {
+      return value.filter((entry) => !isRecord(entry) || entry.id !== eventId)
+    }
+    if (isRecord(value) && Array.isArray(value.active)) {
+      return {
+        ...value,
+        active: value.active.filter((entry) => !isRecord(entry) || entry.id !== eventId),
+      }
+    }
+    if (isRecord(value) && Array.isArray(value.events)) {
+      return {
+        ...value,
+        events: value.events.filter((entry) => !isRecord(entry) || entry.id !== eventId),
+      }
+    }
+    return isRecord(value) && value.id === eventId ? null : value
+  }
+
+  queryClient.setQueriesData({ queryKey: ['events'] }, filterOut)
+  queryClient.setQueriesData({ queryKey: ['today-events'] }, filterOut)
+  queryClient.setQueriesData({ queryKey: ['rolling-events'] }, filterOut)
+  queryClient.removeQueries({ queryKey: ['event-details', eventId] })
+  queryClient.setQueriesData(
+    { queryKey: ['event-transportation-plans'] },
+    (current) => patchTransportationCollection(current, eventId, null),
+  )
+  queryClient.setQueriesData({ queryKey: ['prep-items'] }, (current: unknown) => {
+    if (Array.isArray(current)) {
+      return current.filter((item) => !isRecord(item) || (item.event_id !== eventId && item.source_ref !== eventId))
+    }
+    return current
+  })
+
+  if (!target) return
+  target.dispatchEvent(new CustomEvent('casa:event-deleted', {
+    detail: { eventId },
+  }))
+  target.dispatchEvent(new CustomEvent('casa:event-updated', {
+    detail: { eventId, patch: { status: 'cancelled' } },
+  }))
+  target.dispatchEvent(new CustomEvent('casa:overrides-updated', {
+    detail: { eventId },
+  }))
+}
+
+
+

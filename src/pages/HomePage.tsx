@@ -9,17 +9,19 @@ import { useFamilyMembers } from '../hooks/useFamilyMembers'
 import { useRollingEvents } from '../hooks/useCalendarEvents'
 import { useLiveClock } from '../hooks/useLiveClock'
 import { useCalendarStore } from '../stores/calendarStore'
+import { useAppStore } from '../stores/appStore'
 import { cn } from '../utils/cn'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
 import EventDetailPanel from '../components/calendar/EventDetailPanel'
 import MiniPlayer from '../components/music/MiniPlayer'
 import HomeRightPanel from '../components/home/HomeRightPanel'
-import PrepItemDetailPanel from '../components/home/PrepItemDetailPanel'
 import { isAllDayReminder, isTimedReminder } from '../utils/holidays'
 import SwipeableReminderPill from '../components/shared/SwipeableReminderPill'
 import { usePullToRefresh } from '../hooks/usePullToRefresh'
 import { WeatherIcon } from '../components/shared/WeatherIcon'
 import { LeaveByCard } from '../components/shared/LeaveByCard'
+import TomorrowPrepCard from '../components/home/TomorrowPrepCard'
+import MorningLaunchpadCard from '../components/home/MorningLaunchpadCard'
 import { BirthdayCardDecoration } from '../components/shared/BirthdayCardDecoration'
 import { useTravelEta, type TravelEtaResult } from '../hooks/useTravelEta'
 import { useReminderNeedsYouActions } from '../hooks/useReminderNeedsYouActions'
@@ -29,14 +31,15 @@ import {
 } from '../lib/eventPlanOverrides'
 import { derivePlan, type DerivedPerson } from '../lib/eventCommandCenter'
 import { projectHomeTransportation } from '../lib/homeTransportationProjection.mjs'
-import type { FamilyMember, PrepItem } from '../types'
+import type { FamilyMember } from '../types'
 import { eventOverlapsDay, getEventEndDate, getEventStartDate } from '../utils/eventTime'
-import { formatDurationLabel, pickActiveHeroEvent, resolveRestingIndex } from '../lib/heroFocus.mjs'
+import { formatDurationLabel, isReminderOrChore, pickActiveHeroEvent, resolveRestingIndex } from '../lib/heroFocus.mjs'
 import { cleanEventTitle, isBirthdayEvent } from '../utils/eventTitle'
 import { buttonClassName } from '../design-system/variants.mjs'
 import { Button, CalendarPill, Card, Chip, EmptyState, Heading, IconButton, PersonAvatarStack, PrimaryRail, Sheet, Text } from '../components/ui'
 import SnoozeMenu from '../components/shared/SnoozeMenu'
 import type { SnoozeDuration } from '../utils/snoozeDuration'
+import GmailSyncStatusIndicator from '../components/shared/GmailSyncStatusIndicator'
 
 const SHARED_GOLD = 'var(--color-casa-gold)'
 
@@ -206,8 +209,9 @@ export default function HomePage() {
     [rollingEvents, tomorrow],
   )
   const { visibleMembers } = useCalendarStore()
+  const aiDrawerOpen = useAppStore((s) => s.aiDrawerOpen)
+  const openActionInSidecar = useAppStore((s) => s.openActionInSidecar)
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
-  const [selectedPrepItem, setSelectedPrepItem] = useState<PrepItem | null>(null)
   const [pastItemsOpen, setPastItemsOpen] = useState(false)
   const scrollRef = useRef<HTMLElement | null>(null)
   const nowLineRef = useRef<HTMLLIElement | null>(null)
@@ -238,10 +242,21 @@ export default function HomePage() {
       return isTimedReminder(ev) && memberOk(ev)
     })
   }, [allTomorrowEvents, visibleMembers])
-  const nextTodayEvent = useMemo(
-    () => events.find((e) => isAfter(getEventStartDate(e), now)) ?? null,
-    [events, now],
+
+  // Hard calendar events eligible for the Hero focus (never chores/reminders)
+  const heroCandidateEvents = useMemo<EventWithDetails[]>(() => {
+    return events.filter((e) => !e.all_day && !isReminderOrChore(e))
+  }, [events])
+
+  const heroTomorrowEvent = useMemo<EventWithDetails | null>(() => {
+    return tomorrowEvents.find((e) => !e.all_day && !isReminderOrChore(e)) ?? tomorrowEvents[0] ?? null
+  }, [tomorrowEvents])
+
+  const nextTodayHeroEvent = useMemo(
+    () => heroCandidateEvents.find((e) => isAfter(getEventStartDate(e), now)) ?? null,
+    [heroCandidateEvents, now],
   )
+
   const pastEvents = useMemo(
     () => events
       .filter((event) => isBefore(getEventEndDate(event), now))
@@ -258,18 +273,18 @@ export default function HomePage() {
   // is left?" matters most. All-day events and reminders are excluded so they
   // don't hijack the live state.
   const activeHeroEvent = useMemo(
-    () => pickActiveHeroEvent(events, now) ?? null,
-    [events, now],
+    () => pickActiveHeroEvent<EventWithDetails>(heroCandidateEvents, now) ?? null,
+    [heroCandidateEvents, now],
   )
-  const nextTodayEventMode = nextTodayEvent ? resolveEventMode(nextTodayEvent) : null
-  const heroDestination = nextTodayEvent && nextTodayEventMode !== 'hosted'
-    ? (nextTodayEvent.address ?? nextTodayEvent.location_name)
+  const nextTodayEventMode = nextTodayHeroEvent ? resolveEventMode(nextTodayHeroEvent) : null
+  const heroDestination = nextTodayHeroEvent && nextTodayEventMode !== 'hosted'
+    ? (nextTodayHeroEvent.address ?? nextTodayHeroEvent.location_name)
     : null
   const heroTravelEta = useTravelEta({
     destination: heroDestination,
-    eventStartIso: nextTodayEvent?.start_time ?? null,
-    enabled: Boolean(nextTodayEvent && heroDestination),
-    bufferMins: 10,
+    eventStartIso: nextTodayHeroEvent?.start_time ?? null,
+    enabled: Boolean(nextTodayHeroEvent && heroDestination),
+    bufferMins: 5,
   })
 
   // Show tomorrow section always (not just when today is done)
@@ -394,7 +409,7 @@ export default function HomePage() {
       {/* ── Center content ─────────────────────────────────── */}
       <PrimaryRail
         ref={(el) => { ptrRef(el); scrollRef.current = el }}
-        className="overflow-y-auto overscroll-contain touch-pan-y px-6 pt-8 pb-12 lg:px-8"
+        className="overflow-y-auto overscroll-contain touch-pan-y px-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-32 lg:px-8 lg:pt-8 lg:pb-12"
       >
         {/* ── Pull-to-refresh indicator ─────────────────────── */}
         <AnimatePresence>
@@ -421,15 +436,24 @@ export default function HomePage() {
           )}
         </AnimatePresence>
 
+        {/* ── Gmail Sync Health Warning Banner ── */}
+        <GmailSyncStatusIndicator variant="banner" className="mb-4" />
+
         <HeroCarousel
           now={now}
-          events={events}
-          fallbackTomorrowEvent={tomorrowEvents[0] ?? null}
+          events={heroCandidateEvents}
+          fallbackTomorrowEvent={heroTomorrowEvent}
           activeEvent={activeHeroEvent}
-          nextTodayEvent={nextTodayEvent}
+          nextTodayEvent={nextTodayHeroEvent}
           onViewDetails={(event) => setSelectedEventId(event.id)}
           travelEta={heroTravelEta.data}
         />
+
+        {/* ── Active Morning Launchpad (Morning Action 6:00 AM – 9:30 AM, desktop/tablet only) ── */}
+        <MorningLaunchpadCard now={now} className="mt-3 mb-3 hidden lg:block" />
+
+        {/* ── Tomorrow Morning Prep (Contextual evening card 5:30 PM – 11:00 PM, desktop/tablet only) ── */}
+        <TomorrowPrepCard now={now} className="mt-3 mb-3 hidden lg:block" />
 
         {/* ── Today's timeline — first, front and center ──── */}
         <section className="mt-2">
@@ -617,11 +641,25 @@ export default function HomePage() {
       </PrimaryRail>
 
       {/* ── Right panel (tablet only) ──────────────────────── */}
-      <HomeRightPanel now={now} allTodayEvents={allTodayEvents ?? []} onSelectPrepItem={setSelectedPrepItem} />
-
-      <div onClick={e => e.stopPropagation()}>
-        <PrepItemDetailPanel item={selectedPrepItem} onClose={() => setSelectedPrepItem(null)} />
-      </div>
+      <AnimatePresence initial={false}>
+        {!aiDrawerOpen && (
+          <motion.div
+            key="home-right-panel-motion"
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width: 'auto', opacity: 1 }}
+            exit={{ width: 0, opacity: 0 }}
+            transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
+            className="hidden lg:flex flex-none basis-5/16 min-w-0 h-full overflow-hidden"
+          >
+            <HomeRightPanel
+              now={now}
+              allTodayEvents={allTodayEvents ?? []}
+              onSelectPrepItem={(item) => openActionInSidecar(item.id)}
+              className="w-full basis-full flex"
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -970,12 +1008,6 @@ function DesktopHeroCard({
       .filter((item): item is string => Boolean(item))
       .slice(0, 3)
     : []
-  const leadLabel = isBirthday
-    ? `${isTodayFocus ? 'TODAY' : 'TOMORROW'} · BIRTHDAY 🎉`
-    : isInProgress
-      ? `IN PROGRESS · ${eventLabel.toUpperCase()}`
-      : (isTodayFocus ? `UP NEXT · ${eventLabel.toUpperCase()}` : 'TOMORROW · FIRST UP')
-
   const liveLeaveBy = !isHosted && !isAllDay && isTodayFocus && !isInProgress && travelEta?.found && travelEta.leave_by
     ? new Date(travelEta.leave_by)
     : null
@@ -984,14 +1016,26 @@ function DesktopHeroCard({
     : (liveLeaveBy
       ?? (focusEvent.enrichment?.departure_time ? new Date(focusEvent.enrichment.departure_time) : focusStart))
   const minutesUntilLeave = Math.max(0, Math.round((leaveAt.getTime() - now.getTime()) / 60000))
+  const isWithinProximity = !isTodayFocus || isInProgress || minutesUntilLeave <= 90
+
+  const leadLabel = isBirthday
+    ? `${isTodayFocus ? 'TODAY' : 'TOMORROW'} · BIRTHDAY`
+    : isInProgress
+      ? `IN PROGRESS · ${eventLabel.toUpperCase()}`
+      : (isTodayFocus
+        ? (isWithinProximity ? `UP NEXT · ${eventLabel.toUpperCase()}` : `SCHEDULED TODAY · ${eventLabel.toUpperCase()}`)
+        : 'TOMORROW · FIRST UP')
+
   const headlineText = isBirthday
-    ? `🎂 ${eventLabel}`
+    ? eventLabel
     : isInProgress
       ? `Ends at ${format(focusEnd, 'h:mm a')}`
       : (isAllDay
         ? (isTodayFocus ? 'All day' : 'All day tomorrow')
         : (isTodayFocus
-          ? `${isHosted ? 'Starts at' : 'Leave by'} ${format(leaveAt, 'h:mm a')}`
+          ? (isWithinProximity
+            ? `${isHosted ? 'Starts at' : 'Leave by'} ${format(leaveAt, 'h:mm a')}`
+            : `Starts at ${format(focusStart, 'h:mm a')}`)
           : `Tomorrow starts at ${format(leaveAt, 'h:mm a')}`))
 
   const destinationLabel = focusEvent.address ?? focusEvent.location_name ?? 'At home'
@@ -1024,18 +1068,24 @@ function DesktopHeroCard({
     ? (minutesUntilEnd <= 10
       ? { label: 'Wrapping up', tone: 'tight' as const }
       : { label: 'Underway', tone: 'on-track' as const })
-    : deriveHeroStatus({
-      isTodayFocus,
-      isAllDay,
-      minutesUntilLeave,
-      trafficDelayMins: travelEta?.traffic_delay_mins ?? null,
-    })
+    : !isTodayFocus
+      ? { label: 'Tomorrow', tone: 'calm' as const }
+      : isAllDay
+        ? { label: 'All day', tone: 'calm' as const }
+        : !isWithinProximity
+          ? { label: 'Scheduled', tone: 'calm' as const }
+          : deriveHeroStatus({
+            isTodayFocus,
+            isAllDay,
+            minutesUntilLeave,
+            trafficDelayMins: travelEta?.traffic_delay_mins ?? null,
+          })
   const ringWindowMins = isInProgress
     ? Math.max(1, totalDurationMins)
     : isTodayFocus ? (isHosted ? 180 : 120) : 24 * 60
   const ringProgress = isInProgress
     ? Math.max(0.06, Math.min(1, minutesUntilEnd / ringWindowMins))
-    : isTodayFocus && !isAllDay
+    : isTodayFocus && !isAllDay && isWithinProximity
       ? Math.max(0.06, Math.min(1, minutesUntilLeave / ringWindowMins))
       : 1
   const ringRadius = 96
@@ -1044,12 +1094,20 @@ function DesktopHeroCard({
   const ringValue = isInProgress
     ? formatHeroCountdown(minutesUntilEnd)
     : isTodayFocus
-      ? (isAllDay ? 'All day' : formatHeroCountdown(minutesUntilLeave))
-      : 'Tomorrow'
+      ? (isAllDay
+        ? 'All day'
+        : (!isWithinProximity
+          ? format(focusStart, 'h:mm a')
+          : formatHeroCountdown(minutesUntilLeave)))
+      : format(focusStart, 'h:mm a')
   const ringLabel = isInProgress
     ? (isHosted ? 'OF COVERAGE LEFT' : 'TIME LEFT')
     : isTodayFocus
-      ? (isAllDay ? 'HAPPENING TODAY' : (isHosted ? 'UNTIL IT STARTS' : 'UNTIL YOU LEAVE'))
+      ? (isAllDay
+        ? 'HAPPENING TODAY'
+        : (!isWithinProximity
+          ? (isHosted ? 'STARTS TODAY' : `STARTS ${format(focusStart, 'h:mm a').toUpperCase()}`)
+          : (isHosted ? 'UNTIL IT STARTS' : 'UNTIL YOU LEAVE')))
       : (isAllDay ? 'STARTS ALL DAY' : `STARTS ${format(leaveAt, 'h:mm a').toUpperCase()}`)
 
   const mapsUrl = isHosted || isInProgress ? null : mapsUrlForEvent(focusEvent)
@@ -1252,6 +1310,7 @@ function TimelineRow({
         initial={{ opacity: 0, x: -8 }}
         animate={{ opacity: past ? 0.4 : 1, x: 0 }}
         exit={{ opacity: 0, height: 0, marginBottom: 0, overflow: 'hidden' }}
+        whileTap={{ scale: 0.97, opacity: 0.75 }}
         transition={{ duration: 0.3, delay: index * 0.04 }}
         className="cursor-pointer"
         onClick={e => { e.stopPropagation(); onClick() }}
@@ -1318,6 +1377,7 @@ function TimelineRow({
     <motion.li
       initial={{ opacity: 0, x: -8 }}
       animate={{ opacity: past ? 0.45 : 1, x: 0 }}
+      whileTap={{ scale: 0.97, opacity: 0.75 }}
       transition={{ duration: 0.3, delay: index * 0.04 }}
       className="cursor-pointer"
       role="button"
@@ -1407,7 +1467,7 @@ function TimelineRow({
                     color: m.family_member?.color_hex ?? SHARED_GOLD,
                   }))}
                   max={3}
-                  size="sm"
+                  size="md"
                   className="shrink-0"
                 />
               )}

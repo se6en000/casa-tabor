@@ -1,0 +1,1179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Casa Tabor — Home Living Canvas (Door #3 Mockup)</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <!-- Lucide Icons -->
+  <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.js"></script>
+
+  <style>
+    :root {
+      /* Brand Tokens */
+      --color-gold: #C9A96E;
+      --color-gold-hover: #b89555;
+      --color-gold-soft: #F4E2CD;
+      --color-gold-subtle: #FAF0E2;
+      --color-gold-border: #EBD9BF;
+      --color-navy: #1B2A4A;
+      --color-navy-dark: #0f1a30;
+      
+      /* Surface & Canvas */
+      --color-bg: #FAF8F5;
+      --color-bg-2: #F2EEE7;
+      --color-surface: #FFFFFF;
+      --color-surface-subtle: #FAF6EE;
+      --color-surface-raised: #FFFFFF;
+      
+      /* Text */
+      --color-text: #2D2D2D;
+      --color-text-secondary: #5C5D66;
+      --color-text-tertiary: #8D8E99;
+      --color-text-faint: #A9A398;
+      
+      /* Borders & Dividers */
+      --color-border: #E8E2D9;
+      --color-control-border: #E3DACB;
+      --color-divider: #E4DBCB;
+      
+      /* Semantics */
+      --color-error: #C0392B;
+      --color-error-soft: #FDE8E8;
+      --color-success: #27AE60;
+      --color-success-soft: #DBF0DC;
+      --color-warning: #E67E22;
+      --color-warning-soft: #FDF0E2;
+      --color-info: #10A5AC;
+      --color-info-soft: #E7F4F4;
+
+      /* Family Members */
+      --member-jake: #1B2A4A;
+      --member-kelly: #C4693A;
+      --member-liv: #6A9E7F;
+      --member-emme: #C47A8A;
+      --member-owen: #D4A44C;
+
+      /* Fonts */
+      --font-display: 'Cormorant Garamond', Georgia, serif;
+      --font-body: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+
+      /* Shadows & Radii */
+      --shadow-sm: 0 1px 3px rgba(27,42,74,0.06), 0 1px 2px rgba(27,42,74,0.04);
+      --shadow-md: 0 4px 16px rgba(27,42,74,0.08), 0 1px 3px rgba(27,42,74,0.03);
+      --shadow-lg: 0 12px 36px rgba(27,42,74,0.12), 0 2px 6px rgba(27,42,74,0.04);
+      --shadow-glow: 0 0 0 3px rgba(201,169,110,0.45);
+
+      --radius-sm: 8px;
+      --radius-md: 14px;
+      --radius-lg: 20px;
+      --radius-pill: 9999px;
+
+      --transition-fast: 140ms cubic-bezier(0.2, 0, 0, 1);
+      --transition-base: 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    body.dark-mode {
+      --color-gold: #9F8658;
+      --color-gold-hover: #bda373;
+      --color-gold-soft: #3a3122;
+      --color-gold-subtle: #241e15;
+      --color-gold-border: #4a3c2e;
+      --color-navy: #0E1218;
+      --color-navy-dark: #05070a;
+      
+      --color-bg: #090C11;
+      --color-bg-2: #0e131b;
+      --color-surface: #121923;
+      --color-surface-subtle: #171F2C;
+      --color-surface-raised: #1A2433;
+      
+      --color-text: #E3DDD1;
+      --color-text-secondary: #BCC7D8;
+      --color-text-tertiary: #93A4BC;
+      --color-text-faint: #63738a;
+      
+      --color-border: #263244;
+      --color-control-border: #324157;
+      --color-divider: #2B374C;
+      
+      --color-error-soft: #381a17;
+      --color-success-soft: #14331d;
+      --color-warning-soft: #3b2812;
+      --color-info-soft: #123136;
+
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
+      --shadow-md: 0 4px 16px rgba(0,0,0,0.55);
+      --shadow-lg: 0 12px 36px rgba(0,0,0,0.7);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-body);
+      background-color: var(--color-bg);
+      color: var(--color-text);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ══════════════════════════════════════════════════════════════ */
+    /* 1. TOP GLOBAL APP HEADER                                       */
+    /* ══════════════════════════════════════════════════════════════ */
+    .app-header {
+      background: var(--color-surface);
+      border-bottom: 1px solid var(--color-border);
+      padding: 12px 24px;
+      position: sticky;
+      top: 0;
+      z-index: 90;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .header-content {
+      max-width: 1600px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+
+    .app-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: inherit;
+    }
+
+    .brand-mark {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      background: var(--color-navy);
+      color: var(--color-gold);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-display);
+      font-size: 20px;
+      font-weight: 700;
+    }
+    body.dark-mode .brand-mark {
+      background: var(--color-gold);
+      color: var(--color-navy);
+    }
+
+    .brand-text-name {
+      font-family: var(--font-display);
+      font-size: 22px;
+      font-weight: 600;
+      color: var(--color-navy);
+      line-height: 1;
+    }
+    body.dark-mode .brand-text-name { color: #FFFFFF; }
+
+    .brand-text-meta {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--color-gold);
+      margin-top: 2px;
+    }
+
+    /* Primary Navigation Bar (Simplified!) */
+    .main-nav {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--color-surface-subtle);
+      padding: 4px;
+      border-radius: var(--radius-pill);
+      border: 1px solid var(--color-border);
+    }
+
+    .nav-item {
+      padding: 6px 16px;
+      border-radius: var(--radius-pill);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--color-text-secondary);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all var(--transition-fast);
+      border: none;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .nav-item:hover {
+      color: var(--color-navy);
+    }
+    body.dark-mode .nav-item:hover { color: #fff; }
+
+    .nav-item.active {
+      background: var(--color-surface);
+      color: var(--color-navy);
+      box-shadow: var(--shadow-sm);
+    }
+    body.dark-mode .nav-item.active {
+      background: var(--color-surface-raised);
+      color: var(--color-gold);
+    }
+
+    /* Header Right Tools */
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    /* Family Filter Avatar Bar */
+    .family-filter-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--color-surface-subtle);
+      padding: 4px 8px;
+      border-radius: var(--radius-pill);
+      border: 1px solid var(--color-border);
+    }
+
+    .avatar-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all var(--transition-fast);
+    }
+
+    .avatar-btn:hover {
+      transform: scale(1.12);
+    }
+
+    .avatar-btn.selected {
+      border-color: var(--color-gold);
+      box-shadow: 0 0 0 2px rgba(201,169,110,0.4);
+      transform: scale(1.1);
+    }
+
+    .ai-sidecar-btn {
+      background: linear-gradient(135deg, var(--color-navy) 0%, #2b3d63 100%);
+      color: #FFFFFF;
+      border: 1px solid rgba(201,169,110,0.4);
+      padding: 7px 14px;
+      border-radius: var(--radius-pill);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all var(--transition-fast);
+      box-shadow: var(--shadow-sm);
+    }
+    body.dark-mode .ai-sidecar-btn {
+      background: linear-gradient(135deg, #1b263b 0%, #0d1627 100%);
+      border-color: var(--color-gold);
+    }
+
+    .ai-sidecar-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-md);
+      border-color: var(--color-gold);
+    }
+
+    /* ══════════════════════════════════════════════════════════════ */
+    /* 2. HOME MAIN CANVAS WORKSPACE                                  */
+    /* ══════════════════════════════════════════════════════════════ */
+    .home-workspace {
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 20px 24px 32px;
+      width: 100%;
+      flex: 1;
+    }
+
+    /* Top Live Bar & Greeting */
+    .home-status-ribbon {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .greeting-title {
+      font-family: var(--font-display);
+      font-size: 32px;
+      font-weight: 600;
+      color: var(--color-navy);
+      line-height: 1.1;
+    }
+    body.dark-mode .greeting-title { color: #FFFFFF; }
+
+    .greeting-subtitle {
+      font-size: 13px;
+      color: var(--color-text-secondary);
+      margin-top: 2px;
+    }
+
+    .ribbon-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .density-toggle {
+      display: flex;
+      background: var(--color-surface-subtle);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-pill);
+      padding: 2px;
+    }
+
+    .density-btn {
+      padding: 5px 12px;
+      border-radius: var(--radius-pill);
+      font-size: 12px;
+      font-weight: 600;
+      border: none;
+      background: transparent;
+      color: var(--color-text-secondary);
+      cursor: pointer;
+    }
+    .density-btn.active {
+      background: var(--color-surface);
+      color: var(--color-navy);
+      box-shadow: var(--shadow-sm);
+    }
+    body.dark-mode .density-btn.active {
+      background: var(--color-surface-raised);
+      color: var(--color-gold);
+    }
+
+    /* ══════════════════════════════════════════════════════════════ */
+    /* 3. THE UNIFIED 3-PANE LIVING CANVAS                            */
+    /* ══════════════════════════════════════════════════════════════ */
+    .living-canvas-layout {
+      display: grid;
+      grid-template-columns: 360px 1fr 400px;
+      gap: 20px;
+      align-items: start;
+    }
+
+    @media (max-width: 1200px) {
+      .living-canvas-layout {
+        grid-template-columns: 320px 1fr 340px;
+        gap: 16px;
+      }
+    }
+
+    @media (max-width: 980px) {
+      .living-canvas-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .canvas-column {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      flex-direction: column;
+      height: calc(100vh - 160px);
+      overflow: hidden;
+      position: sticky;
+      top: 80px;
+    }
+
+    @media (max-width: 980px) {
+      .canvas-column {
+        height: auto;
+        position: static;
+      }
+    }
+
+    .col-header {
+      padding: 14px 18px;
+      background: var(--color-surface-subtle);
+      border-bottom: 1px solid var(--color-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    .col-title {
+      font-family: var(--font-display);
+      font-size: 19px;
+      font-weight: 600;
+      color: var(--color-navy);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    body.dark-mode .col-title { color: #FFFFFF; }
+
+    .col-badge {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: var(--radius-pill);
+      font-weight: 600;
+      background: var(--color-gold-subtle);
+      color: #8A5A1E;
+      border: 1px solid var(--color-gold-border);
+    }
+    body.dark-mode .col-badge {
+      color: var(--color-gold);
+    }
+
+    .col-body {
+      padding: 18px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      flex: 1;
+    }
+
+    /* ── COLUMN 1: BRIEFING & LOGISTICS NARRATIVE ─────────────── */
+    .briefing-hero-box {
+      background: linear-gradient(180deg, var(--color-surface-subtle) 0%, var(--color-surface) 100%);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      padding: 18px;
+    }
+
+    .briefing-tag {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--color-gold);
+      font-weight: 600;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .briefing-prose-text {
+      font-family: var(--font-display);
+      font-size: 20px;
+      line-height: 1.4;
+      color: var(--color-text);
+      font-style: italic;
+    }
+    .briefing-prose-text strong {
+      font-style: normal;
+      color: var(--color-navy);
+    }
+    body.dark-mode .briefing-prose-text strong { color: var(--color-gold); }
+
+    .handoff-item {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-left: 4px solid var(--color-warning);
+      border-radius: var(--radius-md);
+      padding: 14px;
+      cursor: pointer;
+      transition: all var(--transition-fast);
+    }
+    .handoff-item:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-md);
+    }
+    .handoff-item.active-cross-highlight {
+      border-color: var(--color-gold) !important;
+      background: var(--color-gold-subtle) !important;
+      box-shadow: var(--shadow-glow) !important;
+    }
+
+    /* ── COLUMN 2: SCHEDULE & REAL-TIME TIMELINE ──────────────── */
+    .next-up-hero {
+      background: linear-gradient(135deg, #1B2A4A 0%, #111a2e 100%);
+      color: #FFFFFF;
+      border-radius: var(--radius-md);
+      padding: 20px;
+      border: 1px solid rgba(201,169,110,0.3);
+      position: relative;
+    }
+
+    .hero-leave-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(201,169,110,0.2);
+      border: 1px solid rgba(201,169,110,0.4);
+      color: var(--color-gold);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 3px 8px;
+      border-radius: var(--radius-pill);
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .hero-title {
+      font-family: var(--font-display);
+      font-size: 24px;
+      font-weight: 600;
+      line-height: 1.2;
+    }
+
+    .timeline-item-card {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+      transition: all var(--transition-fast);
+    }
+    .timeline-item-card:hover {
+      border-color: var(--color-control-border);
+      box-shadow: var(--shadow-md);
+    }
+    .timeline-item-card.has-conflict {
+      border-left: 4px solid var(--color-error);
+      background: var(--color-error-soft);
+    }
+    .timeline-item-card.active-cross-highlight {
+      border-color: var(--color-gold) !important;
+      background: var(--color-gold-subtle) !important;
+      box-shadow: var(--shadow-glow) !important;
+    }
+
+    /* ── COLUMN 3: ATTENTION & ACTION RESOLVERS ────────────────── */
+    .action-card-item {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      box-shadow: var(--shadow-sm);
+      transition: all var(--transition-base);
+    }
+    .action-card-item:hover {
+      border-color: var(--color-control-border);
+      box-shadow: var(--shadow-md);
+    }
+    .action-card-item.active-cross-highlight {
+      border-color: var(--color-gold) !important;
+      background: var(--color-gold-subtle) !important;
+      box-shadow: var(--shadow-glow) !important;
+    }
+
+    .action-resolvers-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid var(--color-divider);
+    }
+
+    .resolver-pill-btn {
+      padding: 6px 12px;
+      border-radius: var(--radius-pill);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid var(--color-border);
+      background: var(--color-surface-subtle);
+      color: var(--color-text);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all var(--transition-fast);
+    }
+    .resolver-pill-btn:hover {
+      background: var(--color-surface);
+      border-color: var(--color-control-border);
+      transform: translateY(-1px);
+    }
+    .resolver-pill-btn.primary {
+      background: var(--color-navy);
+      color: #FFFFFF;
+      border-color: var(--color-navy);
+    }
+    body.dark-mode .resolver-pill-btn.primary {
+      background: var(--color-gold);
+      color: #1B2A4A;
+      border-color: var(--color-gold);
+    }
+
+    /* ══════════════════════════════════════════════════════════════ */
+    /* 4. AI SIDECAR OVERLAY DRAWER                                   */
+    /* ══════════════════════════════════════════════════════════════ */
+    .sidecar-drawer {
+      position: fixed;
+      top: 0;
+      right: -420px;
+      width: 400px;
+      height: 100vh;
+      background: var(--color-surface);
+      border-left: 1px solid var(--color-border);
+      box-shadow: var(--shadow-lg);
+      z-index: 200;
+      transition: right 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .sidecar-drawer.open {
+      right: 0;
+    }
+
+    .sidecar-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.35);
+      backdrop-filter: blur(2px);
+      z-index: 199;
+      display: none;
+    }
+    .sidecar-backdrop.open { display: block; }
+
+    /* Toast */
+    .home-toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(120%);
+      background: var(--color-navy);
+      color: #FFFFFF;
+      padding: 12px 24px;
+      border-radius: var(--radius-pill);
+      box-shadow: var(--shadow-lg);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      z-index: 300;
+      font-size: 13px;
+      font-weight: 500;
+      transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+    .home-toast.show { transform: translateX(-50%) translateY(0); }
+  </style>
+</head>
+<body>
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- 1. TOP APP HEADER (SIMPLIFIED NAVIGATION)                      -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <header class="app-header">
+    <div class="header-content">
+      
+      <!-- Brand -->
+      <a href="#" class="app-brand">
+        <div class="brand-mark">T</div>
+        <div>
+          <div class="brand-text-name">Casa Tabor</div>
+          <div class="brand-text-meta">Household Intelligence</div>
+        </div>
+      </a>
+
+      <!-- Streamlined Main Navigation: No more separate Briefing or Actions links! -->
+      <nav class="main-nav">
+        <button class="nav-item active">
+          <i data-lucide="layout-grid" size="14"></i> Canvas (Home)
+        </button>
+        <button class="nav-item">
+          <i data-lucide="calendar" size="14"></i> Calendar
+        </button>
+        <button class="nav-item">
+          <i data-lucide="utensils" size="14"></i> Meals &amp; Grocery
+        </button>
+        <button class="nav-item">
+          <i data-lucide="settings" size="14"></i> Settings
+        </button>
+      </nav>
+
+      <!-- Right Tooling -->
+      <div class="header-right">
+        
+        <!-- Family Filter Avatars -->
+        <div class="family-filter-bar" title="Filter canvas by family member">
+          <span style="font-size: 11px; font-weight: 600; color: var(--color-text-tertiary); margin-right: 2px;">View:</span>
+          <button class="avatar-btn selected" style="background: var(--color-navy);" onclick="filterFamilyMember('all', this)" title="All Family">All</button>
+          <button class="avatar-btn" style="background: var(--member-jake);" onclick="filterFamilyMember('jake', this)" title="Jake">J</button>
+          <button class="avatar-btn" style="background: var(--member-kelly);" onclick="filterFamilyMember('kelly', this)" title="Kelly">K</button>
+          <button class="avatar-btn" style="background: var(--member-liv);" onclick="filterFamilyMember('liv', this)" title="Liv">L</button>
+          <button class="avatar-btn" style="background: var(--member-owen);" onclick="filterFamilyMember('owen', this)" title="Owen">O</button>
+        </div>
+
+        <!-- AI Sidecar Launcher -->
+        <button class="ai-sidecar-btn" onclick="toggleSidecar()">
+          <i data-lucide="sparkles" size="14" style="color: var(--color-gold);"></i>
+          <span>Ask Sidecar</span>
+        </button>
+
+        <!-- Theme Switcher -->
+        <button class="nav-item" onclick="toggleDarkMode()" style="padding: 6px 10px;">
+          <i data-lucide="moon" size="14"></i>
+        </button>
+
+      </div>
+
+    </div>
+  </header>
+
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- 2. HOME MAIN CANVAS WORKSPACE                                  -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <main class="home-workspace">
+    
+    <!-- Top Status Ribbon & Context Header -->
+    <div class="home-status-ribbon">
+      <div>
+        <div class="greeting-title">Good Afternoon, Kelly &amp; Jake</div>
+        <div class="greeting-subtitle">Friday, October 24 · 3:55 PM · 64°F Breezy · 3 Action items needing attention</div>
+      </div>
+
+      <div class="ribbon-controls">
+        <div class="density-toggle">
+          <button class="density-btn active" onclick="setDensity('living')">Living Canvas</button>
+          <button class="density-btn" onclick="setDensity('inbox')">Inbox Zero</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════ -->
+    <!-- 3. THE 3-PANE LIVING CANVAS                                    -->
+    <!-- ══════════════════════════════════════════════════════════════ -->
+    <div class="living-canvas-layout" id="canvasGrid">
+
+      <!-- ── PANE 1: DAILY BRIEFING & LOGISTICS NARRATIVE ────────── -->
+      <div class="canvas-column">
+        <div class="col-header">
+          <div class="col-title">
+            <i data-lucide="coffee" size="16" style="color: var(--color-gold);"></i>
+            <span>Daily Briefing</span>
+          </div>
+          <span class="col-badge">Orientation</span>
+        </div>
+
+        <div class="col-body">
+          
+          <!-- Editorial Story -->
+          <div class="briefing-hero-box">
+            <div class="briefing-tag">
+              <i data-lucide="sparkles" size="11"></i> Morning Summary
+            </div>
+            <div class="briefing-prose-text">
+              "Today has <strong>1 ride conflict</strong> at 4:15 PM and <strong>1 permission slip</strong> due by 3:00 PM."
+            </div>
+          </div>
+
+          <!-- Interactive Handoffs (Click to cross-highlight) -->
+          <div style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: var(--color-text-tertiary); letter-spacing: 0.08em;">
+            Logistical Handoffs
+          </div>
+
+          <div class="handoff-item" id="briefing-handoff-soccer" onclick="crossHighlight('soccer')">
+            <div style="font-size: 11px; font-family: var(--font-mono); font-weight: 600; color: var(--color-warning); margin-bottom: 4px;">
+              4:15 PM · Ride Handoff
+            </div>
+            <div style="font-size: 14px; font-weight: 600; color: var(--color-navy); margin-bottom: 2px;">
+              Owen Soccer Pickup ➔ Kelly
+            </div>
+            <div style="font-size: 12px; color: var(--color-text-secondary);">
+              Jake is on a client call. Kelly is recommended to drive to Oakridge Field.
+            </div>
+            <div style="margin-top: 8px; font-size: 11px; font-weight: 600; color: var(--color-gold);">
+              <i data-lucide="arrow-right" size="11" style="vertical-align: middle;"></i> Focus Attention Card
+            </div>
+          </div>
+
+          <div class="handoff-item" style="border-left-color: var(--color-error);" id="briefing-handoff-slip" onclick="crossHighlight('science')">
+            <div style="font-size: 11px; font-family: var(--font-mono); font-weight: 600; color: var(--color-error); margin-bottom: 4px;">
+              Due 3:00 PM · School Action
+            </div>
+            <div style="font-size: 14px; font-weight: 600; color: var(--color-navy); margin-bottom: 2px;">
+              Liv Science Camp Waiver
+            </div>
+            <div style="font-size: 12px; color: var(--color-text-secondary);">
+              5th Grade trip permission slip requires digital signature.
+            </div>
+          </div>
+
+          <!-- Tomorrow Preview -->
+          <div style="background: var(--color-surface-subtle); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 12px; font-size: 12px;">
+            <div style="font-weight: 600; color: var(--color-navy);">Tomorrow (Saturday)</div>
+            <div style="color: var(--color-text-secondary); margin-top: 2px;">10:00 AM: Liv's Gymnastics Showcase at Lincoln Arena.</div>
+          </div>
+
+        </div>
+      </div>
+
+
+      <!-- ── PANE 2: SCHEDULE & REAL-TIME TIMELINE ───────────────── -->
+      <div class="canvas-column">
+        <div class="col-header">
+          <div class="col-title">
+            <i data-lucide="calendar" size="16" style="color: var(--color-navy);"></i>
+            <span>Today's Schedule</span>
+          </div>
+          <span style="font-size: 11px; color: var(--color-success); font-weight: 600;">● Live</span>
+        </div>
+
+        <div class="col-body">
+          
+          <!-- Hero Next Up Card -->
+          <div class="next-up-hero">
+            <div class="hero-leave-pill">
+              <i data-lucide="navigation" size="11"></i> Leave in 35 mins
+            </div>
+            <div class="hero-title">Owen Soccer Practice</div>
+            <div style="font-size: 13px; color: rgba(255,255,255,0.85); margin-top: 4px;">
+              4:30 – 6:00 PM · Oakridge Field #3
+            </div>
+            <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.15); font-size: 12px; display: flex; justify-content: space-between;">
+              <span id="hero-driver-label">🚗 Driver: <strong>Pending Kelly</strong></span>
+              <span style="color: var(--color-gold);">10m drive</span>
+            </div>
+          </div>
+
+          <!-- Chronological Timeline Rows -->
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            
+            <div class="timeline-item-card has-conflict" id="timeline-conflict-row" onclick="crossHighlight('soccer')">
+              <div style="font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--color-error); width: 68px;">
+                4:00 PM
+              </div>
+              <div style="flex: 1;">
+                <div style="font-size: 13px; font-weight: 600; color: var(--color-text);">Jake: Q3 Client Review Call</div>
+                <div style="font-size: 11px; color: var(--color-error);">Clashes with 4:30 PM Owen Soccer</div>
+              </div>
+              <span class="avatar-btn" style="width: 36px; height: 36px; font-size: 14px; font-weight: 700; background: var(--member-jake); border: 2px solid #fff; box-shadow: var(--shadow-sm);">J</span>
+            </div>
+
+            <div class="timeline-item-card" id="timeline-soccer-row" onclick="crossHighlight('soccer')">
+              <div style="font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--color-text-secondary); width: 68px;">
+                4:30 PM
+              </div>
+              <div style="flex: 1;">
+                <div style="font-size: 13px; font-weight: 600; color: var(--color-text);">Owen Soccer Practice</div>
+                <div style="font-size: 11px; color: var(--color-text-tertiary);">Oakridge Park · Field 3</div>
+              </div>
+              <span class="avatar-btn" id="driver-avatar-chip" style="width: 36px; height: 36px; font-size: 14px; font-weight: 700; background: var(--color-gold); color: #1B2A4A; border: 2px solid #fff; box-shadow: var(--shadow-sm);">?</span>
+            </div>
+
+            <div class="timeline-item-card">
+              <div style="font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--color-text-secondary); width: 68px;">
+                6:30 PM
+              </div>
+              <div style="flex: 1;">
+                <div style="font-size: 13px; font-weight: 600; color: var(--color-text);">Family Pasta Night</div>
+                <div style="font-size: 11px; color: var(--color-text-tertiary);">Kitchen · All Tabor Family</div>
+              </div>
+              <div style="display: flex; align-items: center;">
+                <span class="avatar-btn" style="width: 36px; height: 36px; font-size: 14px; font-weight: 700; background: var(--member-jake); border: 2px solid #fff; box-shadow: var(--shadow-sm); z-index: 1;">J</span>
+                <span class="avatar-btn" style="width: 36px; height: 36px; font-size: 14px; font-weight: 700; background: var(--member-kelly); border: 2px solid #fff; box-shadow: var(--shadow-sm); margin-left: -10px; z-index: 2;">K</span>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+      </div>
+
+
+      <!-- ── PANE 3: ATTENTION COMMAND & 1-CLICK RESOLVERS ────────── -->
+      <div class="canvas-column">
+        <div class="col-header">
+          <div class="col-title">
+            <i data-lucide="check-circle-2" size="16" style="color: var(--color-success);"></i>
+            <span>Attention Hub</span>
+          </div>
+          <span class="col-badge" id="action-count-pill">3 Items</span>
+        </div>
+
+        <div class="col-body">
+
+          <!-- Action Card 1: Soccer Ride -->
+          <div class="action-card-item" id="card-soccer-ride">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+              <span style="font-size: 10px; font-weight: 700; background: #fee2e2; color: #991b1b; padding: 2px 7px; border-radius: var(--radius-pill);">
+                🚗 Ride Conflict
+              </span>
+              <span style="font-family: var(--font-mono); font-size: 11px; color: var(--color-error); font-weight: 600;">4:15 PM</span>
+            </div>
+            <div style="font-size: 14px; font-weight: 600; color: var(--color-text); margin-bottom: 4px;">
+              Assign driver for Owen's Soccer Practice
+            </div>
+            <div style="font-size: 12px; color: var(--color-text-secondary); line-height: 1.4;">
+              Jake has client call. Kelly is available to drive.
+            </div>
+            <div class="action-resolvers-row">
+              <button class="resolver-pill-btn primary" onclick="resolveKellyDrives()">
+                <i data-lucide="user-check" size="12"></i> Kelly Drives
+              </button>
+              <button class="resolver-pill-btn" onclick="showToast('Asked Jake via WhatsApp')">
+                Ask Jake
+              </button>
+              <button class="resolver-pill-btn" onclick="snoozeItem('card-soccer-ride')">
+                <i data-lucide="moon" size="12"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Action Card 2: Science Camp -->
+          <div class="action-card-item" id="card-science-camp">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+              <span style="font-size: 10px; font-weight: 700; background: #f3e8ff; color: #6b21a8; padding: 2px 7px; border-radius: var(--radius-pill);">
+                📝 School Slip
+              </span>
+              <span style="font-family: var(--font-mono); font-size: 11px; color: var(--color-error); font-weight: 600;">Due 3 PM</span>
+            </div>
+            <div style="font-size: 14px; font-weight: 600; color: var(--color-text); margin-bottom: 4px;">
+              Sign Liv's Science Camp Permission Slip
+            </div>
+            <div style="font-size: 12px; color: var(--color-text-secondary); line-height: 1.4;">
+              5th Grade trip waiver requires digital signature.
+            </div>
+            <div class="action-resolvers-row">
+              <button class="resolver-pill-btn primary" style="background: var(--color-success); border-color: var(--color-success);" onclick="resolveQuickSign()">
+                <i data-lucide="edit-3" size="12"></i> 1-Tap Quick Sign
+              </button>
+              <button class="resolver-pill-btn" onclick="snoozeItem('card-science-camp')">
+                Snooze
+              </button>
+            </div>
+          </div>
+
+          <!-- Action Card 3: HSA Copay -->
+          <div class="action-card-item" id="card-copay-bill">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+              <span style="font-size: 10px; font-weight: 700; background: #fef3c7; color: #92400e; padding: 2px 7px; border-radius: var(--radius-pill);">
+                💳 Invoice
+              </span>
+              <span style="font-family: var(--font-mono); font-size: 11px; color: var(--color-text-tertiary);">Due in 3d</span>
+            </div>
+            <div style="font-size: 14px; font-weight: 600; color: var(--color-text); margin-bottom: 4px;">
+              Dr. Miller Orthodontic Statement ($45)
+            </div>
+            <div style="font-size: 12px; color: var(--color-text-secondary);">
+              Ready for 1-tap auto charge via HSA card.
+            </div>
+            <div class="action-resolvers-row">
+              <button class="resolver-pill-btn primary" onclick="resolvePayCopay()">
+                <i data-lucide="check" size="12"></i> Pay $45 HSA
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- 4. AI SIDECAR DRAWER OVERLAY                                   -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <div class="sidecar-backdrop" id="sidecarBackdrop" onclick="toggleSidecar()"></div>
+  <aside class="sidecar-drawer" id="sidecarDrawer">
+    <div style="padding: 16px 20px; background: var(--color-surface-subtle); border-bottom: 1px solid var(--color-border); display: flex; justify-content: space-between; align-items: center;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <i data-lucide="sparkles" size="18" style="color: var(--color-gold);"></i>
+        <div style="font-family: var(--font-display); font-size: 20px; font-weight: 600; color: var(--color-navy);">Casa AI Sidecar</div>
+      </div>
+      <button style="background: none; border: none; cursor: pointer; color: var(--color-text-tertiary);" onclick="toggleSidecar()">
+        <i data-lucide="x" size="18"></i>
+      </button>
+    </div>
+
+    <div style="padding: 20px; flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 14px;">
+      
+      <!-- AI Message -->
+      <div style="background: var(--color-surface-subtle); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 14px; font-size: 13px; color: var(--color-text);">
+        👋 Hi Kelly! I noticed Jake's 4:00 PM strategy call overlaps with Owen's 4:30 PM soccer practice. Would you like me to assign you as the driver?
+      </div>
+
+      <!-- Quick Action Buttons -->
+      <button class="resolver-pill-btn primary" style="justify-content: center; padding: 10px;" onclick="resolveKellyDrives(); toggleSidecar();">
+        <i data-lucide="check" size="14"></i> Yes, assign Kelly to drive
+      </button>
+
+      <button class="resolver-pill-btn" style="justify-content: center; padding: 10px;" onclick="showToast('Drafted text to Coach Dave')">
+        <i data-lucide="message-square" size="14"></i> Text Coach Dave we'll be 5 mins late
+      </button>
+
+    </div>
+
+    <div style="padding: 14px 20px; border-top: 1px solid var(--color-border); background: var(--color-surface);">
+      <input type="text" placeholder="Ask Casa anything about your household..." style="width: 100%; padding: 10px 14px; border-radius: var(--radius-pill); border: 1px solid var(--color-border); font-size: 13px; font-family: var(--font-body); outline: none; background: var(--color-surface-subtle); color: var(--color-text);">
+    </div>
+  </aside>
+
+
+  <!-- Global Floating Undo Toast -->
+  <div class="home-toast" id="homeToast">
+    <span id="toastMsg">Action resolved</span>
+    <button style="background: var(--color-gold); color: #1B2A4A; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: var(--radius-pill); border: none; cursor: pointer;" onclick="undoAction()">UNDO (4s)</button>
+  </div>
+
+
+  <!-- Interactive Script -->
+  <script>
+    lucide.createIcons();
+
+    // Dark Mode Toggle
+    function toggleDarkMode() {
+      document.body.classList.toggle('dark-mode');
+      lucide.createIcons();
+    }
+
+    // Sidecar Drawer Toggle
+    function toggleSidecar() {
+      document.getElementById('sidecarDrawer').classList.toggle('open');
+      document.getElementById('sidecarBackdrop').classList.toggle('open');
+    }
+
+    // Cross-Highlighting
+    function crossHighlight(key) {
+      document.querySelectorAll('.active-cross-highlight').forEach(el => el.classList.remove('active-cross-highlight'));
+
+      if (key === 'soccer') {
+        const b = document.getElementById('briefing-handoff-soccer');
+        const t1 = document.getElementById('timeline-conflict-row');
+        const t2 = document.getElementById('timeline-soccer-row');
+        const a = document.getElementById('card-soccer-ride');
+        [b, t1, t2, a].forEach(el => el && el.classList.add('active-cross-highlight'));
+        a.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        showToast('Cross-focused soccer ride conflict');
+      } else if (key === 'science') {
+        const b = document.getElementById('briefing-handoff-slip');
+        const a = document.getElementById('card-science-camp');
+        [b, a].forEach(el => el && el.classList.add('active-cross-highlight'));
+        a.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        showToast('Cross-focused science camp slip');
+      }
+    }
+
+    // 1-Click Action Resolvers
+    let lastUndo = null;
+    let toastTimeout = null;
+
+    function showToast(msg, undoFn) {
+      const toast = document.getElementById('homeToast');
+      document.getElementById('toastMsg').innerText = msg;
+      toast.classList.add('show');
+      lastUndo = undoFn;
+
+      if (toastTimeout) clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => {
+        toast.classList.remove('show');
+      }, 4000);
+    }
+
+    function undoAction() {
+      if (lastUndo) {
+        lastUndo();
+        document.getElementById('homeToast').classList.remove('show');
+      }
+    }
+
+    function resolveKellyDrives() {
+      const card = document.getElementById('card-soccer-ride');
+      const conflictRow = document.getElementById('timeline-conflict-row');
+      const heroLabel = document.getElementById('hero-driver-label');
+      const avatarChip = document.getElementById('driver-avatar-chip');
+
+      conflictRow.classList.remove('has-conflict');
+      conflictRow.style.background = 'var(--color-surface)';
+      conflictRow.style.borderLeftColor = 'var(--color-border)';
+      heroLabel.innerHTML = '🚗 Driver: <strong style="color: var(--color-gold);">Kelly Tabor</strong>';
+      avatarChip.innerText = 'K';
+      avatarChip.style.background = 'var(--member-kelly)';
+      avatarChip.style.color = '#fff';
+
+      card.style.opacity = '0';
+      setTimeout(() => { card.style.display = 'none'; updateCount(); }, 250);
+
+      showToast('Kelly assigned to drive Owen to soccer', () => {
+        card.style.display = 'block';
+        setTimeout(() => {
+          card.style.opacity = '1';
+          conflictRow.classList.add('has-conflict');
+          heroLabel.innerHTML = '🚗 Driver: <strong>Pending Kelly</strong>';
+          avatarChip.innerText = '?';
+          updateCount();
+        }, 10);
+      });
+    }
+
+    function resolveQuickSign() {
+      const card = document.getElementById('card-science-camp');
+      card.style.opacity = '0';
+      setTimeout(() => { card.style.display = 'none'; updateCount(); }, 250);
+      showToast('Applied Kelly Tabor signature & submitted to school!');
+    }
+
+    function resolvePayCopay() {
+      const card = document.getElementById('card-copay-bill');
+      card.style.opacity = '0';
+      setTimeout(() => { card.style.display = 'none'; updateCount(); }, 250);
+      showToast('Paid $45.00 Dr. Miller copay via HSA card');
+    }
+
+    function snoozeItem(id) {
+      const el = document.getElementById(id);
+      el.style.opacity = '0';
+      setTimeout(() => { el.style.display = 'none'; updateCount(); }, 250);
+      showToast('Snoozed until tomorrow morning');
+    }
+
+    function updateCount() {
+      const count = document.querySelectorAll('.action-card-item:not([style*="display: none"])').length;
+      document.getElementById('action-count-pill').innerText = count + ' Items';
+    }
+
+    function filterFamilyMember(member, btn) {
+      document.querySelectorAll('.avatar-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      showToast(member === 'all' ? 'Showing whole family' : 'Filtered to ' + member.toUpperCase());
+    }
+
+    function setDensity(mode) {
+      if (mode === 'inbox') {
+        window.location.href = '/casa-living-canvas.html';
+      }
+    }
+  </script>
+</body>
+</html>

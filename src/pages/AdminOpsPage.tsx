@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import { AlertCircle, CheckCircle, Lock, LogOut, RefreshCw, Trash2, Calendar } from 'lucide-react'
 import BounceScroll from '../components/shared/BounceScroll'
-import { Button, Heading } from '../components/ui'
+import { Button, Heading, Input, Textarea } from '../components/ui'
 
 interface OperationPlan {
   operation: 'delete' | 'add' | 'edit'
@@ -182,7 +182,7 @@ export default function AdminOpsPage() {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-casa-navy mb-2">Admin PIN</label>
-              <input
+              <Input
                 type="password"
                 value={pin}
                 onChange={(e) => {
@@ -191,7 +191,6 @@ export default function AdminOpsPage() {
                 }}
                 onKeyDown={(e) => e.key === 'Enter' && handlePinSubmit()}
                 placeholder="Enter PIN"
-                className="w-full px-4 py-2 border border-casa-border rounded-lg focus:outline-none focus:ring-2 focus:ring-casa-gold"
               />
               {pinError && <p className="text-sm text-red-500 mt-1">{pinError}</p>}
             </div>
@@ -247,13 +246,13 @@ export default function AdminOpsPage() {
               <p className="text-xs text-casa-muted mb-3">
                 Examples: "Delete all Feed Diana's Cat events in July 2025", "Add weekly standup Monday 10 AM for Q3", "Change all 3 PM slots to 2 PM"
               </p>
-              <textarea
+              <Textarea
                 ref={requestInputRef}
                 value={request}
                 onChange={(e) => setRequest(e.target.value)}
                 placeholder="Natural language request..."
                 rows={5}
-                className="w-full px-4 py-3 border border-casa-border rounded-lg focus:outline-none focus:ring-2 focus:ring-casa-gold font-sans text-body resize-none"
+                className="resize-none font-sans text-body"
               />
             </div>
 
@@ -528,12 +527,12 @@ function ConfirmationStep({ onConfirm, loading, onCancel }: { onConfirm: () => v
 
   return (
     <div className="space-y-3">
-      <input
+      <Input
         type="text"
         value={confirmText}
         onChange={(e) => setConfirmText(e.target.value.toUpperCase())}
         placeholder="Type CONFIRM to proceed"
-        className="w-full px-4 py-2 border border-amber-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono tracking-widest uppercase"
+        className="border-amber-300 focus-visible:ring-amber-500 font-mono tracking-widest uppercase"
       />
       <div className="flex gap-3">
         <Button

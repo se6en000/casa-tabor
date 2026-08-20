@@ -37,7 +37,31 @@ Deno.serve(async (req) => {
       }).catch((err: Error) => ({ data: null, error: err }))
 
       const syncStatus = typeof syncRes?.data?.sync_status === 'string' ? syncRes.data.sync_status : null
-      const syncError = syncRes?.error?.message ?? syncRes?.data?.error ?? (syncStatus === 'failed' ? 'sync-event-to-google failed' : null)
+      let syncError: string | null = null
+      if (syncRes?.error) {
+        try {
+          if (syncRes.error.context && typeof syncRes.error.context.json === 'function') {
+            const body = await syncRes.error.context.json()
+            syncError = body?.error || body?.message || syncRes.error.message
+          } else if (syncRes.error.context && typeof syncRes.error.context.text === 'function') {
+            const txt = await syncRes.error.context.text()
+            try {
+              const parsed = JSON.parse(txt)
+              syncError = parsed?.error || parsed?.message || txt
+            } catch {
+              syncError = txt || syncRes.error.message
+            }
+          } else {
+            syncError = syncRes.error.message
+          }
+        } catch {
+          syncError = syncRes.error.message
+        }
+      } else if (syncRes?.data?.error) {
+        syncError = syncRes.data.error
+      } else if (syncStatus === 'failed') {
+        syncError = 'sync-event-to-google failed'
+      }
       if (!syncError && (syncStatus === 'synced' || syncStatus === 'not_needed')) {
         const { error: finishError } = await sb.rpc('finish_google_sync_job', {
           p_job_id: job.id,

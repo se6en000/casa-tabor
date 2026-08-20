@@ -1,0 +1,1337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Casa Tabor — Universal Done vs. Snooze Triage</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,400;1,600&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  
+  <!-- Lucide Icons -->
+  <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.js"></script>
+
+  <style>
+    :root {
+      --color-gold: #C9A96E;
+      --color-gold-hover: #B89555;
+      --color-gold-soft: #FBF6EE;
+      --color-gold-border: #E8DFC8;
+      --color-navy: #1B2A4A;
+      --color-navy-dark: #0E1729;
+      --color-navy-light: #2A3E6D;
+      
+      --color-bg: #FAF8F5;
+      --color-surface: #FFFFFF;
+      --color-surface-hover: #FCFAF7;
+      
+      --color-text: #22252A;
+      --color-text-secondary: #5E6271;
+      --color-text-tertiary: #8E92A2;
+      
+      --color-border: #E8E2D9;
+      --color-border-subtle: #F0ECE4;
+      
+      --color-success: #27AE60;
+      --color-success-soft: #EBF8F0;
+      --color-snooze: #D4A44C;
+      --color-snooze-soft: #FDF7EC;
+
+      --font-display: 'Cormorant Garamond', Georgia, serif;
+      --font-body: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+
+      --shadow-sm: 0 2px 8px rgba(27, 42, 74, 0.04);
+      --shadow-card: 0 4px 18px rgba(27, 42, 74, 0.05), 0 1px 3px rgba(0,0,0,0.02);
+      --shadow-card-hover: 0 10px 30px rgba(27, 42, 74, 0.08);
+      --shadow-popover: 0 12px 36px rgba(27, 42, 74, 0.16);
+
+      --radius-sm: 8px;
+      --radius-md: 14px;
+      --radius-lg: 20px;
+      --radius-pill: 9999px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-body);
+      background-color: var(--color-bg);
+      color: var(--color-text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Top Concept Nav */
+    .top-nav {
+      background: var(--color-navy);
+      color: #FFFFFF;
+      padding: 12px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: #FFFFFF;
+    }
+
+    .brand-badge {
+      width: 30px;
+      height: 30px;
+      border-radius: 6px;
+      background: var(--color-gold);
+      color: var(--color-navy);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 13.5px;
+    }
+
+    .brand-text {
+      font-family: var(--font-display);
+      font-size: 19px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+
+    /* Triage Mode Switcher */
+    .mode-switcher {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255,255,255,0.08);
+      padding: 4px;
+      border-radius: var(--radius-pill);
+    }
+
+    .mode-tab {
+      padding: 6px 14px;
+      border-radius: var(--radius-pill);
+      color: rgba(255,255,255,0.7);
+      background: transparent;
+      border: none;
+      font-size: 12.5px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .mode-tab:hover {
+      color: #FFFFFF;
+      background: rgba(255,255,255,0.12);
+    }
+
+    .mode-tab.active {
+      background: var(--color-gold);
+      color: var(--color-navy);
+      font-weight: 600;
+    }
+
+    .reset-btn {
+      padding: 6px 12px;
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: var(--radius-sm);
+      color: #FFFFFF;
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .reset-btn:hover {
+      background: var(--color-gold);
+      color: var(--color-navy);
+    }
+
+    /* Main Container */
+    .main-container {
+      max-width: 1400px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 28px 24px;
+      display: grid;
+      grid-template-columns: 1.05fr 0.95fr;
+      gap: 36px;
+      flex: 1;
+    }
+
+    @media (max-width: 1080px) {
+      .main-container {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Left Context: Living Canvas Snapshot */
+    .left-canvas-pane {
+      background: #FFFFFF;
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--color-border);
+      padding: 28px;
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      height: fit-content;
+    }
+
+    .left-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--color-border-subtle);
+      padding-bottom: 14px;
+    }
+
+    .left-title {
+      font-family: var(--font-display);
+      font-size: 24px;
+      font-weight: 600;
+      color: var(--color-navy);
+    }
+
+    .time-badge {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      background: var(--color-gold-soft);
+      color: var(--color-navy);
+      padding: 4px 12px;
+      border-radius: var(--radius-pill);
+      font-weight: 600;
+      border: 1px solid var(--color-gold-border);
+    }
+
+    .overview-hero {
+      background: linear-gradient(135deg, #FAF6EE 0%, #F5EFE4 100%);
+      border: 1px solid var(--color-gold-border);
+      border-radius: var(--radius-md);
+      padding: 24px 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .hero-icon-box {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      background: #FFFFFF;
+      color: var(--color-gold-hover);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 12px rgba(201, 169, 110, 0.2);
+      flex-shrink: 0;
+    }
+
+    .hero-text h3 {
+      font-family: var(--font-display);
+      font-size: 20px;
+      color: var(--color-navy);
+      font-weight: 600;
+      margin-bottom: 3px;
+    }
+
+    .hero-text p {
+      font-size: 13px;
+      color: var(--color-text-secondary);
+      line-height: 1.45;
+    }
+
+    .philosophy-card {
+      border: 1px dashed var(--color-border);
+      border-radius: var(--radius-md);
+      padding: 16px 20px;
+      background: #FAFAFA;
+      font-size: 13px;
+      color: var(--color-text-secondary);
+      line-height: 1.55;
+    }
+
+    .philosophy-card strong {
+      color: var(--color-navy);
+    }
+
+    /* Right Column: Universal Action Queue */
+    .triage-engine-pane {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .triage-header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      padding-bottom: 2px;
+    }
+
+    .triage-title-group h2 {
+      font-family: var(--font-display);
+      font-size: 26px;
+      font-weight: 600;
+      color: var(--color-navy);
+      letter-spacing: -0.3px;
+    }
+
+    .triage-title-group p {
+      font-size: 13px;
+      color: var(--color-text-secondary);
+      margin-top: 2px;
+    }
+
+    .triage-counter-pill {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 12px;
+      border-radius: var(--radius-pill);
+      background: var(--color-gold-soft);
+      color: #7D5C23;
+      border: 1px solid var(--color-gold-border);
+    }
+
+    /* Mode 1: The Executive 2-Anchor List View */
+    .executive-list-view {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .universal-card {
+      background: #FFFFFF;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-card);
+      padding: 18px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      position: relative;
+      transition: all 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    .universal-card:hover {
+      border-color: var(--color-gold-border);
+      box-shadow: var(--shadow-card-hover);
+      transform: translateY(-1.5px);
+    }
+
+    .universal-card.resolving {
+      opacity: 0;
+      transform: translateX(40px) scale(0.96);
+      pointer-events: none;
+    }
+
+    .universal-card.snoozing {
+      opacity: 0;
+      transform: translateY(-30px) scale(0.96);
+      pointer-events: none;
+    }
+
+    /* Card Top Bar */
+    .card-top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .category-chip {
+      font-size: 11.5px;
+      font-weight: 600;
+      padding: 3px 9px;
+      border-radius: var(--radius-pill);
+      letter-spacing: 0.3px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .chip-school { background: #FDF7EC; color: #B38634; border: 1px solid rgba(212, 164, 76, 0.3); }
+    .chip-bill { background: #EDF7F2; color: #2B5C4A; border: 1px solid rgba(43, 92, 74, 0.3); }
+    .chip-dining { background: #FDF0EB; color: #A64B2A; border: 1px solid rgba(166, 75, 42, 0.3); }
+    .chip-home { background: #EBF4FF; color: #2C5282; border: 1px solid rgba(44, 82, 130, 0.3); }
+    .chip-delivery { background: #F4EFFC; color: #6B46C1; border: 1px solid rgba(107, 70, 193, 0.3); }
+
+    .card-meta-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      color: var(--color-text-tertiary);
+    }
+
+    .due-tag {
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+    }
+
+    .due-tag.urgent {
+      color: #C0392B;
+      font-weight: 600;
+    }
+
+    .source-link-btn {
+      color: var(--color-text-tertiary);
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      transition: color 0.15s ease;
+    }
+
+    .source-link-btn:hover {
+      color: var(--color-navy);
+    }
+
+    /* Card Middle Content */
+    .card-body {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .card-title {
+      font-size: 15.5px;
+      font-weight: 600;
+      color: var(--color-navy);
+      line-height: 1.35;
+    }
+
+    .card-summary {
+      font-size: 13.5px;
+      color: var(--color-text-secondary);
+      line-height: 1.45;
+    }
+
+    .card-amount-badge {
+      font-family: var(--font-mono);
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--color-navy);
+      margin-top: 2px;
+    }
+
+    /* Universal 2-Anchor Footer */
+    .universal-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: 12px;
+      border-top: 1px solid var(--color-border-subtle);
+      position: relative;
+    }
+
+    .done-anchor-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 8px 18px;
+      background: var(--color-bg);
+      color: var(--color-navy);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-pill);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .done-anchor-btn i {
+      color: #27AE60;
+    }
+
+    .done-anchor-btn:hover {
+      background: #EBF8F0;
+      border-color: #27AE60;
+      color: #1E6B37;
+      box-shadow: 0 2px 8px rgba(39, 174, 96, 0.15);
+    }
+
+    /* Snooze Split Pill Button */
+    .snooze-split-group {
+      display: inline-flex;
+      align-items: stretch;
+      background: var(--color-bg);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-pill);
+      transition: all 0.2s ease;
+      position: relative;
+    }
+
+    .snooze-split-group:hover {
+      border-color: var(--color-gold);
+      background: #FFFFFF;
+    }
+
+    .snooze-primary-trigger {
+      padding: 7px 14px;
+      background: transparent;
+      border: none;
+      color: var(--color-text-secondary);
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: color 0.15s ease;
+    }
+
+    .snooze-primary-trigger:hover {
+      color: var(--color-navy);
+    }
+
+    .snooze-dropdown-trigger {
+      padding: 0 10px;
+      background: transparent;
+      border: none;
+      border-left: 1px solid var(--color-border);
+      color: var(--color-text-tertiary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s ease;
+    }
+
+    .snooze-dropdown-trigger:hover {
+      color: var(--color-navy);
+      background: var(--color-gold-soft);
+    }
+
+    /* Popover Menu */
+    .snooze-popover {
+      position: absolute;
+      right: 0;
+      bottom: calc(100% + 8px);
+      background: #FFFFFF;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-popover);
+      padding: 6px;
+      width: 200px;
+      display: none;
+      flex-direction: column;
+      gap: 2px;
+      z-index: 50;
+    }
+
+    .snooze-popover.open {
+      display: flex;
+      animation: popFade 0.15s ease-out;
+    }
+
+    @keyframes popFade {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .popover-header {
+      font-size: 10px;
+      text-transform: uppercase;
+      font-family: var(--font-mono);
+      color: var(--color-text-tertiary);
+      padding: 6px 10px 4px;
+      letter-spacing: 0.8px;
+    }
+
+    .popover-option {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 10px;
+      font-size: 12.5px;
+      color: var(--color-text);
+      border-radius: 6px;
+      cursor: pointer;
+      background: transparent;
+      border: none;
+      width: 100%;
+      text-align: left;
+      transition: all 0.15s ease;
+    }
+
+    .popover-option:hover {
+      background: var(--color-gold-soft);
+      color: var(--color-navy);
+      font-weight: 500;
+    }
+
+    .popover-option-time {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      color: var(--color-text-tertiary);
+    }
+
+    /* Mode 2: Swipe / Touch Gesture Deck */
+    .gesture-deck-view {
+      display: none;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .gesture-card {
+      background: #FFFFFF;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      box-shadow: var(--shadow-card);
+      position: relative;
+      cursor: grab;
+      user-select: none;
+      touch-action: pan-y;
+      transition: transform 0.1s ease, box-shadow 0.2s ease;
+    }
+
+    .gesture-card:active {
+      cursor: grabbing;
+    }
+
+    .swipe-indicators {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 18px;
+      padding-top: 14px;
+      border-top: 1px solid var(--color-border-subtle);
+      font-size: 12.5px;
+      font-weight: 600;
+    }
+
+    .swipe-left-label {
+      color: var(--color-snooze);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .swipe-right-label {
+      color: var(--color-success);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Mode 3: 30-Second Focus Queue */
+    .focus-queue-view {
+      display: none;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .focus-hero-card {
+      background: #FFFFFF;
+      border: 1.5px solid var(--color-gold);
+      border-radius: var(--radius-lg);
+      padding: 32px 28px;
+      box-shadow: 0 16px 40px rgba(27, 42, 74, 0.08);
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      position: relative;
+    }
+
+    .focus-step-indicator {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--color-gold-hover);
+      font-weight: 700;
+    }
+
+    .focus-hero-title {
+      font-family: var(--font-display);
+      font-size: 26px;
+      font-weight: 600;
+      color: var(--color-navy);
+      line-height: 1.25;
+    }
+
+    .focus-hero-summary {
+      font-size: 14.5px;
+      color: var(--color-text-secondary);
+      line-height: 1.6;
+    }
+
+    .focus-actions-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .focus-action-btn {
+      padding: 14px 8px;
+      border-radius: var(--radius-md);
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      border: 1px solid var(--color-border);
+      background: #FFFFFF;
+      color: var(--color-navy);
+      transition: all 0.2s ease;
+    }
+
+    .focus-action-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .focus-btn-done {
+      background: var(--color-navy);
+      color: #FFFFFF;
+      border-color: var(--color-navy);
+    }
+
+    .focus-btn-done:hover {
+      background: var(--color-gold-hover);
+      border-color: var(--color-gold-hover);
+    }
+
+    .focus-action-sub {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      opacity: 0.7;
+    }
+
+    /* All Caught Up Empty State */
+    .empty-queue-state {
+      background: #FFFFFF;
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--color-border);
+      padding: 48px 32px;
+      text-align: center;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .empty-icon-ring {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: var(--color-success-soft);
+      color: var(--color-success);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 16px rgba(39, 174, 96, 0.18);
+    }
+
+    .empty-title {
+      font-family: var(--font-display);
+      font-size: 26px;
+      font-weight: 600;
+      color: var(--color-navy);
+    }
+
+    .empty-desc {
+      font-size: 14px;
+      color: var(--color-text-secondary);
+      max-width: 360px;
+      line-height: 1.5;
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--color-navy);
+      color: #FFFFFF;
+      padding: 12px 20px;
+      border-radius: var(--radius-pill);
+      font-size: 13.5px;
+      display: none;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+      z-index: 300;
+    }
+
+    .toast.show {
+      display: flex;
+      animation: toastIn 0.25s ease;
+    }
+
+    @keyframes toastIn {
+      from { transform: translateY(16px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Bar -->
+  <header class="top-nav">
+    <div class="brand-group">
+      <div class="brand-badge">CT</div>
+      <div>
+        <span class="brand-text">Casa Tabor</span>
+        <span style="font-size: 11px; opacity: 0.65; margin-left: 6px;">Universal Triage Architecture</span>
+      </div>
+    </div>
+
+    <!-- Mode Switcher -->
+    <div class="mode-switcher">
+      <button class="mode-tab active" onclick="switchTriageMode('list', this)">
+        <i data-lucide="list-checks" style="width: 14px; height: 14px;"></i>
+        1. Executive 2-Anchor List
+      </button>
+      <button class="mode-tab" onclick="switchTriageMode('swipe', this)">
+        <i data-lucide="hand" style="width: 14px; height: 14px;"></i>
+        2. Fluid Gesture / Swipe
+      </button>
+      <button class="mode-tab" onclick="switchTriageMode('focus', this)">
+        <i data-lucide="layers" style="width: 14px; height: 14px;"></i>
+        3. 30s Focus Deck
+      </button>
+    </div>
+
+    <div>
+      <button class="reset-btn" onclick="resetAllDemo()">
+        <i data-lucide="rotate-ccw" style="width: 13px; height: 13px;"></i>
+        Reset Queue
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Canvas -->
+  <main class="main-container">
+    
+    <!-- Left Column: Context Snapshot -->
+    <section class="left-canvas-pane">
+      <div class="left-header">
+        <h1 class="left-title">Casa Tabor · Operations</h1>
+        <div class="time-badge">11:55 PM</div>
+      </div>
+
+      <div class="overview-hero">
+        <div class="hero-icon-box">
+          <i data-lucide="sparkles" style="width: 22px; height: 22px;"></i>
+        </div>
+        <div class="hero-text">
+          <h3>The Universal Triage Principle</h3>
+          <p>Household items range from bills to school forms to HOA inspections. Rather than bespoke clutter, every item gets one calm, frictionless decision: <strong>Done</strong> vs. <strong>Snooze</strong>.</p>
+        </div>
+      </div>
+
+      <div class="philosophy-card">
+        <strong>Why this solves the luxury problem:</strong><br>
+        1. <strong>Zero button spam:</strong> Replaces 5 inline snooze pills on every row with a clean 2-anchor bar.<br>
+        2. <strong>AI Distillation:</strong> Raw email noise is synthesized into 1 clean sentence + context pill.<br>
+        3. <strong>Predictable speed:</strong> Triage 6 diverse household items in under 15 seconds across Kiosk, Tablet, or Phone.
+      </div>
+    </section>
+
+    <!-- Right Column: Universal Action Queue Engine -->
+    <section class="triage-engine-pane">
+      
+      <div class="triage-header-row">
+        <div class="triage-title-group">
+          <h2>Action Queue</h2>
+          <p>Universal Done & Snooze Engine</p>
+        </div>
+        <span class="triage-counter-pill" id="actionable-count-badge">5 Actionable</span>
+      </div>
+
+      <!-- ================= MODE 1: EXECUTIVE 2-ANCHOR LIST ================= -->
+      <div class="executive-list-view" id="view-list">
+
+        <!-- Card 1: Owen School Waiver -->
+        <article class="universal-card" id="card-1">
+          <div class="card-top-bar">
+            <span class="category-chip chip-school">
+              <i data-lucide="graduation-cap" style="width: 12px; height: 12px;"></i>
+              Owen · 5th Grade School
+            </span>
+            <div class="card-meta-right">
+              <span class="due-tag urgent">Due Today</span>
+              <a href="#" class="source-link-btn" title="View Source Email" onclick="event.preventDefault(); showToast('Opening original school office email...')">
+                <i data-lucide="external-link" style="width: 13px; height: 13px;"></i>
+              </a>
+            </div>
+          </div>
+
+          <div class="card-body">
+            <h3 class="card-title">Science Camp Medical Release & Equipment Waiver</h3>
+            <p class="card-summary">Requires signed emergency release form for Lake Alpine trip starting Monday.</p>
+          </div>
+
+          <div class="universal-footer">
+            <button class="done-anchor-btn" onclick="resolveCard('card-1', 'Signed & Completed Owen Waiver')">
+              <i data-lucide="check" style="width: 14px; height: 14px;"></i>
+              Mark Done
+            </button>
+
+            <div class="snooze-split-group">
+              <button class="snooze-primary-trigger" onclick="snoozeCard('card-1', 'Tomorrow 9:00 AM')">
+                <i data-lucide="clock" style="width: 13px; height: 13px;"></i>
+                Snooze Tomorrow
+              </button>
+              <button class="snooze-dropdown-trigger" onclick="togglePopover('popover-1', event)" title="More snooze times">
+                <i data-lucide="chevron-down" style="width: 13px; height: 13px;"></i>
+              </button>
+
+              <div class="snooze-popover" id="popover-1">
+                <div class="popover-header">Snooze Until</div>
+                <button class="popover-option" onclick="snoozeCard('card-1', 'Tonight 8 PM')">
+                  <span>Tonight</span><span class="popover-option-time">8:00 PM</span>
+                </button>
+                <button class="popover-option" onclick="snoozeCard('card-1', 'Tomorrow Morning')">
+                  <span>Tomorrow Morning</span><span class="popover-option-time">9:00 AM</span>
+                </button>
+                <button class="popover-option" onclick="snoozeCard('card-1', 'This Weekend')">
+                  <span>This Weekend</span><span class="popover-option-time">Sat 10 AM</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <!-- Card 2: Edison Insurance Bill -->
+        <article class="universal-card" id="card-2">
+          <div class="card-top-bar">
+            <span class="category-chip chip-bill">
+              <i data-lucide="shield" style="width: 12px; height: 12px;"></i>
+              Insurance · Annual Premium
+            </span>
+            <div class="card-meta-right">
+              <span class="due-tag urgent">Due Today</span>
+              <a href="#" class="source-link-btn" title="View Source Email" onclick="event.preventDefault(); showToast('Opening Edison Insurance portal...')">
+                <i data-lucide="external-link" style="width: 13px; height: 13px;"></i>
+              </a>
+            </div>
+          </div>
+
+          <div class="card-body">
+            <h3 class="card-title">Edison Homeowners Property & Hazard Policy Renewal</h3>
+            <p class="card-summary">Policy #EDH5679813 · Direct authorization required for primary residence escrow.</p>
+            <div class="card-amount-badge">$7,198.64</div>
+          </div>
+
+          <div class="universal-footer">
+            <button class="done-anchor-btn" onclick="resolveCard('card-2', 'Paid Edison Insurance ($7,198.64)')">
+              <i data-lucide="check" style="width: 14px; height: 14px;"></i>
+              Mark Paid & Done
+            </button>
+
+            <div class="snooze-split-group">
+              <button class="snooze-primary-trigger" onclick="snoozeCard('card-2', 'Tomorrow 9:00 AM')">
+                <i data-lucide="clock" style="width: 13px; height: 13px;"></i>
+                Snooze Tomorrow
+              </button>
+              <button class="snooze-dropdown-trigger" onclick="togglePopover('popover-2', event)">
+                <i data-lucide="chevron-down" style="width: 13px; height: 13px;"></i>
+              </button>
+
+              <div class="snooze-popover" id="popover-2">
+                <div class="popover-header">Snooze Until</div>
+                <button class="popover-option" onclick="snoozeCard('card-2', 'Tomorrow Morning')">
+                  <span>Tomorrow Morning</span><span class="popover-option-time">9:00 AM</span>
+                </button>
+                <button class="popover-option" onclick="snoozeCard('card-2', 'Next Monday')">
+                  <span>Next Week</span><span class="popover-option-time">Mon 9 AM</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <!-- Card 3: East Wok Delivery Reconcile -->
+        <article class="universal-card" id="card-3">
+          <div class="card-top-bar">
+            <span class="category-chip chip-dining">
+              <i data-lucide="utensils" style="width: 12px; height: 12px;"></i>
+              Dining · Family Dinner
+            </span>
+            <div class="card-meta-right">
+              <span class="due-tag">Receipt Match</span>
+            </div>
+          </div>
+
+          <div class="card-body">
+            <h3 class="card-title">East Wok Delivery Order Settlement</h3>
+            <p class="card-summary">Friday family dinner delivery placed on Kelly's Visa (6 items).</p>
+            <div class="card-amount-badge">$59.62</div>
+          </div>
+
+          <div class="universal-footer">
+            <button class="done-anchor-btn" onclick="resolveCard('card-3', 'Reconciled East Wok ($59.62)')">
+              <i data-lucide="check" style="width: 14px; height: 14px;"></i>
+              Mark Resolved
+            </button>
+
+            <div class="snooze-split-group">
+              <button class="snooze-primary-trigger" onclick="snoozeCard('card-3', 'This Weekend')">
+                <i data-lucide="clock" style="width: 13px; height: 13px;"></i>
+                Push to Weekend
+              </button>
+              <button class="snooze-dropdown-trigger" onclick="togglePopover('popover-3', event)">
+                <i data-lucide="chevron-down" style="width: 13px; height: 13px;"></i>
+              </button>
+
+              <div class="snooze-popover" id="popover-3">
+                <div class="popover-header">Snooze Until</div>
+                <button class="popover-option" onclick="snoozeCard('card-3', 'This Weekend')">
+                  <span>This Weekend</span><span class="popover-option-time">Saturday</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <!-- Card 4: HOA Sprinkler Notice -->
+        <article class="universal-card" id="card-4">
+          <div class="card-top-bar">
+            <span class="category-chip chip-home">
+              <i data-lucide="home" style="width: 12px; height: 12px;"></i>
+              HOA · Property Notice
+            </span>
+            <div class="card-meta-right">
+              <span class="due-tag">Inspection</span>
+            </div>
+          </div>
+
+          <div class="card-body">
+            <h3 class="card-title">Annual Backflow & Sprinkler System Inspection</h3>
+            <p class="card-summary">Community inspector visiting on Tuesday between 9 AM – 12 PM. Gate must remain unlocked.</p>
+          </div>
+
+          <div class="universal-footer">
+            <button class="done-anchor-btn" onclick="resolveCard('card-4', 'Acknowledged HOA Notice')">
+              <i data-lucide="check" style="width: 14px; height: 14px;"></i>
+              Acknowledge & Done
+            </button>
+
+            <div class="snooze-split-group">
+              <button class="snooze-primary-trigger" onclick="snoozeCard('card-4', 'Monday Morning')">
+                <i data-lucide="clock" style="width: 13px; height: 13px;"></i>
+                Snooze to Monday
+              </button>
+              <button class="snooze-dropdown-trigger" onclick="togglePopover('popover-4', event)">
+                <i data-lucide="chevron-down" style="width: 13px; height: 13px;"></i>
+              </button>
+
+              <div class="snooze-popover" id="popover-4">
+                <div class="popover-header">Snooze Until</div>
+                <button class="popover-option" onclick="snoozeCard('card-4', 'Monday Morning')">
+                  <span>Monday Morning</span><span class="popover-option-time">8:00 AM</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <!-- Card 5: Amazon Return Confirmation -->
+        <article class="universal-card" id="card-5">
+          <div class="card-top-bar">
+            <span class="category-chip chip-delivery">
+              <i data-lucide="package" style="width: 12px; height: 12px;"></i>
+              Amazon · Return Drop-off
+            </span>
+            <div class="card-meta-right">
+              <span class="due-tag">In 2 Days</span>
+            </div>
+          </div>
+
+          <div class="card-body">
+            <h3 class="card-title">Return Drop-off: Owen Soccer Shin Guards (UPS Store)</h3>
+            <p class="card-summary">QR code ready on phone. Drop off at local UPS Store before Wednesday.</p>
+          </div>
+
+          <div class="universal-footer">
+            <button class="done-anchor-btn" onclick="resolveCard('card-5', 'Completed Amazon Return')">
+              <i data-lucide="check" style="width: 14px; height: 14px;"></i>
+              Mark Dropped Off
+            </button>
+
+            <div class="snooze-split-group">
+              <button class="snooze-primary-trigger" onclick="snoozeCard('card-5', 'Saturday Afternoon')">
+                <i data-lucide="clock" style="width: 13px; height: 13px;"></i>
+                Snooze to Saturday
+              </button>
+              <button class="snooze-dropdown-trigger" onclick="togglePopover('popover-5', event)">
+                <i data-lucide="chevron-down" style="width: 13px; height: 13px;"></i>
+              </button>
+
+              <div class="snooze-popover" id="popover-5">
+                <div class="popover-header">Snooze Until</div>
+                <button class="popover-option" onclick="snoozeCard('card-5', 'Saturday Afternoon')">
+                  <span>Saturday Afternoon</span><span class="popover-option-time">2:00 PM</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </article>
+
+      </div>
+
+      <!-- ================= MODE 2: FLUID GESTURE / SWIPE DECK ================= -->
+      <div class="gesture-deck-view" id="view-swipe">
+        <p style="font-size: 13px; color: var(--color-text-secondary); margin-bottom: 4px;">
+          👆 <strong>Drag / Swipe Cards:</strong> Drag RIGHT for <strong>Done</strong>, Drag LEFT for <strong>Snooze</strong>.
+        </p>
+
+        <div class="gesture-card" id="swipe-card-1" onmousedown="initDrag(this, event)">
+          <div class="card-top-bar">
+            <span class="category-chip chip-school">Owen · 5th Grade School</span>
+            <span class="due-tag urgent">Due Today</span>
+          </div>
+          <div class="card-body" style="margin: 12px 0;">
+            <h3 class="card-title">Science Camp Medical Release & Checklist</h3>
+            <p class="card-summary">Emergency release for Alpine lake trip. Parent signature needed.</p>
+          </div>
+          <div class="swipe-indicators">
+            <div class="swipe-left-label"><i data-lucide="arrow-left" size="14"></i> Swipe Left to Snooze</div>
+            <div class="swipe-right-label">Swipe Right for Done <i data-lucide="arrow-right" size="14"></i></div>
+          </div>
+        </div>
+
+        <div class="gesture-card" id="swipe-card-2" onmousedown="initDrag(this, event)">
+          <div class="card-top-bar">
+            <span class="category-chip chip-bill">Insurance · Premium</span>
+            <div class="card-amount-badge" style="margin:0;">$7,198.64</div>
+          </div>
+          <div class="card-body" style="margin: 12px 0;">
+            <h3 class="card-title">Edison Homeowners Property Policy Renewal</h3>
+            <p class="card-summary">Policy #EDH5679813 · Direct authorization required for escrow.</p>
+          </div>
+          <div class="swipe-indicators">
+            <div class="swipe-left-label"><i data-lucide="arrow-left" size="14"></i> Swipe Left to Snooze</div>
+            <div class="swipe-right-label">Swipe Right for Done <i data-lucide="arrow-right" size="14"></i></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================= MODE 3: 30-SECOND FOCUS QUEUE ================= -->
+      <div class="focus-queue-view" id="view-focus">
+        <div class="focus-hero-card" id="focus-card-box">
+          <div class="focus-step-indicator" id="focus-step-tag">Task 1 of 5</div>
+          <div>
+            <span class="category-chip chip-school" id="focus-category">Owen · 5th Grade School</span>
+            <h3 class="focus-hero-title" id="focus-title" style="margin-top: 10px;">Science Camp Medical Release & Checklist</h3>
+            <p class="focus-hero-summary" id="focus-summary">Requires signed emergency release form for Lake Alpine trip starting Monday morning.</p>
+          </div>
+
+          <div class="focus-actions-grid">
+            <button class="focus-action-btn focus-btn-done" onclick="advanceFocus('done')">
+              <i data-lucide="check-circle" size="18"></i>
+              <span>Done</span>
+              <span class="focus-action-sub">Resolve</span>
+            </button>
+            <button class="focus-action-btn" onclick="advanceFocus('tonight')">
+              <i data-lucide="moon" size="18"></i>
+              <span>Tonight</span>
+              <span class="focus-action-sub">8:00 PM</span>
+            </button>
+            <button class="focus-action-btn" onclick="advanceFocus('tomorrow')">
+              <i data-lucide="sun" size="18"></i>
+              <span>Tomorrow</span>
+              <span class="focus-action-sub">9:00 AM</span>
+            </button>
+            <button class="focus-action-btn" onclick="advanceFocus('weekend')">
+              <i data-lucide="calendar" size="18"></i>
+              <span>Weekend</span>
+              <span class="focus-action-sub">Saturday</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- All Caught Up Empty State -->
+      <div class="empty-queue-state" id="empty-state">
+        <div class="empty-icon-ring">
+          <i data-lucide="check-check" style="width: 32px; height: 32px;"></i>
+        </div>
+        <h3 class="empty-title">All Caught Up for Today!</h3>
+        <p class="empty-desc">Your household action queue is completely clear. No pending approvals or urgent tasks remain.</p>
+        <button class="done-anchor-btn" onclick="resetAllDemo()" style="margin-top: 8px;">
+          <i data-lucide="rotate-ccw" style="width: 14px; height: 14px;"></i>
+          Reload Sample Queue
+        </button>
+      </div>
+
+    </section>
+  </main>
+
+  <!-- Toast Notification -->
+  <div class="toast" id="toast">
+    <i data-lucide="check-circle-2" style="width: 18px; height: 18px; color: var(--color-gold);"></i>
+    <span id="toast-msg">Action processed</span>
+  </div>
+
+  <script>
+    lucide.createIcons();
+
+    let pendingCount = 5;
+
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toast-msg').innerText = msg;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    function togglePopover(id, event) {
+      event.stopPropagation();
+      document.querySelectorAll('.snooze-popover').forEach(p => {
+        if (p.id !== id) p.classList.remove('open');
+      });
+      const pop = document.getElementById(id);
+      if (pop) pop.classList.toggle('open');
+    }
+
+    document.addEventListener('click', () => {
+      document.querySelectorAll('.snooze-popover').forEach(p => p.classList.remove('open'));
+    });
+
+    function resolveCard(cardId, label) {
+      const card = document.getElementById(cardId);
+      if (!card) return;
+      card.classList.add('resolving');
+      setTimeout(() => {
+        card.style.display = 'none';
+        decrementCount();
+        showToast(`✓ ${label}`);
+      }, 250);
+    }
+
+    function snoozeCard(cardId, when) {
+      const card = document.getElementById(cardId);
+      if (!card) return;
+      card.classList.add('snoozing');
+      setTimeout(() => {
+        card.style.display = 'none';
+        decrementCount();
+        showToast(`⏰ Snoozed until ${when}`);
+      }, 250);
+    }
+
+    function decrementCount() {
+      pendingCount = Math.max(0, pendingCount - 1);
+      document.getElementById('actionable-count-badge').innerText = `${pendingCount} Actionable`;
+      if (pendingCount === 0) {
+        document.getElementById('view-list').style.display = 'none';
+        document.getElementById('view-swipe').style.display = 'none';
+        document.getElementById('view-focus').style.display = 'none';
+        document.getElementById('empty-state').style.display = 'flex';
+      }
+    }
+
+    function switchTriageMode(mode, btn) {
+      document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
+      btn.classList.add('active');
+
+      document.getElementById('view-list').style.display = mode === 'list' && pendingCount > 0 ? 'flex' : 'none';
+      document.getElementById('view-swipe').style.display = mode === 'swipe' && pendingCount > 0 ? 'flex' : 'none';
+      document.getElementById('view-focus').style.display = mode === 'focus' && pendingCount > 0 ? 'flex' : 'none';
+    }
+
+    /* Focus Deck Items */
+    const focusItems = [
+      { step: "Task 1 of 5", category: "Owen · 5th Grade School", title: "Science Camp Medical Release & Checklist", summary: "Requires signed emergency release form for Lake Alpine trip starting Monday morning." },
+      { step: "Task 2 of 5", category: "Insurance · Annual Premium ($7,198.64)", title: "Edison Homeowners Property Policy Renewal", summary: "Policy #EDH5679813 · Direct authorization required for primary residence escrow." },
+      { step: "Task 3 of 5", category: "Dining · East Wok ($59.62)", title: "East Wok Takeout Delivery Settlement", summary: "Friday family dinner delivery placed on Kelly's Visa card." },
+      { step: "Task 4 of 5", category: "HOA · Property Notice", title: "Annual Backflow & Sprinkler System Inspection", summary: "Community inspector visiting on Tuesday between 9 AM – 12 PM." },
+      { step: "Task 5 of 5", category: "Amazon · Return Drop-off", title: "Return Drop-off: Owen Soccer Shin Guards", summary: "QR code ready on phone. Drop off at local UPS Store before Wednesday." }
+    ];
+    let focusIdx = 0;
+
+    function advanceFocus(action) {
+      const box = document.getElementById('focus-card-box');
+      box.style.transform = action === 'done' ? 'translateX(40px)' : 'translateY(-20px)';
+      box.style.opacity = '0';
+
+      showToast(action === 'done' ? `✓ Completed item` : `⏰ Snoozed to ${action}`);
+
+      setTimeout(() => {
+        focusIdx++;
+        if (focusIdx < focusItems.length) {
+          const item = focusItems[focusIdx];
+          document.getElementById('focus-step-tag').innerText = item.step;
+          document.getElementById('focus-category').innerText = item.category;
+          document.getElementById('focus-title').innerText = item.title;
+          document.getElementById('focus-summary').innerText = item.summary;
+
+          box.style.transform = 'none';
+          box.style.opacity = '1';
+          decrementCount();
+        } else {
+          decrementCount();
+        }
+      }, 220);
+    }
+
+    /* Simple Drag Interaction for Swipe Deck */
+    function initDrag(card, e) {
+      let startX = e.clientX;
+      let diff = 0;
+
+      function onMouseMove(moveEvent) {
+        diff = moveEvent.clientX - startX;
+        card.style.transform = `translateX(${diff}px) rotate(${diff * 0.04}deg)`;
+        if (diff > 40) {
+          card.style.borderColor = 'var(--color-success)';
+        } else if (diff < -40) {
+          card.style.borderColor = 'var(--color-snooze)';
+        } else {
+          card.style.borderColor = 'var(--color-border)';
+        }
+      }
+
+      function onMouseUp() {
+        window.removeEventListener('mousemove', onMouseMove);
+        window.removeEventListener('mouseup', onMouseUp);
+
+        if (diff > 90) {
+          card.style.transform = 'translateX(250px)';
+          card.style.opacity = '0';
+          setTimeout(() => { card.style.display = 'none'; decrementCount(); showToast('✓ Completed via swipe right!'); }, 200);
+        } else if (diff < -90) {
+          card.style.transform = 'translateX(-250px)';
+          card.style.opacity = '0';
+          setTimeout(() => { card.style.display = 'none'; decrementCount(); showToast('⏰ Snoozed via swipe left!'); }, 200);
+        } else {
+          card.style.transform = 'none';
+          card.style.borderColor = 'var(--color-border)';
+        }
+      }
+
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('mouseup', onMouseUp);
+    }
+
+    function resetAllDemo() {
+      location.reload();
+    }
+  </script>
+</body>
+</html>

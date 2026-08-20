@@ -42,7 +42,7 @@ test('agent read rollout observes supported text without bypassing unified synth
 test('agent read failures retain the current authoritative fallback path', () => {
   assert.match(assistant, /server_agent_read_fallback/)
   assert.match(assistant, /agent_read_timeout/)
-  assert.match(assistant, /shouldRunAgentShadow = !shouldRunAgentWrite && !shouldRunAgentRead/)
+  assert.match(assistant, /const shouldRunAgentShadow =[\s\S]*?!shouldRunAgentWrite && !shouldRunAgentRead/)
 })
 
 test('write-lane read deferrals continue to authoritative active-event reads', () => {

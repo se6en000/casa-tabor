@@ -79,11 +79,18 @@ export interface CalendarEvent {
   series_revision_applied?: number | null
   created_at: string
   updated_at: string
+  deleted_at?: string | null
   // Trip leg fields (new leg-based model)
   trip_id: string | null
   leg_type: string | null
   flight_number: string | null
   confirmation_number: string | null
+  // Provenance / Source type
+  source_type?: 'routine' | 'google' | 'gmail' | 'casa'
+  // Google Sync Status
+  google_sync_status?: 'synced' | 'pending' | 'queued' | 'retrying' | 'failed' | 'local_only' | 'not_synced'
+  google_sync_error?: string | null
+  google_sync_last_at?: string | null
   // Joined
   members?: EventMember[]
   enrichment?: EventEnrichment | null
@@ -300,6 +307,8 @@ export interface PrepItem {
   snoozed_until?: string | null
   snooze_count?: number
   last_snoozed_at?: string | null
+  is_user_labeled?: boolean | null
+  cluster_id?: string | null
 }
 
 /**
@@ -319,11 +328,52 @@ export type PrepItemCategory =
   | 'rsvp_response'
   | 'general_todo'
 
+export type DeliveryTransitStage =
+  | 'confirmed'
+  | 'payment'
+  | 'shipped'
+  | 'out_for_delivery'
+  | 'delivered'
+  | 'problem'
+
+export interface DeliveryTransitItem {
+  id: string
+  threadKey: string
+  vendor: string
+  title: string
+  itemSummary: string | null
+  stage: DeliveryTransitStage
+  cost?: string | null
+  trackingUrl?: string | null
+  carrier?: string | null
+  etaDisplay?: string | null
+  isPerishable?: boolean
+  occurredAt: string
+  rawItem: PrepItem
+}
+
+export type CategoryRoutingDirective =
+  | 'action_queue'
+  | 'logistics_radar'
+  | 'stage_calendar'
+  | 'passive_briefing'
+  | 'ignore'
+
+export interface HouseholdCapturePolicyMatrix {
+  senderDomain?: string
+  senderEmail?: string
+  categoryRouting: Partial<Record<string, CategoryRoutingDirective>>
+  confidence: number
+  autoTuned?: boolean
+}
+
 
 // ── Views ───────────────────────────────────────────────────
 
 export type CalendarView = 'today' | 'week' | 'month' | 'agenda' | 'family-split' | 'stacked'
 export type AppMode = 'interactive' | 'ambient'
+export type ExperienceMode = 'living_canvas' | 'classic'
+export type CanvasSubmode = 'calm' | 'turbo'
 
 export interface AIMemoryObservation {
   id: string
@@ -349,4 +399,21 @@ export interface AIBugReport {
   created_at: string
   updated_at: string
   resolved_at: string | null
+}
+
+// ── Kitchen & Dinner Plan ──────────────────────────────────
+
+export type DinnerMode = 'cook' | 'takeout' | 'leftovers' | 'dineout'
+
+export interface DinnerPlan {
+  [key: string]: unknown
+  mode: DinnerMode
+  title: string
+  subtitle: string
+  targetTime: string
+  recipeId?: string
+  chefOrDriver?: string
+  statusBadge?: string
+  isPast?: boolean
+  notes?: string
 }

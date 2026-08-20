@@ -23,21 +23,73 @@ Deno.serve(async (req) => {
     })
   }
 
-  const { query, city } = await req.json() as { query: string; city?: string }
+  const { query, city, lat, lng, radius } = await req.json() as {
+    query: string
+    city?: string
+    lat?: number
+    lng?: number
+    radius?: number
+  }
   const textQuery = city ? `${query} in ${city}` : query
 
-  const res = await mapsFetch('https://places.googleapis.com/v1/places:searchText', {
+  const hasCoords = typeof lat === 'number' && typeof lng === 'number' && Number.isFinite(lat) && Number.isFinite(lng)
+  const searchRadius = typeof radius === 'number' && Number.isFinite(radius) ? radius : 50000.0
+
+  const buildPayload = (useRestriction: boolean): Record<string, unknown> => {
+    const payload: Record<string, unknown> = {
+      textQuery,
+      maxResultCount: 6,
+    }
+    if (hasCoords) {
+      if (useRestriction) {
+        payload.locationRestriction = {
+          circle: {
+            center: { latitude: lat, longitude: lng },
+            radius: searchRadius,
+          },
+        }
+      } else {
+        payload.locationBias = {
+          circle: {
+            center: { latitude: lat, longitude: lng },
+            radius: searchRadius,
+          },
+        }
+      }
+    }
+    return payload
+  }
+
+  // 1. Try strict local restriction first so queries like "Walmart" or "Target" return local Palm Beach stores instead of Texas/California
+  let res = await mapsFetch('https://places.googleapis.com/v1/places:searchText', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
       'X-Goog-Api-Key': apiKey,
       'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.addressComponents,places.location,places.id,places.nationalPhoneNumber,places.primaryType',
     },
-    body: JSON.stringify({ textQuery, maxResultCount: 5 }),
+    body: JSON.stringify(buildPayload(hasCoords)),
   })
 
-  const data = await res.json()
-  if (!res.ok) {
+  let data = await res.json()
+
+  // 2. If restricted search returns no results and coords were used, fall back to soft locationBias for out-of-area searches
+  if (hasCoords && (!data.places || data.places.length === 0)) {
+    const fallbackRes = await mapsFetch('https://places.googleapis.com/v1/places:searchText', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'X-Goog-Api-Key': apiKey,
+        'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.addressComponents,places.location,places.id,places.nationalPhoneNumber,places.primaryType',
+      },
+      body: JSON.stringify(buildPayload(false)),
+    })
+    if (fallbackRes.ok) {
+      data = await fallbackRes.json()
+    }
+  }
+
+  if (!res.ok && !data?.places) {
     return new Response(JSON.stringify({ error: data?.error?.message ?? 'Places API error' }), {
       status: 502, headers: { ...CORS, 'content-type': 'application/json' },
     })

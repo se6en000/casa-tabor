@@ -30,7 +30,7 @@ test('computeSnoozeUntil supports a literal one-day snooze', () => {
 })
 
 test('computeSnoozeUntil jumps to 6am the next day for the "tomorrow" duration', () => {
-  const now = new Date('2026-08-07T21:30:00.000-04:00')
+  const now = new Date(2026, 7, 7, 21, 30, 0)
   const result = computeSnoozeUntil('tomorrow', now)
   assert.equal(result.getDate(), 8)
   assert.equal(result.getHours(), 6)

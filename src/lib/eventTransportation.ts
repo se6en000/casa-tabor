@@ -1,5 +1,6 @@
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
 
+export type LogisticsMode = 'stay' | 'dropoff_only' | 'pickup_only' | 'two_way' | 'none'
 export type TransportationPurpose = 'drive' | 'pickup' | 'dropoff' | 'appointment' | 'return'
 export type TransportationTiming = 'arrive_by' | 'depart_at'
 
@@ -94,15 +95,16 @@ export function normalizeTransportationPlan(value: unknown): EventTransportation
         .map((name) => name.trim())
         .filter(Boolean)
     : undefined
-  return legs.length > 0
-    ? {
-        version: 1,
-        ...(raw.source === 'generated' || raw.source === 'manual' ? { source: raw.source } : {}),
-        ...(typeof raw.waitOnSite === 'boolean' ? { waitOnSite: raw.waitOnSite } : {}),
-        legs,
-        ...(attendeeRoster ? { attendeeRoster } : {}),
-      }
-    : null
+
+  if (raw.legs.length > 0 && legs.length === 0) return null
+
+  return {
+    version: 1,
+    ...(raw.source === 'generated' || raw.source === 'manual' ? { source: raw.source } : {}),
+    ...(typeof raw.waitOnSite === 'boolean' ? { waitOnSite: raw.waitOnSite } : {}),
+    legs,
+    ...(attendeeRoster ? { attendeeRoster } : {}),
+  }
 }
 
 export function eventTimeValue(iso: string | null | undefined): string {
@@ -132,7 +134,7 @@ export function eventPassengerNames(event: Pick<EventWithDetails, 'members'>): s
 export function createDefaultTransportationPlan(
   event: EventWithDetails,
   homeAddress: string,
-  driver?: { id: string; name: string } | null,
+  driver?: { id: string | null; name: string } | null,
 ): EventTransportationPlan {
   const destinationName = event.location_name?.trim() || event.address?.trim() || 'Event location'
   const attendeeRoster = eventPassengerNames(event)
@@ -323,4 +325,381 @@ export function updateTransportationDriver(
         : leg,
     ),
   }
+}
+
+export function buildEventTransportationPlan(
+  event: EventWithDetails,
+  homeAddress: string,
+  driver?: { id: string | null; name: string } | null,
+  options?: { waitOnSite?: boolean },
+): EventTransportationPlan {
+  const base = createDefaultTransportationPlan(event, homeAddress, driver)
+  const waitOnSite = options?.waitOnSite ?? true
+  const withWait = updateTransportationWait(base, waitOnSite)
+  const fullPlan = appendReturnHomeLeg(withWait, event, homeAddress)
+  if (driver) {
+    return updateTransportationDriver(fullPlan, 0, driver, true)
+  }
+  return fullPlan
+}
+
+export function applyDriverChangeToPlan(
+  plan: EventTransportationPlan,
+  legIndex: number,
+  driver: { id: string | null; name: string },
+  syncBoth: boolean = false,
+): EventTransportationPlan {
+  const shouldSync = syncBoth || plan.waitOnSite || plan.legs.length <= 1
+  return updateTransportationDriver(plan, legIndex, driver, shouldSync)
+}
+
+export function buildEventTransportationPlanForMode(
+  event: EventWithDetails,
+  homeAddress: string,
+  mode: LogisticsMode,
+  options?: {
+    driver1?: { id: string | null; name: string } | null
+    driver2?: { id: string | null; name: string } | null
+  },
+): EventTransportationPlan {
+  const destinationName = event.location_name?.trim() || event.address?.trim() || 'Event location'
+  const destinationAddress = event.address?.trim() || ''
+  const attendeeRoster = eventPassengerNames(event)
+  const d1 = options?.driver1 ?? null
+  const d2 = options?.driver2 ?? d1
+
+  if (mode === 'none') {
+    return {
+      version: 1,
+      source: 'manual',
+      waitOnSite: false,
+      attendeeRoster,
+      legs: [],
+    }
+  }
+
+  if (mode === 'dropoff_only') {
+    return {
+      version: 1,
+      source: 'manual',
+      waitOnSite: false,
+      attendeeRoster,
+      legs: [{
+        id: crypto.randomUUID(),
+        origin: { name: 'Home', address: homeAddress },
+        destination: { name: destinationName, address: destinationAddress, kind: 'event' },
+        driverId: d1?.id ?? null,
+        driverName: d1?.name ?? '',
+        passengers: attendeeRoster,
+        purpose: 'dropoff',
+        timing: 'arrive_by',
+        time: eventTimeValue(event.start_time),
+      }],
+    }
+  }
+
+  if (mode === 'pickup_only') {
+    return {
+      version: 1,
+      source: 'manual',
+      waitOnSite: false,
+      attendeeRoster,
+      legs: [{
+        id: crypto.randomUUID(),
+        origin: { name: destinationName, address: destinationAddress, kind: 'event' },
+        destination: { name: 'Home', address: homeAddress },
+        driverId: d2?.id ?? null,
+        driverName: d2?.name ?? '',
+        passengers: attendeeRoster,
+        purpose: 'pickup',
+        timing: 'depart_at',
+        time: eventTimeValue(event.end_time),
+      }],
+    }
+  }
+
+  const waitOnSite = mode === 'stay'
+  return {
+    version: 1,
+    source: 'manual',
+    waitOnSite,
+    attendeeRoster,
+    legs: [
+      {
+        id: crypto.randomUUID(),
+        origin: { name: 'Home', address: homeAddress },
+        destination: { name: destinationName, address: destinationAddress, kind: 'event' },
+        driverId: d1?.id ?? null,
+        driverName: d1?.name ?? '',
+        passengers: attendeeRoster,
+        purpose: waitOnSite ? 'appointment' : 'dropoff',
+        timing: 'arrive_by',
+        time: eventTimeValue(event.start_time),
+      },
+      {
+        id: crypto.randomUUID(),
+        origin: { name: destinationName, address: destinationAddress, kind: 'event' },
+        destination: { name: 'Home', address: homeAddress },
+        driverId: (waitOnSite ? d1?.id : d2?.id) ?? null,
+        driverName: (waitOnSite ? d1?.name : d2?.name) ?? '',
+        passengers: attendeeRoster,
+        purpose: waitOnSite ? 'return' : 'pickup',
+        timing: 'depart_at',
+        time: eventTimeValue(event.end_time),
+      },
+    ],
+  }
+}
+
+export function applyLogisticsModeToPlan(
+  plan: EventTransportationPlan,
+  mode: LogisticsMode,
+  event: EventWithDetails,
+  homeAddress: string,
+): EventTransportationPlan {
+  const isSinglePickup = plan.legs.length === 1 && plan.legs[0].purpose === 'pickup'
+  const driver1 = isSinglePickup
+    ? null
+    : (plan.legs[0] ? { id: plan.legs[0].driverId, name: plan.legs[0].driverName } : null)
+  const driver2 = isSinglePickup
+    ? { id: plan.legs[0].driverId, name: plan.legs[0].driverName }
+    : (plan.legs[1] ? { id: plan.legs[1].driverId, name: plan.legs[1].driverName } : driver1)
+  return buildEventTransportationPlanForMode(event, homeAddress, mode, { driver1, driver2 })
+}
+
+export function applyWaitBehaviorToPlan(
+  plan: EventTransportationPlan,
+  behavior: 'stay' | 'dropoff' | LogisticsMode,
+  event: EventWithDetails,
+  homeAddress: string,
+): EventTransportationPlan {
+  if (behavior === 'stay') {
+    return applyLogisticsModeToPlan(plan, 'stay', event, homeAddress)
+  }
+  if (behavior === 'dropoff' || behavior === 'two_way') {
+    return applyLogisticsModeToPlan(plan, 'two_way', event, homeAddress)
+  }
+  if (behavior === 'dropoff_only') {
+    return applyLogisticsModeToPlan(plan, 'dropoff_only', event, homeAddress)
+  }
+  if (behavior === 'pickup_only') {
+    return applyLogisticsModeToPlan(plan, 'pickup_only', event, homeAddress)
+  }
+  if (behavior === 'none') {
+    return applyLogisticsModeToPlan(plan, 'none', event, homeAddress)
+  }
+  return applyLogisticsModeToPlan(plan, 'stay', event, homeAddress)
+}
+
+export interface CalculatedRouteDetails {
+  found: boolean
+  driveMinutes: number
+  distanceMiles: number
+  departureTimeIso: string | null
+  arrivalTimeIso: string | null
+  trafficDelayMinutes: number
+  routeSummary: string | null
+  error?: string
+}
+
+export function parseDistanceMilesFromSummary(summary?: string | null): number {
+  if (!summary) return 0
+  const match = summary.match(/([0-9]+(?:\.[0-9]+)?)\s*mi\b/i)
+  return match ? Number(match[1]) : 0
+}
+
+export function buildLogisticsStepsFromRoute({
+  eventId,
+  eventTitle,
+  startTime,
+  endTime,
+  venueName,
+  venueAddress,
+  homeAddress,
+  driveMinutes,
+  distanceMiles,
+  driverLeg1 = 'Jake',
+  driverLeg2 = 'Jake',
+  attendees = [],
+  waitOnSite = true,
+  mode,
+  bufferMinutes = 5,
+}: {
+  eventId: string
+  eventTitle: string
+  startTime: string
+  endTime: string
+  venueName: string
+  venueAddress: string
+  homeAddress?: string
+  driveMinutes: number
+  distanceMiles: number
+  driverLeg1?: string
+  driverLeg2?: string
+  attendees?: string[]
+  waitOnSite?: boolean
+  mode?: LogisticsMode | 'stay' | 'dropoff'
+  bufferMinutes?: number
+}) {
+  const resolvedMode: LogisticsMode = mode === 'dropoff'
+    ? 'two_way'
+    : (mode ?? (waitOnSite ? 'stay' : 'two_way'))
+
+  if (resolvedMode === 'none') {
+    return []
+  }
+
+  const startDate = new Date(startTime)
+  const endDate = new Date(endTime)
+  const isInvalidDate = Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())
+
+  const totalPreMinutes = Math.max(0, driveMinutes) + Math.max(0, bufferMinutes)
+  const departureDate = isInvalidDate ? new Date() : new Date(startDate.getTime() - totalPreMinutes * 60_000)
+  const returnDate = isInvalidDate ? new Date() : new Date(endDate.getTime() + Math.max(0, driveMinutes) * 60_000)
+  const pickupDepartDate = isInvalidDate ? new Date() : new Date(endDate.getTime() - totalPreMinutes * 60_000)
+
+  const attendeesText = attendees.length > 0 ? attendees.join(', ') : 'Family'
+  const durationMinutes = isInvalidDate ? 60 : Math.max(15, Math.round((endDate.getTime() - startDate.getTime()) / 60_000))
+  const hours = Math.floor(durationMinutes / 60)
+  const mins = durationMinutes % 60
+  const durationText = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`
+
+  if (resolvedMode === 'dropoff_only') {
+    return [
+      {
+        id: crypto.randomUUID(),
+        event_id: eventId,
+        sort_order: 1,
+        step_type: 'departure',
+        icon: '🚗',
+        title: 'Leg 1: Drop Off Drive',
+        description: `${driveMinutes} min drive · ${distanceMiles} miles · ${driverLeg1} driving ${attendeesText}`,
+        time: departureDate.toISOString(),
+        location_name: 'Home',
+        address: homeAddress || '',
+      },
+      {
+        id: crypto.randomUUID(),
+        event_id: eventId,
+        sort_order: 2,
+        step_type: 'arrival',
+        icon: '📍',
+        title: venueName || eventTitle || 'Destination',
+        description: `${attendeesText} at venue · Driver departs after drop-off`,
+        time: startDate.toISOString(),
+        location_name: venueName || 'Destination',
+        address: venueAddress || '',
+      },
+    ]
+  }
+
+  if (resolvedMode === 'pickup_only') {
+    return [
+      {
+        id: crypto.randomUUID(),
+        event_id: eventId,
+        sort_order: 1,
+        step_type: 'departure',
+        icon: '🚗',
+        title: 'Leg 1: Pickup Departure Drive',
+        description: `${driveMinutes} min drive · ${distanceMiles} miles · ${driverLeg2 || driverLeg1} leaving to pick up ${attendeesText}`,
+        time: pickupDepartDate.toISOString(),
+        location_name: 'Home',
+        address: homeAddress || '',
+      },
+      {
+        id: crypto.randomUUID(),
+        event_id: eventId,
+        sort_order: 2,
+        step_type: 'return',
+        icon: '🏠',
+        title: 'Return Home with Passengers',
+        description: `${driveMinutes} min return drive · ${driverLeg2 || driverLeg1} driving ${attendeesText}`,
+        time: returnDate.toISOString(),
+        location_name: 'Home',
+        address: homeAddress || '',
+      },
+    ]
+  }
+
+  if (resolvedMode === 'stay') {
+    return [
+      {
+        id: crypto.randomUUID(),
+        event_id: eventId,
+        sort_order: 1,
+        step_type: 'departure',
+        icon: '🚗',
+        title: 'Depart Home Together',
+        description: `${driveMinutes} min drive · ${distanceMiles} miles · ${driverLeg1} driving ${attendeesText}`,
+        time: departureDate.toISOString(),
+        location_name: 'Home',
+        address: homeAddress || '',
+      },
+      {
+        id: crypto.randomUUID(),
+        event_id: eventId,
+        sort_order: 2,
+        step_type: 'arrival',
+        icon: '📍',
+        title: venueName || eventTitle || 'Destination',
+        description: `${driverLeg1} stays on site with ${attendeesText} (${durationText})`,
+        time: startDate.toISOString(),
+        location_name: venueName || 'Destination',
+        address: venueAddress || '',
+      },
+      {
+        id: crypto.randomUUID(),
+        event_id: eventId,
+        sort_order: 3,
+        step_type: 'return',
+        icon: '🏠',
+        title: 'Return Home Together',
+        description: `${driveMinutes} min return drive · ${driverLeg1} driving`,
+        time: returnDate.toISOString(),
+        location_name: 'Home',
+        address: homeAddress || '',
+      },
+    ]
+  }
+
+  // resolvedMode === 'two_way'
+  return [
+    {
+      id: crypto.randomUUID(),
+      event_id: eventId,
+      sort_order: 1,
+      step_type: 'departure',
+      icon: '🚗',
+      title: 'Leg 1: Drop Off Drive',
+      description: `${driveMinutes} min drive · ${distanceMiles} miles · ${driverLeg1} driving ${attendeesText}`,
+      time: departureDate.toISOString(),
+      location_name: 'Home',
+      address: homeAddress || '',
+    },
+    {
+      id: crypto.randomUUID(),
+      event_id: eventId,
+      sort_order: 2,
+      step_type: 'arrival',
+      icon: '📍',
+      title: venueName || eventTitle || 'Destination',
+      description: `${attendeesText} at venue · Pickup scheduled at end`,
+      time: startDate.toISOString(),
+      location_name: venueName || 'Destination',
+      address: venueAddress || '',
+    },
+    {
+      id: crypto.randomUUID(),
+      event_id: eventId,
+      sort_order: 3,
+      step_type: 'pickup',
+      icon: '🏠',
+      title: 'Leg 2: Return Pickup Drive',
+      description: `${driveMinutes} min return drive · ${driverLeg2} driving`,
+      time: returnDate.toISOString(),
+      location_name: 'Home',
+      address: homeAddress || '',
+    },
+  ]
 }

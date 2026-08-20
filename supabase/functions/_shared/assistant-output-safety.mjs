@@ -1,7 +1,9 @@
 const RAW_TOOL_SYNTAX = /(?:^|\n)\s*(?:```(?:tool|python|json)\b|tool_code\b|function_call\b)|\bprint\s*\(\s*(?:update|create|delete|bulk_update)_[a-z_]+\s*\(|\b(?:update|create|delete|bulk_update)_[a-z_]+\s*\(\s*\{/i
 const UNSUPPORTED_WRITE_PROMISE = /\b(?:i['’]?ll|i will|let me|i(?:'m| am) going to)\s+(?:update|change|save|delete|create|add|move|reschedule)\b/i
-const UNSUPPORTED_WRITE_COMPLETION = /\b(?:i(?: have|'ve)\s+)?(?:updated|changed|saved|deleted|created|added|moved|rescheduled|scheduled|booked|planned)\b/i
+const UNSUPPORTED_WRITE_COMPLETION = /\b(?:i(?: have|'ve)\s+)?(?:updated|changed|saved|deleted|created|added|moved|rescheduled|booked)\b|\b(?:i(?: have|'ve)\s+(?:scheduled|planned))\b/i
 const DEFERRED_PROGRESS_ONLY = /\b(?:let me|i(?:'m| am)|i(?:'ll| will))\s+(?:check|look(?:ing)?|search(?:ing)?|find(?:ing)?|work(?:ing)?)\b|(?:^|[.!?]\s+)(?:still\s+)?(?:looking|searching|checking)\s+(?:for|now)\b|\bplease (?:wait|bear with me)\b/i
+
+const NEGATIVE_OR_CLARIFYING_STATEMENT = /\b(?:nothing (?:was|has been)|did not|didn['’]t|could not|couldn['’]t|unable to|failed to|not (?:be )?(?:added|created|saved|deleted|updated|changed|moved|rescheduled|booked)|without (?:adding|creating|saving|deleting|updating|changing)|no (?:events?|items?|changes?) (?:were|was)|what date|what time|which one|please specify|please clarify)\b/i
 
 export function secureAssistantResult(result, options = {}) {
   if (!result || result.type !== 'text') return result
@@ -14,7 +16,6 @@ export function secureAssistantResult(result, options = {}) {
       text: "I couldn't safely prepare that response. Nothing was changed—please say the request again.",
       safety_rejection: 'raw_tool_syntax',
     }
-
   }
 
   if (DEFERRED_PROGRESS_ONLY.test(text) && options.allowDeferredProgress !== true) {
@@ -27,7 +28,9 @@ export function secureAssistantResult(result, options = {}) {
 
   const writeWasVerified = options.writeWasVerified === true || result.write_verified === true
   const userRequestedWrite = options.userRequestedWrite === true
-  if (!writeWasVerified && (
+  const isNegativeOrClarifying = NEGATIVE_OR_CLARIFYING_STATEMENT.test(text)
+
+  if (!writeWasVerified && !isNegativeOrClarifying && (
     UNSUPPORTED_WRITE_PROMISE.test(text) ||
     (userRequestedWrite && UNSUPPORTED_WRITE_COMPLETION.test(text))
   )) {

@@ -8,22 +8,58 @@ Deno.serve(async (req) => {
   const code = url.searchParams.get('code')
   const stateRaw = url.searchParams.get('state')
   const errorParam = url.searchParams.get('error')
-  const APP = Deno.env.get('APP_RETURN_URL')!
+
+  let familyMemberId: string | undefined
+  let includesGmail = false
+  let customReturnUrl: string | undefined
+
+  if (stateRaw) {
+    try {
+      const state = JSON.parse(atob(stateRaw))
+      familyMemberId = state.m
+      includesGmail = !!state.gmail
+      customReturnUrl = state.ret || undefined
+    } catch {
+      // bad state
+    }
+  }
+
+  const resolveAppUrl = () => {
+    let base = customReturnUrl || Deno.env.get('APP_RETURN_URL') || 'https://casa-tabor.vercel.app/settings/google'
+    if (base.includes('192.168.') || base.includes('localhost')) {
+      if (!customReturnUrl) {
+        base = 'https://casa-tabor.vercel.app/settings/google'
+      }
+    }
+    // Ensure base ends with /settings/google
+    if (!base.includes('/settings/google')) {
+      base = base.replace(/\/+$/, '') + '/settings/google'
+    }
+    return base
+  }
+
+  const APP = resolveAppUrl()
   const redir = (to: string) => new Response(null, { status: 302, headers: { location: to } })
   if (errorParam) return redir(APP + '?error=' + encodeURIComponent(errorParam))
-  if (!code || !stateRaw) return redir(APP + '?error=missing_params')
-  let familyMemberId: string
-  let includesGmail = false
+  if (!code || !stateRaw || !familyMemberId) return redir(APP + '?error=missing_params')
+
   try {
-    const state = JSON.parse(atob(stateRaw))
-    familyMemberId = state.m
-    includesGmail = !!state.gmail
-  } catch { return redir(APP + '?error=bad_state') }
-  try {
-    const tokenRes = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ code, client_id: Deno.env.get('GOOGLE_CLIENT_ID')!, client_secret: Deno.env.get('GOOGLE_CLIENT_SECRET')!, redirect_uri: Deno.env.get('GOOGLE_REDIRECT_URI')!, grant_type: 'authorization_code' }) })
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code,
+        client_id: Deno.env.get('GOOGLE_CLIENT_ID')!,
+        client_secret: Deno.env.get('GOOGLE_CLIENT_SECRET')!,
+        redirect_uri: Deno.env.get('GOOGLE_REDIRECT_URI')!,
+        grant_type: 'authorization_code',
+      }),
+    })
     const tokens = await tokenRes.json()
     if (!tokens.access_token) return redir(APP + '?error=exchange_failed')
-    const emailRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', { headers: { authorization: 'Bearer ' + tokens.access_token } })
+    const emailRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+      headers: { authorization: 'Bearer ' + tokens.access_token },
+    })
     const { email } = await emailRes.json()
     const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
     // Google only returns refresh_token on first consent — keep the existing one if not provided
@@ -33,12 +69,45 @@ Deno.serve(async (req) => {
       refreshToken = existing?.refresh_token
     }
     if (!refreshToken) return redir(APP + '?error=no_refresh_token')
-    const tokenRow: Record<string, unknown> = { family_member_id: familyMemberId, google_email: email, refresh_token: refreshToken, access_token: tokens.access_token, expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString(), scope: tokens.scope, updated_at: new Date().toISOString() }
+
+    const rawEmail = String(email || '').trim()
+    const policy = googleConnectionPolicy(rawEmail, TARGET_SYNC_GOOGLE_EMAIL, rawEmail.toLowerCase())
+    const normalizedEmail = policy.googleEmail
+
+    const tokenRow: Record<string, unknown> = {
+      family_member_id: familyMemberId,
+      google_email: normalizedEmail,
+      refresh_token: refreshToken,
+      access_token: tokens.access_token,
+      expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
+      scope: tokens.scope,
+      updated_at: new Date().toISOString(),
+    }
     // Enable Gmail scan if gmail scope was granted (either via gmail flow or standard connect)
     const hasGmailScope = (tokens.scope ?? '').includes('gmail') || includesGmail
     if (hasGmailScope) tokenRow.gmail_scan_enabled = true
-    const policy = googleConnectionPolicy(String(email), TARGET_SYNC_GOOGLE_EMAIL)
-    const normalizedEmail = policy.googleEmail
+
+    // Auto-discover if a calendar named "Casa Tabor" exists in this Google account
+    let targetCalendarId = normalizedEmail
+    try {
+      const calListRes = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=writer', {
+        headers: { authorization: 'Bearer ' + tokens.access_token },
+      })
+      if (calListRes.ok) {
+        const calList = await calListRes.json()
+        const casaCal = (calList.items ?? []).find((c: any) =>
+          (c.summaryOverride || c.summary || '').trim().toLowerCase() === 'casa tabor'
+        )
+        if (casaCal?.id) {
+          targetCalendarId = casaCal.id
+        }
+      }
+    } catch (e) {
+      console.warn('[google-oauth-callback] calendarList auto-discovery notice:', e)
+    }
+
+    const resolvedPolicy = googleConnectionPolicy(normalizedEmail, TARGET_SYNC_GOOGLE_EMAIL, targetCalendarId)
+
     const { error: tokenError } = await sb.from('google_tokens').upsert({
       ...tokenRow,
       google_email: normalizedEmail,
@@ -61,9 +130,9 @@ Deno.serve(async (req) => {
     const { error: connectionError } = await sb.from('calendar_connections').upsert({
       family_member_id: familyMemberId,
       google_email: normalizedEmail,
-      calendar_id: policy.calendarId,
-      access_mode: policy.accessMode,
-      adoption_policy: policy.adoptionPolicy,
+      calendar_id: resolvedPolicy.calendarId,
+      access_mode: resolvedPolicy.accessMode,
+      adoption_policy: resolvedPolicy.adoptionPolicy,
       is_enabled: true,
       health_status: 'connected',
       health_checked_at: now,
@@ -79,10 +148,10 @@ Deno.serve(async (req) => {
       .update({ email: normalizedEmail, google_calendar_id: normalizedEmail })
       .eq('id', familyMemberId)
     if (memberError) throw new Error(`Could not update family member connection: ${memberError.message}`)
-    const returnPath = '/settings/google'
-    return redir(APP.replace(/\/settings\/[^?]*/, returnPath) + '?connected=' + familyMemberId + (includesGmail ? '&gmail=1' : ''))
+
+    return redir(APP + '?connected=' + familyMemberId + (includesGmail ? '&gmail=1' : ''))
   } catch (err) {
-    console.error(err)
+    console.error('[google-oauth-callback] error:', err)
     return redir(APP + '?error=exchange_failed')
   }
 })

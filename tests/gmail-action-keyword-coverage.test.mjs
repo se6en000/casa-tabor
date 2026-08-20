@@ -67,6 +67,9 @@ test('ACTION_KEYWORDS catches actionable school preparation that may be buried i
     'Register Your Ride even if your child is a car rider',
     'Please purchase an agenda in the cafeteria',
     'Ensure all summer assignments are complete before the first day',
+    'PTO Spirit Day 8/28/26 - Dear Parents & Guardians',
+    'Palm Beach School Spirit Week dress up days',
+    'Volunteer sign up for school book fair',
   ]
   for (const text of examples) {
     assert.match(text, ACTION_KEYWORDS, `expected ACTION_KEYWORDS to match: "${text}"`)

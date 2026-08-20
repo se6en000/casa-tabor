@@ -1,17 +1,17 @@
 const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
 const MONTHS = new Map([
-  ['january', 1],
-  ['february', 2],
-  ['march', 3],
-  ['april', 4],
+  ['january', 1], ['jan', 1],
+  ['february', 2], ['feb', 2],
+  ['march', 3], ['mar', 3],
+  ['april', 4], ['apr', 4],
   ['may', 5],
-  ['june', 6],
-  ['july', 7],
-  ['august', 8],
-  ['september', 9],
-  ['october', 10],
-  ['november', 11],
-  ['december', 12],
+  ['june', 6], ['jun', 6],
+  ['july', 7], ['jul', 7],
+  ['august', 8], ['aug', 8],
+  ['september', 9], ['sep', 9], ['sept', 9],
+  ['october', 10], ['oct', 10],
+  ['november', 11], ['nov', 11],
+  ['december', 12], ['dec', 12],
 ])
 
 function offsetMinutes(value) {
@@ -143,6 +143,27 @@ function relativeRange(text, nowParts) {
     return { start, end: dateAfter(start, 1) }
   }
 
+  const weekdayPattern = WEEKDAYS.join('|')
+  const weekdayRangeMatch = text.match(new RegExp(
+    `\\b(?:from\\s+)?(this\\s+|next\\s+)?(${weekdayPattern})\\b.*?\\b(?:through|thru|to|[-–])\\s*(?:(this|next)\\s+)?(${weekdayPattern})\\b`,
+    'i',
+  ))
+  if (weekdayRangeMatch) {
+    const startWd = WEEKDAYS.indexOf(weekdayRangeMatch[2].toLowerCase())
+    const endWd = WEEKDAYS.indexOf(weekdayRangeMatch[4].toLowerCase())
+    if (startWd >= 0 && endWd >= 0) {
+      let startDaysAhead = startWd - nowParts.weekday
+      if (startDaysAhead <= 0) startDaysAhead += 7
+      if (weekdayRangeMatch[1]?.toLowerCase() === 'next') startDaysAhead += 7
+      const start = dateAfter(today, startDaysAhead)
+      let spanDays = endWd - startWd
+      if (spanDays <= 0) spanDays += 7
+      if (weekdayRangeMatch[3]?.toLowerCase() === 'next') spanDays += 7
+      const end = dateAfter(start, spanDays)
+      return { start, end }
+    }
+  }
+
   const weekday = WEEKDAYS.findIndex((day) => new RegExp(`\\b(?:this\\s+|next\\s+)?${day}\\b`, 'i').test(text))
   if (weekday < 0) return null
   const modifier = text.match(new RegExp(`\\b(this|next)\\s+${WEEKDAYS[weekday]}\\b`, 'i'))?.[1]?.toLowerCase()
@@ -229,7 +250,7 @@ export function validateCalendarTemporalProvenance(provenance, proposed, options
     typeof provenance.rangeStart !== 'string' ||
     typeof provenance.rangeEnd !== 'string' ||
     typeof provenance.sourceText !== 'string' ||
-    !['explicit_date', 'explicit_range', 'relative'].includes(provenance.resolutionKind)
+    !['explicit_date', 'explicit_range', 'relative', 'image_provenance', 'user_confirmed'].includes(provenance.resolutionKind)
   ) {
     return { valid: false, reason: 'missing_temporal_provenance' }
   }

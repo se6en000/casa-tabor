@@ -1,30 +1,30 @@
 import { useState, useEffect, Component, type ReactNode } from 'react'
 import { BrowserRouter, useLocation } from 'react-router-dom'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import NavBar from './components/shared/NavBar'
+import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query'
 import AnimatedRoutes from './components/shared/AnimatedRoutes'
 import TabletSidebar from './components/layout/TabletSidebar'
+import MobileFloatingDock from './components/layout/MobileFloatingDock'
 import { useRoomTone } from './hooks/useRoomTone'
 import { usePushNotifications } from './hooks/usePushNotifications'
 import { useAppUpdater } from './hooks/useAppUpdater'
 import { ThemeProvider, useTheme } from './contexts/ThemeContext'
-import { TopBarC } from './components/shared/TopBar'
+import LuxuryTopBar from './components/shared/LuxuryTopBar'
+import MobileTopBar from './components/layout/MobileTopBar'
 import PinGate from './components/shared/PinGate'
-import AIChatDrawer from './components/shared/AIChatDrawer'
 import ArtScreensaver from './components/shared/ArtScreensaver'
 import QuickCreateSheet from './components/shared/QuickCreateSheet'
-import AddEventFab from './components/shared/AddEventFab'
+import SyncTriageModal from './components/calendar/SyncTriageModal'
 import TouchKeyboard from './components/shared/TouchKeyboard'
-import { useRollingEvents } from './hooks/useCalendarEvents'
-import type { EventWithDetails } from './hooks/useCalendarEvents'
-import { useFamilyMembers } from './hooks/useFamilyMembers'
 import { Button } from './components/ui'
-import { useHomeWeather } from './hooks/useHomeWeather'
-import { useLiveClock } from './hooks/useLiveClock'
-import { useWakeWord } from './hooks/useWakeWord'
 import { useIdleTimer } from './hooks/useIdleTimer'
 import { useScreensaverSettings } from './hooks/useScreensaverSettings'
-import EventDetailPanel from './components/calendar/EventDetailPanel'
+import { useLiveClock } from './hooks/useLiveClock'
+import { useRollingEvents } from './hooks/useCalendarEvents'
+import { useAppStore } from './stores/appStore'
+import SidecarCompanion from './components/shared/SidecarCompanion'
+import CanvasUndoToast from './components/canvas/CanvasUndoToast'
+import { useTonightDinnerSync } from './hooks/useTonightDinnerSync'
+import { useReminderNeedsYouActions } from './hooks/useReminderNeedsYouActions'
 
 const SAFE_MODE = String(import.meta.env.VITE_SAFE_MODE ?? '').toLowerCase()
 const IS_SAFE_MODE = SAFE_MODE === '1' || SAFE_MODE === 'true' || SAFE_MODE === 'yes'
@@ -61,150 +61,83 @@ const queryClient = new QueryClient({
   },
 })
 
-type LaunchAgent = 'general' | 'chef'
-
-interface AIDrawerLaunchContext {
-  launchId: string
-  prompt?: string
-  autoSend?: boolean
-  source?: string
-  page?: string
-  agent?: LaunchAgent
-  traceId?: string
-  wakeAt?: number
-}
-
-type OpenAIChatDetail = {
-  right?: number
-  top?: number
-  anchor?: { right: number; top: number }
-  prompt?: string
-  autoSend?: boolean
-  source?: string
-  page?: string
-  agent?: LaunchAgent
-  traceId?: string
-  wakeAt?: number
-}
-
-function GlobalAIDrawer({
-  screensaverActive,
-  open,
-  setOpen,
-  safeMode,
-  routePath,
-  wakeWordEnabled,
-  onOpenEventDetails,
-}: {
-  screensaverActive: boolean
-  open: boolean
-  setOpen: (open: boolean) => void
-  safeMode: boolean
-  routePath: string
-  wakeWordEnabled: boolean
-  onOpenEventDetails: (event: EventWithDetails) => void
-}) {
-  const [anchor, setAnchor] = useState<{ right: number; top: number } | undefined>()
-  const [launchContext, setLaunchContext] = useState<AIDrawerLaunchContext | undefined>()
-  const now = useLiveClock(60_000)
-  const { data: events = [] } = useRollingEvents(now)
-  const { data: family = [] } = useFamilyMembers()
-  const { data: weather } = useHomeWeather()
-  useWakeWord(open, screensaverActive, !safeMode && wakeWordEnabled)
-
-  const routePage = routePath.startsWith('/calendar')
-    ? 'calendar'
-    : routePath.startsWith('/grocery')
-      ? 'grocery'
-      : routePath.startsWith('/cook')
-        ? 'cook'
-        : routePath.startsWith('/briefing')
-          ? 'briefing'
-          : routePath === '/'
-            ? 'home'
-            : 'app'
-
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = ((e as CustomEvent<OpenAIChatDetail>).detail ?? {}) as OpenAIChatDetail
-      const anchorFromEvent = detail.anchor ?? (
-        typeof detail.right === 'number' && typeof detail.top === 'number'
-          ? { right: detail.right, top: detail.top }
-          : undefined
-      )
-      if (anchorFromEvent) setAnchor(anchorFromEvent)
-      const inferredAgent: LaunchAgent = detail.agent ?? (routePage === 'cook' ? 'chef' : 'general')
-      setLaunchContext({
-        launchId: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-        prompt: detail.prompt,
-        autoSend: detail.autoSend,
-        source: detail.source,
-        page: detail.page ?? routePage,
-        agent: inferredAgent,
-        traceId: detail.traceId,
-        wakeAt: detail.wakeAt,
-      })
-      setOpen(true)
-    }
-    document.addEventListener('open-ai-chat', handler)
-    return () => document.removeEventListener('open-ai-chat', handler)
-  }, [routePage, setOpen])
-
-  return (
-    <AIChatDrawer
-      open={open}
-      onClose={() => setOpen(false)}
-      anchor={anchor}
-      page={launchContext?.page ?? routePage}
-      events={events}
-      family={family}
-      homeCity={weather?.city}
-      onSleepCommand={() => document.dispatchEvent(new CustomEvent('screensaver-on'))}
-      launchContext={launchContext}
-      onOpenEventDetails={onOpenEventDetails}
-    />
-  )
-}
-
 function AppShell() {
+  const queryClient = useQueryClient()
   const { currentZone } = useRoomTone()
   const { setRoomToneZone } = useTheme()
   usePushNotifications()
   useAppUpdater()
+  useTonightDinnerSync()
 
   const { settings } = useScreensaverSettings()
   const ssMs   = settings.enabled && !IS_SAFE_MODE ? settings.screensaverMins * 60_000 : Infinity
   const dispMs = settings.displaySleepEnabled && !IS_SAFE_MODE ? settings.displayOffMins * 60_000 : Infinity
   useIdleTimer(ssMs, dispMs)
 
+  const now = useLiveClock(60_000)
+  const { data: rollingEvents = [] } = useRollingEvents(now)
+  const { queueMissedReminders } = useReminderNeedsYouActions()
+
+  useEffect(() => {
+    if (rollingEvents.length > 0) {
+      void queueMissedReminders(rollingEvents, now).catch(() => {})
+    }
+  }, [rollingEvents, now, queueMissedReminders])
+
   const [screensaverActive, setScreensaverActive] = useState(false)
-  const [aiDrawerOpen, setAiDrawerOpen] = useState(false)
+  const {
+    aiDrawerOpen,
+    openEventInSidecar,
+    openActionInSidecar,
+    openAiInSidecar,
+    experienceMode,
+  } = useAppStore()
   const [quickCreateOpen, setQuickCreateOpen] = useState(false)
-  const [selectedDrawerEvent, setSelectedDrawerEvent] = useState<EventWithDetails | null>(null)
   const location = useLocation()
-  // Grocery page has its own dedicated FAB for adding items.
-  const hideFab = location.pathname.startsWith('/settings') || location.pathname.startsWith('/grocery') || screensaverActive
 
   useEffect(() => {
     setRoomToneZone(currentZone)
   }, [currentZone, setRoomToneZone])
 
   useEffect(() => {
+    const triggerCatchUpSync = () => {
+      void queryClient.invalidateQueries({ queryKey: ['events'] })
+      void queryClient.invalidateQueries({ queryKey: ['grocery'] })
+      void queryClient.invalidateQueries({ queryKey: ['notifications'] })
+      void queryClient.invalidateQueries({ queryKey: ['conflicts'] })
+    }
+
     const onSleep = () => setScreensaverActive(true)
     const onSleepIdle = () => {
       if (aiDrawerOpen) return
       setScreensaverActive(true)
     }
-    const onWake  = () => setScreensaverActive(false)
+    const onWake  = () => {
+      setScreensaverActive(false)
+      triggerCatchUpSync()
+    }
+    const onVisibilityOrFocus = () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'hidden') {
+        triggerCatchUpSync()
+      }
+    }
+
     document.addEventListener('screensaver-on', onSleep)
     document.addEventListener('screensaver-idle-on', onSleepIdle)
     document.addEventListener('wake-kiosk', onWake)
+    document.addEventListener('visibilitychange', onVisibilityOrFocus)
+    window.addEventListener('focus', onVisibilityOrFocus)
+    window.addEventListener('online', onVisibilityOrFocus)
+
     return () => {
       document.removeEventListener('screensaver-on', onSleep)
       document.removeEventListener('screensaver-idle-on', onSleepIdle)
       document.removeEventListener('wake-kiosk', onWake)
+      document.removeEventListener('visibilitychange', onVisibilityOrFocus)
+      window.removeEventListener('focus', onVisibilityOrFocus)
+      window.removeEventListener('online', onVisibilityOrFocus)
     }
-  }, [aiDrawerOpen])
+  }, [aiDrawerOpen, queryClient])
 
   useEffect(() => {
     fetch('http://127.0.0.1:8766/wake-sensitivity', {
@@ -214,44 +147,64 @@ function AppShell() {
     }).catch(() => {})
   }, [settings.wakeWordSensitivity])
 
-  // Global "open this event's details" primitive — any surface in the app (not just the
-  // AI chat drawer) can dispatch this with just an event id. We only need `{ id }` here;
-  // EventDetailPanel fetches the full record itself via useEventDetails().
+  // Global "open this event's details" primitive — opens non-blocking sidecar companion
   useEffect(() => {
     const onOpenEventById = (e: Event) => {
       const eventId = (e as CustomEvent<{ eventId?: string }>).detail?.eventId
       if (!eventId) return
-      document.dispatchEvent(new CustomEvent('casa:close-event-details'))
-      setAiDrawerOpen(false)
-      setSelectedDrawerEvent({ id: eventId } as EventWithDetails)
+      openEventInSidecar(eventId)
     }
     document.addEventListener('casa:open-event-details', onOpenEventById)
     return () => document.removeEventListener('casa:open-event-details', onOpenEventById)
-  }, [])
+  }, [openEventInSidecar])
 
-  const openEventDetailsFromAssistant = (event: EventWithDetails) => {
-    document.dispatchEvent(new CustomEvent('casa:close-event-details'))
-    setAiDrawerOpen(false)
-    setSelectedDrawerEvent(event)
-  }
+  // Global "open this action's details" primitive — opens non-blocking sidecar companion
+  useEffect(() => {
+    const onOpenActionById = (e: Event) => {
+      const actionId = (e as CustomEvent<{ actionId?: string }>).detail?.actionId
+      if (!actionId) return
+      openActionInSidecar(actionId)
+    }
+    document.addEventListener('casa:open-action-details', onOpenActionById)
+    return () => document.removeEventListener('casa:open-action-details', onOpenActionById)
+  }, [openActionInSidecar])
+
+  // Global AI chat dispatcher — opens Copilot tab in sidecar companion
+  useEffect(() => {
+    const onOpenAi = (e: Event) => {
+      const customEvent = e as CustomEvent<import('./stores/appStore').AIChatLaunchContext | undefined>
+      const detail = customEvent.detail
+      openAiInSidecar(detail || undefined)
+    }
+    document.addEventListener('open-ai-chat', onOpenAi)
+    return () => document.removeEventListener('open-ai-chat', onOpenAi)
+  }, [openAiInSidecar])
 
   return (
     <div className="app-shell flex flex-col overflow-hidden bg-casa-bg">
-      {/* Full-width top bar — sticky, never scrolls */}
-      <TopBarC />
+      {/* Full-width luxury top bar — adapts to experience mode (desktop >= lg) */}
+      <LuxuryTopBar />
 
-      <div className="app-shell-main flex flex-1 min-h-0">
-        <TabletSidebar />
+      {/* Global luxury concierge top bar (< lg) */}
+      <MobileTopBar />
+
+      <div className="app-shell-main flex flex-1 min-h-0 relative overflow-hidden">
+        {experienceMode === 'classic' && <TabletSidebar aiDrawerOpen={aiDrawerOpen} />}
         <div className="flex-1 min-w-0 overflow-hidden h-full">
           <AnimatedRoutes />
         </div>
+        {/* Unified non-blocking Sidecar Companion for Events & AI */}
+        <SidecarCompanion
+          screensaverActive={screensaverActive}
+          safeMode={IS_SAFE_MODE}
+          routePath={location.pathname}
+          wakeWordEnabled={settings.wakeWordEnabled}
+        />
       </div>
 
-      {/* Bottom nav only visible on mobile */}
-      <NavBar />
-
-      {!hideFab && (
-        <AddEventFab onClick={() => setQuickCreateOpen(true)} visible={!quickCreateOpen} />
+      {/* Dynamic Floating Navigation Capsule on mobile viewports (< lg) */}
+      {!screensaverActive && (
+        <MobileFloatingDock onOpenQuickCreate={() => setQuickCreateOpen(true)} />
       )}
 
       <QuickCreateSheet
@@ -259,23 +212,12 @@ function AppShell() {
         onClose={() => setQuickCreateOpen(false)}
       />
 
+      <SyncTriageModal />
+
       <TouchKeyboard />
 
-      {/* Global AI drawer — opens from TopBar sparkle or wake word */}
-      <GlobalAIDrawer
-        screensaverActive={screensaverActive}
-        open={aiDrawerOpen}
-        setOpen={setAiDrawerOpen}
-        safeMode={IS_SAFE_MODE}
-        routePath={location.pathname}
-        wakeWordEnabled={settings.wakeWordEnabled}
-        onOpenEventDetails={openEventDetailsFromAssistant}
-      />
-
-      <EventDetailPanel
-        event={selectedDrawerEvent}
-        onClose={() => setSelectedDrawerEvent(null)}
-      />
+      {/* Global Undo Toast */}
+      <CanvasUndoToast />
 
       {/* Art screensaver overlay — always available when triggered manually; idle auto-fire respects settings.enabled */}
       {screensaverActive && (
@@ -307,3 +249,4 @@ export default function App() {
     </AppErrorBoundary>
   )
 }
+

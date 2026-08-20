@@ -1,46 +1,78 @@
 import { addDays, differenceInCalendarDays, format, isSameDay, startOfDay } from 'date-fns'
+import { toZonedTime, fromZonedTime } from 'date-fns-tz'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
+
+export const HOUSEHOLD_TIMEZONE = 'America/New_York'
 
 type EventTimeLike = Pick<EventWithDetails, 'start_time' | 'end_time'> & { all_day?: boolean }
 
-const DAY_MS = 24 * 60 * 60 * 1000
-
 function asDate(value: string): Date {
-  return new Date(value)
+  if (!value) return new Date()
+  return toZonedTime(value, HOUSEHOLD_TIMEZONE)
 }
 
-function parseDatePortionAsLocal(value: string): Date {
+export function serializeToZonedIso(date: Date): string {
+  return fromZonedTime(date, HOUSEHOLD_TIMEZONE).toISOString()
+}
+
+export function parseDatePortionAsLocal(value: string): Date {
+  if (!value) return new Date()
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(value)
-  if (!m) return new Date(value)
+  if (!m) return toZonedTime(value, HOUSEHOLD_TIMEZONE)
   return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 0, 0, 0, 0)
 }
 
-function looksLikeMidnightTimestamp(value: string): boolean {
+function looksLikeMidnightOrExclusiveTimestamp(value: string): boolean {
+  if (!value) return false
+  if (value.includes('23:59')) return false
   const timeMatch = /T(\d{2}):(\d{2})(?::(\d{2}))?/.exec(value)
-  if (!timeMatch) return true
+  if (!timeMatch) return false
   const hh = timeMatch[1]
   const mm = timeMatch[2]
-  const ss = timeMatch[3] ?? '00'
-  return hh === '00' && mm === '00' && ss === '00'
+  return (hh === '00' && mm === '00') || (hh === '12' && mm === '00') || (hh === '04' && mm === '00') || (hh === '05' && mm === '00')
 }
 
 export function getEventStartDate(event: EventTimeLike): Date {
-  return event.all_day ? parseDatePortionAsLocal(event.start_time) : asDate(event.start_time)
+  if (!event.all_day) return asDate(event.start_time)
+  return parseDatePortionAsLocal(event.start_time)
 }
 
 export function getEventEndDate(event: EventTimeLike): Date {
-  if (!event.all_day) return asDate(event.end_time)
-  const endDayStart = parseDatePortionAsLocal(event.end_time)
-  if (looksLikeMidnightTimestamp(event.end_time)) {
-    return new Date(endDayStart.getTime() - 1)
+  if (!event.all_day) {
+    if (!event.end_time) return asDate(event.start_time)
+    return asDate(event.end_time)
   }
-  return new Date(endDayStart.getTime() + DAY_MS - 1)
+
+  const startLocal = getEventStartDate(event)
+  if (!event.end_time) {
+    return new Date(startLocal.getFullYear(), startLocal.getMonth(), startLocal.getDate(), 23, 59, 59, 999)
+  }
+
+  const endDayParsed = parseDatePortionAsLocal(event.end_time)
+  if (Number.isNaN(endDayParsed.getTime())) {
+    return new Date(startLocal.getFullYear(), startLocal.getMonth(), startLocal.getDate(), 23, 59, 59, 999)
+  }
+
+  const diffCalendarDays = differenceInCalendarDays(endDayParsed, startLocal)
+  if (diffCalendarDays <= 0) {
+    return new Date(startLocal.getFullYear(), startLocal.getMonth(), startLocal.getDate(), 23, 59, 59, 999)
+  }
+
+  const isExclusiveBoundary = looksLikeMidnightOrExclusiveTimestamp(event.end_time)
+  if (isExclusiveBoundary) {
+    const inclusiveEndDay = addDays(endDayParsed, -1)
+    const safeEndDay = inclusiveEndDay < startLocal ? startLocal : inclusiveEndDay
+    return new Date(safeEndDay.getFullYear(), safeEndDay.getMonth(), safeEndDay.getDate(), 23, 59, 59, 999)
+  }
+
+  return new Date(endDayParsed.getFullYear(), endDayParsed.getMonth(), endDayParsed.getDate(), 23, 59, 59, 999)
 }
+
 
 export function eventOverlapsRange(event: EventTimeLike, rangeStart: Date, rangeEndExclusive: Date): boolean {
   const start = getEventStartDate(event)
   const end = getEventEndDate(event)
-  return start < rangeEndExclusive && end > rangeStart
+  return start < rangeEndExclusive && end >= rangeStart
 }
 
 export function eventOverlapsDay(event: EventTimeLike, day: Date): boolean {
@@ -58,9 +90,7 @@ export function getEventDisplayStartDay(event: EventTimeLike): Date {
 }
 
 export function getEventDisplayEnd(event: EventTimeLike): Date {
-  if (event.all_day) return getEventEndDate(event)
-  const end = getEventEndDate(event)
-  return new Date(end.getTime() - 1)
+  return getEventEndDate(event)
 }
 
 export function getEventSpanDayCount(event: EventTimeLike): number {
@@ -141,3 +171,30 @@ export function buildAiDraftPrompt(params: {
   if (bodyContext) lines.push(`Context:\n${bodyContext}`)
   return lines.join('\n')
 }
+
+/**
+ * Format minutes into a compact human-friendly string (e.g. 109m -> "1h 49m", 60m -> "1h", 25m -> "25m").
+ */
+export function formatDurationHuman(minutes: number | null | undefined): string {
+  if (minutes === null || minutes === undefined) return ''
+  const clamped = Math.max(0, Math.round(minutes))
+  const hours = Math.floor(clamped / 60)
+  const mins = clamped % 60
+  if (hours === 0) return `${mins}m`
+  if (mins === 0) return `${hours}h`
+  return `${hours}h ${mins}m`
+}
+
+/**
+ * Format minutes into an uppercase tracked string (e.g. 109m -> "1H 49M", 45m -> "45 MIN", 60m -> "1 HR").
+ */
+export function formatDurationLong(minutes: number | null | undefined): string {
+  if (minutes === null || minutes === undefined) return ''
+  const clamped = Math.max(0, Math.round(minutes))
+  const hours = Math.floor(clamped / 60)
+  const mins = clamped % 60
+  if (hours === 0) return `${mins} MIN`
+  if (mins === 0) return `${hours} HR`
+  return `${hours}H ${mins}M`
+}
+

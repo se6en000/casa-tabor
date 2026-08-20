@@ -171,12 +171,21 @@ Deno.serve(async (req) => {
     .slice(0, 12)
 
   const runs = {
-    analyze_conflicts: { ok: !conflictRun.error, error: conflictRun.error?.message ?? null },
-    analyze_prep: { ok: !prepRun.error, error: prepRun.error?.message ?? null },
-    weather_pending: { ok: !weatherRun.error, error: weatherRun.error?.message ?? null },
+    analyze_conflicts: {
+      ok: !conflictRun.error && (conflictRun.data ? conflictRun.data.ok !== false : true),
+      error: conflictRun.error?.message ?? (conflictRun.data?.ok === false ? conflictRun.data?.error : null),
+    },
+    analyze_prep: {
+      ok: !prepRun.error && (prepRun.data ? prepRun.data.ok !== false : true),
+      error: prepRun.error?.message ?? (prepRun.data?.ok === false ? prepRun.data?.error : null),
+    },
+    weather_pending: {
+      ok: !weatherRun.error && (weatherRun.data ? weatherRun.data.ok !== false : true),
+      error: weatherRun.error?.message ?? (weatherRun.data?.ok === false ? weatherRun.data?.error : null),
+    },
     household_graph: {
       ok: !graphRun.error && !!graphRun.data?.ok,
-      error: graphRun.error?.message ?? graphRun.data?.error ?? null,
+      error: graphRun.error?.message ?? (graphRun.data?.ok === false ? graphRun.data?.error : null),
       counts: graphRun.data?.counts ?? null,
     },
   }

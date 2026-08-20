@@ -2,12 +2,13 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { format, startOfWeek, addDays, isToday, startOfDay } from 'date-fns'
 import { useWeekEvents } from '../../hooks/useCalendarEvents'
 import { useCalendarStore } from '../../stores/calendarStore'
+import { useAppStore } from '../../stores/appStore'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
 import EventBlock from './EventBlock'
 import EventDetailPanel from './EventDetailPanel'
 import EventEditSheet from './EventEditSheet'
-import QuickCreateSheet from '../shared/QuickCreateSheet'
+import PalmBeachFolioCard from './PalmBeachFolioCard'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { cn } from '../../utils/cn'
 import { cleanEventTitle } from '../../utils/eventTitle'
@@ -28,6 +29,8 @@ interface DragState {
   clientX: number
   clientY: number
   grabOffsetPx: number
+  origStart?: Date
+  origDurationMs?: number
   ghostWidth: number
   ghostHeight: number
 }
@@ -55,7 +58,7 @@ function computeDropInfo(d: DragState, gridEl: HTMLDivElement, days: Date[]) {
   const hours = Math.floor(clampedHour)
   const minutes = Math.round((clampedHour % 1) * 60)
 
-  const durationMs = new Date(d.event.end_time).getTime() - new Date(d.event.start_time).getTime()
+  const durationMs = d.origDurationMs ?? (new Date(d.event.end_time).getTime() - new Date(d.event.start_time).getTime())
   const newStart = new Date(targetDay)
   newStart.setHours(hours, minutes, 0, 0)
   const newEnd = new Date(newStart.getTime() + durationMs)
@@ -72,26 +75,32 @@ function getPrimaryColor(event: EventWithDetails): string {
 
 export default function WeekView() {
   const { selectedDate, visibleMembers } = useCalendarStore()
+  const { selectedSidecarEventId, aiDrawerOpen, sidecarTab, openEventInSidecar } = useAppStore()
   const weekStart = startOfWeek(selectedDate, { weekStartsOn: 0 })
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
   const weekEnd = addDays(weekStart, 6)
 
-  const { data: allEvents, isLoading } = useWeekEvents(selectedDate)
+  const { data: allEvents, isLoading, isError, refetch } = useWeekEvents(selectedDate)
   const events = useMemo(() => {
     if (!allEvents) return []
     if (visibleMembers.length === 0) return allEvents
     return allEvents.filter((ev) =>
-      isHoliday(ev) || isReminder(ev) || ev.members?.some((m) => visibleMembers.includes(m.family_member.id)),
+      isHoliday(ev) ||
+      isReminder(ev) ||
+      ev.members?.length === 0 ||
+      ev.members?.some((m) => visibleMembers.includes(m.family_member?.id)) ||
+      (Boolean(ev.source_member_id) && visibleMembers.includes(ev.source_member_id!))
     )
   }, [allEvents, visibleMembers])
 
+  const activeEventId = aiDrawerOpen && sidecarTab === 'event' ? selectedSidecarEventId : null
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [editEventId, setEditEventId] = useState<string | null>(null)
   const selectedEvent = selectedEventId ? (events?.find(e => e.id === selectedEventId) ?? null) : null
   const editEvent = editEventId ? (events?.find(e => e.id === editEventId) ?? null) : null
 
-  // ── Quick create (long-press empty slot) ─────────────────────
-  const [quickCreate, setQuickCreate] = useState<{ open: boolean; start?: Date }>({ open: false })
+  // ── Quick create (Folio popover) ─────────────────────
+  const [folioPopover, setFolioPopover] = useState<{ open: boolean; start: Date } | null>(null)
   const slotLongPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const slotLongPressOrigin = useRef<{ x: number; y: number; day: Date } | null>(null)
 
@@ -115,7 +124,7 @@ export default function WeekView() {
       const start = new Date(origin.day)
       start.setHours(hours, minutes, 0, 0)
       navigator.vibrate?.(30)
-      setQuickCreate({ open: true, start })
+      setFolioPopover({ open: true, start })
     }, 500)
   }, [])
 
@@ -156,7 +165,7 @@ export default function WeekView() {
       const minutes = snapped % 1 === 0.5 ? 30 : 0
       const start = new Date(origin.day)
       start.setHours(hours, minutes, 0, 0)
-      setQuickCreate({ open: true, start })
+      setFolioPopover({ open: true, start })
     }, 500)
   }, [])
 
@@ -178,7 +187,7 @@ export default function WeekView() {
     const minutes = snapped % 1 === 0.5 ? 30 : 0
     const start = new Date(day)
     start.setHours(hours, minutes, 0, 0)
-    setQuickCreate({ open: true, start })
+    setFolioPopover({ open: true, start })
   }, [])
 
   // Prevent browser context menu on right-click over the calendar grid
@@ -257,6 +266,8 @@ export default function WeekView() {
       clientX,
       clientY,
       grabOffsetPx: Math.max(0, Math.min(grabOffsetPx, height - 8)),
+      origStart: new Date(event.start_time),
+      origDurationMs: new Date(event.end_time).getTime() - new Date(event.start_time).getTime(),
       ghostWidth: colWidth * 0.88,
       ghostHeight: height,
     }
@@ -336,10 +347,24 @@ export default function WeekView() {
   // Are there any visible multi-day events this week?
   const visibleMultiDay = multiDayEvents.filter(ev => getMultiDaySpan(ev))
 
-  if (isLoading) {
+  if (isLoading && !allEvents) {
     return (
       <div className="flex items-center justify-center h-64">
         <span className="text-casa-muted text-body animate-breathe">Loading events...</span>
+      </div>
+    )
+  }
+
+  if (isError && !allEvents) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-3">
+        <span className="text-casa-muted text-body">Unable to load calendar events</span>
+        <button
+          onClick={() => void refetch()}
+          className="text-casa-gold text-body-sm font-semibold hover:underline"
+        >
+          Try again
+        </button>
       </div>
     )
   }
@@ -402,18 +427,25 @@ export default function WeekView() {
               const color = holiday ? HOLIDAY_COLOR : reminder ? REMINDER_COLOR : getPrimaryColor(ev)
               const leftPct = (span.startCol / 7) * 100
               const widthPct = ((span.endCol - span.startCol + 1) / 7) * 100
-              const isSelected = selectedEventId === ev.id
+              const isSelected = activeEventId === ev.id
 
               return (
                 <button
                   key={ev.id}
-                  onClick={(e) => { e.stopPropagation(); setSelectedEventId(ev.id) }}
+                  data-calendar-event
+                  data-sidecar-loadable="true"
+                  data-event-id={ev.id}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    openEventInSidecar(ev.id)
+                    setSelectedEventId(ev.id)
+                  }}
                   onDoubleClick={(e) => { e.stopPropagation(); setSelectedEventId(null); setEditEventId(ev.id) }}
                   title={`${ev.title} — click to view, double-click to edit`}
                   className={cn(
                     'absolute flex items-center px-2 rounded text-caption font-semibold truncate transition-all',
                     'text-white',
-                    isSelected ? 'brightness-110 ring-2 ring-white/60' : 'hover:brightness-110',
+                    isSelected ? 'brightness-110 ring-2 ring-casa-gold font-bold shadow-md z-10' : 'hover:brightness-110',
                   )}
                   style={{
                     left: `calc(${leftPct}% + 2px)`,
@@ -434,7 +466,7 @@ export default function WeekView() {
       {/* ── Time grid ────────────────────────────────────────────── */}
       <div
         ref={gridScrollRef}
-        className={cn('flex-1 overflow-y-auto', drag ? 'cursor-grabbing select-none' : '')}
+        className={cn('flex-1 overflow-y-auto pb-36 md:pb-0', drag ? 'cursor-grabbing select-none' : '')}
       >
         <div className="grid grid-cols-[60px_repeat(7,1fr)]" style={{ height: `${HOURS.length * HOUR_HEIGHT}px` }}>
           {/* Hour labels */}
@@ -506,7 +538,11 @@ export default function WeekView() {
                     <EventBlock
                       key={event.id}
                       event={event}
-                      onClick={() => setSelectedEventId(event.id)}
+                      isActive={activeEventId === event.id}
+                      onClick={() => {
+                        openEventInSidecar(event.id)
+                        setSelectedEventId(event.id)
+                      }}
                       onDoubleClick={() => { setSelectedEventId(null); setEditEventId(event.id) }}
                       columnCount={overlap.columnCount}
                       columnIndex={overlap.columnIndex}
@@ -573,12 +609,22 @@ export default function WeekView() {
         />
       )}
 
-      {/* Quick create (long-press empty slot) */}
-      <QuickCreateSheet
-        open={quickCreate.open}
-        initialStart={quickCreate.start}
-        onClose={() => setQuickCreate({ open: false })}
-      />
+      {/* Palm Beach Folio Popover */}
+      {folioPopover?.open && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-casa-navy/40 backdrop-blur-xs"
+          onClick={() => setFolioPopover(null)}
+        >
+          <div onClick={(e) => e.stopPropagation()}>
+            <PalmBeachFolioCard
+              contextDate={folioPopover.start}
+              initialStart={folioPopover.start}
+              mode="popover"
+              onClose={() => setFolioPopover(null)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -7,10 +7,9 @@ import { cleanEventTitle } from '../utils/eventTitle'
 import { buildReminderPrepDescription } from '../utils/reminderLateness'
 import { computeReminderSnoozeWindow } from '../utils/reminderSnooze'
 import type { SnoozeDuration } from '../utils/snoozeDuration'
+import { publishEventAggregatePatch, evictEventFromAllCaches } from '../lib/eventAggregateCache'
 
 const ONE_HOUR_MS = 60 * 60 * 1000
-const ONE_DAY_MS = 24 * 60 * 60 * 1000
-const MISSED_GRACE_MS = 10 * 60 * 1000
 
 const REMINDER_SOURCE_MANUAL = 'reminder_manual'
 const REMINDER_SOURCE_MISSED = 'reminder_missed'
@@ -24,8 +23,10 @@ export function useReminderNeedsYouActions() {
     await Promise.all([
       qc.invalidateQueries({ queryKey: ['today-events'] }),
       qc.invalidateQueries({ queryKey: ['events'] }),
+      qc.invalidateQueries({ queryKey: ['rolling-events'] }),
       qc.invalidateQueries({ queryKey: ['prep-items'] }),
     ])
+    void qc.refetchQueries({ queryKey: ['events'], type: 'active' })
   }, [qc])
 
   const ensureReminderInNeedsYou = useCallback(async (
@@ -38,23 +39,21 @@ export function useReminderNeedsYouActions() {
       .select('id')
       .in('source_type', activeSources)
       .eq('source_ref', event.id)
+      .eq('dismissed', false)
       .limit(1)
 
     if (existingError) throw existingError
-    if ((existing ?? []).length > 0) return
+    if (existing && existing.length > 0) return
 
     const now = new Date()
-    const dueBy = new Date(now.getTime() + ONE_DAY_MS)
-    const overdueMs = now.getTime() - (getEventStartDate(event).getTime() + MISSED_GRACE_MS)
-    const priority = sourceType === REMINDER_SOURCE_MISSED && overdueMs > 2 * ONE_HOUR_MS ? 3 : 2
+    const startDate = getEventStartDate(event)
+    const dueBy = sourceType === REMINDER_SOURCE_MISSED ? now : new Date(startDate.getTime() + ONE_HOUR_MS)
+    const priority = sourceType === REMINDER_SOURCE_MISSED ? 'high' : 'medium'
 
     const { error: insertError } = await supabase
       .from('prep_items')
       .insert({
-        event_id: null,
-        type: 'reminder',
-        category: 'general_todo',
-        emoji: '🔔',
+        title: cleanEventTitle(event.title),
         description: buildReminderPrepDescription(cleanEventTitle(event.title), sourceType),
         event_title: cleanEventTitle(event.title),
         event_date: event.start_time,
@@ -73,6 +72,13 @@ export function useReminderNeedsYouActions() {
   const snoozeReminderByDuration = useCallback(async (event: EventWithDetails, duration: SnoozeDuration = '1h') => {
     const window = computeReminderSnoozeWindow(event.start_time, event.end_time, duration, new Date())
 
+    // Optimistically update all 4 caches
+    publishEventAggregatePatch(qc, event.id, {
+      start_time: window.start,
+      end_time: window.end,
+      status: 'confirmed',
+    })
+
     const { error } = await supabase
       .from('events')
       .update({
@@ -84,9 +90,12 @@ export function useReminderNeedsYouActions() {
 
     if (error) throw error
     await invalidateReminderSurfaces()
-  }, [invalidateReminderSurfaces])
+  }, [qc, invalidateReminderSurfaces])
 
   const moveReminderToNeedsYou = useCallback(async (event: EventWithDetails) => {
+    // 0ms Evict from all caches
+    evictEventFromAllCaches(qc, event.id)
+
     await ensureReminderInNeedsYou(event, REMINDER_SOURCE_MANUAL)
 
     const { error } = await supabase
@@ -96,12 +105,15 @@ export function useReminderNeedsYouActions() {
 
     if (error) throw error
     await invalidateReminderSurfaces()
-  }, [ensureReminderInNeedsYou, invalidateReminderSurfaces])
+  }, [qc, ensureReminderInNeedsYou, invalidateReminderSurfaces])
 
   const completeReminder = useCallback(async (
     reminderId: string,
     expectedUpdatedAt?: string,
   ) => {
+    // 0ms Evict from all caches
+    evictEventFromAllCaches(qc, reminderId)
+
     const { data, error } = await supabase.rpc('complete_reminder_with_linked_actions', {
       p_reminder_id: reminderId,
       p_expected_updated_at: expectedUpdatedAt ?? null,
@@ -110,7 +122,7 @@ export function useReminderNeedsYouActions() {
     if (!data?.ok) throw new Error('Casa could not complete this reminder.')
     await invalidateReminderSurfaces()
     return data
-  }, [invalidateReminderSurfaces])
+  }, [qc, invalidateReminderSurfaces])
 
   const queueMissedReminders = useCallback(async (events: EventWithDetails[], now: Date) => {
     const nowMs = now.getTime()
@@ -118,16 +130,16 @@ export function useReminderNeedsYouActions() {
       const startMs = getEventStartDate(event).getTime()
       return (event.event_type === 'reminder')
         && event.status !== 'cancelled'
-        && (nowMs > startMs + MISSED_GRACE_MS)
+        && (nowMs > startMs)
     })
 
     if (missed.length === 0) return
 
-    const existingSources = [REMINDER_SOURCE_MANUAL, REMINDER_SOURCE_MISSED]
+    const activeSources = [REMINDER_SOURCE_MANUAL, REMINDER_SOURCE_MISSED]
     const { data: existing, error: existingError } = await supabase
       .from('prep_items')
-      .select('source_ref')
-      .in('source_type', existingSources)
+      .select('source_ref, dismissed')
+      .in('source_type', activeSources)
       .in('source_ref', missed.map((event) => event.id))
 
     if (existingError) throw existingError
@@ -136,10 +148,10 @@ export function useReminderNeedsYouActions() {
     const toInsert = missed.filter((event) => !existingIds.has(event.id))
     if (toInsert.length === 0) return
 
-    const dueBy = new Date(nowMs + ONE_DAY_MS).toISOString()
     const rows = toInsert.map((event) => {
-      const overdueMs = nowMs - (getEventStartDate(event).getTime() + MISSED_GRACE_MS)
+      const overdueMs = nowMs - getEventStartDate(event).getTime()
       const priority = overdueMs > 2 * ONE_HOUR_MS ? 3 : 2
+      const assignee = event.source_member_id || event.members?.[0]?.family_member?.id || null
       return {
         event_id: null,
         type: 'reminder',
@@ -148,13 +160,14 @@ export function useReminderNeedsYouActions() {
         description: buildReminderPrepDescription(cleanEventTitle(event.title), REMINDER_SOURCE_MISSED),
         event_title: cleanEventTitle(event.title),
         event_date: event.start_time,
-        due_by: dueBy,
+        due_by: event.start_time,
         priority,
         dismissed: false,
         source_type: REMINDER_SOURCE_MISSED,
         source_ref: event.id,
         source_pattern_key: 'reminder:missed',
         source_confidence: 1,
+        assigned_to: assignee,
       }
     })
 

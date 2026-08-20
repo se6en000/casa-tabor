@@ -7,7 +7,7 @@ const migration = readFileSync(
   'utf8',
 )
 const prepHooks = readFileSync(new URL('../src/hooks/usePrepItems.ts', import.meta.url), 'utf8')
-const panel = readFileSync(new URL('../src/components/home/PrepItemDetailPanel.tsx', import.meta.url), 'utf8')
+const panel = readFileSync(new URL('../src/components/canvas/widgets/ActionInspectionSidecar.tsx', import.meta.url), 'utf8')
 const types = readFileSync(new URL('../src/types/index.ts', import.meta.url), 'utf8')
 
 test('migration adds a nullable assigned_to FK to family_members on prep_items', () => {
@@ -64,16 +64,8 @@ test('assignment is a single-select mutation against prep_items.assigned_to', ()
   assert.match(fnBody, /update\(\{ assigned_to: familyMemberId \}\)/)
 })
 
-test('detail panel surfaces confidence chip, assignment picker, and inline due-by editor', () => {
-  assert.match(panel, /prepItemConfidenceLabel/)
-  assert.match(panel, /useSetPrepItemAssignee/)
-  assert.match(panel, /useUpdatePrepItemDueBy/)
+test('ActionInspectionSidecar uses usePrepItemDetails and source synthesis', () => {
+  assert.match(panel, /usePrepItemDetails/)
+  assert.match(panel, /synthesizeActionAnalysis/)
   assert.match(panel, /useFamilyMembers/)
-  assert.match(panel, /will not change any linked calendar event/)
-})
-
-test('source-aware section shows event snapshot for calendar_ai and email for gmail', () => {
-  assert.match(panel, /data\?\.eventSnapshot/)
-  assert.match(panel, /data\?\.gmailContext/)
-  assert.match(panel, /data\?\.gmailContext \? 'Email context' : 'Source event'/)
 })

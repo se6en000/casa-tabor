@@ -13,6 +13,7 @@ export function LeaveByCard({
   travelEta,
   travelEtaLoading,
   travelEtaError,
+  bufferMins = 5,
 }: {
   origin?: string | null
   destination: string | null
@@ -23,6 +24,7 @@ export function LeaveByCard({
   travelEta?: TravelEtaResult | null
   travelEtaLoading?: boolean
   travelEtaError?: boolean
+  bufferMins?: number
 }) {
   const targetValue = departureTimeIso ?? eventStartIso
   const target = targetValue ? new Date(targetValue) : null
@@ -33,7 +35,7 @@ export function LeaveByCard({
     eventStartIso,
     departureTimeIso,
     enabled: shouldRun && !travelEta,
-    bufferMins: 10,
+    bufferMins,
   })
   const data = travelEta ?? query.data
   const isLoading = travelEtaLoading ?? query.isLoading

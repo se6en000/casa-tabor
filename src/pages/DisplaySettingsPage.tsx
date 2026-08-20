@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react'
-import { CheckCircle, Monitor, Clock, Eye, Sunset, Sliders, Cpu, Palette, Image, ToggleLeft, Sun, RotateCcw, Type } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { CheckCircle, Monitor, Clock, Eye, Sunset, Sliders, Cpu, Palette, Image, Type, Sparkles, LayoutGrid } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
 import { SettingsPageHeader, SettingsToggle as Toggle } from '../components/settings'
-import { Alert, Button, Card, DisclosureSection, IconButton, SegmentedControl, SectionHeader as SharedSectionHeader } from '../components/ui'
-import { useTheme, PRESETS, DEFAULTS, MIDNIGHT_GALLERY_DEFAULTS, type ThemeColors } from '../contexts/ThemeContext'
+import { Button, Card, SectionHeader as SharedSectionHeader } from '../components/ui'
+import { useTheme, PRESETS, type ThemeColors } from '../contexts/ThemeContext'
 import { DEFAULT_FONT_SCALE, MAX_FONT_SCALE, MIN_FONT_SCALE } from '../design-system/tokens.mjs'
-import { getThemeContrastIssues } from '../design-system/themeContrast.mjs'
+import { useAppStore } from '../stores/appStore'
 import {
   useRoomTone,
   getZoneForHour,
@@ -21,37 +22,6 @@ import { useScreensaverSettings } from '../hooks/useScreensaverSettings'
 
 // ── Shared sub-components ──────────────────────────────────────────
 
-const COLOR_FIELDS: { key: keyof ThemeColors; label: string; desc: string }[] = [
-  { key: 'casa-gold',    label: 'Accent Color',       desc: 'Icons, highlights, buttons, badges' },
-  { key: 'casa-navy',    label: 'Primary Color',      desc: 'Navigation, headers, dark elements' },
-  { key: 'casa-bg',      label: 'Background',         desc: 'Main page background' },
-  { key: 'casa-bg-2',    label: 'Background 2',       desc: 'Secondary rail background used by side panels' },
-  { key: 'casa-surface', label: 'Card / Panel',       desc: 'Cards, panels, input backgrounds' },
-  { key: 'casa-text',    label: 'Body Text',          desc: 'Primary text color' },
-  { key: 'casa-border',  label: 'Borders & Dividers', desc: 'Card borders, divider lines' },
-  { key: 'casa-error', label: 'Error Accent', desc: 'Errors, destructive actions, and critical status states' },
-  { key: 'casa-success', label: 'Success Accent', desc: 'General success highlights and completion confirmations' },
-  { key: 'casa-warning', label: 'Warning Accent', desc: 'Warnings, caution states, and timing urgency badges' },
-  { key: 'casa-surface-subtle', label: 'Subtle Surface', desc: 'Inset strips, secondary wells, low-emphasis panel fills' },
-  { key: 'casa-control-border', label: 'Control Border', desc: 'Inputs, segmented controls, and chip outlines' },
-  { key: 'casa-divider-strong', label: 'Strong Divider', desc: 'Section separators and structured content dividers' },
-  { key: 'casa-text-secondary', label: 'Secondary Text', desc: 'Supporting paragraph copy and helper labels' },
-  { key: 'casa-text-tertiary', label: 'Tertiary / Muted Text', desc: 'Metadata, timestamps, and subdued labels' },
-  { key: 'casa-text-faint', label: 'Faint Text', desc: 'Placeholder and de-emphasized text' },
-  { key: 'casa-accent-soft', label: 'Primary Soft Fill', desc: 'Primary warm action surfaces (peach-style fill)' },
-  { key: 'casa-accent-soft-border', label: 'Primary Soft Border', desc: 'Borders paired with primary soft fill components' },
-  { key: 'casa-accent-soft-hover', label: 'Primary Soft Hover', desc: 'Hover/press tint for warm primary actions' },
-  { key: 'casa-accent-subtle', label: 'Subtle Accent Fill', desc: 'Low-emphasis accent surfaces (secondary action backgrounds)' },
-  { key: 'casa-accent-subtle-border', label: 'Subtle Accent Border', desc: 'Borders for subtle accent surfaces' },
-  { key: 'casa-info', label: 'Info Accent', desc: 'Informational highlights and AI/cue accents' },
-  { key: 'casa-info-strong', label: 'Info Accent Strong', desc: 'Text/icons on informational chips and emphasis badges' },
-  { key: 'casa-info-soft', label: 'Info Accent Soft Fill', desc: 'Background fill for informational chips' },
-  { key: 'casa-success-strong', label: 'Success Accent Strong', desc: 'Positive text/icon emphasis' },
-  { key: 'casa-success-soft', label: 'Success Accent Soft Fill', desc: 'Positive pill/chip background fill' },
-  { key: 'casa-toggle-track', label: 'Toggle Track', desc: 'Segmented toggle and neutral track backgrounds' },
-  { key: 'casa-top-pick-band', label: 'Top-Pick Band Text', desc: 'Text color used on featured/top-pick band labels' },
-]
-
 function SectionHeader({ icon: Icon, label }: { icon: React.ElementType; label: string }) {
   return <SharedSectionHeader icon={Icon} title={label} compact className="mb-2" />
 }
@@ -59,11 +29,6 @@ function SectionHeader({ icon: Icon, label }: { icon: React.ElementType; label: 
 // ── Room Tone Preview ──────────────────────────────────────────────
 
 const ZONES_IN_ORDER: RoomToneZone[] = ['day', 'afternoon', 'evening', 'night', 'late-night']
-
-const PALETTE_TARGET_OPTIONS = [
-  { value: 'day', label: 'Day Palette' },
-  { value: 'midnight', label: 'Midnight Gallery' },
-] as const
 
 const ZONE_FILTER: Record<RoomToneZone, string> = {
   'day':        'sepia(0) brightness(1)',
@@ -81,7 +46,7 @@ function WarmthPreview({ filter }: { filter: string }) {
       style={{ filter, transition: 'filter 0.3s ease-out' }}
     >
       {/* Simulated screen content */}
-      <div className="bg-[#FAF8F5] p-4">
+      <div className="bg-casa-surface p-4">
         <div className="flex items-center justify-between mb-3">
           <div>
             <div className="font-display text-casa-navy text-heading font-semibold">Thursday</div>
@@ -93,11 +58,11 @@ function WarmthPreview({ filter }: { filter: string }) {
         </div>
         <div className="space-y-1.5">
           {[
-            { color: '#C4693A', label: 'Kelly | Dinner with parents', time: '7:30 PM' },
-            { color: '#6A9E7F', label: 'Liv | Soccer practice', time: '8:00 PM' },
-            { color: '#D4A44C', label: 'Owen | Bedtime', time: '9:00 PM' },
+            { color: 'var(--color-member-kelly)', label: 'Kelly | Dinner with parents', time: '7:30 PM' },
+            { color: 'var(--color-member-liv)', label: 'Liv | Soccer practice', time: '8:00 PM' },
+            { color: 'var(--color-member-owen)', label: 'Owen | Bedtime', time: '9:00 PM' },
           ].map(e => (
-            <div key={e.label} className="flex items-center gap-2 py-1 px-2.5 rounded-lg bg-white border border-[#E8E2D9]">
+            <div key={e.label} className="flex items-center gap-2 py-1 px-2.5 rounded-lg bg-casa-bg border border-casa-border">
               <div className="w-2 h-2 rounded-full shrink-0" style={{ background: e.color }} />
               <span className="text-casa-text text-caption flex-1 truncate">{e.label}</span>
               <span className="text-casa-muted text-caption">{e.time}</span>
@@ -170,44 +135,6 @@ function DayTimeline({ cfg }: { cfg: DisplayConfig }) {
   )
 }
 
-// ── Screensaver helper components ─────────────────────────────────
-
-function StepPicker({ value, onChange, min, max, step = 1, unit }: {
-  value: number; onChange: (v: number) => void
-  min: number; max: number; step?: number; unit: string
-}) {
-  return (
-    <div className="flex items-center gap-3">
-      <Button
-        onClick={() => onChange(Math.max(min, value - step))}
-        className="size-control rounded-button bg-casa-bg border border-casa-border text-casa-navy font-semibold font-display text-heading flex items-center justify-center active:scale-95 outline-none transition-transform focus-visible:ring-2 focus-visible:ring-casa-gold"
-        aria-label={`Decrease ${unit}`}
-      >−</Button>
-      <div className="min-w-[5rem] text-center">
-        <span className="font-display text-display-sm text-casa-navy">{value}</span>
-        <span className="text-caption text-casa-muted ml-1">{unit}</span>
-      </div>
-      <Button
-        onClick={() => onChange(Math.min(max, value + step))}
-        className="size-control rounded-button bg-casa-bg border border-casa-border text-casa-navy font-semibold font-display text-heading flex items-center justify-center active:scale-95 outline-none transition-transform focus-visible:ring-2 focus-visible:ring-casa-gold"
-        aria-label={`Increase ${unit}`}
-      >+</Button>
-    </div>
-  )
-}
-
-function Row({ label, desc, children }: { label: string; desc?: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-4 py-4 border-b border-casa-border last:border-0">
-      <div className="flex-1 min-w-0">
-        <p className="text-body-sm font-medium text-casa-navy">{label}</p>
-        {desc && <p className="text-caption text-casa-muted mt-0.5">{desc}</p>}
-      </div>
-      {children}
-    </div>
-  )
-}
-
 // ── Main page ──────────────────────────────────────────────────────
 
 function SliderRow({ label, desc, value, min, max, onChange, unit = '%' }: {
@@ -233,31 +160,26 @@ function SliderRow({ label, desc, value, min, max, onChange, unit = '%' }: {
 }
 
 export default function DisplaySettingsPage() {
+  const navigate = useNavigate()
   const qc = useQueryClient()
   const { cfg: liveCfg, currentZone, sensorData } = useRoomTone()
-  const { settings, update: updateScreensaver } = useScreensaverSettings()
+  const { settings } = useScreensaverSettings()
   const {
-    colors,
     dayColors,
-    activeTarget,
     autoMidnight,
     forceMidnight,
     setAutoMidnight,
     setForceMidnight,
     fontScale,
     setFontScale,
-    setActiveTarget,
-    setColor,
     applyDayPreset,
-    resetToDefaults,
-    isDefault,
   } = useTheme()
+  const { experienceMode, setExperienceMode } = useAppStore()
   const [config, setConfig] = useState<DisplayConfig>(DISPLAY_DEFAULTS)
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
   const [previewZone, setPreviewZone] = useState<RoomToneZone>('day')
   // Track whether config has been user-modified (vs just loaded from DB)
   const [dirty, setDirty] = useState(false)
-  const contrastIssues = getThemeContrastIssues(colors)
 
   useEffect(() => {
     setConfig({ ...DISPLAY_DEFAULTS, ...liveCfg })
@@ -314,6 +236,73 @@ export default function DisplaySettingsPage() {
       </div>
 
       <div className="space-y-4">
+
+        {/* ── UX EXPERIENCE ARCHITECTURE TOGGLE ── */}
+        <Card padding="sm" className="border-2 border-casa-gold/40 bg-gradient-to-r from-casa-surface to-casa-gold/5">
+          <SectionHeader icon={Sparkles} label="Experience Architecture" />
+          <p className="mb-3 text-body-sm text-casa-text-secondary">
+            Switch between the next-generation Living Canvas OS (Calm Ambient Kiosk + Turbo 3-Pane) and Classic multi-tab view.
+          </p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Button
+              variant="secondary"
+              onClick={() => setExperienceMode('living_canvas')}
+              aria-pressed={experienceMode === 'living_canvas'}
+              className={cn(
+                'h-auto min-h-control-lg items-start rounded-card border-2 p-3 text-left transition-all',
+                experienceMode === 'living_canvas'
+                  ? 'border-casa-navy bg-casa-surface shadow-card-hover'
+                  : 'border-casa-border bg-casa-surface/60 opacity-80 hover:opacity-100'
+              )}
+            >
+              <div className="w-full">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-body-sm font-bold text-casa-navy flex items-center gap-1.5">
+                    <Sparkles size={14} className="text-casa-gold" />
+                    Living Canvas
+                  </span>
+                  {experienceMode === 'living_canvas' && (
+                    <span className="text-caption uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-casa-gold/20 text-casa-navy">
+                      Active
+                    </span>
+                  )}
+                </div>
+                <p className="text-caption text-casa-text-secondary">
+                  Calm Ambient entry for wall mounts, 1-tap expandable Turbo 3-pane triage canvas, and persistent AI sidecar.
+                </p>
+              </div>
+            </Button>
+
+            <Button
+              variant="secondary"
+              onClick={() => setExperienceMode('classic')}
+              aria-pressed={experienceMode === 'classic'}
+              className={cn(
+                'h-auto min-h-control-lg items-start rounded-card border-2 p-3 text-left transition-all',
+                experienceMode === 'classic'
+                  ? 'border-casa-navy bg-casa-surface shadow-card-hover'
+                  : 'border-casa-border bg-casa-surface/60 opacity-80 hover:opacity-100'
+              )}
+            >
+              <div className="w-full">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-body-sm font-bold text-casa-navy flex items-center gap-1.5">
+                    <LayoutGrid size={14} className="text-casa-muted" />
+                    Classic Mode
+                  </span>
+                  {experienceMode === 'classic' && (
+                    <span className="text-caption uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-casa-border text-casa-navy">
+                      Active
+                    </span>
+                  )}
+                </div>
+                <p className="text-caption text-casa-text-secondary">
+                  Traditional sidebar navigation with standalone Briefing, Action Hub, and Home pages.
+                </p>
+              </div>
+            </Button>
+          </div>
+        </Card>
 
         {/* ─────────────────────────────────────────────────────────────────── */}
         {/* 1. THEME & COLORS ──────────────────────────────────────────────── */}
@@ -431,111 +420,6 @@ export default function DisplaySettingsPage() {
           />
         </div>
 
-        <Card padding="none">
-          <DisclosureSection
-            title="Advanced Colors"
-            summary="Fine-tune semantic colors with live contrast checks"
-            icon={<Palette size={18} />}
-          >
-            <SegmentedControl
-              aria-label="Custom palette to edit"
-              value={activeTarget}
-              options={PALETTE_TARGET_OPTIONS}
-              onChange={setActiveTarget}
-              className="mb-4"
-            />
-            {contrastIssues.length > 0 && (
-              <Alert tone="warning" title="Some text may be difficult to read" className="mb-4">
-                Adjust: {contrastIssues.join(', ')}. Casa recommends WCAG AA contrast for all normal text.
-              </Alert>
-            )}
-            <div className="divide-y divide-casa-divider">
-            {COLOR_FIELDS.map(({ key, label, desc }) => (
-              <div key={key} className="flex items-center gap-4 px-0 py-3.5">
-                {/* Color swatch + picker */}
-                <label className="relative cursor-pointer flex-shrink-0">
-                  <div
-                    className="w-10 h-10 rounded-xl border-2 border-casa-border shadow-sm transition-transform hover:scale-105"
-                    style={{ background: colors[key] }}
-                  />
-                  <input
-                    type="color"
-                    value={colors[key]}
-                    onChange={e => setColor(key, e.target.value)}
-                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                  />
-                </label>
-
-                <div className="flex-1 min-w-0">
-                  <p className="text-body-sm font-semibold text-casa-navy leading-tight">{label}</p>
-                  <p className="text-caption text-casa-muted mt-0.5">{desc}</p>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <code className="text-caption font-mono text-casa-muted bg-casa-bg px-2 py-1 rounded-md">
-                    {colors[key].toUpperCase()}
-                  </code>
-                  {colors[key] !== (activeTarget === 'midnight' ? MIDNIGHT_GALLERY_DEFAULTS[key] : DEFAULTS[key]) && (
-                    <IconButton
-                      onClick={() => setColor(key, activeTarget === 'midnight' ? MIDNIGHT_GALLERY_DEFAULTS[key] : DEFAULTS[key])}
-                      variant="ghost"
-                      size="sm"
-                      icon={<RotateCcw size={13} />}
-                      aria-label="Reset this color"
-                      title="Reset this color"
-                    />
-                  )}
-                </div>
-              </div>
-            ))}
-            </div>
-          </DisclosureSection>
-        </Card>
-
-        {/* Live preview strip */}
-        <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
-          <SectionHeader icon={Eye} label="Preview" />
-          <div className="rounded-2xl overflow-hidden border border-casa-border shadow-sm">
-            {/* Header bar */}
-            <div className="px-4 py-3 flex items-center justify-between" style={{ background: colors['casa-navy'] }}>
-              <span className="font-display text-body-sm font-semibold text-white">Casa Tabor</span>
-              <div className="w-2 h-2 rounded-full" style={{ background: colors['casa-gold'] }} />
-            </div>
-            {/* Card */}
-            <div className="p-4" style={{ background: colors['casa-bg'] }}>
-              <div className="rounded-xl p-3 border" style={{ background: colors['casa-surface'], borderColor: colors['casa-border'] }}>
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-caption font-bold" style={{ background: colors['casa-gold'] }}>J</div>
-                  <span className="text-body-sm font-semibold" style={{ color: colors['casa-navy'] }}>Jake's Event</span>
-                </div>
-                <p className="text-caption" style={{ color: colors['casa-text'] }}>Thursday · 3:00 PM – 4:00 PM</p>
-                <div className="mt-2 pt-2 border-t" style={{ borderColor: colors['casa-border'] }}>
-                  <span className="text-caption font-semibold px-2 py-0.5 rounded-full text-white" style={{ background: colors['casa-gold'] }}>Work</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Reset to defaults */}
-        {!isDefault && (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 flex items-center justify-between">
-            <div>
-              <p className="text-body-sm font-semibold text-amber-800">Custom {activeTarget === 'midnight' ? 'Midnight Gallery' : 'day'} palette active</p>
-              <p className="text-caption text-amber-600 mt-0.5">
-                Restore original {activeTarget === 'midnight' ? 'Midnight Gallery' : 'Casa Tabor day'} colors
-              </p>
-            </div>
-            <Button
-              onClick={resetToDefaults}
-              variant="secondary"
-            >
-              <RotateCcw size={14} />
-              Reset palette defaults
-            </Button>
-          </div>
-        )}
-
         {/* ─────────────────────────────────────────────────────────────────── */}
         {/* 2. DISPLAY SETTINGS ────────────────────────────────────────────── */}
         {/* ─────────────────────────────────────────────────────────────────── */}
@@ -605,11 +489,11 @@ export default function DisplaySettingsPage() {
               Adjust when each warmth zone begins. The Pi sensor array will override these with real lux/CCT readings once connected.
             </p>
             <div className="divide-y divide-casa-divider">
-              <HourPicker label="☀️  Day begins" value={config.schedule_day_hour} onChange={v => set('schedule_day_hour', v)} />
-              <HourPicker label="🌤  Afternoon begins" value={config.schedule_afternoon_hour} onChange={v => set('schedule_afternoon_hour', v)} />
-              <HourPicker label="🌇  Evening begins" value={config.schedule_evening_hour} onChange={v => set('schedule_evening_hour', v)} />
-              <HourPicker label="🌙  Night begins" value={config.schedule_night_hour} onChange={v => set('schedule_night_hour', v)} />
-              <HourPicker label="🕯  Late Night begins" value={config.schedule_late_night_hour} onChange={v => set('schedule_late_night_hour', v)} />
+              <HourPicker label="Day begins" value={config.schedule_day_hour} onChange={v => set('schedule_day_hour', v)} />
+              <HourPicker label="Afternoon begins" value={config.schedule_afternoon_hour} onChange={v => set('schedule_afternoon_hour', v)} />
+              <HourPicker label="Evening begins" value={config.schedule_evening_hour} onChange={v => set('schedule_evening_hour', v)} />
+              <HourPicker label="Night begins" value={config.schedule_night_hour} onChange={v => set('schedule_night_hour', v)} />
+              <HourPicker label="Late Night begins" value={config.schedule_late_night_hour} onChange={v => set('schedule_late_night_hour', v)} />
             </div>
           </div>
         )}
@@ -636,7 +520,7 @@ export default function DisplaySettingsPage() {
                     value={config.manual_warmth}
                     onChange={e => set('manual_warmth', Number(e.target.value))}
                     className="w-full accent-casa-gold"
-                    style={{ background: `linear-gradient(to right, #FAF8F5, #D4845A ${config.manual_warmth * 200}%, #E8E2D9 ${config.manual_warmth * 200}%)` }}
+                    style={{ background: `linear-gradient(to right, var(--color-casa-surface), var(--color-casa-gold) ${config.manual_warmth * 200}%, var(--color-casa-border) ${config.manual_warmth * 200}%)` }}
                   />
                   <div className="flex justify-between text-caption text-casa-muted mt-1">
                     <span>Cool (daylight)</span><span>Warm (candlelight)</span>
@@ -724,7 +608,7 @@ export default function DisplaySettingsPage() {
                     <div className="flex gap-2 mt-1">
                       {(['R', 'G', 'B'] as const).map((ch, i) => {
                         const val = sensorData.rgb![i]
-                        const color = ch === 'R' ? '#E05050' : ch === 'G' ? '#4CAF72' : '#5080E0'
+                        const color = ch === 'R' ? 'var(--color-casa-error)' : ch === 'G' ? 'var(--color-casa-success)' : 'var(--color-casa-info)'
                         return (
                           <div key={ch} className="flex-1 text-center">
                             <div className="text-caption font-bold mb-0.5" style={{ color }}>{ch}</div>
@@ -840,140 +724,45 @@ export default function DisplaySettingsPage() {
          <div className="flex-1 h-px bg-casa-border" />
          <span className="flex items-center gap-2 px-1">
            <Image size={15} className="text-casa-gold" />
-           <span className="text-caption font-semibold text-casa-muted uppercase tracking-wide">Art Mode &amp; Sleep</span>
+           <span className="text-caption font-semibold text-casa-muted uppercase tracking-wide">Art Mode</span>
          </span>
          <div className="flex-1 h-px bg-casa-border" />
         </div>
 
-        {/* ── Master toggles ──────────────────────────── */}
-        <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
-          <SectionHeader icon={ToggleLeft} label="Enable / Disable" />
-          <Toggle
-            checked={settings.enabled}
-            onChange={v => updateScreensaver({ enabled: v })}
-            label="Art Mode Screensaver"
-            desc="Show artwork after idle timeout"
-          />
-          <div className={cn('transition-opacity', !settings.enabled && 'opacity-40 pointer-events-none')}>
-            <Toggle
-              checked={settings.displaySleepEnabled}
-              onChange={v => updateScreensaver({ displaySleepEnabled: v })}
-              label="Monitor Sleep"
-              desc="Turn off display after a longer idle period"
-            />
-          </div>
-        </div>
-
-        {/* Show remaining Art Mode options only when enabled */}
-        {settings.enabled && (
-          <div className="space-y-4">
-
-        {/* ── Timing ──────────────────────────────────── */}
-        <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
-          <SectionHeader icon={Clock} label="Timers" />
-          <Row label="Art mode after" desc="How long before artwork appears">
-            <StepPicker
-              value={settings.screensaverMins}
-              onChange={v => updateScreensaver({ screensaverMins: v })}
-              min={1} max={60} unit="min"
-            />
-          </Row>
-          <Row label="Display off after" desc="How long before monitor turns off (must be > art mode)">
-            <StepPicker
-              value={settings.displayOffMins}
-              onChange={v => updateScreensaver({ displayOffMins: Math.max(settings.screensaverMins + 1, v) })}
-              min={2} max={120} unit="min"
-            />
-          </Row>
-          <Row label="Painting rotation" desc="How long each artwork is shown">
-            <StepPicker
-              value={settings.rotationMins}
-              onChange={v => updateScreensaver({ rotationMins: v })}
-              min={1} max={60} unit="min"
-            />
-          </Row>
-        </div>
-
-        {/* ── Art size ────────────────────────────────── */}
-        <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
-          <SectionHeader icon={Image} label="Artwork Size" />
-          <Row label="Minimum art width" desc="Portrait paintings won't be smaller than this">
-            <StepPicker
-              value={settings.minArtWidthVw}
-              onChange={v => updateScreensaver({ minArtWidthVw: v })}
-              min={30} max={90} step={5} unit="vw"
-            />
-          </Row>
-        </div>
-
-        {/* ── Current Schedule preview ─────────────────── */}
-        <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
-          <SectionHeader icon={Monitor} label="Current Schedule" />
-          <div className="space-y-2 text-body-sm text-casa-muted">
-            {settings.enabled ? (
-              <>
-                <p>🖼 Art mode starts after <span className="text-casa-navy font-medium">{settings.screensaverMins} min</span> idle</p>
-                <p>🎨 Painting rotates every <span className="text-casa-navy font-medium">{settings.rotationMins} min</span></p>
-                {settings.displaySleepEnabled && (
-                  <p>😴 Monitor sleeps after <span className="text-casa-navy font-medium">{settings.displayOffMins} min</span> idle</p>
-                )}
-                <p>🗣 Say <span className="text-casa-navy font-medium">"Alexa"</span> or tap screen to wake</p>
-              </>
-            ) : (
-              <p className="text-casa-muted">Art mode is disabled — screen will stay on.</p>
-            )}
-          </div>
-        </div>
-
-        {/* ── Display Brightness in Art Mode ───────────── */}
-        <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
-          <SectionHeader icon={Sun} label="Display Brightness in Art Mode" />
-          <p className="text-caption text-casa-muted mb-4">
-            Monitor dims to <span className="font-medium text-casa-navy">{settings.artDimOffset}% below</span> the ambient light level — so the painting feels lit by the room, not glowing.
-            Higher = darker relative to surroundings.
+        <Card padding="md" className="space-y-4">
+          <SectionHeader icon={Image} label="Art Mode Screensaver & Gallery" />
+          <p className="text-body-sm text-casa-text-secondary">
+            Display museum-grade paintings and personal family photos on idle wall mounts, with automatic color-matched linen mats and ambient dimming.
           </p>
-          <Row label="Dim below ambient" desc="Relative to current room lux reading">
-            <StepPicker
-              value={settings.artDimOffset}
-              onChange={v => updateScreensaver({ artDimOffset: v })}
-              min={5} max={80} step={5} unit="%"
-            />
-          </Row>
-          <p className="text-caption text-casa-muted mt-2">
-            Example: room at 300 lux → auto brightness 70 → art mode at {settings.artDimOffset}% below = {Math.round(70 * (1 - settings.artDimOffset / 100))}
-          </p>
-        </div>
-
-        {/* ── Mat Style ───────────────────────────────── */}
-        <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
-          <SectionHeader icon={Palette} label="Mat Style" />
-          <p className="text-body-sm text-casa-muted">
-            Adaptive linen mat with subtle canvas grain texture. Each painting gets a complementary mat color extracted from the artwork itself — warm neutrals for bright pieces, cooler tones for darker works. Includes realistic bevel shadow, vignetting, and lighting simulation for museum-quality presentation.
-          </p>
-          <div className="mt-3 flex items-center gap-2 text-caption text-casa-muted">
-            <span className="text-casa-gold">✓</span> Adaptive color from artwork
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-casa-divider">
+            <div className="flex items-center gap-2">
+              <span className="text-caption text-casa-muted">
+                Status: <span className="font-semibold text-casa-navy">{settings.enabled ? 'Active' : 'Disabled'}</span>
+              </span>
+              {settings.enabled && (
+                <span className="text-caption text-casa-muted">
+                  · {settings.screensaverMins}m idle delay · rotates every {settings.rotationMins}m
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => document.dispatchEvent(new CustomEvent('screensaver-on'))}
+              >
+                Preview Art Mode
+              </Button>
+              <Button
+                variant="strong"
+                size="sm"
+                onClick={() => navigate('/settings/art-mode')}
+              >
+                Configure Art Mode
+              </Button>
+            </div>
           </div>
-          <div className="flex items-center gap-2 text-caption text-casa-muted mt-1">
-            <span className="text-casa-gold">✓</span> Paper texture grain overlay
-          </div>
-          <div className="flex items-center gap-2 text-caption text-casa-muted mt-1">
-            <span className="text-casa-gold">✓</span> Realistic frame effect
-          </div>
-          <div className="flex items-center gap-2 text-caption text-casa-muted mt-1">
-            <span className="text-casa-gold">✓</span> Gallery label auto-fades after a few seconds
-          </div>
-          <Button
-            type="button"
-            onClick={() => document.dispatchEvent(new CustomEvent('screensaver-on'))}
-            className="mt-4 px-4 py-2 rounded-lg text-body-sm font-medium bg-casa-gold text-white hover:bg-casa-gold/90 transition-colors"
-          >
-            Preview Art Mode
-          </Button>
-        </div>
-
-         </div>
-        )}
-
+        </Card>
       </div>
 
       {/* Auto-save status */}

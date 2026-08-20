@@ -158,7 +158,7 @@ test('assistant narrows prompt context and tools by intent profile', () => {
   assert.match(assistantFunction, /primaryToolDeclarations/)
   assert.match(assistantFunction, /source: 'explicit_reminder_create'/)
   assert.match(assistantFunction, /const directReminderCreateFlow =/)
-  assert.match(assistantFunction, /const shouldRunAgentWrite = shouldUseAgentWritePlanner\(\{/)
+  assert.match(assistantFunction, /const shouldRunAgentWrite =[\s\S]*shouldUseAgentWritePlanner\(\{/)
   assert.match(agentWrite, /options\.explicitReminderCreate !== true/)
   assert.match(assistantFunction, /directReminderCreateFlow[\s\S]{0,160}tool\.name === 'create_event'/)
   assert.match(assistantFunction, /REMINDER CREATE MODE:/)

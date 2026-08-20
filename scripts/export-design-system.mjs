@@ -55,6 +55,8 @@ This bundle is the implementation and usage source of truth for generating Casa 
 - Preserve minimum targets: 44px for compact/touch and 48px for kiosk.
 - Use Cormorant Garamond for display/heading roles and DM Sans for body roles.
 - Use semantic roles rather than arbitrary font sizes.
+- Follow the 4 semantic header/title archetypes: Display Hero (H1 Title Case), Section Anchor (H2 Title Case + Action Slot), Entity Title (H3 Title Case 15-16px), and Eyebrow/Overline (uppercase tracked monospace).
+- Entity titles (recipes, events, places) MUST be Title Case; never render all-caps raw database text.
 - Use shared Button, IconButton, Card, Chip, fields, selection controls, overlays, and feedback components.
 - Assemble pages from the supplied headers, sections, rail, master-detail, feedback, and workflow patterns.
 - Do not rely on hover, color alone, or tiny icon-only affordances.

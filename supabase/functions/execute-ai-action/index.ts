@@ -208,8 +208,9 @@ async function finalizeEventSync(
 }
 
 function extractMemberRoleOverrides(args: Record<string, unknown>) {
-  const membersPrimary = typeof args.members_primary === 'string' && args.members_primary.trim().length > 0
-    ? args.members_primary.trim()
+  const primaryRaw = args.primary_attendee ?? args.members_primary
+  const membersPrimary = typeof primaryRaw === 'string' && primaryRaw.trim().length > 0
+    ? primaryRaw.trim()
     : undefined
   const membersAttendees = Array.isArray(args.members_attendees)
     ? args.members_attendees
@@ -279,7 +280,10 @@ async function applyMemberRoleOverrides(
 
     await sb
       .from('event_members')
-      .upsert({ event_id: eventId, family_member_id: primaryId, role: 'primary', rsvp_status: 'accepted' })
+      .upsert(
+        { event_id: eventId, family_member_id: primaryId, role: 'primary', rsvp_status: 'accepted' },
+        { onConflict: 'event_id,family_member_id' },
+      )
   }
 
   if (membersAttendees !== undefined) {
@@ -628,10 +632,18 @@ Deno.serve(async (req) => {
         clientTraceSource === 'assistant_drawer' ||
         clientTraceSource === 'ai-drawer-confirmation'
       if (requiresTemporalProvenance) {
+        const effectiveProvenance = args.temporal_provenance ?? (confirmedByUser ? {
+          sourceMessageId: cid ?? `user-confirm-${Date.now().toString(36)}`,
+          sourceText: '(user confirmed)',
+          rangeStart: normalizedStart ? normalizedStart.slice(0, 10) : null,
+          rangeEnd: normalizedEnd ? normalizedEnd.slice(0, 10) : (normalizedStart ? normalizedStart.slice(0, 10) : null),
+          resolutionKind: 'user_confirmed',
+          requiresExactDateConfirmation: false,
+        } : null)
         const validation = validateCalendarTemporalProvenance(
-          args.temporal_provenance,
+          effectiveProvenance,
           { start: normalizedStart, end: normalizedEnd },
-          { utcOffset: normalizeOptionalText((args.temporal_provenance as Record<string, unknown> | undefined)?.utcOffset, 10) },
+          { utcOffset: normalizeOptionalText((effectiveProvenance as Record<string, unknown> | undefined)?.utcOffset, 10) },
         )
         if (!validation.valid) {
           const result = {
@@ -657,7 +669,7 @@ Deno.serve(async (req) => {
             headers: { ...CORS, 'content-type': 'application/json' },
           })
         }
-        const provenance = args.temporal_provenance as { requiresExactDateConfirmation?: boolean }
+        const provenance = (effectiveProvenance ?? {}) as { requiresExactDateConfirmation?: boolean }
         if (provenance.requiresExactDateConfirmation === true && !confirmedByUser) {
           const result = {
             success: false,
@@ -739,30 +751,37 @@ Deno.serve(async (req) => {
             headers: { ...CORS, 'content-type': 'application/json' },
         })
       }
-      if (calendarPreflight.status === 'requires_confirmation' && args.allow_calendar_conflicts !== true) {
-        const result = {
-          success: false,
-          error: 'A probable duplicate or calendar conflict requires explicit keep-both confirmation.',
-          code: 'calendar_conflict_confirmation_required',
-          calendar_preflight: calendarPreflight,
-          correlation_id: cid,
+      const isQuickCapture = clientTraceSource === 'capture-command'
+      let conflictTitle: string | null = null
+      if (calendarPreflight.status === 'requires_confirmation') {
+        const conflictCandidates = Array.isArray(calendarPreflight.conflicts) ? calendarPreflight.conflicts : []
+        const firstConflict = conflictCandidates.find((c: { title?: string }) => Boolean(c?.title))
+        conflictTitle = firstConflict?.title ?? null
+        if (!isQuickCapture && args.allow_calendar_conflicts !== true) {
+          const result = {
+            success: false,
+            error: 'A probable duplicate or calendar conflict requires explicit keep-both confirmation.',
+            code: 'calendar_conflict_confirmation_required',
+            calendar_preflight: calendarPreflight,
+            correlation_id: cid,
+          }
+          await auditEventCreate(sb, {
+            actionId: createActionId,
+            sessionId,
+            args,
+            status: 'failed',
+            result,
+            errorMessage: result.error,
+            confirmedByUser,
+          })
+          appendActionTrace('probable_duplicate_blocked', normalizedTitle, {
+            calendar_preflight: calendarPreflight,
+          })
+          return new Response(JSON.stringify(result), {
+            status: 409,
+            headers: { ...CORS, 'content-type': 'application/json' },
+          })
         }
-        await auditEventCreate(sb, {
-          actionId: createActionId,
-          sessionId,
-          args,
-          status: 'failed',
-          result,
-          errorMessage: result.error,
-          confirmedByUser,
-        })
-        appendActionTrace('probable_duplicate_blocked', normalizedTitle, {
-          calendar_preflight: calendarPreflight,
-        })
-        return new Response(JSON.stringify(result), {
-          status: 409,
-          headers: { ...CORS, 'content-type': 'application/json' },
-        })
       }
 
       // Prefer an existing saved_places match over the raw typed/spoken
@@ -866,6 +885,7 @@ Deno.serve(async (req) => {
         draft_promoted: draftPromoted,
         sync_status: 'synced',
         correlation_id: cid,
+        conflict_title: conflictTitle ?? undefined,
       }
       await auditEventCreate(sb, {
         actionId: createActionId,
@@ -1155,13 +1175,73 @@ Deno.serve(async (req) => {
         p_members_add: addIds,
         p_members_remove: removeIds,
         p_action_id: actionId ?? null,
-        p_expected_updated_at: normalized.expectedUpdatedAt,
+        p_expected_updated_at: normalized.expectedUpdatedAt ?? eventRow.updated_at,
         p_request_payload: cleanArgs,
         p_ai_session_id: sessionId ?? null,
       })
       if (rpcError) throw new Error(rpcError.message)
 
       await applyMemberRoleOverrides(sb, normalized.eventId, membersPrimary, membersAttendees)
+
+      if (cleanArgs.primary_attendee !== undefined) {
+        const { data: family } = await sb.from('family_members').select('id, name, full_name')
+        const pri = resolveFamilyMemberByName(family ?? [], String(cleanArgs.primary_attendee).trim())
+        if (pri) {
+          await sb.from('event_members').update({ role: 'attendee', is_primary: false }).eq('event_id', normalized.eventId)
+          await sb.from('event_members').upsert({
+            event_id: normalized.eventId,
+            family_member_id: pri.id,
+            role: 'primary_attendee',
+            is_primary: true,
+          }, { onConflict: 'event_id,family_member_id' })
+        }
+      }
+
+      if (cleanArgs.category !== undefined) {
+        const cat = typeof cleanArgs.category === 'string' ? cleanArgs.category.trim() : null
+        await sb.from('events').update({ category: cat }).eq('id', normalized.eventId)
+        await sb.from('event_enrichments').update({ category: cat, category_locked: true }).eq('event_id', normalized.eventId)
+      }
+
+      if (
+        cleanArgs.driver_name !== undefined ||
+        cleanArgs.driver_leg1 !== undefined ||
+        cleanArgs.driver_leg2 !== undefined ||
+        cleanArgs.travel_behavior !== undefined
+      ) {
+        const { data: family } = await sb.from('family_members').select('id, name, full_name, role, can_drive')
+        const driverName = typeof cleanArgs.driver_name === 'string' ? cleanArgs.driver_name.trim() : undefined
+        const driverLeg1 = typeof cleanArgs.driver_leg1 === 'string' ? cleanArgs.driver_leg1.trim() : undefined
+        const driverLeg2 = typeof cleanArgs.driver_leg2 === 'string' ? cleanArgs.driver_leg2.trim() : undefined
+        const travelBehavior = typeof cleanArgs.travel_behavior === 'string' ? cleanArgs.travel_behavior.trim() : undefined
+
+        const { data: existingOverride } = await sb
+          .from('event_plan_overrides')
+          .select('*')
+          .eq('event_id', normalized.eventId)
+          .maybeSingle()
+
+        const d1 = driverLeg1 ?? driverName
+        const d2 = driverLeg2 ?? driverName
+        const d1Member = d1 ? resolveFamilyMemberByName(family ?? [], d1) : null
+        const d2Member = d2 ? resolveFamilyMemberByName(family ?? [], d2) : null
+
+        const driverOverrides: Record<number, string> = {
+          ...(existingOverride?.driver_overrides ?? {}),
+          ...(d1 !== undefined ? (d1Member ? { 0: d1Member.id } : { 0: d1 }) : {}),
+          ...(d2 !== undefined ? (d2Member ? { 1: d2Member.id } : { 1: d2 }) : {}),
+        }
+
+        const waits = travelBehavior === 'stay' ? true : travelBehavior === 'two_way' ? false : existingOverride?.waits ?? null
+
+        await sb.from('event_plan_overrides').upsert({
+          event_id: normalized.eventId,
+          verified: true,
+          waits,
+          driver_overrides: driverOverrides,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'event_id' })
+      }
 
       const { data: updatedEvent, error: updatedEventError } = await sb
         .from('events')
@@ -1437,8 +1517,27 @@ Deno.serve(async (req) => {
       if (eventRow.recurrence_master_id || eventRow.rrule) {
         throw new Error(RECURRING_EDIT_ERROR)
       }
-      await sb.functions.invoke('delete-google-event', { body: { event_id: args.id } }).catch(() => {})
-      const { error } = await sb.from('events').update({ status: 'cancelled' }).eq('id', args.id)
+      await sb.functions.invoke('delete-google-event', {
+        body: { event_id: args.id },
+        headers: { Authorization: `Bearer ${requireEnv('SUPABASE_SERVICE_ROLE_KEY')}` },
+      }).catch((err) => console.warn('[execute-ai-action] delete-google-event warning:', err))
+
+      // Clean up child tables to prevent foreign key issues
+      await Promise.allSettled([
+        sb.from('event_members').delete().eq('event_id', args.id),
+        sb.from('event_enrichments').delete().eq('event_id', args.id),
+        sb.from('event_plan_overrides').delete().eq('event_id', args.id),
+        sb.from('prep_items').delete().eq('source_ref', args.id),
+        sb.from('event_logistics').delete().eq('event_id', args.id),
+        sb.from('event_checklist_items').delete().eq('event_id', args.id),
+        sb.from('event_action_items').delete().eq('event_id', args.id),
+      ])
+
+      const { error } = await sb.from('events').update({
+        status: 'cancelled',
+        deleted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }).eq('id', args.id)
       if (error) throw new Error(error.message)
       return new Response(JSON.stringify({ success: true, correlation_id: cid }), {
         headers: { ...CORS, 'content-type': 'application/json' },
@@ -1490,14 +1589,22 @@ Deno.serve(async (req) => {
       const missingCount = uniqueIds.length - matchedIds.length
 
       for (const eventId of matchedIds) {
-        await sb.functions.invoke('delete-google-event', { body: { event_id: eventId } }).catch(() => {})
+        await sb.functions.invoke('delete-google-event', {
+          body: { event_id: eventId },
+          headers: { Authorization: `Bearer ${requireEnv('SUPABASE_SERVICE_ROLE_KEY')}` },
+        }).catch((err) => console.warn('[execute-ai-action] delete-google-event bulk warning:', err))
       }
 
       const { error: updateError } = await sb
         .from('events')
-        .update({ status: 'cancelled' })
+        .update({
+          status: 'cancelled',
+          deleted_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
         .in('id', matchedIds)
       if (updateError) throw new Error(updateError.message)
+
 
       return new Response(JSON.stringify({
         success: true,

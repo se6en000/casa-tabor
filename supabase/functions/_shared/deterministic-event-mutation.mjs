@@ -1,4 +1,11 @@
 const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+const MONTHS = new Map([
+  ['january', 0], ['jan', 0], ['february', 1], ['feb', 1], ['march', 2], ['mar', 2],
+  ['april', 3], ['apr', 3], ['may', 4], ['june', 5], ['jun', 5], ['july', 6], ['jul', 6],
+  ['august', 7], ['aug', 7], ['september', 8], ['sep', 8], ['sept', 8],
+  ['october', 9], ['oct', 9], ['november', 10], ['nov', 10], ['december', 11], ['dec', 11],
+])
+const MONTH_REGEX = /\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/i
 const STOP_WORDS = new Set(['the', 'an', 'a', 'event', 'appointment', 'apt', 'calendar', 'please'])
 
 function normalize(value) {
@@ -24,6 +31,8 @@ function localParts(date, offsetMinutes) {
     month: shifted.getUTCMonth(),
     day: shifted.getUTCDate(),
     weekday: shifted.getUTCDay(),
+    hour: shifted.getUTCHours(),
+    minute: shifted.getUTCMinutes(),
   }
 }
 
@@ -31,6 +40,10 @@ function extractDateHint(text) {
   const lower = String(text).toLowerCase()
   if (/\btoday\b/.test(lower)) return 'today'
   if (/\btomorrow\b/.test(lower)) return 'tomorrow'
+  const monthMatch = lower.match(/\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(\d{1,2})(?:st|nd|rd|th)?(?:\s*,?\s*(\d{4}))?\b/)
+  if (monthMatch) {
+    return `month:${monthMatch[1]}:${monthMatch[2]}${monthMatch[3] ? `:${monthMatch[3]}` : ''}`
+  }
   return WEEKDAYS.find((day) => new RegExp(`\\b${day}\\b`, 'i').test(lower)) ?? null
 }
 
@@ -42,6 +55,13 @@ function matchesDateHint(event, hint, now, offsetMinutes) {
   const nowDay = Date.UTC(nowParts.year, nowParts.month, nowParts.day)
   if (hint === 'today') return eventDay === nowDay
   if (hint === 'tomorrow') return eventDay === nowDay + 86400000
+  if (hint.startsWith('month:')) {
+    const [, mStr, dStr, yStr] = hint.split(':')
+    const m = MONTHS.get(mStr.toLowerCase())
+    const d = Number(dStr)
+    const y = yStr ? Number(yStr) : nowParts.year
+    return eventParts.month === m && eventParts.day === d && (!yStr || eventParts.year === y)
+  }
   const targetWeekday = WEEKDAYS.indexOf(hint)
   let daysAhead = targetWeekday - nowParts.weekday
   if (daysAhead <= 0) daysAhead += 7
@@ -97,19 +117,30 @@ function movedIso(eventStart, requestedTime, offsetMinutes) {
 function createStartIso(text, requestedTime, now, offsetMinutes) {
   const localNow = localParts(now, offsetMinutes)
   const isoDate = String(text).match(/\b(20\d{2})-(\d{2})-(\d{2})\b/)
+  const monthDate = String(text).match(/\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(\d{1,2})(?:st|nd|rd|th)?(?:\s*,?\s*(\d{4}))?\b/i)
   let year = localNow.year
   let month = localNow.month
   let day = localNow.day
 
+  const hint = extractDateHint(text)
   if (isoDate) {
     year = Number(isoDate[1])
     month = Number(isoDate[2]) - 1
     day = Number(isoDate[3])
+  } else if (monthDate) {
+    month = MONTHS.get(monthDate[1].toLowerCase()) ?? localNow.month
+    day = Number(monthDate[2])
+    year = monthDate[3] ? Number(monthDate[3]) : localNow.year
+    if (!monthDate[3]) {
+      const tentativeMs = Date.UTC(year, month, day, requestedTime.hour, requestedTime.minute) - offsetMinutes * 60000
+      if (tentativeMs < now.getTime() - 12 * 3600000) {
+        year += 1
+      }
+    }
   } else {
-    const hint = extractDateHint(text)
-    if (!hint) return null
+    const effectiveHint = hint ?? 'today'
     const currentDay = Date.UTC(year, month, day)
-    let daysAhead = hint === 'today' ? 0 : hint === 'tomorrow' ? 1 : WEEKDAYS.indexOf(hint) - localNow.weekday
+    let daysAhead = effectiveHint === 'today' ? 0 : effectiveHint === 'tomorrow' ? 1 : WEEKDAYS.indexOf(effectiveHint) - localNow.weekday
     if (daysAhead < 0) daysAhead += 7
     const targetDay = new Date(currentDay + daysAhead * 86400000)
     year = targetDay.getUTCFullYear()
@@ -118,8 +149,9 @@ function createStartIso(text, requestedTime, now, offsetMinutes) {
   }
 
   let start = new Date(Date.UTC(year, month, day, requestedTime.hour, requestedTime.minute) - offsetMinutes * 60000)
-  if (!isoDate && start.getTime() <= now.getTime()) {
-    start = new Date(start.getTime() + 7 * 86400000)
+  if (!isoDate && !monthDate && start.getTime() <= now.getTime()) {
+    const daysToAdd = (!hint || hint === 'today') ? 1 : 7
+    start = new Date(start.getTime() + daysToAdd * 86400000)
   }
   return start.toISOString()
 }
@@ -132,12 +164,15 @@ export function resolveDeterministicEventMutation(text, events, options = {}) {
   const quotedTitle = input.match(/["“](.+?)["”]/)?.[1]?.trim() ?? null
 
   const createPrefix = /^(?:create|add|book|schedule)\b/i
-  if (createPrefix.test(input)) {
-    const namedTitle = input.match(/\b(?:called|named)\s+(.+?)(?=\s+(?:on\s+)?(?:20\d{2}-\d{2}-\d{2}|today|tomorrow|sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b|\s+at\s+\d|$)/i)?.[1]
-    const naturalTitle = input.match(
-      /^(?:create|add|book|schedule)\s+(?:an?\s+)?(.+?)(?=\s+(?:on\s+)?(?:20\d{2}-\d{2}-\d{2}|today|tomorrow|sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b|\s+at\s+\d)/i,
-    )?.[1]?.replace(/^(?:calendar\s+)?(?:event|appointment|apt|reminder)\s+(?:called|named)\s+/i, '')
-    const candidateTitle = (namedTitle ?? naturalTitle)?.trim()
+  const naturalEventPattern = /^(?:create|add|book|schedule)\s+(?:an?\s+)?(.+?)(?=\s+(?:for|on\s+)?(?:20\d{2}-\d{2}-\d{2}|today|tomorrow|sunday|monday|tuesday|wednesday|thursday|friday|saturday|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b|\s+at\s+\d)/i
+  const standAlonePattern = /^(.+?)\s+(?:for|on\s+)?(?:20\d{2}-\d{2}-\d{2}|today|tomorrow|sunday|monday|tuesday|wednesday|thursday|friday|saturday|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+.*at\s+\d/i
+
+  if (createPrefix.test(input) || (standAlonePattern.test(input) && /\b(?:event|appointment|appt|apt|reservation|dinner|lunch|breakfast|practice|meeting|party|tour|doctor|dr\b|dentist)\b/i.test(input))) {
+    const namedTitle = input.match(/\b(?:called|named)\s+(.+?)(?=\s+(?:for|on\s+)?(?:20\d{2}-\d{2}-\d{2}|today|tomorrow|sunday|monday|tuesday|wednesday|thursday|friday|saturday|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b|\s+at\s+\d|$)/i)?.[1]
+    const naturalTitleMatch = input.match(naturalEventPattern)
+    const naturalTitle = naturalTitleMatch?.[1]?.replace(/^(?:calendar\s+)?(?:event|appointment|apt|reminder)\s+(?:called|named)\s+/i, '')
+    const fallbackTitle = !naturalTitle && standAlonePattern.test(input) ? input.match(standAlonePattern)?.[1] : null
+    const candidateTitle = (namedTitle ?? naturalTitle ?? fallbackTitle)?.replace(/\s+(?:for|on)\s*$/i, '')?.trim()
     const title = candidateTitle && !/^(?:calendar\s+)?(?:event|appointment|apt|reminder)$/i.test(candidateTitle)
       ? candidateTitle
       : null

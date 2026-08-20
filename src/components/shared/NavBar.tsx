@@ -9,12 +9,9 @@ import { useCalendarStore } from '../../stores/calendarStore'
 import { Button } from '../ui'
 
 const primaryTabs = [
-  { to: '/', icon: Home, label: 'Home' },
-  { to: '/calendar', icon: Calendar, label: 'Calendar' },
-  { to: '/grocery', icon: ShoppingCart, label: 'Grocery' },
+  { to: '/', icon: Home, label: 'Today' },
+  { to: '/calendar', icon: Calendar, label: 'Agenda' },
   { to: '/cook', icon: ChefHat, label: 'Cooking' },
-  { to: '/briefing', icon: Sun, label: 'Briefing' },
-  { to: '/settings', icon: Settings, label: 'Settings' },
 ]
 
 export default function NavBar() {
@@ -35,8 +32,8 @@ export default function NavBar() {
             onClick={() => { if (to === '/calendar') setActiveView('today') }}
             className={({ isActive }) =>
               cn(
-                'app-bottom-nav-item flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-button transition-colors',
-                isActive ? 'text-casa-gold' : 'text-casa-muted hover:text-casa-navy'
+                'app-bottom-nav-item flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-button transition-colors min-h-[48px]',
+                isActive ? 'text-casa-gold font-semibold' : 'text-casa-muted hover:text-casa-navy'
               )
             }
           >
@@ -49,8 +46,8 @@ export default function NavBar() {
         <Button variant="ghost"
           onClick={() => setMoreOpen(o => !o)}
           className={cn(
-            'app-bottom-nav-item flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-button transition-colors relative',
-            moreOpen ? 'text-casa-gold' : 'text-casa-muted hover:text-casa-navy'
+            'app-bottom-nav-item flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-button transition-colors relative min-h-[48px]',
+            moreOpen ? 'text-casa-gold font-semibold' : 'text-casa-muted hover:text-casa-navy'
           )}
         >
           <MoreHorizontal size={22} strokeWidth={1.8} />
@@ -109,6 +106,26 @@ export default function NavBar() {
               <div className="py-2">
                 <Button variant="ghost"
                   className="w-full flex items-center gap-4 px-5 py-3.5 hover:bg-casa-bg active:bg-casa-bg transition-colors"
+                  onClick={() => { navigate('/grocery'); setMoreOpen(false) }}
+                >
+                  <div className="w-9 h-9 rounded-xl bg-emerald-500/10 flex items-center justify-center flex-shrink-0">
+                    <ShoppingCart size={18} strokeWidth={1.8} className="text-emerald-600" />
+                  </div>
+                  <span className="text-body-md font-medium text-casa-navy">Grocery List</span>
+                </Button>
+
+                <Button variant="ghost"
+                  className="w-full flex items-center gap-4 px-5 py-3.5 hover:bg-casa-bg active:bg-casa-bg transition-colors"
+                  onClick={() => { navigate('/actions'); setMoreOpen(false) }}
+                >
+                  <div className="w-9 h-9 rounded-xl bg-blue-500/10 flex items-center justify-center flex-shrink-0">
+                    <Sparkles size={18} strokeWidth={1.8} className="text-blue-600" />
+                  </div>
+                  <span className="text-body-md font-medium text-casa-navy">Action Queue</span>
+                </Button>
+
+                <Button variant="ghost"
+                  className="w-full flex items-center gap-4 px-5 py-3.5 hover:bg-casa-bg active:bg-casa-bg transition-colors"
                   onClick={() => { navigate('/music'); setMoreOpen(false) }}
                 >
                   <div className="w-9 h-9 rounded-xl bg-casa-gold/15 flex items-center justify-center flex-shrink-0">
@@ -119,12 +136,22 @@ export default function NavBar() {
 
                 <Button variant="ghost"
                   className="w-full flex items-center gap-4 px-5 py-3.5 hover:bg-casa-bg active:bg-casa-bg transition-colors"
-                  onClick={() => { navigate('/actions'); setMoreOpen(false) }}
+                  onClick={() => { navigate('/briefing'); setMoreOpen(false) }}
                 >
-                  <div className="w-9 h-9 rounded-xl bg-blue-500/10 flex items-center justify-center flex-shrink-0">
-                    <Sparkles size={18} strokeWidth={1.8} className="text-blue-600" />
+                  <div className="w-9 h-9 rounded-xl bg-amber-500/10 flex items-center justify-center flex-shrink-0">
+                    <Sun size={18} strokeWidth={1.8} className="text-amber-600" />
                   </div>
-                  <span className="text-body-md font-medium text-casa-navy">Action Hub</span>
+                  <span className="text-body-md font-medium text-casa-navy">Daily Briefing</span>
+                </Button>
+
+                <Button variant="ghost"
+                  className="w-full flex items-center gap-4 px-5 py-3.5 hover:bg-casa-bg active:bg-casa-bg transition-colors"
+                  onClick={() => { navigate('/settings'); setMoreOpen(false) }}
+                >
+                  <div className="w-9 h-9 rounded-xl bg-slate-500/10 flex items-center justify-center flex-shrink-0">
+                    <Settings size={18} strokeWidth={1.8} className="text-slate-600" />
+                  </div>
+                  <span className="text-body-md font-medium text-casa-navy">Household Settings</span>
                 </Button>
 
                 <Button variant="ghost"

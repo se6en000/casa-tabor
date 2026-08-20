@@ -51,6 +51,11 @@ const ALLOWED_UPDATE_KEYS = new Set([
   'action_items',
   'members_add',
   'members_remove',
+  'driver_name',
+  'driver_leg1',
+  'driver_leg2',
+  'travel_behavior',
+  'primary_attendee',
 ])
 
 export function normalizeOptionalText(value) {
@@ -187,10 +192,9 @@ export function buildValidatedUpdatePayload(args) {
 
   const eventUpdates = {}
   const enrichmentUpdates = {}
-  const expectedUpdatedAt = normalizeExpectedUpdatedAt(args.expected_updated_at, errors)
-  if (expectedUpdatedAt === undefined) {
-    errors.push('expected_updated_at is required')
-  }
+  const expectedUpdatedAt = args.expected_updated_at !== undefined
+    ? normalizeExpectedUpdatedAt(args.expected_updated_at, errors)
+    : undefined
   const recurrenceScope = args.recurrence_scope === undefined
     ? undefined
     : ['this', 'future', 'all'].includes(args.recurrence_scope)
@@ -233,7 +237,11 @@ export function buildValidatedUpdatePayload(args) {
     else eventUpdates.all_day = args.all_day
   }
 
-  if (args.notes !== undefined) enrichmentUpdates.prep_notes = normalizeOptionalText(args.notes)
+  if (args.notes !== undefined) {
+    const normNotes = normalizeOptionalText(args.notes)
+    enrichmentUpdates.prep_notes = normNotes
+    if (args.description === undefined) eventUpdates.description = normNotes
+  }
   if (args.category !== undefined) {
     const category = normalizeOptionalText(args.category)
     if (category !== null && category !== undefined && !EVENT_CATEGORIES.includes(category)) {
@@ -263,7 +271,7 @@ export function buildValidatedUpdatePayload(args) {
     label,
     note: null,
     checked: false,
-    category: undefined,
+    category: 'bring',
   }))
   const actionItems = normalizeActionItems(args.action_items, errors)
 
@@ -295,13 +303,22 @@ export function buildValidatedUpdatePayload(args) {
     errors.push(`members_remove cannot exceed ${AI_EVENT_EDIT_LIMITS.membersPerAction} names`)
   }
 
+  const hasDriverOrLogistics = (
+    args.driver_name !== undefined ||
+    args.driver_leg1 !== undefined ||
+    args.driver_leg2 !== undefined ||
+    args.travel_behavior !== undefined ||
+    args.primary_attendee !== undefined
+  )
+
   if (
     Object.keys(eventUpdates).length === 0 &&
     Object.keys(enrichmentUpdates).length === 0 &&
     checklistItems === undefined &&
     actionItems === undefined &&
     membersAdd === undefined &&
-    membersRemove === undefined
+    membersRemove === undefined &&
+    !hasDriverOrLogistics
   ) {
     errors.push('update_event must include at least one editable field')
   }

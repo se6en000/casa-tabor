@@ -125,7 +125,13 @@ export function initPointerGestures(): () => void {
       // Lock the gesture axis on first real movement.
       if (Math.abs(totalDx) > Math.abs(totalDy)) {
         axisLocked = 'horizontal'
-        if (!swipeTarget) scrollEl = findScrollable(e.target as Element, 'horizontal')
+        const horizEl = findScrollable(e.target as Element, 'horizontal')
+        if (horizEl) {
+          scrollEl = horizEl
+          swipeTarget = null // Prefer scrolling the horizontal container over page swipe
+        } else if (!swipeTarget) {
+          scrollEl = null
+        }
       } else {
         axisLocked = 'vertical'
         scrollEl = findScrollable(e.target as Element, 'vertical')

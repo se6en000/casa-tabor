@@ -17,11 +17,27 @@ export interface DesignSystemRelease {
   changes: string[]
 }
 
+export interface TypographyArchetype {
+  role: string
+  fontFamily: string
+  weight: string
+  casing: string
+  size?: string
+  desktopSize?: string
+  kioskSize?: string
+  lineHeight?: string
+  layout?: string
+  glanceability?: string
+  usage: string
+}
+
 export const DESIGN_SYSTEM_VERSION: string
 export const DESIGN_SYSTEM_RELEASE_DATE: string
 export const DESIGN_SYSTEM_SCHEMA_VERSION: number
 export const COMPONENT_MANIFEST: ComponentDocumentation[]
 export const DESIGN_SYSTEM_CHANGELOG: DesignSystemRelease[]
+export const TYPOGRAPHY_ARCHETYPES: Record<string, TypographyArchetype>
 
 export function renderComponentGuide(): string
 export function renderDesignSystemChangelog(): string
+

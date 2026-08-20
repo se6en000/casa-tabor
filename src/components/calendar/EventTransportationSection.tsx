@@ -234,7 +234,7 @@ function TripLegTimeline({
     eventStartIso: leg.timing === 'arrive_by' ? timingIso : null,
     departureTimeIso: leg.timing === 'depart_at' ? timingIso : null,
     enabled: Boolean(leg.origin.name && leg.destination.name && timingIso),
-    bufferMins: 10,
+    bufferMins: 5,
   })
   const result = eta.data
   const leaveTime = formatClock(result?.leave_by ?? result?.departure_time)

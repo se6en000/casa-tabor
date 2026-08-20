@@ -40,11 +40,13 @@ function plan(legs, extra = {}) {
 }
 
 test('Owen plan uses Giselle and the next saved leg instead of inventing Jake or a stay', () => {
+  const now = new Date(event.start_time)
+  now.setHours(12, 0, 0, 0)
   const projection = projectHomeTransportation(event, plan([
     leg({ id: 'out', time: '14:30', driverName: 'Giselle', origin: "Giselle's house" }),
     leg({ id: 'mid', time: '14:45', driverName: 'Giselle', origin: 'Hope Center', destination: "Giselle's house" }),
     leg({ id: 'return', time: '17:00', driverName: 'Giselle', origin: "Giselle's house", destination: 'Home' }),
-  ]), new Date('2026-07-16T17:00:00.000Z'))
+  ]), now)
 
   assert.equal(projection.summary, 'Giselle drives')
   assert.deepEqual(projection.drivers.map((driver) => driver.name), ['Giselle'])
@@ -54,10 +56,12 @@ test('Owen plan uses Giselle and the next saved leg instead of inventing Jake or
 })
 
 test('next saved leg and emphasized driver advance during the event', () => {
+  const now = new Date(event.start_time)
+  now.setHours(15, 0, 0, 0)
   const projection = projectHomeTransportation(event, plan([
     leg({ id: 'drop', time: '14:30', driverName: 'Giselle' }),
     leg({ id: 'pickup', time: '16:30', driverName: 'Jake', origin: 'Hope Center', destination: 'Home' }),
-  ]), new Date('2026-07-16T19:00:00.000Z'))
+  ]), now)
 
   assert.equal(projection.summary, 'Giselle drops off · Jake picks up')
   assert.equal(projection.nextDriver.name, 'Jake')
@@ -66,21 +70,25 @@ test('next saved leg and emphasized driver advance during the event', () => {
 })
 
 test('three drivers collapse to a count while retaining next-driver ordering', () => {
+  const now = new Date(event.start_time)
+  now.setHours(14, 45, 0, 0)
   const projection = projectHomeTransportation(event, plan([
     leg({ id: 'one', time: '14:00', driverName: 'Giselle' }),
     leg({ id: 'two', time: '15:00', driverName: 'Kelly' }),
     leg({ id: 'three', time: '16:00', driverName: 'Jake' }),
-  ]), new Date('2026-07-16T18:45:00.000Z'))
+  ]), now)
 
   assert.equal(projection.summary, '3 drivers · View plan')
   assert.deepEqual(projection.drivers.map((driver) => driver.name), ['Kelly', 'Giselle', 'Jake'])
 })
 
 test('saved unassigned next leg fails visibly instead of guessing', () => {
+  const now = new Date(event.start_time)
+  now.setHours(12, 0, 0, 0)
   const projection = projectHomeTransportation(event, plan([
     leg({ id: 'drop', time: '14:30', driverName: null, driverId: null }),
     leg({ id: 'pickup', time: '17:00', driverName: 'Jake' }),
-  ]), new Date('2026-07-16T17:00:00.000Z'))
+  ]), now)
 
   assert.equal(projection.summary, 'Driver needed')
   assert.equal(projection.nextDriver, null)
@@ -89,16 +97,18 @@ test('saved unassigned next leg fails visibly instead of guessing', () => {
 })
 
 test('wait, single-purpose, external driver, and malformed plans stay truthful', () => {
+  const now = new Date(event.start_time)
+  now.setHours(12, 0, 0, 0)
   assert.equal(
     projectHomeTransportation(event, plan([
       leg({ id: 'wait', time: '14:30', driverName: 'Grandma', driverId: null }),
-    ], { waitOnSite: true }), new Date('2026-07-16T17:00:00.000Z')).summary,
+    ], { waitOnSite: true }), now).summary,
     'Grandma drives & stays',
   )
   assert.equal(
     projectHomeTransportation(event, plan([
       leg({ id: 'drop', time: '14:30', driverName: 'Giselle', purpose: 'dropoff' }),
-    ]), new Date('2026-07-16T17:00:00.000Z')).summary,
+    ]), now).summary,
     'Giselle drops off',
   )
   assert.equal(projectHomeTransportation(event, null), null)

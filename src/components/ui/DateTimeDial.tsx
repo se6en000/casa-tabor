@@ -167,6 +167,23 @@ const WheelColumn = memo(function WheelColumn({ items, value, onChange, onPrevie
     if (!pointerActive.current) scheduleSelectionCommit()
   }
 
+  const handleOptionClick = (index: number, itemValue: number | string) => {
+    if (settleTimer.current) {
+      window.clearTimeout(settleTimer.current)
+      settleTimer.current = undefined
+    }
+    userScrolling.current = false
+    pointerActive.current = false
+    updateHighlightedOption(index)
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = index * ITEM_HEIGHT
+    }
+    if (itemValue !== value) {
+      navigator.vibrate?.(6)
+      onChange(itemValue)
+    }
+  }
+
   return (
     <div className={cn('relative overflow-hidden', wide ? 'flex-[2.4]' : 'flex-1')} style={{ height: VISIBLE_ITEMS * ITEM_HEIGHT }}>
       <div
@@ -194,7 +211,8 @@ const WheelColumn = memo(function WheelColumn({ items, value, onChange, onPrevie
               }}
               role="option"
               aria-selected={distance === 0}
-              className="flex snap-center select-none items-center justify-center whitespace-nowrap text-heading transition-[opacity,transform]"
+              onClick={() => handleOptionClick(index, item.value)}
+              className="flex snap-center select-none items-center justify-center whitespace-nowrap text-heading cursor-pointer transition-[opacity,transform]"
               style={{
                 height: ITEM_HEIGHT,
                 opacity: distance === 0 ? 1 : distance === 1 ? 0.5 : 0.2,
@@ -289,13 +307,36 @@ export function DateTimeDial({
   const end = parseLocal(previewEndValue)
   const sameDay = start.toDateString() === end.toDateString()
 
+  const handleToggleExpanded = useCallback(() => {
+    if (expanded) {
+      if (previewStart && previewStart !== startValue) {
+        updateStart(previewStart)
+      }
+      if (previewEnd && previewEnd !== endValue) {
+        updateEnd(previewEnd)
+      }
+    }
+    setExpanded(value => !value)
+  }, [endValue, expanded, previewEnd, previewStart, startValue, updateEnd, updateStart])
+
+  useEffect(() => {
+    return () => {
+      if (previewStart && previewStart !== startValue) {
+        onStartChange(previewStart)
+      }
+      if (previewEnd && previewEnd !== endValue) {
+        onEndChange(previewEnd)
+      }
+    }
+  }, [endValue, onEndChange, onStartChange, previewEnd, previewStart, startValue])
+
   return (
     <div className="space-y-3">
       <FormSummaryCard
         icon={<Clock size={20} />}
         title={`${format(start, 'EEE, MMM d · h:mm a')}–${format(end, sameDay ? 'h:mm a' : 'EEE, MMM d · h:mm a')}`}
         detail={durationLabel(previewStartValue, previewEndValue)}
-        action={<Button variant="secondary" size="sm" onClick={() => setExpanded(value => !value)}>{expanded ? 'Done' : 'Change'}</Button>}
+        action={<Button variant="secondary" size="sm" onClick={handleToggleExpanded}>{expanded ? 'Done' : 'Change'}</Button>}
       />
       {expanded && (
         <div className="grid gap-4">

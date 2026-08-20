@@ -1,7 +1,10 @@
-import type { EventWithDetails } from '../hooks/useCalendarEvents'
-import type { EventMode } from './eventCommandCenter'
-import { inferEventMode } from './eventCommandCenter'
-import { normalizeTransportationPlan, type EventTransportationPlan } from './eventTransportation'
+import type { QueryClient } from '@tanstack/react-query'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import type { EventWithDetails } from '../hooks/useCalendarEvents.ts'
+import type { EventMode } from './eventCommandCenter.ts'
+import { inferEventMode } from './eventCommandCenter.ts'
+import { normalizeTransportationPlan, type EventTransportationPlan } from './eventTransportation.ts'
+import { publishEventAggregatePatch } from './eventAggregateCache.ts'
 
 export type PersistedPlanOverrides = {
   verified?: boolean | null
@@ -12,6 +15,20 @@ export type PersistedPlanOverrides = {
   transportationPlan?: EventTransportationPlan | null
   locationSignature?: string
   locationProjectionBlocked?: boolean
+}
+
+export interface EventPlanOverrideDbRow {
+  event_id: string
+  verified: boolean
+  waits: boolean | null
+  mode_override: EventMode | null
+  two_driver_confirmed: boolean
+  driver_overrides: Record<number, string>
+  location_signature: string
+  transportation_plan: EventTransportationPlan | null
+  location_projection_blocked?: boolean
+  created_at?: string
+  updated_at: string
 }
 
 const PANEL_OVERRIDES_KEY_PREFIX = 'event-command-center-overrides:v1'
@@ -135,3 +152,111 @@ export function getPersistedDriverOverrideMemberIds(event: EventWithDetails): Se
 export function resolveEventMode(event: EventWithDetails): EventMode {
   return getPersistedModeOverride(event) ?? inferEventMode(event)
 }
+
+export function createEventPlanOverridePayload(options: {
+  event: EventWithDetails
+  transportationPlan?: EventTransportationPlan | null
+  waits?: boolean | null
+  modeOverride?: EventMode | null
+  driverOverrides?: Record<number, string>
+  twoDriverConfirmed?: boolean
+}): EventPlanOverrideDbRow {
+  const { event, transportationPlan, waits, modeOverride, driverOverrides, twoDriverConfirmed } = options
+  const locSig = locationSignature(event)
+  const normalizedPlan = normalizeTransportationPlan(transportationPlan)
+  
+  const effectiveDriverOverrides: Record<number, string> = { ...(driverOverrides ?? {}) }
+  if (normalizedPlan && Object.keys(effectiveDriverOverrides).length === 0) {
+    normalizedPlan.legs.forEach((leg, index) => {
+      if (leg.driverId) {
+        effectiveDriverOverrides[index] = leg.driverId
+      }
+    })
+  }
+
+  const effectiveWaits = typeof waits === 'boolean'
+    ? waits
+    : typeof normalizedPlan?.waitOnSite === 'boolean'
+      ? normalizedPlan.waitOnSite
+      : (event.plan_override?.waits ?? null)
+
+  const effectiveMode = normalizeModeOverride(modeOverride ?? event.plan_override?.mode_override)
+
+  const distinctDriverIds = new Set(Object.values(effectiveDriverOverrides).filter(Boolean))
+  const isTwoDrivers = typeof twoDriverConfirmed === 'boolean'
+    ? twoDriverConfirmed
+    : distinctDriverIds.size >= 2
+
+  return {
+    event_id: event.id,
+    verified: true,
+    waits: effectiveWaits,
+    mode_override: effectiveMode,
+    two_driver_confirmed: isTwoDrivers,
+    driver_overrides: effectiveDriverOverrides,
+    location_signature: locSig,
+    transportation_plan: normalizedPlan,
+    location_projection_blocked: Boolean(event.plan_override?.location_projection_blocked),
+    created_at: event.plan_override?.created_at || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }
+}
+
+export async function saveEventTransportationOverride(options: {
+  supabase?: SupabaseClient | null
+  queryClient?: QueryClient | null
+  event: EventWithDetails
+  transportationPlan?: EventTransportationPlan | null
+  waits?: boolean | null
+  modeOverride?: EventMode | null
+  driverOverrides?: Record<number, string>
+  twoDriverConfirmed?: boolean
+}): Promise<EventPlanOverrideDbRow> {
+  const { supabase, queryClient, event } = options
+  const payload = createEventPlanOverridePayload(options)
+
+  // 1. Synchronously write to localStorage for instant local read fallback
+  try {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(overridesStorageKey(event.id), JSON.stringify({
+        verified: payload.verified,
+        waits: payload.waits,
+        modeOverride: payload.mode_override,
+        twoDriverConfirmed: payload.two_driver_confirmed,
+        driverOverrides: payload.driver_overrides,
+        locationSignature: payload.location_signature,
+        transportationPlan: payload.transportation_plan,
+        locationProjectionBlocked: payload.location_projection_blocked,
+      }))
+    }
+  } catch (error) {
+    console.warn('saveEventTransportationOverride: failed to write localStorage override', error)
+  }
+
+  // 2. Publish aggregate patch & fire custom events so all components re-render immediately
+  if (queryClient) {
+    publishEventAggregatePatch(queryClient, event.id, {
+      plan_override: payload,
+    })
+  } else if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('casa:event-updated', { detail: { eventId: event.id, patch: { plan_override: payload } } }))
+    window.dispatchEvent(new CustomEvent('casa:overrides-updated', { detail: { eventId: event.id } }))
+  }
+
+  // 3. Upsert to Supabase
+  if (supabase) {
+    try {
+      const { error } = await supabase
+        .from('event_plan_overrides')
+        .upsert(payload, { onConflict: 'event_id' })
+      if (error) {
+        console.error('saveEventTransportationOverride: Supabase upsert error', error)
+      }
+    } catch (err) {
+      console.error('saveEventTransportationOverride: network error', err)
+    }
+  }
+
+  return payload
+}
+

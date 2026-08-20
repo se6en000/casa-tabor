@@ -19,6 +19,7 @@ export interface SegmentedControlProps<T extends string> {
   onChange: (value: T) => void
   'aria-label': string
   fullWidth?: boolean
+  disabled?: boolean
   className?: string
 }
 
@@ -33,11 +34,12 @@ export function SegmentedControl<T extends string>({
   onChange,
   'aria-label': ariaLabel,
   fullWidth = false,
+  disabled = false,
   className,
 }: SegmentedControlProps<T>) {
   const [dragPosition, setDragPosition] = useState<number | null>(null)
   const pointerInteraction = useRef<{ pointerId: number; startX: number; dragging: boolean } | null>(null)
-  const enabledOptions = options.filter((option) => !option.disabled)
+  const enabledOptions = disabled ? [] : options.filter((option) => !option.disabled)
   const selectedIndex = Math.max(0, options.findIndex((option) => option.value === value))
 
   const pointerPosition = (event: PointerEvent<HTMLDivElement>) => {
@@ -131,7 +133,7 @@ export function SegmentedControl<T extends string>({
             type="button"
             role="radio"
             aria-checked={selected}
-            disabled={option.disabled}
+            disabled={disabled || option.disabled}
             tabIndex={selected ? 0 : -1}
             data-segment-value={option.value}
             onClick={(event) => {

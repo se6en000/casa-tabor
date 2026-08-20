@@ -372,10 +372,10 @@ export default function TabletPrototypePage() {
                   )}
                 </div>
                 <div className="mt-6 pt-5 border-t border-casa-border flex items-center gap-3">
-                  <Button variant="ghost" className="flex items-center gap-2 px-5 py-2.5 bg-casa-navy text-white rounded-xl text-body font-medium hover:brightness-110 transition-all">
-                    <Edit3 size={15} /> Edit Event
+                  <Button variant="strong" leadingIcon={<Edit3 size={15} />}>
+                    Edit Event
                   </Button>
-                  <Button variant="ghost" onClick={() => setEditingEvent(null)} className="px-5 py-2.5 text-casa-muted rounded-xl text-body hover:bg-casa-bg transition-colors">
+                  <Button variant="secondary" onClick={() => setEditingEvent(null)}>
                     Close
                   </Button>
                   <p className="ml-auto text-caption text-casa-muted italic">Prototype — edit not wired yet</p>

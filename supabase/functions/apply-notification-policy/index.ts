@@ -206,7 +206,7 @@ Deno.serve(async (req) => {
     const bucket = prepEscalationBucket(dueInMins, p.priority, cfg, escalateMinutes)
     if (!bucket) continue
 
-    const dedupeKey = `policy_prep:${p.event_id}:${bucket}`
+    const dedupeKey = `policy_prep:${p.id}:${bucket}`
     const { data: existing } = await sb.from('notifications')
       .select('id')
       .eq('dedupe_key', dedupeKey)

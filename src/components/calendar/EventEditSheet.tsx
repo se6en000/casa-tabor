@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   X, Save, Sparkles, Trash2, Loader2,
@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { useEventDetails, type EventWithDetails } from '../../hooks/useCalendarEvents'
+import type { FamilyMember } from '../../types'
 import {
   getFieldsForCategory, FIELD_CONFIG, CATEGORY_LABEL,
   type EnrichmentFieldKey,
@@ -13,6 +14,7 @@ import {
 import { useSaveEnrichmentBatch, useEnrichEvent } from '../../hooks/useEnrichEvent'
 import ChecklistEditor from './ChecklistEditor'
 import { supabase } from '../../lib/supabase'
+import { deleteCalendarEvent, syncAndMaterializeRecurringSeries, triggerGoogleEventSync, excludeOccurrence } from '../../lib/eventMutations'
 import { useQueryClient } from '@tanstack/react-query'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
 import BounceScroll from '../shared/BounceScroll'
@@ -20,6 +22,7 @@ import {
   Alert,
   Button,
   Chip,
+  ConfirmationDialog,
   DateTimeDial,
   DisclosureSection,
   FormSummaryCard,
@@ -36,6 +39,7 @@ import { normalizeReminderTimeRange } from '../../utils/reminderTimeRange'
 import type { EventLocationScope } from '../../lib/eventLocation'
 import type { TransportationPlace } from '../../lib/eventTransportation'
 import RecurrenceScopeDialog from './RecurrenceScopeDialog'
+import RecurrenceRuleBuilder from './RecurrenceRuleBuilder'
 import SmartPlaceInput from './SmartPlaceInput'
 import SmartContactInput from './SmartContactInput'
 import {
@@ -64,16 +68,16 @@ function expandRrule(masterStart: string, masterEnd: string, rrule: string): Arr
   const until = untilRaw
     ? new Date(`${untilRaw.slice(0,4)}-${untilRaw.slice(4,6)}-${untilRaw.slice(6,8)}T23:59:59Z`)
     : null
-  const maxCount = countStr ? parseInt(countStr, 10) : 500
+  // Keep local instance expansion lightweight (12 weeks horizon / max 24 occurrences)
+  // Google sync and canonical recurrence handle longer term expansion dynamically.
+  const maxCount = countStr ? Math.min(parseInt(countStr, 10), 25) : 25
 
   const origin = new Date(masterStart)
   const duration = new Date(masterEnd).getTime() - origin.getTime()
   const results: Array<{ start: string; end: string }> = []
 
-  // Generate all candidate dates, collect all that are > origin (or same date but excluded)
-  // Hard cap: never generate more than 500 instances
   const addOcc = (d: Date) => {
-    if (results.length >= Math.min(maxCount - 1, 499)) return false
+    if (results.length >= Math.min(maxCount - 1, 24)) return false
     if (until && d > until) return false
     if (d.toDateString() === origin.toDateString()) return true // skip master
     const s = new Date(d); s.setHours(origin.getHours(), origin.getMinutes(), origin.getSeconds(), 0)
@@ -83,7 +87,7 @@ function expandRrule(masterStart: string, masterEnd: string, rrule: string): Arr
 
   if (freq === 'DAILY') {
     const cur = new Date(origin); cur.setDate(cur.getDate() + interval)
-    while ((until ? cur <= until : results.length < maxCount - 1) && results.length < 499) {
+    while ((until ? cur <= until : results.length < maxCount - 1) && results.length < 24) {
       if (!addOcc(cur)) break
       cur.setDate(cur.getDate() + interval)
     }
@@ -92,7 +96,7 @@ function expandRrule(masterStart: string, masterEnd: string, rrule: string): Arr
     // Start from the Sunday of the origin week and walk forward week-by-week
     const weekSun = new Date(origin); weekSun.setDate(origin.getDate() - origin.getDay())
     let weekOffset = 0
-    const maxWeeks = 260 // 5 years safety
+    const maxWeeks = 12 // 12 weeks / 3 months near-term horizon
     outer: while (weekOffset < maxWeeks) {
       const ws = new Date(weekSun); ws.setDate(weekSun.getDate() + weekOffset * 7 * interval)
       const sorted = [...effectiveByDay].sort((a, b) => a - b)
@@ -100,20 +104,20 @@ function expandRrule(masterStart: string, masterEnd: string, rrule: string): Arr
         const day = new Date(ws); day.setDate(ws.getDate() + d)
         if (day < origin) continue // before master
         if (until && day > until) break outer
-        if (results.length >= Math.min(maxCount - 1, 499)) break outer
+        if (results.length >= Math.min(maxCount - 1, 24)) break outer
         addOcc(day)
       }
       weekOffset++
     }
   } else if (freq === 'MONTHLY') {
     const cur = new Date(origin); cur.setMonth(cur.getMonth() + interval)
-    while ((until ? cur <= until : results.length < maxCount - 1) && results.length < 499) {
+    while ((until ? cur <= until : results.length < maxCount - 1) && results.length < 24) {
       if (!addOcc(cur)) break
       cur.setMonth(cur.getMonth() + interval)
     }
   } else if (freq === 'YEARLY') {
     const cur = new Date(origin); cur.setFullYear(cur.getFullYear() + interval)
-    while ((until ? cur <= until : results.length < maxCount - 1) && results.length < 499) {
+    while ((until ? cur <= until : results.length < maxCount - 1) && results.length < 24) {
       if (!addOcc(cur)) break
       cur.setFullYear(cur.getFullYear() + interval)
     }
@@ -135,33 +139,35 @@ interface Props {
   initialDelete?: boolean
   initialAiTools?: boolean
   presentation?: 'sheet' | 'inline'
+  detailError?: boolean
 }
 
 export default function EventEditSheet(props: Props) {
   const detailQuery = useEventDetails(props.event)
   const inline = props.presentation === 'inline'
 
-  if (!props.open || detailQuery.data) {
-    return <EventEditSheetContent {...props} event={detailQuery.data ?? props.event} />
+  if (!props.open || detailQuery.data || detailQuery.isError) {
+    return (
+      <EventEditSheetContent
+        {...props}
+        event={detailQuery.data ?? props.event}
+        detailError={detailQuery.isError}
+      />
+    )
   }
 
   if (inline) {
     return (
-      <div className="flex h-full min-h-0 items-center justify-center bg-casa-bg-2 p-6" role="status">
-        {detailQuery.isError ? (
-          <Alert tone="danger" title="Event details could not be loaded" className="max-w-md">
-            <div className="mt-2">
-              <Button variant="secondary" size="sm" onClick={() => void detailQuery.refetch()}>
-                Try again
-              </Button>
-            </div>
-          </Alert>
-        ) : (
-          <div className="inline-flex items-center gap-2 text-body-sm text-casa-muted">
-            <Loader2 size={18} className="animate-spin" />
-            Loading complete event details…
-          </div>
-        )}
+      <div className="flex h-full min-h-0 flex-col items-center justify-center bg-casa-bg-2 p-6" role="status">
+        <div className="inline-flex items-center gap-2 text-body-sm text-casa-muted">
+          <Loader2 size={18} className="animate-spin" />
+          Loading complete event details…
+        </div>
+        <div className="mt-4">
+          <Button variant="ghost" size="sm" onClick={props.onClose}>
+            Cancel
+          </Button>
+        </div>
       </div>
     )
   }
@@ -192,20 +198,10 @@ export default function EventEditSheet(props: Props) {
           <IconButton icon={<X size={18} />} aria-label="Close editor" onClick={props.onClose} />
         </div>
         <div className="flex flex-1 items-center justify-center p-6">
-          {detailQuery.isError ? (
-            <Alert tone="danger" title="Event details could not be loaded" className="max-w-md">
-              <div className="mt-2">
-                <Button variant="secondary" size="sm" onClick={() => void detailQuery.refetch()}>
-                  Try again
-                </Button>
-              </div>
-            </Alert>
-          ) : (
-            <div className="inline-flex items-center gap-2 text-body-sm text-casa-muted" role="status">
-              <Loader2 size={18} className="animate-spin" />
-              Loading complete event details…
-            </div>
-          )}
+          <div className="inline-flex items-center gap-2 text-body-sm text-casa-muted" role="status">
+            <Loader2 size={18} className="animate-spin" />
+            Loading complete event details…
+          </div>
         </div>
       </motion.div>
     </AnimatePresence>
@@ -219,6 +215,7 @@ function EventEditSheetContent({
   initialDelete = false,
   initialAiTools = false,
   presentation = 'sheet',
+  detailError = false,
 }: Props) {
   const inline = presentation === 'inline'
   const enr = event.enrichment
@@ -481,6 +478,11 @@ function EventEditSheetContent({
 
   // Selected members are attendees; transportation ownership is managed in The Plan.
   const [memberRoles, setMemberRoles] = useState<Record<string, 'attendee'>>({})
+  const visibleAttendingMembers = useMemo(
+    () => allMembers.filter((m) => (m.show_on_home_sidebar ?? true) || Boolean(memberRoles[m.id])),
+    [allMembers, memberRoles]
+  )
+
 
   // Date/time state uses local datetime strings shared by the touch dial.
   const toLocalDT = (iso: string, allDay = false) => {
@@ -514,7 +516,7 @@ function EventEditSheetContent({
     return out
   }
 
-  // Reset everything when sheet opens or when masterData loads for instances
+  // Reset form when sheet opens for an event
   useEffect(() => {
     if (!open) {
       initializedEventIdRef.current = null
@@ -522,6 +524,22 @@ function EventEditSheetContent({
     }
     const eventChanged = initializedEventIdRef.current !== event.id
     if (!eventChanged && isDirtyRef.current) return
+    if (!eventChanged) {
+      // If masterData or recurringContext loaded after initial mount, sync recurrence safely if untouched
+      if (!recurrenceTouched) {
+        const activeCanonicalRrule = recurringContext?.series.recurrence_lines
+          .find((line) => line.startsWith('RRULE:'))
+          ?.slice('RRULE:'.length) ?? null
+        const activeRrule = isCanonicalOccurrence
+          ? (activeCanonicalRrule ?? event.rrule ?? null)
+          : isInstance ? (masterData?.rrule ?? event.rrule ?? null) : (event.rrule ?? null)
+        if (activeRrule) {
+          setRecur(parseRrule(activeRrule))
+        }
+      }
+      return
+    }
+
     initializedEventIdRef.current = event.id
     const activeEnr = isInstance ? (masterData?.enrichment ?? enr) : enr
     const cat = activeEnr?.category ?? 'other'
@@ -577,7 +595,6 @@ function EventEditSheetContent({
     }
     return out
   }
-
   const markDirty = () => { isDirtyRef.current = true }
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false)
   const set = (field: string, value: string) => {
@@ -587,7 +604,6 @@ function EventEditSheetContent({
 
   const handleClose = () => {
     if (isDirtyRef.current) {
-      clearTimeAutosaveTimer()
       setShowDiscardConfirm(true)
       return
     }
@@ -595,7 +611,6 @@ function EventEditSheetContent({
   }
 
   const confirmDiscard = () => {
-    clearTimeAutosaveTimer()
     isDirtyRef.current = false
     setShowDiscardConfirm(false)
     onClose()
@@ -603,7 +618,6 @@ function EventEditSheetContent({
 
   const cancelDiscard = () => {
     setShowDiscardConfirm(false)
-    scheduleTimeAutosave()
   }
 
   const handleReenrich = async () => {
@@ -672,18 +686,6 @@ function EventEditSheetContent({
   }
 
   const pendingTitleRef = useRef<string | null>(null)
-  const timeAutosaveTimerRef = useRef<number | null>(null)
-
-  const clearTimeAutosaveTimer = useCallback(() => {
-    if (timeAutosaveTimerRef.current !== null) {
-      window.clearTimeout(timeAutosaveTimerRef.current)
-      timeAutosaveTimerRef.current = null
-    }
-  }, [])
-
-  useEffect(() => () => {
-    clearTimeAutosaveTimer()
-  }, [clearTimeAutosaveTimer])
 
   const handleSave = async () => {
     // Flush DOM value — fixes iOS/Safari composition lag where the last
@@ -709,20 +711,9 @@ function EventEditSheetContent({
     await doSave('all')
   }
 
-  const scheduleTimeAutosave = useCallback(() => {
-    if (isSaving || isInstance || recurringEditorEnabled || isCanonicalOccurrence || recur.freq !== 'none') return
-    clearTimeAutosaveTimer()
-    timeAutosaveTimerRef.current = window.setTimeout(() => {
-      timeAutosaveTimerRef.current = null
-      if (!isDirtyRef.current || isSaving) return
-      void handleSave()
-    }, 300)
-  }, [clearTimeAutosaveTimer, handleSave, isCanonicalOccurrence, isInstance, isSaving, recur.freq, recurringEditorEnabled])
-
   const handleDateTimeInteraction = useCallback(() => {
     markDirty()
-    scheduleTimeAutosave()
-  }, [scheduleTimeAutosave])
+  }, [])
 
   const handleScopeChoice = async (
     scope: RecurScope,
@@ -744,7 +735,6 @@ function EventEditSheetContent({
     setIsSaving(true)
     setSaveStatus('saving')
     setSaveError(null)
-    clearTimeAutosaveTimer()
 
     // Supabase free tier cold-starts can take 15-20s — allow 35s before giving up
     const saveTimeout = new Promise<never>((_, reject) =>
@@ -992,6 +982,9 @@ function EventEditSheetContent({
         all_day: isAllDay,
         event_type: eventType,
         is_enriched: true,
+        record_kind: isInstance ? 'occurrence' : (event.record_kind || 'single'),
+        is_exception: isInstance ? true : (event.is_exception || false),
+        original_start_time: isInstance ? (event.original_start_time || event.start_time) : (event.original_start_time || null),
         updated_at: new Date().toISOString(),
       }).eq('id', event.id)
       if (error) { alert(`Save failed: ${error.message}`); return }
@@ -1196,25 +1189,21 @@ function EventEditSheetContent({
         .catch(() => {})
 
     } else if (scope === 'all') {
-      // All instances: push master event (with full RRULE) to Google
       const masterIdToSync = isInstance ? event.recurrence_master_id! : event.id
-      supabase.functions.invoke('update-recurring-google', { body: { master_event_id: masterIdToSync } })
-        .then(() => qc.invalidateQueries({ queryKey: ['events'] }))
-        .catch(e => console.warn('[EventEditSheet] update-recurring-google failed:', e))
+      await syncAndMaterializeRecurringSeries(supabase, masterIdToSync)
+      triggerGoogleEventSync(supabase, masterIdToSync)
+      void qc.invalidateQueries({ queryKey: ['events'] })
 
     } else if (scope === 'future') {
-      // Future split: truncate original series in Google + create new series for future branch
       if (event.recurrence_master_id) {
-        // Update original master in Google (now has UNTIL in rrule)
-        supabase.functions.invoke('update-recurring-google', { body: { master_event_id: event.recurrence_master_id } })
-          .catch(e => console.warn('[EventEditSheet] update-recurring-google (original) failed:', e))
+        await syncAndMaterializeRecurringSeries(supabase, event.recurrence_master_id)
+        triggerGoogleEventSync(supabase, event.recurrence_master_id)
       }
       if (newFutureMasterId) {
-        // Create new Google recurring event for the future branch
-        supabase.functions.invoke('update-recurring-google', { body: { master_event_id: newFutureMasterId } })
-          .then(() => qc.invalidateQueries({ queryKey: ['events'] }))
-          .catch(e => console.warn('[EventEditSheet] update-recurring-google (future) failed:', e))
+        await syncAndMaterializeRecurringSeries(supabase, newFutureMasterId)
+        triggerGoogleEventSync(supabase, newFutureMasterId)
       }
+      void qc.invalidateQueries({ queryKey: ['events'] })
     }
     // analyze-conflicts + analyze-prep removed from save — they run on the scheduled HomePage cadence (5x/day)
 
@@ -1299,12 +1288,32 @@ function EventEditSheetContent({
     setDeleteError(null)
     try {
       if (event.google_event_id) {
-        const googleDelete = await supabase.functions.invoke('delete-google-event', { body: { event_id: event.id } })
-        if (googleDelete.error) throw new Error(`Google Calendar deletion failed: ${googleDelete.error.message}`)
+        try {
+          const googleDelete = await supabase.functions.invoke('delete-google-event', {
+            body: {
+              event_id: event.id,
+              google_event_id: event.google_event_id,
+              google_calendar_id: event.google_calendar_id,
+              google_connection_id: event.google_connection_id,
+              source_member_id: event.source_member_id,
+            },
+          })
+          if (googleDelete.error) {
+            const errorMsg = String(googleDelete.error.message || '')
+            const isNotFound = errorMsg.includes('404') || /not\s*found/i.test(errorMsg)
+            if (!isNotFound) {
+              throw new Error(`Google Calendar deletion failed: ${googleDelete.error.message}`)
+            }
+          }
+        } catch (googleErr) {
+          const message = googleErr instanceof Error ? googleErr.message : String(googleErr)
+          const isNotFound = message.includes('404') || /not\s*found/i.test(message)
+          if (!isNotFound) {
+            throw googleErr
+          }
+        }
       }
-      const { error } = await supabase.from('events').delete().eq('id', event.id)
-      if (error) throw new Error(`Casa deletion failed: ${error.message}`)
-      await qc.invalidateQueries({ queryKey: ['events'] })
+      await deleteCalendarEvent(supabase, qc, event.id, event)
       onClose()
     } catch (cause) {
       setDeleteError(cause instanceof Error ? cause.message : 'Could not delete this event.')
@@ -1322,7 +1331,9 @@ function EventEditSheetContent({
     setDeleteError(null)
     try {
       const seriesPatch: Record<string, unknown> = {}
-      if (scope === 'future') {
+      if (scope === 'this') {
+        await excludeOccurrence(supabase, event.id)
+      } else if (scope === 'future') {
         const originalStart = event.original_start_time ?? (
           event.original_start_date ? `${event.original_start_date}T00:00:00Z` : event.start_time
         )
@@ -1519,6 +1530,13 @@ function EventEditSheetContent({
                       : 'This event currently inherits all editable details from the series.'}
                   </p>
                 )}
+                {detailError && (
+                  <div className="mt-3">
+                    <Alert tone="warning" title="Event details could not be loaded">
+                      Using cached event summary. You can still make changes or delete this event.
+                    </Alert>
+                  </div>
+                )}
                 {saveError && !showScopeModal && (
                   <div className="mt-3">
                     <Alert tone="danger" title="Could not save changes">{saveError}</Alert>
@@ -1619,7 +1637,7 @@ function EventEditSheetContent({
                     Select everyone attending.
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    {allMembers.map(member => {
+                    {visibleAttendingMembers.map((member: FamilyMember) => {
                       const isAttending = memberRoles[member.id] === 'attendee'
 
                       return (
@@ -1756,124 +1774,17 @@ function EventEditSheetContent({
                   defaultOpen={recur.freq !== 'none'}
                   className="-mx-6 -mb-4 border-b-0"
                 >
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3">
-                    <label className="text-caption text-casa-muted font-medium shrink-0">Repeat</label>
-                    <div className="relative flex-1">
-                      <Select
-                        value={recur.freq}
-                        onChange={e => {
-                          setRecur(r => ({ ...r, freq: e.target.value as typeof r.freq, byDay: [] }))
-                          setRecurrenceTouched(true)
-                          markDirty()
-                        }}
-                        className="pr-8 appearance-none"
-                      >
-                        <option value="none" disabled={isCanonicalOccurrence && recurringEditorEnabled}>
-                          Does not repeat
-                        </option>
-                        <option value="daily">Daily</option>
-                        <option value="weekly">Weekly</option>
-                        <option value="monthly">Monthly</option>
-                        <option value="yearly">Yearly</option>
-                      </Select>
-                      <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-casa-muted pointer-events-none" />
-                    </div>
-                    {recur.freq !== 'none' && (
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <span className="text-caption text-casa-muted">every</span>
-                        <Input
-                          type="number"
-                          min={1} max={99}
-                          value={recur.interval}
-                          onChange={e => {
-                            setRecur(r => ({ ...r, interval: Math.max(1, parseInt(e.target.value) || 1) }))
-                            setRecurrenceTouched(true)
-                            markDirty()
-                          }}
-                          className="w-20 text-center"
-                        />
-                        <span className="text-caption text-casa-muted">
-                          {recur.freq === 'daily' ? 'day(s)' : recur.freq === 'weekly' ? 'wk(s)' : recur.freq === 'monthly' ? 'mo(s)' : 'yr(s)'}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Day-of-week selector for weekly */}
-                  {recur.freq === 'weekly' && (
-                    <div className="flex gap-1.5 flex-wrap">
-                      {['S','M','T','W','T','F','S'].map((d, i) => (
-                        <Chip
-                          key={i}
-                          type="button"
-                          selected={recur.byDay.includes(i)}
-                          onClick={() => {
-                            setRecur(r => ({
-                              ...r,
-                              byDay: r.byDay.includes(i) ? r.byDay.filter(x => x !== i) : [...r.byDay, i],
-                            }))
-                            setRecurrenceTouched(true)
-                            markDirty()
-                          }}
-                        >
-                          {d}
-                        </Chip>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* End condition */}
-                  {recur.freq !== 'none' && (
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <label className="text-caption text-casa-muted font-medium shrink-0">Ends</label>
-                      <div className="flex gap-2">
-                        {(['never','date','count'] as const).map(opt => (
-                          <Chip
-                            key={opt}
-                            type="button"
-                            selected={recur.endType === opt}
-                            onClick={() => {
-                              setRecur(r => ({ ...r, endType: opt }))
-                              setRecurrenceTouched(true)
-                              markDirty()
-                            }}
-                          >
-                            {opt === 'never' ? 'Never' : opt === 'date' ? 'On date' : 'After'}
-                          </Chip>
-                        ))}
-                      </div>
-                      {recur.endType === 'date' && (
-                        <Input
-                          type="date"
-                          value={recur.endDate}
-                          onChange={e => {
-                            setRecur(r => ({ ...r, endDate: e.target.value }))
-                            setRecurrenceTouched(true)
-                            markDirty()
-                          }}
-                          className="flex-1"
-                        />
-                      )}
-                      {recur.endType === 'count' && (
-                        <div className="flex items-center gap-1.5">
-                          <Input
-                            type="number"
-                            min={2} max={999}
-                            value={recur.count}
-                            onChange={e => {
-                              setRecur(r => ({ ...r, count: Math.max(2, parseInt(e.target.value) || 2) }))
-                              setRecurrenceTouched(true)
-                              markDirty()
-                            }}
-                            className="w-24 text-center"
-                          />
-                          <span className="text-caption text-casa-muted">occurrences</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+                  <RecurrenceRuleBuilder
+                    value={buildRrule()}
+                    onChange={(rruleStr) => {
+                      setRecur(parseRrule(rruleStr))
+                      setRecurrenceTouched(true)
+                      markDirty()
+                    }}
+                    startDate={startDT}
+                    disabled={isCanonicalOccurrence && recurringEditorEnabled}
+                    className="border-0 shadow-none bg-transparent p-0"
+                  />
                 </DisclosureSection>
               </div>
 
@@ -2065,7 +1976,7 @@ function EventEditSheetContent({
             }}
             onSelect={(scope) => void handleRecurringDelete(scope)}
           />
-          <Modal
+          <ConfirmationDialog
             open={showDeleteConfirm}
             onClose={() => {
               if (deleting) return
@@ -2073,42 +1984,35 @@ function EventEditSheetContent({
               setDeleteError(null)
               setDeleteBlocked(false)
             }}
-            title={deleteBlocked ? 'Cannot safely delete this event' : 'Delete this event?'}
-            size="sm"
-          >
-            <p className="text-body-sm text-casa-muted">
-              {deleteBlocked
+            onConfirm={() => void handleDelete()}
+            title={
+              deleteBlocked
+                ? 'Cannot safely delete this event'
+                : (titleRef.current?.value || displayTitle || event.title || '').trim()
+                  ? `Delete "${(titleRef.current?.value || displayTitle || event.title || '').trim()}"?`
+                  : 'Delete this event?'
+            }
+            description={
+              deleteBlocked
                 ? 'Casa left the event unchanged. Close this message and try again after recurring deletion is available.'
-                : 'This removes the event from Casa and its connected Google Calendar.'}
-            </p>
-            {deleteError && <p role="alert" className="mt-3 text-body-sm text-casa-error">{deleteError}</p>}
-            <div className="mt-4 flex justify-end gap-2">
-              <Button variant="secondary" onClick={() => {
-                setShowDeleteConfirm(false)
-                setDeleteError(null)
-                setDeleteBlocked(false)
-              }}>
-                {deleteBlocked ? 'Close' : 'Cancel'}
-              </Button>
-              {!deleteBlocked && (
-                <Button variant="danger" loading={deleting} onClick={() => void handleDelete()}>Delete event</Button>
-              )}
-            </div>
-          </Modal>
-          <Modal
+                : 'This will remove the event from Casa Tabor and its connected Google Calendar.'
+            }
+            confirmLabel="Delete event"
+            cancelLabel={deleteBlocked ? 'Close' : 'Keep event'}
+            destructive={!deleteBlocked}
+            loading={deleting}
+            error={deleteError}
+          />
+          <ConfirmationDialog
             open={showDiscardConfirm}
             onClose={cancelDiscard}
+            onConfirm={confirmDiscard}
             title="Discard changes?"
-            size="sm"
-          >
-            <p className="text-body-sm text-casa-muted">
-              You have unsaved changes. Closing now will discard them.
-            </p>
-            <div className="mt-4 flex justify-end gap-2">
-              <Button variant="secondary" onClick={cancelDiscard}>Keep editing</Button>
-              <Button variant="danger" onClick={confirmDiscard}>Discard changes</Button>
-            </div>
-          </Modal>
+            description="You have unsaved changes. Closing now will discard them."
+            confirmLabel="Discard changes"
+            cancelLabel="Keep editing"
+            destructive
+          />
         </>
       )}
     </AnimatePresence>

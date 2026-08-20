@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Design System Comparison: Full Day View vs Compact Stacked View</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;0,700;1,600&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --color-casa-gold: #C9A96E;
+      --color-casa-gold-dark: #9C7838;
+      --color-casa-navy: #1B2A4A;
+      --color-casa-bg: #FAF8F5;
+      --color-casa-surface: #FFFFFF;
+      --color-casa-border: #E8E2D9;
+      --color-casa-border-dark: #D4CBBD;
+      --color-casa-divider: #EFE9DF;
+      --color-casa-text: #2D2D2D;
+      --color-casa-muted: #7A7B87;
+      --color-casa-success: #27AE60;
+      --family-jake: #1B2A4A;
+      --family-kelly: #C4693A;
+      --family-liv: #6A9E7F;
+      --family-emme: #C47A8A;
+      --family-owen: #D4A44C;
+      --shadow-card: 0 1px 4px rgba(27,42,74,0.06), 0 1px 2px rgba(27,42,74,0.04);
+      --shadow-card-hover: 0 4px 14px rgba(27,42,74,0.10);
+      --radius-widget: 16px;
+      --radius-pill: 9999px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--color-casa-bg);
+      color: var(--color-casa-text);
+      font-family: 'DM Sans', sans-serif;
+      padding: 40px 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 36px;
+    }
+
+    header {
+      text-align: center;
+      max-width: 860px;
+    }
+    h1 {
+      font-family: 'Cormorant Garamond', Georgia, serif;
+      font-size: 34px;
+      font-weight: 700;
+      color: var(--color-casa-navy);
+      letter-spacing: -0.5px;
+    }
+    p.subtitle {
+      font-size: 15px;
+      color: var(--color-casa-muted);
+      margin-top: 8px;
+      line-height: 1.5;
+    }
+
+    .section-title {
+      font-family: 'Cormorant Garamond', Georgia, serif;
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--color-casa-navy);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .section-tag {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      padding: 3px 8px;
+      border-radius: var(--radius-pill);
+      background: rgba(201,169,110,0.2);
+      color: var(--color-casa-gold-dark);
+    }
+
+    /* ── SVG Icons ── */
+    .svg-icon {
+      display: inline-block;
+      vertical-align: middle;
+      flex-shrink: 0;
+    }
+
+    /* ── Shared Badges & Avatars ── */
+    .avatar-stack {
+      display: inline-flex;
+      align-items: center;
+    }
+    .avatar {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      color: white;
+      font-size: 10.5px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 2px solid #fff;
+      margin-left: -7px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+    }
+    .avatar:first-child { margin-left: 0; }
+
+    .role-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: var(--radius-pill);
+      font-size: 11.5px;
+      font-weight: 700;
+      background: #F7F5F0;
+      border: 1px solid var(--color-casa-border);
+      color: var(--color-casa-navy);
+    }
+    .role-badge .initial-dot {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      color: white;
+      font-size: 9.5px;
+      font-weight: 800;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .role-pill {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1.5px 6px;
+      border-radius: 4px;
+    }
+    .role-pill.drives { background: rgba(201,169,110,0.2); color: var(--color-casa-gold-dark); }
+    .role-pill.hosting { background: rgba(39,174,96,0.15); color: #238A4C; }
+
+    .btn-action {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      border: 1px solid var(--color-casa-border);
+      background: #fff;
+      color: var(--color-casa-navy);
+      cursor: pointer;
+      min-height: 36px;
+    }
+    .btn-action:hover {
+      background: var(--color-casa-bg);
+      border-color: var(--color-casa-navy);
+    }
+
+    /* ════════════════════════════════════════════════════════════════
+       FULL CALENDAR CARD (Day View Reference — 680px width)
+       ════════════════════════════════════════════════════════════════ */
+    .day-view-container {
+      width: 100%;
+      max-width: 720px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .full-card {
+      background: var(--color-casa-surface);
+      border: 1px solid var(--color-casa-border);
+      border-radius: var(--radius-widget);
+      box-shadow: var(--shadow-card);
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: 140px 1fr;
+    }
+    .full-card.happening {
+      box-shadow: 0 0 0 1.5px var(--color-casa-gold), var(--shadow-card-hover);
+    }
+    .full-pillar {
+      background: var(--color-casa-navy);
+      color: #fff;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      border-left: 5px solid var(--family-kelly);
+      border-right: 1px solid rgba(255,255,255,0.12);
+    }
+    .full-time {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 24px;
+      font-weight: 700;
+      line-height: 1;
+      color: #ffffff;
+    }
+    .full-subtime {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.7);
+      margin-top: 4px;
+      text-transform: uppercase;
+    }
+    .full-leave {
+      padding-top: 8px;
+      border-top: 1px solid rgba(255,255,255,0.15);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--color-casa-gold);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .full-deck {
+      padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 14px;
+    }
+    .full-title {
+      font-family: 'Cormorant Garamond', Georgia, serif;
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--color-casa-navy);
+      line-height: 1.25;
+    }
+    .full-loc {
+      font-size: 12.5px;
+      color: var(--color-casa-muted);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      margin-top: 4px;
+    }
+    .full-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 12px;
+      border-top: 1px solid var(--color-casa-divider);
+    }
+
+    /* Full Reminder Card */
+    .full-reminder {
+      background: #FFFDF8;
+      border: 1px solid #EADBBE;
+      border-radius: var(--radius-widget);
+      box-shadow: var(--shadow-card);
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: 140px 1fr;
+    }
+    .full-reminder-pillar {
+      background: #F7ECD2;
+      color: #5C450A;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      border-left: 5px solid #D4A44C;
+      border-right: 1px solid #EAD8B0;
+    }
+    .full-reminder-time {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 22px;
+      font-weight: 700;
+      color: #4A3800;
+      line-height: 1;
+    }
+
+
+    /* ════════════════════════════════════════════════════════════════
+       COMPACT COMPARISONS SECTION (3 Approaches for Stacked View)
+       ════════════════════════════════════════════════════════════════ */
+    .compact-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      gap: 28px;
+      width: 100%;
+      max-width: 1280px;
+    }
+
+    .compact-column {
+      background: rgba(255,255,255,0.7);
+      border: 1.5px solid var(--color-casa-border);
+      border-radius: 20px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .compact-header {
+      border-bottom: 1.5px solid var(--color-casa-border);
+      padding-bottom: 12px;
+    }
+    .compact-title {
+      font-weight: 700;
+      font-size: 16px;
+      color: var(--color-casa-navy);
+    }
+    .compact-desc {
+      font-size: 12px;
+      color: var(--color-casa-muted);
+      margin-top: 3px;
+    }
+
+    /* ── SYSTEM 1: Top-Anchor Header System (Option 1) ── */
+    .s1-card {
+      background: #fff;
+      border: 1.5px solid var(--color-casa-border-dark);
+      border-radius: var(--radius-widget);
+      box-shadow: var(--shadow-card);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .s1-top-bar {
+      padding: 7px 12px;
+      background: #F8F5EE;
+      border-bottom: 1px solid var(--color-casa-divider);
+      border-left: 4px solid var(--family-kelly);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .s1-time {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--color-casa-navy);
+    }
+    .s1-leave {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--color-casa-gold-dark);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .s1-deck {
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .s1-title {
+      font-family: 'Cormorant Garamond', Georgia, serif;
+      font-size: 18px;
+      font-weight: 700;
+      line-height: 1.25;
+      color: var(--color-casa-navy);
+    }
+    .s1-loc {
+      font-size: 11.5px;
+      color: var(--color-casa-muted);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .s1-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 8px;
+      border-top: 1px solid var(--color-casa-divider);
+    }
+    /* S1 Reminder */
+    .s1-reminder {
+      background: #FAF7EF;
+      border: 1px solid #E5D7BF;
+      border-left: 4px solid #C9A96E;
+      border-radius: 12px;
+      padding: 9px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+
+    /* ── SYSTEM 2: Responsive Proportional Left Pillar (System Match) ── */
+    .s2-card {
+      background: #fff;
+      border: 1.5px solid var(--color-casa-border-dark);
+      border-radius: var(--radius-widget);
+      box-shadow: var(--shadow-card);
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: 86px 1fr;
+    }
+    .s2-pillar {
+      background: #F8F5EE;
+      border-left: 4px solid var(--family-kelly);
+      border-right: 1px solid var(--color-casa-divider);
+      padding: 12px 8px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .s2-time-main {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--color-casa-navy);
+      line-height: 1;
+    }
+    .s2-time-sub {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--color-casa-muted);
+      margin-top: 3px;
+      text-transform: uppercase;
+    }
+    .s2-leave {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--color-casa-gold-dark);
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      padding-top: 6px;
+    }
+    .s2-deck {
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .s2-title {
+      font-family: 'Cormorant Garamond', Georgia, serif;
+      font-size: 18px;
+      font-weight: 700;
+      line-height: 1.25;
+      color: var(--color-casa-navy);
+    }
+    .s2-loc {
+      font-size: 11.5px;
+      color: var(--color-casa-muted);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .s2-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 8px;
+      border-top: 1px solid var(--color-casa-divider);
+    }
+    /* S2 Reminder */
+    .s2-reminder {
+      background: #FFFDF8;
+      border: 1px solid #EADBBE;
+      border-radius: var(--radius-widget);
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: 86px 1fr;
+    }
+    .s2-reminder-pillar {
+      background: #F8EED8;
+      border-left: 4px solid #D4A44C;
+      border-right: 1px solid #EAD8B0;
+      padding: 10px 8px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+
+    /* ── SYSTEM 3: Navy-Anchor Pillar Hybrid ── */
+    .s3-card {
+      background: #fff;
+      border: 1.5px solid var(--color-casa-border-dark);
+      border-radius: var(--radius-widget);
+      box-shadow: var(--shadow-card);
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: 86px 1fr;
+    }
+    .s3-pillar {
+      background: var(--color-casa-navy);
+      color: #fff;
+      border-left: 4px solid var(--family-kelly);
+      padding: 12px 8px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .s3-time-main {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 15px;
+      font-weight: 700;
+      color: #ffffff;
+      line-height: 1;
+    }
+    .s3-time-sub {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.7);
+      margin-top: 3px;
+      text-transform: uppercase;
+    }
+    .s3-leave {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--color-casa-gold);
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      padding-top: 6px;
+      border-top: 1px solid rgba(255,255,255,0.15);
+    }
+    .s3-deck {
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 8px;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Design System Alignment: Day View vs Compact Stacked View</h1>
+    <p class="subtitle">
+      Compare the authoritative <strong>Full Day View Card</strong> with 3 compact variations for the multi-column <strong>Stacked View</strong>.
+    </p>
+  </header>
+
+  <!-- ════════════════════════════════════════════════════════════════
+       SECTION 1: THE FULL DAY VIEW CARD (CURRENT ESTABLISHED SYSTEM)
+       ════════════════════════════════════════════════════════════════ -->
+  <section style="width:100%; max-width:880px; display:flex; flex-direction:column; align-items:center;">
+    <div class="section-title">
+      <span>1. Full Day View Reference Cards (Single Column Hero)</span>
+      <span class="section-tag">Authoritative Base</span>
+    </div>
+
+    <div class="day-view-container">
+      
+      <!-- Full Event 1 -->
+      <div class="full-card">
+        <div class="full-pillar" style="border-left-color: var(--family-kelly);">
+          <div>
+            <div class="full-time">1:00</div>
+            <div class="full-subtime">PM · 60m</div>
+          </div>
+          <div class="full-leave">
+            <svg class="svg-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+            Leave by 12:32 PM
+          </div>
+        </div>
+        <div class="full-deck">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div>
+              <div class="full-title">Take Owen to the Dentist</div>
+              <div class="full-loc">
+                <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#C9A96E" stroke-width="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                Wanuck, Hier & Associates, 1232 W Indiantown Rd #109, Jupiter
+              </div>
+            </div>
+            <button class="btn-action" title="Open directions">
+              <svg class="svg-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C9A96E" stroke-width="2.5"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+            </button>
+          </div>
+          <div class="full-footer">
+            <span class="role-badge">
+              <span class="initial-dot" style="background: var(--family-kelly);">K</span>
+              <span>Kelly</span>
+              <span class="role-pill drives">Driver Assigned</span>
+            </span>
+            <div class="avatar-stack">
+              <span class="avatar" style="background: var(--family-owen);">O</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Full Reminder -->
+      <div class="full-reminder">
+        <div class="full-reminder-pillar">
+          <div>
+            <div class="full-reminder-time">9:30</div>
+            <div style="font-family:'JetBrains Mono'; font-size:11px; font-weight:700; color:#8A6D00; margin-top:4px;">AM · REMINDER</div>
+          </div>
+          <svg class="svg-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8A6D00" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        </div>
+        <div class="full-deck" style="padding:14px 20px;">
+          <div>
+            <div style="font-size:16px; font-weight:700; color:var(--color-casa-navy);">Submit Walmart Order</div>
+            <div style="display:flex; gap:6px; margin-top:6px;">
+              <span style="font-size:11px; font-weight:700; padding:2px 8px; border-radius:12px; background:var(--family-jake); color:#fff;">Jake</span>
+            </div>
+          </div>
+          <div class="full-footer" style="padding-top:8px;">
+            <button class="btn-action" style="background:var(--color-casa-navy); color:#fff; border-color:var(--color-casa-navy);">✓ Done</button>
+            <span style="font-size:12px; color:var(--color-casa-muted);">Tap for details</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+
+  <!-- ════════════════════════════════════════════════════════════════
+       SECTION 2: COMPACT ADAPTATIONS FOR STACKED VIEW (SIDE-BY-SIDE)
+       ════════════════════════════════════════════════════════════════ -->
+  <section style="width:100%; display:flex; flex-direction:column; align-items:center;">
+    <div class="section-title">
+      <span>2. Compact Stacked View Adaptations (Multi-Column)</span>
+      <span class="section-tag">Choose Your Design System Path</span>
+    </div>
+
+    <div class="compact-grid">
+
+      <!-- ── PATH 1 ── -->
+      <div class="compact-column">
+        <div class="compact-header">
+          <div class="compact-title">Path 1: Top-Anchor Header</div>
+          <div class="compact-desc">Rotates time into a horizontal band. Zero truncation & high vertical compactness.</div>
+        </div>
+
+        <!-- Event -->
+        <div class="s1-card">
+          <div class="s1-top-bar" style="border-left-color: var(--family-kelly);">
+            <span class="s1-time">1:00 PM · 60m</span>
+            <span class="s1-leave">
+              <svg class="svg-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+              Leave 12:32 PM
+            </span>
+          </div>
+          <div class="s1-deck">
+            <div class="s1-title">Take Owen to the Dentist</div>
+            <div class="s1-loc">
+              <svg class="svg-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#C9A96E" stroke-width="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+              Wanuck, Hier & Associates · Jupiter
+            </div>
+            <div class="s1-footer">
+              <span class="role-badge">
+                <span class="initial-dot" style="background: var(--family-kelly);">K</span>
+                <span>Kelly</span>
+                <span class="role-pill drives">Drives</span>
+              </span>
+              <div class="avatar-stack">
+                <span class="avatar" style="background: var(--family-owen);">O</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Reminder -->
+        <div class="s1-reminder">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <svg class="svg-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9C7838" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+            <span style="font-size:13px; font-weight:600; color:var(--color-casa-navy);">Submit Walmart Order</span>
+          </div>
+          <span style="font-family:'JetBrains Mono'; font-size:11px; font-weight:700; color:#9C7838;">9:30 AM</span>
+        </div>
+      </div>
+
+
+      <!-- ── PATH 2 ── -->
+      <div class="compact-column" style="border-color: var(--color-casa-gold); box-shadow: 0 0 0 1px var(--color-casa-gold), var(--shadow-card);">
+        <div class="compact-header">
+          <div class="compact-title" style="color:var(--color-casa-gold-dark);">Path 2: True Proportional Pillar (Exact Day View Match)</div>
+          <div class="compact-desc">Identical 2-zone silhouette as Day View, scaled with an 86px wide left pillar.</div>
+        </div>
+
+        <!-- Event -->
+        <div class="s2-card">
+          <div class="s2-pillar" style="border-left-color: var(--family-kelly);">
+            <div>
+              <div class="s2-time-main">1:00</div>
+              <div class="s2-time-sub">PM · 60m</div>
+            </div>
+            <div class="s2-leave">
+              <svg class="svg-icon" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+              12:32 PM
+            </div>
+          </div>
+          <div class="s2-deck">
+            <div>
+              <div class="s2-title">Take Owen to the Dentist</div>
+              <div class="s2-loc">
+                <svg class="svg-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#C9A96E" stroke-width="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                Wanuck, Hier & Assoc. · Jupiter
+              </div>
+            </div>
+            <div class="s2-footer">
+              <span class="role-badge">
+                <span class="initial-dot" style="background: var(--family-kelly);">K</span>
+                <span>Kelly</span>
+                <span class="role-pill drives">Drives</span>
+              </span>
+              <div class="avatar-stack">
+                <span class="avatar" style="background: var(--family-owen);">O</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Reminder -->
+        <div class="s2-reminder">
+          <div class="s2-reminder-pillar">
+            <div>
+              <div style="font-family:'JetBrains Mono'; font-size:14px; font-weight:700; color:#5C450A; line-height:1;">9:30</div>
+              <div style="font-family:'JetBrains Mono'; font-size:9.5px; font-weight:700; color:#8A6D00; margin-top:2px;">AM</div>
+            </div>
+            <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8A6D00" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          </div>
+          <div style="padding:10px 12px; display:flex; flex-direction:column; justify-content:space-between; gap:6px;">
+            <div style="font-size:13.5px; font-weight:700; color:var(--color-casa-navy);">Submit Walmart Order</div>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span style="font-size:10px; font-weight:700; color:var(--color-casa-muted); text-transform:uppercase;">Reminder</span>
+              <span class="avatar" style="background: var(--family-jake); width:20px; height:20px; font-size:9px;">J</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- ── PATH 3 ── -->
+      <div class="compact-column">
+        <div class="compact-header">
+          <div class="compact-title">Path 3: Navy Left Pillar (Direct Miniature)</div>
+          <div class="compact-desc">Keeps the solid Navy pillar from Day View, scaled to 86px with 18px serif title.</div>
+        </div>
+
+        <!-- Event -->
+        <div class="s3-card">
+          <div class="s3-pillar" style="border-left-color: var(--family-kelly);">
+            <div>
+              <div class="s3-time-main">1:00</div>
+              <div class="s3-time-sub">PM · 60m</div>
+            </div>
+            <div class="s3-leave">
+              <svg class="svg-icon" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+              12:32 PM
+            </div>
+          </div>
+          <div class="s3-deck">
+            <div>
+              <div class="s2-title">Take Owen to the Dentist</div>
+              <div class="s2-loc">
+                <svg class="svg-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#C9A96E" stroke-width="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                Wanuck, Hier & Assoc. · Jupiter
+              </div>
+            </div>
+            <div class="s2-footer">
+              <span class="role-badge">
+                <span class="initial-dot" style="background: var(--family-kelly);">K</span>
+                <span>Kelly</span>
+                <span class="role-pill drives">Drives</span>
+              </span>
+              <div class="avatar-stack">
+                <span class="avatar" style="background: var(--family-owen);">O</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Reminder -->
+        <div class="s2-reminder">
+          <div class="s2-reminder-pillar">
+            <div>
+              <div style="font-family:'JetBrains Mono'; font-size:14px; font-weight:700; color:#5C450A; line-height:1;">9:30</div>
+              <div style="font-family:'JetBrains Mono'; font-size:9.5px; font-weight:700; color:#8A6D00; margin-top:2px;">AM</div>
+            </div>
+            <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8A6D00" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          </div>
+          <div style="padding:10px 12px; display:flex; flex-direction:column; justify-content:space-between; gap:6px;">
+            <div style="font-size:13.5px; font-weight:700; color:var(--color-casa-navy);">Submit Walmart Order</div>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span style="font-size:10px; font-weight:700; color:var(--color-casa-muted); text-transform:uppercase;">Reminder</span>
+              <span class="avatar" style="background: var(--family-jake); width:20px; height:20px; font-size:9px;">J</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+</body>
+</html>

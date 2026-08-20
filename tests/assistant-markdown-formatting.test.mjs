@@ -54,3 +54,8 @@ test('intentional Markdown blocks remain unchanged', () => {
   const content = '## Dinner ideas\n\n- Tacos\n- Pasta\n- Stir-fry'
   assert.equal(formatTextForMarkdown(content), content)
 })
+
+test('bullet lists with unicode bullets remain intact', () => {
+  const content = 'Tomorrow, Sunday, August 16, 2026, there are three items on the calendar:\n\n• [Alice sleep over](casa://event/b426b652-001f-4d48-bace-84b50284ae58) is an all-day event\n• [Call in my ADD prescription](casa://event/ff4d6a37-408b-47a9-a9e7-5d88a259dfcc) is a reminder'
+  assert.equal(formatTextForMarkdown(content), content)
+})

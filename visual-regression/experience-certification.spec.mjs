@@ -42,7 +42,7 @@ test('touch targets and kiosk supporting text meet physical-use minimums', async
 })
 
 test('keyboard focus is visible and dialogs trap, dismiss, and restore focus', async ({ page }, testInfo) => {
-  test.skip(testInfo.project.metadata.density !== 'compact', 'One desktop profile certifies the shared keyboard contract.')
+  test.skip(testInfo.project.name !== 'desktop-day-compact', 'One desktop profile certifies the shared keyboard contract.')
 
   const modalTrigger = page.getByRole('button', { name: 'Review dialog' })
   await modalTrigger.focus()
@@ -63,7 +63,8 @@ test('keyboard focus is visible and dialogs trap, dismiss, and restore focus', a
   await expect(modalTrigger).toBeFocused()
 
   const sheetTrigger = page.getByRole('button', { name: 'Open task sheet' })
-  await sheetTrigger.click()
+  await sheetTrigger.focus()
+  await sheetTrigger.press('Enter')
   const sheet = page.getByRole('dialog', { name: 'Today’s task details' })
   await expect(sheet).toBeVisible()
   await expect(sheet.getByRole('button', { name: 'Close' })).toBeFocused()

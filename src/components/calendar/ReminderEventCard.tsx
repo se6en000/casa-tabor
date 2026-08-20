@@ -55,6 +55,8 @@ export default function ReminderEventCard({
       }}
       role="button"
       tabIndex={0}
+      data-calendar-event
+      data-tactile="true"
       className={cn(
         'min-w-0 bg-amber-50/60 rounded-card border border-amber-200',
         'flex items-center gap-3 px-3 py-2.5 transition-all duration-300',

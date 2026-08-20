@@ -18,16 +18,17 @@ const CONTROL_BASE =
   'focus-visible:ring-2 focus-visible:ring-casa-gold focus-visible:ring-offset-2 focus-visible:ring-offset-casa-bg ' +
   'disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none'
 
-export const BUTTON_VARIANTS = ['primary', 'strong', 'secondary', 'subtle', 'ghost', 'danger']
+export const BUTTON_VARIANTS = ['primary', 'strong', 'secondary', 'subtle', 'ghost', 'danger', 'champagne']
 export const BUTTON_SIZES = ['sm', 'md', 'lg']
 
 const BUTTON_VARIANT_CLASSES = {
-  primary: 'casa-action-primary bg-casa-gold shadow-card hover:brightness-110',
-  strong: 'casa-action-strong bg-casa-navy shadow-card hover:brightness-110',
+  primary: 'casa-action-primary bg-casa-gold text-casa-navy font-bold shadow-card hover:brightness-110',
+  strong: 'casa-action-strong bg-casa-navy text-white font-bold shadow-card hover:brightness-110',
   secondary: 'bg-casa-surface text-content-heading border border-casa-border hover:bg-casa-bg',
   subtle: 'bg-surface-inset text-content-primary border border-casa-border/70 hover:bg-surface-subtle',
   ghost: 'bg-transparent text-content-heading hover:bg-casa-bg',
   danger: 'bg-casa-error text-white hover:brightness-110',
+  champagne: 'bg-casa-gold/15 text-casa-navy font-bold border border-casa-gold/35 hover:bg-casa-gold/25 hover:border-casa-gold/50 shadow-2xs',
 }
 
 const BUTTON_SIZE_CLASSES = {
@@ -53,15 +54,16 @@ export function buttonClassName(options = {}) {
   ].filter(Boolean).join(' ')
 }
 
-export const ICON_BUTTON_VARIANTS = ['primary', 'strong', 'secondary', 'ghost', 'danger']
+export const ICON_BUTTON_VARIANTS = ['primary', 'strong', 'secondary', 'ghost', 'danger', 'champagne']
 export const ICON_BUTTON_SIZES = ['sm', 'md', 'lg']
 
 const ICON_BUTTON_VARIANT_CLASSES = {
-  primary: 'casa-action-primary bg-casa-gold shadow-card hover:brightness-110',
-  strong: 'casa-action-strong bg-casa-navy shadow-card hover:brightness-110',
+  primary: 'casa-action-primary bg-casa-gold text-casa-navy shadow-card hover:brightness-110',
+  strong: 'casa-action-strong bg-casa-navy text-white shadow-card hover:brightness-110',
   secondary: 'bg-casa-surface text-content-heading border border-casa-border hover:bg-casa-bg',
   ghost: 'bg-transparent text-casa-muted hover:text-content-heading hover:bg-casa-bg',
   danger: 'bg-transparent text-casa-error hover:bg-casa-error/10',
+  champagne: 'bg-casa-gold/15 text-casa-navy border border-casa-gold/35 hover:bg-casa-gold/25 hover:border-casa-gold/50 shadow-2xs',
 }
 
 const ICON_BUTTON_SIZE_CLASSES = {
@@ -144,7 +146,7 @@ export function segmentedControlItemClassName(options = {}) {
 }
 
 export const CARD_PADDINGS = ['none', 'sm', 'md', 'lg']
-export const CARD_TONES = ['surface', 'subtle', 'accent']
+export const CARD_TONES = ['surface', 'subtle', 'accent', 'ambient', 'stylish']
 
 const CARD_PADDING_CLASSES = {
   none: '',
@@ -157,7 +159,11 @@ const CARD_TONE_CLASSES = {
   surface: 'bg-casa-surface border-casa-border',
   subtle: 'bg-casa-bg border-casa-border/70',
   accent: 'bg-casa-accent-subtle border-casa-accent-subtle-border',
+  ambient: 'bg-gradient-to-br from-casa-surface via-casa-surface to-casa-accent-subtle/30 border-casa-accent-soft-border/60 shadow-widget',
+  stylish: 'bg-gradient-to-br from-casa-surface via-casa-surface to-casa-accent-subtle/40 border-casa-gold/30 shadow-widget',
 }
+
+export const TACTILE_PRESS_CLASSES = 'active:scale-[0.97] active:opacity-75 transition-all duration-150'
 
 /**
  * @param {{padding?: string, tone?: string, interactive?: boolean}} [options]
@@ -171,8 +177,40 @@ export function cardClassName(options = {}) {
     CARD_TONE_CLASSES[tone],
     CARD_PADDING_CLASSES[padding],
     options.interactive
-      ? 'transition-shadow duration-150 cursor-pointer hover:shadow-card-hover outline-none focus-visible:ring-2 focus-visible:ring-casa-gold focus-visible:ring-offset-2'
+      ? 'transition-all duration-150 cursor-pointer hover:shadow-card-hover active:scale-[0.97] active:opacity-75 outline-none focus-visible:ring-2 focus-visible:ring-casa-gold focus-visible:ring-offset-2'
       : '',
+  ].filter(Boolean).join(' ')
+}
+
+export const STATUS_DOT_VARIANTS = ['active', 'warning', 'gold', 'neutral', 'info']
+export const STATUS_DOT_SIZES = ['sm', 'md', 'lg']
+
+const STATUS_DOT_VARIANT_CLASSES = {
+  active: 'bg-emerald-400',
+  warning: 'bg-amber-500',
+  gold: 'bg-casa-gold',
+  neutral: 'bg-casa-muted',
+  info: 'bg-casa-info',
+}
+
+const STATUS_DOT_SIZE_CLASSES = {
+  sm: 'size-2',
+  md: 'size-2.5',
+  lg: 'size-3',
+}
+
+/**
+ * @param {{variant?: string, size?: string, pulse?: boolean}} [options]
+ * @returns {string}
+ */
+export function statusDotClassName(options = {}) {
+  const variant = STATUS_DOT_VARIANTS.includes(options.variant) ? options.variant : 'active'
+  const size = STATUS_DOT_SIZES.includes(options.size) ? options.size : 'md'
+  return [
+    'inline-block rounded-full flex-shrink-0',
+    STATUS_DOT_VARIANT_CLASSES[variant],
+    STATUS_DOT_SIZE_CLASSES[size],
+    options.pulse !== false ? 'animate-pulse' : '',
   ].filter(Boolean).join(' ')
 }
 

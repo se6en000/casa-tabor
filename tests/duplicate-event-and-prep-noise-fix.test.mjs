@@ -77,7 +77,7 @@ test('migration adds notifications.dedupe_key and suppresses event_added/event_e
 
 test('migration includes a one-time backfill removing the specific duplicate Adderall event/prep/notifications', () => {
   assert.match(migration, /af4cea6c-7383-4baa-916e-5a29c4b41616/)
-  assert.match(migration, /update public\.events set deleted_at = now\(\)/)
+  assert.match(migration, /update public\.events\s+set deleted_at = now\(\)/)
   assert.match(migration, /delete from public\.prep_items where event_id = dupe_event_id/)
   assert.match(migration, /delete from public\.notifications where event_id = dupe_event_id/)
 })

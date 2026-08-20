@@ -261,7 +261,7 @@ test('automatic memory separates personal and household scope with private-conve
     new URL('../supabase/functions/assistant-history/index.ts', import.meta.url),
     'utf8',
   )
-  assert.match(gateway, /inferPersonalMemoryCandidates\(newMessages\)/)
+  assert.match(gateway, /inferPersonalMemoryCandidates\(newMessages/)
   assert.match(gateway, /ignoreDuplicates: true/)
 })
 

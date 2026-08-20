@@ -34,9 +34,57 @@
       {
         "path": "src/pages/MusicPage.tsx",
         "reason": "Official Spotify identity and connect action retain Spotify brand colors."
+      },
+      {
+        "path": "src/pages/CookPrototypeLivingCanvasPage.tsx",
+        "reason": "Exploratory kitchen kiosk prototype."
+      },
+      {
+        "path": "src/pages/CookPrototypeMediumPage.tsx",
+        "reason": "Exploratory kitchen kiosk prototype."
       }
     ],
     "inlineStyleBlocks": [
+      {
+        "path": "src/components/ui/CopilotIcon.tsx",
+        "reason": "Dynamic icon size and caller style passthrough."
+      },
+      {
+        "path": "src/components/ui/MemberJewelPill.tsx",
+        "reason": "Family-member avatar colors and indicators are selected from runtime household data."
+      },
+      {
+        "path": "src/components/ui/JourneyProgressBar.tsx",
+        "reason": "Segmented dynamic journey progress bar widths are runtime-calculated."
+      },
+      {
+        "path": "src/components/canvas/CalmKioskView.tsx",
+        "reason": "Family-member avatar colors and indicators are selected from runtime household data."
+      },
+      {
+        "path": "src/components/canvas/TurboCanvasView.tsx",
+        "reason": "Family-member avatar colors and indicators are selected from runtime household data."
+      },
+      {
+        "path": "src/components/canvas/widgets/BriefingWidget.tsx",
+        "reason": "Family-member avatar colors and indicators are selected from runtime household data."
+      },
+      {
+        "path": "src/components/canvas/widgets/ScheduleStreamWidget.tsx",
+        "reason": "Family-member avatar colors and indicators are selected from runtime household data."
+      },
+      {
+        "path": "src/components/canvas/widgets/AttentionHubWidget.tsx",
+        "reason": "Family-member avatar colors and indicators are selected from runtime household data."
+      },
+      {
+        "path": "src/components/shared/PinGate.tsx",
+        "reason": "Family-member avatar colors and indicators are selected from runtime household data."
+      },
+      {
+        "path": "src/components/calendar/DayEventCard.tsx",
+        "reason": "Family-member avatar colors and event accent borders are selected from runtime household data."
+      },
       {
         "path": "src/components/calendar/DayView.tsx",
         "reason": "Family-member avatar colors are selected from runtime household data."
@@ -81,12 +129,16 @@
         "reason": "Event and family-member colors are runtime-derived."
       },
       {
-        "path": "src/components/calendar/WeekView.tsx",
-        "reason": "Time-grid dimensions, multi-day spans, drag placeholders, drag previews, and event colors are runtime-derived."
+        "path": "src/components/calendar/living-flow/components/LivingFlowHeader.tsx",
+        "reason": "Household attendee avatars bind persisted family-member profile colors."
       },
       {
-        "path": "src/components/home/PrepItemDetailPanel.tsx",
-        "reason": "Motion geometry (drag shell shadow/backdrop gradients, drag-handle touch-action) mirrors EventDetailPanel and is runtime-derived or composed from semantic theme variables."
+        "path": "src/components/calendar/living-flow/modals/AttendeesPopover.tsx",
+        "reason": "Household attendee avatars bind persisted family-member profile colors."
+      },
+      {
+        "path": "src/components/calendar/WeekView.tsx",
+        "reason": "Time-grid dimensions, multi-day spans, drag placeholders, drag previews, and event colors are runtime-derived."
       },
       {
         "path": "src/components/layout/TabletSidebar.tsx",
@@ -133,6 +185,14 @@
         "reason": "The shared calendar pill accepts runtime event and member colors as part of its public contract."
       },
       {
+        "path": "src/components/ui/ScheduleStreamItem.tsx",
+        "reason": "Member indicator dots accept runtime family-member colors as part of its public contract."
+      },
+      {
+        "path": "src/components/shared/LuxuryTopBar.tsx",
+        "reason": "Event ticker indicators bind runtime family-member colors."
+      },
+      {
         "path": "src/components/ui/DateTimeDial.tsx",
         "reason": "Wheel height, padding, and active scroll position are derived from dial geometry."
       },
@@ -150,10 +210,6 @@
       {
         "path": "src/pages/BriefingPage.tsx",
         "reason": "Briefing schedule markers bind persisted household member colors."
-      },
-      {
-        "path": "src/pages/CalendarsSettingsPage.tsx",
-        "reason": "Calendar connection avatars bind persisted household member colors."
       },
       {
         "path": "src/pages/CookPage.tsx",
@@ -175,10 +231,6 @@
       {
         "path": "src/pages/FamilySettingsPage.tsx",
         "reason": "Family profile previews and the color picker bind persisted or user-selected member colors."
-      },
-      {
-        "path": "src/pages/GmailScanPage.tsx",
-        "reason": "Gmail member avatars bind persisted household member colors."
       },
       {
         "path": "src/pages/GoogleServicesPage.tsx",
@@ -224,8 +276,8 @@
         "reason": "The multi-day event block is a specialized absolutely positioned calendar span with runtime width, selection, and double-click edit behavior."
       },
       {
-        "path": "src/components/home/PrepItemDetailPanel.tsx",
-        "reason": "The remaining native button is a pointer-driven drag handle whose touch-action and Framer Motion drag controls must live on the interactive element, matching EventDetailPanel."
+        "path": "src/components/calendar/living-flow/components/LivingHeroTitleCard.tsx",
+        "reason": "Specialized inline micro-steppers, night preset chips, and living header pills for tactile kiosk event editing."
       }
     ]
   }

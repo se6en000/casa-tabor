@@ -11,8 +11,10 @@ import {
 } from 'lucide-react'
 import { addHours, format } from 'date-fns'
 import { supabase } from '../../lib/supabase'
+import { syncAndMaterializeRecurringSeries, triggerGoogleEventSync } from '../../lib/eventMutations'
 import { useQueryClient } from '@tanstack/react-query'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
+import type { FamilyMember } from '../../types'
 import { useSavedPlaces, savedPlaceAddress } from '../../hooks/useSavedPlaces'
 import { resolveDirectoryPlaceSave, type DirectoryPlaceSelection } from '../../utils/directorySuggestions'
 import { normalizeAllDayEventRange } from '../../utils/allDayEventRange'
@@ -23,6 +25,8 @@ import {
 } from '../../utils/smartEventParser'
 import { useFieldDictation } from '../../hooks/useFieldDictation'
 import DirectoryPlaceInput from './DirectoryPlaceInput'
+import MobileDocumentScanSheet from '../mobile/MobileDocumentScanSheet'
+import RecurrenceRuleBuilder from '../calendar/RecurrenceRuleBuilder'
 import {
   Alert,
   Button,
@@ -33,7 +37,6 @@ import {
   IconButton,
   Input,
   PersonAvatarStack,
-  Select,
   Sheet,
   Switch,
   Textarea,
@@ -77,97 +80,96 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
 
   // Core Form State
   const [title, setTitle] = useState('')
-  const [startDT, setStartDT] = useState(toLocalDTString(defaultStart))
-  const [endDT, setEndDT] = useState(toLocalDTString(defaultEnd))
+  const [eventType, setEventType] = useState<'event' | 'reminder'>('event')
+  const [startDT, setStartDT] = useState(() => toLocalDTString(defaultStart))
+  const [endDT, setEndDT] = useState(() => toLocalDTString(defaultEnd))
+  const [allDay, setAllDay] = useState(false)
   const [activeSlot, setActiveSlot] = useState<'morning' | 'midday' | 'afternoon' | 'evening' | null>('morning')
   const [customTimeOpen, setCustomTimeOpen] = useState(false)
-  const [allDay, setAllDay] = useState(false)
-  const [eventType, setEventType] = useState<'event' | 'reminder'>('event')
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([])
-  const [placeSelection, setPlaceSelection] = useState<DirectoryPlaceSelection>(null)
+  const [placeSelection, setPlaceSelection] = useState<DirectoryPlaceSelection | null>(null)
   const [placeFieldKey, setPlaceFieldKey] = useState(0)
+
+  // Details & Recurrence
   const [detailsOpen, setDetailsOpen] = useState(false)
-  const [repeat, setRepeat] = useState<'none' | 'daily' | 'weekly' | 'monthly'>('none')
+  const [rruleStr, setRruleStr] = useState<string | null>(null)
+  const [rruleSummary, setRruleSummary] = useState<string>('Does not repeat')
   const [notes, setNotes] = useState('')
+  const [scanSheetOpen, setScanSheetOpen] = useState(false)
+
+  // Save State
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [saveSuccess, setSaveSuccess] = useState('')
   const [savePartial, setSavePartial] = useState(false)
 
-  // ── Smart Natural Language Parser Trigger ─────────────────────────────
-  const applySmartParse = useCallback(
-    (text: string) => {
-      if (!text.trim()) {
-        setAiFeedback(null)
-        return
-      }
-
-      const parsed = parseSmartEvent(text, {
-        referenceDate: initialStart ?? new Date(),
-        familyMembers,
-        savedPlaces,
-      })
-
-      if (parsed.title) setTitle(parsed.title)
-      setStartDT(parsed.startDT)
-      setEndDT(parsed.endDT)
-      setEventType(parsed.eventType)
-      if (parsed.quickSlot) setActiveSlot(parsed.quickSlot)
-
-      if (parsed.matchedMemberIds.length > 0) {
-        setSelectedMemberIds((prev) => {
-          const combined = Array.from(new Set([...prev, ...parsed.matchedMemberIds]))
-          return combined
-        })
-      }
-
-      if (parsed.matchedPlaceName) {
-        const place = savedPlaces.find(
-          (p) => p.name.toLowerCase() === parsed.matchedPlaceName?.toLowerCase(),
-        )
-        if (place) {
-          setPlaceSelection({
-            kind: 'directory',
-            placeId: place.id,
-            displayName: place.name,
-            address: savedPlaceAddress(place) || undefined,
-          })
-          setPlaceFieldKey((k) => k + 1)
-        }
-      }
-
-      // Generate brief visual reassurance badge
-      const feedbackParts: string[] = []
-      try {
-        const timeFormatted = format(parsed.startDate, 'h:mm a')
-        feedbackParts.push(timeFormatted)
-      } catch { /* ignore */ }
-
-      if (parsed.matchedMemberIds.length > 0) {
-        const names = parsed.matchedMemberIds
-          .map((id) => familyMembers.find((m) => m.id === id)?.name)
-          .filter(Boolean)
-        if (names.length > 0) feedbackParts.push(names.join(', '))
-      }
-      if (parsed.matchedPlaceName || parsed.rawLocation) {
-        feedbackParts.push(parsed.matchedPlaceName || parsed.rawLocation || '')
-      }
-
-      setAiFeedback(feedbackParts.length > 0 ? feedbackParts.join(' · ') : 'Smart parsed')
-    },
-    [familyMembers, savedPlaces, initialStart],
+  const visibleFamilyMembers = useMemo(
+    () => familyMembers.filter((m: FamilyMember) => !m.archived && !m.is_guest),
+    [familyMembers],
   )
 
-  // ── Voice Dictation Hook with Dual Path (Pi WebSocket + Mac WebSpeech) ─
+  // ── Smart Natural Language Extraction ─────────────────────────────────
+  const applySmartParse = useCallback((text: string) => {
+    if (!text.trim()) {
+      setAiFeedback(null)
+      return
+    }
+    const baseDate = initialStart ? new Date(initialStart) : new Date()
+    const parsed = parseSmartEvent(
+      text,
+      baseDate,
+      visibleFamilyMembers.map((m: FamilyMember) => ({ id: m.id, name: m.name, role: m.role })),
+      savedPlaces.map((p) => ({ id: p.id, name: p.name, aliases: p.aliases, address: p.address })),
+    )
+
+    if (parsed.startTime) {
+      setStartDT(toLocalDTString(parsed.startTime))
+      setActiveSlot(null)
+    }
+    if (parsed.endTime) {
+      setEndDT(toLocalDTString(parsed.endTime))
+    }
+    if (parsed.eventType) {
+      setEventType(parsed.eventType)
+    }
+    if (parsed.attendeeIds && parsed.attendeeIds.length > 0) {
+      setSelectedMemberIds(parsed.attendeeIds)
+    }
+    if (parsed.place) {
+      setPlaceSelection({
+        mode: 'saved_place',
+        placeId: parsed.place.id,
+        primaryText: parsed.place.name,
+      })
+    }
+
+    // Build friendly pill summary
+    const highlights: string[] = []
+    if (parsed.startTime) highlights.push(format(parsed.startTime, 'h:mm a'))
+    if (parsed.attendeeIds && parsed.attendeeIds.length > 0) {
+      const names = parsed.attendeeIds
+        .map((id) => visibleFamilyMembers.find((m: FamilyMember) => m.id === id)?.name)
+        .filter(Boolean)
+      if (names.length > 0) highlights.push(names.join(', '))
+    }
+    if (parsed.place) highlights.push(parsed.place.name)
+
+    if (highlights.length > 0) {
+      setAiFeedback(`✦ Detected: ${highlights.join(' · ')}`)
+    } else {
+      setAiFeedback(null)
+    }
+  }, [initialStart, visibleFamilyMembers, savedPlaces])
+
+  // ── Voice Dictation Integration ───────────────────────────────────────
   const {
-    listening: micListening,
+    listening: micActive,
     start: startMic,
     stop: stopMic,
-    toggle: toggleMic,
   } = useFieldDictation({
-    onText: (dictated) => {
-      setSmartInput(dictated)
-      applySmartParse(dictated)
+    onText: (fullText) => {
+      setSmartInput(fullText)
+      applySmartParse(fullText)
     },
     onFinal: (finalText) => {
       if (finalText.trim()) {
@@ -238,7 +240,8 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
       setPlaceSelection(null)
       setPlaceFieldKey((k) => k + 1)
       setDetailsOpen(false)
-      setRepeat('none')
+      setRruleStr(null)
+      setRruleSummary('Does not repeat')
       setNotes('')
       setSaving(false)
       setSaveError('')
@@ -306,7 +309,7 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
     }
     if (end.getTime() <= start.getTime()) end = addHours(start, 1)
     const allDayRange = allDay ? normalizeAllDayEventRange(startDT, endDT) : null
-    const repeatRule = repeat === 'none' ? null : `FREQ=${repeat.toUpperCase()}`
+    const repeatRule = rruleStr ? rruleStr.replace(/^RRULE:/, '') : null
 
     const placeResolution = resolveDirectoryPlaceSave(
       placeSelection,
@@ -376,18 +379,9 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
     }
 
     if (repeatRule) {
-      const { error: seriesError } = await supabase.from('event_series').insert({
-        template_event_id: inserted.id,
-        recurrence_lines: [`RRULE:${repeatRule}`],
-        ownership: 'casa',
-      })
-      if (seriesError) {
-        setSavePartial(true)
-        setSaveError(`Event was created, but repeat pattern failed: ${seriesError.message}`)
-        setSaving(false)
-        void qc.invalidateQueries({ queryKey: ['events'] })
-        return
-      }
+      await syncAndMaterializeRecurringSeries(supabase, inserted.id)
+    } else {
+      triggerGoogleEventSync(supabase, inserted.id)
     }
 
     if (inserted && selectedMemberIds.length > 0) {
@@ -452,128 +446,111 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
     >
       <div ref={sheetRef} tabIndex={-1} className="space-y-5 select-none">
         {/* ── TOP HEADER: Date Badge + Event/Reminder Segmented Toggle ── */}
-        <div className="flex items-center justify-between gap-3 pt-1">
+        <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-casa-gold inline-block" />
-            <span className="font-serif text-xl font-bold tracking-tight text-casa-navy">
+            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-casa-sand/30 border border-casa-sand text-xs font-bold text-casa-navy">
+              <CalendarDays size={13} className="text-casa-gold" />
               {headerDateLabel}
             </span>
-            <Chip size="sm" tone="accent" icon={<Sparkles size={12} />}>
+            <span className="text-xs font-bold text-casa-gold tracking-widest uppercase">
               Quick Add
-            </Chip>
+            </span>
           </div>
 
-          {/* Event / Reminder Pill Toggle */}
-          <div className="flex items-center rounded-full p-1 bg-casa-sand/30 border border-casa-sand/50 shadow-inner">
+          <div className="inline-flex items-center p-1 rounded-full bg-casa-surface-muted border border-casa-border">
             <Button
               size="sm"
-              variant={eventType === 'event' ? 'strong' : 'ghost'}
+              variant={eventType === 'event' ? 'primary' : 'ghost'}
               onClick={() => setEventType('event')}
-              className="rounded-full"
+              className="rounded-full !text-caption !py-1 !px-3"
             >
               Event
             </Button>
             <Button
               size="sm"
-              variant={eventType === 'reminder' ? 'strong' : 'ghost'}
+              variant={eventType === 'reminder' ? 'primary' : 'ghost'}
               onClick={() => setEventType('reminder')}
               leadingIcon={<Bell size={12} />}
-              className="rounded-full"
+              className="rounded-full !text-caption !py-1 !px-3"
             >
               Reminder
             </Button>
           </div>
         </div>
 
-        {/* ── SMART NATURAL LANGUAGE AI INPUT BAR WITH MIC ──────────── */}
-        <div className="relative">
-          <div
-            className={`relative flex items-center rounded-2xl border-2 transition-all shadow-sm bg-white dark:bg-casa-navy/40 ${
-              micListening
-                ? 'border-casa-gold ring-4 ring-casa-gold/25 shadow-gold'
-                : 'border-casa-gold/40 focus-within:border-casa-gold focus-within:ring-2 focus-within:ring-casa-gold/20'
-            }`}
-          >
+        {/* ── SMART AI INPUT & VOICE CAPTURE BAR ───────────────────────── */}
+        <div className="space-y-1.5">
+          <div className="relative flex items-center w-full">
             <input
               type="text"
               value={smartInput}
               onChange={handleSmartInputChange}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') void handleSave()
-              }}
-              placeholder="From 7 P.M to 9 pm Kelly is going to the gym..."
-              className="w-full px-4 py-3.5 text-base font-medium placeholder:text-casa-slate/50 text-casa-navy focus:outline-none bg-transparent"
+              placeholder='e.g. "From 7 PM to 9 PM Kelly is going to the gym"'
               disabled={saving || Boolean(saveSuccess)}
+              className="w-full h-14 pl-4 pr-14 rounded-2xl border-2 border-casa-gold/60 focus:border-casa-gold bg-casa-surface text-casa-navy placeholder:text-casa-slate/60 text-base font-medium shadow-sm transition-all focus:outline-none focus:ring-4 focus:ring-casa-gold/15"
             />
 
-            {/* Embedded Microphone Button */}
-            <div className="pr-2 flex items-center gap-1.5">
-              <IconButton
-                icon={<Mic size={20} className={micListening ? 'animate-bounce text-casa-navy' : 'text-casa-slate'} />}
-                aria-label={micListening ? 'Listening... Release or click to stop' : 'Push to talk or click to speak'}
-                title={micListening ? 'Listening (Release to stop)' : 'Push to talk or click to speak'}
-                variant={micListening ? 'strong' : 'ghost'}
-                size="md"
-                onPointerDown={handleMicPointerDown}
-                onPointerUp={handleMicPointerUp}
-                onClick={() => toggleMic(smartInput)}
-                className={`rounded-xl transition-all ${
-                  micListening ? 'bg-casa-gold ring-2 ring-casa-gold/50 animate-pulse' : ''
-                }`}
-              />
-            </div>
+            {/* Embedded Luxury Push-to-Talk Mic Button */}
+            <IconButton
+              icon={<Mic size={18} strokeWidth={2.4} />}
+              aria-label={micActive ? 'Listening... release to finish' : 'Hold to speak (Push to talk)'}
+              title={micActive ? 'Listening... release to finish' : 'Hold to speak (Push to talk)'}
+              onPointerDown={handleMicPointerDown}
+              onPointerUp={handleMicPointerUp}
+              onPointerCancel={handleMicPointerUp}
+              size="md"
+              className={cn(
+                'absolute right-2 !size-control-sm rounded-xl',
+                micActive
+                  ? 'bg-red-500 text-white animate-pulse shadow-lg scale-105'
+                  : 'bg-casa-gold/15 hover:bg-casa-gold/30 text-casa-gold active:scale-95',
+              )}
+            />
           </div>
 
-          {/* Live AI Parsing Extraction Badge */}
+          {/* AI Entity Feedback Pill */}
           {aiFeedback && (
-            <div className="mt-1.5 px-3 py-1 rounded-lg bg-casa-gold/10 border border-casa-gold/20 flex items-center justify-between text-xs text-casa-gold-dark font-medium animate-fadeIn">
-              <span className="flex items-center gap-1.5">
-                <Sparkles size={12} className="text-casa-gold animate-spin-slow" />
-                <span>AI extracted: <strong>{aiFeedback}</strong></span>
-              </span>
-              <span className="text-xs opacity-75 text-casa-slate">Edit anytime below</span>
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-casa-gold/10 text-xs font-semibold text-casa-gold-dark">
+              <span>{aiFeedback}</span>
             </div>
           )}
         </div>
 
-        {/* ── TIME & QUICK SLOTS SECTION ────────────────────────────── */}
-        <div className="space-y-2.5">
+        {/* ── QUICK TIME SLOTS + CUSTOM TIME DIAL ───────────────────── */}
+        <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-sm font-semibold text-casa-navy">
-              <Clock size={16} className="text-casa-gold-dark" />
-              <span>{formatStartsAtLabel(startDT)}</span>
+            <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-casa-slate">
+              <Clock size={14} />
+              <span>Time Slot</span>
             </div>
-            <Button
+            <IconButton
+              icon={customTimeOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+              aria-label={customTimeOpen ? 'Hide custom time dial' : 'Open custom time dial'}
               size="sm"
               variant="ghost"
-              onClick={() => setCustomTimeOpen((prev) => !prev)}
-              trailingIcon={customTimeOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-              className="text-xs uppercase tracking-wider font-bold"
-            >
-              Custom Time
-            </Button>
+              onClick={() => setCustomTimeOpen((o) => !o)}
+            />
           </div>
 
-          {/* 4 Quick Time Slot Buttons */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {/* 4 Quick Preset Slot Buttons */}
+          <div className="grid grid-cols-4 gap-2">
             {(['morning', 'midday', 'afternoon', 'evening'] as const).map((slotKey) => {
               const slot = QUICK_SLOT_TIMES[slotKey]
-              const isSelected = activeSlot === slotKey && !customTimeOpen
-              const timeLabel = slot.hour > 12 ? `${slot.hour - 12}:${slot.minute === 0 ? '00' : slot.minute} PM` : `${slot.hour}:${slot.minute === 0 ? '00' : slot.minute} AM`
+              const isSelected = activeSlot === slotKey
               return (
                 <Button
                   key={slotKey}
-                  variant={isSelected ? 'strong' : 'subtle'}
-                  size="md"
+                  variant={isSelected ? 'secondary' : 'ghost'}
                   onClick={() => handleSelectQuickSlot(slotKey)}
-                  className={`w-full justify-between capitalize font-semibold ${
-                    isSelected ? 'bg-casa-navy text-white shadow-sm' : ''
-                  }`}
+                  className={cn(
+                    'flex flex-col items-center justify-center !p-2.5 !h-auto rounded-xl border transition-all',
+                    isSelected
+                      ? 'border-casa-gold bg-casa-gold/15 text-casa-navy font-bold shadow-sm'
+                      : 'border-casa-border bg-casa-surface text-casa-slate hover:bg-casa-surface-muted',
+                  )}
                 >
-                  <span>{slotKey}</span>
-                  <span className={`text-xs font-mono ml-1 ${isSelected ? 'text-casa-gold' : 'text-casa-slate'}`}>
-                    {timeLabel}
-                  </span>
+                  <span className="text-caption font-bold">{slot.label}</span>
+                  <span className="text-caption text-casa-muted mt-0.5">{slot.time}</span>
                 </Button>
               )
             })}
@@ -605,7 +582,7 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
           </div>
 
           <div className="flex flex-wrap gap-2">
-            {familyMembers.map((member) => {
+            {visibleFamilyMembers.map((member: FamilyMember) => {
               const selected = selectedMemberIds.includes(member.id)
               return (
                 <Chip
@@ -643,7 +620,7 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
         {/* ── DETAILS & RECURRENCE DISCLOSURE ───────────────────────── */}
         <DisclosureSection
           title="Add notes / details"
-          summary={allDay ? 'All day' : (repeat !== 'none' ? `Repeats ${repeat}` : '')}
+          summary={allDay ? 'All day' : (rruleSummary !== 'Does not repeat' ? rruleSummary : '')}
           icon={<CalendarDays size={18} />}
           open={detailsOpen}
           onOpenChange={setDetailsOpen}
@@ -664,18 +641,15 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
               description="Keep this on the selected date without a specific time."
               disabled={saving || Boolean(saveSuccess)}
             />
-            <Field label="Repeat" hint="For recurring events or chores.">
-              <Select
-                value={repeat}
-                onChange={(event) => setRepeat(event.target.value as typeof repeat)}
-                disabled={saving || Boolean(saveSuccess)}
-              >
-                <option value="none">Does not repeat</option>
-                <option value="daily">Every day</option>
-                <option value="weekly">Every week</option>
-                <option value="monthly">Every month</option>
-              </Select>
-            </Field>
+            <RecurrenceRuleBuilder
+              value={rruleStr}
+              onChange={(str, summary) => {
+                setRruleStr(str)
+                setRruleSummary(summary)
+              }}
+              startDate={startDT}
+              disabled={saving || Boolean(saveSuccess)}
+            />
             <Field label="Notes">
               <Textarea
                 value={notes}
@@ -718,6 +692,16 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
           </Button>
         </div>
       </div>
+
+      {/* ── Document / Card Scanner Sheet ── */}
+      <MobileDocumentScanSheet
+        open={scanSheetOpen}
+        onClose={() => setScanSheetOpen(false)}
+        onSuccess={() => {
+          setScanSheetOpen(false)
+          onClose()
+        }}
+      />
     </Sheet>
   )
 }

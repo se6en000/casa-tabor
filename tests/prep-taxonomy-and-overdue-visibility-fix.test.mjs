@@ -9,7 +9,7 @@ const migration = readFileSync(
 const prepCategories = readFileSync(new URL('../src/utils/prepCategories.ts', import.meta.url), 'utf8')
 const usePrepItems = readFileSync(new URL('../src/hooks/usePrepItems.ts', import.meta.url), 'utf8')
 const actionHub = readFileSync(new URL('../src/pages/ActionHubPage.tsx', import.meta.url), 'utf8')
-const detailPanel = readFileSync(new URL('../src/components/home/PrepItemDetailPanel.tsx', import.meta.url), 'utf8')
+const detailPanel = readFileSync(new URL('../src/components/canvas/widgets/ActionInspectionSidecar.tsx', import.meta.url), 'utf8')
 const analyzePrep = readFileSync(new URL('../supabase/functions/analyze-prep/index.ts', import.meta.url), 'utf8')
 const applyPolicy = readFileSync(new URL('../supabase/functions/apply-notification-policy/index.ts', import.meta.url), 'utf8')
 const orchestrate = readFileSync(new URL('../supabase/functions/orchestrate-household/index.ts', import.meta.url), 'utf8')
@@ -82,8 +82,8 @@ test('ActionHubPage surfaces an overdue count in its KPI strip instead of a dead
   assert.doesNotMatch(actionHub, /cancellations/i)
 })
 
-test('PrepItemDetailPanel shows the shared category label instead of the raw free-text type', () => {
-  assert.match(detailPanel, /import { getPrepCategoryConfig } from '\.\.\/\.\.\/utils\/prepCategories'/)
+test('ActionInspectionSidecar shows clean category / source badges instead of raw free-text types', () => {
+  assert.match(detailPanel, /import { sourceBadge } from '\.\.\/\.\.\/\.\.\/utils\/prepSourceBadge'/)
   assert.doesNotMatch(detailPanel, /\{item\.type\}/)
 })
 

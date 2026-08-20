@@ -21,18 +21,47 @@ const MAX_INCREMENTAL_CANCELLATIONS = 100
 const INITIAL_SYNC_PAST_DAYS = 7
 const INITIAL_SYNC_FUTURE_DAYS = 90
 
+function toErrorMessage(cause: unknown): string {
+  if (cause instanceof Error) return cause.message
+  if (typeof cause === 'object' && cause !== null) {
+    if ('message' in cause && typeof (cause as { message: unknown }).message === 'string') {
+      return (cause as { message: string }).message
+    }
+    try {
+      return JSON.stringify(cause)
+    } catch {
+      return String(cause)
+    }
+  }
+  return String(cause)
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
   const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
   const body = req.method === 'POST' ? await req.json().catch(() => ({})) : {}
   const results: Record<string, unknown> = {}
-  if (body.family_member_id) {
+  if (body.connection_id) {
+    try {
+      const { data: connection, error: connErr } = await sb
+        .from('calendar_connections')
+        .select('*')
+        .eq('id', body.connection_id)
+        .single()
+      if (connErr || !connection) throw new Error(connErr?.message || 'Connection not found')
+      const resolved = await resolveGoogleConnection(sb, connection as CalendarConnection)
+      results[connection.family_member_id] = await syncOne(sb, resolved)
+    } catch (cause) {
+      const message = toErrorMessage(cause)
+      results[body.connection_id] = { error: message }
+    }
+  } else if (body.family_member_id) {
     try {
       const resolved = await loadMemberGoogleConnection(sb, body.family_member_id)
       results[body.family_member_id] = await syncOne(sb, resolved)
     } catch (cause) {
-      const error = cause instanceof Error ? cause : new Error(String(cause))
-      results[body.family_member_id] = { error: error.message }
+      const message = toErrorMessage(cause)
+      results[body.family_member_id] = { error: message }
     }
   } else {
     const { data: connections, error } = await sb
@@ -46,9 +75,23 @@ Deno.serve(async (req) => {
         const resolved = await resolveGoogleConnection(sb, connection as CalendarConnection)
         results[connection.family_member_id] = await syncOne(sb, resolved)
       } catch (cause) {
-        const syncError = cause instanceof Error ? cause : new Error(String(cause))
-        results[connection.family_member_id] = { error: syncError.message }
+        const syncErrorMessage = toErrorMessage(cause)
+        results[connection.family_member_id] = { error: syncErrorMessage }
       }
+    }
+
+    // Auto-renew or register webhook push notification channels
+    const nowMs = Date.now()
+    const needsWebhookRenew = (connections ?? []).some((c: any) => {
+      if (!c.webhook_expires_at || c.webhook_status !== 'active') return true
+      const expMs = new Date(c.webhook_expires_at).getTime()
+      return isNaN(expMs) || expMs < nowMs + 24 * 3600 * 1000
+    })
+
+    if (needsWebhookRenew) {
+      sb.functions.invoke('register-google-calendar-webhook', { body: {} }).catch((whErr: unknown) => {
+        console.warn('[sync-calendars] Webhook auto-registration notice:', whErr)
+      })
     }
   }
   return new Response(JSON.stringify({ ok: true, results }), { headers: { ...CORS, 'content-type': 'application/json' } })
@@ -57,6 +100,8 @@ Deno.serve(async (req) => {
 async function syncOne(sb: SupabaseClient, resolved: ResolvedGoogleConnection) {
   const { connection, accessToken } = resolved
   const now = Date.now()
+  const { data: members } = await sb.from('family_members').select('id,email').not('email', 'is', null)
+  const emailToId = new Map((members ?? []).map((m: { id: string; email: string }) => [m.email.toLowerCase(), m.id]))
   let pageToken: string | undefined
   let syncToken: string | null = connection.sync_token
   let isFullReconciliation = !syncToken
@@ -96,7 +141,7 @@ async function syncOne(sb: SupabaseClient, resolved: ResolvedGoogleConnection) {
           continue
         }
         if (isFullReconciliation && !isWithinInitialSyncWindow(ev, now)) continue
-        await upsertEvent(sb, connection, ev, accessToken)
+        await upsertEvent(sb, connection, ev, accessToken, emailToId)
         upserted++
       }
       pageToken = page.nextPageToken
@@ -140,8 +185,8 @@ async function syncOne(sb: SupabaseClient, resolved: ResolvedGoogleConnection) {
         pulled += page2.items?.length ?? 0
         for (const ev of page2.items ?? []) {
           if (ev.status === 'cancelled') continue
-          if (!isWithinInitialSyncWindow(ev, now)) continue
-          await upsertEvent(sb, connection, ev, accessToken)
+          if (isFullReconciliation && !isWithinInitialSyncWindow(ev, now)) continue
+          await upsertEvent(sb, connection, ev, accessToken, emailToId)
           upserted++
         }
         pageToken = page2.nextPageToken
@@ -150,17 +195,66 @@ async function syncOne(sb: SupabaseClient, resolved: ResolvedGoogleConnection) {
     }
 
     for (const ev of pendingCancellations) {
-      await upsertEvent(sb, connection, ev, accessToken)
+      await upsertEvent(sb, connection, ev, accessToken, emailToId, connection.calendar_id, false)
       upserted++
     }
+
+    // Sync secondary read-only calendars
+    const readIds = (connection.read_calendar_ids || []).filter(
+      (id) => id && id !== connection.calendar_id
+    )
+    for (const readCalId of readIds) {
+      try {
+        const readParams = new URLSearchParams({
+          singleEvents: 'true',
+          showDeleted: 'true',
+          maxResults: '2500',
+          timeMin: new Date(now - INITIAL_SYNC_PAST_DAYS * 86400000).toISOString(),
+          timeMax: new Date(now + INITIAL_SYNC_FUTURE_DAYS * 86400000).toISOString(),
+        })
+        const readRes = await fetch(
+          `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(readCalId)}/events?${readParams}`,
+          { headers: { authorization: 'Bearer ' + accessToken } },
+        )
+        if (readRes.ok) {
+          const readPage = await readRes.json()
+          pulled += readPage.items?.length ?? 0
+          for (const ev of readPage.items ?? []) {
+            if (ev.status === 'cancelled') {
+              await sb
+                .from('events')
+                .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+                .eq('google_connection_id', connection.id)
+                .eq('google_calendar_id', readCalId)
+                .eq('google_event_id', ev.id)
+              continue
+            }
+            await upsertEvent(sb, connection, ev, accessToken, emailToId, readCalId, true)
+            upserted++
+          }
+        }
+      } catch (readErr) {
+        console.warn(`[sync-calendars] Secondary calendar sync notice for ${readCalId}:`, readErr)
+      }
+    }
+
     const syncedAt = new Date().toISOString()
     await markGoogleConnectionHealthy(sb, connection.id, {
       sync_token: syncToken,
       last_incremental_sync_at: syncedAt,
     })
+
+    // Keep recurring series synchronized with Google
+    sb.functions.invoke('import-google-recurrence', {
+      body: { connection_id: connection.id },
+    }).catch((recurErr: unknown) => {
+      console.warn(`[sync-calendars] Recurrence import notice for connection ${connection.id}:`, recurErr)
+    })
+
     return { pulled, upserted, quarantine_recovery: quarantineTripped, connection_id: connection.id }
   } catch (cause) {
-    const error = cause instanceof Error ? cause : new Error(String(cause))
+    const errorMsg = toErrorMessage(cause)
+    const error = cause instanceof Error ? cause : new Error(errorMsg)
     await markGoogleConnectionFailure(sb, connection.id, error)
     throw error
   }
@@ -200,7 +294,7 @@ async function linkCanonicalOccurrence(
     ? seriesQuery.eq('id', privateSeriesId)
     : seriesQuery.eq('google_recurring_event_id', recurringEventId)
   const { data: series, error: seriesError } = await seriesQuery.maybeSingle()
-  if (seriesError) throw seriesError
+  if (seriesError) throw new Error(seriesError.message)
   if (!series) return false
   if (
     recurringEventId
@@ -224,8 +318,9 @@ async function linkCanonicalOccurrence(
     if (!originalStartTime) return true
     occurrenceQuery = occurrenceQuery.eq('original_start_time', originalStartTime)
   }
-  const { data: occurrence, error: occurrenceError } = await occurrenceQuery.maybeSingle()
-  if (occurrenceError) throw occurrenceError
+  const { data: occurrenceList, error: occurrenceError } = await occurrenceQuery.limit(1)
+  if (occurrenceError) throw new Error(occurrenceError.message)
+  const occurrence = occurrenceList?.[0] ?? null
   if (!occurrence) return true
 
   const { error: linkError } = await sb.rpc('recurrence_link_google_instance', {
@@ -242,25 +337,55 @@ async function linkCanonicalOccurrence(
   return true
 }
 
-async function upsertEvent(sb: SupabaseClient, connection: CalendarConnection, ev: Record<string, unknown>, accessToken: string) {
+async function upsertEvent(
+  sb: SupabaseClient,
+  connection: CalendarConnection,
+  ev: Record<string, unknown>,
+  accessToken: string,
+  emailToId: Map<string, string>,
+  calendarId: string = connection.calendar_id,
+  isReadOnly: boolean = false,
+) {
   const sourceMemberId = connection.family_member_id
   if (await linkCanonicalOccurrence(sb, connection, ev)) return
   if (ev.status === 'cancelled') {
     await sb.from('events').update({ status: 'cancelled', updated_at: new Date().toISOString() })
       .eq('google_connection_id', connection.id)
+      .eq('google_calendar_id', calendarId)
       .eq('google_event_id', ev.id)
     return
   }
   const start = ev.start as Record<string, string> | undefined
   const end = ev.end as Record<string, string> | undefined
-  const startTime = start?.dateTime ?? (start?.date ? start.date + 'T00:00:00Z' : null)
-  const endTime = end?.dateTime ?? (end?.date ? end.date + 'T23:59:59Z' : null)
+  const isAllDay = !start?.dateTime && Boolean(start?.date)
+  let startTime: string | null = null
+  let endTime: string | null = null
+
+  if (isAllDay && start?.date) {
+    startTime = `${start.date}T00:00:00Z`
+    if (end?.date) {
+      // Google Calendar API provides end.date as an exclusive boundary (the day after the event ends).
+      // In Casa Tabor, all-day events end at 23:59:59Z on the final inclusive day.
+      const endD = new Date(`${end.date}T00:00:00Z`)
+      endD.setUTCDate(endD.getUTCDate() - 1)
+      const startD = new Date(`${start.date}T00:00:00Z`)
+      const safeEndD = endD < startD ? startD : endD
+      const endIsoDate = safeEndD.toISOString().slice(0, 10)
+      endTime = `${endIsoDate}T23:59:59Z`
+    } else {
+      endTime = `${start.date}T23:59:59Z`
+    }
+  } else {
+    startTime = start?.dateTime ?? (start?.date ? start.date + 'T00:00:00Z' : null)
+    endTime = end?.dateTime ?? (end?.date ? end.date + 'T23:59:59Z' : null)
+  }
   if (!startTime || !endTime) return
 
   let { data: existing } = await sb
     .from('events')
     .select('id, is_enriched, updated_at, source_member_id, google_connection_id')
     .eq('google_connection_id', connection.id)
+    .eq('google_calendar_id', calendarId)
     .eq('google_event_id', ev.id)
     .maybeSingle()
   if (!existing) {
@@ -289,17 +414,29 @@ async function upsertEvent(sb: SupabaseClient, connection: CalendarConnection, e
         all_day: !start?.dateTime,
         status: 'confirmed',
         google_connection_id: connection.id,
-        google_calendar_id: connection.calendar_id,
+        google_calendar_id: calendarId,
         source_member_id: sourceMemberId,
         updated_at: new Date().toISOString(),
       }).eq('id', eventId)
     } else {
-      const row = { title: (ev.summary as string) ?? '(untitled)', description: (ev.description as string) ?? null, start_time: startTime, end_time: endTime, all_day: !start?.dateTime, location_name: (ev.location as string) ?? null, address: (ev.location as string) ?? null, google_event_id: ev.id as string, google_calendar_id: connection.calendar_id, google_connection_id: connection.id, source_member_id: sourceMemberId, status: 'confirmed', updated_at: new Date().toISOString() }
+      const row = {
+        title: (ev.summary as string) ?? '(untitled)',
+        description: (ev.description as string) ?? null,
+        start_time: startTime,
+        end_time: endTime,
+        all_day: !start?.dateTime,
+        location_name: (ev.location as string) ?? null,
+        address: (ev.location as string) ?? null,
+        google_event_id: ev.id as string,
+        google_calendar_id: calendarId,
+        google_connection_id: connection.id,
+        source_member_id: sourceMemberId,
+        status: 'confirmed',
+        updated_at: new Date().toISOString(),
+      }
       await sb.from('events').update(row).eq('id', eventId)
       const attendees = ev.attendees as Array<{ email: string }> | undefined
       const emails = new Set((attendees ?? []).map(a => a.email.toLowerCase()))
-      const { data: members } = await sb.from('family_members').select('id,email').not('email', 'is', null)
-      const emailToId = new Map((members ?? []).map((m: { id: string; email: string }) => [m.email.toLowerCase(), m.id]))
       const memberIds = new Set([sourceMemberId])
       for (const email of emails) { const id = emailToId.get(email); if (id) memberIds.add(id) }
       await sb.from('event_members').delete().eq('event_id', eventId)
@@ -309,14 +446,16 @@ async function upsertEvent(sb: SupabaseClient, connection: CalendarConnection, e
     // New event — check for an existing event at this time for this member.
     // If one exists and is enriched, patch the incoming Google event with our canonical data
     // so both calendar entries stay consistent. Then skip the DB insert.
-    const { data: existingAtTime } = await sb.from('events')
+    const { data: existingAtTimeList } = await sb.from('events')
       .select('id, is_enriched, title, location_name, address, event_enrichments(contact_name, contact_phone)')
       .eq('source_member_id', sourceMemberId)
       .eq('start_time', startTime)
-      .maybeSingle()
+      .limit(1)
+
+    const existingAtTime = existingAtTimeList?.[0] ?? null
 
     if (existingAtTime) {
-      if (existingAtTime.is_enriched && connection.access_mode === 'writable') {
+      if (!isReadOnly && existingAtTime.is_enriched && connection.access_mode === 'writable') {
         const enr = (existingAtTime.event_enrichments as Record<string, string>[] | null)?.[0]
         const patch: Record<string, unknown> = { summary: existingAtTime.title }
         if (existingAtTime.location_name || existingAtTime.address) {
@@ -333,20 +472,32 @@ async function upsertEvent(sb: SupabaseClient, connection: CalendarConnection, e
           headers: { authorization: 'Bearer ' + accessToken, 'content-type': 'application/json' },
           body: JSON.stringify(patch),
         }).catch(() => {})
+        return
       }
-      return
     }
 
     // Genuinely new event — insert
-    const row = { title: (ev.summary as string) ?? '(untitled)', description: (ev.description as string) ?? null, start_time: startTime, end_time: endTime, all_day: !start?.dateTime, location_name: (ev.location as string) ?? null, address: (ev.location as string) ?? null, google_event_id: ev.id as string, google_calendar_id: connection.calendar_id, google_connection_id: connection.id, source_member_id: sourceMemberId, status: 'confirmed', updated_at: new Date().toISOString() }
+    const row = {
+      title: (ev.summary as string) ?? '(untitled)',
+      description: (ev.description as string) ?? null,
+      start_time: startTime,
+      end_time: endTime,
+      all_day: !start?.dateTime,
+      location_name: (ev.location as string) ?? null,
+      address: (ev.location as string) ?? null,
+      google_event_id: ev.id as string,
+      google_calendar_id: calendarId,
+      google_connection_id: connection.id,
+      source_member_id: sourceMemberId,
+      status: 'confirmed',
+      updated_at: new Date().toISOString()
+    }
     const { data: ins, error } = await sb.from('events').insert({ ...row, is_enriched: false }).select('id').single()
-    if (error) throw error
+    if (error) throw new Error(error.message)
     eventId = ins.id
     await sb.from('event_enrichments').insert({ event_id: eventId, confidence: 'low', what_to_bring: [] })
     const attendees = ev.attendees as Array<{ email: string }> | undefined
     const emails = new Set((attendees ?? []).map(a => a.email.toLowerCase()))
-    const { data: members } = await sb.from('family_members').select('id,email').not('email', 'is', null)
-    const emailToId = new Map((members ?? []).map((m: { id: string; email: string }) => [m.email.toLowerCase(), m.id]))
     const memberIds = new Set([sourceMemberId])
     for (const email of emails) { const id = emailToId.get(email); if (id) memberIds.add(id) }
     await sb.from('event_members').delete().eq('event_id', eventId)

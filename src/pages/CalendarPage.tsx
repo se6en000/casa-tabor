@@ -57,13 +57,15 @@ export default function CalendarPage() {
     ? `${format(selectedDate, 'MMM d')} – ${format(stackedEnd, stackedEnd.getMonth() === selectedDate.getMonth() ? 'd, yyyy' : 'MMM d, yyyy')}`
     : `${format(weekStart, 'MMMM d')} – ${format(endOfWeek(selectedDate, { weekStartsOn: 0 }), 'd, yyyy')}`
 
-  // Touch swipe detection — skip if a modal/panel is open (z-index overlay)
+  // Touch swipe detection — skip if a modal/panel is open, or if in stacked view (which has its own 8-day horizontal ribbon)
   const touchStartX = useRef<number | null>(null)
   const onTouchStart = (e: React.TouchEvent) => {
+    if (isStacked) return
     if ((e.target as HTMLElement).closest('[data-panel-overlay]')) return
     touchStartX.current = e.touches[0].clientX
   }
   const onTouchEnd = (e: React.TouchEvent) => {
+    if (isStacked) return
     if (touchStartX.current === null) return
     const delta = e.changedTouches[0].clientX - touchStartX.current
     touchStartX.current = null
@@ -80,13 +82,14 @@ export default function CalendarPage() {
     const el = swipeRef.current
     if (!el) return
     const handler = (e: Event) => {
+      if (isStacked) return
       const dir = (e as CustomEvent<{ dir: 'next' | 'prev' }>).detail?.dir
       if (dir === 'next') goNext()
       else if (dir === 'prev') goPrev()
     }
     el.addEventListener('casa:swipe', handler)
     return () => el.removeEventListener('casa:swipe', handler)
-  }, [goNext, goPrev])
+  }, [goNext, goPrev, isStacked])
 
   // Slide animation variants
   const variants = {
@@ -100,8 +103,8 @@ export default function CalendarPage() {
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
       {/* Top toolbar */}
-      <div className="flex items-center justify-between px-6 py-3 bg-casa-bg">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between px-4 sm:px-6 py-2.5 sm:py-3 gap-2 bg-casa-bg border-b border-casa-border/40 shrink-0">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <Button
             onClick={goToToday}
             variant="secondary"
@@ -111,16 +114,16 @@ export default function CalendarPage() {
           </Button>
           {!isStacked && (
             <>
-              <IconButton onClick={goPrev} aria-label="Previous calendar period" icon={<ChevronLeft size={20} />} />
-              <IconButton onClick={goNext} aria-label="Next calendar period" icon={<ChevronRight size={20} />} />
+              <IconButton onClick={goPrev} aria-label="Previous calendar period" icon={<ChevronLeft size={18} />} />
+              <IconButton onClick={goNext} aria-label="Next calendar period" icon={<ChevronRight size={18} />} />
             </>
           )}
-          <h2 className="font-display text-heading text-casa-text ml-2">
+          <h2 className="font-display text-body-lg sm:text-heading text-casa-text ml-1 truncate">
             {headerLabel}
           </h2>
         </div>
 
-        <div className="hidden md:block">
+        <div className="w-full sm:w-auto overflow-x-auto scrollbar-hide">
           <SegmentedControl
             aria-label="Calendar view"
             value={activeView}

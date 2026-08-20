@@ -161,6 +161,49 @@ function deleteSelectionMatches(request, events, utcOffset) {
   ))
 }
 
+export function findTargetEventFromText(text, events, options = {}) {
+  if (!text || !Array.isArray(events) || events.length === 0) return null
+  const input = normalizeAssistantSpeechPunctuation(text).toLowerCase()
+
+  // 1. Exact / Full title match
+  const exactTitleMatches = events.filter((e) => {
+    if (!e.title) return false
+    const title = String(e.title).toLowerCase().trim()
+    return title.length >= 3 && input.includes(title)
+  })
+  if (exactTitleMatches.length > 1) {
+    return exactTitleMatches.sort((a, b) => {
+      const lengthDiff = (b.title?.length ?? 0) - (a.title?.length ?? 0)
+      if (lengthDiff !== 0) return lengthDiff
+      return new Date(b.created_at || b.updated_at || 0).getTime() - new Date(a.created_at || a.updated_at || 0).getTime()
+    })[0]
+  }
+
+  // 2. Keyword token matching (ignore generic stopwords and intent words)
+  const stopWords = new Set([
+    'change', 'update', 'driver', 'driving', 'attendee', 'attendees', 'primary',
+    'category', 'location', 'venue', 'address', 'checklist', 'notes', 'bring',
+    'water', 'bottle', 'guards', 'hours', 'before', 'visit', 'please', 'today',
+    'tomorrow', 'event', 'appointment', 'meeting', 'reminder', 'schedule', 'time',
+    'with', 'from', 'into', 'also', 'that', 'this', 'will', 'have', 'been',
+  ])
+
+  const tokens = input
+    .replace(/[^\w\s]/g, ' ')
+    .split(/\s+/)
+    .filter((t) => t.length >= 3 && !stopWords.has(t))
+
+  if (tokens.length > 0) {
+    const tokenMatches = events.filter((e) => {
+      const eTitle = String(e.title ?? '').toLowerCase()
+      return tokens.some((token) => eTitle.includes(token))
+    })
+    if (tokenMatches.length === 1) return tokenMatches[0]
+  }
+
+  return null
+}
+
 export function resolveActiveCalendarMutation(text, event, events, options = {}) {
   if (!event?.id) return null
   const input = normalizeAssistantSpeechPunctuation(text)
@@ -203,9 +246,306 @@ export function resolveActiveCalendarMutation(text, event, events, options = {})
     }
   }
 
-  const requestedMember = input.match(/\badd\s+([a-z][a-z'-]*)(?:\s+too|\s+to\s+(?:the\s+)?(?:calendar\s+)?(?:event|appointment|meeting|dinner|party|practice))\b/i)?.[1]
-  if (requestedMember && Array.isArray(options.familyNames)) {
-    const member = options.familyNames.find((name) => name.toLowerCase() === requestedMember.toLowerCase())
+  // Location / Venue removal
+  const clearLocationMatch = /^(?:clear|remove|delete)\s+(?:the\s+)?(?:location|venue|address|place)[.!?]?$/i.test(input) ||
+    /^(?:set\s+(?:the\s+)?(?:location|venue|address|place)\s+to\s+(?:none|empty|nothing)|no\s+location)[.!?]?$/i.test(input)
+  if (clearLocationMatch) {
+    return {
+      tool: 'update_event',
+      args: {
+        id: event.id,
+        expected_updated_at: event.updated_at,
+        location: '',
+        address: '',
+      },
+      event,
+    }
+  }
+
+  // Incomplete location slot request (conversational prompt)
+  const incompleteLocation = /^(?:please\s+)?(?:change|update|set|edit|move|switch)\s+(?:the\s+)?(?:location|venue|address|place)[.!?]?$/i.test(input)
+  if (incompleteLocation) {
+    return {
+      text: `Where would you like to set the location for "${event.title}"?`,
+      event,
+    }
+  }
+
+  // Exploratory capability inquiry
+  const exploratoryInquiry = /^(?:update|edit|change)\s+(?:details|event|info|this)\??$/i.test(input) ||
+    /^what\s+can\s+(?:i|we)\s+(?:change|update|edit)\??$/i.test(input) ||
+    /^(?:help\s+with\s+)?(?:editing|updating)\??$/i.test(input)
+  if (exploratoryInquiry) {
+    return {
+      text: `You can update the time, location, assigned driver, attendees, or prep notes for "${event.title}". What would you like to change?`,
+      event,
+    }
+  }
+
+  // Explicit Location / Venue update
+  const explicitNamedLocation = input.match(
+    /^(?:please\s+)?(?:update|change|set|make|move|switch|put)\s+(?:the\s+)?(?:location|venue|address|place)\s+(?:(?:to|at|as|for)\s+)?(.+?)[.!?]?$/i,
+  ) || input.match(
+    /^(?:the\s+)?(?:location|venue|address|place)\s+is\s+(.+?)[.!?]?$/i,
+  ) || input.match(
+    /^(?:relocate|move\s+venue)\s+(?:to\s+)?(.+?)[.!?]?$/i,
+  )
+
+  const meetingAtLocation = input.match(
+    /^(?:(?:it's|its|we're|we\s+are|we\s+will\s+be)\s+)?(?:meeting|located|actually)?\s*(?:at|in)\s+(.+?)[.!?]?$/i,
+  )
+
+  const candidateLocationMatch = explicitNamedLocation ?? meetingAtLocation
+  if (candidateLocationMatch) {
+    const rawDest = candidateLocationMatch[1].trim()
+    const isTemporal = /\b(?:\d{1,2}(?::\d{2})?\s*(?:am|pm)|today|tomorrow|sunday|monday|tuesday|wednesday|thursday|friday|saturday|noon|midnight)\b/i.test(rawDest) && !explicitNamedLocation
+    if (!isTemporal && rawDest.length > 0 && !/^(?:the\s+)?(?:location|venue|address|place)$/i.test(rawDest)) {
+      return {
+        tool: 'update_event',
+        args: {
+          id: event.id,
+          expected_updated_at: event.updated_at,
+          location: rawDest,
+        },
+        event,
+      }
+    }
+  }
+
+  // Renaming / Title
+  const incompleteRename = /^(?:please\s+)?(?:rename(?:\s+the)?(?:\s+event|\s+this|\s+appointment)?|change\s+(?:the\s+)?(?:title|name))[.!?]?$/i.test(input)
+  if (incompleteRename) {
+    return {
+      text: `What would you like to rename "${event.title}" to?`,
+      event,
+    }
+  }
+
+  const explicitRename = input.match(
+    /^(?:please\s+)?(?:rename|change\s+(?:the\s+)?(?:name|title)|set\s+(?:the\s+)?(?:name|title))\s+(?:(?:of|for)\s+(?:this\s+)?(?:event|appointment)\s+)?(?:to|as)\s+(.+?)[.!?]?$/i,
+  ) || input.match(
+    /^(?:please\s+)?rename\s+(?:(.+?)\s+)?to\s+(.+?)[.!?]?$/i,
+  ) || input.match(
+    /^rename\s+(?:to\s+)?(.+?)[.!?]?$/i,
+  )
+  if (explicitRename && !/\b(?:driver|location|venue|category|what\s+to\s+bring)\b/i.test(input)) {
+    const rawTitle = (explicitRename[2] ?? explicitRename[1]).trim().replace(/^["']|["']$/g, '')
+    if (rawTitle.length > 0 && !/^(?:the\s+)?(?:event|appointment|this)$/i.test(rawTitle)) {
+      return {
+        tool: 'update_event',
+        args: {
+          id: event.id,
+          expected_updated_at: event.updated_at,
+          title: rawTitle,
+        },
+        event,
+      }
+    }
+  }
+
+  // Category & Tagging
+  const CATEGORY_MAP = {
+    medical: 'medical', doctor: 'medical', health: 'medical', pediatric: 'medical', pediatrics: 'medical',
+    dentist: 'medical', orthodontic: 'medical', orthodontics: 'medical', prescription: 'medical', pharmacy: 'medical',
+    school: 'school', class: 'school', education: 'school', strings: 'school', band: 'school', orchestra: 'school',
+    sports: 'sports', sport: 'sports', soccer: 'sports', football: 'sports', basketball: 'sports', baseball: 'sports',
+    swimming: 'sports', practice: 'sports', game: 'sports', match: 'sports', gym: 'sports',
+    dining: 'dining', dinner: 'dining', lunch: 'dining', breakfast: 'dining', brunch: 'dining', restaurant: 'dining', food: 'dining',
+    home_maintenance: 'home_maintenance', maintenance: 'home_maintenance', home: 'home_maintenance', chore: 'home_maintenance', chores: 'home_maintenance', repair: 'home_maintenance',
+    social: 'social', party: 'social', playdate: 'social', hangout: 'social',
+    work: 'work', job: 'work', office: 'work',
+    errand: 'errand', errands: 'errand', shopping: 'errand', grocery: 'errand', groceries: 'errand',
+    child_care: 'child_care', childcare: 'child_care', daycare: 'child_care', babysitting: 'child_care',
+    birthday: 'birthday', bday: 'birthday',
+    travel: 'travel', trip: 'travel', flight: 'travel', vacation: 'travel',
+    holiday: 'holiday',
+    appointment: 'appointment',
+  }
+
+  const categoryMatch = input.match(
+    /^(?:please\s+)?(?:change|set|update|make)\s+(?:the\s+)?category\s+(?:to|as)\s+([a-z_\s]+)[.!?]?$/i,
+  ) || input.match(
+    /^(?:tag|mark)\s+(?:(?:this|the)\s+)?(?:.+?\s+)?as\s+([a-z_\s]+)[.!?]?$/i,
+  ) || input.match(
+    /^(?:tag|mark)\s+(?:this\s+)?([a-z_\s]+)[.!?]?$/i,
+  ) || input.match(
+    /^(?:it's|its|make\s+it|it\s+is)\s+(?:a|an)?\s*(medical|sports|school|social|work|errand|dining|travel|birthday|home\s+maintenance)\s*(?:event|appointment|category)?[.!?]?$/i,
+  )
+  if (categoryMatch) {
+    const rawCat = categoryMatch[1].trim().toLowerCase().replace(/\s+/g, '_')
+    const mapped = CATEGORY_MAP[rawCat]
+    if (mapped) {
+      return {
+        tool: 'update_event',
+        args: {
+          id: event.id,
+          expected_updated_at: event.updated_at,
+          category: mapped,
+        },
+        event,
+      }
+    }
+  }
+
+  const incompleteCategory = /^(?:please\s+)?(?:change|update|set)\s+(?:the\s+)?category[.!?]?$/i.test(input)
+  if (incompleteCategory) {
+    return {
+      text: `What category would you like to set for "${event.title}" (e.g. School, Sports, Medical, Social, Work, Errand)?`,
+      event,
+    }
+  }
+
+  // Travel behavior modes
+  if (/^(?:wait\s+there|wait\s+on\s+site|stay\s+on\s+site|stay\s+there|staying)(?:\s+(?:for|to|at)\s+.+)?[.!?]?$/i.test(input)) {
+    return {
+      tool: 'update_event',
+      args: {
+        id: event.id,
+        expected_updated_at: event.updated_at,
+        travel_behavior: 'stay',
+      },
+      event,
+    }
+  }
+  if (/^(?:two\s+way|2\s+way|come\s+back(?:\s+home)?\s+(?:and|to)\s+pick\s+up\s+later|separate\s+trips)(?:\s+(?:for|to|at)\s+.+)?[.!?]?$/i.test(input)) {
+    return {
+      tool: 'update_event',
+      args: {
+        id: event.id,
+        expected_updated_at: event.updated_at,
+        travel_behavior: 'two_way',
+      },
+      event,
+    }
+  }
+  if (/^(?:drop\s*off\s+only|just\s+drop(?:ping)?\s+off|only\s+drop(?:ping)?\s+off)(?:\s+(?:for|to|at)\s+.+)?[.!?]?$/i.test(input)) {
+    return {
+      tool: 'update_event',
+      args: {
+        id: event.id,
+        expected_updated_at: event.updated_at,
+        travel_behavior: 'dropoff_only',
+      },
+      event,
+    }
+  }
+  if (/^(?:pick\s*up\s+only|just\s+pick(?:ing)?\s+up|only\s+pick(?:ing)?\s+up)(?:\s+(?:for|to|at)\s+.+)?[.!?]?$/i.test(input)) {
+    return {
+      tool: 'update_event',
+      args: {
+        id: event.id,
+        expected_updated_at: event.updated_at,
+        travel_behavior: 'pickup_only',
+      },
+      event,
+    }
+  }
+  if (/^(?:no\s+driving(?:\s+needed)?|no\s+ride(?:\s+needed)?|virtual|online|walking)(?:\s+(?:for|to|at)\s+.+)?[.!?]?$/i.test(input)) {
+    return {
+      tool: 'update_event',
+      args: {
+        id: event.id,
+        expected_updated_at: event.updated_at,
+        travel_behavior: 'none',
+      },
+      event,
+    }
+  }
+
+  // Clear driver
+  if (/^(?:clear|remove|delete)\s+(?:the\s+)?driver(?:\s+(?:for|to|at)\s+.+)?[.!?]?$/i.test(input) || /^(?:no\s+driver|unassigned\s+driver)(?:\s+(?:for|to|at)\s+.+)?[.!?]?$/i.test(input)) {
+    return {
+      tool: 'update_event',
+      args: {
+        id: event.id,
+        expected_updated_at: event.updated_at,
+        driver_name: '',
+      },
+      event,
+    }
+  }
+
+  // Incomplete driver prompt
+  if (/^(?:please\s+)?(?:change|update|set|switch|assign)\s+(?:the\s+)?driver[.!?]?$/i.test(input) || /^who\s+is\s+driving\??$/i.test(input)) {
+    return {
+      text: `Who should be assigned as the driver for "${event.title}"?`,
+      event,
+    }
+  }
+
+  // Split drivers: "Jake will drop off and Kelly pick up"
+  const splitDriversMatch = input.match(
+    /^([a-z][a-z'-]*)\s+(?:will\s+|is\s+)?(?:doing\s+)?(?:drop\s*off|dropoff|drops?\s*off)\s+(?:and\s+|,)?\s*([a-z][a-z'-]*)\s+(?:will\s+|is\s+)?(?:doing\s+)?(?:pick\s*up|pickup|picks?\s*up)(?:\s+(?:for|to|at)\s+.+)?[.!?]?$/i,
+  )
+  if (splitDriversMatch) {
+    const d1 = splitDriversMatch[1]
+    const d2 = splitDriversMatch[2]
+    return {
+      tool: 'update_event',
+      args: {
+        id: event.id,
+        expected_updated_at: event.updated_at,
+        driver_leg1: d1.charAt(0).toUpperCase() + d1.slice(1).toLowerCase(),
+        driver_leg2: d2.charAt(0).toUpperCase() + d2.slice(1).toLowerCase(),
+      },
+      event,
+    }
+  }
+
+  // Single driver assignment: "Kelly is driving", "assign driver to Jake", "switch driver to Kelly"
+  const singleDriverMatch = input.match(
+    /^(?:please\s+)?(?:set|assign|change|switch|make)\s+(?:the\s+)?driver\s+(?:to|as)\s+([a-z][a-z'-]*)(?:\s+(?:for|to)\s+.+)?$/i,
+  ) || input.match(
+    /^([a-z][a-z'-]*)\s+(?:is\s+driving|will\s+drive|is\s+the\s+driver|drives)(?:\s+(?:for|to)\s+.+)?$/i,
+  )
+  if (singleDriverMatch && !/\b(?:to|at|in|on)\b/i.test(singleDriverMatch[1])) {
+    const rawDriver = singleDriverMatch[1].trim()
+    const capDriver = rawDriver.charAt(0).toUpperCase() + rawDriver.slice(1).toLowerCase()
+    return {
+      tool: 'update_event',
+      args: {
+        id: event.id,
+        expected_updated_at: event.updated_at,
+        driver_name: capDriver,
+      },
+      event,
+    }
+  }
+
+  // Attendee removal: "remove Jake", "remove Jake from attendees"
+  const removeAttendeeMatch = input.match(
+    /^(?:please\s+)?(?:remove|delete)\s+(.+?)(?:\s+from\s+(?:the\s+)?(?:event|attendees?|appointment)(?:\s+(?:for|to|at)\s+.+)?)?[.!?]?$/i,
+  ) || input.match(
+    /^(?:please\s+)?(?:remove|delete)\s+(.+?)(?:\s+from\s+.+?\s+attendees?)[.!?]?$/i,
+  )
+  if (removeAttendeeMatch && !/\b(?:location|venue|address|driver|what\s+to\s+bring|checklist|notes?)\b/i.test(input)) {
+    const rawNames = removeAttendeeMatch[1]
+      .split(/\s*(?:,|&|\band\b|\+)\s*/i)
+      .map(s => s.trim())
+      .filter(Boolean)
+    const validNames = Array.isArray(options.familyNames)
+      ? rawNames.map(r => options.familyNames.find(n => n.toLowerCase() === r.toLowerCase())).filter(Boolean)
+      : rawNames
+    if (validNames.length > 0) {
+      return {
+        tool: 'update_event',
+        args: {
+          id: event.id,
+          expected_updated_at: event.updated_at,
+          members_remove: validNames,
+        },
+        event,
+      }
+    }
+  }
+
+  // Primary attendee: "this is for Emme", "primary attendee is Liv", "make Emme the primary attendee"
+  const primaryAttendeeMatch = input.match(
+    /^(?:(?:make|set)\s+([a-z][a-z'-]*)\s+(?:the\s+|as\s+)?(?:primary\s+attendee|primary)|(?:this\s+is\s+for|for|primary\s+attendee\s+is|primary\s+is)\s+([a-z][a-z'-]*))(?:\s+(?:for|to|at)\s+.+)?[.!?]?$/i,
+  )
+  if (primaryAttendeeMatch && Array.isArray(options.familyNames)) {
+    const name = (primaryAttendeeMatch[1] || primaryAttendeeMatch[2]).toLowerCase()
+    const member = options.familyNames.find(n => n.toLowerCase() === name)
     if (member) {
       return {
         tool: 'update_event',
@@ -213,9 +553,142 @@ export function resolveActiveCalendarMutation(text, event, events, options = {})
           id: event.id,
           expected_updated_at: event.updated_at,
           members_add: [member],
+          primary_attendee: member,
         },
         event,
       }
+    }
+  }
+
+  // Multiple / Single Attendee Addition: "add Owen and Liv", "add Kelly too"
+  const addAttendeeMatch = input.match(
+    /^(?:please\s+)?add\s+(.+?)(?:\s+too|\s+as\s+attendees?|\s+to\s+(?:the\s+)?(?:calendar\s+)?(?:event|appointment|meeting|dinner|party|practice|attendees?))[.!?]?$/i,
+  ) || input.match(
+    /^(?:please\s+)?add\s+([a-z\s,and'-]+?)(?:\s+too)?[.!?]?$/i,
+  )
+  if (addAttendeeMatch && Array.isArray(options.familyNames) && !/\b(?:what\s+to\s+bring|notes?|checklist|recipe|ingredient)\b/i.test(input)) {
+    const rawNames = addAttendeeMatch[1]
+      .split(/\s*(?:,|&|\band\b|\+)\s*/i)
+      .map(s => s.trim())
+      .filter(Boolean)
+    const validNames = rawNames
+      .map((r) => options.familyNames.find((n) => n.toLowerCase() === r.toLowerCase()))
+      .filter(Boolean)
+    if (validNames.length > 0) {
+      return {
+        tool: 'update_event',
+        args: {
+          id: event.id,
+          expected_updated_at: event.updated_at,
+          members_add: validNames,
+        },
+        event,
+      }
+    }
+  }
+
+  // Incomplete attendee prompt
+  if (/^(?:please\s+)?(?:add|remove)\s+(?:an\s+)?attendee[.!?]?$/i.test(input) || /^who\s+is\s+attending\??$/i.test(input)) {
+    return {
+      text: `Who would you like to update in the attendee list for "${event.title}"?`,
+      event,
+    }
+  }
+
+  // Clear what to bring
+  if (/^(?:clear|remove|delete)\s+(?:what\s+to\s+bring|the\s+checklist|checklist)[.!?]?$/i.test(input)) {
+    return {
+      tool: 'update_event',
+      args: {
+        id: event.id,
+        expected_updated_at: event.updated_at,
+        what_to_bring: [],
+      },
+      event,
+    }
+  }
+
+  // What to bring / pack / take
+  const bringMatch = input.match(
+    /^(?:please\s+)?(?:bring|pack|take|need\s+to\s+bring)\s+(.+?)[.!?]?$/i,
+  ) || input.match(
+    /^(?:please\s+)?add\s+(.+?)\s+to\s+(?:what\s+to\s+bring|checklist)[.!?]?$/i,
+  )
+  if (bringMatch && !/\b(?:attendees?|member|driver|venue|location)\b/i.test(input)) {
+    const rawItems = bringMatch[1].trim()
+    const items = rawItems.split(/\s*(?:,|and|\+)\s*/i).map(s => s.trim()).filter(Boolean)
+    if (items.length > 0) {
+      return {
+        tool: 'update_event',
+        args: {
+          id: event.id,
+          expected_updated_at: event.updated_at,
+          what_to_bring: items,
+        },
+        event,
+      }
+    }
+  }
+
+  // Outfit suggestion
+  const outfitMatch = input.match(
+    /^(?:please\s+)?(?:wear|outfit(?:\s+is)?|dress\s+code(?:\s+is)?)\s+(.+?)[.!?]?$/i,
+  )
+  if (outfitMatch) {
+    const rawOutfit = outfitMatch[1].trim()
+    if (rawOutfit.length > 0) {
+      return {
+        tool: 'update_event',
+        args: {
+          id: event.id,
+          expected_updated_at: event.updated_at,
+          outfit_suggestion: rawOutfit,
+        },
+        event,
+      }
+    }
+  }
+
+  // Notes
+  const notesMatch = input.match(
+    /^(?:please\s+)?(?:add\s+note|set\s+note|add\s+a\s+note|note|notes)\s*(?::\s*|\s+that\s+|\s+to\s+|\s+)(.+?)[.!?]?$/i,
+  )
+  if (notesMatch) {
+    const rawNotes = notesMatch[1].trim()
+    if (rawNotes.length > 0) {
+      return {
+        tool: 'update_event',
+        args: {
+          id: event.id,
+          expected_updated_at: event.updated_at,
+          notes: rawNotes,
+        },
+        event,
+      }
+    }
+  }
+
+  // All day toggle
+  if (/^(?:make\s+it\s+all\s+day|set\s+(?:to\s+)?all\s+day|all\s+day)[.!?]?$/i.test(input)) {
+    return {
+      tool: 'update_event',
+      args: {
+        id: event.id,
+        expected_updated_at: event.updated_at,
+        all_day: true,
+      },
+      event,
+    }
+  }
+  if (/^(?:not\s+all\s+day|turn\s+off\s+all\s+day|timed\s+event)[.!?]?$/i.test(input)) {
+    return {
+      tool: 'update_event',
+      args: {
+        id: event.id,
+        expected_updated_at: event.updated_at,
+        all_day: false,
+      },
+      event,
     }
   }
 

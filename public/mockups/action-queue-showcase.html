@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Casa Tabor — Action Queue Luxury Redesign Showcase</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,400;1,600&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  
+  <!-- Lucide Icons -->
+  <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.js"></script>
+
+  <style>
+    :root {
+      --color-gold: #C9A96E;
+      --color-gold-hover: #B89555;
+      --color-gold-soft: #F9F4EB;
+      --color-navy: #1B2A4A;
+      --color-navy-dark: #0A0E17;
+      --color-navy-panel: #111726;
+      
+      --color-bg: #090C12;
+      --color-surface: #141A29;
+      --color-surface-card: #1B2236;
+      
+      --color-text: #F3F4F6;
+      --color-text-secondary: #9DA3B4;
+      --color-border: rgba(255, 255, 255, 0.08);
+
+      --font-display: 'Cormorant Garamond', Georgia, serif;
+      --font-body: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+
+      --radius-sm: 8px;
+      --radius-md: 14px;
+      --radius-lg: 22px;
+      --radius-pill: 9999px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-body);
+      background-color: var(--color-bg);
+      color: var(--color-text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Master Top Header */
+    .showcase-header {
+      background: var(--color-navy-panel);
+      border-bottom: 1px solid var(--color-border);
+      padding: 16px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .brand-section {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .brand-mark {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      background: var(--color-gold);
+      color: var(--color-navy);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 15px;
+    }
+
+    .brand-title-wrap h1 {
+      font-family: var(--font-display);
+      font-size: 20px;
+      font-weight: 600;
+      color: #FFFFFF;
+      letter-spacing: 0.5px;
+    }
+
+    .brand-title-wrap p {
+      font-size: 12px;
+      color: var(--color-text-secondary);
+    }
+
+    /* Concept Selector Tabs */
+    .concept-select-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(0, 0, 0, 0.4);
+      padding: 4px;
+      border-radius: var(--radius-pill);
+      border: 1px solid var(--color-border);
+    }
+
+    .concept-btn {
+      padding: 8px 16px;
+      border-radius: var(--radius-pill);
+      color: var(--color-text-secondary);
+      background: transparent;
+      border: none;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .concept-btn:hover {
+      color: #FFFFFF;
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .concept-btn.active {
+      background: var(--color-gold);
+      color: var(--color-navy);
+      font-weight: 600;
+    }
+
+    /* Viewport Simulator Controls */
+    .viewport-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .device-btn {
+      padding: 6px 12px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      color: var(--color-text-secondary);
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .device-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #FFFFFF;
+    }
+
+    .device-btn.active {
+      background: rgba(201, 169, 110, 0.15);
+      border-color: var(--color-gold);
+      color: var(--color-gold);
+      font-weight: 600;
+    }
+
+    .popout-link {
+      padding: 6px 12px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      color: #FFFFFF;
+      text-decoration: none;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .popout-link:hover {
+      background: var(--color-gold);
+      color: var(--color-navy);
+      border-color: var(--color-gold);
+    }
+
+    /* Sub-bar / Concept Details */
+    .concept-info-bar {
+      background: #0E131E;
+      border-bottom: 1px solid var(--color-border);
+      padding: 12px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+
+    .concept-pill-badge {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      padding: 4px 10px;
+      border-radius: var(--radius-pill);
+      background: rgba(201, 169, 110, 0.15);
+      color: var(--color-gold);
+      border: 1px solid rgba(201, 169, 110, 0.3);
+    }
+
+    .concept-desc-text {
+      font-size: 13.5px;
+      color: var(--color-text-secondary);
+      flex: 1;
+    }
+
+    /* Stage Area */
+    .stage-wrapper {
+      flex: 1;
+      padding: 24px;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      overflow-y: auto;
+      background: radial-gradient(circle at 50% 10%, #151C2C 0%, #090C12 70%);
+    }
+
+    .mockup-frame-container {
+      width: 100%;
+      height: 860px;
+      background: #FAF8F5;
+      border-radius: var(--radius-lg);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.1);
+      overflow: hidden;
+      transition: all 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .mockup-frame-container.viewport-kiosk {
+      width: 100%;
+      max-width: 1540px;
+      height: 880px;
+    }
+
+    .mockup-frame-container.viewport-tablet {
+      width: 960px;
+      height: 780px;
+    }
+
+    .mockup-frame-container.viewport-mobile {
+      width: 390px;
+      height: 800px;
+      border-radius: 40px;
+      box-shadow: 0 25px 70px rgba(0,0,0,0.8), 0 0 0 8px #1F2430;
+    }
+
+    .mockup-iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+      background: #FAF8F5;
+    }
+
+    /* Concept Cards Direct Grid */
+    .direct-links-section {
+      background: var(--color-navy-panel);
+      border-top: 1px solid var(--color-border);
+      padding: 28px;
+    }
+
+    .direct-grid-title {
+      font-family: var(--font-display);
+      font-size: 22px;
+      color: #FFFFFF;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+    }
+
+    .concept-card-link {
+      background: var(--color-surface-card);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      padding: 20px;
+      text-decoration: none;
+      color: var(--color-text);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      transition: all 0.25s ease;
+    }
+
+    .concept-card-link:hover {
+      border-color: var(--color-gold);
+      transform: translateY(-3px);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+    }
+
+    .concept-card-link h3 {
+      font-family: var(--font-display);
+      font-size: 20px;
+      color: #FFFFFF;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .concept-card-link p {
+      font-size: 13px;
+      color: var(--color-text-secondary);
+      line-height: 1.5;
+    }
+
+    .concept-card-tags {
+      display: flex;
+      gap: 6px;
+      margin-top: 6px;
+    }
+
+    .mini-tag {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--color-gold);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Master Top Navigation -->
+  <header class="showcase-header">
+    <div class="brand-section">
+      <div class="brand-mark">CT</div>
+      <div class="brand-title-wrap">
+        <h1>Casa Tabor · Action Queue Redesign Hub</h1>
+        <p>Interactive High-Fidelity UX Mockups & Architecture</p>
+      </div>
+    </div>
+
+    <!-- Concept Tabs -->
+    <div class="concept-select-bar">
+      <button class="concept-btn active" onclick="loadConcept('action-queue-universal-triage.html', '⭐ Universal Triage: Done vs. Snooze', 'Universal 2-anchor design: every arbitrary household task gets a clean [Done] and [Snooze ▾] loop with zero button spam.', this)">
+        <i data-lucide="check-check" style="width: 14px; height: 14px;"></i>
+        ⭐ Universal Triage
+      </button>
+
+      <button class="concept-btn" onclick="loadConcept('action-queue-concierge.html', 'Concept 1: The Private Concierge', 'Bespoke archetype cards with prominent currency/child metadata, high-touch primary CTA buttons, and clean progressive disclosure snooze.', this)">
+        <i data-lucide="sparkles" style="width: 14px; height: 14px;"></i>
+        1. Concierge
+      </button>
+
+      <button class="concept-btn" onclick="loadConcept('action-queue-editorial.html', 'Concept 2: The Editorial Ledger', 'Quiet luxury architectural style with borderless rows, hairline dividers, Cormorant Garamond headings, and minimal champagne checks.', this)">
+        <i data-lucide="book-open" style="width: 14px; height: 14px;"></i>
+        2. Ledger
+      </button>
+
+      <button class="concept-btn" onclick="loadConcept('action-queue-horizon.html', 'Concept 3: Priority Horizon', 'Executive nightly briefing with split urgency zones (urgent approvals & payments spotlight vs compact daily stream).', this)">
+        <i data-lucide="layout-grid" style="width: 14px; height: 14px;"></i>
+        3. Horizon
+      </button>
+    </div>
+
+    <!-- Viewport Controls -->
+    <div class="viewport-controls">
+      <button class="device-btn active" onclick="setViewport('viewport-kiosk', this)" title="Wall Kiosk (1920x1080)">
+        <i data-lucide="monitor" style="width: 14px; height: 14px;"></i>
+        Wall Kiosk
+      </button>
+      <button class="device-btn" onclick="setViewport('viewport-tablet', this)" title="Kitchen Tablet (1024x768)">
+        <i data-lucide="tablet" style="width: 14px; height: 14px;"></i>
+        Tablet
+      </button>
+      <button class="device-btn" onclick="setViewport('viewport-mobile', this)" title="Mobile Phone (390x844)">
+        <i data-lucide="smartphone" style="width: 14px; height: 14px;"></i>
+        Mobile
+      </button>
+      <a href="action-queue-universal-triage.html" target="_blank" class="popout-link" id="popout-btn">
+        <i data-lucide="external-link" style="width: 13px; height: 13px;"></i>
+        Open Standalone
+      </a>
+    </div>
+  </header>
+
+  <!-- Info Bar -->
+  <div class="concept-info-bar">
+    <div class="concept-pill-badge" id="info-badge">⭐ Universal Triage: Done vs. Snooze</div>
+    <div class="concept-desc-text" id="info-desc">
+      Universal 2-anchor design: every arbitrary household task gets a clean [Done] and [Snooze ▾] loop with zero button spam.
+    </div>
+  </div>
+
+  <!-- Interactive Stage -->
+  <main class="stage-wrapper">
+    <div class="mockup-frame-container viewport-kiosk" id="mockup-frame-box">
+      <iframe src="action-queue-universal-triage.html" class="mockup-iframe" id="active-mockup-iframe"></iframe>
+    </div>
+  </main>
+
+  <!-- Direct Standalone Links Footer Section -->
+  <section class="direct-links-section">
+    <h2 class="direct-grid-title">
+      <i data-lucide="layers" style="width: 20px; height: 20px; color: var(--color-gold);"></i>
+      Direct Standalone Mockup Pages
+    </h2>
+
+    <div class="cards-grid">
+      <!-- Universal Triage Card -->
+      <a href="action-queue-universal-triage.html" target="_blank" class="concept-card-link" style="border-color: var(--color-gold); background: rgba(201, 169, 110, 0.08);">
+        <h3>
+          ⭐ Universal Done vs. Snooze Triage
+          <i data-lucide="arrow-up-right" style="width: 16px; height: 16px;"></i>
+        </h3>
+        <p>Built for real-world chaotic household items. Standardizes every task to a 2-anchor [Done] and [Snooze ▾] loop with gesture & focus deck modes.</p>
+        <div class="concept-card-tags">
+          <span class="mini-tag">Executive 2-Anchor</span>
+          <span class="mini-tag">Swipe Deck</span>
+          <span class="mini-tag">30s Focus Queue</span>
+        </div>
+      </a>
+
+      <!-- Card 1 -->
+      <a href="action-queue-concierge.html" target="_blank" class="concept-card-link">
+        <h3>
+          Concept 1: Private Concierge
+          <i data-lucide="arrow-up-right" style="width: 16px; height: 16px;"></i>
+        </h3>
+        <p>Bespoke archetype cards (Insurance, School Waiver, East Wok). Interactive slide-out signing pad and payment authorization drawer.</p>
+        <div class="concept-card-tags">
+          <span class="mini-tag">Archetypes</span>
+          <span class="mini-tag">Slide-out Drawers</span>
+          <span class="mini-tag">Progressive Snooze</span>
+        </div>
+      </a>
+
+      <!-- Card 2 -->
+      <a href="action-queue-editorial.html" target="_blank" class="concept-card-link">
+        <h3>
+          Concept 2: Editorial Ledger
+          <i data-lucide="arrow-up-right" style="width: 16px; height: 16px;"></i>
+        </h3>
+        <p>Quiet luxury & architectural typography. Borderless rows, hairline dividers, ambient quote & live household stats.</p>
+        <div class="concept-card-tags">
+          <span class="mini-tag">Quiet Luxury</span>
+          <span class="mini-tag">Borderless</span>
+          <span class="mini-tag">Hairline Dividers</span>
+        </div>
+      </a>
+
+      <!-- Card 3 -->
+      <a href="action-queue-horizon.html" target="_blank" class="concept-card-link">
+        <h3>
+          Concept 3: Priority Horizon
+          <i data-lucide="arrow-up-right" style="width: 16px; height: 16px;"></i>
+        </h3>
+        <p>Urgency split hierarchy. Nightly executive briefing with high-priority spotlight cards and glanceable routine stream.</p>
+        <div class="concept-card-tags">
+          <span class="mini-tag">Urgency Split</span>
+          <span class="mini-tag">Executive Digest</span>
+          <span class="mini-tag">Batch Actions</span>
+        </div>
+      </a>
+    </div>
+  </section>
+
+  <script>
+    lucide.createIcons();
+
+    function loadConcept(url, title, desc, btn) {
+      document.querySelectorAll('.concept-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      document.getElementById('active-mockup-iframe').src = url;
+      document.getElementById('info-badge').innerText = title;
+      document.getElementById('info-desc').innerText = desc;
+      document.getElementById('popout-btn').href = url;
+    }
+
+    function setViewport(viewportClass, btn) {
+      document.querySelectorAll('.device-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      const frame = document.getElementById('mockup-frame-box');
+      frame.className = `mockup-frame-container ${viewportClass}`;
+    }
+  </script>
+</body>
+</html>

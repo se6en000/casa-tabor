@@ -33,7 +33,7 @@ export function classifyAssistantIntent(text, options = {}) {
   const hasRecipeIntent = assistantMode === 'chef' ||
     /\b(recipe|cook|meal|dinner|lunch|breakfast|ingredient|servings?)\b/i.test(input)
   const hasPlaceIntent = /\b(address|phone number|where is|find (?:a|an|the)?\s*(?:restaurant|store|business|place)|nearby)\b/i.test(input)
-  const hasWebIntent = /\b(latest|news|score|stock price|current price|recent review|look it up|search the web)\b/i.test(input)
+  const hasWebIntent = /\b(latest|news|score|stock price|current price|recent review|(?:recent|customer|online|top|good|bad)\s+reviews?|reviews?\s+(?:for|of|on|about|online)|tours?|attractions?|things to do|activities|recommendations?|dress code|menus?|policies|bag policy|tickets?|hours|look it up|search the web|search online|find online|web search)\b/i.test(input)
   const matchedDomains = [
     hasEventIntent,
     hasWeatherIntent,
@@ -46,6 +46,9 @@ export function classifyAssistantIntent(text, options = {}) {
 
   if (hasRecipeIntent && AMBIGUOUS_MUTATION.test(input)) {
     return { profile: 'full', forceEventSearch: false }
+  }
+  if (hasWebIntent && !AMBIGUOUS_MUTATION.test(input) && !ADDITIVE_ACTION.test(input) && !pendingEventAction) {
+    return { profile: 'web', forceEventSearch: false }
   }
   if (hasEventIntent) {
     const hasAuthoritativeEvent = focusedEvent || eventFollowUp

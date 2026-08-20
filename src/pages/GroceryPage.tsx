@@ -1,24 +1,56 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ShoppingCart, Trash2, X, Plus, Minus, RefreshCw, GripVertical, Link2, Upload, BookOpen, ChefHat, ChevronLeft, ChevronRight, Clock3, ExternalLink, Camera, Sparkles, Leaf, Milk, Beef, Croissant, Snowflake, Package, Coffee, Popcorn, Sandwich, House, HeartPulse, Baby as BabyIcon, PawPrint, Circle } from 'lucide-react'
-import { AnimatePresence, motion } from 'framer-motion'
+import {
+  ShoppingCart,
+  Trash2,
+  Plus,
+  Minus,
+  Link2,
+  Upload,
+  BookOpen,
+  ChefHat,
+  Camera,
+  Leaf,
+  Milk,
+  Beef,
+  Croissant,
+  Snowflake,
+  Package,
+  Coffee,
+  Popcorn,
+  Sandwich,
+  House,
+  HeartPulse,
+  Baby as BabyIcon,
+  PawPrint,
+} from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { cn } from '../utils/cn'
 import { useGroceryList, GROCERY_CATEGORIES, type GroceryItem } from '../hooks/useGroceryList'
-import GroceryQuickAddSheet from '../components/shared/GroceryQuickAddSheet'
 import { inferCategoryFromName } from '../utils/groceryCategorization'
-import {
-  categoryIconBadgeClassName,
-  getCategoryTone,
-  getDepletionVisual,
-  urgencyDotClassName,
-  urgencyTagClassName,
-} from '../utils/groceryVisuals'
+import { parseGroceryVoiceBatch, type ParsedVoiceGroceryItem } from '../utils/groceryBatchVoiceParser.ts'
+import { useFieldDictation } from '../hooks/useFieldDictation'
+import GroceryCommandBar from '../components/grocery/GroceryCommandBar'
+import GroceryAisleGrid from '../components/grocery/GroceryAisleGrid'
+import MobileGroceryView from '../components/mobile/MobileGroceryView'
 import { normalizeRecipeIngredientFields } from '../utils/recipeIngredientParsing'
 import { supabase } from '../lib/supabase'
 import { formatSupabaseError } from '../lib/formatSupabaseError'
 import { usePageVisibility } from '../hooks/usePageVisibility'
-import { Alert, Button, Checkbox, IconButton, Card, Chip, Input, Heading, Modal, Progress, SegmentedControl, Sheet, Text, Toast } from '../components/ui'
+import {
+  Alert,
+  Button,
+  Checkbox,
+  IconButton,
+  Card,
+  Chip,
+  Input,
+  PageShell,
+  Sheet,
+  Text,
+  Textarea,
+} from '../components/ui'
+import { useTactileSwapState } from '../components/ui/TactileSwap'
 import {
   appendPantryInventoryAudit,
   normalizePackageUnit,
@@ -26,38 +58,20 @@ import {
   type PantryInventoryAuditEntry,
 } from '../lib/pantryInventoryUtils'
 import {
-  buildGroceryPredictionDeferredUntil,
-  GROCERY_PREDICTION_DISMISS_DAYS,
-  GROCERY_PREDICTION_PUSH_DAYS,
   normalizeGroceryNameKey,
-  resolveGroceryPredictionDueAt,
-  sanitizeGroceryPredictionDeferrals,
-  type GroceryPredictionDeferrals,
 } from '../utils/groceryPredictionDeferrals'
 import recipeFallbackHero from '../assets/hero.png'
 
-const SYNC_LAST_AT_KEY = 'grocery-sync-last-at-v1'
-const SYNC_LAST_SUMMARY_KEY = 'grocery-sync-last-summary-v1'
-const GROCERY_PREDICTION_DEFERRALS_SETTING_KEY = 'grocery_prediction_deferrals'
-const GROCERY_WEEKLY_HIDDEN_PICKS_SETTING_KEY = 'grocery_weekly_hidden_picks'
 // Background dedupe is a full-table scan + write. It only needs to catch
 // duplicates introduced by adds/imports/iOS merges, not run on every tick.
 // Throttle background dedupe to at most once per this interval; the manual
 // "Clean + Sync" button still forces a dedupe pass regardless.
 const DEDUPE_MIN_INTERVAL_MS = 10 * 60_000
 const SYNC_LAST_DEDUPE_AT_KEY = 'grocery-sync-last-dedupe-at-v1'
-const CLEAN_SYNC_BATCH_SIZE = 60
 const QUICK_ADD_TOUCH_ITEMS = ['Milk', 'Eggs', 'Bread', 'Bananas', 'Chicken', 'Coffee']
-const CHECKED_ITEM_DISMISS_MS = 3_000
+const INTERACTION_STABILITY_GRACE_MS = 10_000
 const CHECKED_ITEM_EXIT_ANIMATION_MS = 320
 const LOW_CONFIDENCE_REVIEW_THRESHOLD = 0.82
-function smartPickRecencyMultiplier(daysSince: number): number {
-  if (daysSince <= 7) return 0.5   // bought very recently — probably still in stock
-  if (daysSince <= 30) return 1.0  // sweet spot: likely due for a restock
-  if (daysSince <= 60) return 0.75
-  if (daysSince <= 90) return 0.5
-  return 0.2
-}
 const STORE_SECTION_ORDER: Record<string, number> = {
   'Produce': 10,
   'Bakery': 20,
@@ -88,20 +102,20 @@ const DEFAULT_CATEGORY_VISUAL: CategoryVisual = {
 // (src/utils/groceryVisuals.ts), a typed semantic tone map backed entirely by
 // canonical casa-* tokens so category badges stay correct in both themes.
 const CATEGORY_VISUAL_BY_KEY: Record<string, CategoryVisual> = {
-  produce: { icon: Leaf, subtitle: 'Fresh items • entry side' },
-  dairy: { icon: Milk, subtitle: 'Cold essentials • back wall' },
-  meat: { icon: Beef, subtitle: 'Protein picks • butcher lane' },
-  bakery: { icon: Croissant, subtitle: 'Bread & baked goods' },
-  frozen: { icon: Snowflake, subtitle: 'Frozen staples' },
-  pantry: { icon: Package, subtitle: 'Shelf staples • center aisles' },
-  beverages: { icon: Coffee, subtitle: 'Drinks & hydration' },
-  snacks: { icon: Popcorn, subtitle: 'Quick bites & treats' },
-  deli: { icon: Sandwich, subtitle: 'Prepared foods' },
-  household: { icon: House, subtitle: 'Home & cleaning' },
-  'personal-care': { icon: HeartPulse, subtitle: 'Health & body' },
+  produce: { icon: Leaf, subtitle: 'Fresh produce & herbs' },
+  dairy: { icon: Milk, subtitle: 'Cold dairy & refrigerated' },
+  meat: { icon: Beef, subtitle: 'Prime butcher & seafood' },
+  bakery: { icon: Croissant, subtitle: 'Artisan bread & baked goods' },
+  frozen: { icon: Snowflake, subtitle: 'Frozen essentials' },
+  pantry: { icon: Package, subtitle: 'Cellar & pantry staples' },
+  beverages: { icon: Coffee, subtitle: 'Beverages & coffee' },
+  snacks: { icon: Popcorn, subtitle: 'Snacks & treats' },
+  deli: { icon: Sandwich, subtitle: 'Deli & prepared foods' },
+  household: { icon: House, subtitle: 'Household & cleaning' },
+  'personal-care': { icon: HeartPulse, subtitle: 'Health & personal care' },
   baby: { icon: BabyIcon, subtitle: 'Baby essentials' },
   pet: { icon: PawPrint, subtitle: 'Pet supplies' },
-  other: { icon: ShoppingCart, subtitle: 'Everything else' },
+  other: { icon: ShoppingCart, subtitle: 'General provisions' },
 }
 const RECIPE_MEAL_SLOTS: Array<{ slot: RecipeMealPlanSlot; label: string }> = [
   { slot: 'tonight', label: 'Tonight' },
@@ -211,47 +225,10 @@ type PantryReconcileDraft = {
   audit_log: PantryInventoryAuditEntry[]
 }
 
-type GroceryWeeklyHiddenPicks = Record<string, { name: string; hidden_at: string }>
-
-function detectCategory(name: string): string {
-  return inferCategoryFromName(name)
-}
-
-function normalizeItemName(name: string): string {
-  return normalizeGroceryNameKey(name)
-}
-
-function sanitizeGroceryWeeklyHiddenPicks(value: unknown): GroceryWeeklyHiddenPicks {
-  if (!value || typeof value !== 'object') return {}
-  const sanitized: GroceryWeeklyHiddenPicks = {}
-  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
-    const normalized = normalizeItemName(key)
-    if (!normalized || !entry || typeof entry !== 'object') continue
-    const row = entry as Record<string, unknown>
-    const name = typeof row.name === 'string' && row.name.trim().length > 0 ? row.name.trim() : normalized
-    const hiddenAtRaw = typeof row.hidden_at === 'string' ? row.hidden_at : ''
-    const hiddenAt = Number.isNaN(Date.parse(hiddenAtRaw)) ? new Date().toISOString() : hiddenAtRaw
-    sanitized[normalized] = { name, hidden_at: hiddenAt }
-  }
-  return sanitized
-}
-
-function pantryInventoryKey(name: string, category: string): string {
-  return normalizePantryKey(name, category)
-}
-
 function defaultLowStockThreshold(category: string): number {
   if (category === 'pantry') return 0.5
   if (category === 'other') return 0.35
   return 0.25
-}
-
-function chunkArray<T>(items: T[], size: number): T[][] {
-  const chunks: T[][] = []
-  for (let index = 0; index < items.length; index += size) {
-    chunks.push(items.slice(index, index + size))
-  }
-  return chunks
 }
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
@@ -262,36 +239,6 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
     binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize))
   }
   return btoa(binary)
-}
-
-function extractTimerOptions(instruction: string): Array<{ label: string; seconds: number }> {
-  const options: Array<{ label: string; seconds: number }> = []
-  const regex = /(\d+)\s*(hours?|hrs?|h|minutes?|mins?|m|seconds?|secs?|s)\b/gi
-  let match: RegExpExecArray | null
-  while ((match = regex.exec(instruction)) !== null) {
-    const value = Number(match[1] ?? 0)
-    const unit = String(match[2] ?? '').toLowerCase()
-    if (!Number.isFinite(value) || value <= 0) continue
-    let seconds = 0
-    if (unit.startsWith('h')) seconds = value * 3600
-    else if (unit.startsWith('m')) seconds = value * 60
-    else seconds = value
-    if (seconds <= 0) continue
-    options.push({
-      label: `${value} ${unit.startsWith('h') ? 'hr' : unit.startsWith('m') ? 'min' : 'sec'}`,
-      seconds,
-    })
-  }
-  return options.slice(0, 3)
-}
-
-function formatTimer(seconds: number): string {
-  const safeSeconds = Math.max(0, Math.floor(seconds))
-  const h = Math.floor(safeSeconds / 3600)
-  const m = Math.floor((safeSeconds % 3600) / 60)
-  const s = safeSeconds % 60
-  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-  return `${m}:${String(s).padStart(2, '0')}`
 }
 
 function scaleQuantityValue(value: string | null, scale: number): string | null {
@@ -435,108 +382,6 @@ function renumberDraftSteps(steps: RecipeDraftStep[]): RecipeDraftStep[] {
   }))
 }
 
-function ItemRow({ item, onToggle, onDelete, dismissPhase = 'none', isDragging = false, isSpotlighted = false, onRequestReview, onMovePointerDown, onMovePointerMove, onMovePointerUp, onMovePointerCancel }: {
-  item: GroceryItem
-  onToggle: (id: string, checked: boolean) => void
-  onDelete: (id: string) => void
-  dismissPhase?: 'none' | 'queued' | 'exiting'
-  isDragging?: boolean
-  isSpotlighted?: boolean
-  onRequestReview?: (id: string) => void
-  onMovePointerDown?: (e: React.PointerEvent<HTMLButtonElement>) => void
-  onMovePointerMove?: (e: React.PointerEvent<HTMLButtonElement>) => void
-  onMovePointerUp?: (e: React.PointerEvent<HTMLButtonElement>) => void
-  onMovePointerCancel?: (e: React.PointerEvent<HTMLButtonElement>) => void
-}) {
-  const visualChecked = item.checked || dismissPhase !== 'none'
-  const categoryLabel = splitCategoryLabel(
-    GROCERY_CATEGORIES.find((category) => category.key === item.category)?.label ?? item.category
-  )
-  const metaParts = [
-    item.store_section?.trim() || categoryLabel,
-    item.subcategory?.trim(),
-    item.brand?.trim(),
-  ].filter((value): value is string => Boolean(value))
-  const needsConfidenceReview =
-    !item.checked &&
-    typeof item.enhancement_confidence === 'number' &&
-    item.enhancement_confidence < LOW_CONFIDENCE_REVIEW_THRESHOLD
-
-  return (
-    <div className={cn(
-      'flex items-start gap-3.5 px-4 py-3.5 hover:bg-casa-bg/55 transition-all duration-300 ease-out group will-change-transform',
-      visualChecked && 'opacity-55',
-      dismissPhase === 'queued' && 'bg-casa-gold/8',
-      dismissPhase === 'exiting' && 'opacity-0 translate-y-1 scale-[0.985] max-h-0 py-0',
-      isDragging && 'opacity-30',
-      isSpotlighted && 'ring-2 ring-casa-gold/60 bg-casa-gold/10',
-    )}>
-      {onMovePointerDown && (
-        <IconButton
-          icon={<GripVertical size={18} />}
-          variant="ghost"
-          size="sm"
-          onPointerDown={onMovePointerDown}
-          onPointerMove={onMovePointerMove}
-          onPointerUp={onMovePointerUp}
-          onPointerCancel={onMovePointerCancel}
-          className="-ml-2 flex-shrink-0 text-casa-muted/70 hover:text-casa-navy touch-none"
-          aria-label={`Move ${item.name}`}
-        />
-      )}
-      <Checkbox
-        checked={visualChecked}
-        onChange={() => onToggle(item.id, !visualChecked)}
-        label={visualChecked ? `Mark ${item.name} as not done` : `Mark ${item.name} as done`}
-        className="min-h-0 shrink-0 gap-0 pt-0.5 [&>span:last-child]:sr-only"
-      />
-      <div className="min-w-0 flex-1 pt-1.5">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <span className={cn(
-              'text-body font-semibold text-casa-text leading-tight',
-              visualChecked && 'line-through text-casa-muted'
-            )}>
-              {item.name}
-            </span>
-            {(item.quantity || item.unit) && (
-              <span className="ml-2 text-caption font-medium text-casa-muted">
-                {item.quantity}{item.unit ? ' ' + item.unit : ''}
-              </span>
-            )}
-          </div>
-          {needsConfidenceReview && (
-            <Chip
-              tone="info"
-              size="sm"
-              icon={<Sparkles size={11} />}
-              onClick={() => onRequestReview?.(item.id)}
-              title={`Suggested placement (${Math.round((item.enhancement_confidence ?? 0) * 100)}% confidence). Tap to recategorize.`}
-              className="shrink-0"
-            >
-              Suggested
-            </Chip>
-          )}
-        </div>
-        <p className="mt-0.5 text-caption leading-relaxed text-casa-muted">
-          {metaParts.join(' · ')}
-        </p>
-        {item.notes && (
-          <p className="text-caption text-casa-muted truncate mt-0.5">{item.notes}</p>
-        )}
-      </div>
-      <IconButton
-        icon={<X size={15} />}
-        variant="danger"
-        size="sm"
-        onClick={() => onDelete(item.id)}
-        aria-label={`Delete ${item.name}`}
-        className="-mr-2 flex-shrink-0"
-      />
-    </div>
-  )
-}
-
 export default function GroceryPage() {
   const isPageVisible = usePageVisibility()
   const location = useLocation()
@@ -547,6 +392,7 @@ export default function GroceryPage() {
     uncheckedCount,
     checkedCount,
     isLoading,
+    error: listError,
     dataUpdatedAt,
     addItem,
     toggleItem,
@@ -569,36 +415,6 @@ export default function GroceryPage() {
     },
     staleTime: 5 * 60_000,
     refetchInterval: isPageVisible ? 10 * 60_000 : false,
-  })
-
-  const { data: predictionDeferrals = {}, refetch: refetchPredictionDeferrals } = useQuery({
-    queryKey: ['grocery-pantry-prediction-deferrals'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('settings')
-        .select('value')
-        .eq('key', GROCERY_PREDICTION_DEFERRALS_SETTING_KEY)
-        .maybeSingle()
-      if (error) throw error
-      return sanitizeGroceryPredictionDeferrals(data?.value, Date.now())
-    },
-    staleTime: 60_000,
-    refetchInterval: isPageVisible ? 2 * 60_000 : false,
-  })
-
-  const { data: hiddenWeeklyPicks = {}, refetch: refetchHiddenWeeklyPicks } = useQuery({
-    queryKey: ['grocery-weekly-hidden-picks'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('settings')
-        .select('value')
-        .eq('key', GROCERY_WEEKLY_HIDDEN_PICKS_SETTING_KEY)
-        .maybeSingle()
-      if (error) throw error
-      return sanitizeGroceryWeeklyHiddenPicks(data?.value)
-    },
-    staleTime: 60_000,
-    refetchInterval: isPageVisible ? 2 * 60_000 : false,
   })
 
   const { data: recipeLibrary = [], refetch: refetchRecipeLibrary } = useQuery({
@@ -731,9 +547,7 @@ export default function GroceryPage() {
   })
 
   const [inputValue, setInputValue] = useState('')
-  const [groceryViewMode, setGroceryViewMode] = useState<'manage' | 'smart'>('manage')
   const [isAddPanelOpen, setIsAddPanelOpen] = useState(false)
-  const [isQuickAddOpen, setIsQuickAddOpen] = useState(false)
   const [addPanelMode, setAddPanelMode] = useState<'quick' | 'recipe' | 'library'>('quick')
   const [recipeImportStep, setRecipeImportStep] = useState<1 | 2 | 3>(1)
   const [recipeUrlInput, setRecipeUrlInput] = useState('')
@@ -746,20 +560,12 @@ export default function GroceryPage() {
   const [selectedRecipeIngredientIndexes, setSelectedRecipeIngredientIndexes] = useState<Set<number>>(new Set())
   const [savingRecipe, setSavingRecipe] = useState(false)
   const [recipeScale, setRecipeScale] = useState(1)
-  const [cookView, setCookView] = useState<{ recipe: RecipePreset; stepIndex: number } | null>(null)
-  const [cookTimer, setCookTimer] = useState<{ totalSeconds: number; remainingSeconds: number; label: string } | null>(null)
-  const [syncing, setSyncing] = useState(false)
-  const [syncError, setSyncError] = useState<string | null>(null)
+  const syncError = listError ? (listError instanceof Error ? listError.message : 'Sync failed') : null
   const [reconcilingPantry, setReconcilingPantry] = useState(false)
   const [pantryReconcileDraft, setPantryReconcileDraft] = useState<PantryReconcileDraft | null>(null)
   const [pantryReconcileMessage, setPantryReconcileMessage] = useState<string | null>(null)
   const [pantryReconcileError, setPantryReconcileError] = useState<string | null>(null)
-  const [predictionDeferralError, setPredictionDeferralError] = useState<string | null>(null)
-  const [smartPickSettingsError, setSmartPickSettingsError] = useState<string | null>(null)
-  const [groceryToastMessage, setGroceryToastMessage] = useState<string | null>(null)
   const [expandedReconcileQtyIds, setExpandedReconcileQtyIds] = useState<Set<string>>(new Set())
-  const [lastSyncAt, setLastSyncAt] = useState<string | null>(() => localStorage.getItem(SYNC_LAST_AT_KEY))
-  const [lastSyncSummary, setLastSyncSummary] = useState<string>(() => localStorage.getItem(SYNC_LAST_SUMMARY_KEY) ?? 'Not synced yet')
   const [showCompletedArchive, setShowCompletedArchive] = useState(false)
   const [dragState, setDragState] = useState<{
     itemId: string
@@ -770,9 +576,8 @@ export default function GroceryPage() {
     y: number
   } | null>(null)
   const [dragOverCategory, setDragOverCategory] = useState<string | null>(null)
-  const [reviewingItemId, setReviewingItemId] = useState<string | null>(null)
   const [spotlightedItemId, setSpotlightedItemId] = useState<string | null>(null)
-  const [analysisNow, setAnalysisNow] = useState(() => Date.now())
+  const { isSwapped: isItemJustMoved, triggerSwap: triggerItemMoved } = useTactileSwapState()
   const inputRef = useRef<HTMLInputElement>(null)
   const recipeFileInputRef = useRef<HTMLInputElement>(null)
   const recipeCameraInputRef = useRef<HTMLInputElement>(null)
@@ -781,8 +586,10 @@ export default function GroceryPage() {
   const dismissExitTimerRef = useRef<number | null>(null)
   const [dismissingIds, setDismissingIds] = useState<Set<string>>(new Set())
   const [dismissingExitingIds, setDismissingExitingIds] = useState<Set<string>>(new Set())
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set())
   const dismissingIdsRef = useRef<Set<string>>(new Set())
   const dismissingExitingIdsRef = useRef<Set<string>>(new Set())
+  const deletingIdsRef = useRef<Set<string>>(new Set())
   const hasRecipeImportSource = recipeUrlInput.trim().length > 0 || recipeImportFiles.length > 0
 
   const activeItems = items.filter((item) => !item.checked)
@@ -803,12 +610,12 @@ export default function GroceryPage() {
   }, [pantryReconcileDraft])
 
   const findMergeSuggestion = useCallback((name: string) => {
-    const normalized = normalizeItemName(name)
+    const normalized = normalizeGroceryNameKey(name)
     if (!normalized) return null
-    const exact = activeItems.find((item) => normalizeItemName(item.name) === normalized)
+    const exact = activeItems.find((item) => normalizeGroceryNameKey(item.name) === normalized)
     if (exact) return exact
     const fuzzy = activeItems.find((item) => {
-      const existing = normalizeItemName(item.name)
+      const existing = normalizeGroceryNameKey(item.name)
       return existing.includes(normalized) || normalized.includes(existing)
     })
     return fuzzy ?? null
@@ -816,37 +623,9 @@ export default function GroceryPage() {
 
   const mergeSuggestion = findMergeSuggestion(inputValue)
   const activeNameSet = useMemo(
-    () => new Set(activeItems.map((item) => normalizeItemName(item.name))),
+    () => new Set(activeItems.map((item) => normalizeGroceryNameKey(item.name))),
     [activeItems]
   )
-
-  const predictiveMap = useMemo(() => {
-    const map = new Map<string, { name: string; category: string; count: number; lastAt: number }>()
-    for (const row of historyRows) {
-      if (!row.checked) continue
-      const normalized = normalizeItemName(row.name)
-      if (!normalized || activeNameSet.has(normalized)) continue
-      const parsedAt = Date.parse(row.updated_at)
-      const updatedAt = Number.isNaN(parsedAt) ? 0 : parsedAt
-      const seen = map.get(normalized)
-      if (!seen) {
-        map.set(normalized, {
-          name: row.name,
-          category: row.category,
-          count: 1,
-          lastAt: updatedAt,
-        })
-        continue
-      }
-      seen.count += 1
-      if (updatedAt > seen.lastAt) {
-        seen.lastAt = updatedAt
-        seen.name = row.name
-        seen.category = row.category
-      }
-    }
-    return map
-  }, [activeNameSet, historyRows])
 
   const pantryLikelyOwnedNames = useMemo(() => {
     const recentWindowMs = 21 * 24 * 60 * 60 * 1000
@@ -854,7 +633,7 @@ export default function GroceryPage() {
     const names = new Set<string>()
     for (const row of historyRows) {
       if (!row.checked) continue
-      const normalized = normalizeItemName(row.name)
+      const normalized = normalizeGroceryNameKey(row.name)
       if (!normalized || activeNameSet.has(normalized)) continue
       const updatedAt = Date.parse(row.updated_at)
       if (Number.isNaN(updatedAt)) continue
@@ -867,7 +646,7 @@ export default function GroceryPage() {
   const defaultSelectedRecipeIndexes = useCallback((recipe: RecipeDraft) => {
     const selected = new Set<number>()
     recipe.ingredients.forEach((ingredient, index) => {
-      const normalized = normalizeItemName(ingredient.name || ingredient.raw_text)
+      const normalized = normalizeGroceryNameKey(ingredient.name || ingredient.raw_text)
       if (!normalized) return
       if (activeNameSet.has(normalized)) return
       if (pantryLikelyOwnedNames.has(normalized)) return
@@ -875,118 +654,6 @@ export default function GroceryPage() {
     })
     return selected
   }, [activeNameSet, pantryLikelyOwnedNames])
-
-  const smartPickSuggestions = useMemo(() => {
-    return Array.from(predictiveMap.values())
-      .filter((entry) => entry.count >= 2)
-      .map((entry) => {
-        const daysSince = (analysisNow - entry.lastAt) / (24 * 60 * 60 * 1000)
-        return { ...entry, score: entry.count * smartPickRecencyMultiplier(daysSince) }
-      })
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 8)
-  }, [analysisNow, predictiveMap])
-
-  const pantryDepletionPredictions = useMemo(() => {
-    const dayMs = 24 * 60 * 60 * 1000
-    const byName = new Map<string, { name: string; timestamps: number[] }>()
-    for (const row of historyRows) {
-      if (!row.checked || row.category !== 'pantry') continue
-      const normalized = normalizeItemName(row.name)
-      if (!normalized || activeNameSet.has(normalized)) continue
-      const ts = Date.parse(row.updated_at)
-      if (Number.isNaN(ts)) continue
-      const existing = byName.get(normalized)
-      if (!existing) {
-        byName.set(normalized, { name: row.name, timestamps: [ts] })
-      } else {
-        existing.timestamps.push(ts)
-      }
-    }
-
-    const results: Array<{
-      name: string
-      daysUntil: number
-      cadenceDays: number
-      dueAt: number
-      confidence: 'high' | 'medium'
-      deferredUntil: string | null
-    }> = []
-    byName.forEach((value) => {
-      const uniqueTs = Array.from(new Set(value.timestamps.map((ts) => Math.floor(ts / dayMs) * dayMs))).sort((a, b) => a - b)
-      if (uniqueTs.length < 2) return
-      const deltas: number[] = []
-      for (let i = 1; i < uniqueTs.length; i += 1) {
-        deltas.push((uniqueTs[i] - uniqueTs[i - 1]) / dayMs)
-      }
-      if (deltas.length === 0) return
-      const cadenceDays = deltas.reduce((sum, d) => sum + d, 0) / deltas.length
-      const lastAt = uniqueTs[uniqueTs.length - 1]
-      const projectedDueAt = lastAt + cadenceDays * dayMs
-      const { dueAt, deferredUntil } = resolveGroceryPredictionDueAt(
-        value.name,
-        projectedDueAt,
-        predictionDeferrals,
-        analysisNow,
-      )
-      const daysUntil = Math.round((dueAt - analysisNow) / dayMs)
-      if (daysUntil > 7) return
-      results.push({
-        name: value.name,
-        daysUntil,
-        cadenceDays: Math.max(1, Math.round(cadenceDays)),
-        dueAt,
-        confidence: uniqueTs.length >= 4 ? 'high' : 'medium',
-        deferredUntil,
-      })
-    })
-
-    return results
-      .sort((a, b) => a.daysUntil - b.daysUntil || b.dueAt - a.dueAt)
-      .slice(0, 8)
-  }, [activeNameSet, analysisNow, historyRows, predictionDeferrals])
-
-  const activePredictionDeferralCount = useMemo(() => {
-    return Object.values(predictionDeferrals).filter((entry) => Date.parse(entry.deferred_until) > analysisNow).length
-  }, [analysisNow, predictionDeferrals])
-
-  const cookStepTimerOptions = useMemo(() => {
-    if (!cookView) return []
-    const instruction = cookView.recipe.steps[cookView.stepIndex]?.instruction ?? ''
-    return extractTimerOptions(instruction)
-  }, [cookView])
-
-  useEffect(() => {
-    if (!groceryToastMessage) return
-    const timer = window.setTimeout(() => setGroceryToastMessage(null), 2400)
-    return () => window.clearTimeout(timer)
-  }, [groceryToastMessage])
-
-  const weeklyAutoListCandidates = useMemo(() => {
-    const thirtyDaysAgo = analysisNow - 30 * 24 * 60 * 60 * 1000
-    return Array.from(predictiveMap.values())
-      .filter((entry) => entry.count >= 2 && entry.lastAt >= thirtyDaysAgo)
-      .sort((a, b) => b.count - a.count || b.lastAt - a.lastAt)
-      .slice(0, 10)
-  }, [analysisNow, predictiveMap])
-
-  const hiddenSmartPickNames = useMemo(
-    () => new Set(Object.keys(hiddenWeeklyPicks)),
-    [hiddenWeeklyPicks],
-  )
-
-  const weeklySmartPickCandidates = useMemo(() => {
-    const combined = [...weeklyAutoListCandidates, ...smartPickSuggestions]
-    const seen = new Set<string>()
-    const visible: Array<{ name: string; category: string; count: number; lastAt: number }> = []
-    for (const entry of combined) {
-      const normalized = normalizeItemName(entry.name)
-      if (!normalized || seen.has(normalized) || hiddenSmartPickNames.has(normalized)) continue
-      seen.add(normalized)
-      visible.push(entry)
-    }
-    return visible
-  }, [hiddenSmartPickNames, smartPickSuggestions, weeklyAutoListCandidates])
 
   const mealPlanSlotsByRecipe = useMemo(() => {
     const byRecipe = new Map<string, Set<RecipeMealPlanSlot>>()
@@ -997,77 +664,6 @@ export default function GroceryPage() {
     }
     return byRecipe
   }, [recipeMealPlans])
-
-  const persistPredictionDeferrals = useCallback(async (nextDeferrals: GroceryPredictionDeferrals) => {
-    const nowIso = new Date().toISOString()
-    const sanitized = sanitizeGroceryPredictionDeferrals(nextDeferrals, Date.now())
-    const { error } = await supabase.from('settings').upsert(
-      {
-        key: GROCERY_PREDICTION_DEFERRALS_SETTING_KEY,
-        value: sanitized,
-        updated_at: nowIso,
-      },
-      { onConflict: 'key' },
-    )
-    if (error) throw error
-    await refetchPredictionDeferrals()
-  }, [refetchPredictionDeferrals])
-
-  const persistHiddenWeeklyPicks = useCallback(async (nextEntries: GroceryWeeklyHiddenPicks) => {
-    const { data: existingRow, error: existingError } = await supabase
-      .from('settings')
-      .select('value')
-      .eq('key', GROCERY_WEEKLY_HIDDEN_PICKS_SETTING_KEY)
-      .maybeSingle()
-    if (existingError) throw existingError
-    const existing = sanitizeGroceryWeeklyHiddenPicks(existingRow?.value)
-    const merged = { ...existing, ...nextEntries }
-    const nowIso = new Date().toISOString()
-    const { error } = await supabase.from('settings').upsert(
-      {
-        key: GROCERY_WEEKLY_HIDDEN_PICKS_SETTING_KEY,
-        value: merged,
-        updated_at: nowIso,
-      },
-      { onConflict: 'key' },
-    )
-    if (error) throw error
-    await refetchHiddenWeeklyPicks()
-  }, [refetchHiddenWeeklyPicks])
-
-  const deferPantryPrediction = useCallback(async (itemName: string, daysToPush: number, mode: 'push' | 'dismiss') => {
-    const normalizedName = normalizeItemName(itemName)
-    if (!normalizedName) return
-    setPredictionDeferralError(null)
-    try {
-      const currentDeferredUntil = predictionDeferrals[normalizedName]?.deferred_until ?? null
-      const nextDeferredUntil = buildGroceryPredictionDeferredUntil(currentDeferredUntil, Date.now(), daysToPush)
-      const nextDeferrals: GroceryPredictionDeferrals = {
-        ...predictionDeferrals,
-        [normalizedName]: {
-          name: itemName.trim() || predictionDeferrals[normalizedName]?.name || itemName,
-          deferred_until: nextDeferredUntil,
-          updated_at: new Date().toISOString(),
-        },
-      }
-      await persistPredictionDeferrals(nextDeferrals)
-      setGroceryToastMessage(
-        `Prediction updated — ${mode === 'dismiss' ? 'Dismissed' : 'Pushed'} ${itemName} until ${new Date(nextDeferredUntil).toLocaleDateString([], { month: 'short', day: 'numeric' })}.`,
-      )
-    } catch (error) {
-      setPredictionDeferralError(formatSupabaseError(error, 'Could not defer pantry prediction'))
-    }
-  }, [persistPredictionDeferrals, predictionDeferrals])
-
-  const clearPantryPredictionDeferrals = useCallback(async () => {
-    setPredictionDeferralError(null)
-    try {
-      await persistPredictionDeferrals({})
-      setGroceryToastMessage('Predictions visible again — deferred items restored.')
-    } catch (error) {
-      setPredictionDeferralError(formatSupabaseError(error, 'Could not reset deferred pantry predictions'))
-    }
-  }, [persistPredictionDeferrals])
 
   const spotlightItem = useCallback((itemId: string) => {
     setSpotlightedItemId(itemId)
@@ -1086,13 +682,99 @@ export default function GroceryPage() {
       }
       return
     }
-    const category = detectCategory(trimmedName)
+    const category = inferCategoryFromName(trimmedName)
     addItem.mutate({ list_id: defaultListId, name: trimmedName, quantity: null, unit: null, category, checked: false, notes: null })
     if (options?.clearInput !== false) {
       setInputValue('')
       inputRef.current?.focus()
     }
   }, [addItem, defaultListId, findMergeSuggestion, spotlightItem])
+
+  const [stagedVoiceItems, setStagedVoiceItems] = useState<ParsedVoiceGroceryItem[]>([])
+  const [isPressingMic, setIsPressingMic] = useState(false)
+
+  const handleVoiceComplete = useCallback((fullText: string) => {
+    const clean = fullText.trim()
+    if (!clean) return
+    const parsed = parseGroceryVoiceBatch(clean)
+    if (parsed.length > 0) {
+      setStagedVoiceItems(parsed)
+      setInputValue('')
+    }
+  }, [])
+
+  const dictation = useFieldDictation({
+    onText: (text) => setInputValue(text),
+    onComplete: (fullText) => handleVoiceComplete(fullText),
+  })
+
+  const handleCommitVoiceItems = useCallback((itemsToCommit: ParsedVoiceGroceryItem[]) => {
+    if (!defaultListId || itemsToCommit.length === 0) return
+    for (const item of itemsToCommit) {
+      addItem.mutate({
+        list_id: defaultListId,
+        name: item.name,
+        quantity: item.quantity,
+        unit: item.unit,
+        category: item.category,
+        checked: false,
+        notes: null,
+      })
+      triggerItemMoved(item.id, 'move')
+    }
+    setStagedVoiceItems([])
+    setInputValue('')
+  }, [addItem, defaultListId, triggerItemMoved])
+
+  const handleRemoveStagedItem = useCallback((id: string) => {
+    setStagedVoiceItems((prev) => prev.filter((item) => item.id !== id))
+  }, [])
+
+  const handleCancelStagedItems = useCallback(() => {
+    setStagedVoiceItems([])
+  }, [])
+
+  const handleMicPointerDown = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return
+    e.preventDefault()
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId)
+    } catch {}
+    setIsPressingMic(true)
+    setInputValue('')
+    void dictation.start('')
+  }, [dictation])
+
+  const handleMicPointerUp = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!isPressingMic) return
+    e.preventDefault()
+    try {
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId)
+      }
+    } catch {}
+    setIsPressingMic(false)
+    const captured = dictation.stop()
+    const textToProcess = (captured || inputValue).trim()
+    if (textToProcess) {
+      handleVoiceComplete(textToProcess)
+    }
+  }, [dictation, handleVoiceComplete, inputValue, isPressingMic])
+
+  const handleMicPointerCancel = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!isPressingMic) return
+    try {
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId)
+      }
+    } catch {}
+    setIsPressingMic(false)
+    const captured = dictation.stop()
+    const textToProcess = (captured || inputValue).trim()
+    if (textToProcess) {
+      handleVoiceComplete(textToProcess)
+    }
+  }, [dictation, handleVoiceComplete, inputValue, isPressingMic])
 
   const handleAddItem = () => {
     addItemByName(inputValue, { spotlightOnDuplicate: true, clearInput: true })
@@ -1101,37 +783,6 @@ export default function GroceryPage() {
   const handleQuickAdd = (name: string) => {
     addItemByName(name, { spotlightOnDuplicate: true, clearInput: true })
   }
-
-  const handleGenerateWeeklyList = useCallback(() => {
-    let added = 0
-    for (const candidate of weeklySmartPickCandidates) {
-      const trimmed = candidate.name.trim()
-      if (!trimmed) continue
-      const existing = findMergeSuggestion(trimmed)
-      if (!existing) added += 1
-      addItemByName(trimmed, { spotlightOnDuplicate: false, clearInput: false })
-    }
-    if (added > 0) {
-      setGroceryToastMessage(added === 1 ? '1 item added to your list.' : `All ${added} added to your list.`)
-    }
-  }, [addItemByName, findMergeSuggestion, setGroceryToastMessage, weeklySmartPickCandidates])
-
-  const handleHideSmartPick = useCallback(async (name: string) => {
-    const normalized = normalizeItemName(name)
-    if (!normalized) return
-    setSmartPickSettingsError(null)
-    try {
-      await persistHiddenWeeklyPicks({
-        [normalized]: {
-          name: name.trim() || hiddenWeeklyPicks[normalized]?.name || name,
-          hidden_at: new Date().toISOString(),
-        },
-      })
-      setGroceryToastMessage(`Removed ${name} from weekly picks.`)
-    } catch (error) {
-      setSmartPickSettingsError(formatSupabaseError(error, 'Could not save weekly pick preference'))
-    }
-  }, [hiddenWeeklyPicks, persistHiddenWeeklyPicks])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
@@ -1337,7 +988,7 @@ export default function GroceryPage() {
       const name = (ingredient.name || ingredient.raw_text).trim()
       if (!name) return
       if (findMergeSuggestion(name)) return
-      const category = detectCategory(name)
+      const category = inferCategoryFromName(name)
       addItem.mutate({
         list_id: defaultListId,
         name,
@@ -1554,14 +1205,13 @@ export default function GroceryPage() {
   }, [addSelectedRecipeIngredientsToCart, parsedRecipe, refetchRecipeLibrary])
 
   const openRecipeForCookMode = useCallback(async (recipe: RecipePreset) => {
-    setCookView({ recipe, stepIndex: 0 })
-    setCookTimer(null)
     await supabase
       .from('recipes')
       .update({ last_used_at: new Date().toISOString() })
       .eq('id', recipe.id)
     void refetchRecipeLibrary()
-  }, [refetchRecipeLibrary])
+    navigate(`/cook?recipeId=${recipe.id}`)
+  }, [navigate, refetchRecipeLibrary])
 
   const planRecipeForSlot = useCallback(async (recipeId: string, slot: RecipeMealPlanSlot) => {
     const today = new Date()
@@ -1657,28 +1307,55 @@ export default function GroceryPage() {
   }, [dismissingExitingIds])
 
   useEffect(() => {
+    deletingIdsRef.current = deletingIds
+  }, [deletingIds])
+
+  useEffect(() => {
     return () => {
       document.body.style.userSelect = ''
     }
   }, [])
 
-  useEffect(() => {
-    const timer = window.setInterval(() => setAnalysisNow(Date.now()), 15 * 60_000)
-    return () => window.clearInterval(timer)
-  }, [])
+  const resetStabilityTimer = useCallback(() => {
+    if (dismissBatchTimerRef.current) {
+      window.clearTimeout(dismissBatchTimerRef.current)
+      dismissBatchTimerRef.current = null
+    }
+    if (dismissExitTimerRef.current) {
+      window.clearTimeout(dismissExitTimerRef.current)
+      dismissExitTimerRef.current = null
+    }
 
-  useEffect(() => {
-    if (!cookTimer) return
-    if (cookTimer.remainingSeconds <= 0) return
-    const tick = window.setInterval(() => {
-      setCookTimer((current) => {
-        if (!current) return current
-        const next = Math.max(0, current.remainingSeconds - 1)
-        return { ...current, remainingSeconds: next }
-      })
-    }, 1000)
-    return () => window.clearInterval(tick)
-  }, [cookTimer])
+    dismissBatchTimerRef.current = window.setTimeout(() => {
+      const checkedBatch = Array.from(dismissingIdsRef.current)
+      const deleteBatch = Array.from(deletingIdsRef.current)
+      dismissBatchTimerRef.current = null
+
+      if (checkedBatch.length === 0 && deleteBatch.length === 0) return
+
+      // Execute actual deletions on remote backend after user has stopped interacting
+      for (const id of deleteBatch) {
+        deleteItem.mutate(id)
+      }
+
+      setDismissingExitingIds(new Set([...checkedBatch, ...deleteBatch]))
+
+      dismissExitTimerRef.current = window.setTimeout(() => {
+        setDismissingIds((prev) => {
+          const next = new Set(prev)
+          checkedBatch.forEach((batchId) => next.delete(batchId))
+          return next
+        })
+        setDeletingIds((prev) => {
+          const next = new Set(prev)
+          deleteBatch.forEach((batchId) => next.delete(batchId))
+          return next
+        })
+        setDismissingExitingIds(new Set())
+        dismissExitTimerRef.current = null
+      }, CHECKED_ITEM_EXIT_ANIMATION_MS)
+    }, INTERACTION_STABILITY_GRACE_MS)
+  }, [deleteItem])
 
   const handleToggle = (id: string, checked: boolean) => {
     if (!checked) {
@@ -1704,150 +1381,28 @@ export default function GroceryPage() {
       return next
     })
     setDismissingExitingIds(new Set())
-    if (dismissBatchTimerRef.current) {
-      window.clearTimeout(dismissBatchTimerRef.current)
-    }
-    if (dismissExitTimerRef.current) {
-      window.clearTimeout(dismissExitTimerRef.current)
-      dismissExitTimerRef.current = null
-    }
-    dismissBatchTimerRef.current = window.setTimeout(() => {
-      const batchIds = Array.from(dismissingIdsRef.current)
-      dismissBatchTimerRef.current = null
-      if (batchIds.length === 0) return
-      setDismissingExitingIds(new Set(batchIds))
-      if (dismissExitTimerRef.current) {
-        window.clearTimeout(dismissExitTimerRef.current)
-      }
-      dismissExitTimerRef.current = window.setTimeout(() => {
-        setDismissingIds((prev) => {
-          const next = new Set(prev)
-          batchIds.forEach((batchId) => next.delete(batchId))
-          return next
-        })
-        setDismissingExitingIds((prev) => {
-          const next = new Set(prev)
-          batchIds.forEach((batchId) => next.delete(batchId))
-          return next
-        })
-        dismissExitTimerRef.current = null
-      }, CHECKED_ITEM_EXIT_ANIMATION_MS)
-    }, CHECKED_ITEM_DISMISS_MS)
+    resetStabilityTimer()
   }
 
-  const handleSyncNow = useCallback(async (options?: { cleanBeforeSync?: boolean }) => {
-    if (syncInFlightRef.current) return
-    syncInFlightRef.current = true
-    setSyncing(true)
-    setSyncError(null)
-    try {
-      let cleanSummary = ''
-      if (options?.cleanBeforeSync) {
-        const archivedItemCount = items.filter((item) => item.checked && !item.deleted_at).length
-        if (archivedItemCount > 0) {
-          await clearChecked.mutateAsync()
-          setShowCompletedArchive(false)
-          cleanSummary = `Cleared ${archivedItemCount} archived item${archivedItemCount === 1 ? '' : 's'}`
-        } else {
-          cleanSummary = 'Archive already clear'
-        }
+  const handleDeleteItem = useCallback((id: string) => {
+    setDeletingIds((prev) => {
+      const next = new Set(prev)
+      next.add(id)
+      return next
+    })
+    resetStabilityTimer()
+  }, [resetStabilityTimer])
 
-        const activeItemIds = items
-          .filter((item) => !item.checked && !item.deleted_at)
-          .map((item) => item.id)
-        const batches = chunkArray(activeItemIds, CLEAN_SYNC_BATCH_SIZE)
+  const handleUndoDelete = useCallback((id: string) => {
+    setDeletingIds((prev) => {
+      const next = new Set(prev)
+      next.delete(id)
+      return next
+    })
+    resetStabilityTimer()
+  }, [resetStabilityTimer])
 
-        let totalScanned = 0
-        let totalCorrected = 0
-        let totalEnhanced = 0
-
-        for (const batchIds of batches) {
-          const [{ data: normalizeData, error: normalizeError }, { data: enhanceData, error: enhanceError }] = await Promise.all([
-            supabase.functions.invoke('normalize-grocery-items', {
-              body: { item_ids: batchIds },
-            }),
-            supabase.functions.invoke('enhance-grocery-items', {
-              body: { item_ids: batchIds, limit: batchIds.length },
-            }),
-          ])
-
-          if (normalizeError) throw normalizeError
-          if (enhanceError) throw enhanceError
-
-          totalScanned += Number(normalizeData?.scanned_count ?? 0)
-          totalCorrected += Number(normalizeData?.corrected_count ?? 0)
-          totalEnhanced += Number(enhanceData?.enhanced_count ?? 0)
-        }
-
-        if (totalCorrected === 0) {
-          const cleanupStatus = totalScanned > 0
-            ? 'Clean pass: names already looked good (no spelling/case fixes needed)'
-            : 'Clean pass: no suspicious names'
-          cleanSummary = cleanSummary
-            ? `${cleanSummary} · ${cleanupStatus}`
-            : cleanupStatus
-        } else {
-          const cleanupStatus = `Cleaned ${totalCorrected} name${totalCorrected === 1 ? '' : 's'} · Enhanced ${totalEnhanced} item${totalEnhanced === 1 ? '' : 's'}`
-          cleanSummary = cleanSummary
-            ? `${cleanSummary} · ${cleanupStatus}`
-            : cleanupStatus
-        }
-
-        const { data: learningData, error: learningError } = await supabase.functions.invoke('learn-grocery-corrections', {
-          body: { dry_run: false, limit: 400, min_votes: 1, lookback_days: 90 },
-        })
-        if (learningError) throw learningError
-        const learnedCount = Number(learningData?.applied_count ?? 0)
-        if (learnedCount > 0) {
-          cleanSummary = cleanSummary
-            ? `${cleanSummary} · Learned ${learnedCount} new match${learnedCount === 1 ? '' : 'es'}`
-            : `Learned ${learnedCount} new match${learnedCount === 1 ? '' : 'es'}`
-        }
-      }
-
-      const lastDedupeAtRaw = Number(localStorage.getItem(SYNC_LAST_DEDUPE_AT_KEY) ?? 0)
-      const shouldDedupe =
-        Boolean(options?.cleanBeforeSync) ||
-        !Number.isFinite(lastDedupeAtRaw) ||
-        Date.now() - lastDedupeAtRaw >= DEDUPE_MIN_INTERVAL_MS
-
-      let dedupedRows = 0
-      if (shouldDedupe) {
-        const { data: dedupeData, error: dedupeError } = await supabase.functions.invoke('dedupe-grocery-items', {
-          body: { dry_run: false },
-        })
-        if (dedupeError) throw dedupeError
-        dedupedRows = Number(dedupeData?.duplicate_rows ?? 0)
-        localStorage.setItem(SYNC_LAST_DEDUPE_AT_KEY, String(Date.now()))
-      }
-
-      // Casa→iOS reconciliation is owned by the Mac launchd job (which applies
-      // deltas to Reminders using its own cursor). The frontend no longer polls
-      // sync-casa-to-ios — it was redundant telemetry that never applied changes.
-      const dedupeSummary = dedupedRows > 0
-        ? `Deduped ${dedupedRows} duplicate item${dedupedRows === 1 ? '' : 's'}`
-        : ''
-      const summary = [cleanSummary, dedupeSummary].filter(Boolean).join(' · ') || 'List is tidy'
-
-      const nowIso = new Date().toISOString()
-      localStorage.setItem(SYNC_LAST_AT_KEY, nowIso)
-      localStorage.setItem(SYNC_LAST_SUMMARY_KEY, summary)
-      setLastSyncAt(nowIso)
-      setLastSyncSummary(summary)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Sync failed'
-      setSyncError(message)
-    } finally {
-      syncInFlightRef.current = false
-      setSyncing(false)
-    }
-  }, [clearChecked, items])
-
-  // Silent background maintenance: throttled dedupe only. Does NOT touch the
-  // `syncing` UI state (no button spin / no flicker) and never calls
-  // sync-casa-to-ios (Mac owns Casa→iOS). List freshness is handled separately
-  // by react-query realtime + refetch; the "Synced <time>" label reads
-  // dataUpdatedAt. This keeps background edge-function calls to ~1 per 10 min.
+  // Silent background maintenance: throttled dedupe only.
   const runBackgroundDedupe = useCallback(async () => {
     if (syncInFlightRef.current) return
     const lastDedupeAtRaw = Number(localStorage.getItem(SYNC_LAST_DEDUPE_AT_KEY) ?? 0)
@@ -1928,7 +1483,7 @@ export default function GroceryPage() {
       const skippedCount = pantryReconcileDraft.skipped_already_reconciled
 
       for (const row of pantryReconcileDraft.rows) {
-        const key = pantryInventoryKey(row.name, row.category)
+        const key = normalizePantryKey(row.name, row.category)
         const existing = pantryInventory[key]
         const packageUnit = normalizePackageUnit(existing?.package_unit ?? row.package_unit)
         const packageSize = existing?.package_size ?? row.package_size
@@ -2049,6 +1604,7 @@ export default function GroceryPage() {
   const finishDrag = useCallback((dropCategory: string | null) => {
     setDragState((current) => {
       if (current && dropCategory && dropCategory !== current.fromCategory) {
+        triggerItemMoved(current.itemId, 'move')
         updateItemCategory.mutate({
           id: current.itemId,
           category: dropCategory,
@@ -2060,7 +1616,7 @@ export default function GroceryPage() {
     })
     setDragOverCategory(null)
     document.body.style.userSelect = ''
-  }, [updateItemCategory])
+  }, [triggerItemMoved, updateItemCategory])
 
   const handleMovePointerDown = useCallback((
     item: GroceryItem,
@@ -2138,7 +1694,7 @@ export default function GroceryPage() {
     }
   }, [runBackgroundDedupe])
 
-  const visibleDismissIds = new Set([...dismissingIds, ...dismissingExitingIds])
+  const visibleDismissIds = new Set([...dismissingIds, ...dismissingExitingIds, ...deletingIds])
 
   const activeItemsByCategory = GROCERY_CATEGORIES.map(cat => ({
     ...cat,
@@ -2149,13 +1705,6 @@ export default function GroceryPage() {
     ...cat,
     items: sortItemsForShopping(items.filter(i => i.category === cat.key && i.checked && !visibleDismissIds.has(i.id))),
   })).filter(cat => cat.items.length > 0)
-  const hasSmartPicks = (
-    weeklySmartPickCandidates.length > 0
-    || pantryDepletionPredictions.length > 0
-    || activePredictionDeferralCount > 0
-  )
-  const totalTrackedItems = checkedCount + uncheckedCount
-  const checkedProgressPercent = totalTrackedItems > 0 ? Math.round((checkedCount / totalTrackedItems) * 100) : 0
   const lastSyncTimeLabel = dataUpdatedAt
     ? new Date(dataUpdatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
     : null
@@ -2164,565 +1713,279 @@ export default function GroceryPage() {
     : lastSyncTimeLabel
       ? `Updated ${lastSyncTimeLabel}`
       : 'Loading…'
-  const reviewingItem = reviewingItemId
-    ? items.find((item) => item.id === reviewingItemId) ?? null
-    : null
 
   return (
-    <div className="h-full min-h-0 bg-casa-bg flex flex-col overflow-hidden">
-      {/* Header */}
-      <div className="sticky top-0 z-10 bg-casa-bg px-4 pt-safe-t">
-        <div className="space-y-3 py-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-casa-border bg-casa-bg-2 text-casa-gold">
-              <ShoppingCart size={20} />
-            </div>
-            <div className="min-w-0">
-              <Heading role="display-sm" className="truncate leading-none">Grocery List</Heading>
-              <p className="mt-1 text-caption text-casa-muted">
-                {syncStatusLabel} · sorted by store aisle
-              </p>
-            </div>
-            <div className="ml-auto flex shrink-0 items-center gap-2">
-              <Button
-                variant="secondary"
-                size="sm"
-                leadingIcon={<RefreshCw size={14} className={cn(syncing && 'animate-spin')} />}
-                onClick={() => void handleSyncNow({ cleanBeforeSync: true })}
-                disabled={syncing}
-                title={`${lastSyncSummary}${lastSyncAt ? ` · ${new Date(lastSyncAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}`}
-                className="hidden md:inline-flex"
-              >
-                Clean + Sync
-              </Button>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <SegmentedControl
-              aria-label="Grocery view"
-              value={groceryViewMode}
-              onChange={setGroceryViewMode}
-              options={[
-                { value: 'manage', label: 'Manage list' },
-                { value: 'smart', label: 'Smart picks', icon: <Sparkles size={14} className="text-casa-info" /> },
-              ]}
-              className="shrink-0"
-            />
-            {groceryViewMode === 'manage' && totalTrackedItems > 0 && (
-              <div className="hidden md:block md:min-w-[14rem] md:flex-1 md:max-w-[42rem] px-2">
-                <div className="mb-1.5 flex items-center justify-between text-caption font-semibold text-casa-muted">
-                  <span><span className="text-casa-navy">{checkedCount}</span> of {totalTrackedItems} checked</span>
-                  <span>{uncheckedCount} remaining</span>
-                </div>
-                <Progress value={checkedProgressPercent} aria-label="Grocery completion" className="[&_.casa-progress]:h-1.5" />
-              </div>
-            )}
-          </div>
-        </div>
-        {syncError && <Alert tone="danger" title="Grocery sync failed" className="mb-3">{syncError}</Alert>}
-        {pantryReconcileError && <Alert tone="danger" title="Pantry restock failed" className="mb-3">{pantryReconcileError}</Alert>}
-        {!pantryReconcileError && pantryReconcileMessage && (
-          <Alert tone="success" title="Pantry restock updated" className="mb-3">{pantryReconcileMessage}</Alert>
-        )}
-        {predictionDeferralError && <Alert tone="danger" title="Prediction update failed" className="mb-3">{predictionDeferralError}</Alert>}
-        {smartPickSettingsError && <Alert tone="danger" title="Weekly picks update failed" className="mb-3">{smartPickSettingsError}</Alert>}
-        {pantryReconcileDraft && (
-          <div className="pb-3">
-            <Card padding="sm" tone="subtle">
-              <Text role="caption" className="font-semibold text-casa-navy">
-                Review pantry restock ({pantryReconcileDraft.rows.length})
-              </Text>
-              <Text role="caption" muted className="mt-0.5">
-                Adjust package counts before saving to pantry inventory.
-              </Text>
-              <div className="mt-2 max-h-52 space-y-2 overflow-y-auto pr-1">
-                {pantryReconcileRowsByCategory.map((group) => (
-                  <div key={`reconcile-group-${group.category}`} className="rounded-xl border border-casa-border bg-casa-surface p-2">
-                    <Text role="caption" muted className="font-semibold uppercase tracking-wide">
-                      {GROCERY_CATEGORIES.find((category) => category.key === group.category)?.label ?? group.category}
-                    </Text>
-                    <div className="mt-1.5 grid grid-cols-1 gap-1.5 lg:grid-cols-4">
-                      {group.rows.map((row) => (
-                        <div key={`reconcile-draft-${row.item_id}`} className="rounded-lg border border-casa-border bg-casa-bg px-2 py-2">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <Text role="caption" className="truncate font-semibold">{row.name}</Text>
-                              <Text role="caption" muted>
-                                {row.package_unit || 'pack'}{row.package_size ? ` · ${row.package_size}` : ''}
-                              </Text>
-                            </div>
-                            <IconButton
-                              icon={<Trash2 size={14} />}
-                              variant="danger"
-                              size="sm"
-                              onClick={() => removePantryReconcileDraftRow(row.item_id)}
-                              aria-label={`Remove ${row.name} from pantry restock review`}
-                              title="Remove from review"
-                            />
-                          </div>
-                          <div className="mt-2 grid grid-cols-3 gap-1">
-                            <Chip
-                              tone={row.review_status === 'out' ? 'danger' : 'neutral'}
-                              selected={row.review_status === 'out'}
-                              onClick={() => updatePantryReconcileRowStatus(row.item_id, 'out')}
-                            >
-                              Out
-                            </Chip>
-                            <Chip
-                              tone={row.review_status === 'low' ? 'warning' : 'neutral'}
-                              selected={row.review_status === 'low'}
-                              onClick={() => updatePantryReconcileRowStatus(row.item_id, 'low')}
-                            >
-                              Low
-                            </Chip>
-                            <Chip
-                              tone={row.review_status === 'ok' ? 'success' : 'neutral'}
-                              selected={row.review_status === 'ok'}
-                              onClick={() => updatePantryReconcileRowStatus(row.item_id, 'ok')}
-                            >
-                              OK
-                            </Chip>
-                          </div>
-                          {row.review_status === 'ok' && (
-                            <div className="mt-1.5">
-                              <Button
+    <div className="h-full min-h-0 flex-1 overflow-hidden bg-casa-bg">
+      {/* ── Mobile-Specific Simplified Shopping Checklist (< lg) ── */}
+      <div className="block lg:hidden h-full min-h-0 overflow-y-auto overscroll-contain touch-pan-y">
+        <MobileGroceryView
+          items={items}
+          activeCategories={activeItemsByCategory.map((cat) => ({
+            key: cat.key,
+            label: splitCategoryLabel(cat.label),
+            items: cat.items,
+            visual: CATEGORY_VISUAL_BY_KEY[cat.key] ?? DEFAULT_CATEGORY_VISUAL,
+          }))}
+          completedItems={items.filter((i) => i.checked && !visibleDismissIds.has(i.id))}
+          uncheckedCount={uncheckedCount}
+          checkedCount={checkedCount}
+          syncStatusLabel={syncStatusLabel}
+          dismissingIds={dismissingIds}
+          dismissingExitingIds={dismissingExitingIds}
+          spotlightedItemId={spotlightedItemId}
+          onToggleItem={handleToggle}
+          onDeleteItem={handleDeleteItem}
+          onUndoDelete={handleUndoDelete}
+          deletingIds={deletingIds}
+          onClearCompleted={() => void clearChecked.mutate()}
+          onAddItem={(name, options) =>
+            addItemByName(name, {
+              allowDuplicate: options?.allowDuplicate,
+              spotlightOnDuplicate: !options?.allowDuplicate,
+              clearInput: true,
+            })
+          }
+        />
+      </div>
+
+      {/* ── Desktop & Touch Kiosk Multi-Column View (>= lg) ── */}
+      <div className="hidden lg:block h-full min-h-0 overflow-y-auto overscroll-contain touch-pan-y">
+        <PageShell width="full" className="space-y-4 p-3 sm:p-4 lg:p-6 pb-36 lg:pb-16 text-casa-text">
+          <GroceryCommandBar
+            uncheckedCount={uncheckedCount}
+            checkedCount={checkedCount}
+            syncStatusLabel={syncStatusLabel}
+            inputValue={inputValue}
+            inputRef={inputRef}
+            mergeSuggestion={mergeSuggestion}
+            isListening={dictation.listening}
+            stagedVoiceItems={stagedVoiceItems}
+            onInputChange={setInputValue}
+            onInputKeyDown={handleKeyDown}
+            onAddItem={handleAddItem}
+            onQuickAdd={handleQuickAdd}
+            onSpotlightItem={(id) => window.setTimeout(() => spotlightItem(id), 120)}
+            onForceAddSuggestion={() => {
+              const nextName = inputValue.trim()
+              if (!nextName || !defaultListId) return
+              const category = inferCategoryFromName(nextName)
+              addItem.mutate({ list_id: defaultListId, name: nextName, quantity: null, unit: null, category, checked: false, notes: null })
+              setInputValue('')
+              inputRef.current?.focus()
+            }}
+            onClearChecked={() => void clearChecked.mutate()}
+            onMicPointerDown={handleMicPointerDown}
+            onMicPointerUp={handleMicPointerUp}
+            onMicPointerCancel={handleMicPointerCancel}
+            onRemoveStagedItem={handleRemoveStagedItem}
+            onCommitStagedItems={handleCommitVoiceItems}
+            onCancelStagedItems={handleCancelStagedItems}
+          />
+
+          {syncError && <Alert tone="danger" title="Grocery sync failed" className="mb-3">{syncError}</Alert>}
+          {pantryReconcileError && <Alert tone="danger" title="Pantry restock failed" className="mb-3">{pantryReconcileError}</Alert>}
+          {!pantryReconcileError && pantryReconcileMessage && (
+            <Alert tone="success" title="Pantry restock updated" className="mb-3">{pantryReconcileMessage}</Alert>
+          )}
+
+          {/* Pantry Restock Review Draft */}
+          {pantryReconcileDraft && (
+            <div className="pb-3">
+              <Card padding="md" tone="surface" className="rounded-3xl border-casa-border shadow-widget">
+                <Text role="body-sm" className="font-display font-bold text-casa-navy">
+                  Review pantry restock ({pantryReconcileDraft.rows.length} items)
+                </Text>
+                <Text role="caption" muted className="mt-0.5">
+                  Adjust package counts before committing to pantry inventory.
+                </Text>
+                <div className="mt-3 max-h-60 space-y-2 overflow-y-auto pr-1">
+                  {pantryReconcileRowsByCategory.map((group) => (
+                    <div key={`reconcile-group-${group.category}`} className="rounded-2xl border border-casa-border bg-casa-bg/60 p-3">
+                      <Text role="caption" muted className="font-mono font-bold uppercase tracking-wider text-2xs text-casa-navy">
+                        {GROCERY_CATEGORIES.find((category) => category.key === group.category)?.label ?? group.category}
+                      </Text>
+                      <div className="mt-2 grid grid-cols-1 gap-2 lg:grid-cols-4">
+                        {group.rows.map((row) => (
+                          <div key={`reconcile-draft-${row.item_id}`} className="rounded-xl border border-casa-border bg-casa-surface p-2.5 shadow-2xs">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <Text role="caption" className="truncate font-semibold text-casa-navy">{row.name}</Text>
+                                <Text role="caption" muted className="text-2xs">
+                                  {row.package_unit || 'pack'}{row.package_size ? ` · ${row.package_size}` : ''}
+                                </Text>
+                              </div>
+                              <IconButton
+                                icon={<Trash2 size={13} />}
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => toggleReconcileQtyEditor(row.item_id)}
+                                onClick={() => removePantryReconcileDraftRow(row.item_id)}
+                                aria-label={`Remove ${row.name} from pantry restock review`}
+                                className="text-casa-muted hover:text-casa-error hover:bg-casa-error/10 -mr-1 -mt-1"
+                                title="Remove from review"
+                              />
+                            </div>
+                            <div className="mt-2 grid grid-cols-3 gap-1">
+                              <Chip
+                                tone={row.review_status === 'out' ? 'danger' : 'neutral'}
+                                selected={row.review_status === 'out'}
+                                onClick={() => updatePantryReconcileRowStatus(row.item_id, 'out')}
+                                size="sm"
+                                className="justify-center"
                               >
-                                Qty: {row.package_count} {expandedReconcileQtyIds.has(row.item_id) ? '▲' : '▼'}
-                              </Button>
-                              {expandedReconcileQtyIds.has(row.item_id) && (
-                                <div className="mt-1 flex items-center gap-1">
-                                  <IconButton
-                                    icon={<Minus size={14} />}
-                                    variant="secondary"
-                                    size="sm"
-                                    onClick={() => updatePantryReconcileDraftRow(row.item_id, Math.max(0, row.package_count - 0.25))}
-                                    aria-label={`Decrease ${row.name} restock quantity`}
-                                  />
-                                  <Input
-                                    type="number"
-                                    min={0}
-                                    step={0.25}
-                                    value={row.package_count}
-                                    onChange={(event) => updatePantryReconcileDraftRow(row.item_id, Number(event.target.value))}
-                                    className="w-20 text-center"
-                                    aria-label={`${row.name} restock quantity`}
-                                  />
-                                  <IconButton
-                                    icon={<Plus size={14} />}
-                                    variant="secondary"
-                                    size="sm"
-                                    onClick={() => updatePantryReconcileDraftRow(row.item_id, row.package_count + 0.25)}
-                                    aria-label={`Increase ${row.name} restock quantity`}
-                                  />
-                                </div>
-                              )}
+                                Out
+                              </Chip>
+                              <Chip
+                                tone={row.review_status === 'low' ? 'warning' : 'neutral'}
+                                selected={row.review_status === 'low'}
+                                onClick={() => updatePantryReconcileRowStatus(row.item_id, 'low')}
+                                size="sm"
+                                className="justify-center"
+                              >
+                                Low
+                              </Chip>
+                              <Chip
+                                tone={row.review_status === 'ok' ? 'success' : 'neutral'}
+                                selected={row.review_status === 'ok'}
+                                onClick={() => updatePantryReconcileRowStatus(row.item_id, 'ok')}
+                                size="sm"
+                                className="justify-center"
+                              >
+                                OK
+                              </Chip>
                             </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-2 flex items-center gap-2">
-                <Button
-                  size="sm"
-                  onClick={() => void handleReconcilePantryFromDone()}
-                  disabled={reconcilingPantry}
-                  loading={reconcilingPantry}
-                >
-                  Confirm restock
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    setPantryReconcileDraft(null)
-                    setExpandedReconcileQtyIds(new Set())
-                  }}
-                  disabled={reconcilingPantry}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </Card>
-          </div>
-        )}
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 min-h-0 overflow-y-auto touch-pan-y">
-        <div className="max-w-6xl mx-auto px-4">
-        {isLoading ? (
-            <div className="pt-6 space-y-4">
-            {[...Array(3)].map((_, i) => (
-              <div key={i} className="animate-pulse">
-                <div className="h-4 bg-casa-divider rounded w-24 mb-3" />
-                {[...Array(3)].map((_, j) => (
-                  <div key={j} className="h-12 bg-casa-surface rounded-xl mb-1" />
-                ))}
-              </div>
-            ))}
-          </div>
-        ) : (
-          groceryViewMode === 'manage' ? (
-            items.length === 0 ? (
-              <div className="flex flex-col items-center gap-3 py-16 text-center px-8">
-                <ShoppingCart size={40} className="text-casa-gold opacity-40" />
-                <p className="text-body font-semibold text-casa-text">Your list is empty</p>
-                <p className="text-body-sm text-casa-muted">Add items below or ask the AI.</p>
-              </div>
-            ) : (
-            <div className="pt-3 pb-6">
-              {dragState && (
-                <div className="mb-3 rounded-2xl border border-casa-border bg-casa-surface p-3">
-                  <p className="text-caption font-semibold text-casa-muted uppercase tracking-wider mb-2">
-                    Drop into category
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {GROCERY_CATEGORIES.map((cat) => (
-                      <Chip
-                        key={`drop-target-${cat.key}`}
-                        data-drop-category={cat.key}
-                        size="sm"
-                        selected={dragOverCategory === cat.key}
-                      >
-                        {splitCategoryLabel(cat.label)}
-                      </Chip>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {activeItemsByCategory.length === 0 ? (
-                <div className="mb-4 rounded-2xl border border-casa-border bg-casa-surface p-4 text-body-sm text-casa-muted">
-                  Active list is clear. Completed items are hidden in the archive.
-                </div>
-              ) : (
-              <div className="columns-1 gap-3 lg:columns-2 2xl:columns-3">
-                <AnimatePresence initial={false}>
-                {activeItemsByCategory.map((cat) => ({
-                  key: cat.key,
-                  label: splitCategoryLabel(cat.label),
-                  items: cat.items,
-                  dropKey: cat.key,
-                  visual: CATEGORY_VISUAL_BY_KEY[cat.key] ?? DEFAULT_CATEGORY_VISUAL,
-                  reviewCount: cat.items.filter((item) =>
-                    typeof item.enhancement_confidence === 'number' &&
-                    item.enhancement_confidence < LOW_CONFIDENCE_REVIEW_THRESHOLD
-                  ).length,
-                })).map((section) => {
-                  const CategoryIcon = section.visual.icon
-                  return (
-                    <motion.div
-                      key={section.key}
-                      layout
-                      initial={false}
-                      exit={{ opacity: 0, scale: 0.96, height: 0, marginBottom: 0, transition: { duration: 0.32, ease: 'easeInOut' } }}
-                      transition={{ layout: { duration: 0.28, ease: 'easeInOut' } }}
-                      data-drop-category={section.dropKey ?? undefined}
-                      className={cn(
-                        'mb-3 overflow-hidden break-inside-avoid rounded-2xl',
-                        section.dropKey && dragState && dragOverCategory === section.dropKey && 'bg-casa-gold/5 ring-2 ring-casa-gold/60'
-                      )}
-                    >
-                      <div className="overflow-hidden rounded-[1.2rem] border border-casa-border bg-casa-surface shadow-card">
-                        <div className="flex items-start justify-between gap-3 border-b border-casa-accent-soft-border bg-[linear-gradient(120deg,var(--color-casa-accent-soft),var(--color-casa-accent-soft-hover))] px-4 py-3.5">
-                          <div className="flex min-w-0 items-center gap-2.5">
-                            <div
-                              className={cn(
-                                'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-casa-border/70',
-                                categoryIconBadgeClassName(getCategoryTone(section.key)),
-                              )}
-                            >
-                              <CategoryIcon size={18} />
-                            </div>
-                            <div className="min-w-0">
-                              <p className="truncate text-body font-semibold leading-tight text-casa-navy">{section.label}</p>
-                              <p className="mt-0.5 text-caption text-casa-top-pick-band/80">{section.visual.subtitle}</p>
-                            </div>
-                          </div>
-                          <div className="flex shrink-0 items-center gap-2 text-caption text-casa-muted">
-                            {section.reviewCount > 0 && (
-                              <Chip tone="info" size="sm">{section.reviewCount} suggested</Chip>
+                            {row.review_status === 'ok' && (
+                              <div className="mt-1.5">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => toggleReconcileQtyEditor(row.item_id)}
+                                  className="text-2xs text-casa-muted hover:text-casa-navy px-1 py-0 min-h-0"
+                                >
+                                  Qty: {row.package_count} {expandedReconcileQtyIds.has(row.item_id) ? '▲' : '▼'}
+                                </Button>
+                                {expandedReconcileQtyIds.has(row.item_id) && (
+                                  <div className="mt-1.5 flex items-center gap-1">
+                                    <IconButton
+                                      icon={<Minus size={13} />}
+                                      variant="secondary"
+                                      size="sm"
+                                      onClick={() => updatePantryReconcileDraftRow(row.item_id, Math.max(0, row.package_count - 0.25))}
+                                      aria-label={`Decrease ${row.name} restock quantity`}
+                                    />
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      step={0.25}
+                                      value={row.package_count}
+                                      onChange={(event) => updatePantryReconcileDraftRow(row.item_id, Number(event.target.value))}
+                                      className="w-16 text-center text-caption py-1"
+                                      aria-label={`${row.name} restock quantity`}
+                                    />
+                                    <IconButton
+                                      icon={<Plus size={13} />}
+                                      variant="secondary"
+                                      size="sm"
+                                      onClick={() => updatePantryReconcileDraftRow(row.item_id, row.package_count + 0.25)}
+                                      aria-label={`Increase ${row.name} restock quantity`}
+                                    />
+                                  </div>
+                                )}
+                              </div>
                             )}
-                            <Chip tone="accent" size="sm">
-                              {section.items.length} item{section.items.length === 1 ? '' : 's'}
-                            </Chip>
                           </div>
-                        </div>
-                        <div className="divide-y divide-casa-divider">
-                          {section.items.map((item) => (
-                            <div key={item.id} id={`grocery-item-${item.id}`}>
-                              <ItemRow
-                                item={item}
-                                dismissPhase={dismissingExitingIds.has(item.id) ? 'exiting' : dismissingIds.has(item.id) ? 'queued' : 'none'}
-                                isDragging={dragState?.itemId === item.id}
-                                isSpotlighted={spotlightedItemId === item.id}
-                                onRequestReview={setReviewingItemId}
-                                onToggle={handleToggle}
-                                onDelete={(id) => deleteItem.mutate(id)}
-                                onMovePointerDown={(e) => handleMovePointerDown(item, item.category, e)}
-                                onMovePointerMove={handleMovePointerMove}
-                                onMovePointerUp={handleMovePointerUp}
-                                onMovePointerCancel={handleMovePointerCancel}
-                              />
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </motion.div>
-                  )
-                })}
-                </AnimatePresence>
-              </div>
-              )}
-
-              {completedItemsByCategory.length > 0 && (
-                <div className="mt-5">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowCompletedArchive(prev => !prev)}
-                    className="mb-2 min-h-0 px-1 py-0 text-caption text-casa-muted hover:bg-transparent"
-                  >
-                    {showCompletedArchive ? 'Hide completed archive' : `Show completed archive (${checkedCount})`}
-                  </Button>
-                  {showCompletedArchive && (
-                    <div className="space-y-3">
-                      {completedItemsByCategory.map(cat => (
-                      <div key={`completed-${cat.key}`}>
-                        <div className="px-1 pb-1">
-                          <p className="text-body-sm font-semibold text-casa-muted">
-                            {splitCategoryLabel(cat.label)}
-                          </p>
-                        </div>
-                        <div className="bg-casa-surface rounded-2xl border border-casa-border divide-y divide-casa-divider overflow-hidden">
-                          {cat.items.map(item => (
-                            <div key={item.id} id={`grocery-item-${item.id}`}>
-                              <ItemRow
-                                item={item}
-                                isSpotlighted={spotlightedItemId === item.id}
-                                onToggle={handleToggle}
-                                onDelete={(id) => deleteItem.mutate(id)}
-                              />
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-              <div className="h-24" />
-          </div>
-            )
-          ) : (
-            <div className="pt-3 pb-6">
-              {hasSmartPicks ? (
-                <div className="mt-2 space-y-3">
-                  {weeklySmartPickCandidates.length > 0 && (
-                    <Card padding="md" tone="accent" className="overflow-hidden sm:px-5">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div className="pr-1">
-                          <Text role="caption" className="inline-flex items-center gap-1.5 font-bold uppercase tracking-[0.14em] text-casa-top-pick-band">
-                            <Sparkles size={12} />
-                            Auto weekly list
-                          </Text>
-                          <Heading role="display-sm" className="mt-1">Your usual week, ready to add</Heading>
-                          <Text role="body-sm" muted className="mt-1">Combined from your repeat buys and regular restocks.</Text>
-                        </div>
-                        <Button
-                          variant="strong"
-                          size="sm"
-                          onClick={handleGenerateWeeklyList}
-                        >
-                          Add all {weeklySmartPickCandidates.length} →
-                        </Button>
-                      </div>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {weeklySmartPickCandidates.map((item) => (
-                          <Chip
-                            key={`weekly-smart-${item.name}`}
-                            tone="accent"
-                            onClick={() => addItemByName(item.name, { spotlightOnDuplicate: true, clearInput: true })}
-                            icon={<Plus size={13} className="text-casa-gold" />}
-                          >
-                            <span className="inline-flex items-center gap-1.5">
-                              <span>{item.name}</span>
-                              <span
-                                role="button"
-                                tabIndex={0}
-                                aria-label={`Remove ${item.name} from weekly picks`}
-                                className="inline-flex h-4 w-4 items-center justify-center rounded-full text-casa-muted transition hover:bg-casa-bg/30 hover:text-casa-text"
-                                onClick={(event) => {
-                                  event.preventDefault()
-                                  event.stopPropagation()
-                                  void handleHideSmartPick(item.name)
-                                }}
-                                onKeyDown={(event) => {
-                                  if (event.key === 'Enter' || event.key === ' ') {
-                                    event.preventDefault()
-                                    event.stopPropagation()
-                                    void handleHideSmartPick(item.name)
-                                  }
-                                }}
-                              >
-                                <X size={11} />
-                              </span>
-                            </span>
-                          </Chip>
                         ))}
                       </div>
-                    </Card>
-                  )}
-
-                  {(pantryDepletionPredictions.length > 0 || activePredictionDeferralCount > 0) && (
-                    <Card padding="md" tone="surface">
-                      <div className="mb-2 flex items-center justify-between gap-2">
-                        <Text role="caption" muted className="font-bold uppercase tracking-[0.14em]">
-                          Pantry depletion predictions
-                        </Text>
-                        {activePredictionDeferralCount > 0 && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => void clearPantryPredictionDeferrals()}
-                          >
-                            Show deferred ({activePredictionDeferralCount})
-                          </Button>
-                        )}
-                      </div>
-                      <div className="space-y-1.5">
-                        {pantryDepletionPredictions.slice(0, 4).map((prediction) => {
-                          const visual = getDepletionVisual(prediction.daysUntil)
-                          const cadenceMeterPercent = Math.max(
-                            12,
-                            Math.min(
-                              100,
-                              Math.round(((prediction.cadenceDays - Math.max(prediction.daysUntil, 0)) / Math.max(prediction.cadenceDays, 1)) * 100)
-                            )
-                          )
-                          return (
-                            <div key={`depletion-${prediction.name}`} className="flex flex-wrap items-center gap-3 border-t border-casa-divider px-1 py-2 first:border-t-0">
-                              <Circle size={10} fill="currentColor" className={cn('shrink-0', urgencyDotClassName(visual.tone))} />
-                              <div className="min-w-0 flex-1">
-                                <p className="truncate text-body-sm font-semibold text-casa-navy">{prediction.name}</p>
-                                <div className="mt-0.5 flex items-center gap-2 text-caption text-casa-muted">
-                                  <span>Cadence ~{prediction.cadenceDays}d</span>
-                                  <Progress
-                                    value={cadenceMeterPercent}
-                                    aria-label={`${prediction.name} depletion cadence`}
-                                    className="w-16 [&_.casa-progress]:h-1.5"
-                                  />
-                                </div>
-                              </div>
-                              <Chip size="sm" className={urgencyTagClassName(visual.tone)}>
-                                {visual.dueLabel}
-                              </Chip>
-                              <div className="flex shrink-0 items-center gap-1.5">
-                                <Button
-                                  type="button"
-                                  variant="secondary"
-                                  size="sm"
-                                  leadingIcon={<Clock3 size={11} />}
-                                  onClick={() => void deferPantryPrediction(prediction.name, GROCERY_PREDICTION_PUSH_DAYS, 'push')}
-                                  title={`Push this prediction ${GROCERY_PREDICTION_PUSH_DAYS} days later`}
-                                >
-                                  +{GROCERY_PREDICTION_PUSH_DAYS}d
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="secondary"
-                                  size="sm"
-                                  onClick={() => void deferPantryPrediction(prediction.name, GROCERY_PREDICTION_DISMISS_DAYS, 'dismiss')}
-                                  title={`Dismiss this prediction for ${GROCERY_PREDICTION_DISMISS_DAYS} days`}
-                                >
-                                  {Math.round(GROCERY_PREDICTION_DISMISS_DAYS / 7)}w
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="secondary"
-                                  size="sm"
-                                  onClick={() => addItemByName(prediction.name, { spotlightOnDuplicate: true, clearInput: true })}
-                                >
-                                  Add
-                                </Button>
-                              </div>
-                            </div>
-                          )
-                        })}
-                        {pantryDepletionPredictions.length === 0 && activePredictionDeferralCount > 0 && (
-                          <p className="px-1 py-2 text-caption text-casa-muted">
-                            Predictions are currently deferred. Use “Show deferred” to bring them back now.
-                          </p>
-                        )}
-                      </div>
-                      <p className="mt-2 text-caption text-casa-muted">
-                        Push items out a few days or dismiss for two weeks when you still have stock.
-                      </p>
-                    </Card>
-                  )}
-
+                    </div>
+                  ))}
                 </div>
-              ) : (
-                <div className="mt-2 rounded-2xl border border-casa-border bg-casa-surface p-6 text-center">
-                  <p className="text-body font-semibold text-casa-text">No smart picks yet</p>
-                  <p className="mt-1 text-body-sm text-casa-muted">
-                    Keep checking items off — weekly picks will appear here.
-                  </p>
+                <div className="mt-3 flex items-center gap-2">
+                  <Button
+                    variant="champagne"
+                    size="sm"
+                    onClick={() => void handleReconcilePantryFromDone()}
+                    disabled={reconcilingPantry}
+                    loading={reconcilingPantry}
+                    className="font-bold"
+                  >
+                    Confirm restock
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      setPantryReconcileDraft(null)
+                      setExpandedReconcileQtyIds(new Set())
+                    }}
+                    disabled={reconcilingPantry}
+                  >
+                    Cancel
+                  </Button>
                 </div>
-              )}
-              <div className="h-24" />
+              </Card>
             </div>
-          )
-        )}
-        </div>
-      </div>
-      <Modal
-        open={reviewingItem !== null}
-        onClose={() => setReviewingItemId(null)}
-        title={reviewingItem ? `Recategorize ${reviewingItem.name}` : 'Recategorize item'}
-        size="lg"
-        panelClassName="max-w-2xl"
-      >
-        {reviewingItem && (
-          <>
-            <Text role="body-sm" muted>
-              Choose the store section. The grocery list stays fixed behind this overlay.
-            </Text>
-            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {GROCERY_CATEGORIES.map((category) => (
-                <Chip
-                  key={`${reviewingItem.id}-${category.key}`}
-                  tone="neutral"
-                  selected={reviewingItem.category === category.key}
-                  onClick={() => {
-                    updateItemCategory.mutate({
-                      id: reviewingItem.id,
-                      category: category.key,
-                      fromCategory: reviewingItem.category,
-                      itemName: reviewingItem.name,
-                      reviewedByUser: true,
-                    })
-                    setReviewingItemId(null)
-                  }}
-                  className="w-full"
-                >
-                  {splitCategoryLabel(category.label)}
-                </Chip>
+          )}
+
+          {/* Content Body */}
+          {isLoading ? (
+            <div className="pt-4 space-y-4">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="animate-pulse space-y-2">
+                  <div className="h-4 bg-casa-divider rounded w-32 mb-2" />
+                  <div className="h-28 bg-casa-surface rounded-2xl border border-casa-border" />
+                </div>
               ))}
             </div>
-            <Button variant="secondary" className="mt-4" onClick={() => setReviewingItemId(null)}>
-              Looks right
-            </Button>
-          </>
-        )}
-      </Modal>
+          ) : (
+            <GroceryAisleGrid
+              sections={activeItemsByCategory.map((cat) => ({
+                key: cat.key,
+                label: splitCategoryLabel(cat.label),
+                items: cat.items,
+                dropKey: cat.key,
+                visual: CATEGORY_VISUAL_BY_KEY[cat.key] ?? DEFAULT_CATEGORY_VISUAL,
+                reviewCount: cat.items.filter((item) =>
+                  typeof item.enhancement_confidence === 'number' &&
+                  item.enhancement_confidence < LOW_CONFIDENCE_REVIEW_THRESHOLD
+                ).length,
+              }))}
+              completedSections={completedItemsByCategory.map((cat) => ({
+                key: cat.key,
+                label: splitCategoryLabel(cat.label),
+                items: cat.items,
+              }))}
+              showCompletedArchive={showCompletedArchive}
+              onToggleCompletedArchive={() => setShowCompletedArchive((prev) => !prev)}
+              onClearCompleted={() => void clearChecked.mutate()}
+              dragState={dragState}
+              dragOverCategory={dragOverCategory}
+              spotlightedItemId={spotlightedItemId}
+              isItemJustMoved={isItemJustMoved}
+              dismissingIds={dismissingIds}
+              dismissingExitingIds={dismissingExitingIds}
+              deletingIds={deletingIds}
+              onToggleItem={handleToggle}
+              onDeleteItem={handleDeleteItem}
+              onUndoDelete={handleUndoDelete}
+              onRecategorize={(id, category) => {
+                const item = items.find((i) => i.id === id)
+                if (!item) return
+                triggerItemMoved(id, 'move')
+                updateItemCategory.mutate({
+                  id,
+                  category,
+                  fromCategory: item.category,
+                  itemName: item.name,
+                  reviewedByUser: true,
+                })
+              }}
+              onMovePointerDown={handleMovePointerDown}
+              onMovePointerMove={handleMovePointerMove}
+              onMovePointerUp={handleMovePointerUp}
+              onMovePointerCancel={handleMovePointerCancel}
+            />
+          )}
+        </PageShell>
+      </div>
       {isAddPanelOpen && (
         <Sheet
           open
@@ -2765,14 +2028,14 @@ export default function GroceryPage() {
             <>
           <div className="flex items-center gap-2 bg-casa-bg rounded-2xl border border-casa-border px-4 py-3 min-h-14 shadow-sm">
             <Plus size={18} className="text-casa-muted flex-shrink-0" />
-            <input
+            <Input
               ref={inputRef}
               type="text"
               value={inputValue}
               onChange={e => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Add an item…"
-              className="flex-1 bg-transparent text-body text-casa-text placeholder:text-casa-muted outline-none"
+              className="flex-1 border-0 bg-transparent shadow-none"
             />
             <Button
               onClick={handleAddItem}
@@ -2805,7 +2068,7 @@ export default function GroceryPage() {
                   onClick={() => {
                     const nextName = inputValue.trim()
                     if (!nextName || !defaultListId) return
-                    const category = detectCategory(nextName)
+                    const category = inferCategoryFromName(nextName)
                     addItem.mutate({ list_id: defaultListId, name: nextName, quantity: null, unit: null, category, checked: false, notes: null })
                     setInputValue('')
                     inputRef.current?.focus()
@@ -2829,7 +2092,7 @@ export default function GroceryPage() {
             ))}
           </div>
           <p className="mt-1 text-caption text-casa-muted">
-            Tip: tap the sparkle in the top bar to ask Casa AI, then say “add milk, eggs, and bananas.”
+            Tip: tap the sparkle in the top bar to ask Copilot, then say “add milk, eggs, and bananas.”
           </p>
             </>
           )}
@@ -2842,14 +2105,14 @@ export default function GroceryPage() {
                 </p>
                 <p className="text-caption text-casa-muted mb-1">Paste a public recipe URL</p>
                 <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-2 flex-1 bg-casa-surface rounded-button border border-casa-border px-3 py-2">
-                    <Link2 size={14} className="text-casa-muted" />
-                    <input
+                  <div className="relative flex-1">
+                    <Link2 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-casa-muted z-10" />
+                    <Input
                       type="url"
                       value={recipeUrlInput}
                       onChange={(event) => setRecipeUrlInput(event.target.value)}
                       placeholder="https://..."
-                      className="flex-1 bg-transparent text-body-sm text-casa-text placeholder:text-casa-muted outline-none"
+                      className="pl-8"
                     />
                   </div>
                 </div>
@@ -3010,12 +2273,12 @@ export default function GroceryPage() {
                   <div className="rounded-xl border border-casa-border bg-casa-bg p-2">
                     <p className="text-caption text-casa-muted mb-2">Recipe photos (cover image optional)</p>
                     <div className="flex items-center gap-2 mb-2">
-                      <input
+                      <Input
                         type="url"
                         value={recipeExtraImageUrl}
                         onChange={(event) => setRecipeExtraImageUrl(event.target.value)}
                         placeholder="https://.../another-photo.jpg"
-                        className="flex-1 rounded-button border border-casa-border bg-casa-surface px-2.5 py-1.5 text-caption text-casa-text outline-none"
+                        className="flex-1 text-caption"
                       />
                       <Button
                         variant="secondary"
@@ -3097,47 +2360,52 @@ export default function GroceryPage() {
                           const scaledQuantity = scaleQuantityValue(ingredient.quantity, recipeScale)
                           return (
                             <div key={`${ingredient.raw_text}-${index}`} className="rounded-lg border border-casa-border bg-casa-surface px-2 py-1.5">
-                              <label className="flex items-start gap-2 text-body-sm text-casa-text">
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={() => {
-                                  setSelectedRecipeIngredientIndexes((current) => {
-                                    const next = new Set(current)
-                                    if (next.has(index)) next.delete(index)
-                                    else next.add(index)
-                                    return next
-                                  })
-                                }}
-                              />
-                                <span>{displayName}</span>
-                                {(scaledQuantity || ingredient.unit) && (
-                                  <span className="text-caption text-casa-muted">
-                                    {scaledQuantity ? `${scaledQuantity} ` : ''}{ingredient.unit ?? ''}
-                                  </span>
-                                )}
-                              </label>
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-start gap-2 text-body-sm text-casa-text">
+                                  <Checkbox
+                                    checked={checked}
+                                    onChange={() => {
+                                      setSelectedRecipeIngredientIndexes((current) => {
+                                        const next = new Set(current)
+                                        if (next.has(index)) next.delete(index)
+                                        else next.add(index)
+                                        return next
+                                      })
+                                    }}
+                                    label={
+                                      <div className="flex items-center gap-1.5">
+                                        <span>{displayName}</span>
+                                        {(scaledQuantity || ingredient.unit) && (
+                                          <span className="text-caption text-casa-muted">
+                                            {scaledQuantity ? `${scaledQuantity} ` : ''}{ingredient.unit ?? ''}
+                                          </span>
+                                        )}
+                                      </div>
+                                    }
+                                  />
+                                </div>
+                              </div>
                               <div className="mt-1 flex items-center gap-1.5">
-                                <input
+                                <Input
                                   type="text"
                                   value={ingredient.quantity ?? ''}
                                   onChange={(event) => updateParsedIngredient(index, { quantity: event.target.value || null })}
                                   placeholder="Qty"
-                                  className="w-16 rounded-button border border-casa-border bg-casa-bg px-2 py-1 text-caption text-casa-text outline-none"
+                                  className="w-16 text-caption"
                                 />
-                                <input
+                                <Input
                                   type="text"
                                   value={ingredient.unit ?? ''}
                                   onChange={(event) => updateParsedIngredient(index, { unit: event.target.value || null })}
                                   placeholder="Unit"
-                                  className="w-16 rounded-button border border-casa-border bg-casa-bg px-2 py-1 text-caption text-casa-text outline-none"
+                                  className="w-16 text-caption"
                                 />
-                                <input
+                                <Input
                                   type="text"
                                   value={ingredient.name ?? ingredient.raw_text}
                                   onChange={(event) => updateParsedIngredient(index, { name: event.target.value || null })}
                                   placeholder="Ingredient"
-                                  className="flex-1 rounded-button border border-casa-border bg-casa-bg px-2 py-1 text-caption text-casa-text outline-none"
+                                  className="flex-1 text-caption"
                                 />
                               </div>
                             </div>
@@ -3198,11 +2466,11 @@ export default function GroceryPage() {
                                 </Chip>
                               </div>
                             </div>
-                            <textarea
+                            <Textarea
                               value={step.instruction}
                               onChange={(event) => updateParsedStep(stepIndex, event.target.value)}
                               rows={3}
-                              className="w-full rounded-button border border-casa-border bg-casa-bg px-2 py-1 text-caption text-casa-text outline-none resize-y"
+                              className="resize-y text-caption"
                             />
                           </div>
                         ))}
@@ -3317,175 +2585,6 @@ export default function GroceryPage() {
           )}
         </Sheet>
       )}
-      <AnimatePresence>
-        {!isQuickAddOpen && (
-          <motion.button
-            type="button"
-            onClick={() => setIsQuickAddOpen(true)}
-            initial={{ scale: 0, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1, y: [0, -5, 0] }}
-            exit={{ scale: 0, opacity: 0 }}
-            transition={{
-              y: { duration: 3.2, repeat: Infinity, ease: 'easeInOut' },
-              default: { duration: 0.22, ease: 'easeOut' },
-            }}
-            whileTap={{ scale: 0.92, y: 0 }}
-            className="fixed right-5 bottom-[calc(var(--spacing-nav-height)+1rem+var(--vk-height,0px)+var(--vk-gap,0px))] lg:bottom-[calc(1.5rem+var(--vk-height,0px)+var(--vk-gap,0px))] z-popover size-14 rounded-full bg-casa-gold text-casa-navy font-semibold border border-casa-gold/50 shadow-fab flex items-center justify-center hover:brightness-110 hover:shadow-modal transition-[filter,box-shadow]"
-            aria-label="Quick add grocery item"
-            title="Quick add"
-          >
-            <Plus size={24} />
-          </motion.button>
-        )}
-      </AnimatePresence>
-      <GroceryQuickAddSheet
-        open={isQuickAddOpen}
-        onClose={() => setIsQuickAddOpen(false)}
-        items={items}
-        defaultListId={defaultListId}
-        addItem={addItem}
-        deleteItem={deleteItem}
-        onOpenMore={() => {
-          setAddPanelMode('recipe')
-          if (!parsedRecipe) setRecipeImportStep(1)
-          setIsAddPanelOpen(true)
-        }}
-      />
-      {cookView && (
-        <Sheet
-          open
-          side="right"
-          title={`Cook ${cookView.recipe.name}`}
-          showHeader={false}
-          onClose={() => {
-            setCookView(null)
-            setCookTimer(null)
-          }}
-          closeOnBackdrop={false}
-          closeOnEscape={false}
-          panelClassName="w-[min(38rem,calc(100vw-2rem))]"
-          contentClassName="flex flex-col overflow-hidden p-0"
-        >
-            <div className="px-4 py-3 border-b border-casa-divider flex items-center justify-between gap-2">
-              <div>
-                <p className="text-body font-semibold text-casa-navy">{cookView.recipe.name}</p>
-                <p className="text-caption text-casa-muted">
-                  Step {cookView.stepIndex + 1} of {Math.max(1, cookView.recipe.steps.length)}
-                  {cookView.recipe.cook_time ? ` · ${cookView.recipe.cook_time}` : ''}
-                  {cookView.recipe.servings ? ` · ${cookView.recipe.servings}` : ''}
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                {cookView.recipe.source_url && (
-                  <a
-                    href={cookView.recipe.source_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="px-2.5 py-1.5 rounded-button border border-casa-border bg-casa-bg text-caption text-casa-muted hover:bg-casa-main transition-colors inline-flex items-center gap-1"
-                  >
-                    <ExternalLink size={12} />
-                    Original
-                  </a>
-                )}
-                <IconButton
-                  icon={<X size={16} />}
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    setCookView(null)
-                    setCookTimer(null)
-                  }}
-                  aria-label="Close cook mode"
-                />
-              </div>
-            </div>
-            <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3">
-              <div className="rounded-2xl border border-casa-border bg-casa-bg p-4">
-                <p className="text-body-sm text-casa-navy leading-relaxed">
-                  {cookView.recipe.steps[cookView.stepIndex]?.instruction ?? 'No instruction available.'}
-                </p>
-                {cookStepTimerOptions.length > 0 && (
-                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                    {cookStepTimerOptions.map((timer, index) => (
-                      <Chip
-                        key={`${timer.label}-${index}`}
-                        onClick={() => setCookTimer({
-                          totalSeconds: timer.seconds,
-                          remainingSeconds: timer.seconds,
-                          label: timer.label,
-                        })}
-                        tone="neutral"
-                        size="sm"
-                      >
-                        <Clock3 size={11} />
-                        {timer.label}
-                      </Chip>
-                    ))}
-                  </div>
-                )}
-                {cookTimer && (
-                  <div className="mt-2 rounded-xl border border-casa-gold/40 bg-casa-gold/10 px-2.5 py-1.5 flex items-center justify-between gap-2">
-                    <p className="text-caption text-casa-navy">
-                      Timer ({cookTimer.label}): <span className="font-semibold">{formatTimer(cookTimer.remainingSeconds)}</span>
-                    </p>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setCookTimer(null)}
-                      className="min-h-0 p-0 text-caption text-casa-muted hover:bg-transparent"
-                    >
-                      Clear
-                    </Button>
-                  </div>
-                )}
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {cookView.recipe.ingredients.map((ingredient, index) => {
-                  const normalized = normalizeRecipeIngredientFields({
-                    rawText: ingredient.raw_text,
-                    name: ingredient.name,
-                    quantity: ingredient.quantity,
-                    unit: ingredient.unit,
-                  })
-                  return (
-                    <div key={`${cookView.recipe.id}-${index}`} className="rounded-xl border border-casa-border bg-casa-bg px-2 py-1.5">
-                      <p className="text-caption text-casa-text">
-                        {[normalized.quantity, normalized.unit].filter(Boolean).join(' ')} {(normalized.name || ingredient.raw_text).trim()}
-                      </p>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-            <div className="px-4 py-3 border-t border-casa-divider flex items-center justify-between gap-2">
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  setCookTimer(null)
-                  setCookView((current) => current
-                    ? { ...current, stepIndex: Math.max(0, current.stepIndex - 1) }
-                    : current)
-                }}
-                disabled={cookView.stepIndex <= 0}
-                leadingIcon={<ChevronLeft size={14} />}
-              >
-                Previous
-              </Button>
-              <Button
-                onClick={() => {
-                  setCookTimer(null)
-                  setCookView((current) => current
-                    ? { ...current, stepIndex: Math.min(current.recipe.steps.length - 1, current.stepIndex + 1) }
-                    : current)
-                }}
-                disabled={cookView.stepIndex >= cookView.recipe.steps.length - 1}
-                trailingIcon={<ChevronRight size={14} />}
-              >
-                Next
-              </Button>
-            </div>
-        </Sheet>
-      )}
       {dragState && (
         <div
           className="fixed z-debug pointer-events-none px-3 py-2 rounded-xl bg-casa-navy text-white text-body-sm shadow-modal"
@@ -3494,12 +2593,6 @@ export default function GroceryPage() {
           Move “{dragState.itemName}”
         </div>
       )}
-      <Toast
-        open={Boolean(groceryToastMessage)}
-        tone="success"
-        message={groceryToastMessage ?? ''}
-        onClose={() => setGroceryToastMessage(null)}
-      />
     </div>
   )
 }

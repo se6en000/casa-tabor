@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none">
+  <style>
+    .main-star {
+      transform-origin: 12px 12px;
+      animation: copilot-breathe 3.8s infinite ease-in-out;
+    }
+    .satellite {
+      transform-origin: 19.5px 4.5px;
+      animation: copilot-twinkle 2.8s infinite ease-in-out 0.4s;
+    }
+    .shimmer {
+      transform-origin: 12px 12px;
+      animation: copilot-shimmer-pass 4.2s infinite ease-in-out 1s;
+    }
+    @keyframes copilot-breathe {
+      0%, 100% {
+        transform: scale(1);
+        filter: drop-shadow(0 0 4px rgba(212, 175, 55, 0.45));
+      }
+      50% {
+        transform: scale(1.05);
+        filter: drop-shadow(0 0 10px rgba(212, 175, 55, 0.8)) drop-shadow(0 0 18px rgba(246, 226, 182, 0.45));
+      }
+    }
+    @keyframes copilot-twinkle {
+      0%, 100% {
+        transform: scale(0.82);
+        opacity: 0.65;
+      }
+      50% {
+        transform: scale(1.22);
+        opacity: 1;
+        filter: drop-shadow(0 0 4px #FFF);
+      }
+    }
+    @keyframes copilot-shimmer-pass {
+      0% {
+        transform: translate(-30px, -30px) rotate(35deg);
+        opacity: 0;
+      }
+      15% {
+        opacity: 0.9;
+      }
+      45% {
+        transform: translate(30px, 30px) rotate(35deg);
+        opacity: 0;
+      }
+      100% {
+        transform: translate(30px, 30px) rotate(35deg);
+        opacity: 0;
+      }
+    }
+  </style>
+
+  <defs>
+    <!-- Luminous Solid Metallic Gold Gradient -->
+    <linearGradient id="flat-star-gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FAE8A0" />
+      <stop offset="45%" stop-color="#E4C069" />
+      <stop offset="100%" stop-color="#C9A96E" />
+    </linearGradient>
+
+    <!-- Specular Shimmer Sheen Ribbon -->
+    <linearGradient id="shimmer-sheen" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0" />
+      <stop offset="35%" stop-color="#FFFDFA" stop-opacity="0.35" />
+      <stop offset="50%" stop-color="#FFFFFF" stop-opacity="0.95" />
+      <stop offset="65%" stop-color="#FFF4D0" stop-opacity="0.4" />
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0" />
+    </linearGradient>
+
+    <!-- Precise Flat Star Vector Clipping Mask -->
+    <clipPath id="flat-star-clip">
+      <path d="M 12 2 C 12 7.2 7.2 12 3 12 C 7.2 12 12 16.8 12 22 C 12 16.8 16.8 12 21 12 C 16.8 12 12 7.2 12 2 Z" />
+      <path d="M 19.5 1.5 C 19.5 3.1 18.1 4.5 16.5 4.5 C 18.1 4.5 19.5 5.9 19.5 7.5 C 19.5 5.9 20.9 4.5 22.5 4.5 C 20.9 4.5 19.5 3.1 19.5 1.5 Z" />
+    </clipPath>
+  </defs>
+
+  <!-- Clean Flat 4-Pointed Sparkle Star -->
+  <g class="main-star">
+    <path
+      d="M 12 2 C 12 7.2 7.2 12 3 12 C 7.2 12 12 16.8 12 22 C 12 16.8 16.8 12 21 12 C 16.8 12 12 7.2 12 2 Z"
+      fill="url(#flat-star-gold)"
+    />
+  </g>
+
+  <!-- Companion Satellite Starlet -->
+  <path
+    class="satellite"
+    d="M 19.5 1.5 C 19.5 3.1 18.1 4.5 16.5 4.5 C 18.1 4.5 19.5 5.9 19.5 7.5 C 19.5 5.9 20.9 4.5 22.5 4.5 C 20.9 4.5 19.5 3.1 19.5 1.5 Z"
+    fill="url(#flat-star-gold)"
+  />
+
+  <!-- Shimmer Sheen Sweep Masked to Star -->
+  <g clip-path="url(#flat-star-clip)">
+    <rect
+      class="shimmer"
+      x="-10"
+      y="-10"
+      width="44"
+      height="44"
+      fill="url(#shimmer-sheen)"
+    />
+  </g>
+</svg>

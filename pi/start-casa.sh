@@ -96,6 +96,13 @@ kill $(pgrep -f "matchbox-keyboard" 2>/dev/null) 2>/dev/null
 sleep 3
 
 # ── Voice/sensor bridges are systemd user services ─────────────────────────
+WHISPER_ENV="$HOME/.config/casa/whisper-bridge.env"
+if [ -r "$WHISPER_ENV" ]; then
+  set -a
+  . "$WHISPER_ENV"
+  set +a
+fi
+
 for svc in casa-sensor-bridge.service casa-whisper-bridge.service; do
   if systemctl --user cat "$svc" >/dev/null 2>&1; then
     if ! systemctl --user restart "$svc"; then

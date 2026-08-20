@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Casa Tabor Concept 3 — Assistive Card Deck & Co-Pilot</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,400&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --color-casa-gold: #C9A96E;
+      --color-casa-gold-light: #F4E8D3;
+      --color-casa-gold-dark: #A27B3A;
+      --color-casa-navy: #1B2A4A;
+      --color-casa-navy-soft: #283C66;
+      --color-casa-bg: #FAF8F5;
+      --color-casa-bg-2: #F2EEE7;
+      --color-casa-surface: #FFFFFF;
+      --color-casa-text: #2D2D2D;
+      --color-casa-muted: #7E7F8A;
+      --color-casa-border: #E8E2D9;
+      --color-casa-border-subtle: #F0EAE1;
+      --color-casa-success: #27AE60;
+      --color-casa-success-soft: #E8F7EE;
+      --color-casa-warning: #E67E22;
+      --color-casa-warning-soft: #FCF1E6;
+      --color-casa-error: #C0392B;
+      
+      --color-family-kelly: #C4693A;
+      --color-family-liv: #6A9E7F;
+      --color-family-jake: #1B2A4A;
+      --color-family-owen: #D4A44C;
+      --color-family-emme: #C47A8A;
+      
+      --font-display: 'Cormorant Garamond', Georgia, serif;
+      --font-body: 'DM Sans', system-ui, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      font-family: var(--font-body);
+      background: #111827;
+      color: var(--color-casa-text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    /* Top Demo Control Header */
+    .demo-bar {
+      background: #1F2937;
+      border-bottom: 1px solid #374151;
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #E5E7EB;
+      z-index: 50;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .demo-bar h1 {
+      font-size: 14px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .demo-bar h1 span {
+      background: var(--color-casa-gold);
+      color: #1A1A1A;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .nav-tabs-group {
+      display: flex;
+      gap: 8px;
+    }
+    .nav-tab-btn {
+      background: #374151;
+      border: 1px solid #4B5563;
+      color: #E5E7EB;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+    .nav-tab-btn.active {
+      background: var(--color-casa-gold);
+      color: #111827;
+      border-color: var(--color-casa-gold);
+    }
+    .device-switcher {
+      display: flex;
+      background: #111827;
+      padding: 3px;
+      border-radius: 8px;
+      border: 1px solid #374151;
+      gap: 4px;
+    }
+    .device-btn {
+      background: transparent;
+      border: none;
+      color: #9CA3AF;
+      padding: 6px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+    .device-btn.active {
+      background: #374151;
+      color: #FFFFFF;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+
+    /* Outer Stage Wrapper */
+    .stage-container {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: radial-gradient(circle at 50% 50%, #1E293B 0%, #0F172A 100%);
+      overflow: auto;
+    }
+
+    /* Screen Emulation Frame */
+    .app-frame {
+      width: 1440px;
+      height: 900px;
+      background: var(--color-casa-bg);
+      border-radius: 16px;
+      box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255,255,255,0.1);
+      display: flex;
+      overflow: hidden;
+      position: relative;
+      transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1), height 0.35s cubic-bezier(0.16, 1, 0.3, 1), border-radius 0.3s;
+    }
+
+    .app-frame.device-kiosk {
+      width: 1920px;
+      height: 1080px;
+    }
+    .app-frame.device-desktop {
+      width: 1440px;
+      height: 880px;
+    }
+    .app-frame.device-tablet {
+      width: 860px;
+      height: 1024px;
+    }
+    .app-frame.device-mobile {
+      width: 412px;
+      height: 860px;
+      border-radius: 40px;
+      border: 8px solid #1F2937;
+    }
+
+    /* Left Simulated Background */
+    .canvas-bg {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: var(--color-casa-bg);
+      border-right: 1px solid var(--color-casa-border);
+      opacity: 0.35;
+      pointer-events: none;
+      filter: blur(1.5px);
+      user-select: none;
+    }
+    .canvas-topbar {
+      height: 64px;
+      border-bottom: 1px solid var(--color-casa-border);
+      display: flex;
+      align-items: center;
+      padding: 0 24px;
+      gap: 32px;
+      background: var(--color-casa-surface);
+    }
+    .brand {
+      font-family: var(--font-display);
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--color-casa-navy);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .brand-badge {
+      width: 32px;
+      height: 32px;
+      background: var(--color-casa-navy);
+      color: var(--color-casa-gold);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .canvas-grid {
+      flex: 1;
+      padding: 24px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+    .mock-day-col {
+      background: rgba(255,255,255,0.7);
+      border: 1px solid var(--color-casa-border);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .mock-day-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--color-casa-navy);
+      text-transform: uppercase;
+    }
+    .mock-card {
+      background: white;
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid var(--color-casa-border);
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       CONCEPT 3: ASSISTIVE CARD DECK & CO-PILOT SIDECAR
+       ═══════════════════════════════════════════════════════════ */
+    .sidecar-panel {
+      width: 560px;
+      background: var(--color-casa-bg);
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      border-left: 1px solid var(--color-casa-border);
+      box-shadow: -10px 0 35px rgba(27, 42, 74, 0.08);
+      position: relative;
+      z-index: 20;
+      overflow: hidden;
+    }
+
+    .device-mobile .canvas-bg {
+      display: none;
+    }
+    .device-mobile .sidecar-panel {
+      width: 100%;
+      border-left: none;
+    }
+
+    /* Header Bar */
+    .deck-header {
+      padding: 16px 20px;
+      background: var(--color-casa-surface);
+      border-bottom: 1px solid var(--color-casa-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .deck-header-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .deck-status-pill {
+      background: #ECFDF5;
+      color: #065F46;
+      border: 1px solid #A7F3D0;
+      padding: 4px 10px;
+      border-radius: 14px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* Scrollable Card Stack */
+    .deck-scroll-stack {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* Hero Summary Card */
+    .card-hero {
+      background: var(--color-casa-surface);
+      border: 1px solid var(--color-casa-border);
+      border-radius: 18px;
+      padding: 20px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+    }
+    .card-hero-title {
+      font-family: var(--font-display);
+      font-size: 32px;
+      font-weight: 600;
+      color: var(--color-casa-navy);
+      line-height: 1.15;
+    }
+    .card-hero-tags {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .hero-chip {
+      background: var(--color-casa-bg);
+      border: 1px solid var(--color-casa-border);
+      padding: 5px 12px;
+      border-radius: 16px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--color-casa-navy);
+    }
+
+    /* PROACTIVE ASSIST CARD (Dynamic Attention Banner) */
+    .card-attention {
+      background: #FFFBEB;
+      border: 1.5px solid #FCD34D;
+      border-radius: 16px;
+      padding: 16px;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      box-shadow: 0 4px 12px rgba(245, 158, 11, 0.08);
+      animation: gentlePulse 3s infinite ease-in-out;
+    }
+    @keyframes gentlePulse {
+      0%, 100% { box-shadow: 0 4px 12px rgba(245, 158, 11, 0.08); }
+      50% { box-shadow: 0 4px 18px rgba(245, 158, 11, 0.2); }
+    }
+    .attention-icon {
+      font-size: 22px;
+    }
+    .attention-body {
+      flex: 1;
+    }
+    .attention-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #92400E;
+    }
+    .attention-desc {
+      font-size: 12px;
+      color: #B45309;
+      margin-top: 2px;
+    }
+    .attention-action-btn {
+      margin-top: 8px;
+      background: #F59E0B;
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    /* Interactive Stop Accordion */
+    .card-stops {
+      background: var(--color-casa-surface);
+      border: 1px solid var(--color-casa-border);
+      border-radius: 18px;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .stops-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .stops-title {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--color-casa-muted);
+    }
+    .stop-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px;
+      background: var(--color-casa-bg);
+      border: 1px solid var(--color-casa-border-subtle);
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .stop-row:hover {
+      background: white;
+      border-color: var(--color-casa-gold);
+    }
+    .stop-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .stop-badge {
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      background: var(--color-casa-navy);
+      color: white;
+      font-size: 11px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .stop-name {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--color-casa-navy);
+    }
+    .stop-right {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--color-casa-muted);
+    }
+
+    /* Embedded Co-Pilot Assist Ribbon */
+    .copilot-card {
+      background: linear-gradient(145deg, #FAF4EB 0%, #F5E8D3 100%);
+      border: 1.5px solid var(--color-casa-gold);
+      border-radius: 18px;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .copilot-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--color-casa-navy);
+    }
+    .copilot-prompts {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .prompt-chip {
+      background: white;
+      border: 1px solid rgba(201, 169, 110, 0.4);
+      padding: 8px 12px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--color-casa-navy);
+      text-align: left;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: all 0.15s;
+    }
+    .prompt-chip:hover {
+      background: #FFFDF9;
+      border-color: var(--color-casa-gold);
+      transform: translateX(2px);
+    }
+
+    /* Sticky Footer */
+    .deck-footer {
+      padding: 16px 20px;
+      background: var(--color-casa-surface);
+      border-top: 1px solid var(--color-casa-border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    .btn-nav-primary {
+      flex: 1;
+      padding: 14px;
+      border-radius: 12px;
+      background: var(--color-casa-gold);
+      color: #1A1A1A;
+      border: none;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .btn-edit-secondary {
+      padding: 14px 18px;
+      border-radius: 12px;
+      background: var(--color-casa-bg);
+      border: 1px solid var(--color-casa-border);
+      color: var(--color-casa-navy);
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Demo Bar -->
+  <header class="demo-bar">
+    <h1>
+      <span>Concept 3</span>
+      Assistive Card Deck & Co-Pilot (Adaptive Cards + Proactive Assist)
+    </h1>
+    <div class="nav-tabs-group">
+      <a href="concept-1-living-flow.html" class="nav-tab-btn">Concept 1</a>
+      <a href="concept-2-story-logistics.html" class="nav-tab-btn">Concept 2</a>
+      <a href="concept-3-assistive-deck.html" class="nav-tab-btn active">Concept 3</a>
+      <a href="index.html" class="nav-tab-btn" style="background: var(--color-casa-navy); color: var(--color-casa-gold);">Showroom Overview</a>
+    </div>
+    <div class="device-switcher">
+      <button class="device-btn" onclick="setDevice('mobile')">📱 Mobile (390px)</button>
+      <button class="device-btn" onclick="setDevice('tablet')">📟 Tablet (860px)</button>
+      <button class="device-btn active" onclick="setDevice('desktop')">💻 Desktop (1440px)</button>
+      <button class="device-btn" onclick="setDevice('kiosk')">📺 Kiosk (1920px)</button>
+    </div>
+  </header>
+
+  <!-- Stage Container -->
+  <main class="stage-container">
+    <div class="app-frame device-desktop" id="appFrame">
+      
+      <!-- Blurred Canvas Background -->
+      <div class="canvas-bg">
+        <div class="canvas-topbar">
+          <div class="brand"><div class="brand-badge">CT</div> Casa Tabor</div>
+          <div style="margin-left: 20px; font-weight: 600;">Calendar • Weekend Focus</div>
+        </div>
+        <div class="canvas-grid">
+          <div class="mock-day-col">
+            <div class="mock-day-title">Sat 15</div>
+            <div class="mock-card"><strong>2:25 PM</strong> · Liv and Mom Mall</div>
+          </div>
+          <div class="mock-day-col">
+            <div class="mock-day-title">Sun 16</div>
+            <div class="mock-card"><strong>1:00 PM</strong> · Soccer Practice</div>
+          </div>
+          <div class="mock-day-col">
+            <div class="mock-day-title">Mon 17</div>
+            <div class="mock-card"><strong>8:00 AM</strong> · School Run</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════ CONCEPT 3 SIDECAR ═══════ -->
+      <aside class="sidecar-panel">
+        
+        <!-- Header -->
+        <div class="deck-header">
+          <div class="deck-header-left">
+            <span class="deck-status-pill">● Live Tracking</span>
+            <span style="font-size: 13px; font-weight: 600; color: var(--color-casa-navy);">Sat, Aug 15</span>
+          </div>
+          <button style="border: none; background: transparent; font-size: 16px; cursor: pointer; color: var(--color-casa-muted);">✕</button>
+        </div>
+
+        <!-- Scrollable Stack -->
+        <div class="deck-scroll-stack">
+          
+          <!-- Hero Card -->
+          <div class="card-hero">
+            <h2 class="card-hero-title">Liv and Mom Mall</h2>
+            <div class="card-hero-tags">
+              <span class="hero-chip" style="background: #FFF2EB; color: var(--color-family-kelly); font-weight: 700;">● Kelly (Driver)</span>
+              <span class="hero-chip" style="background: #EAF5EE; color: var(--color-family-liv); font-weight: 700;">● Liv</span>
+              <span class="hero-chip">🕒 2:25 PM – 5:05 PM</span>
+              <span class="hero-chip">🛍️ Social</span>
+            </div>
+          </div>
+
+          <!-- Dynamic Proactive Attention Card -->
+          <div class="card-attention" id="attentionCard">
+            <span class="attention-icon">⚠️</span>
+            <div class="attention-body">
+              <div class="attention-title">Return Leg Driver Needed</div>
+              <div class="attention-desc">Kelly is driving outbound, but return trip at 5:05 PM has no confirmed driver yet.</div>
+              <button class="attention-action-btn" onclick="alert('Assigned Jake as return driver!'); document.getElementById('attentionCard').style.display='none';">
+                Assign Jake (Dad) for 5:05 PM
+              </button>
+            </div>
+          </div>
+
+          <!-- Stop & Routing Accordion -->
+          <div class="card-stops">
+            <div class="stops-header">
+              <span class="stops-title">📍 Stops & Timing</span>
+              <button style="border: none; background: transparent; color: var(--color-casa-gold-dark); font-size: 12px; font-weight: 700; cursor: pointer;">+ Add Stop</button>
+            </div>
+
+            <div class="stop-row" onclick="alert('Stop 1 Details')">
+              <div class="stop-left">
+                <div class="stop-badge">1</div>
+                <div>
+                  <div class="stop-name">Depart Home</div>
+                  <div style="font-size: 11px; color: var(--color-casa-muted);">Leave by 1:55 PM · 20m drive</div>
+                </div>
+              </div>
+              <span class="stop-right">Kelly 🚗</span>
+            </div>
+
+            <div class="stop-row" onclick="alert('Stop 2 Details')">
+              <div class="stop-left">
+                <div class="stop-badge">2</div>
+                <div>
+                  <div class="stop-name">The Gardens Mall</div>
+                  <div style="font-size: 11px; color: var(--color-casa-muted);">Arrive 2:25 PM · Nordstrom Lot</div>
+                </div>
+              </div>
+              <span class="stop-right">2h 40m</span>
+            </div>
+
+            <div class="stop-row" onclick="alert('Stop 3 Details')">
+              <div class="stop-left">
+                <div class="stop-badge">3</div>
+                <div>
+                  <div class="stop-name">Return Home</div>
+                  <div style="font-size: 11px; color: var(--color-casa-muted);">Leave at 5:05 PM · Arrive 5:27 PM</div>
+                </div>
+              </div>
+              <span class="stop-right" style="color: var(--color-casa-warning); font-weight: 700;">Needs Driver</span>
+            </div>
+          </div>
+
+          <!-- Proactive Co-Pilot Assist Card -->
+          <div class="copilot-card">
+            <div class="copilot-header">
+              <span>✨</span>
+              <span>Casa AI Suggested Actions</span>
+            </div>
+            <div class="copilot-prompts">
+              <div class="prompt-chip" onclick="alert('AI drafted text message: Hey Kelly, traffic on PGA Blvd is clear. Leave by 1:55 PM!')">
+                <span>💬 "Send departure text to Kelly"</span>
+                <span>➔</span>
+              </div>
+              <div class="prompt-chip" onclick="alert('AI checked weather: 84°F, 10% rain chance around 4pm.')">
+                <span>☀️ "Check rain radar for mall return"</span>
+                <span>➔</span>
+              </div>
+              <div class="prompt-chip" onclick="alert('AI added Zara return and aunt gift to family tasks!')">
+                <span>📝 "Sync mall errands to grocery list"</span>
+                <span>➔</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Sticky Footer -->
+        <div class="deck-footer">
+          <button class="btn-nav-primary" onclick="alert('Launching turn-by-turn navigation')">🚗 Start Drive (1:55 PM)</button>
+          <button class="btn-edit-secondary" onclick="alert('Deep edit opened')">✏️ Edit Details</button>
+        </div>
+
+      </aside>
+
+    </div>
+  </main>
+
+  <script>
+    function setDevice(device) {
+      document.querySelectorAll('.device-btn').forEach(btn => btn.classList.remove('active'));
+      event.target.classList.add('active');
+      const frame = document.getElementById('appFrame');
+      frame.className = 'app-frame device-' + device;
+    }
+  </script>
+</body>
+</html>

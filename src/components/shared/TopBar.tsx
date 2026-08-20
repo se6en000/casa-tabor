@@ -8,9 +8,11 @@ import { useTodayEvents } from '../../hooks/useCalendarEvents'
 import { cn } from '../../utils/cn'
 import { IconButton } from '../ui'
 import { useProfileSession } from '../../contexts/ProfileSessionContext'
+import { useAppStore } from '../../stores/appStore'
 
 /** Full-width Command Bar — CT logo · current events center · weather + clock + AI right */
 export function TopBarC() {
+  const { aiDrawerOpen, setAiDrawerOpen } = useAppStore()
   const { profile, signOut } = useProfileSession()
   const now = useLiveClock(10_000)
   const { data: weather } = useHomeWeather()
@@ -154,28 +156,40 @@ export function TopBarC() {
             <motion.button
               ref={btnRef}
               onClick={() => {
-                const rect = btnRef.current?.getBoundingClientRect()
-                document.dispatchEvent(new CustomEvent('open-ai-chat', {
-                  detail: rect ? { right: window.innerWidth - rect.right, top: rect.bottom } : undefined
-                }))
+                if (aiDrawerOpen) {
+                  setAiDrawerOpen(false)
+                } else {
+                  const rect = btnRef.current?.getBoundingClientRect()
+                  document.dispatchEvent(new CustomEvent('open-ai-chat', {
+                    detail: rect ? { right: window.innerWidth - rect.right, top: rect.bottom } : undefined
+                  }))
+                }
               }}
               animate={{
-                boxShadow: [
-                  '0 0 5px rgba(201,169,110,0.18)',
-                  '0 0 9px rgba(201,169,110,0.32)',
-                  '0 0 5px rgba(201,169,110,0.18)',
-                ],
+                boxShadow: aiDrawerOpen
+                  ? '0 0 12px rgba(201,169,110,0.5)'
+                  : [
+                      '0 0 5px rgba(201,169,110,0.18)',
+                      '0 0 9px rgba(201,169,110,0.32)',
+                      '0 0 5px rgba(201,169,110,0.18)',
+                    ],
               }}
-              transition={{ duration: 3.4, repeat: Infinity, ease: 'easeInOut' }}
+              transition={{ duration: 3.4, repeat: aiDrawerOpen ? 0 : Infinity, ease: 'easeInOut' }}
               className={cn(
                 'relative size-control-sm rounded-lg flex items-center justify-center transition-colors',
-                'bg-casa-gold/15 hover:bg-casa-gold/30 text-casa-gold',
+                aiDrawerOpen
+                  ? 'bg-casa-gold text-casa-navy font-bold ring-2 ring-casa-gold/60'
+                  : 'bg-casa-gold/15 hover:bg-casa-gold/30 text-casa-gold',
               )}
-              title="Talk to Casa AI"
-              aria-label="Talk to Casa AI"
+              title={aiDrawerOpen ? 'Close Copilot' : 'Talk to Copilot'}
+              aria-label={aiDrawerOpen ? 'Close Copilot' : 'Talk to Copilot'}
+              aria-expanded={aiDrawerOpen}
             >
-              <Sparkles size={15} strokeWidth={1.8} />
-              <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-casa-gold text-casa-navy flex items-center justify-center ring-2 ring-casa-navy">
+              <Sparkles size={15} strokeWidth={aiDrawerOpen ? 2.2 : 1.8} />
+              <span className={cn(
+                'absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full flex items-center justify-center ring-2 ring-casa-navy',
+                aiDrawerOpen ? 'bg-casa-navy text-white' : 'bg-casa-gold text-casa-navy',
+              )}>
                 <Mic size={7} strokeWidth={2.5} />
               </span>
             </motion.button>

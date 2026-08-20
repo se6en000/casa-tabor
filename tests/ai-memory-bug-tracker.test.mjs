@@ -2,21 +2,16 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
-test('memory and bug settings have dedicated canonical destinations', () => {
+test('memory settings has a dedicated canonical destination', () => {
   const aiSettings = readFileSync(new URL('../src/pages/AISettingsPage.tsx', import.meta.url), 'utf8')
   const memorySettings = readFileSync(new URL('../src/pages/MemorySettingsPage.tsx', import.meta.url), 'utf8')
-  const bugSettings = readFileSync(new URL('../src/pages/BugTrackerSettingsPage.tsx', import.meta.url), 'utf8')
   const routes = readFileSync(new URL('../src/components/shared/AnimatedRoutes.tsx', import.meta.url), 'utf8')
   const shell = readFileSync(new URL('../src/components/settings/SettingsShell.tsx', import.meta.url), 'utf8')
   assert.doesNotMatch(aiSettings, /ai_memory_observations/)
   assert.match(memorySettings, /create_memory/)
   assert.match(memorySettings, /Food & meal preferences/)
-  assert.match(bugSettings, /ai_memory_capture_config/)
-  assert.match(bugSettings, /from\('ai_bug_reports'\)/)
   assert.match(routes, /path="memory"/)
-  assert.match(routes, /path="bug-tracker"/)
   assert.match(shell, /\/settings\/memory/)
-  assert.match(shell, /\/settings\/bug-tracker/)
 })
 
 test('supabase migration defines memory and bug report tables with RLS', () => {

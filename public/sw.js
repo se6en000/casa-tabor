@@ -22,11 +22,11 @@ self.addEventListener('push', function (event) {
     icon: icon || '/icons/icon-192.png',
     badge: '/icons/icon-192.png',
     tag: tag || 'casa-tabor-default',
-    renotify: true,
+    renotify: payload.renotify ?? false,
     requireInteraction: false,
     actions,
     data: { url, eventId, prepItemId, ...data },
-    vibrate: [200, 100, 200],
+    vibrate: payload.vibrate ?? [100],
   };
 
   event.waitUntil(self.registration.showNotification(title, options));

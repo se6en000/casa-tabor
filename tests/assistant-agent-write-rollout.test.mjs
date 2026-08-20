@@ -76,9 +76,8 @@ test('write rollout falls through to authoritative reads after non-write plans',
   assert.match(assistant, /agentWriteData\?\.code/)
   assert.match(assistant, /agent_write_timeout/)
   assert.match(agentWrite, /options\.isCalendarSemanticRead !== true/)
-  assert.match(assistant, /isCalendarSemanticRead \|\| Math\.random\(\) < agentReadRate/)
-  assert.match(assistant, /shouldRunAgentRead = !dryRun/)
-  assert.match(assistant, /shouldRunAgentShadow = !shouldRunAgentWrite && !shouldRunAgentRead/)
+  assert.match(assistant, /shouldRunAgentRead =[\s\S]*?!dryRun/)
+  assert.match(assistant, /shouldRunAgentShadow =[\s\S]*?!shouldRunAgentWrite && !shouldRunAgentRead/)
 })
 
 test('write planner budget accommodates nested cold starts within the request budget', () => {

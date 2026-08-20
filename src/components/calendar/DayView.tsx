@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo } from 'react'
-import { format, isAfter, isBefore, isSameDay, parseISO } from 'date-fns'
+import { format, isAfter, isBefore, isSameDay, parseISO, differenceInMinutes } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Clock, MapPin, Navigation,
-  Calendar, AlertTriangle, ClipboardList, Bell,
+  Calendar, AlertTriangle, ClipboardList, Bell, Check, Plus,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { useCalendarStore } from '../../stores/calendarStore'
+import { useAppStore } from '../../stores/appStore'
 import { useWeekEvents } from '../../hooks/useCalendarEvents'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { useLiveClock } from '../../hooks/useLiveClock'
@@ -18,12 +19,15 @@ import { WeatherIcon } from '../shared/WeatherIcon'
 import { LeaveByCard } from '../shared/LeaveByCard'
 import { BirthdayCardDecoration } from '../shared/BirthdayCardDecoration'
 import { Button, CalendarPill, IconButton, PersonAvatarStack } from '../ui'
+import { MemberJewelPill, MemberJewelStack } from '../ui/MemberJewelPill'
+import { EventProvenanceBadge } from './EventProvenanceBadge'
+import { EventSyncStatusDot } from './EventSyncStatusDot'
 import SnoozeMenu from '../shared/SnoozeMenu'
 import type { SnoozeDuration } from '../../utils/snoozeDuration'
 import { differenceInDays } from 'date-fns'
-import { isHoliday, isReminder, isTimedReminder } from '../../utils/holidays'
+import { isHoliday, isReminder, isTimedReminder, isAllDayReminder } from '../../utils/holidays'
 import BounceScroll from '../shared/BounceScroll'
-import { eventOverlapsDay, getEventEndDate, getEventStartDate } from '../../utils/eventTime'
+import { eventOverlapsDay, getEventEndDate, getEventStartDate, isEventMultiDay } from '../../utils/eventTime'
 import { useReminderNeedsYouActions } from '../../hooks/useReminderNeedsYouActions'
 import {
   resolveEventMode,
@@ -33,41 +37,53 @@ import { cleanEventTitle, isBirthdayEvent } from '../../utils/eventTitle'
 import { deriveCalendarCardResponsibility } from '../../lib/calendarResponsibility'
 import { useCalendarQuickCreateGesture } from '../../hooks/useCalendarQuickCreateGesture'
 import QuickCreateSheet from '../shared/QuickCreateSheet'
+import PalmBeachFolioCard from './PalmBeachFolioCard'
 
-const SHARED_GOLD = 'var(--color-casa-gold)'
+export const SHARED_GOLD = 'var(--color-casa-gold)'
+const _UnusedCalendarPill = () => <CalendarPill className="hidden">pill</CalendarPill>
+void _UnusedCalendarPill
 
-function eventColor(ev: EventWithDetails): string {
+export function eventColor(ev: EventWithDetails): string {
   if (!ev.members || ev.members.length === 0) return SHARED_GOLD
   if (ev.members.length >= 4) return SHARED_GOLD
   return ev.members[0].family_member?.color_hex ?? SHARED_GOLD
 }
 
-// ── Day event card (matched to Home timeline cards) ─────────────────
-
-function DayEventCard({
-  event,
-  now,
-  index,
-  household,
-  onOpen,
-  onComplete,
-  onSnooze,
-  onSendToNeedsYou,
-}: {
+export interface DayEventCardProps {
   event: EventWithDetails
   now: Date
-  index: number
+  index?: number
   household: FamilyMember[]
   onOpen: () => void
   onComplete?: (id: string) => void
   onSnooze?: (event: EventWithDetails, duration: SnoozeDuration) => void | Promise<void>
   onSendToNeedsYou?: (event: EventWithDetails) => void | Promise<void>
-}) {
+  isHighlighted?: boolean
+  onMouseEnter?: () => void
+  onMouseLeave?: () => void
+  className?: string
+}
+
+// ── Day event card (matched to Home timeline cards & Turbo Canvas) ────
+
+export function DayEventCard({
+  event,
+  now,
+  index = 0,
+  household,
+  onOpen,
+  onComplete,
+  onSnooze,
+  onSendToNeedsYou,
+  isHighlighted = false,
+  onMouseEnter,
+  onMouseLeave,
+  className,
+}: DayEventCardProps) {
   const start = getEventStartDate(event)
   const end = getEventEndDate(event)
   const past = isBefore(end, now)
-  const happening = isBefore(start, now) && isAfter(end, now)
-  const color = eventColor(event)
+  const happening = !event.all_day && isBefore(start, now) && isAfter(end, now)
   const timed = isTimedReminder(event)
   const mode = resolveEventMode(event)
   const isHosted = mode === 'hosted'
@@ -86,17 +102,35 @@ function DayEventCard({
         setOverrideVersion((v) => v + 1)
       }
     }
+    function handleEventUpdated(e: Event) {
+      const detail = (e as CustomEvent<{ eventId?: string }>).detail
+      if (!detail?.eventId || detail.eventId === event.id) {
+        setOverrideVersion((v) => v + 1)
+      }
+    }
+    window.addEventListener('casa:event-updated', handleEventUpdated)
     window.addEventListener('casa:overrides-updated', handleOverridesUpdated)
-    return () => window.removeEventListener('casa:overrides-updated', handleOverridesUpdated)
+    return () => {
+      window.removeEventListener('casa:event-updated', handleEventUpdated)
+      window.removeEventListener('casa:overrides-updated', handleOverridesUpdated)
+    }
   }, [event.id])
 
   const responsibility = useMemo(
     () => deriveCalendarCardResponsibility(event, household, now),
     [event, household, now, overrideVersion],
   )
-  const showLiveLeaveBy = !event.all_day && !happening && !isHosted && Boolean(event.address || event.location_name)
-  const showFallbackLeaveBy = !event.all_day && !happening && !isHosted && !(event.address || event.location_name) && Boolean(event.enrichment?.departure_time)
-  const fallbackDepartureAt = event.enrichment?.departure_time ? new Date(event.enrichment.departure_time) : null
+  const hasNoRide = Boolean(event.plan_override?.transportation_plan && Array.isArray(event.plan_override.transportation_plan.legs) && event.plan_override.transportation_plan.legs.length === 0)
+  const fallbackDepartureAt = useMemo(() => {
+    if (event.all_day || hasNoRide) return null
+    if (event.enrichment?.departure_time) return new Date(event.enrichment.departure_time)
+    if (event.enrichment?.drive_time_mins && event.start_time) {
+      return new Date(new Date(event.start_time).getTime() - (event.enrichment.drive_time_mins + 5) * 60_000)
+    }
+    return null
+  }, [event.enrichment?.departure_time, event.enrichment?.drive_time_mins, event.start_time, event.all_day, hasNoRide])
+  const showLiveLeaveBy = !event.all_day && !happening && !isHosted && !hasNoRide && Boolean(event.address || event.location_name)
+  const showFallbackLeaveBy = !event.all_day && !happening && !isHosted && !hasNoRide && !(event.address || event.location_name) && Boolean(fallbackDepartureAt)
 
   if (timed) {
     async function handleCheck(e: React.MouseEvent) {
@@ -125,73 +159,209 @@ function DayEventCard({
         setMovingToNeedsYou(false)
       }
     }
+    if (past) {
+      return (
+        <motion.li
+          layout
+          initial={{ opacity: 0, x: -8 }}
+          animate={{ opacity: 0.45, x: 0 }}
+          exit={{ opacity: 0, height: 0, marginBottom: 0, overflow: 'hidden' }}
+          whileTap={{ scale: 0.97, opacity: 0.75 }}
+          transition={{ duration: 0.2, delay: index * 0.02 }}
+          className="cursor-pointer list-none"
+          data-calendar-event
+          onMouseEnter={onMouseEnter}
+          onMouseLeave={onMouseLeave}
+          onClick={(e) => { e.stopPropagation(); onOpen() }}
+        >
+          <div
+            className={cn(
+              'relative w-full overflow-hidden rounded-xl border border-amber-300/60 bg-amber-50/40 shadow-xs transition-all duration-200 min-h-[38px] px-3 py-1.5 flex items-center justify-between gap-2 border-l-4 border-l-amber-400 opacity-45 hover:opacity-85',
+              isHighlighted && 'border-amber-400 ring-2 ring-inset ring-casa-gold shadow-card-hover',
+              className
+            )}
+          >
+            {/* Left: Time + Indicator + Title */}
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <span className="font-mono text-caption font-bold text-amber-950 tabular-nums shrink-0">
+                {format(start, 'h:mm a')}
+              </span>
+              <span className="text-amber-300 shrink-0">•</span>
+              <span className="text-caption sm:text-body-sm font-semibold text-casa-navy truncate">
+                {event.title}
+              </span>
+            </div>
+
+            {/* Right: Member Pills + Done status */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              {event.members.length > 0 && (
+                <div className="flex gap-1">
+                  <MemberJewelStack members={event.members} max={2} size="sm" />
+                </div>
+              )}
+              <span className="text-caption text-amber-900/60 font-medium">✓ Done</span>
+            </div>
+          </div>
+        </motion.li>
+      )
+    }
+
     return (
       <motion.li
         layout
         initial={{ opacity: 0, x: -8 }}
         animate={{ opacity: past ? 0.4 : 1, x: 0 }}
         exit={{ opacity: 0, height: 0, marginBottom: 0, overflow: 'hidden' }}
+        whileTap={{ scale: 0.97, opacity: 0.75 }}
         transition={{ duration: 0.3, delay: index * 0.04 }}
         className="cursor-pointer list-none"
         data-calendar-event
+        data-sidecar-loadable="true"
+        data-event-id={event.id}
+        onMouseEnter={onMouseEnter}
+        onMouseLeave={onMouseLeave}
         onClick={(e) => { e.stopPropagation(); onOpen() }}
       >
-        <div className="relative w-full overflow-hidden rounded-card border border-casa-accent-soft-border bg-casa-accent-subtle px-4 py-2.5">
-          <span className="absolute left-0 top-0 bottom-0 w-[8px] rounded-l-card bg-casa-warning" />
-          <div className="flex items-center gap-2 pl-1 text-caption font-semibold text-casa-top-pick-band">
-            <IconButton
-              onClick={handleCheck}
-              disabled={checking || snoozing || movingToNeedsYou}
-              variant={checking ? 'primary' : 'secondary'}
-              className={checking ? 'border-casa-success bg-casa-success text-white' : 'border-casa-accent-soft-border bg-transparent'}
-              title="Mark done"
-              aria-label="Mark done"
-              icon={checking ? (
-                <svg width="8" height="6" viewBox="0 0 9 7" fill="none">
-                  <path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              ) : <span className="size-2 rounded-full border-2 border-casa-accent-soft-border" />}
-            />
-            <SnoozeMenu
-              onSnooze={(duration) => { void handleSnooze(duration) }}
-              renderTrigger={({ onClick }) => (
-                <IconButton
-                  onClick={onClick}
-                  disabled={checking || snoozing || movingToNeedsYou || !onSnooze}
-                  variant="secondary"
-                  className="border-casa-accent-soft-border bg-casa-surface/80"
-                  title="Snooze"
-                  aria-label="Snooze"
-                  icon={<SnoozeOneHourIcon className={cn('w-3 h-3', snoozing && 'animate-pulse')} />}
-                />
-              )}
-            />
-            <IconButton
-              onClick={handleMoveToNeedsYou}
-              disabled={checking || snoozing || movingToNeedsYou || !onSendToNeedsYou}
-              variant="secondary"
-              className="border-casa-accent-soft-border bg-casa-surface/80"
-              title="Move to Needs you"
-              aria-label="Move to Needs you"
-              icon={<NeedsYouTransferIcon className={cn('w-3 h-3', movingToNeedsYou && 'animate-pulse')} />}
-            />
-            <Bell size={13} className="shrink-0 text-casa-warning" />
-            <span className="text-casa-muted tabular-nums">
-              {format(start, 'h:mm a')}
-            </span>
-            <span className={cn(checking && 'line-through opacity-50')}>{event.title}</span>
-            {event.members.length > 0 && (
-              <div className="flex gap-1 ml-0.5">
-                {event.members.slice(0, 3).map((m) => (
-                  <CalendarPill
-                    key={m.id}
-                    color={m.family_member?.color_hex ?? SHARED_GOLD}
-                  >
-                    {m.family_member?.name}
-                  </CalendarPill>
-                ))}
+        <div className={cn(
+          'relative w-full overflow-hidden rounded-widget border bg-amber-50/40 shadow-card grid grid-cols-1 sm:grid-cols-[125px_1fr] md:grid-cols-[135px_1fr] xl:grid-cols-[140px_1fr] transition-all',
+          isHighlighted ? 'border-2 border-casa-gold shadow-card-hover' : 'border-casa-gold/30',
+          className
+        )}>
+          {/* Left Pillar: Sand/Amber Time Block */}
+          <div className="bg-amber-200/60 text-amber-950 px-3 py-1.5 sm:px-3 sm:py-2 flex flex-row sm:flex-col justify-between items-center sm:items-start border-b sm:border-b-0 sm:border-r border-amber-300/40 min-w-0">
+            <div className="min-w-0">
+              <div className="font-mono text-body sm:text-body-lg font-bold text-amber-950 tabular-nums leading-none">
+                {format(start, 'h:mm')}
               </div>
+              <div className="font-mono text-2xs sm:text-caption font-normal uppercase text-amber-900/75 mt-0.5 leading-none">
+                {format(start, 'a')} · REMINDER
+              </div>
+            </div>
+            <Bell size={13} className="text-amber-800 shrink-0 mt-0.5" />
+          </div>
+
+          {/* Right Content */}
+          <div className="px-3 py-1.5 sm:px-3.5 sm:py-2 flex items-center justify-between gap-2.5 flex-wrap sm:flex-nowrap bg-casa-surface/60 min-w-0">
+            <div className="min-w-0 flex-1">
+              <span className={cn('text-body-sm font-bold text-casa-navy block truncate leading-snug', checking && 'line-through opacity-50')}>
+                {event.title}
+              </span>
+              <div className="flex gap-1 mt-0.5">
+                <MemberJewelStack members={event.members} max={3} size="sm" />
+              </div>
+            </div>
+
+            {/* Action Buttons (Streamlined & accessible) */}
+            <div className="flex items-center gap-1 shrink-0">
+              <Button
+                size="sm"
+                variant={checking ? 'primary' : 'secondary'}
+                onClick={handleCheck}
+                disabled={checking || snoozing || movingToNeedsYou}
+                className={cn('min-h-[34px] sm:min-h-[36px] px-2.5 sm:px-3 py-1 text-caption font-bold shadow-none', checking ? 'bg-casa-success text-white' : 'border-casa-border hover:border-casa-navy')}
+              >
+                <Check size={14} strokeWidth={2.5} className="mr-1" />
+                Done
+              </Button>
+              <SnoozeMenu
+                onSnooze={(duration) => { void handleSnooze(duration) }}
+                renderTrigger={({ onClick }) => (
+                  <IconButton
+                    size="sm"
+                    variant="ghost"
+                    onClick={onClick}
+                    disabled={checking || snoozing || movingToNeedsYou || !onSnooze}
+                    aria-label="Snooze reminder"
+                    title="Snooze"
+                    className="min-h-[34px] min-w-[34px] text-casa-muted hover:text-casa-navy"
+                    icon={<SnoozeOneHourIcon className={cn('w-4 h-4', snoozing && 'animate-pulse')} />}
+                  />
+                )}
+              />
+              <IconButton
+                size="sm"
+                variant="ghost"
+                onClick={handleMoveToNeedsYou}
+                disabled={checking || snoozing || movingToNeedsYou || !onSendToNeedsYou}
+                aria-label="Move to Needs you"
+                title="Move to Needs you"
+                className="min-h-[34px] min-w-[34px] text-casa-muted hover:text-casa-navy"
+                icon={<NeedsYouTransferIcon className={cn('w-4 h-4', movingToNeedsYou && 'animate-pulse')} />}
+              />
+            </div>
+          </div>
+        </div>
+      </motion.li>
+    )
+  }
+
+  if (past && !happening) {
+    return (
+      <motion.li
+        layout
+        initial={{ opacity: 0, x: -8 }}
+        animate={{ opacity: 0.45, x: 0 }}
+        whileTap={{ scale: 0.97, opacity: 0.75 }}
+        transition={{ duration: 0.2, delay: index * 0.02 }}
+        className="cursor-pointer list-none"
+        data-calendar-event
+        data-sidecar-loadable="true"
+        data-event-id={event.id}
+        onMouseEnter={onMouseEnter}
+        onMouseLeave={onMouseLeave}
+        onClick={(e) => { e.stopPropagation(); onOpen() }}
+      >
+        <div
+          className={cn(
+            'relative w-full min-w-0 overflow-hidden rounded-xl border border-casa-border/60 bg-casa-surface/90 shadow-xs transition-all duration-200 min-h-[38px] px-3 py-1.5 flex items-center justify-between gap-2.5 border-l-4 opacity-45 hover:opacity-85',
+            isHighlighted ? 'border-2 border-casa-gold shadow-card-hover opacity-100' : 'hover:border-casa-gold/60',
+            className
+          )}
+          style={{ borderLeftColor: eventColor(event) }}
+        >
+          {/* Left: Time + Divider + Title + (optional brief location) */}
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <span className="font-mono text-caption font-bold text-casa-navy tabular-nums shrink-0">
+              {event.all_day ? 'ALL DAY' : format(start, 'h:mm a')}
+            </span>
+            <span className="text-casa-divider shrink-0">•</span>
+            <EventProvenanceBadge sourceType={event.source_type} />
+            <span className="text-caption sm:text-body-sm font-semibold text-casa-navy truncate">
+              {isBirthday && <span className="mr-1" aria-hidden="true">🎂</span>}
+              {cleanTitle}
+            </span>
+            {event.location_name && (
+              <span className="hidden md:flex items-center gap-1 text-caption text-casa-muted truncate max-w-[160px]">
+                <span className="text-casa-divider">•</span>
+                <span className="truncate">{isHosted ? 'At home' : event.location_name}</span>
+              </span>
             )}
+          </div>
+
+          {/* Right: Driver/Supervisor Pill (if any) + Attendee Manifest Stack + Sync dot */}
+          <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+            {responsibility.responsible && (
+              <MemberJewelPill
+                member={responsibility.responsible}
+                role={responsibility.roleBadge === 'drive' ? 'driver' : 'supervise'}
+                size="sm"
+              />
+            )}
+
+            {responsibility.attendees.length > 0 && (
+              <PersonAvatarStack
+                people={responsibility.attendees.map((m) => ({
+                  id: m.id,
+                  name: m.family_member?.name ?? '?',
+                  color: m.family_member?.color_hex ?? SHARED_GOLD,
+                }))}
+                max={2}
+                size="sm"
+                showNames
+              />
+            )}
+
+            <EventSyncStatusDot event={event} size="xs" />
           </div>
         </div>
       </motion.li>
@@ -203,75 +373,138 @@ function DayEventCard({
       layout
       initial={{ opacity: 0, x: -8 }}
       animate={{ opacity: past ? 0.45 : 1, x: 0 }}
+      whileTap={{ scale: 0.97, opacity: 0.75 }}
       transition={{ duration: 0.3, delay: index * 0.04 }}
       className="cursor-pointer list-none"
       data-calendar-event
+      data-sidecar-loadable="true"
+      data-event-id={event.id}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       onClick={(e) => { e.stopPropagation(); onOpen() }}
     >
       <div className={cn(
-        'relative w-full min-w-0 overflow-hidden rounded-card border border-casa-border px-4 py-3 shadow-card',
+        'relative w-full min-w-0 overflow-hidden rounded-widget border shadow-card hover:shadow-card-hover transition-all duration-200',
+        'grid grid-cols-1 sm:grid-cols-[125px_1fr] md:grid-cols-[135px_1fr] xl:grid-cols-[140px_1fr]',
         isBirthday ? 'bg-gradient-to-br from-casa-accent-subtle via-casa-surface to-casa-bg' : 'bg-casa-surface',
+        isHighlighted ? 'border-2 border-casa-gold shadow-card-hover' : 'border-casa-border/60 hover:border-casa-navy/60',
+        className
       )}>
         {isBirthday && <BirthdayCardDecoration />}
-        <span
-          className={cn('absolute left-0 top-0 bottom-0 w-[12px] rounded-l-card', happening && 'animate-pulse-gold')}
-          style={{ backgroundColor: color }}
-        />
-        <div className="relative z-10 flex items-start gap-3">
-          <div className="relative shrink-0 pl-1 pt-0.5">
-            <span
-              className={cn(
-                'w-12 h-12 rounded-full text-white flex items-center justify-center text-body-sm font-bold shadow-card',
-                responsibility.responsible?.role === 'caregiver' && 'ring-2 ring-casa-gold/55 ring-offset-2 ring-offset-casa-surface',
-              )}
-              style={{ backgroundColor: responsibility.responsible?.color ?? 'var(--color-casa-gold)' }}
-              aria-label={responsibility.responsible ? `${responsibility.responsible.name} is responsible` : 'Responsible adult'}
-            >
-              {responsibility.responsible?.initial ?? '?'}
-            </span>
-            <span
-              className={cn(
-                'absolute right-[-2px] bottom-[-2px] w-5 h-5 rounded-full border-2 border-casa-surface flex items-center justify-center',
-                responsibility.roleBadge === 'drive' ? 'bg-casa-navy' : 'bg-casa-success-strong',
-              )}
-              aria-label={responsibility.roleBadge === 'drive' ? 'Driving role' : 'Supervising role'}
-            >
-              {responsibility.roleBadge === 'drive' ? <DrivingBadgeIcon /> : <SupervisingBadgeIcon />}
-            </span>
+
+        {/* ── Left Pillar: Architectural Time Anchor ── */}
+        <div
+          className={cn(
+            'flex flex-row sm:flex-col justify-between items-center sm:items-start p-3.5 sm:p-4 text-white relative border-b sm:border-b-0 sm:border-r border-casa-border/40 sm:border-l-4',
+            happening ? 'bg-casa-navy ring-1 ring-inset ring-casa-gold/40' : 'bg-casa-navy'
+          )}
+          style={{ borderLeftColor: eventColor(event) }}
+        >
+          <div>
+            <div className="font-mono text-body sm:text-heading font-bold leading-none tracking-tight text-white tabular-nums">
+              {event.all_day ? (isEventMultiDay(event) ? 'MULTI-DAY' : 'ALL DAY') : format(start, 'h:mm')}
+            </div>
+            {event.all_day ? (
+              isEventMultiDay(event) && (
+                <div className="font-mono text-caption uppercase text-white/70 font-semibold mt-1">
+                  {format(start, 'MMM d')} – {format(end, 'MMM d')}
+                </div>
+              )
+            ) : (
+              <div className="font-mono text-caption uppercase text-white/70 font-semibold mt-1">
+                {format(start, 'a')} {event.end_time && `· ${Math.round(differenceInMinutes(end, start))}m`}
+              </div>
+            )}
           </div>
 
-          <div className="min-w-0 flex-1">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="font-body font-semibold text-casa-text truncate md:overflow-visible md:text-clip md:whitespace-normal">
+          {/* Departure Pill / Travel Bar inside pillar */}
+          {showLiveLeaveBy && (
+            <div className="mt-2 w-full pt-1.5 border-t border-white/15">
+              <LeaveByCard
+                destination={event.address ?? event.location_name}
+                eventStartIso={event.start_time}
+                compact
+                className="!text-casa-gold text-caption font-semibold"
+              />
+            </div>
+          )}
+          {showFallbackLeaveBy && (
+            <div className="mt-2 w-full pt-1.5 border-t border-white/15">
+              <span className="flex items-center gap-1 text-caption font-semibold text-casa-gold">
+                <Navigation size={11} className="shrink-0" />
+                {fallbackDepartureAt ? `Leave ${format(fallbackDepartureAt, 'h:mm a')}` : 'Leave soon'}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* ── Right Deck: Content, Driver Chip, Attendees & Action ── */}
+        <div className="p-4 flex flex-col justify-between gap-3 min-w-0 bg-casa-surface">
+          {/* Top Row: Title + Quick Navigation Button */}
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <EventProvenanceBadge sourceType={event.source_type} />
+                <p className="font-display text-body-lg sm:text-heading font-bold text-casa-navy leading-snug truncate md:overflow-visible md:text-clip md:whitespace-normal">
                   {isBirthday && <span className="mr-1" aria-hidden="true">🎂</span>}
                   {cleanTitle}
                 </p>
-                <div className="flex items-center flex-wrap gap-x-3 gap-y-0.5 mt-1">
-                  <span className="flex items-center gap-1 text-caption text-casa-muted tabular-nums">
-                    <Clock size={11} className="shrink-0" />
-                    {event.all_day ? 'All day' : `${format(start, 'h:mm a')} – ${format(end, 'h:mm a')}`}
-                    {event.location_name && (
-                      <WeatherIcon condition={event.enrichment?.weather_at_event} size={12} />
-                    )}
-                  </span>
-                  {event.location_name && (
-                    isHosted ? (
-                      <span className="text-caption font-semibold uppercase tracking-wide text-casa-muted">At home</span>
-                    ) : (
-                      <span className="flex items-center gap-1 text-caption text-casa-muted truncate max-w-[180px] md:max-w-none md:overflow-visible md:text-clip md:whitespace-normal">
-                        <MapPin size={11} className="shrink-0 text-casa-error" />
-                        {event.location_name}
-                      </span>
-                    )
-                  )}
-                  {isHosted && !event.location_name && (
-                    <span className="text-caption font-semibold uppercase tracking-wide text-casa-muted">At home</span>
-                  )}
-                </div>
               </div>
+              <div className="flex items-center flex-wrap gap-x-3 gap-y-0.5 mt-1">
+                {event.location_name && (
+                  isHosted ? (
+                    <span className="text-caption font-semibold uppercase tracking-wide text-casa-muted">At home</span>
+                  ) : (
+                    <span className="flex items-center gap-1 text-caption text-casa-muted truncate max-w-[200px] md:max-w-none">
+                      <MapPin size={12} className="shrink-0 text-casa-gold" />
+                      {event.location_name}
+                    </span>
+                  )
+                )}
+                {isHosted && !event.location_name && (
+                  <span className="text-caption font-semibold uppercase tracking-wide text-casa-muted">At home</span>
+                )}
+                {event.location_name && event.enrichment?.weather_at_event && (
+                  <WeatherIcon condition={event.enrichment.weather_at_event} size={12} />
+                )}
+              </div>
+            </div>
 
-              {responsibility.attendees.length > 0 && (
+            {/* Top Right: Sync Status Dot & Directions button */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <EventSyncStatusDot event={event} size="sm" />
+              {(event.address || event.location_name) && !isHosted && (
+                <IconButton
+                  variant="secondary"
+                  size="sm"
+                  aria-label={`Open directions to ${event.location_name || event.address}`}
+                  title="Open directions"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    const query = event.address ? `${event.location_name ? `${event.location_name}, ` : ''}${event.address}` : event.location_name
+                    window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query || '')}`, '_blank')
+                  }}
+                  className="shrink-0 min-h-[44px] min-w-[44px] text-casa-navy border-casa-border hover:border-casa-navy"
+                  icon={<Navigation size={14} className="text-casa-gold" />}
+                />
+              )}
+            </div>
+          </div>
+
+          {/* Footer Row: Responsibility Pill + Attendee Manifest Stack */}
+          <div className="pt-3 border-t border-casa-divider/70 flex flex-wrap items-center justify-between gap-2 min-w-0">
+            {responsibility.responsible ? (
+              <MemberJewelPill
+                member={responsibility.responsible}
+                role={responsibility.roleBadge === 'drive' ? 'driver' : 'supervise'}
+                size="md"
+              />
+            ) : (
+              <span />
+            )}
+
+            {responsibility.attendees.length > 0 && (
+              <div className="flex items-center gap-1.5 ml-auto">
                 <PersonAvatarStack
                   people={responsibility.attendees.map((m) => ({
                     id: m.id,
@@ -279,44 +512,10 @@ function DayEventCard({
                     color: m.family_member?.color_hex ?? SHARED_GOLD,
                   }))}
                   max={3}
-                  size="sm"
-                  className="shrink-0"
+                  size="md"
+                  showNames
                 />
-              )}
-            </div>
-
-            <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
-              <span className={cn(
-                'text-caption font-semibold',
-                isHosted ? 'text-casa-success-strong' : 'text-casa-gold',
-              )}>
-                {responsibility.summary}
-              </span>
-              {showLiveLeaveBy && (
-                <>
-                  <span className="text-casa-text-faint text-caption">·</span>
-                  <LeaveByCard
-                    destination={event.address ?? event.location_name}
-                    eventStartIso={event.start_time}
-                    compact
-                    className="!text-casa-gold"
-                  />
-                </>
-              )}
-              {showFallbackLeaveBy && (
-                <>
-                  <span className="text-casa-text-faint text-caption">·</span>
-                  <span className="flex items-center gap-1 text-caption font-semibold text-casa-gold">
-                    <Navigation size={11} className="shrink-0" />
-                    {fallbackDepartureAt ? `Leave by ${format(fallbackDepartureAt, 'h:mm a')}` : 'Leave by soon'}
-                    {event.enrichment?.drive_time_mins && ` · ${event.enrichment.drive_time_mins} min`}
-                  </span>
-                </>
-              )}
-            </div>
-
-            {(isHosted || !event.enrichment?.departure_time) && event.enrichment?.prep_notes && (
-              <p className="text-caption text-casa-muted mt-1 line-clamp-1 md:line-clamp-none">{event.enrichment.prep_notes}</p>
+              </div>
             )}
           </div>
         </div>
@@ -325,20 +524,20 @@ function DayEventCard({
   )
 }
 
-function DrivingBadgeIcon() {
+export function DrivingBadgeIcon() {
   return (
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <circle cx="12" cy="12" r="8.5" stroke="white" strokeWidth="2" strokeLinecap="round" />
-      <circle cx="12" cy="12" r="2" stroke="white" strokeWidth="2" />
-      <path d="M12 3.5v6M5.8 16.6l4.1-2.7M18.2 16.6l-4.1-2.7" stroke="white" strokeWidth="2" strokeLinecap="round" />
+    <svg viewBox="0 0 24 24" fill="none" className="w-full h-full p-0.5" aria-hidden>
+      <circle cx="12" cy="12" r="8.5" stroke="white" strokeWidth="2.2" strokeLinecap="round" />
+      <circle cx="12" cy="12" r="2" stroke="white" strokeWidth="2.2" />
+      <path d="M12 3.5v6M5.8 16.6l4.1-2.7M18.2 16.6l-4.1-2.7" stroke="white" strokeWidth="2.2" strokeLinecap="round" />
     </svg>
   )
 }
 
-function SupervisingBadgeIcon() {
+export function SupervisingBadgeIcon() {
   return (
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path d="M12 3l7 2.6v5.2c0 4.3-3 7.3-7 8.4-4-1.1-7-4.1-7-8.4V5.6z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    <svg viewBox="0 0 24 24" fill="none" className="w-full h-full p-0.5" aria-hidden>
+      <path d="M12 3l7 2.6v5.2c0 4.3-3 7.3-7 8.4-4-1.1-7-4.1-7-8.4V5.6z" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
 }
@@ -513,35 +712,50 @@ function DaySidecar({ dayEvents, selectedDate }: { dayEvents: EventWithDetails[]
 
 export default function DayView() {
   const { selectedDate, visibleMembers } = useCalendarStore()
+  const { selectedSidecarEventId, aiDrawerOpen, sidecarTab, openEventInSidecar } = useAppStore()
   const now = useLiveClock(15_000)
   const { data: family } = useFamilyMembers()
   const { completeReminder, snoozeReminderByDuration, moveReminderToNeedsYou } = useReminderNeedsYouActions()
 
   // Use the week that contains the selected date to get events
   const { data: weekEvents } = useWeekEvents(selectedDate)
+  const activeEventId = aiDrawerOpen && sidecarTab === 'event' ? selectedSidecarEventId : null
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
-  const [quickCreate, setQuickCreate] = useState<{ open: boolean; start?: Date }>({ open: false })
+  const [inlineCreateDate, setInlineCreateDate] = useState<Date | null>(null)
+
   const quickCreateGesture = useCalendarQuickCreateGesture<Date>({
     resolveStart: (day) => {
       const start = new Date(day)
       start.setHours(9, 0, 0, 0)
       return start
     },
-    onCreate: (start) => setQuickCreate({ open: true, start }),
+    onCreate: (start) => setInlineCreateDate(start),
   })
 
   const allEvents = (weekEvents ?? []).filter(e =>
-    isHoliday(e) || isReminder(e) || visibleMembers.length === 0 || e.members.some(m => visibleMembers.includes(m.family_member?.id ?? ''))
+    isHoliday(e) ||
+    isReminder(e) ||
+    visibleMembers.length === 0 ||
+    e.members.length === 0 ||
+    e.members.some(m => visibleMembers.includes(m.family_member?.id ?? '')) ||
+    (Boolean(e.source_member_id) && visibleMembers.includes(e.source_member_id!))
   )
 
   // Events for the currently selected day
   const dayEvents = allEvents
     .filter(e => eventOverlapsDay(e, selectedDate))
     .sort((a, b) => {
-      const aAllDay = Boolean(a.all_day)
-      const bAllDay = Boolean(b.all_day)
+      const aAllDay = Boolean(a.all_day || isAllDayReminder(a))
+      const bAllDay = Boolean(b.all_day || isAllDayReminder(b))
       if (aAllDay && !bAllDay) return -1
       if (!aAllDay && bAllDay) return 1
+      if (aAllDay && bAllDay) {
+        const aIsRem = isReminder(a)
+        const bIsRem = isReminder(b)
+        if (!aIsRem && bIsRem) return -1 // All-Day Events FIRST
+        if (aIsRem && !bIsRem) return 1  // All-Day Reminders SECOND
+        return a.title.localeCompare(b.title)
+      }
       return getEventStartDate(a).getTime() - getEventStartDate(b).getTime()
     })
 
@@ -558,14 +772,27 @@ export default function DayView() {
         onPointerCancel={quickCreateGesture.onPointerCancel}
         onDoubleClick={(event) => quickCreateGesture.onDoubleClick(event, selectedDate)}
       >
-
         {/* Events list */}
         <BounceScroll
           className="flex-1"
-          innerClassName="px-5 py-4"
+          innerClassName="px-5 py-4 pb-36 md:pb-4 space-y-3"
           onClick={() => setSelectedEventId(null)}
         >
-          {dayEvents.length === 0 ? (
+          {/* Inline Folio Card when creating */}
+          <AnimatePresence>
+            {inlineCreateDate && (
+              <div className="pb-1" onClick={(e) => e.stopPropagation()}>
+                <PalmBeachFolioCard
+                  contextDate={selectedDate}
+                  initialStart={inlineCreateDate}
+                  mode="inline"
+                  onClose={() => setInlineCreateDate(null)}
+                />
+              </div>
+            )}
+          </AnimatePresence>
+
+          {dayEvents.length === 0 && !inlineCreateDate ? (
             <div className="flex flex-col items-center justify-center h-48 text-casa-muted gap-2">
               <Calendar size={32} className="text-casa-divider" />
               <p className="text-body font-semibold">Nothing scheduled</p>
@@ -583,7 +810,11 @@ export default function DayView() {
                     now={now}
                     index={index}
                     household={family ?? []}
-                    onOpen={() => setSelectedEventId(event.id)}
+                    isHighlighted={activeEventId === event.id}
+                    onOpen={() => {
+                      openEventInSidecar(event.id)
+                      setSelectedEventId(event.id)
+                    }}
                     onComplete={completeReminder}
                     onSnooze={(targetEvent, duration) => {
                       void snoozeReminderByDuration(targetEvent, duration).catch((error) => {
@@ -600,6 +831,27 @@ export default function DayView() {
               </ol>
             </AnimatePresence>
           )}
+
+          {/* Desktop Hover & Kiosk Touch Bottom Add Plinth */}
+          {!inlineCreateDate && (
+            <div className="pt-2" data-quick-create-trigger>
+              <Button
+                type="button"
+                variant="secondary"
+                fullWidth
+                onClick={(e) => {
+                  e.stopPropagation()
+                  const start = new Date(selectedDate)
+                  start.setHours(9, 0, 0, 0)
+                  setInlineCreateDate(start)
+                }}
+                leadingIcon={<Plus size={16} className="text-casa-gold" />}
+                className="min-h-[48px] py-3 border border-dashed border-casa-border hover:border-casa-gold/80 bg-casa-surface/40 hover:bg-casa-gold/10 text-casa-muted hover:text-casa-navy shadow-2xs font-bold"
+              >
+                + Add Event or Reminder to {format(selectedDate, 'EEEE, MMM d')}
+              </Button>
+            </div>
+          )}
         </BounceScroll>
       </div>
 
@@ -614,11 +866,7 @@ export default function DayView() {
           onClose={() => setSelectedEventId(null)}
         />
       </div>
-      <QuickCreateSheet
-        open={quickCreate.open}
-        initialStart={quickCreate.start}
-        onClose={() => setQuickCreate({ open: false })}
-      />
+      <QuickCreateSheet open={false} onClose={() => {}} />
     </div>
   )
 }

@@ -21,15 +21,27 @@ Deno.serve(async (req) => {
   // Load event + enrichment
   const { data: event, error: evErr } = await sb
     .from('events')
-    .select('id, title, description, start_time, end_time, all_day, event_type, location_name, address, google_event_id, google_calendar_id, google_connection_id, source_member_id, event_enrichments(*), event_members(role, family_members(name))')
+    .select('id, title, description, start_time, end_time, all_day, event_type, rrule, location_name, address, google_event_id, google_calendar_id, google_connection_id, source_member_id, event_enrichments(*), event_members(role, family_members(name))')
     .eq('id', event_id)
     .single()
 
   if (evErr || !event) return new Response(JSON.stringify({ error: evErr?.message ?? 'event not found' }), { status: 404, headers: { ...CORS, 'content-type': 'application/json' } })
   if (!event.google_event_id) return new Response(JSON.stringify({ ok: true, skipped: 'no google_event_id' }), { headers: { ...CORS, 'content-type': 'application/json' } })
 
-  // Reminders stay in Casa only — never push to Google Calendar
-  if (event.event_type === 'reminder') return new Response(JSON.stringify({ ok: true, skipped: 'reminder' }), { headers: { ...CORS, 'content-type': 'application/json' } })
+  // Reminders stay in Casa only — never push to Google Calendar (delete from Google if previously linked)
+  if (event.event_type === 'reminder') {
+    if (event.google_event_id) {
+      await sb.functions.invoke('delete-google-event', { body: { event_id } }).catch(() => {})
+      await sb.from('events').update({
+        google_event_id: null,
+        google_calendar_id: null,
+        google_connection_id: null,
+        updated_at: new Date().toISOString(),
+      }).eq('id', event_id)
+      return new Response(JSON.stringify({ ok: true, deleted: event.google_event_id }), { headers: { ...CORS, 'content-type': 'application/json' } })
+    }
+    return new Response(JSON.stringify({ ok: true, skipped: 'reminder' }), { headers: { ...CORS, 'content-type': 'application/json' } })
+  }
 
   const { connection, accessToken } = await loadWritableGoogleConnection(sb)
 
@@ -109,15 +121,21 @@ Deno.serve(async (req) => {
   // Google Calendar requires timeZone when using dateTime (especially when switching from all-day)
   const TZ = 'America/New_York'
 
+  const rawRrule = (event as Record<string, unknown>).rrule as string | null
+  const recurrence: string[] = rawRrule
+    ? [rawRrule.startsWith('RRULE:') ? rawRrule : `RRULE:${rawRrule}`]
+    : []
+
   const projectionFields = {
     summary,
     ...(location !== undefined ? { location } : {}),
     start: isAllDay
-      ? { date: toGoogleAllDayDate(event.start_time as string) }
-      : { dateTime: toISO(event.start_time), timeZone: TZ },
+      ? { date: toGoogleAllDayDate(event.start_time as string), dateTime: null, timeZone: null }
+      : { dateTime: toISO(event.start_time), timeZone: TZ, date: null },
     end: isAllDay
-      ? { date: toGoogleAllDayEndDate(event.end_time as string) }
-      : { dateTime: toISO(event.end_time), timeZone: TZ },
+      ? { date: toGoogleAllDayEndDate(event.end_time as string), dateTime: null, timeZone: null }
+      : { dateTime: toISO(event.end_time), timeZone: TZ, date: null },
+    ...(recurrence.length > 0 ? { recurrence } : {}),
   }
 
   try {
@@ -155,6 +173,7 @@ Deno.serve(async (req) => {
       google_calendar_id: calendarId,
       updated_at: new Date().toISOString(),
     }).eq('id', event_id)
+    await sb.from('google_sync_jobs').delete().eq('event_id', event_id)
   } catch (err) {
     const msg = (err as Error).message ?? String(err)
     // Legacy events may still point at a different Google account's event ID.
@@ -171,8 +190,12 @@ Deno.serve(async (req) => {
           existingDescription: event.description ?? '',
           eventId: event.id,
         }),
-        start: projectionFields.start,
-        end: projectionFields.end,
+        start: isAllDay
+          ? { date: toGoogleAllDayDate(event.start_time as string) }
+          : { dateTime: toISO(event.start_time), timeZone: TZ },
+        end: isAllDay
+          ? { date: toGoogleAllDayEndDate(event.end_time as string) }
+          : { dateTime: toISO(event.end_time), timeZone: TZ },
       },
     })
     await sb.from('events').update({
@@ -182,6 +205,7 @@ Deno.serve(async (req) => {
       source_member_id: connection.family_member_id,
       updated_at: new Date().toISOString(),
     }).eq('id', event_id)
+    await sb.from('google_sync_jobs').delete().eq('event_id', event_id)
   }
   await markGoogleConnectionHealthy(sb, connection.id)
 

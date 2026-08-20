@@ -268,12 +268,14 @@ test('cardClassName covers every padding and tone combination', () => {
   }
 })
 
-test('cardClassName interactive state adds hover/focus affordances', () => {
+test('cardClassName interactive state adds hover/focus affordances and tactile press physics', () => {
   const base = cardClassName()
   const interactive = cardClassName({ interactive: true })
   assert.notEqual(base, interactive)
   assert.match(interactive, /cursor-pointer/)
   assert.match(interactive, /focus-visible:ring-2/)
+  assert.match(interactive, /active:scale-\[0\.97\]/)
+  assert.match(interactive, /active:opacity-75/)
 })
 
 test('fieldControlClassName swaps border/ring tokens for the invalid state', () => {

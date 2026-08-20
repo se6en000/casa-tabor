@@ -1,5 +1,6 @@
 import { forwardRef } from 'react'
 import type { ElementType, HTMLAttributes, ReactNode } from 'react'
+import { AlertTriangle, Trash2 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { Alert } from './Alert'
 import { Button } from './Button'
@@ -224,11 +225,13 @@ export interface ConfirmationDialogProps {
   onClose: () => void
   onConfirm: () => void
   title: ReactNode
-  description: ReactNode
+  description?: ReactNode
   confirmLabel?: ReactNode
   cancelLabel?: ReactNode
   destructive?: boolean
   loading?: boolean
+  error?: ReactNode
+  icon?: ReactNode
 }
 
 export function ConfirmationDialog({
@@ -241,16 +244,75 @@ export function ConfirmationDialog({
   cancelLabel = 'Cancel',
   destructive = false,
   loading = false,
+  error,
+  icon,
 }: ConfirmationDialogProps) {
+  const defaultIcon = destructive ? (
+    <Trash2 size={22} className="text-action-danger" aria-hidden="true" />
+  ) : (
+    <AlertTriangle size={22} className="text-action-accent" aria-hidden="true" />
+  )
+
+  const renderedIcon = icon !== undefined ? icon : defaultIcon
+
   return (
-    <Modal open={open} onClose={onClose} title={title} closeOnBackdrop={!loading} closeOnEscape={!loading} size="sm">
-      <Text role="body-sm" muted>{description}</Text>
-      <WorkflowActions>
-        <Button variant="secondary" onClick={onClose} disabled={loading}>{cancelLabel}</Button>
-        <Button variant={destructive ? 'danger' : 'primary'} onClick={onConfirm} loading={loading}>
-          {confirmLabel}
-        </Button>
-      </WorkflowActions>
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={typeof title === 'string' ? title : 'Confirm'}
+      showHeader={false}
+      closeOnBackdrop={!loading}
+      closeOnEscape={!loading}
+      size="sm"
+      panelClassName="overflow-hidden border border-casa-border/80 bg-surface-raised p-6 shadow-modal rounded-modal sm:max-w-md"
+      contentClassName="p-0"
+    >
+      <div className="flex flex-col items-center text-center sm:items-start sm:text-left">
+        {renderedIcon && (
+          <div
+            className={cn(
+              'mb-4 flex size-12 shrink-0 items-center justify-center rounded-full',
+              destructive
+                ? 'bg-action-danger/10 text-action-danger ring-4 ring-action-danger/5'
+                : 'bg-surface-subtle text-action-accent ring-4 ring-surface-subtle/50',
+            )}
+          >
+            {renderedIcon}
+          </div>
+        )}
+        <h3 className="font-display text-display-sm font-medium text-content-heading leading-tight">
+          {title}
+        </h3>
+        {description && (
+          <p className="mt-2 text-body-sm text-content-muted leading-relaxed">
+            {description}
+          </p>
+        )}
+        {error && (
+          <p role="alert" className="mt-3 text-body-sm font-medium text-action-danger">
+            {error}
+          </p>
+        )}
+        <div className="mt-6 flex w-full flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <Button
+            variant="secondary"
+            onClick={onClose}
+            disabled={loading}
+            className="w-full sm:w-auto min-w-[100px]"
+          >
+            {cancelLabel}
+          </Button>
+          <Button
+            variant={destructive ? 'danger' : 'primary'}
+            onClick={onConfirm}
+            loading={loading}
+            className="w-full sm:w-auto min-w-[120px]"
+          >
+            {confirmLabel}
+          </Button>
+        </div>
+      </div>
     </Modal>
   )
 }
+

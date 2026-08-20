@@ -1,10 +1,12 @@
-import { useRef } from 'react'
+import { useMemo, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { Repeat } from 'lucide-react'
+import { Repeat, Navigation } from 'lucide-react'
 import { format } from 'date-fns'
 import { cn } from '../../utils/cn'
 import { cleanEventTitle } from '../../utils/eventTitle'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
+
+import { EventSyncStatusDot } from './EventSyncStatusDot'
 
 const HOUR_HEIGHT = 60 // px per hour
 const GRID_START_HOUR = 6 // 6 AM
@@ -12,19 +14,13 @@ const GRID_START_HOUR = 6 // 6 AM
 // When all 5 members are on an event, use gold (shared family)
 const SHARED_COLOR = 'var(--color-casa-gold)'
 
-// Confidence dot colors
-const CONFIDENCE_DOT: Record<string, string> = {
-  high: 'bg-casa-success',
-  medium: 'bg-casa-warning',
-  low: 'bg-casa-error',
-}
-
 interface EventBlockProps {
   event: EventWithDetails
   onClick: () => void
   onDoubleClick?: () => void
   columnCount?: number
   columnIndex?: number
+  isActive?: boolean
   /** Called after a 450ms touch hold — WeekView takes over the drag from here */
   onDragStart?: (event: EventWithDetails, clientX: number, clientY: number, grabOffsetPx: number) => void
   /** Dims the block while its ghost is being dragged */
@@ -52,7 +48,7 @@ function getEventPosition(event: EventWithDetails) {
   return { top, height }
 }
 
-export default function EventBlock({ event, onClick, onDoubleClick, columnCount = 1, columnIndex = 0, onDragStart, isDragging }: EventBlockProps) {
+export default function EventBlock({ event, onClick, onDoubleClick, columnCount = 1, columnIndex = 0, isActive = false, onDragStart, isDragging }: EventBlockProps) {
   const { top, height } = getEventPosition(event)
   const color = getPrimaryColor(event)
   const start = new Date(event.start_time)
@@ -62,8 +58,16 @@ export default function EventBlock({ event, onClick, onDoubleClick, columnCount 
   const leftPercent = 2.5 + columnIndex * widthPercent
 
   const isCompact = height < 50
-  const confidence = event.enrichment?.confidence
-  const confidenceDotClass = confidence ? CONFIDENCE_DOT[confidence] : null
+
+  const hasNoRide = Boolean(event.plan_override?.transportation_plan && Array.isArray(event.plan_override.transportation_plan.legs) && event.plan_override.transportation_plan.legs.length === 0)
+  const departureAt = useMemo(() => {
+    if (event.all_day || hasNoRide) return null
+    if (event.enrichment?.departure_time) return new Date(event.enrichment.departure_time)
+    if (event.enrichment?.drive_time_mins && event.start_time) {
+      return new Date(new Date(event.start_time).getTime() - (event.enrichment.drive_time_mins + 5) * 60_000)
+    }
+    return null
+  }, [event.enrichment?.departure_time, event.enrichment?.drive_time_mins, event.start_time, event.all_day, hasNoRide])
 
   // ── Long-press drag detection ────────────────────────────────
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -107,10 +111,14 @@ export default function EventBlock({ event, onClick, onDoubleClick, columnCount 
   return (
       <motion.button
       data-event-block
+      data-calendar-event
+      data-sidecar-loadable="true"
+      data-event-id={event.id}
       layout
       initial={{ opacity: 0, scale: 0.96 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.96 }}
+      whileTap={{ scale: 0.97, opacity: 0.75 }}
       transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
       onClick={(e) => { e.stopPropagation(); onClick() }}
       onDoubleClick={(e) => { e.stopPropagation(); onDoubleClick?.() }}
@@ -120,8 +128,9 @@ export default function EventBlock({ event, onClick, onDoubleClick, columnCount 
       className={cn(
         'absolute rounded-lg px-2.5 py-1.5 text-left',
         'hover:brightness-110 hover:shadow-card-hover',
-        'overflow-hidden cursor-pointer border-0',
-        'text-white transition-opacity',
+        'overflow-hidden cursor-pointer',
+        'text-white transition-all duration-150',
+        isActive ? 'ring-2 ring-casa-gold ring-offset-1 ring-offset-casa-bg z-20 font-bold shadow-md' : 'border-0',
         isDragging ? 'opacity-30' : 'opacity-100',
       )}
       style={{
@@ -130,21 +139,28 @@ export default function EventBlock({ event, onClick, onDoubleClick, columnCount 
         left: `${leftPercent}%`,
         width: `${widthPercent}%`,
         backgroundColor: color,
+        ...(isActive ? { zIndex: 20 } : {}),
       }}
     >
       <p className={cn(
         'font-body font-semibold truncate leading-tight',
-        isCompact ? 'text-caption' : 'text-body-sm'
+        isCompact ? 'text-caption' : 'text-body-sm',
+        isActive && 'font-bold text-white'
       )}>
         {cleanEventTitle(event.title)}
       </p>
 
-      {/* Time range */}
-      {!isCompact && (
+      {/* Leave by & Time range */}
+      {departureAt ? (
+        <p className="text-caption font-mono font-bold text-amber-200 truncate flex items-center gap-1 mt-0.5">
+          <Navigation size={9} className="shrink-0 text-amber-300" />
+          <span>Leave {format(departureAt, 'h:mm a')}</span>
+        </p>
+      ) : !isCompact ? (
         <p className="text-caption font-body opacity-80 mt-0.5">
           {format(start, 'h:mm a')} – {format(end, 'h:mm a')}
         </p>
-      )}
+      ) : null}
 
       {/* Compact member metadata avoids oversized controls inside the time grid. */}
       {!isCompact && event.members && event.members.length > 0 && (() => {
@@ -161,13 +177,12 @@ export default function EventBlock({ event, onClick, onDoubleClick, columnCount 
         )
       })()}
 
-      {/* Confidence dot — top right corner */}
-      {confidenceDotClass && (
-        <span
-          className={cn('absolute right-1.5 top-1.5 h-2 w-2 rounded-full border border-white/50', confidenceDotClass)}
-          title={`Enrichment confidence: ${confidence}`}
-        />
-      )}
+      {/* Google Sync Status dot — top right corner */}
+      <EventSyncStatusDot
+        event={event}
+        size="xs"
+        className="absolute right-1.5 top-1.5 z-10"
+      />
       {/* Repeat indicator for recurring instances */}
       {(event as any).recurrence_master_id && (
         <span className="absolute bottom-1 right-1 opacity-60">

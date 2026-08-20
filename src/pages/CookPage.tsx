@@ -1,18 +1,75 @@
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Camera, Check, ChevronLeft, ChevronRight, CircleHelp, Clock3, ExternalLink, Search, ShoppingCart, Sparkles, Trash2, Upload, Users } from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
+import {
+  CalendarPlus,
+  Camera,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Clock3,
+  GripVertical,
+  Layers,
+  Plus,
+  RotateCcw,
+  Search,
+  ShoppingCart,
+  Sparkles,
+  Trash2,
+  Upload,
+  Users,
+  Utensils,
+  X,
+  BookOpen,
+} from 'lucide-react'
+import { saveTonightDinnerPlan } from '../utils/dinnerPlanSync'
+import type { DinnerPlan } from '../types'
 import { supabase } from '../lib/supabase'
 import { formatSupabaseError } from '../lib/formatSupabaseError'
 import { inferCategoryFromName } from '../utils/groceryCategorization'
 import { normalizeRecipeIngredientFields } from '../utils/recipeIngredientParsing'
 import { DEFAULT_FOOD_PROFILE, normalizeFoodProfile, type FoodProfile } from '../lib/foodProfile'
-import { appendPantryInventoryAudit, normalizePackageUnit, normalizePantryKey, sanitizePantryInventoryAudit, type PantryInventoryAuditEntry } from '../lib/pantryInventoryUtils'
+import {
+  appendPantryInventoryAudit,
+  normalizePackageUnit,
+  normalizePantryKey,
+  sanitizePantryInventoryAudit,
+  type PantryInventoryAuditEntry,
+} from '../lib/pantryInventoryUtils'
 import { cn } from '../utils/cn'
 import recipeFallbackHero from '../assets/hero.png'
-import { Alert, Button, Card, Checkbox, Chip, DisclosureSection, Heading, IconButton, Input, Progress, SegmentedControl, Switch, Text, Textarea } from '../components/ui'
+import {
+  Alert,
+  Button,
+  Card,
+  Checkbox,
+  Chip,
+  DisclosureSection,
+  EmptyState,
+  Heading,
+  IconButton,
+  Input,
+  Modal,
+  PageShell,
+  Progress,
+  SegmentedControl,
+  Switch,
+  Text,
+  Textarea,
+  TactileSheenBeam,
+  TactileSwapBadge,
+  Toast,
+  type ToastTone,
+} from '../components/ui'
+import {
+  TACTILE_SPRING_TRANSITION,
+  TACTILE_SWAP_SCALE_ANIMATION,
+} from '../components/ui/TactileSwap'
+import ActiveKitchenWorkbench from '../components/kitchen/ActiveKitchenWorkbench'
+import MobileCookingView from '../components/mobile/MobileCookingView'
+import { useAppStore } from '../stores/appStore'
 
-type RecipeScale = '0.5' | '1' | '2'
 
 type Recipe = {
   id: string
@@ -266,39 +323,43 @@ function isCookMood(value: string | null): value is CookMood {
   return value === 'quick' || value === 'family' || value === 'new' || value === 'fancy' || value === 'pantry'
 }
 
-function scaleQuantityValue(value: string | null, scale: number): string | null {
-  if (!value) return value
-  const trimmed = value.trim()
-  if (!trimmed) return value
-  if (Math.abs(scale - 1) < 0.0001) return trimmed
-  const replacedFractions = trimmed
-    .replace(/\b½\b/g, ' 1/2 ')
-    .replace(/\b¼\b/g, ' 1/4 ')
-    .replace(/\b¾\b/g, ' 3/4 ')
-  const mixed = replacedFractions.match(/^\s*(\d+)\s+(\d+)\/(\d+)\s*$/)
-  const fractionOnly = replacedFractions.match(/^\s*(\d+)\/(\d+)\s*$/)
-  const decimalOrInt = replacedFractions.match(/^\s*(\d+(?:\.\d+)?)\s*$/)
-  let base = Number.NaN
-  if (mixed) {
-    const whole = Number(mixed[1] ?? 0)
-    const fracNum = Number(mixed[2] ?? 0)
-    const fracDen = Number(mixed[3] ?? 1)
-    base = whole + (fracDen > 0 ? fracNum / fracDen : 0)
-  } else if (fractionOnly) {
-    const fracNum = Number(fractionOnly[1] ?? 0)
-    const fracDen = Number(fractionOnly[2] ?? 1)
-    base = fracDen > 0 ? fracNum / fracDen : Number.NaN
-  } else if (decimalOrInt) {
-    base = Number(decimalOrInt[1] ?? Number.NaN)
-  }
-  if (!Number.isFinite(base)) return trimmed
-  const scaled = base * scale
-  if (scaled === 0) return '0'
-  if (scaled >= 1 && Math.abs(Math.round(scaled) - scaled) < 0.05) {
-    return String(Math.max(1, Math.round(scaled)))
-  }
-  return Number(scaled.toFixed(scaled < 1 ? 2 : 1)).toString()
+export function formatRecipeTitle(raw: string | null | undefined): string {
+  if (!raw) return ''
+  const trimmed = raw.trim()
+  if (!trimmed) return ''
+
+  const upperAcronyms = new Set(['GLP-1', 'AI', 'BBQ', 'BLT', 'BLTS', 'PB&J', 'USA', 'IP', 'NY', 'NYC'])
+  const lowerMinorWords = new Set(['a', 'an', 'and', 'as', 'at', 'but', 'by', 'for', 'in', 'nor', 'of', 'on', 'or', 'so', 'the', 'to', 'up', 'yet', 'with', 'la', 'alla', 'de', 'du'])
+
+  const isAllUpper = trimmed === trimmed.toUpperCase() && /[A-Z]/.test(trimmed)
+  const isAllLower = trimmed === trimmed.toLowerCase()
+
+  const words = trimmed.split(/(\s+|-|\/)/)
+  let isFirstWord = true
+  return words
+    .map((w) => {
+      if (/^\s+$/.test(w) || w === '-' || w === '/') return w
+      const lower = w.toLowerCase()
+      if (upperAcronyms.has(w.toUpperCase()) || /^glp-1$/i.test(w)) {
+        isFirstWord = false
+        return w.toUpperCase() === 'GLP-1' || /^glp-1$/i.test(w) ? 'GLP-1' : w.toUpperCase()
+      }
+      if (!isFirstWord && lowerMinorWords.has(lower) && (isAllUpper || isAllLower)) {
+        isFirstWord = false
+        return lower
+      }
+      if (isAllUpper || isAllLower || (w === w.toLowerCase() && !lowerMinorWords.has(lower))) {
+        isFirstWord = false
+        return lower.charAt(0).toUpperCase() + lower.slice(1)
+      }
+      isFirstWord = false
+      return w
+    })
+    .join('')
 }
+
+
+
 
 function pickRecipeThumb(recipe: Recipe): string | null {
   if (recipe.image_url) return recipe.image_url.split('#')[0] ?? recipe.image_url
@@ -443,34 +504,22 @@ function RecipeImage({
   )
 }
 
-function InfoHint({ label, text }: { label: string; text: string }) {
-  const [open, setOpen] = useState(false)
-  return (
-    <span className="relative inline-flex items-center">
-      <IconButton
-        icon={<CircleHelp size={13} />}
-        variant="ghost"
-        size="sm"
-        aria-label={label}
-        onMouseEnter={() => setOpen(true)}
-        onMouseLeave={() => setOpen(false)}
-        onFocus={() => setOpen(true)}
-        onBlur={() => setOpen(false)}
-        onClick={() => setOpen((current) => !current)}
-      />
-      {open && (
-        <span className="absolute z-20 top-full mt-1 right-0 w-56 rounded-lg border border-casa-border bg-casa-surface px-2.5 py-2 text-caption text-casa-navy shadow-card">
-          {text}
-        </span>
-      )}
-    </span>
-  )
-}
 
 export default function CookPage() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const aiDrawerOpen = useAppStore((s) => s.aiDrawerOpen)
   const [cookRecipeId, setCookRecipeId] = useState<string | null>(null)
+  const [assigningDay, setAssigningDay] = useState<{ slot: 'tonight' | 'tomorrow' | 'this-week'; dateStr: string; dayLabel: string } | null>(null)
+  const [assignDaySearch, setAssignDaySearch] = useState('')
   const [recipeSearch, setRecipeSearch] = useState('')
+
+  useEffect(() => {
+    const recipeParam = searchParams.get('recipe')
+    if (recipeParam) {
+      setCookRecipeId(recipeParam)
+    }
+  }, [searchParams])
   const [cookLandingMode, setCookLandingMode] = useState<CookLandingMode>(() => {
     try {
       const raw = localStorage.getItem(COOK_LANDING_MODE_STORAGE_KEY)
@@ -521,15 +570,7 @@ export default function CookPage() {
   })
   const [recipeBrowseFilter, setRecipeBrowseFilter] = useState<RecipeBrowseFilter>('all')
   const [stepIndex, setStepIndex] = useState(0)
-  const [recipeScale, setRecipeScale] = useState<RecipeScale>('1')
-  const [showCupsConversion, setShowCupsConversion] = useState(false)
   const [directionsViewMode, setDirectionsViewMode] = useState<'step' | 'all'>('step')
-  // Session-local mise-en-place check-off (keyed by cookIngredientRows id).
-  // Does NOT mutate the recipe or grocery list — cleared when the recipe changes.
-  const [checkedCookIngredients, setCheckedCookIngredients] = useState<Set<string>>(new Set())
-  // Auto-scroll target for the currently-active direction step.
-  const currentStepRef = useRef<HTMLElement | null>(null)
-  const [photoEditorName, setPhotoEditorName] = useState('')
   const [photoEditorUrl, setPhotoEditorUrl] = useState('')
   const [photoEditorPreviewUrl, setPhotoEditorPreviewUrl] = useState('')
   const [photoEditorPendingFile, setPhotoEditorPendingFile] = useState<File | null>(null)
@@ -591,6 +632,28 @@ export default function CookPage() {
   const [foodProfile, setFoodProfile] = useState<FoodProfile>(DEFAULT_FOOD_PROFILE)
   const [plannerAdvancedOpen, setPlannerAdvancedOpen] = useState(false)
   const [plannerLogOpen, setPlannerLogOpen] = useState(false)
+
+  // Toast with Undo state
+  const [toastState, setToastState] = useState<{
+    open: boolean
+    message: React.ReactNode
+    tone?: ToastTone
+    actionLabel?: string
+    onAction?: () => void
+  } | null>(null)
+  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const [activeGroceryRecipeId, setActiveGroceryRecipeId] = useState<string | null>(null)
+  const [recipeGrocerySelections, setRecipeGrocerySelections] = useState<Record<string, Set<number>>>({})
+
+  // Drag-and-Drop Weekly Horizon State
+  const [horizonExpanded, setHorizonExpanded] = useState(false)
+  const [draggingHorizonDateStr, setDraggingHorizonDateStr] = useState<string | null>(null)
+  const [dragOverHorizonDateStr, setDragOverHorizonDateStr] = useState<string | null>(null)
+  const [justSwappedDates, setJustSwappedDates] = useState<{ dates: [string, string]; type: 'swap' | 'move' } | null>(null)
+  const touchDragSourceDateStrRef = useRef<string | null>(null)
+  const swapAnimationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const importFileInputRef = useRef<HTMLInputElement>(null)
   const importCameraInputRef = useRef<HTMLInputElement>(null)
   const photoEditorUploadInputRef = useRef<HTMLInputElement>(null)
@@ -865,6 +928,13 @@ export default function CookPage() {
     }
     return map
   }, [ingredients])
+  const fullRecipes = useMemo(() => {
+    return recipes.map((recipe) => ({
+      ...recipe,
+      ingredients: ingredientsByRecipe.get(recipe.id) ?? [],
+      steps: stepsByRecipe.get(recipe.id) ?? [],
+    }))
+  }, [recipes, ingredientsByRecipe, stepsByRecipe])
   const plannedRecipes = mealPlans
     .map((plan) => ({ plan, recipe: recipeById.get(plan.recipe_id) }))
     .filter((row): row is { plan: RecipeMealPlan; recipe: Recipe } => Boolean(row.recipe))
@@ -879,6 +949,62 @@ export default function CookPage() {
     () => new Set(plannedRecipes.map(({ recipe }) => recipe.id)),
     [plannedRecipes],
   )
+  const weekDays = useMemo(() => {
+    const days: Array<{
+      date: Date
+      dateStr: string
+      dayName: string
+      formattedDate: string
+      isToday: boolean
+      slot: 'tonight' | 'tomorrow' | 'this-week'
+    }> = []
+
+    const today = new Date()
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(today)
+      d.setDate(today.getDate() + i)
+      const dateStr = d.toISOString().split('T')[0]
+      const dayName = i === 0 ? 'Today' : d.toLocaleDateString('en-US', { weekday: 'short' })
+      const formattedDate = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      const slot: 'tonight' | 'tomorrow' | 'this-week' = i === 0 ? 'tonight' : i === 1 ? 'tomorrow' : 'this-week'
+      days.push({
+        date: d,
+        dateStr,
+        dayName,
+        formattedDate,
+        isToday: i === 0,
+        slot,
+      })
+    }
+    return days
+  }, [])
+
+  const weekDayMeals = useMemo(() => {
+    return weekDays.map((day, index) => {
+      let matched = plannedRecipes.find(
+        (p) =>
+          (day.isToday && p.plan.slot === 'tonight') ||
+          (index === 1 && p.plan.slot === 'tomorrow') ||
+          (p.plan.planned_for && p.plan.planned_for.startsWith(day.dateStr))
+      )
+
+      if (!matched && index > 1) {
+        const remainingThisWeek = plannedRecipes.filter(
+          (p) => p.plan.slot === 'this-week' && (!p.plan.planned_for || p.plan.planned_for === day.dateStr)
+        )
+        const offset = index - 2
+        if (remainingThisWeek[offset]) {
+          matched = remainingThisWeek[offset]
+        }
+      }
+
+      return {
+        day,
+        plan: matched?.plan ?? null,
+        recipe: matched?.recipe ?? null,
+      }
+    })
+  }, [weekDays, plannedRecipes])
   const recipesWithMoodInsights = useMemo<RecipeMoodInsight[]>(() => {
     const nowMs = Date.now()
     const isFancyRecipe = (nameLower: string) => /salmon|cod|barramundi|dijon|creamy|scampi|caesar|salsa/i.test(nameLower)
@@ -981,7 +1107,6 @@ export default function CookPage() {
   const cookRecipe = cookRecipeId ? recipeById.get(cookRecipeId) ?? null : null
   const cookSteps = cookRecipeId ? stepsByRecipe.get(cookRecipeId) ?? [] : []
   const cookIngredients = cookRecipeId ? ingredientsByRecipe.get(cookRecipeId) ?? [] : []
-  const currentStep = cookSteps[stepIndex] ?? null
 
   useEffect(() => {
     localStorage.setItem(COOK_LANDING_MODE_STORAGE_KEY, cookLandingMode)
@@ -1026,17 +1151,16 @@ export default function CookPage() {
     })
   }, [cookRecipeId, cookSteps.length, stepIndex])
 
-  // Clear the session check-off whenever the open recipe changes.
-  useEffect(() => {
-    setCheckedCookIngredients(new Set())
-  }, [cookRecipeId])
-
   // Keyboard nav for the Cook panel: ← / → move steps, Esc closes.
   // Only active while cooking (not editing) and no nested dialog is open.
   useEffect(() => {
     if (!cookRecipeId || isRecipeEditMode) return
     if (importDialogOpen || deleteConfirmRecipe) return
     function onKeyDown(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return
+      }
       if (event.key === 'Escape') {
         setCookRecipeId(null)
         return
@@ -1054,17 +1178,6 @@ export default function CookPage() {
   useEffect(() => () => {
     if (photoEditorObjectUrlRef.current) URL.revokeObjectURL(photoEditorObjectUrlRef.current)
   }, [])
-
-  // Keep the active step in view as it changes (esp. in the all-steps list).
-  useEffect(() => {
-    if (!cookRecipeId || isRecipeEditMode) return
-    const el = currentStepRef.current
-    if (!el) return
-    const id = window.setTimeout(() => {
-      el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-    }, 0)
-    return () => window.clearTimeout(id)
-  }, [cookRecipeId, isRecipeEditMode, directionsViewMode, stepIndex])
 
   useEffect(() => {
     if (!mealPlannerPlan) {
@@ -1256,7 +1369,6 @@ export default function CookPage() {
   function openRecipeForCookMode(recipeId: string) {
     setCookRecipeId(recipeId)
     setStepIndex(0)
-    setRecipeScale('1')
     setDirectionsViewMode('step')
     setLibraryActionError(null)
   }
@@ -1264,6 +1376,11 @@ export default function CookPage() {
   function closeCookRecipe() {
     clearPhotoEditorPendingFile()
     setCookRecipeId(null)
+    setStepIndex(0)
+    setDirectionsViewMode('step')
+    if (searchParams.has('recipe') || searchParams.has('autocook')) {
+      setSearchParams({}, { replace: true })
+    }
   }
 
   function startRecipeEditing() {
@@ -1485,51 +1602,7 @@ export default function CookPage() {
     }
   }
 
-  const densityForIngredient = (ingredientName: string): number => {
-    const name = ingredientName.toLowerCase()
-    if (name.includes('rice')) return 195
-    if (name.includes('corn')) return 165
-    if (name.includes('pea')) return 145
-    if (name.includes('carrot')) return 128
-    if (name.includes('shrimp')) return 145
-    if (name.includes('soy sauce')) return 255
-    return 236.588
-  }
 
-  const gramsToCupsLabel = (grams: number, ingredientName: string): string => {
-    const cups = grams / densityForIngredient(ingredientName)
-    const rounded = cups < 1 ? Number(cups.toFixed(2)) : Number(cups.toFixed(1))
-    return `${rounded} cup${rounded === 1 ? '' : 's'}`
-  }
-
-  const quantityLabel = (ingredient: RecipeIngredient): string => {
-    const normalized = normalizeRecipeIngredientFields({
-      rawText: ingredient.raw_text,
-      name: ingredient.name,
-      quantity: ingredient.quantity,
-      unit: ingredient.unit,
-    })
-    const scaledQuantity = scaleQuantityValue(normalized.quantity, Number(recipeScale))
-    const unit = (normalized.unit ?? '').toLowerCase().trim()
-    if (!scaledQuantity) return normalized.unit ?? ''
-    if (!showCupsConversion) {
-      return `${scaledQuantity}${normalized.unit ? ` ${normalized.unit}` : ''}`.trim()
-    }
-    if (unit === 'g' || unit === 'gram' || unit === 'grams') {
-      const numeric = Number(scaledQuantity)
-      if (Number.isFinite(numeric)) {
-        return gramsToCupsLabel(numeric, normalized.name || ingredient.raw_text)
-      }
-    }
-    if (unit === 'oz' || unit === 'ounce' || unit === 'ounces') {
-      const numeric = Number(scaledQuantity)
-      if (Number.isFinite(numeric)) {
-        const grams = Math.round(numeric * 28.35)
-        return `${grams} g`
-      }
-    }
-    return `${scaledQuantity}${normalized.unit ? ` ${normalized.unit}` : ''}`.trim()
-  }
 
   async function getOrCreateShoppingListId(): Promise<string> {
     const { data: listRows, error: listError } = await supabase
@@ -1549,7 +1622,10 @@ export default function CookPage() {
     return String(newList.id)
   }
 
-  async function insertUniqueGroceryItems(listId: string, items: Array<{ name: string; quantity: string | null; unit: string | null; notes: string }>): Promise<number> {
+  async function insertUniqueGroceryItems(
+    listId: string,
+    items: Array<{ name: string; quantity: string | null; unit: string | null; notes: string }>,
+  ): Promise<{ insertedCount: number; insertedIds: string[] }> {
     const { data: existingItems, error: existingError } = await supabase
       .from('grocery_items')
       .select('name')
@@ -1581,11 +1657,446 @@ export default function CookPage() {
       }]
     })
 
-    if (rowsToInsert.length > 0) {
-      const { error: insertError } = await supabase.from('grocery_items').insert(rowsToInsert)
-      if (insertError && insertError.code !== '23505') throw insertError
+    if (rowsToInsert.length === 0) {
+      return { insertedCount: 0, insertedIds: [] }
     }
-    return rowsToInsert.length
+
+    const { data: insertedRows, error: insertError } = await supabase
+      .from('grocery_items')
+      .insert(rowsToInsert)
+      .select('id')
+    if (insertError && insertError.code !== '23505') throw insertError
+    const insertedIds = (insertedRows ?? []).map((row) => (row as { id: string }).id)
+    return { insertedCount: rowsToInsert.length, insertedIds }
+  }
+
+  function showToast(options: {
+    message: React.ReactNode
+    tone?: ToastTone
+    actionLabel?: string
+    onAction?: () => void
+    duration?: number
+  }) {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current)
+      toastTimeoutRef.current = null
+    }
+    setToastState({
+      open: true,
+      message: options.message,
+      tone: options.tone ?? 'success',
+      actionLabel: options.actionLabel,
+      onAction: options.onAction,
+    })
+    toastTimeoutRef.current = setTimeout(() => {
+      setToastState(null)
+    }, options.duration ?? 6000)
+  }
+
+  function toggleGroceryDrawer(recipe: Recipe) {
+    if (activeGroceryRecipeId === recipe.id) {
+      setActiveGroceryRecipeId(null)
+    } else {
+      setActiveGroceryRecipeId(recipe.id)
+      const recipeIngredients = ingredientsByRecipe.get(recipe.id) ?? []
+      if (!recipeGrocerySelections[recipe.id]) {
+        setRecipeGrocerySelections((prev) => ({
+          ...prev,
+          [recipe.id]: new Set(recipeIngredients.map((_, i) => i)),
+        }))
+      }
+    }
+  }
+
+  function toggleIngredientSelection(recipeId: string, index: number) {
+    setRecipeGrocerySelections((prev) => {
+      const current = new Set(prev[recipeId] ?? [])
+      if (current.has(index)) {
+        current.delete(index)
+      } else {
+        current.add(index)
+      }
+      return { ...prev, [recipeId]: current }
+    })
+  }
+
+  function toggleAllIngredients(recipe: Recipe) {
+    const recipeIngredients = ingredientsByRecipe.get(recipe.id) ?? []
+    setRecipeGrocerySelections((prev) => {
+      const current = prev[recipe.id] ?? new Set()
+      const allSelected = current.size === recipeIngredients.length
+      return {
+        ...prev,
+        [recipe.id]: allSelected ? new Set() : new Set(recipeIngredients.map((_, i) => i)),
+      }
+    })
+  }
+
+  async function addSelectedRecipeGroceries(recipe: Recipe) {
+    const recipeIngredients = ingredientsByRecipe.get(recipe.id) ?? []
+    const selectedIndexes = recipeGrocerySelections[recipe.id] ?? new Set(recipeIngredients.map((_, i) => i))
+    const itemsToAdd = recipeIngredients
+      .filter((_, i) => selectedIndexes.has(i))
+      .map((ingredient) => {
+        const normalized = normalizeRecipeIngredientFields({
+          rawText: ingredient.raw_text,
+          name: ingredient.name,
+          quantity: ingredient.quantity,
+          unit: ingredient.unit,
+        })
+        return {
+          name: (normalized.name || ingredient.raw_text).trim().replace(/\s+/g, ' '),
+          quantity: normalized.quantity,
+          unit: normalized.unit,
+          notes: `From recipe: ${recipe.name}`,
+        }
+      })
+
+    if (itemsToAdd.length === 0) {
+      showToast({ message: 'No ingredients selected to add.', tone: 'info', duration: 3000 })
+      return
+    }
+
+    setSmartAddingRecipeId(recipe.id)
+    try {
+      const listId = await getOrCreateShoppingListId()
+      const { insertedCount, insertedIds } = await insertUniqueGroceryItems(listId, itemsToAdd)
+      setActiveGroceryRecipeId(null)
+
+      if (insertedCount > 0) {
+        showToast({
+          message: `Added ${insertedCount} ingredient${insertedCount === 1 ? '' : 's'} from "${recipe.name}" to cart.`,
+          tone: 'success',
+          actionLabel: 'Undo',
+          onAction: () => {
+            void undoAddGroceries(insertedIds, recipe.name)
+          },
+        })
+      } else {
+        showToast({
+          message: `Selected ingredients from "${recipe.name}" are already in your cart.`,
+          tone: 'info',
+        })
+      }
+    } catch (error) {
+      showToast({
+        message: formatSupabaseError(error, 'Could not add ingredients to cart'),
+        tone: 'danger',
+      })
+    } finally {
+      setSmartAddingRecipeId(null)
+    }
+  }
+
+  async function undoAddGroceries(insertedIds: string[], recipeName: string) {
+    if (insertedIds.length === 0) return
+    try {
+      const { error } = await supabase
+        .from('grocery_items')
+        .delete()
+        .in('id', insertedIds)
+      if (error) throw error
+      setToastState(null)
+      showToast({
+        message: `Removed ingredients for "${recipeName}" from cart.`,
+        tone: 'info',
+        duration: 4000,
+      })
+    } catch (error) {
+      showToast({
+        message: formatSupabaseError(error, 'Could not undo grocery addition'),
+        tone: 'danger',
+      })
+    }
+  }
+
+  async function handleAssignRecipeToDay(recipe: Recipe) {
+    if (!assigningDay) return
+    const { slot, dateStr, dayLabel } = assigningDay
+    const actionId = `assign-day:${recipe.id}:${dateStr}`
+    setPlannedMealActionId(actionId)
+
+    try {
+      const { error } = await supabase.from('recipe_meal_plans').upsert(
+        [{
+          recipe_id: recipe.id,
+          slot,
+          planned_for: dateStr,
+          notes: null,
+        }],
+        { onConflict: 'recipe_id,slot' },
+      )
+      if (error) throw error
+
+      if (slot === 'tonight') {
+        const prepTime = recipe.cook_time ? `${recipe.cook_time} prep` : '25m prep'
+        const plan: DinnerPlan = {
+          mode: 'cook',
+          title: recipe.name,
+          subtitle: `${prepTime} · Pantry stock confirmed · Chef: Jake & Kelly`,
+          targetTime: '6:30 PM Target',
+          recipeId: recipe.id,
+          chefOrDriver: 'Jake & Kelly',
+          statusBadge: 'Ingredients ready',
+          updatedAt: new Date().toISOString(),
+        }
+        useAppStore.getState().setDinnerPlan(plan)
+        void saveTonightDinnerPlan(plan)
+      }
+
+      await refetchMealPlans()
+      setAssigningDay(null)
+      showToast({
+        message: `Assigned "${recipe.name}" for ${dayLabel}.`,
+        tone: 'success',
+      })
+    } catch (error) {
+      showToast({
+        message: formatSupabaseError(error, 'Could not assign meal for day'),
+        tone: 'danger',
+      })
+    } finally {
+      setPlannedMealActionId(null)
+    }
+  }
+
+  async function undoScheduleMeal(recipe: Recipe, assignedSlot: (typeof SLOT_ORDER)[number], previousSlot?: (typeof SLOT_ORDER)[number]) {
+    try {
+      await supabase
+        .from('recipe_meal_plans')
+        .delete()
+        .eq('recipe_id', recipe.id)
+        .eq('slot', assignedSlot)
+
+      if (previousSlot) {
+        await supabase.from('recipe_meal_plans').upsert(
+          [{
+            recipe_id: recipe.id,
+            slot: previousSlot,
+            planned_for: new Date().toISOString(),
+            notes: null,
+          }],
+          { onConflict: 'recipe_id,slot' },
+        )
+      }
+      await refetchMealPlans()
+      setToastState(null)
+      showToast({
+        message: previousSlot
+          ? `Restored "${recipe.name}" to ${SLOT_LABELS[previousSlot]}.`
+          : `Removed "${recipe.name}" from schedule.`,
+        tone: 'info',
+        duration: 4000,
+      })
+    } catch (error) {
+      showToast({
+        message: formatSupabaseError(error, 'Could not undo schedule change'),
+        tone: 'danger',
+      })
+    }
+  }
+
+  async function moveOrSwapWeeklyMeal(sourceDateStr: string, targetDateStr: string) {
+    if (!sourceDateStr || !targetDateStr || sourceDateStr === targetDateStr) return
+
+    const sourceMeal = weekDayMeals.find((w) => w.day.dateStr === sourceDateStr)
+    const targetMeal = weekDayMeals.find((w) => w.day.dateStr === targetDateStr)
+    if (!sourceMeal || !sourceMeal.recipe) return
+
+    const actionId = `drag-reorder:${sourceDateStr}:${targetDateStr}`
+    setPlannedMealActionId(actionId)
+
+    const recipeA = sourceMeal.recipe
+    const recipeB = targetMeal?.recipe ?? null
+
+    try {
+      if (recipeB && targetMeal) {
+        // Swap recipeA and recipeB between the two days
+        await supabase
+          .from('recipe_meal_plans')
+          .delete()
+          .in('recipe_id', [recipeA.id, recipeB.id])
+
+        await supabase.from('recipe_meal_plans').upsert([
+          {
+            recipe_id: recipeA.id,
+            slot: targetMeal.day.slot,
+            planned_for: targetMeal.day.dateStr,
+            notes: null,
+          },
+          {
+            recipe_id: recipeB.id,
+            slot: sourceMeal.day.slot,
+            planned_for: sourceMeal.day.dateStr,
+            notes: null,
+          },
+        ])
+
+        if (targetMeal.day.isToday || targetMeal.day.slot === 'tonight') {
+          const prepTime = recipeA.cook_time ? `${recipeA.cook_time} prep` : '25m prep'
+          const plan: DinnerPlan = {
+            mode: 'cook',
+            title: recipeA.name,
+            subtitle: `${prepTime} · Pantry stock confirmed · Chef: Jake & Kelly`,
+            targetTime: '6:30 PM Target',
+            recipeId: recipeA.id,
+            chefOrDriver: 'Jake & Kelly',
+            statusBadge: 'Ingredients ready',
+            updatedAt: new Date().toISOString(),
+          }
+          useAppStore.getState().setDinnerPlan(plan)
+          void saveTonightDinnerPlan(plan)
+        } else if (sourceMeal.day.isToday || sourceMeal.day.slot === 'tonight') {
+          const prepTime = recipeB.cook_time ? `${recipeB.cook_time} prep` : '25m prep'
+          const plan: DinnerPlan = {
+            mode: 'cook',
+            title: recipeB.name,
+            subtitle: `${prepTime} · Pantry stock confirmed · Chef: Jake & Kelly`,
+            targetTime: '6:30 PM Target',
+            recipeId: recipeB.id,
+            chefOrDriver: 'Jake & Kelly',
+            statusBadge: 'Ingredients ready',
+            updatedAt: new Date().toISOString(),
+          }
+          useAppStore.getState().setDinnerPlan(plan)
+          void saveTonightDinnerPlan(plan)
+        }
+
+        if (swapAnimationTimeoutRef.current) clearTimeout(swapAnimationTimeoutRef.current)
+        setJustSwappedDates({ dates: [sourceDateStr, targetDateStr], type: 'swap' })
+        swapAnimationTimeoutRef.current = setTimeout(() => {
+          setJustSwappedDates(null)
+        }, 1600)
+
+        await refetchMealPlans()
+        showToast({
+          message: `Swapped "${recipeA.name}" and "${recipeB.name}".`,
+          tone: 'success',
+          actionLabel: 'Undo',
+          onAction: () => {
+            void moveOrSwapWeeklyMeal(targetDateStr, sourceDateStr)
+          },
+        })
+      } else if (targetMeal) {
+        // Move recipeA to the empty target day
+        await supabase
+          .from('recipe_meal_plans')
+          .delete()
+          .eq('recipe_id', recipeA.id)
+          .eq('slot', sourceMeal.day.slot)
+
+        await supabase.from('recipe_meal_plans').upsert([
+          {
+            recipe_id: recipeA.id,
+            slot: targetMeal.day.slot,
+            planned_for: targetMeal.day.dateStr,
+            notes: null,
+          },
+        ])
+
+        if (targetMeal.day.isToday || targetMeal.day.slot === 'tonight') {
+          const prepTime = recipeA.cook_time ? `${recipeA.cook_time} prep` : '25m prep'
+          const plan: DinnerPlan = {
+            mode: 'cook',
+            title: recipeA.name,
+            subtitle: `${prepTime} · Pantry stock confirmed · Chef: Jake & Kelly`,
+            targetTime: '6:30 PM Target',
+            recipeId: recipeA.id,
+            chefOrDriver: 'Jake & Kelly',
+            statusBadge: 'Ingredients ready',
+            updatedAt: new Date().toISOString(),
+          }
+          useAppStore.getState().setDinnerPlan(plan)
+          void saveTonightDinnerPlan(plan)
+        }
+
+        if (swapAnimationTimeoutRef.current) clearTimeout(swapAnimationTimeoutRef.current)
+        setJustSwappedDates({ dates: [sourceDateStr, targetDateStr], type: 'move' })
+        swapAnimationTimeoutRef.current = setTimeout(() => {
+          setJustSwappedDates(null)
+        }, 1600)
+
+        await refetchMealPlans()
+        showToast({
+          message: `Moved "${recipeA.name}" to ${targetMeal.day.dayName} (${targetMeal.day.formattedDate}).`,
+          tone: 'success',
+          actionLabel: 'Undo',
+          onAction: () => {
+            void moveOrSwapWeeklyMeal(targetDateStr, sourceDateStr)
+          },
+        })
+      }
+    } catch (error) {
+      showToast({
+        message: formatSupabaseError(error, 'Could not move meal'),
+        tone: 'danger',
+      })
+    } finally {
+      setPlannedMealActionId(null)
+    }
+  }
+
+  function handleHorizonDragStart(e: React.DragEvent, dateStr: string, isAssigned: boolean) {
+    if (!isAssigned) return
+    e.dataTransfer.setData('text/plain', dateStr)
+    e.dataTransfer.effectAllowed = 'move'
+    setDraggingHorizonDateStr(dateStr)
+  }
+
+  function handleHorizonDragOver(e: React.DragEvent, dateStr: string) {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    if (dragOverHorizonDateStr !== dateStr) {
+      setDragOverHorizonDateStr(dateStr)
+    }
+  }
+
+  function handleHorizonDragLeave(_e: React.DragEvent, dateStr: string) {
+    if (dragOverHorizonDateStr === dateStr) {
+      setDragOverHorizonDateStr(null)
+    }
+  }
+
+  function handleHorizonDrop(e: React.DragEvent, targetDateStr: string) {
+    e.preventDefault()
+    const sourceDateStr = e.dataTransfer.getData('text/plain') || draggingHorizonDateStr
+    setDraggingHorizonDateStr(null)
+    setDragOverHorizonDateStr(null)
+    if (sourceDateStr && targetDateStr && sourceDateStr !== targetDateStr) {
+      void moveOrSwapWeeklyMeal(sourceDateStr, targetDateStr)
+    }
+  }
+
+  function handleHorizonTouchStart(dateStr: string, isAssigned: boolean) {
+    if (!isAssigned) return
+    touchDragSourceDateStrRef.current = dateStr
+    setDraggingHorizonDateStr(dateStr)
+  }
+
+  function handleHorizonTouchMove(e: React.TouchEvent) {
+    if (!touchDragSourceDateStrRef.current) return
+    const touch = e.touches[0]
+    if (!touch) return
+    const el = document.elementFromPoint(touch.clientX, touch.clientY)
+    if (el?.closest('[data-horizon-upcoming-drawer]')) {
+      setHorizonExpanded(true)
+    }
+    const dayCard = el?.closest('[data-horizon-date]')
+    const targetDateStr = dayCard?.getAttribute('data-horizon-date')
+    if (targetDateStr && targetDateStr !== dragOverHorizonDateStr) {
+      setDragOverHorizonDateStr(targetDateStr)
+    }
+  }
+
+  function handleHorizonTouchEnd() {
+    const source = touchDragSourceDateStrRef.current
+    const target = dragOverHorizonDateStr
+    touchDragSourceDateStrRef.current = null
+    setDraggingHorizonDateStr(null)
+    setDragOverHorizonDateStr(null)
+    if (source && target && source !== target) {
+      void moveOrSwapWeeklyMeal(source, target)
+    }
   }
 
   async function smartAddIngredientsToShoppingList(recipe: Recipe) {
@@ -1613,15 +2124,28 @@ export default function CookPage() {
           notes: `From recipe: ${recipe.name}`,
         }
       })
-      const insertedCount = await insertUniqueGroceryItems(listId, items)
+      const { insertedCount, insertedIds } = await insertUniqueGroceryItems(listId, items)
 
-      setLibraryActionStatus(
-        insertedCount > 0
-          ? `Added ${insertedCount} ingredient${insertedCount === 1 ? '' : 's'} from "${recipe.name}" to shopping list.`
-          : `All ingredients from "${recipe.name}" are already on your shopping list.`,
-      )
+      if (insertedCount > 0) {
+        showToast({
+          message: `Added ${insertedCount} ingredient${insertedCount === 1 ? '' : 's'} from "${recipe.name}" to cart.`,
+          tone: 'success',
+          actionLabel: 'Undo',
+          onAction: () => {
+            void undoAddGroceries(insertedIds, recipe.name)
+          },
+        })
+      } else {
+        showToast({
+          message: `All ingredients from "${recipe.name}" are already in your cart.`,
+          tone: 'info',
+        })
+      }
     } catch (error) {
-      setLibraryActionError(formatSupabaseError(error, 'Could not add ingredients to shopping list'))
+      showToast({
+        message: formatSupabaseError(error, 'Could not add ingredients to cart'),
+        tone: 'danger',
+      })
     } finally {
       setSmartAddingRecipeId(null)
     }
@@ -1735,6 +2259,16 @@ export default function CookPage() {
     }
   }
 
+  async function deleteMealPlannerTemplate(templateId: string) {
+    try {
+      const nextTemplates = mealPlannerTemplates.filter((t) => t.id !== templateId)
+      await persistMealPlannerTemplates(nextTemplates)
+      setMealPlannerStatus('Deleted template.')
+    } catch (error) {
+      setMealPlannerError(formatSupabaseError(error, 'Could not delete template'))
+    }
+  }
+
   async function runWeeklyAutoDraft() {
     const baseTemplate = mealPlannerTemplates[0]
     const learnedPrompt = mealPlannerLearning.successful_prompts[0]
@@ -1833,7 +2367,7 @@ export default function CookPage() {
         throw new Error('No active grocery items to add.')
       }
       const listId = await getOrCreateShoppingListId()
-      const inserted = await insertUniqueGroceryItems(
+      const { insertedCount: inserted } = await insertUniqueGroceryItems(
         listId,
         pendingPlannerGroceries.map((item) => {
           const tracker = projectedPantryForItem(item)
@@ -1959,6 +2493,27 @@ export default function CookPage() {
         .from('recipe_meal_plans')
         .upsert(rows, { onConflict: 'recipe_id,slot' })
       if (error) throw error
+
+      const tonightRow = rows.find((r) => r.slot === 'tonight')
+      if (tonightRow) {
+        const rec = recipeById.get(tonightRow.recipe_id)
+        if (rec) {
+          const prepTime = rec.cook_time ? `${rec.cook_time} prep` : '25m prep'
+          const plan: DinnerPlan = {
+            mode: 'cook',
+            title: rec.name,
+            subtitle: `${prepTime} · Pantry stock confirmed · Chef: Jake & Kelly`,
+            targetTime: '6:30 PM Target',
+            recipeId: rec.id,
+            chefOrDriver: 'Jake & Kelly',
+            statusBadge: 'Ingredients ready',
+            updatedAt: new Date().toISOString(),
+          }
+          useAppStore.getState().setDinnerPlan(plan)
+          void saveTonightDinnerPlan(plan)
+        }
+      }
+
       await refetchMealPlans()
       setMealPlannerStatus('Queued planner meals in your meal slots.')
       await appendMealPlannerActionLog({
@@ -1999,6 +2554,83 @@ export default function CookPage() {
       setMealPlannerStatus('Captured this plan pattern as a preference for future drafts.')
     } catch (error) {
       setMealPlannerError(formatSupabaseError(error, 'Could not save plan preference'))
+    }
+  }
+
+  async function addRecipeToNextAvailableSlot(recipe: Recipe) {
+    const alreadyScheduled = weekDayMeals.find((w) => w.recipe?.id === recipe.id)
+    if (alreadyScheduled) {
+      if (alreadyScheduled.plan) {
+        await removePlannedMeal(alreadyScheduled.plan, recipe)
+        showToast({
+          message: `Removed "${recipe.name}" from ${alreadyScheduled.day.dayName} (${alreadyScheduled.day.formattedDate}).`,
+          tone: 'info',
+          actionLabel: 'Undo',
+          onAction: () => {
+            void addRecipeToNextAvailableSlot(recipe)
+          },
+        })
+      }
+      return
+    }
+
+    const nextAvailable = weekDayMeals.find((w) => !w.recipe)
+    if (!nextAvailable) {
+      showToast({
+        message: `All 7 days on the Weekly Horizon are filled. Use "Swap" on a day card to replace a meal.`,
+        tone: 'info',
+      })
+      return
+    }
+
+    const { day } = nextAvailable
+    const actionId = `quick-plan:${recipe.id}:${day.slot}:${day.dateStr}`
+    setPlannedMealActionId(actionId)
+
+    try {
+      const { error } = await supabase.from('recipe_meal_plans').upsert(
+        [{
+          recipe_id: recipe.id,
+          slot: day.slot,
+          planned_for: day.dateStr,
+          notes: null,
+        }],
+        { onConflict: 'recipe_id,slot' },
+      )
+      if (error) throw error
+
+      if (day.slot === 'tonight' || day.isToday) {
+        const prepTime = recipe.cook_time ? `${recipe.cook_time} prep` : '25m prep'
+        const plan: DinnerPlan = {
+          mode: 'cook',
+          title: recipe.name,
+          subtitle: `${prepTime} · Pantry stock confirmed · Chef: Jake & Kelly`,
+          targetTime: '6:30 PM Target',
+          recipeId: recipe.id,
+          chefOrDriver: 'Jake & Kelly',
+          statusBadge: 'Ingredients ready',
+          updatedAt: new Date().toISOString(),
+        }
+        useAppStore.getState().setDinnerPlan(plan)
+        void saveTonightDinnerPlan(plan)
+      }
+
+      await refetchMealPlans()
+      showToast({
+        message: `Added "${recipe.name}" to ${day.dayName} (${day.formattedDate}).`,
+        tone: 'success',
+        actionLabel: 'Undo',
+        onAction: () => {
+          void undoScheduleMeal(recipe, day.slot)
+        },
+      })
+    } catch (error) {
+      showToast({
+        message: formatSupabaseError(error, 'Could not schedule meal'),
+        tone: 'danger',
+      })
+    } finally {
+      setPlannedMealActionId(null)
     }
   }
 
@@ -2056,41 +2688,7 @@ export default function CookPage() {
     }
   }
 
-  async function shiftPlannedMealSlot(plan: RecipeMealPlan, recipe: Recipe, direction: -1 | 1) {
-    const currentIndex = SLOT_ORDER.indexOf(plan.slot)
-    if (currentIndex < 0) return
-    const targetIndex = currentIndex + direction
-    if (targetIndex < 0 || targetIndex >= SLOT_ORDER.length) return
-    const targetSlot = SLOT_ORDER[targetIndex]
-    const actionId = `${plan.slot}:${recipe.id}:shift:${targetSlot}`
-    setPlannedMealActionId(actionId)
-    setPlannedMealError(null)
-    setPlannedMealStatus(null)
-    try {
-      const { error } = await supabase.from('recipe_meal_plans').upsert(
-        [{
-          recipe_id: recipe.id,
-          slot: targetSlot,
-          planned_for: plan.planned_for ?? null,
-          notes: plan.notes ?? null,
-        }],
-        { onConflict: 'recipe_id,slot' },
-      )
-      if (error) throw error
-      const { error: deleteError } = await supabase
-        .from('recipe_meal_plans')
-        .delete()
-        .eq('recipe_id', recipe.id)
-        .eq('slot', plan.slot)
-      if (deleteError) throw deleteError
-      await refetchMealPlans()
-      setPlannedMealStatus(`Moved "${recipe.name}" to ${SLOT_LABELS[targetSlot]}.`)
-    } catch (error) {
-      setPlannedMealError(formatSupabaseError(error, 'Could not move planned meal'))
-    } finally {
-      setPlannedMealActionId(null)
-    }
-  }
+
 
   async function deleteRecipe(recipe: Recipe) {
     setLibraryActionError(null)
@@ -2364,7 +2962,6 @@ export default function CookPage() {
   function initializePhotoEditorDraft(recipe: Recipe) {
     clearPhotoEditorPendingFile()
     const focus = parseRecipeImageFocus(recipe.image_url)
-    setPhotoEditorName(recipe.name)
     setPhotoEditorUrl(pickRecipeThumb(recipe) ?? '')
     setPhotoEditorPreviewUrl('')
     setPhotoEditorPendingFile(null)
@@ -2847,7 +3444,6 @@ export default function CookPage() {
       if (options?.openCookMode) {
         setCookRecipeId(recipeId)
         setStepIndex(0)
-        setRecipeScale('1')
         setDirectionsViewMode('step')
       }
     } catch (error) {
@@ -2881,38 +3477,6 @@ export default function CookPage() {
     setImportStep(1)
   }
 
-  const cookIngredientRows = cookIngredients.map((ingredient, index) => {
-    const normalized = normalizeRecipeIngredientFields({
-      rawText: ingredient.raw_text,
-      name: ingredient.name,
-      quantity: ingredient.quantity,
-      unit: ingredient.unit,
-    })
-    const name = normalized.name || ingredient.raw_text
-    const qty = quantityLabel(ingredient)
-    const searchableName = name.toLowerCase()
-    const searchTokens = searchableName
-      .split(/[^a-z0-9]+/i)
-      .map((token) => token.trim())
-      .filter((token) => token.length >= 4)
-    return {
-      id: `${ingredient.recipe_id}-${index}`,
-      name,
-      qty,
-      searchableName,
-      searchTokens,
-    }
-  })
-  const currentStepInstruction = currentStep?.instruction?.toLowerCase() ?? ''
-  const neededNowIngredientRows = (() => {
-    if (cookIngredientRows.length === 0) return []
-    if (!currentStepInstruction) return cookIngredientRows.slice(0, 4)
-    const matched = cookIngredientRows.filter((row) =>
-      currentStepInstruction.includes(row.searchableName)
-      || row.searchTokens.some((token) => currentStepInstruction.includes(token))
-    )
-    return (matched.length > 0 ? matched : cookIngredientRows).slice(0, 4)
-  })()
   const landingMetaLabel = `${new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).format(new Date())} · ${plannedRecipes.length} planned this week`
   const buildMoodReason = (insight: RecipeMoodInsight): string => {
     if (cookMood === 'quick') {
@@ -2942,1952 +3506,2497 @@ export default function CookPage() {
     return null
   }
 
-  return (
-    <div className="h-full space-y-4 overflow-y-auto bg-casa-bg p-4 lg:p-6">
-      <Card padding="lg">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <SegmentedControl
-            aria-label="Cook view"
-            value={cookLandingMode}
-            onChange={setCookLandingMode}
-            options={[
-              { value: 'cook-now', label: 'Cook tonight' },
-              { value: 'plan-week', label: 'Plan the week', icon: <Sparkles size={14} className="text-casa-info" /> },
-            ]}
-          />
-          <Text role="body-sm" muted>{landingMetaLabel}</Text>
-        </div>
+  if (cookRecipe && !isRecipeEditMode) {
+    return (
+      <ActiveKitchenWorkbench
+        recipe={cookRecipe}
+        ingredients={cookIngredients.map((ingredient, index) => ({
+          id: `${cookRecipe.id}-${ingredient.sort_order ?? index}`,
+          name: ingredient.name,
+          quantity: ingredient.quantity,
+          unit: ingredient.unit,
+          raw_text: ingredient.raw_text,
+          sort_order: ingredient.sort_order ?? index,
+        }))}
+        steps={cookSteps}
+        initialStepIndex={stepIndex}
+        onExit={closeCookRecipe}
+        onEditRecipe={startRecipeEditing}
+        onDeleteRecipe={() => {
+          void deleteRecipe(cookRecipe)
+          closeCookRecipe()
+        }}
+        onSaveRating={(rating) => {
+          void appendMealPlannerActionLog({
+            action: 'cook_complete',
+            status: 'success',
+            detail: `Rated ${cookRecipe.name} with ${rating} stars.`,
+            trace_id: mealPlannerLastTraceId,
+          })
+        }}
+        onCompleteMeal={() => {
+          const tonightPlan = mealPlans.find((m) => m.recipe_id === cookRecipe.id && m.slot === 'tonight')
+          if (tonightPlan) {
+            void markPlannedMealCooked(tonightPlan, cookRecipe)
+          }
+          closeCookRecipe()
+        }}
+      />
+    )
+  }
 
-        {cookLandingMode === 'cook-now' ? (
-          <div className="mt-4">
-            <Heading role="display-sm" className="font-body font-bold">What are we feeling tonight?</Heading>
-            <div className="mt-3 flex flex-wrap gap-2.5">
-              {COOK_MOOD_OPTIONS.map((mood) => (
-                <Chip
-                  key={mood.id}
-                  onClick={() => {
-                    setCookMood(mood.id)
-                    setShortlistOffsets((current) => ({ ...current, [mood.id]: 0 }))
-                  }}
-                  selected={cookMood === mood.id}
-                  tone={cookMood === mood.id ? 'accent' : 'neutral'}
+  return (
+    <div className="h-full min-h-0 flex-1 overflow-y-auto overscroll-contain touch-pan-y bg-casa-bg">
+      {/* ── Dedicated Mobile Basic Cooking Mode (< lg) ── */}
+      <div className="lg:hidden w-full h-full overflow-y-auto">
+        <MobileCookingView
+          onOpenImport={openImportDialog}
+          catalogRecipes={fullRecipes}
+        />
+      </div>
+
+      {/* ── Desktop & Large Kiosk Meal & Kitchen Workbench (>= lg) ── */}
+      <div className="hidden lg:block w-full">
+        <PageShell width="full" className="space-y-8 p-4 sm:p-6 lg:p-8 pb-36 lg:pb-16 text-casa-text">
+          {/* ── Open Atelier Masthead & Mode Switcher (No outer card) ── */}
+          <div className="space-y-4 pb-6 border-b border-casa-border/50">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-casa-gold/20 text-casa-navy text-caption font-mono font-bold tracking-wider uppercase border border-casa-gold/30">
+                    <Sparkles size={11} className="text-casa-gold" />
+                    The Tabor Kitchen &amp; Atelier
+                  </span>
+                  <span className="text-caption text-casa-muted font-mono font-medium hidden sm:inline">
+                    Palm Beach Residence
+                  </span>
+                </div>
+                <Heading role="display-sm" className="font-display text-display-sm font-bold text-casa-navy mt-1 tracking-tight">
+                  {cookLandingMode === 'cook-now' ? 'What are we feeling tonight?' : 'Weekly Dinner Planner & Atelier'}
+                </Heading>
+              </div>
+
+              {/* Quick Navigation Action Pills */}
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => navigate('/settings/food-profile')}
+                  leadingIcon={<Users size={14} className="text-casa-gold" />}
+                  className="text-body-sm font-semibold text-casa-navy hover:text-casa-gold min-h-control bg-casa-surface/90 border-casa-border shadow-2xs"
                 >
-                  {mood.label}
+                  Food Profile
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => navigate('/settings/pantry-inventory')}
+                  leadingIcon={<Layers size={14} className="text-casa-gold" />}
+                  className="text-body-sm font-semibold text-casa-navy hover:text-casa-gold min-h-control bg-casa-surface/90 border-casa-border shadow-2xs"
+                >
+                  Pantry Inventory
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => navigate('/grocery')}
+                  leadingIcon={<ShoppingCart size={14} className="text-casa-gold" />}
+                  className="text-body-sm font-semibold text-casa-navy hover:text-casa-gold min-h-control bg-casa-surface/90 border-casa-border shadow-2xs"
+                >
+                  Shopping List
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => navigate('/prototype/cook-medium')}
+                  leadingIcon={<BookOpen size={14} className="text-casa-gold" />}
+                  className="text-body-sm font-semibold text-casa-navy hover:text-casa-gold min-h-control bg-casa-surface/90 border-casa-border shadow-2xs"
+                >
+                  Option 2 Prototype
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => navigate('/prototype/cook-high')}
+                  leadingIcon={<Sparkles size={14} className="text-casa-gold" />}
+                  className="text-body-sm font-semibold text-casa-navy hover:text-casa-gold min-h-control bg-casa-surface/90 border-casa-border shadow-2xs"
+                >
+                  Option 3 Prototype
+                </Button>
+              </div>
+            </div>
+
+            {/* Mode Switcher & Context Bar */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
+              <SegmentedControl
+                aria-label="Cook view"
+                value={cookLandingMode}
+                onChange={setCookLandingMode}
+                options={[
+                  { value: 'cook-now', label: 'Cook tonight', icon: <Utensils size={15} /> },
+                  { value: 'plan-week', label: 'Plan the week', icon: <Sparkles size={15} className="text-casa-gold" /> },
+                ]}
+                className="min-w-[18rem]"
+              />
+
+              <p className="text-caption text-casa-muted font-medium">
+                {cookLandingMode === 'cook-now'
+                  ? landingMetaLabel
+                  : `Household of ${foodProfile.householdSize} · $${foodProfile.weeklyBudgetUsd}/week budget · ${foodProfile.defaultMealsPerWeek} meals`}
+              </p>
+            </div>
+          </div>
+
+          {/* ── COOK TONIGHT: DUAL-PANE UPPER MASTER STAGE (60/40 Split) ── */}
+          {cookLandingMode === 'cook-now' && (
+            <div className="grid grid-cols-12 gap-8 items-start">
+              {/* ── LEFT COLUMN (60%): TONIGHT'S CINEMATIC STAGE & ACTIVE SESSION ── */}
+              <div className="col-span-12 lg:col-span-7 xl:col-span-7 space-y-5">
+                {/* Active Session (Jump Back In) */}
+                {resumeRecipe && (
+                  <Card
+                    tone="ambient"
+                    padding="md"
+                    className="border-casa-gold/40 shadow-widget cursor-pointer hover:border-casa-gold transition-all rounded-3xl"
+                    onClick={() => {
+                      openRecipeForCookMode(resumeRecipe.recipe.id)
+                      setStepIndex(
+                        Math.max(
+                          0,
+                          Math.min(resumeRecipe.progress.stepIndex, Math.max(0, resumeRecipe.progress.totalSteps - 1)),
+                        ),
+                      )
+                    }}
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full bg-casa-gold animate-pulse" />
+                          <span className="text-caption font-mono font-bold uppercase tracking-widest text-amber-800">
+                            Active Session · Jump Back In
+                          </span>
+                          <span className="text-caption font-mono font-bold px-2.5 py-0.5 rounded-full bg-casa-surface text-casa-navy border border-casa-border shadow-2xs">
+                            Step {resumeRecipe.progress.stepIndex + 1} of {resumeRecipe.progress.totalSteps}
+                          </span>
+                        </div>
+                        <p className="font-display text-heading font-bold text-casa-navy">
+                          {formatRecipeTitle(resumeRecipe.recipe.name)}
+                        </p>
+                        {resumeRecentLabel && (
+                          <p className="text-caption text-casa-muted">Recent history: {resumeRecentLabel}</p>
+                        )}
+                      </div>
+                      <Button
+                        variant="champagne"
+                        size="md"
+                        className="font-bold min-h-control px-6 shrink-0"
+                      >
+                        Resume Cooking →
+                      </Button>
+                    </div>
+                    <Progress
+                      value={resumeRecipe.progress.stepIndex + 1}
+                      max={Math.max(1, resumeRecipe.progress.totalSteps)}
+                      aria-label="Saved cooking progress"
+                      className="mt-3.5 [&_.casa-progress]:h-2"
+                    />
+                  </Card>
+                )}
+
+                {/* The Michelin Plinth: Tonight's Feature Pick (The Singular Hero Plinth) */}
+                {moodShortlistRecipes.length > 0 ? (
+                  (() => {
+                    const topInsight = moodShortlistRecipes[0]
+                    const focus = parseRecipeImageFocus(topInsight.recipe.image_url)
+                    const minutesLabel = topInsight.minutes ? `${topInsight.minutes} min` : (topInsight.recipe.cook_time ?? 'Quick cook')
+                    const approvalLabel = buildTopPickApproval(topInsight)
+
+                    return (
+                      <Card
+                        padding="none"
+                        tone="ambient"
+                        className="flex flex-col overflow-hidden transition-all group shadow-widget rounded-3xl border-casa-gold/50 ring-2 ring-casa-gold/60 relative"
+                      >
+                        {/* Crown Plinth Banner */}
+                        <div className="bg-gradient-to-r from-casa-gold/35 via-casa-gold/20 to-transparent px-5 py-3 text-caption font-mono font-bold uppercase tracking-widest text-casa-navy border-b border-casa-gold/30 flex items-center justify-between">
+                          <span className="flex items-center gap-2">
+                            <Sparkles size={14} className="text-casa-gold animate-pulse" />
+                            Tonight's Feature Plinth · Curated for the Tabor Kitchen
+                          </span>
+                          <span className="text-caption font-mono font-bold text-amber-900/80 px-2 py-0.5 rounded-full bg-casa-gold/20 border border-casa-gold/30">
+                            Top Pick
+                          </span>
+                        </div>
+
+                        {/* Expansive 16:9 Photography */}
+                        <div className="relative overflow-hidden bg-casa-surface aspect-[16/9] w-full">
+                          <RecipeImage
+                            src={getRecipeImage(topInsight.recipe)}
+                            alt={topInsight.recipe.name}
+                            focalX={focus.focalX}
+                            focalY={focus.focalY}
+                            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-103"
+                          />
+                          <div className="absolute top-3 right-3 flex items-center gap-2">
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-casa-surface/95 backdrop-blur-md text-casa-navy text-caption font-mono font-bold border border-casa-border/80 shadow-card">
+                              <Clock3 size={13} className="text-casa-gold" />
+                              {minutesLabel}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Plinth Body */}
+                        <div className="p-6 flex flex-col flex-1 gap-4">
+                          <div>
+                            <Heading role="heading" className="font-display font-bold leading-tight text-casa-navy text-2xl sm:text-3xl lg:text-display-xs">
+                              {formatRecipeTitle(topInsight.recipe.name)}
+                            </Heading>
+                            <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                              <Chip tone="neutral" size="sm" icon={<Users size={13} />}>
+                                {topInsight.recipe.servings ? `${topInsight.recipe.servings} Servings` : '4 Servings'}
+                              </Chip>
+                              {approvalLabel && (
+                                <Chip tone="success" size="sm" icon={<CheckCircle2 size={13} />}>
+                                  {approvalLabel}
+                                </Chip>
+                              )}
+                            </div>
+                            <p className="mt-3 text-body-sm text-casa-text-secondary line-clamp-2 leading-relaxed italic border-l-2 border-casa-gold pl-3 py-0.5">
+                              "{buildMoodReason(topInsight)}"
+                            </p>
+                          </div>
+
+                          {/* Action Bar */}
+                          <div className="mt-auto pt-2 flex items-center gap-3">
+                            <Button
+                              onClick={() => openRecipeForCookMode(topInsight.recipe.id)}
+                              variant="champagne"
+                              className="mt-auto"
+                              size="lg"
+                              fullWidth
+                            >
+                              Start cooking
+                            </Button>
+                            <IconButton
+                              icon={<ShoppingCart size={16} />}
+                              variant="secondary"
+                              size="lg"
+                              onClick={() => void smartAddIngredientsToShoppingList(topInsight.recipe)}
+                              disabled={smartAddingRecipeId === topInsight.recipe.id}
+                              title="Smart add ingredients to grocery list"
+                              aria-label={`Add ingredients for ${topInsight.recipe.name} to shopping list`}
+                              className="shrink-0 bg-casa-surface border-casa-border hover:border-casa-gold size-control-lg shadow-2xs"
+                            />
+                          </div>
+                        </div>
+                      </Card>
+                    )
+                  })()
+                ) : (
+                  <Card tone="subtle" padding="lg" className="text-center space-y-3 border-dashed border-casa-border rounded-3xl">
+                    <Text>Import recipes from your library or URL to unlock your mood-based shortlist.</Text>
+                    <Button
+                      onClick={openImportDialog}
+                      variant="champagne"
+                      size="md"
+                      leadingIcon={<Upload size={16} />}
+                      className="font-bold min-h-control"
+                    >
+                      Import recipe
+                    </Button>
+                  </Card>
+                )}
+              </div>
+
+              {/* ── RIGHT COLUMN (40%): OPEN AGENDA & RHYTHM SHORTLIST (No heavy outer cards) ── */}
+              <div className="col-span-12 lg:col-span-5 xl:col-span-5 space-y-6">
+                {/* The Weekly Horizon: 7-Day Day-of-Week Schedule */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-casa-border/50">
+                    <div>
+                      <Heading role="heading" className="font-display text-lg sm:text-xl font-bold text-casa-navy tracking-tight">
+                        The Weekly Horizon
+                      </Heading>
+                      <p className="text-caption text-casa-text-secondary mt-0.5">
+                        7-day family dinner schedule.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setCookLandingMode('plan-week')}
+                        leadingIcon={<Sparkles size={13} className="text-casa-gold" />}
+                        className="text-caption font-bold text-casa-gold hover:text-amber-800 p-0"
+                      >
+                        AI Plan Week
+                      </Button>
+                      <span className="text-caption font-mono font-bold px-2.5 py-0.5 rounded-full bg-casa-surface border border-casa-border text-casa-navy shadow-2xs">
+                        {weekDayMeals.filter((w) => Boolean(w.recipe)).length} / 7 Set
+                      </span>
+                    </div>
+                  </div>
+
+                  {plannedMealError && (
+                    <Alert tone="danger" title="Planned meals update failed" className="shadow-sm">
+                      {plannedMealError}
+                    </Alert>
+                  )}
+                  {!plannedMealError && plannedMealStatus && (
+                    <Alert tone="success" title="Planned meals updated" className="shadow-sm">
+                      {plannedMealStatus}
+                    </Alert>
+                  )}
+
+                  <div className="space-y-2.5" onTouchMove={handleHorizonTouchMove}>
+                    {/* Primary Focus: Today & Tomorrow */}
+                    {weekDayMeals.slice(0, 2).map(({ day, plan, recipe }) => {
+                      const isAssigned = Boolean(plan && recipe)
+                      const isToday = day.isToday
+                      const isDragging = draggingHorizonDateStr === day.dateStr
+                      const isDragOver = dragOverHorizonDateStr === day.dateStr && draggingHorizonDateStr !== day.dateStr
+                      const isJustSwapped = justSwappedDates?.dates.includes(day.dateStr)
+
+                      return (
+                        <motion.div
+                          layout
+                          key={day.dateStr}
+                          data-horizon-date={day.dateStr}
+                          draggable={isAssigned}
+                          onDragStartCapture={(e) => handleHorizonDragStart(e as unknown as React.DragEvent, day.dateStr, isAssigned)}
+                          onDragOverCapture={(e) => handleHorizonDragOver(e as unknown as React.DragEvent, day.dateStr)}
+                          onDragLeaveCapture={(e) => handleHorizonDragLeave(e as unknown as React.DragEvent, day.dateStr)}
+                          onDropCapture={(e) => handleHorizonDrop(e as unknown as React.DragEvent, day.dateStr)}
+                          onTouchEnd={handleHorizonTouchEnd}
+                          initial={false}
+                          animate={
+                            isJustSwapped
+                              ? TACTILE_SWAP_SCALE_ANIMATION
+                              : isDragging
+                              ? { scale: 0.97, opacity: 0.45 }
+                              : { scale: 1, opacity: 1 }
+                          }
+                          transition={TACTILE_SPRING_TRANSITION}
+                          className={cn(
+                            'p-3 rounded-2xl border transition-colors duration-200 select-none relative overflow-hidden',
+                            isJustSwapped && 'border-casa-gold ring-2 ring-inset ring-casa-gold/60 bg-casa-gold/10 shadow-sm',
+                            isDragging && 'border-dashed border-casa-gold/60',
+                            isDragOver && 'border-casa-gold ring-2 ring-inset ring-casa-gold/70 bg-casa-gold/15 shadow-sm',
+                            !isJustSwapped && !isDragging && !isDragOver && (
+                              isToday
+                                ? 'bg-casa-surface border-casa-gold/60 shadow-subtle ring-1 ring-casa-gold/30'
+                                : isAssigned
+                                ? 'bg-casa-surface/80 border-casa-border/80 hover:border-casa-border hover:shadow-2xs'
+                                : 'bg-casa-bg/60 border-dashed border-casa-border/70 hover:border-casa-gold/40'
+                            )
+                          )}
+                        >
+                          {/* Radiant Sheen Beam on Swap */}
+                          {isJustSwapped && <TactileSheenBeam />}
+
+                          <div className="flex items-center justify-between gap-2 mb-2 relative z-0">
+                            <div className="flex items-center gap-2">
+                              {isAssigned && (
+                                <div
+                                  onTouchStart={() => handleHorizonTouchStart(day.dateStr, isAssigned)}
+                                  className="touch-none cursor-grab active:cursor-grabbing p-1 -ml-1 text-casa-muted/60 hover:text-casa-navy transition-colors shrink-0 flex items-center justify-center"
+                                  title="Drag with finger or mouse to move or swap day"
+                                  aria-label="Drag recipe to reorder day"
+                                >
+                                  <GripVertical size={16} />
+                                </div>
+                              )}
+                              <span
+                                className={cn(
+                                  'text-caption font-mono font-bold px-2 py-0.5 rounded-md uppercase tracking-wider',
+                                  isToday
+                                    ? 'bg-casa-gold/20 text-casa-navy border border-casa-gold/40'
+                                    : 'bg-casa-surface border border-casa-border/60 text-casa-muted'
+                                )}
+                              >
+                                {isToday ? `Today · ${day.formattedDate}` : `${day.dayName} · ${day.formattedDate}`}
+                              </span>
+
+                              <AnimatePresence>
+                                {isJustSwapped && (
+                                  <TactileSwapBadge type={justSwappedDates?.type ?? 'swap'} />
+                                )}
+                              </AnimatePresence>
+                            </div>
+                            {isAssigned && recipe?.cook_time && (
+                              <span className="inline-flex items-center gap-1 text-2xs font-mono text-casa-muted">
+                                <Clock3 size={11} className="text-casa-gold" />
+                                {recipe.cook_time}
+                              </span>
+                            )}
+                          </div>
+
+                          {isAssigned && recipe ? (
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                {recipe.image_url && (
+                                  <img
+                                    src={recipe.image_url}
+                                    alt={recipe.name}
+                                    className="w-11 h-11 rounded-xl object-cover border border-casa-border shrink-0"
+                                  />
+                                )}
+                                <div className="min-w-0 flex-1">
+                                  <h3 className="font-display text-body font-bold text-casa-navy truncate">
+                                    {formatRecipeTitle(recipe.name)}
+                                  </h3>
+                                  <p className="text-caption text-casa-text-secondary truncate mt-0.5">
+                                    {recipe.servings ? `${recipe.servings} serv` : 'Family size'} · Chef: Jake & Kelly
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-1 shrink-0">
+                                {isToday ? (
+                                  <Button
+                                    variant="champagne"
+                                    size="sm"
+                                    onClick={() => openRecipeForCookMode(recipe.id)}
+                                    className="font-bold min-h-[32px] px-3 text-caption shadow-2xs"
+                                  >
+                                    Cook
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => openRecipeForCookMode(recipe.id)}
+                                    className="font-semibold min-h-[32px] px-2.5 text-caption text-casa-navy hover:text-casa-gold"
+                                  >
+                                    View
+                                  </Button>
+                                )}
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  onClick={() => plan && void markPlannedMealCooked(plan, recipe)}
+                                  disabled={plannedMealActionId !== null}
+                                  className="font-semibold min-h-[32px] px-2 text-caption"
+                                >
+                                  Done
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() =>
+                                    setAssigningDay({
+                                      slot: day.slot,
+                                      dateStr: day.dateStr,
+                                      dayLabel: `${day.dayName} (${day.formattedDate})`,
+                                    })
+                                  }
+                                  className="font-semibold min-h-[32px] px-2 text-caption text-casa-gold hover:text-amber-800"
+                                >
+                                  Swap
+                                </Button>
+                                <IconButton
+                                  icon={<Trash2 size={13} />}
+                                  variant="danger"
+                                  size="sm"
+                                  onClick={() => plan && void removePlannedMeal(plan, recipe)}
+                                  disabled={plannedMealActionId !== null}
+                                  aria-label={`Remove ${recipe.name}`}
+                                />
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-between gap-2 py-1">
+                              <span className="text-caption text-casa-muted italic">No dinner scheduled</span>
+                              <div className="flex items-center gap-1.5">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  leadingIcon={<Plus size={13} className="text-casa-gold" />}
+                                  onClick={() =>
+                                    setAssigningDay({
+                                      slot: day.slot,
+                                      dateStr: day.dateStr,
+                                      dayLabel: `${day.dayName} (${day.formattedDate})`,
+                                    })
+                                  }
+                                  className="text-caption font-bold text-casa-gold hover:text-amber-800 min-h-[30px] px-2.5"
+                                >
+                                  Assign
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  leadingIcon={<Sparkles size={12} className="text-casa-muted" />}
+                                  onClick={() =>
+                                    document.dispatchEvent(
+                                      new CustomEvent('open-ai-chat', {
+                                        detail: {
+                                          launchId: crypto.randomUUID(),
+                                          agent: 'chef',
+                                          source: 'tonights-kitchen',
+                                          prompt: `Suggest a delicious weeknight recipe for ${day.dayName} (${day.formattedDate}) using ingredients we already have in our pantry stock.`,
+                                          autoSend: true,
+                                        },
+                                      })
+                                    )
+                                  }
+                                  className="text-2xs font-semibold text-casa-muted hover:text-casa-navy min-h-[30px] px-2"
+                                >
+                                  AI Suggest
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                        </motion.div>
+                      )
+                    })}
+
+                    {/* Collapsible 5-Day Upcoming Horizon */}
+                    {weekDayMeals.length > 2 && (
+                      <div
+                        data-horizon-upcoming-drawer="true"
+                        onDragOver={() => {
+                          if (!horizonExpanded) setHorizonExpanded(true)
+                        }}
+                        className="pt-1"
+                      >
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => setHorizonExpanded((prev) => !prev)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              setHorizonExpanded((prev) => !prev)
+                            }
+                          }}
+                          className={cn(
+                            'w-full flex items-center justify-between gap-2 p-2.5 rounded-xl border transition-all duration-200 text-left min-h-[44px] cursor-pointer select-none',
+                            horizonExpanded
+                              ? 'bg-casa-surface/90 border-casa-border text-casa-navy'
+                              : 'bg-casa-surface/60 border-dashed border-casa-border/80 hover:border-casa-gold/60 hover:bg-casa-surface text-casa-muted'
+                          )}
+                          aria-expanded={horizonExpanded}
+                        >
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <CalendarPlus size={13} className="text-casa-gold shrink-0" />
+                              <span className="font-display text-body-sm font-bold text-casa-navy">
+                                Upcoming Days (5)
+                              </span>
+                            </div>
+
+                            {/* Minimal single-letter counts */}
+                            <div className="flex items-center gap-1 shrink-0 ml-1 overflow-hidden">
+                              {weekDayMeals.slice(2).map(({ day, plan, recipe }) => {
+                                const isSet = Boolean(plan && recipe)
+                                const letter = day.dayName.charAt(0)
+                                return (
+                                  <span
+                                    key={day.dateStr}
+                                    title={`${day.dayName} (${day.formattedDate}): ${isSet ? recipe?.name : 'No meal scheduled'}`}
+                                    className={cn(
+                                      'inline-flex items-center justify-center gap-0.5 text-2xs font-mono font-bold px-1.5 py-0.5 rounded-md border',
+                                      isSet
+                                        ? 'bg-emerald-50 text-emerald-800 border-emerald-200/70'
+                                        : 'bg-casa-bg text-casa-muted/70 border-casa-border/60'
+                                    )}
+                                  >
+                                    <span>{letter}</span>
+                                    {isSet ? (
+                                      <CheckCircle2 size={9} className="text-emerald-600 shrink-0" />
+                                    ) : (
+                                      <Plus size={8} className="text-casa-muted/60 shrink-0" />
+                                    )}
+                                  </span>
+                                )
+                              })}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0 text-caption font-semibold text-casa-gold">
+                            <span className="text-2xs font-mono text-casa-muted">
+                              {weekDayMeals.slice(2).filter((m) => Boolean(m.plan && m.recipe)).length}/5 planned
+                            </span>
+                            {horizonExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                          </div>
+                        </div>
+
+                        <AnimatePresence>
+                          {horizonExpanded && (
+                            <motion.div
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: 'auto' }}
+                              exit={{ opacity: 0, height: 0 }}
+                              transition={{ duration: 0.3, ease: 'easeInOut' }}
+                              className="space-y-2.5 pt-2.5 px-0.5 -mx-0.5"
+                            >
+                              {weekDayMeals.slice(2).map(({ day, plan, recipe }) => {
+                                const isAssigned = Boolean(plan && recipe)
+                                const isDragging = draggingHorizonDateStr === day.dateStr
+                                const isDragOver = dragOverHorizonDateStr === day.dateStr && draggingHorizonDateStr !== day.dateStr
+                                const isJustSwapped = justSwappedDates?.dates.includes(day.dateStr)
+
+                                return (
+                                  <motion.div
+                                    layout
+                                    key={day.dateStr}
+                                    data-horizon-date={day.dateStr}
+                                    draggable={isAssigned}
+                                    onDragStartCapture={(e) => handleHorizonDragStart(e as unknown as React.DragEvent, day.dateStr, isAssigned)}
+                                    onDragOverCapture={(e) => handleHorizonDragOver(e as unknown as React.DragEvent, day.dateStr)}
+                                    onDragLeaveCapture={(e) => handleHorizonDragLeave(e as unknown as React.DragEvent, day.dateStr)}
+                                    onDropCapture={(e) => handleHorizonDrop(e as unknown as React.DragEvent, day.dateStr)}
+                                    onTouchEnd={handleHorizonTouchEnd}
+                                    initial={false}
+                                    animate={
+                                      isJustSwapped
+                                        ? TACTILE_SWAP_SCALE_ANIMATION
+                                        : isDragging
+                                        ? { scale: 0.97, opacity: 0.45 }
+                                        : { scale: 1, opacity: 1 }
+                                    }
+                                    transition={TACTILE_SPRING_TRANSITION}
+                                    className={cn(
+                                      'p-3 rounded-2xl border transition-colors duration-200 select-none relative overflow-hidden',
+                                      isJustSwapped && 'border-casa-gold ring-2 ring-inset ring-casa-gold/60 bg-casa-gold/10 shadow-sm',
+                                      isDragging && 'border-dashed border-casa-gold/60',
+                                      isDragOver && 'border-casa-gold ring-2 ring-inset ring-casa-gold/70 bg-casa-gold/15 shadow-sm',
+                                      !isJustSwapped && !isDragging && !isDragOver && (
+                                        isAssigned
+                                          ? 'bg-casa-surface/80 border-casa-border/80 hover:border-casa-border hover:shadow-2xs'
+                                          : 'bg-casa-bg/60 border-dashed border-casa-border/70 hover:border-casa-gold/40'
+                                      )
+                                    )}
+                                  >
+                                    {/* Radiant Sheen Beam on Swap */}
+                                    {isJustSwapped && <TactileSheenBeam />}
+
+                                    <div className="flex items-center justify-between gap-2 mb-2 relative z-0">
+                                      <div className="flex items-center gap-2">
+                                        {isAssigned && (
+                                          <div
+                                            onTouchStart={() => handleHorizonTouchStart(day.dateStr, isAssigned)}
+                                            className="touch-none cursor-grab active:cursor-grabbing p-1 -ml-1 text-casa-muted/60 hover:text-casa-navy transition-colors shrink-0 flex items-center justify-center"
+                                            title="Drag with finger or mouse to move or swap day"
+                                            aria-label="Drag recipe to reorder day"
+                                          >
+                                            <GripVertical size={16} />
+                                          </div>
+                                        )}
+                                        <span className="text-caption font-mono font-bold px-2 py-0.5 rounded-md uppercase tracking-wider bg-casa-surface border border-casa-border/60 text-casa-muted">
+                                          {day.dayName} · {day.formattedDate}
+                                        </span>
+
+                                        <AnimatePresence>
+                                          {isJustSwapped && (
+                                            <TactileSwapBadge type={justSwappedDates?.type ?? 'swap'} />
+                                          )}
+                                        </AnimatePresence>
+                                      </div>
+                                      {isAssigned && recipe?.cook_time && (
+                                        <span className="inline-flex items-center gap-1 text-2xs font-mono text-casa-muted">
+                                          <Clock3 size={11} className="text-casa-gold" />
+                                          {recipe.cook_time}
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    {isAssigned && recipe ? (
+                                      <div className="flex items-center justify-between gap-3">
+                                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                          {recipe.image_url && (
+                                            <img
+                                              src={recipe.image_url}
+                                              alt={recipe.name}
+                                              className="w-11 h-11 rounded-xl object-cover border border-casa-border shrink-0"
+                                            />
+                                          )}
+                                          <div className="min-w-0 flex-1">
+                                            <h3 className="font-display text-body font-bold text-casa-navy truncate">
+                                              {formatRecipeTitle(recipe.name)}
+                                            </h3>
+                                            <p className="text-caption text-casa-text-secondary truncate mt-0.5">
+                                              {recipe.servings ? `${recipe.servings} serv` : 'Family size'} · Chef: Jake & Kelly
+                                            </p>
+                                          </div>
+                                        </div>
+
+                                        <div className="flex items-center gap-1 shrink-0">
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => openRecipeForCookMode(recipe.id)}
+                                            className="font-semibold min-h-[32px] px-2.5 text-caption text-casa-navy hover:text-casa-gold"
+                                          >
+                                            View
+                                          </Button>
+                                          <Button
+                                            variant="secondary"
+                                            size="sm"
+                                            onClick={() => plan && void markPlannedMealCooked(plan, recipe)}
+                                            disabled={plannedMealActionId !== null}
+                                            className="font-semibold min-h-[32px] px-2 text-caption"
+                                          >
+                                            Done
+                                          </Button>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() =>
+                                              setAssigningDay({
+                                                slot: day.slot,
+                                                dateStr: day.dateStr,
+                                                dayLabel: `${day.dayName} (${day.formattedDate})`,
+                                              })
+                                            }
+                                            className="font-semibold min-h-[32px] px-2 text-caption text-casa-gold hover:text-amber-800"
+                                          >
+                                            Swap
+                                          </Button>
+                                          <IconButton
+                                            icon={<Trash2 size={13} />}
+                                            variant="danger"
+                                            size="sm"
+                                            onClick={() => plan && void removePlannedMeal(plan, recipe)}
+                                            disabled={plannedMealActionId !== null}
+                                            aria-label={`Remove ${recipe.name}`}
+                                          />
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <div className="flex items-center justify-between gap-2 py-1">
+                                        <span className="text-caption text-casa-muted italic">No dinner scheduled</span>
+                                        <div className="flex items-center gap-1.5">
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            leadingIcon={<Plus size={13} className="text-casa-gold" />}
+                                            onClick={() =>
+                                              setAssigningDay({
+                                                slot: day.slot,
+                                                dateStr: day.dateStr,
+                                                dayLabel: `${day.dayName} (${day.formattedDate})`,
+                                              })
+                                            }
+                                            className="text-caption font-bold text-casa-gold hover:text-amber-800 min-h-[30px] px-2.5"
+                                          >
+                                            Assign
+                                          </Button>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            leadingIcon={<Sparkles size={12} className="text-casa-muted" />}
+                                            onClick={() =>
+                                              document.dispatchEvent(
+                                                new CustomEvent('open-ai-chat', {
+                                                  detail: {
+                                                    launchId: crypto.randomUUID(),
+                                                    agent: 'chef',
+                                                    source: 'tonights-kitchen',
+                                                    prompt: `Suggest a delicious weeknight recipe for ${day.dayName} (${day.formattedDate}) using ingredients we already have in our pantry stock.`,
+                                                    autoSend: true,
+                                                  },
+                                                })
+                                              )
+                                            }
+                                            className="text-2xs font-semibold text-casa-muted hover:text-casa-navy min-h-[30px] px-2"
+                                          >
+                                            AI Suggest
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </motion.div>
+                                )
+                              })}
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Tonight's Rhythm & Shortlist Alternatives (Open Pill Section) */}
+                <div className="space-y-4 pt-5 border-t border-casa-border/50">
+                  {/* Mood Header & Selector */}
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <Heading role="heading" className="font-display text-lg sm:text-xl font-bold text-casa-navy tracking-tight">
+                        Tonight's Rhythm
+                        <span className="ml-2 font-body text-caption font-semibold text-casa-text-secondary uppercase tracking-wider">
+                          ({shortlistHeadingLabel})
+                        </span>
+                      </Heading>
+                      <Button
+                        onClick={() => setShortlistOffsets((current) => ({ ...current, [cookMood]: current[cookMood] + 1 }))}
+                        variant="ghost"
+                        size="sm"
+                        leadingIcon={<RotateCcw size={13} className="text-casa-gold" />}
+                        className="font-bold min-h-control text-caption text-casa-gold hover:text-amber-800 p-0"
+                      >
+                        Shuffle
+                      </Button>
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5">
+                      {COOK_MOOD_OPTIONS.map((mood) => {
+                        const isSelected = cookMood === mood.id
+                        return (
+                          <Chip
+                            key={mood.id}
+                            onClick={() => {
+                              setCookMood(mood.id)
+                              setShortlistOffsets((current) => ({ ...current, [mood.id]: 0 }))
+                            }}
+                            selected={isSelected}
+                            tone={isSelected ? 'accent' : 'neutral'}
+                            size="sm"
+                            className={cn(
+                              'min-h-control-sm text-caption font-semibold transition-all px-3 py-1',
+                              isSelected && 'shadow-xs border-casa-gold/70 text-casa-navy font-bold ring-1 ring-casa-gold/30',
+                            )}
+                          >
+                            {mood.label}
+                          </Chip>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Alternative Shortlist Recommendations (Cards #2 and #3 as Open Rows) */}
+                  <div className="space-y-2.5 pt-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <Heading role="heading" className="font-display text-lg sm:text-xl font-bold text-casa-navy tracking-tight">
+                        Shortlist Alternatives
+                        <span className="ml-2 font-body text-caption font-semibold text-casa-text-secondary">
+                          ({Math.max(0, moodShortlistRecipes.length - 1)})
+                        </span>
+                      </Heading>
+                    </div>
+
+                    {moodShortlistRecipes.slice(1, 3).map((insight, altIndex) => {
+                      const focus = parseRecipeImageFocus(insight.recipe.image_url)
+                      const minutesLabel = insight.minutes ? `${insight.minutes} min` : (insight.recipe.cook_time ?? 'Quick cook')
+                      return (
+                        <div
+                          key={`${insight.recipe.id}-alt-${altIndex}`}
+                          className="flex items-center gap-3 p-2.5 rounded-2xl hover:bg-casa-surface/80 transition-colors group cursor-pointer border border-transparent hover:border-casa-border/60"
+                          onClick={() => openRecipeForCookMode(insight.recipe.id)}
+                        >
+                          <div className="relative size-14 rounded-xl overflow-hidden bg-casa-surface shrink-0 border border-casa-border/80">
+                            <RecipeImage
+                              src={getRecipeImage(insight.recipe)}
+                              alt={insight.recipe.name}
+                              focalX={focus.focalX}
+                              focalY={focus.focalY}
+                              className="size-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            />
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <Text as="h3" role="body-lg" className="font-display text-body font-bold leading-snug text-casa-navy truncate group-hover:text-casa-gold transition-colors">{formatRecipeTitle(insight.recipe.name)}</Text>
+                            <p className="text-caption text-casa-text-secondary mt-0.5 truncate">
+                              {minutesLabel} · {insight.recipe.servings ? `${insight.recipe.servings} Servings` : '4 Servings'}
+                            </p>
+                          </div>
+
+                          <Button
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              openRecipeForCookMode(insight.recipe.id)
+                            }}
+                            variant="champagne"
+                            className="mt-auto shrink-0 font-bold shadow-2xs"
+                            size="sm"
+                          >
+                            Cook
+                          </Button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── PLAN THE WEEK WORKSPACE ── */}
+          {cookLandingMode === 'plan-week' && (
+            <Card tone="surface" padding="lg" className="space-y-6 shadow-card border-casa-border rounded-3xl">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-casa-border/60">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Sparkles size={18} className="text-casa-gold" />
+                    <Heading role="heading" className="font-display text-heading font-bold text-casa-navy">
+                      Meal Planner AI Atelier
+                    </Heading>
+                  </div>
+                  <p className="text-body-sm text-casa-text-secondary mt-0.5">
+                    Plan dinners with intelligent ingredient reuse to eliminate food waste and reduce grocery spend.
+                  </p>
+                </div>
+              </div>
+
+              {/* Strategy Selector */}
+              <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-casa-bg rounded-2xl border border-casa-border/60">
+                <div className="flex items-center gap-2">
+                  <span className="text-caption font-bold uppercase tracking-wider text-casa-muted">Strategy:</span>
+                  {(['balanced', 'budget', 'speed'] as const).map((strat) => (
+                    <Chip
+                      key={strat}
+                      onClick={() => setMealPlannerStrategy(strat)}
+                      selected={mealPlannerStrategy === strat}
+                      tone={mealPlannerStrategy === strat ? 'accent' : 'neutral'}
+                      className="capitalize font-semibold min-h-control"
+                    >
+                      {strat}
+                    </Chip>
+                  ))}
+                </div>
+                <p className="text-caption text-casa-muted font-medium">
+                  {strategyInstruction(mealPlannerStrategy)}
+                </p>
+              </div>
+
+              {/* Prompt Box */}
+              <div className="space-y-2.5">
+                <Textarea
+                  value={mealPlannerPrompt}
+                  onChange={(event) => setMealPlannerPrompt(event.target.value)}
+                  rows={2}
+                  placeholder="Plan 5 dinners this week under $140 with overlapping ingredients and one seafood meal."
+                  className="text-body bg-casa-surface border-casa-border focus:border-casa-gold"
+                />
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  {[
+                    'High overlap & low waste',
+                    'Fast 20m weeknights',
+                    'Budget friendly under $120',
+                    'Use up pantry staples',
+                  ].map((preset) => (
+                    <Chip
+                      key={preset}
+                      size="sm"
+                      onClick={() => setMealPlannerPrompt(preset)}
+                      className="text-caption font-medium bg-casa-bg border-casa-border hover:border-casa-gold/60 cursor-pointer"
+                    >
+                      {preset}
+                    </Chip>
+                  ))}
+                </div>
+              </div>
+
+              {/* Actions Bar */}
+              <div className="flex flex-wrap items-center gap-3 pt-1">
+                <Button
+                  variant="champagne"
+                  size="lg"
+                  onClick={() => void generateMealPlan()}
+                  disabled={mealPlannerLoading}
+                  loading={mealPlannerLoading}
+                  leadingIcon={<Sparkles size={16} />}
+                  className="font-bold px-6 min-h-control"
+                >
+                  {mealPlannerLoading ? 'Generating Plan…' : 'Generate Weekly Plan'}
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  onClick={() => void optimizeCurrentPlanForBudget()}
+                  disabled={mealPlannerLoading || !mealPlannerPlan}
+                  className="font-semibold min-h-control"
+                >
+                  Optimize Budget
+                </Button>
+                <Button
+                  variant="champagne"
+                  size="lg"
+                  onClick={() => void applyPlannerGroceries()}
+                  disabled={mealPlannerAddingGroceries || pendingPlannerGroceries.length === 0}
+                  loading={mealPlannerAddingGroceries}
+                  leadingIcon={<ShoppingCart size={16} className="text-casa-gold" />}
+                  className="font-bold min-h-control px-6 ml-auto"
+                >
+                  {mealPlannerAddingGroceries
+                    ? `Adding Groceries... (${pendingPlannerGroceries.length})`
+                    : `Apply to Shopping List (${pendingPlannerGroceries.length})`}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setPlannerAdvancedOpen((val) => !val)}
+                  className="text-caption font-bold text-casa-gold"
+                >
+                  {plannerAdvancedOpen ? 'Hide Advanced' : 'Show Advanced'}
+                </Button>
+              </div>
+
+              {/* Advanced Planner Settings */}
+              {plannerAdvancedOpen && (
+                <Card tone="subtle" padding="md" className="space-y-3 rounded-2xl border-casa-border">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Input
+                      value={mealPlannerTemplateName}
+                      onChange={(event) => setMealPlannerTemplateName(event.target.value)}
+                      placeholder="Template name"
+                      className="flex-1 text-caption min-h-control"
+                    />
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => void saveCurrentPromptTemplate()}
+                      className="min-h-control"
+                    >
+                      Save Template
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => void runWeeklyAutoDraft()}
+                      className="min-h-control font-bold text-casa-gold"
+                    >
+                      Auto Weekly Draft
+                    </Button>
+                  </div>
+
+                  {mealPlannerTemplates.length > 0 && (
+                    <div className="space-y-1">
+                      <p className="text-caption text-casa-muted font-semibold">Saved Templates</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {mealPlannerTemplates.map((tpl) => (
+                          <div key={tpl.id} className="inline-flex items-center gap-1 rounded-pill border border-casa-border bg-casa-surface px-2.5 py-1 text-caption shadow-2xs">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setMealPlannerPrompt(tpl.prompt)}
+                              className="min-h-0 p-0 text-casa-navy hover:bg-transparent font-medium"
+                            >
+                              {tpl.name}
+                            </Button>
+                            <IconButton
+                              icon={<Trash2 size={12} />}
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => void deleteMealPlannerTemplate(tpl.id)}
+                              aria-label={`Delete ${tpl.name} template`}
+                              className="min-h-0 min-w-0 p-0 text-casa-muted hover:text-casa-error hover:bg-transparent"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {typeof mealPlannerDebug?.elapsed_ms === 'number' && (
+                    <p className="text-caption font-mono text-casa-muted">
+                      trace {mealPlannerLastTraceId ? mealPlannerLastTraceId.slice(0, 8) : 'n/a'} · {mealPlannerDebug.elapsed_ms}ms
+                    </p>
+                  )}
+                </Card>
+              )}
+
+              {mealPlannerError && (
+                <Alert tone="danger" title="Meal planning error" className="shadow-sm">
+                  {mealPlannerError}
+                </Alert>
+              )}
+              {!mealPlannerError && mealPlannerStatus && (
+                <Alert tone="success" title="Plan ready" className="shadow-sm">
+                  {mealPlannerStatus}
+                </Alert>
+              )}
+
+              {/* Generated Plan Details */}
+              {mealPlannerPlan && (
+                <div className="space-y-5 pt-4 border-t border-casa-border/60">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <Heading role="heading" className="font-display text-heading font-bold text-casa-navy">
+                      Proposed Weekly Dinners ({configuredPlannerMeals.filter((m) => m.enabled).length})
+                    </Heading>
+                    <div className="flex items-center gap-2">
+                      <span className="text-caption font-mono font-bold px-3 py-1 rounded-full bg-emerald-500/15 text-emerald-800 border border-emerald-500/30">
+                        Est. Cost: ${configuredPlannerMetrics.estimatedLow} – ${configuredPlannerMetrics.estimatedHigh}
+                      </span>
+                      <span className="text-caption font-mono font-bold px-3 py-1 rounded-full bg-casa-gold/20 text-casa-navy border border-casa-gold/30">
+                        Overlap Score: {(mealPlannerPlan.budget_fit_score * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Over Budget Swap Hints */}
+                  {overBudgetSwapHints.length > 0 && (
+                    <Alert tone="warning" title="Budget optimization suggestions">
+                      <ul className="list-disc pl-4 space-y-0.5 mt-1 text-body-sm">
+                        {overBudgetSwapHints.map((hint) => (
+                          <li key={hint}>{hint}</li>
+                        ))}
+                      </ul>
+                    </Alert>
+                  )}
+
+                  {/* Proposed Meals Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
+                    {configuredPlannerMeals.map((meal) => (
+                      <Card
+                        key={meal.key}
+                        tone={meal.enabled ? 'surface' : 'subtle'}
+                        padding="md"
+                        className={cn(
+                          'space-y-2.5 transition-all rounded-2xl border-casa-border shadow-card',
+                          !meal.enabled && 'opacity-60',
+                        )}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-caption font-bold uppercase tracking-wider text-casa-gold">
+                            {SLOT_LABELS[meal.slot]}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <Switch
+                              checked={meal.enabled}
+                              onCheckedChange={() => toggleConfiguredMeal(meal.key)}
+                              label="Include"
+                            />
+                            <IconButton
+                              icon={<Trash2 size={13} />}
+                              variant="danger"
+                              size="sm"
+                              onClick={() => deleteConfiguredMeal(meal.key)}
+                              aria-label={`Remove ${meal.recipe_name} from plan`}
+                            />
+                          </div>
+                        </div>
+                        <p className="font-display text-body-lg font-bold text-casa-navy">{meal.recipe_name}</p>
+                        <p className="text-caption text-casa-text-secondary line-clamp-2 leading-relaxed">{meal.reason}</p>
+                      </Card>
+                    ))}
+                  </div>
+
+                  {/* Plan Action Buttons */}
+                  <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => void applyPlannerMealQueue()}
+                      className="font-bold min-h-control"
+                    >
+                      Queue meals for week
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => void reinforceCurrentPlanPreferences()}
+                      className="min-h-control font-semibold"
+                    >
+                      Love this pattern (learn)
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        void (async () => {
+                          if (!mealPlannerPlan) return
+                          try {
+                            await recordPlannerRejection(mealPlannerPlan)
+                            setMealPlannerStatus('Captured feedback. Regenerating with updated learning…')
+                            await generateMealPlan()
+                          } catch (error) {
+                            setMealPlannerError(formatSupabaseError(error, 'Could not save planner feedback'))
+                          }
+                        })()
+                      }}
+                      className="min-h-control text-casa-muted"
+                    >
+                      This plan missed (learn + regenerate)
+                    </Button>
+                  </div>
+
+                  {/* Overlap Ingredients & Deductions */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-2">
+                    <Card tone="subtle" padding="md" className="space-y-2 rounded-2xl border-casa-border">
+                      <p className="text-caption font-bold uppercase tracking-wider text-casa-navy flex items-center gap-1.5">
+                        <Sparkles size={14} className="text-casa-gold" />
+                        Shared Overlap Ingredients ({mealPlannerPlan.overlap_ingredients.length})
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {mealPlannerPlan.overlap_ingredients.map((item) => (
+                          <Chip key={item.name} size="sm" tone="accent">
+                            {item.name} ({item.recipe_count} recipes)
+                          </Chip>
+                        ))}
+                      </div>
+                    </Card>
+
+                    <Card tone="subtle" padding="md" className="space-y-2 rounded-2xl border-casa-border">
+                      <p className="text-caption font-bold uppercase tracking-wider text-casa-navy flex items-center gap-1.5">
+                        <Layers size={14} className="text-casa-gold" />
+                        Pantry Deductions ({mealPlannerPlan.pantry_deductions.length})
+                      </p>
+                      <p className="text-caption text-casa-text-secondary line-clamp-2">
+                        {mealPlannerPlan.pantry_deductions.map((d) => d.name).join(', ')}
+                      </p>
+                    </Card>
+                  </div>
+
+                  {/* Overlap-Optimized Groceries Checklist */}
+                  <div className="space-y-3 pt-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <Heading role="heading" className="font-display text-heading font-bold text-casa-navy">
+                        Overlap-Optimized Groceries ({pendingPlannerGroceries.length} to buy)
+                      </Heading>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => navigate('/settings/pantry-inventory')}
+                        className="text-caption font-bold text-casa-gold hover:underline min-h-control"
+                      >
+                        Manage pantry inventory →
+                      </Button>
+                    </div>
+
+                    {lowStockPlannerItems.length > 0 && (
+                      <p className="text-caption text-amber-800 font-medium">
+                        {lowStockPlannerItems.length} item{lowStockPlannerItems.length === 1 ? '' : 's'} projected low in pantry after this plan — review before shopping.
+                      </p>
+                    )}
+
+                    {mealPlannerAddResult && (
+                      <Alert tone="success" title="Shopping list updated">
+                        Added {mealPlannerAddResult.inserted} new items to shopping list ({mealPlannerAddResult.attempted} processed).
+                      </Alert>
+                    )}
+
+                    <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
+                      {configuredPlannerGroceries.map((item) => {
+                        const checked = Boolean(mealPlannerPantryConfig[plannerGroceryKey(item)])
+                        const tracker = projectedPantryForItem(item)
+                        return (
+                          <div
+                            key={`${item.name}-${item.category}`}
+                            className="rounded-xl border border-casa-border bg-casa-surface p-3 flex items-center justify-between gap-3 shadow-2xs"
+                          >
+                            <Checkbox
+                              checked={checked}
+                              onChange={() => togglePlannerPantryItem(item)}
+                              label={
+                                <span className={cn('text-body-sm font-semibold', checked ? 'line-through text-casa-muted' : 'text-casa-navy')}>
+                                  {item.name}
+                                  {item.quantity ? ` · ${item.quantity}${item.unit ? ` ${item.unit}` : ''}` : ''}
+                                  {item.suggested_purchase_display && (
+                                    <span className="text-casa-muted font-normal"> · buy {item.suggested_purchase_display}</span>
+                                  )}
+                                </span>
+                              }
+                            />
+                            <div className="flex items-center gap-2">
+                              <Chip size="sm" tone="neutral">
+                                {item.category}
+                              </Chip>
+                              {tracker.lowStock && (
+                                <Chip size="sm" tone="danger">
+                                  Low stock
+                                </Chip>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Action Log Drawer */}
+                  {mealPlannerActionLog.length > 0 && (
+                    <div className="pt-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setPlannerLogOpen((val) => !val)}
+                        className="text-caption font-mono text-casa-muted"
+                      >
+                        {plannerLogOpen ? 'Hide action log' : `Show action log (${mealPlannerActionLog.length})`}
+                      </Button>
+                      {plannerLogOpen && (
+                        <div className="mt-2 max-h-40 overflow-y-auto space-y-1.5 pr-1">
+                          {mealPlannerActionLog.slice(0, 10).map((log) => (
+                            <div key={log.id} className="p-2.5 rounded-xl bg-casa-surface border border-casa-border text-caption">
+                              <p className="font-semibold text-casa-navy">{log.action}: {log.status}</p>
+                              <p className="text-casa-muted">{log.detail}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </Card>
+          )}
+
+          {/* ── THE RECIPE VAULT & CATALOG (Open Gallery Section) ── */}
+          <div className="space-y-5 pt-8 border-t border-casa-border/60">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
+              <div>
+                <Heading role="heading" className="font-display text-heading font-bold text-casa-navy">
+                  Recipe Vault &amp; Catalog
+                </Heading>
+                <p className="text-body-sm text-casa-text-secondary mt-0.5">
+                  Browse and search all {recipes.length} saved household recipes.
+                </p>
+              </div>
+
+              {libraryActionError && (
+                <Alert tone="danger" title="Library action failed">
+                  {libraryActionError}
+                </Alert>
+              )}
+              {!libraryActionError && libraryActionStatus && (
+                <Alert tone="success" title="Action completed">
+                  {libraryActionStatus}
+                </Alert>
+              )}
+
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="relative min-w-[15rem] flex-1 sm:flex-initial">
+                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-casa-muted z-10" />
+                  <Input
+                    value={recipeSearch}
+                    onChange={(event) => setRecipeSearch(event.target.value)}
+                    placeholder="Search recipes..."
+                    className="pl-9 min-h-control"
+                  />
+                  {recipeSearch.trim() && (
+                    <IconButton
+                      icon={<X size={14} />}
+                      aria-label="Clear search"
+                      onClick={() => setRecipeSearch('')}
+                      size="sm"
+                      variant="ghost"
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2"
+                    />
+                  )}
+                </div>
+                <Button
+                  variant="champagne"
+                  size="md"
+                  onClick={openImportDialog}
+                  leadingIcon={<Upload size={16} />}
+                  className="font-bold min-h-control px-4"
+                >
+                  Import recipe
+                </Button>
+              </div>
+            </div>
+
+            {/* Real-time search matches dropdown tray if user searches */}
+            {recipeSearch.trim() && (
+              <div className="space-y-3 p-4 bg-casa-surface rounded-2xl border border-casa-gold/40 shadow-card">
+                <div className="flex items-center justify-between pb-2 border-b border-casa-border/60">
+                  <Text role="caption" muted className="font-bold uppercase tracking-wider text-casa-gold">
+                    Found {filteredRecipes.length} {filteredRecipes.length === 1 ? 'matching recipe' : 'matching recipes'}
+                  </Text>
+                  <Button variant="ghost" size="sm" onClick={() => setRecipeSearch('')} className="text-caption font-semibold">
+                    Clear search
+                  </Button>
+                </div>
+                {filteredRecipes.length === 0 ? (
+                  <EmptyState title="No recipes match" description="Try a different keyword or scan a new recipe from photo or URL." />
+                ) : (
+                  <div className="grid gap-2.5 sm:grid-cols-2 max-h-72 overflow-y-auto pr-1">
+                    {filteredRecipes.map((recipe) => (
+                      <Card
+                        key={recipe.id}
+                        interactive
+                        padding="sm"
+                        tone="surface"
+                        onClick={() => {
+                          setRecipeSearch('')
+                          openRecipeForCookMode(recipe.id)
+                        }}
+                        className="flex items-center justify-between gap-3 border border-casa-border hover:border-casa-gold/80 group"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <Text role="body-sm" className="font-semibold text-casa-navy truncate group-hover:text-casa-gold transition-colors">
+                            {recipe.name}
+                          </Text>
+                          <Text role="caption" muted className="truncate">
+                            {recipe.cook_time ? `${recipe.cook_time} · ` : ''}{recipe.servings ? `${recipe.servings} servings` : 'Standard'}
+                          </Text>
+                        </div>
+                        <Button variant="champagne" size="sm" leadingIcon={<Utensils size={13} />} className="shrink-0 font-bold">
+                          Cook
+                        </Button>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Filter Chips */}
+            <div className="flex flex-wrap items-center gap-2">
+              {([
+                { id: 'all', label: `All Recipes (${recipes.length})` },
+                { id: 'quick', label: `Quick Cooks (${quickTonightCount})` },
+                { id: 'planned', label: `Planned This Week (${plannedRecipes.length})` },
+              ] as const).map((filter) => (
+                <Chip
+                  key={filter.id}
+                  onClick={() => setRecipeBrowseFilter(filter.id)}
+                  selected={recipeBrowseFilter === filter.id}
+                  tone={recipeBrowseFilter === filter.id ? 'accent' : 'neutral'}
+                  className="min-h-control font-semibold"
+                >
+                  {filter.label}
                 </Chip>
               ))}
             </div>
 
-            <div className="mt-4 flex items-center justify-between gap-3">
-              <Text role="body-sm" className="font-semibold text-casa-navy">3 {shortlistHeadingLabel} picks for tonight</Text>
-              <Button
-                onClick={() => setShortlistOffsets((current) => ({ ...current, [cookMood]: current[cookMood] + 1 }))}
-                variant="ghost"
-                size="sm"
-              >
-                Shuffle →
-              </Button>
-            </div>
+            {filteredRecipes.length === 0 && (
+              <EmptyState
+                title="No recipes found"
+                description="Try adjusting your search or filters, or import a new recipe."
+              />
+            )}
 
-            {moodShortlistRecipes.length === 0 ? (
-              <Card tone="subtle" className="mt-3">
-                <Text>Import recipes from Grocery to unlock your mood-based shortlist.</Text>
-                <Button
-                  onClick={openImportDialog}
-                  className="mt-3"
-                >
-                  Import recipe
-                </Button>
-              </Card>
-            ) : (
-              <div className="mt-3 grid grid-cols-1 xl:grid-cols-[1.25fr_1fr_1fr] gap-4">
-                {moodShortlistRecipes.map((insight, index) => {
-                  const focus = parseRecipeImageFocus(insight.recipe.image_url)
-                  const isTop = index === 0
-                  const minutesLabel = insight.minutes ? `${insight.minutes} min` : (insight.recipe.cook_time ?? 'Quick cook')
-                  const approvalLabel = isTop ? buildTopPickApproval(insight) : null
-                  return (
-                    <Card
-                      key={`${insight.recipe.id}-${index}`}
-                      padding="none"
-                      tone={isTop ? 'accent' : 'surface'}
-                      className={cn(
-                        'flex flex-col overflow-hidden',
-                        isTop && 'border-2 border-casa-accent-soft-border',
-                      )}
-                    >
-                      {isTop && (
-                        <div className="bg-casa-accent-soft px-4 py-2 text-caption font-bold uppercase tracking-wide text-casa-top-pick-band">
-                          Top pick for tonight
-                        </div>
-                      )}
+            {/* Recipe Grid */}
+            <div
+              className={cn(
+                'grid gap-5',
+                aiDrawerOpen
+                  ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
+                  : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4',
+              )}
+            >
+              {filteredRecipes.slice(0, 32).map((recipe) => {
+                const focus = parseRecipeImageFocus(recipe.image_url)
+                const matchedHorizon = weekDayMeals.find((w) => w.recipe?.id === recipe.id)
+                const isScheduled = Boolean(matchedHorizon)
+                const scheduledDayLabel = matchedHorizon ? (matchedHorizon.day.isToday ? 'Today' : `${matchedHorizon.day.dayName}, ${matchedHorizon.day.formattedDate}`) : null
+                const isGroceryDrawerOpen = activeGroceryRecipeId === recipe.id
+                const recipeIngredients = ingredientsByRecipe.get(recipe.id) ?? []
+                const selectedSet = recipeGrocerySelections[recipe.id] ?? new Set(recipeIngredients.map((_, i) => i))
+                const selectedCount = selectedSet.size
+
+                return (
+                  <Card
+                    key={recipe.id}
+                    tone="surface"
+                    padding="none"
+                    className={cn(
+                      'overflow-hidden flex flex-col group transition-all shadow-card rounded-2xl cursor-pointer hover:shadow-card-hover border-casa-border',
+                      isGroceryDrawerOpen ? 'ring-2 ring-casa-gold/80 border-casa-gold' : 'hover:ring-2 hover:ring-casa-gold/50',
+                    )}
+                    onClick={() => openRecipeForCookMode(recipe.id)}
+                  >
+                    <div className="relative overflow-hidden bg-casa-surface">
                       <RecipeImage
-                        src={getRecipeImage(insight.recipe)}
-                        alt={insight.recipe.name}
+                        src={getRecipeImage(recipe)}
+                        alt={recipe.name}
                         focalX={focus.focalX}
                         focalY={focus.focalY}
-                        className={cn('w-full object-cover', isTop ? 'h-44' : 'h-36')}
+                        className="h-44 w-full object-cover group-hover:scale-103 transition-transform duration-500"
                       />
-                      <div className={cn('p-4 flex flex-col flex-1', !isTop && 'p-3.5')}>
-                        {isTop ? (
-                          <Heading role="heading" className="font-semibold leading-tight">{insight.recipe.name}</Heading>
-                        ) : (
-                          <Text as="h3" role="body-lg" className="font-semibold leading-tight text-casa-navy">{insight.recipe.name}</Text>
-                        )}
-                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                          <Chip tone="info" size="sm" icon={<Clock3 size={14} />}>
-                            {minutesLabel}
-                          </Chip>
-                          {approvalLabel && (
-                            <Chip tone="success" size="sm" icon={<Users size={14} />}>
-                              {approvalLabel}
-                            </Chip>
-                          )}
+                      {isScheduled && (
+                        <div className="absolute top-2.5 left-2.5">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-casa-gold/20 text-casa-navy text-caption font-mono font-bold border border-casa-gold/35 shadow-xs">
+                            <Sparkles size={10} className="text-casa-navy" />
+                            {scheduledDayLabel || 'Planned'}
+                          </span>
                         </div>
-                        {isTop && (
-                          <p className="mt-2 text-body-sm text-casa-text-tertiary">
-                            {buildMoodReason(insight)}
-                          </p>
-                        )}
+                      )}
+                      {recipe.cook_time && (
+                        <div className="absolute top-2.5 right-2.5">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-casa-surface/90 backdrop-blur-sm text-casa-navy text-caption font-mono font-bold border border-casa-border/80 shadow-xs">
+                            <Clock3 size={11} className="text-casa-gold" />
+                            {recipe.cook_time}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="p-4 flex flex-col flex-1 gap-2.5">
+                      <Heading role="heading" className="font-display font-bold text-body-lg text-casa-navy line-clamp-2 group-hover:text-casa-gold transition-colors">
+                        {formatRecipeTitle(recipe.name)}
+                      </Heading>
+                      <p className="text-caption text-casa-muted">
+                        {recipe.servings ? `${recipe.servings} servings` : 'Standard servings'}{recipe.cook_time ? ` · ${recipe.cook_time}` : ''}
+                      </p>
+
+                      <div className="mt-auto pt-2 flex items-center gap-2">
                         <Button
-                          onClick={() => openRecipeForCookMode(insight.recipe.id)}
-                          variant={isTop ? 'primary' : 'secondary'}
-                          className="mt-auto"
+                          variant="champagne"
+                          size="sm"
+                          className="flex-1 font-bold min-h-control"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            openRecipeForCookMode(recipe.id)
+                          }}
+                          leadingIcon={<Utensils size={13} />}
                         >
-                          Start cooking
+                          Cook
                         </Button>
-                      </div>
-                    </Card>
-                  )
-                })}
-              </div>
-            )}
-
-            {resumeRecipe && (
-              <Button
-                onClick={() => {
-                  openRecipeForCookMode(resumeRecipe.recipe.id)
-                  setStepIndex(Math.max(0, Math.min(resumeRecipe.progress.stepIndex, Math.max(0, resumeRecipe.progress.totalSteps - 1))))
-                }}
-                variant="secondary"
-                fullWidth
-                className="mt-4 h-auto flex-col items-stretch text-left"
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-body-sm font-semibold text-casa-navy">Jump back in</span>
-                  <span className="text-body-sm font-semibold text-casa-navy">{resumeRecipe.recipe.name}</span>
-                  <span className="text-caption font-semibold uppercase tracking-[0.12em] text-casa-info-strong">
-                    Step {resumeRecipe.progress.stepIndex + 1} of {resumeRecipe.progress.totalSteps}
-                  </span>
-                  {resumeRecentLabel && (
-                    <span className="text-body-sm text-casa-text-faint">Also recent: {resumeRecentLabel}</span>
-                  )}
-                </div>
-                <Progress
-                  value={resumeRecipe.progress.stepIndex + 1}
-                  max={Math.max(1, resumeRecipe.progress.totalSteps)}
-                  aria-label="Saved cooking progress"
-                  className="mt-2 [&_.casa-progress]:h-1"
-                />
-              </Button>
-            )}
-
-            <Card tone="accent" className="mt-4 flex items-start gap-2.5 border-dashed">
-              <Sparkles size={16} className="text-casa-info shrink-0 mt-0.5" />
-              <p className="text-body-sm text-casa-text-secondary">
-                Thinking ahead? The <span className="font-semibold text-casa-navy">Plan the week</span> tab opens Meal Planner AI — build a weekly plan, optimize budget, and push groceries to shopping.
-              </p>
-            </Card>
-          </div>
-        ) : (
-          <Card className="mt-4">
-            <Text role="caption" className="font-semibold uppercase tracking-wide text-casa-info-strong">Meal Planner AI</Text>
-            <Heading role="heading" className="mt-1 font-body font-bold">Build an overlap-optimized weekly plan</Heading>
-            <p className="mt-1 text-body-sm text-casa-text-tertiary">
-              Profile: {foodProfile.householdSize} people · ${foodProfile.weeklyBudgetUsd}/week · {foodProfile.defaultMealsPerWeek} meals · {foodProfile.weeknightMaxMinutes} min weeknights
-            </p>
-            <p className="mt-2 text-body-sm text-casa-text-secondary">
-              Use the planner workspace below to generate, optimize, and apply your weekly meal + grocery plan.
-            </p>
-          </Card>
-        )}
-      </Card>
-
-      {cookLandingMode === 'plan-week' && (
-      <>
-      <Card className="space-y-3">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <Text role="caption" className="font-semibold uppercase tracking-wide text-casa-info-strong">Meal Planner AI</Text>
-            <Text role="caption" muted className="mt-1">
-              Build an overlap-optimized weekly plan, then confirm groceries + queue actions.
-            </Text>
-          </div>
-          <Button
-            onClick={() => navigate('/settings/food-profile')}
-            variant="secondary"
-            size="sm"
-          >
-            Food profile
-          </Button>
-        </div>
-        <Card tone="subtle" padding="sm">
-          <Text role="caption" muted>
-            Profile: {foodProfile.householdSize} people · ${foodProfile.weeklyBudgetUsd}/week · {foodProfile.defaultMealsPerWeek} meals · {foodProfile.weeknightMaxMinutes} min weeknights
-          </Text>
-          <Textarea
-            value={mealPlannerPrompt}
-            onChange={(event) => setMealPlannerPrompt(event.target.value)}
-            rows={2}
-            placeholder="Plan 5 dinners this week under $140 with overlapping ingredients and one fish meal."
-            className="mt-2"
-          />
-          <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
-            <Button
-              onClick={() => void generateMealPlan()}
-              disabled={mealPlannerLoading}
-              loading={mealPlannerLoading}
-            >
-              {mealPlannerLoading ? 'Planning…' : 'Generate plan'}
-            </Button>
-            <Button
-              onClick={() => void optimizeCurrentPlanForBudget()}
-              disabled={mealPlannerLoading || !mealPlannerPlan}
-              variant="secondary"
-            >
-              Optimize budget
-            </Button>
-            <Button
-              onClick={() => void applyPlannerGroceries()}
-              disabled={mealPlannerAddingGroceries || pendingPlannerGroceries.length === 0}
-              loading={mealPlannerAddingGroceries}
-            >
-              {mealPlannerAddingGroceries
-                ? `Adding groceries... (${pendingPlannerGroceries.length})`
-                : `Apply to shopping (${pendingPlannerGroceries.length})`}
-            </Button>
-          </div>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <Button
-              onClick={() => {
-                const prompt = mealPlannerPrompt.trim() || 'Plan 4 quick weeknight dinners under budget.'
-                document.dispatchEvent(new CustomEvent('open-ai-chat', {
-                  detail: {
-                    prompt,
-                    autoSend: false,
-                    source: 'cook-talk-to-chef',
-                    page: 'cook',
-                    agent: 'chef',
-                  },
-                }))
-              }}
-              variant="secondary"
-              size="sm"
-            >
-              Talk to Chef
-            </Button>
-            <Button
-              onClick={() => setPlannerAdvancedOpen((value) => !value)}
-              variant="secondary"
-              size="sm"
-            >
-              {plannerAdvancedOpen ? 'Hide advanced' : 'Show advanced'}
-            </Button>
-            {!plannerAdvancedOpen && typeof mealPlannerDebug?.elapsed_ms === 'number' && (
-              <span className="text-caption text-casa-muted">
-                trace {mealPlannerLastTraceId ? mealPlannerLastTraceId.slice(0, 8) : 'n/a'} · {mealPlannerDebug.elapsed_ms}ms
-              </span>
-            )}
-          </div>
-          {plannerAdvancedOpen && (
-            <div className="mt-2 space-y-2 rounded-lg border border-casa-border bg-casa-surface p-2.5">
-              <div className="flex flex-wrap items-center gap-1.5">
-                {([
-                  { key: 'balanced', label: 'Balanced' },
-                  { key: 'budget', label: 'Budget-first' },
-                  { key: 'speed', label: 'Speed-first' },
-                ] as Array<{ key: MealPlannerStrategy; label: string }>).map((strategy) => (
-                  <Chip
-                    key={strategy.key}
-                    onClick={() => setMealPlannerStrategy(strategy.key)}
-                    size="sm"
-                    selected={mealPlannerStrategy === strategy.key}
-                  >
-                    {strategy.label}
-                  </Chip>
-                ))}
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-2">
-                <input
-                  value={mealPlannerTemplateName}
-                  onChange={(event) => setMealPlannerTemplateName(event.target.value)}
-                  placeholder="Template name (optional)"
-                  className="rounded-button border border-casa-border bg-casa-bg px-3 py-2 text-body-sm text-casa-text placeholder:text-casa-muted outline-none"
-                />
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => void saveCurrentPromptTemplate()}
-                >
-                  Save template
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => void runWeeklyAutoDraft()}
-                  className="border-casa-gold/40 bg-casa-gold/10"
-                >
-                  Auto weekly draft
-                </Button>
-              </div>
-              {mealPlannerTemplates.length > 0 && (
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {mealPlannerTemplates.slice(0, 6).map((template) => (
-                    <Chip
-                      key={template.id}
-                      onClick={() => setMealPlannerPrompt(template.prompt)}
-                      size="sm"
-                      title={template.prompt}
-                    >
-                      {template.name}
-                    </Chip>
-                  ))}
-                </div>
-              )}
-              {typeof mealPlannerDebug?.elapsed_ms === 'number' && (
-                <p className="text-caption text-casa-muted">
-                  Debug latency {mealPlannerDebug.elapsed_ms}ms
-                  {mealPlannerLastTraceId ? ` · trace ${mealPlannerLastTraceId}` : ''}
-                </p>
-              )}
-            </div>
-          )}
-        </Card>
-        {mealPlannerError && <Alert tone="danger" title="Meal planning failed">{mealPlannerError}</Alert>}
-        {!mealPlannerError && mealPlannerStatus && <Alert tone="success" title="Meal planner updated">{mealPlannerStatus}</Alert>}
-        {mealPlannerPlan && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            <div className="rounded-xl border border-casa-border bg-casa-bg p-3">
-              <p className="text-body-sm font-semibold text-casa-navy inline-flex items-center gap-1.5">
-                Weekly meal queue preview
-                <InfoHint label="Meal selection reasoning" text={mealPlannerPlan.explainability?.meal_selection ?? 'Ranked recipes by overlap, time fit, and learned preferences.'} />
-              </p>
-              <p className="text-caption text-casa-muted mt-1">{mealPlannerPlan.summary}</p>
-              <p className="text-caption text-casa-muted mt-1 inline-flex items-center gap-1.5">
-                Overlap strategy
-                <InfoHint label="Overlap strategy reasoning" text={mealPlannerPlan.explainability?.overlap_strategy ?? 'Balanced ingredient overlap against variety preference.'} />
-              </p>
-              <p className="text-caption text-casa-muted mt-1">
-                Active meals: {configuredPlannerMeals.filter((meal) => meal.enabled).length} / {configuredPlannerMeals.length}
-              </p>
-              <div className="mt-2 space-y-2">
-                {configuredPlannerMeals.map((meal) => (
-                  <div key={meal.key} className={cn('rounded-lg border border-casa-border bg-casa-surface px-2.5 py-2', !meal.enabled && 'opacity-55')}>
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-caption text-casa-muted">{SLOT_LABELS[meal.slot]}{meal.planned_for ? ` · ${meal.planned_for}` : ''}</p>
-                        <p className="text-body-sm font-semibold text-casa-navy">{meal.recipe_name}</p>
-                        <p className="text-caption text-casa-muted">Overlap {(meal.overlap_score * 100).toFixed(0)}% · {meal.reason}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Switch
-                          checked={meal.enabled}
-                          onCheckedChange={() => toggleConfiguredMeal(meal.key)}
-                          label={meal.enabled ? `Disable ${meal.recipe_name}` : `Enable ${meal.recipe_name}`}
-                          className="[&>div]:sr-only"
+                        <IconButton
+                          icon={<CalendarPlus size={15} />}
+                          variant="secondary"
+                          size="sm"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            void addRecipeToNextAvailableSlot(recipe)
+                          }}
+                          disabled={plannedMealActionId !== null}
+                          title={isScheduled ? `Scheduled for ${scheduledDayLabel} (Click to remove from schedule)` : 'Add to next available day on Weekly Horizon'}
+                          aria-label={isScheduled ? `Remove ${recipe.name} from weekly schedule` : `Add ${recipe.name} to weekly dinner horizon`}
+                          className={cn(
+                            'shrink-0 min-h-control size-control bg-casa-surface border-casa-border hover:border-casa-gold transition-all',
+                            isScheduled && 'border-casa-gold text-casa-gold bg-casa-gold/15',
+                          )}
                         />
                         <IconButton
-                          icon={<Trash2 size={13} />}
-                          variant="danger"
+                          icon={<ShoppingCart size={15} />}
+                          variant="secondary"
                           size="sm"
-                          onClick={() => deleteConfiguredMeal(meal.key)}
-                          aria-label="Delete meal from planner"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            toggleGroceryDrawer(recipe)
+                          }}
+                          disabled={smartAddingRecipeId === recipe.id}
+                          title="Add ingredients to grocery list"
+                          aria-label={`Add ingredients for ${recipe.name} to shopping list`}
+                          className={cn(
+                            'shrink-0 min-h-control size-control bg-casa-surface border-casa-border hover:border-casa-gold',
+                            isGroceryDrawerOpen && 'border-casa-gold text-casa-gold bg-casa-gold/15',
+                          )}
                         />
                       </div>
                     </div>
-                  </div>
-                ))}
-                {configuredPlannerMeals.length === 0 && (
-                  <p className="text-caption text-casa-muted">No meals left in the queue. Generate a new plan.</p>
-                )}
-              </div>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => void applyPlannerMealQueue()}
-                className="mt-3"
-              >
-                Queue meals for week
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => void reinforceCurrentPlanPreferences()}
-                className="ml-2 mt-2"
-              >
-                Love this pattern (learn)
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => {
-                  void (async () => {
-                    if (!mealPlannerPlan) return
-                    try {
-                      await recordPlannerRejection(mealPlannerPlan)
-                      setMealPlannerStatus('Captured feedback. Regenerating with updated learning…')
-                      await generateMealPlan()
-                    } catch (error) {
-                      setMealPlannerError(formatSupabaseError(error, 'Could not save planner feedback'))
-                    }
-                  })()
-                }}
-                className="mt-2"
-              >
-                This plan missed (learn + regenerate)
-              </Button>
+
+                    {/* Inline Grocery Ingredient Review Tray (Modal-Free) */}
+                    {isGroceryDrawerOpen && (
+                      <div
+                        className="p-3 bg-casa-bg border-t border-casa-border/80 space-y-2.5 rounded-b-2xl"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="flex items-center justify-between gap-1 pb-1 border-b border-casa-border/50">
+                          <span className="text-caption font-mono font-bold uppercase tracking-wider text-casa-navy truncate">
+                            Ingredients ({selectedCount}/{recipeIngredients.length})
+                          </span>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => toggleAllIngredients(recipe)}
+                              className="text-caption font-semibold p-0 min-h-0 text-casa-gold hover:text-amber-800"
+                            >
+                              {selectedCount === recipeIngredients.length ? 'Clear' : 'All'}
+                            </Button>
+                            <IconButton
+                              icon={<X size={13} />}
+                              size="sm"
+                              variant="ghost"
+                              aria-label="Close ingredient selector"
+                              onClick={() => setActiveGroceryRecipeId(null)}
+                              className="size-6 p-0 min-h-0 min-w-0 text-casa-muted hover:text-casa-navy"
+                            />
+                          </div>
+                        </div>
+
+                        {recipeIngredients.length === 0 ? (
+                          <p className="text-caption text-casa-muted py-1">No ingredients listed for this recipe.</p>
+                        ) : (
+                          <div className="max-h-44 overflow-y-auto space-y-1.5 pr-1">
+                            {recipeIngredients.map((ingredient, idx) => {
+                              const isChecked = selectedSet.has(idx)
+                              const text = ingredient.name || ingredient.raw_text
+                              const qtyText = ingredient.quantity ? `${ingredient.quantity}${ingredient.unit ? ` ${ingredient.unit}` : ''}` : ''
+                              return (
+                                <div
+                                  key={`${ingredient.recipe_id}-${idx}`}
+                                  onClick={() => toggleIngredientSelection(recipe.id, idx)}
+                                  className={cn(
+                                    'flex items-center gap-2 p-1.5 rounded-xl border text-caption cursor-pointer transition-colors select-none',
+                                    isChecked
+                                      ? 'bg-casa-surface border-casa-gold/60 text-casa-navy'
+                                      : 'bg-casa-surface/40 border-casa-border/60 text-casa-muted line-through opacity-70',
+                                  )}
+                                >
+                                  <Checkbox
+                                    checked={isChecked}
+                                    onChange={() => toggleIngredientSelection(recipe.id, idx)}
+                                    label=""
+                                    className="pointer-events-none"
+                                  />
+                                  <span className="truncate font-medium flex-1">
+                                    {text}
+                                  </span>
+                                  {qtyText && (
+                                    <span className="text-caption font-mono text-casa-muted shrink-0">
+                                      {qtyText}
+                                    </span>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
+
+                        <Button
+                          variant="champagne"
+                          size="sm"
+                          fullWidth
+                          onClick={() => void addSelectedRecipeGroceries(recipe)}
+                          disabled={smartAddingRecipeId === recipe.id || selectedCount === 0}
+                          loading={smartAddingRecipeId === recipe.id}
+                          leadingIcon={<ShoppingCart size={13} />}
+                          className="font-bold min-h-control"
+                        >
+                          Add {selectedCount} to cart →
+                        </Button>
+                      </div>
+                    )}
+                  </Card>
+                )
+              })}
             </div>
-            <div className="rounded-xl border border-casa-border bg-casa-bg p-3">
-              <p className="text-body-sm font-semibold text-casa-navy inline-flex items-center gap-1.5">
-                Consolidated grocery preview
-                <InfoHint label="Budget reasoning" text={mealPlannerPlan.explainability?.budget_strategy ?? 'Estimated basket cost vs weekly budget target.'} />
+          </div>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        open={Boolean(deleteConfirmRecipe)}
+        onClose={() => {
+          if (deletingRecipeId !== deleteConfirmRecipe?.id) {
+            setDeleteConfirmRecipe(null)
+          }
+        }}
+        size="sm"
+        title="Delete recipe?"
+      >
+        <div className="space-y-4">
+          <p className="text-body text-casa-text-secondary">
+            Are you sure you want to delete <span className="font-bold text-casa-navy">{deleteConfirmRecipe?.name}</span>? This action cannot be undone.
+          </p>
+          <div className="flex items-center justify-end gap-3 pt-2">
+            <Button
+              variant="secondary"
+              size="md"
+              onClick={() => setDeleteConfirmRecipe(null)}
+              disabled={deletingRecipeId === deleteConfirmRecipe?.id}
+              className="min-h-control"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              size="md"
+              onClick={() => void confirmDeleteRecipe()}
+              disabled={deletingRecipeId === deleteConfirmRecipe?.id}
+              loading={deletingRecipeId === deleteConfirmRecipe?.id}
+              className="font-bold min-h-control"
+            >
+              Delete recipe
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Recipe Import Multi-Step Modal */}
+      <Modal
+        open={importDialogOpen}
+        onClose={closeImportDialog}
+        size="lg"
+        title={`Import Recipe · ${importStep === 1 ? 'Step 1 of 3 (Sources)' : importStep === 2 ? 'Step 2 of 3 (Photos)' : 'Step 3 of 3 (Review)'}`}
+      >
+        <div className="space-y-4">
+          {(importStep === 1 || importStep === 2) && (
+            <Card tone="subtle" padding="md" className="space-y-3">
+              <p className="text-body-sm text-casa-text-secondary">
+                Paste a recipe URL, upload images or PDFs, or take a camera snapshot.
               </p>
-              <p className="text-caption text-casa-muted mt-1">
-                Est. ${configuredPlannerMetrics.estimatedLow}-{configuredPlannerMetrics.estimatedHigh} {mealPlannerPlan.estimated_cost_range.currency}
-              </p>
-              <p className="text-caption text-casa-muted mt-1">
-                Budget fit {(configuredPlannerMetrics.budgetFit * 100).toFixed(0)}% · Waste score {(configuredPlannerMetrics.wasteScore * 100).toFixed(0)}% · Est. waste ${configuredPlannerMetrics.wasteValue.toFixed(2)}
-                <span className="ml-1.5 inline-flex items-center gap-1">
-                  <InfoHint label="Waste reasoning" text={mealPlannerPlan.explainability?.waste_strategy ?? 'Pack-size rounding is used to estimate waste risk.'} />
-                </span>
-              </p>
-              {configuredPlannerMetrics.budgetFit < 0.8 && (
-                <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-2">
-                  <p className="text-caption font-semibold text-amber-800">
-                    Over budget risk detected
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <Input
+                  type="url"
+                  value={importUrlInput}
+                  onChange={(event) => setImportUrlInput(event.target.value)}
+                  placeholder="https://..."
+                  className="flex-1 min-h-control"
+                />
+                <Button
+                  variant="secondary"
+                  size="md"
+                  onClick={() => triggerFileInput(importFileInputRef)}
+                  disabled={importingRecipe}
+                  leadingIcon={<Upload size={16} />}
+                  className="font-semibold min-h-control"
+                >
+                  Upload
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="md"
+                  onClick={() => triggerFileInput(importCameraInputRef)}
+                  disabled={importingRecipe}
+                  leadingIcon={<Camera size={16} />}
+                  className="font-semibold min-h-control"
+                >
+                  Take photo
+                </Button>
+              </div>
+
+              <input
+                id="cook-import-file-input"
+                ref={importFileInputRef}
+                type="file"
+                accept="image/*,.pdf,application/pdf"
+                multiple
+                className="hidden"
+                onChange={(event) => {
+                  const files = event.target.files ? Array.from(event.target.files) : []
+                  event.currentTarget.value = ''
+                  void addImportCaptureFiles(files, 'upload')
+                }}
+              />
+              <input
+                id="cook-import-camera-input"
+                ref={importCameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={(event) => {
+                  const files = event.target.files ? Array.from(event.target.files) : []
+                  event.currentTarget.value = ''
+                  void addImportCaptureFiles(files, 'camera')
+                }}
+              />
+
+              {importCaptureFiles.length > 0 && (
+                <div className="space-y-2 pt-2">
+                  <p className="text-caption font-semibold text-casa-muted">
+                    Attached photos ({importCaptureFiles.length})
                   </p>
-                  {overBudgetSwapHints.length > 0 && (
-                    <ul className="mt-1 list-disc pl-4 text-caption text-amber-800 space-y-0.5">
-                      {overBudgetSwapHints.map((hint) => <li key={hint}>{hint}</li>)}
-                    </ul>
-                  )}
+                  <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                    {importCaptureFiles.map((file, index) => {
+                      const selected = importMealPhotoIndex !== null && index === importMealPhotoIndex
+                      return (
+                        <div
+                          key={file.id}
+                          className={cn(
+                            'rounded-xl border overflow-hidden bg-casa-surface',
+                            selected ? 'border-casa-gold ring-2 ring-casa-gold/30' : 'border-casa-border',
+                          )}
+                        >
+                          <img
+                            src={file.previewUrl}
+                            alt={file.name}
+                            className="h-16 w-full object-cover"
+                          />
+                          <div className="p-1 flex flex-col gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setImportMealPhotoIndex((curr) => (curr === index ? null : index))}
+                              className="text-caption p-0 h-auto"
+                            >
+                              {selected ? 'Cover photo' : 'Set cover'}
+                            </Button>
+                            <Button
+                              variant="danger"
+                              size="sm"
+                              onClick={() => removeImportCaptureFile(file.id)}
+                              className="text-caption p-0 h-auto"
+                            >
+                              Remove
+                            </Button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </Card>
+          )}
+
+          {importingRecipe && (
+            <p className="text-body-sm text-casa-gold font-bold animate-pulse text-center py-2">
+              Extracting recipe with AI intelligence…
+            </p>
+          )}
+          {importError && <Alert tone="danger" title="Recipe import failed">{importError}</Alert>}
+
+          {importStep === 3 && importDraft && (
+            <Card tone="surface" padding="md" className="space-y-4">
+              <div className="flex items-start gap-4">
+                <img
+                  src={
+                    importDraft.primary_image_index === null
+                      ? (importDraft.image_url ?? recipeFallbackHero)
+                      : (importDraft.image_urls[importDraft.primary_image_index] ?? importDraft.image_url ?? recipeFallbackHero)
+                  }
+                  alt={importDraft.name}
+                  className="h-20 w-20 rounded-xl border border-casa-border object-cover bg-casa-surface flex-shrink-0"
+                />
+                <div>
+                  <Heading role="heading" className="font-display text-heading font-bold text-casa-navy">
+                    {importDraft.name}
+                  </Heading>
+                  <p className="text-body-sm text-casa-text-secondary mt-1">
+                    {importDraft.ingredients.length} ingredients · {importDraft.steps.length} steps · {Math.round(importDraft.confidence * 100)}% AI confidence
+                  </p>
+                </div>
+              </div>
+
+              {/* Extra Photo Search / Custom URL inside Import */}
+              <div className="space-y-2 pt-2 border-t border-casa-border/60">
+                <p className="text-caption font-semibold text-casa-muted">Recipe Photos</p>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="url"
+                    value={importExtraImageUrl}
+                    onChange={(event) => setImportExtraImageUrl(event.target.value)}
+                    placeholder="https://.../another-photo.jpg"
+                    className="flex-1 text-caption min-h-control"
+                  />
                   <Button
                     variant="secondary"
                     size="sm"
-                    onClick={() => void optimizeCurrentPlanForBudget()}
-                    className="mt-2 border-casa-warning/35 bg-casa-warning/10 text-caption text-casa-warning"
+                    onClick={addImportImageUrl}
+                    className="min-h-control"
                   >
-                    Auto optimize for budget
+                    Add image
                   </Button>
                 </div>
-              )}
-              {mealPlannerPlan.pantry_deductions.length > 0 && (
-                <div className="mt-2 rounded-lg border border-casa-border bg-casa-surface px-2.5 py-2">
-                  <p className="text-caption text-casa-muted inline-flex items-center gap-1.5">
-                    Pantry deductions ({mealPlannerPlan.pantry_deductions.length})
-                    <InfoHint label="Pantry deduction reasoning" text={mealPlannerPlan.explainability?.pantry_strategy ?? 'Pantry staples are removed from grocery adds.'} />
-                  </p>
-                  <p className="text-caption text-casa-navy mt-1 line-clamp-2">
-                    {mealPlannerPlan.pantry_deductions.slice(0, 6).map((row) => row.name).join(', ')}
-                  </p>
-                </div>
-              )}
-              <div className="mt-2 max-h-52 overflow-y-auto space-y-1.5 pr-1">
-                {configuredPlannerGroceries.slice(0, 40).map((item) => {
-                  const checked = Boolean(mealPlannerPantryConfig[plannerGroceryKey(item)])
-                  const tracker = projectedPantryForItem(item)
-                  return (
-                    <Checkbox
-                        key={`${item.name}-${item.category}`}
-                        checked={checked}
-                        onChange={() => togglePlannerPantryItem(item)}
-                        label={(
-                          <span className={checked ? 'line-through text-casa-muted' : ''}>
-                        {item.name}
-                        {item.quantity ? ` · ${item.quantity}${item.unit ? ` ${item.unit}` : ''}` : ''}
-                        {item.suggested_purchase_display && (
-                          <span className="text-casa-muted"> · buy {item.suggested_purchase_display}</span>
-                        )}
-                        {typeof tracker.remaining === 'number' && (
-                          <span className="text-casa-muted">
-                            {' '}· est pantry after apply {tracker.remaining} {item.suggested_purchase_unit || 'packs'}
+
+                {importDraft.image_urls.length > 0 && (
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 pt-2">
+                    {importDraft.image_urls.map((imageUrl, imageIndex) => {
+                      const selected = importDraft.primary_image_index !== null && imageIndex === importDraft.primary_image_index
+                      return (
+                        <div
+                          key={`${imageUrl}-${imageIndex}`}
+                          onClick={() => chooseImportPrimaryImage(imageIndex)}
+                          className={cn(
+                            'rounded-xl border overflow-hidden cursor-pointer transition-all',
+                            selected ? 'border-casa-gold ring-2 ring-casa-gold/40' : 'border-casa-border hover:border-casa-gold/50',
+                          )}
+                        >
+                          <img
+                            src={imageUrl}
+                            alt={`${importDraft.name} photo ${imageIndex + 1}`}
+                            className="h-16 w-full object-cover"
+                          />
+                          <span className={cn('block p-1 text-caption text-center', selected ? 'font-bold text-casa-navy bg-casa-gold/20' : 'text-casa-muted')}>
+                            {selected ? 'Cover selected' : 'Set cover'}
                           </span>
-                        )}
-                        {(tracker.lowStock || item.low_stock_prompt) && <span className="text-casa-muted"> · low-stock check?</span>}
-                        <span className="text-casa-muted"> · {item.category} · waste {(item.waste_ratio * 100).toFixed(0)}%</span>
-                          </span>
-                        )}
-                        className="items-start"
-                    />
-                  )
-                })}
-                {configuredPlannerGroceries.length === 0 && (
-                  <p className="text-caption text-casa-muted">No grocery items for the current meal selection.</p>
+                        </div>
+                      )
+                    })}
+                  </div>
                 )}
               </div>
-              {configuredPlannerGroceries.length > 0 && (
-                <p className="mt-2 text-caption text-casa-muted">
-                  {configuredPlannerGroceries.length - pendingPlannerGroceries.length} marked as already in pantry · {pendingPlannerGroceries.length} heading to shopping list
-                </p>
-              )}
-              {lowStockPlannerItems.length > 0 && (
-                <p className="mt-1 text-caption text-casa-muted">
-                  {lowStockPlannerItems.length} item{lowStockPlannerItems.length === 1 ? '' : 's'} are projected low after this plan — review pantry before checkout.
-                </p>
-              )}
-              {configuredPlannerGroceries.length > 0 && (
-                <p className="mt-1 text-caption text-casa-muted">
-                  Pantry tracker persists leftovers after apply and projects low-stock from your inventory balance.
+
+              {/* Steps Edit & Reorder inside Import */}
+              <div className="space-y-2 pt-2 border-t border-casa-border/60">
+                <div className="flex items-center justify-between">
+                  <p className="text-caption font-semibold text-casa-muted">Extracted Steps ({importDraft.steps.length})</p>
                   <Button
-                    variant="ghost"
+                    variant="secondary"
                     size="sm"
-                    onClick={() => navigate('/settings/pantry-inventory')}
-                    className="ml-1 min-h-0 p-0 underline underline-offset-2 hover:bg-transparent"
+                    onClick={() => addImportStepAfter(importDraft.steps.length - 1)}
+                    className="text-caption"
                   >
-                    Manage inventory
+                    Add step
                   </Button>
-                </p>
-              )}
-              {mealPlannerPlan.suggested_recipe && (
-                <div className="mt-2 rounded-lg border border-casa-border bg-casa-surface px-2.5 py-2">
-                  <p className="text-caption text-casa-muted">Suggested extra recipe</p>
-                  <p className="text-body-sm font-semibold text-casa-navy">{mealPlannerPlan.suggested_recipe.name}</p>
-                  <p className="text-caption text-casa-muted">{mealPlannerPlan.suggested_recipe.reason}</p>
                 </div>
-              )}
-              <p className="mt-3 text-caption text-casa-muted">
-                Use “Apply to shopping” above to send this list.
-              </p>
-              {mealPlannerAddResult && (
-                <Alert tone="success" title="Shopping list updated" className="mt-2">
-                  Sent {mealPlannerAddResult.attempted} planner items to Shopping.
-                  {' '}
-                  Added {mealPlannerAddResult.inserted} new item{mealPlannerAddResult.inserted === 1 ? '' : 's'}
-                  {' '}
-                  ({mealPlannerAddResult.attempted - mealPlannerAddResult.inserted} already existed).
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => navigate('/grocery')}
-                    className="ml-2 min-h-0 p-0 underline underline-offset-2 hover:bg-transparent"
-                  >
-                    Open shopping list
-                  </Button>
-                </Alert>
-              )}
-            </div>
-          </div>
-        )}
-        {mealPlannerActionLog.length > 0 && (
-          <div className="mt-3 rounded-xl border border-casa-border bg-casa-bg p-2.5">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-caption font-semibold text-casa-navy">Planner action log</p>
-              <Chip
-                size="sm"
-                onClick={() => setPlannerLogOpen((value) => !value)}
-              >
-                {plannerLogOpen ? 'Hide' : 'Show'}
-              </Chip>
-            </div>
-            {plannerLogOpen && (
-              <div className="mt-1.5 max-h-36 overflow-y-auto space-y-1 pr-1">
-                {mealPlannerActionLog.slice(0, 12).map((entry) => (
-                  <div key={entry.id} className="rounded-lg border border-casa-border bg-casa-surface px-2 py-1.5">
-                    <p className="text-caption text-casa-navy">
-                      {entry.action.replace(/_/g, ' ')} · {entry.status}
-                    </p>
-                    <p className="text-caption text-casa-muted">
-                      {entry.detail}
-                      {entry.trace_id ? ` · trace ${entry.trace_id.slice(0, 8)}` : ''}
-                    </p>
-                  </div>
-                ))}
+                <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
+                  {importDraft.steps.map((step, idx) => (
+                    <div key={idx} className="p-2.5 rounded-xl border border-casa-border bg-casa-bg space-y-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-caption font-bold text-casa-navy">Step {idx + 1}</span>
+                        <div className="flex items-center gap-1">
+                          <Chip size="sm" onClick={() => moveImportStep(idx, -1)} disabled={idx === 0}>
+                            ↑
+                          </Chip>
+                          <Chip size="sm" onClick={() => moveImportStep(idx, 1)} disabled={idx >= importDraft.steps.length - 1}>
+                            ↓
+                          </Chip>
+                          <Chip size="sm" tone="danger" onClick={() => removeImportStep(idx)} disabled={importDraft.steps.length <= 1}>
+                            Remove
+                          </Chip>
+                        </div>
+                      </div>
+                      <Textarea
+                        value={step.instruction}
+                        onChange={(event) => updateImportStepInstruction(idx, event.target.value)}
+                        rows={2}
+                        className="text-body-sm"
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
+            </Card>
+          )}
+
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-casa-border/60">
+            {importStep === 1 && (
+              <>
+                <Button variant="secondary" onClick={closeImportDialog} className="min-h-control">
+                  Cancel
+                </Button>
+                <Button
+                  variant="champagne"
+                  onClick={() => setImportStep(2)}
+                  disabled={!hasImportSource}
+                  className="font-bold min-h-control"
+                >
+                  Next: Photos
+                </Button>
+              </>
+            )}
+            {importStep === 2 && (
+              <>
+                <Button variant="secondary" onClick={() => setImportStep(1)} className="min-h-control">
+                  Back
+                </Button>
+                <Button
+                  variant="champagne"
+                  onClick={() => void runImportFromCurrentSources()}
+                  disabled={importingRecipe || !hasImportSource}
+                  loading={importingRecipe}
+                  className="font-bold min-h-control"
+                >
+                  Extract recipe
+                </Button>
+              </>
+            )}
+            {importStep === 3 && (
+              <>
+                <Button variant="secondary" onClick={() => setImportStep(2)} className="min-h-control">
+                  Back
+                </Button>
+                <Button
+                  variant="secondary"
+                  disabled={!importDraft || importSaving}
+                  onClick={() => void saveImportedRecipe({ openCookMode: false })}
+                  loading={importSaving}
+                  className="min-h-control"
+                >
+                  Save recipe
+                </Button>
+                <Button
+                  variant="champagne"
+                  disabled={!importDraft || importSaving}
+                  onClick={() => void saveImportedRecipe({ openCookMode: true })}
+                  loading={importSaving}
+                  className="font-bold min-h-control"
+                >
+                  Save + Start cooking
+                </Button>
+              </>
             )}
           </div>
-        )}
-      </Card>
-
-      <Card>
-        <div className="flex items-center justify-between gap-2 mb-3">
-          <Heading role="heading">Planned meals</Heading>
-          <Text role="caption" muted>Drag planning happens in Grocery</Text>
         </div>
-        {plannedMealError && <Alert tone="danger" title="Planned meals update failed" className="mb-2">{plannedMealError}</Alert>}
-        {!plannedMealError && plannedMealStatus && (
-          <Alert tone="success" title="Planned meals updated" className="mb-2">{plannedMealStatus}</Alert>
-        )}
-        {plannedRecipes.length === 0 ? (
-          <p className="text-body-sm text-casa-muted">No meal slots yet. Plan recipes from Grocery → Saved recipes.</p>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-            {plannedRecipes.slice(0, 9).map(({ plan, recipe }) => (
-              <article
-                key={`${plan.slot}-${recipe.id}`}
-                className="rounded-xl border border-casa-border bg-casa-bg px-3 py-2"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <Button
-                    variant="ghost"
-                    onClick={() => {
-                      setCookRecipeId(recipe.id)
-                      setStepIndex(0)
-                      setRecipeScale('1')
-                      setDirectionsViewMode('step')
-                    }}
-                    className="h-auto min-h-0 min-w-0 flex-1 justify-start p-0 text-left hover:bg-transparent hover:opacity-90"
-                    contentClassName="block min-w-0 text-left"
-                  >
-                    <p className="text-caption text-casa-muted">{SLOT_LABELS[plan.slot]}</p>
-                    <p className="text-body-sm font-semibold text-casa-navy truncate">{recipe.name}</p>
-                  </Button>
-                  <div className="flex items-center gap-1">
-                    <IconButton
-                      icon={<ChevronLeft size={12} />}
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => void shiftPlannedMealSlot(plan, recipe, -1)}
-                      disabled={plan.slot === 'tonight' || plannedMealActionId !== null}
-                      aria-label="Move planned meal earlier"
-                    />
-                    <IconButton
-                      icon={<ChevronRight size={12} />}
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => void shiftPlannedMealSlot(plan, recipe, 1)}
-                      disabled={plan.slot === 'this-week' || plannedMealActionId !== null}
-                      aria-label="Move planned meal later"
-                    />
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => openRecipeForCookMode(recipe.id)}
-                    >
-                      Cook now
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => void markPlannedMealCooked(plan, recipe)}
-                      disabled={plannedMealActionId !== null}
-                      className="border-casa-success/35 text-casa-success-strong"
-                    >
-                      Done
-                    </Button>
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      onClick={() => void removePlannedMeal(plan, recipe)}
-                      disabled={plannedMealActionId === `${plan.slot}:${recipe.id}` || plannedMealActionId !== null}
-                      leadingIcon={<Trash2 size={12} />}
-                    >
-                      {plannedMealActionId === `${plan.slot}:${recipe.id}` ? 'Removing…' : 'Remove'}
-                    </Button>
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </Card>
-      </>
-      )}
+      </Modal>
 
-      <section className="rounded-2xl border border-casa-border bg-casa-surface p-4">
-        <div className="flex flex-col gap-2 mb-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <p className="text-heading font-semibold text-casa-navy">Recipe library</p>
-              <p className="text-body-sm text-casa-text-tertiary mt-1">
-                Browse all {recipes.length} recipes.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <div className="flex items-center gap-2 rounded-[8px] border border-casa-control-border bg-casa-surface px-3 py-2 min-w-[15rem]">
-                <Search size={14} className="text-casa-text-tertiary" />
-                <input
-                  value={recipeSearch}
-                  onChange={(event) => setRecipeSearch(event.target.value)}
-                  placeholder="Search recipes..."
-                  className="w-full bg-transparent text-body-sm text-casa-text placeholder:text-casa-text-faint outline-none"
-                />
-              </div>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={openImportDialog}
-                leadingIcon={<Upload size={14} />}
-                className="border-casa-accent-soft-border bg-casa-accent-soft"
-              >
-                Import recipe
-              </Button>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {([
-              { id: 'all', label: `All (${recipes.length})` },
-              { id: 'quick', label: `Quick (${quickTonightCount})` },
-              { id: 'planned', label: `Planned (${plannedRecipes.length})` },
-            ] as const).map((filter) => (
-              <Chip
-                key={filter.id}
-                onClick={() => setRecipeBrowseFilter(filter.id)}
-                selected={recipeBrowseFilter === filter.id}
-              >
-                {filter.label}
-              </Chip>
-            ))}
-          </div>
-        </div>
-        {libraryActionError && (
-          <p className="mb-2 text-caption text-casa-error">{libraryActionError}</p>
-        )}
-        {!libraryActionError && libraryActionStatus && (
-          <p className="mb-2 text-caption text-casa-muted">{libraryActionStatus}</p>
-        )}
-        {filteredRecipes.length === 0 && (
-          <p className="mb-2 text-caption text-casa-muted">
-            No recipes match this filter yet. Try switching filters or importing a recipe.
-          </p>
-        )}
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-          {filteredRecipes.slice(0, 24).map((recipe) => (
-            <article
-              key={recipe.id}
-              role="button"
-              tabIndex={0}
-              onClick={() => openRecipeForCookMode(recipe.id)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault()
-                  openRecipeForCookMode(recipe.id)
-                }
-              }}
-              className="h-full rounded-2xl border border-casa-border bg-casa-surface overflow-hidden cursor-pointer hover:border-casa-accent-soft-border transition-colors flex flex-col"
-            >
-              {(() => {
-                const focus = parseRecipeImageFocus(recipe.image_url)
-                return (
-                  <RecipeImage
-                    src={getRecipeImage(recipe)}
-                    alt={recipe.name}
-                    focalX={focus.focalX}
-                    focalY={focus.focalY}
-                    className="h-40 w-full object-cover"
-                  />
-                )
-              })()}
-              <div className="p-3 flex flex-1 flex-col">
-                <p className="text-body font-semibold text-casa-navy line-clamp-2">{recipe.name}</p>
-                <p className="mt-1 text-caption text-casa-muted">
-                  {recipe.cook_time ? `${recipe.cook_time} · ` : ''}
-                  {recipe.servings ?? 'servings n/a'}
-                </p>
-                <div className="mt-auto pt-3 flex items-center gap-2">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      void smartAddIngredientsToShoppingList(recipe)
-                    }}
-                    disabled={smartAddingRecipeId === recipe.id}
-                    loading={smartAddingRecipeId === recipe.id}
-                    leadingIcon={<ShoppingCart size={14} />}
-                    className="flex-1 border-casa-accent-subtle-border bg-casa-accent-subtle"
-                  >
-                    Smart add ingredients
-                  </Button>
-                </div>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      {deleteConfirmRecipe && (
-        <div
-          className="fixed inset-0 z-modal bg-casa-navy/40 flex items-center justify-center p-4"
-          onClick={() => {
-            if (deletingRecipeId !== deleteConfirmRecipe.id) {
-              setDeleteConfirmRecipe(null)
-            }
-          }}
+      {/* Recipe Editing Mode Modal */}
+      {cookRecipe && isRecipeEditMode && recipeEditorDraft && (
+        <Modal
+          open={true}
+          onClose={cancelRecipeEditing}
+          title="Edit Recipe"
+          size="xl"
         >
-          <div
-            className="w-full max-w-md rounded-2xl border border-casa-border bg-casa-surface shadow-modal"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="px-4 py-3 border-b border-casa-divider">
-              <p className="text-body font-semibold text-casa-navy">Delete recipe?</p>
-              <p className="mt-1 text-body-sm text-casa-muted">
-                Delete "{deleteConfirmRecipe.name}"? This cannot be undone.
-              </p>
-            </div>
-            <div className="px-4 py-3 flex items-center justify-end gap-2">
-              <Button
-                variant="secondary"
-                onClick={() => setDeleteConfirmRecipe(null)}
-                disabled={deletingRecipeId === deleteConfirmRecipe.id}
-              >
-                Cancel
-              </Button>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-casa-border">
+              <div>
+                <span className="text-caption font-bold uppercase tracking-wider text-casa-gold">Recipe Editor</span>
+                <Heading role="heading" className="font-display font-bold text-casa-navy text-heading">
+                  Edit Recipe
+                </Heading>
+              </div>
               <Button
                 variant="danger"
-                onClick={() => void confirmDeleteRecipe()}
-                disabled={deletingRecipeId === deleteConfirmRecipe.id}
-                loading={deletingRecipeId === deleteConfirmRecipe.id}
+                size="sm"
+                onClick={() => requestDeleteRecipe(cookRecipe)}
+                disabled={deletingRecipeId === cookRecipe.id}
+                loading={deletingRecipeId === cookRecipe.id}
+                leadingIcon={<Trash2 size={14} />}
+                className="min-h-control"
               >
-                Delete recipe
+                Delete
               </Button>
             </div>
-          </div>
-        </div>
-      )}
 
-      {importDialogOpen && (
-        <div className="fixed inset-0 z-modal bg-casa-navy/40 flex items-center justify-center p-4" onClick={closeImportDialog}>
-          <div
-            className="w-full max-w-3xl max-h-[92vh] rounded-2xl border border-casa-border bg-casa-surface shadow-modal overflow-hidden flex flex-col self-end md:self-auto"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="px-4 py-3 border-b border-casa-divider">
-              <p className="text-caption uppercase tracking-[0.14em] text-casa-muted font-semibold">Dinner Control Center</p>
-              <p className="text-body font-semibold text-casa-navy mt-1">Import recipe</p>
-              <p className="text-caption text-casa-muted mt-1">
-                {importStep === 1 ? 'Step 1 of 3 · Add sources' : importStep === 2 ? 'Step 2 of 3 · Confirm sources' : 'Step 3 of 3 · Review + save'}
-              </p>
-            </div>
-            <div className="p-4 space-y-3 overflow-y-auto flex-1">
-              {(importStep === 1 || importStep === 2) && (
-                <div className="rounded-2xl border border-casa-border bg-casa-bg p-3 space-y-2">
-                  <p className="text-caption text-casa-muted">Add a URL and/or photos. Import will use whatever you provided.</p>
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                    <input
-                      type="url"
-                      value={importUrlInput}
-                      onChange={(event) => setImportUrlInput(event.target.value)}
-                      placeholder="https://..."
-                      className="flex-1 rounded-button border border-casa-border bg-casa-surface px-3 py-2 text-body-sm text-casa-text outline-none"
-                    />
+            <div className="p-4 sm:p-6 space-y-4 overflow-y-auto max-h-[70vh] bg-casa-bg rounded-2xl">
+              {recipeEditorError && (
+                <Alert tone="danger" title="Recipe edit error">
+                  {recipeEditorError}
+                </Alert>
+              )}
+              {recipeEditorStatus && (
+                <Alert tone="success" title="Recipe updated">
+                  {recipeEditorStatus}
+                </Alert>
+              )}
+              {recipeAiError && (
+                <Alert tone="danger" title="AI edit failed">
+                  {recipeAiError}
+                </Alert>
+              )}
+              {/* Name field */}
+              <div>
+                <label className="block text-body-sm font-semibold text-casa-navy mb-1">Recipe Name</label>
+                <Input
+                  type="text"
+                  value={recipeEditorDraft.name}
+                  onChange={(event) =>
+                    setRecipeEditorDraft((curr) => (curr ? { ...curr, name: event.target.value } : curr))
+                  }
+                  className="text-body-lg min-h-control"
+                />
+              </div>
+
+              {/* Photo Editor Disclosure */}
+              <DisclosureSection
+                title="Photo"
+                summary={photoEditorPendingFile ? 'New image ready to save' : 'Search, upload, take, paste, or crop'}
+                icon={<Camera size={18} />}
+                open={photoEditorExpanded}
+                onOpenChange={(open) => {
+                  setPhotoEditorExpanded(open)
+                  if (open && photoSearchResults.length === 0 && !photoSearchLoading) {
+                    void searchWebImages(photoSearchQuery)
+                  }
+                }}
+              >
+                <div className="space-y-4 p-3 bg-casa-surface rounded-2xl border border-casa-border" onPaste={photoEditorExpanded ? handlePhotoEditorPaste : undefined}>
+                  <p className="text-caption text-casa-muted">
+                    Paste a screenshot anywhere in this section, upload an image, or take a photo.
+                  </p>
+                  {(photoEditorPreviewUrl || photoEditorUrl) && (
+                    <div className="rounded-xl overflow-hidden border border-casa-border max-h-48">
+                      <img src={photoEditorPreviewUrl || photoEditorUrl} alt="Preview" className="w-full h-48 object-cover" />
+                    </div>
+                  )}
+                  {photoEditorError && <p role="alert" className="text-caption text-casa-error font-medium">{photoEditorError}</p>}
+                  {photoSearchError && <p className="text-caption text-casa-error font-medium">{photoSearchError}</p>}
+                  <div className="flex flex-wrap gap-2">
                     <Button
                       variant="secondary"
                       size="sm"
-                      onClick={() => triggerFileInput(importFileInputRef)}
-                      disabled={importingRecipe}
+                      onClick={() => triggerFileInput(photoEditorUploadInputRef)}
+                      disabled={recipeEditorSaving || photoEditorUploading}
                       leadingIcon={<Upload size={14} />}
+                      className="min-h-control"
                     >
-                      Upload
+                      Choose image
                     </Button>
                     <Button
                       variant="secondary"
                       size="sm"
-                      onClick={() => triggerFileInput(importCameraInputRef)}
-                      disabled={importingRecipe}
+                      onClick={() => triggerFileInput(photoEditorCameraInputRef)}
+                      disabled={recipeEditorSaving || photoEditorUploading}
                       leadingIcon={<Camera size={14} />}
+                      className="min-h-control"
                     >
                       Take photo
                     </Button>
                   </div>
                   <input
-                    id="cook-import-file-input"
-                    ref={importFileInputRef}
+                    ref={photoEditorUploadInputRef}
                     type="file"
-                    accept="image/*,.pdf,application/pdf"
-                    multiple
-                    className="absolute left-[-9999px] h-px w-px opacity-0 pointer-events-none"
+                    accept="image/*"
+                    className="hidden"
                     onChange={(event) => {
                       const files = event.target.files ? Array.from(event.target.files) : []
                       event.currentTarget.value = ''
-                      void addImportCaptureFiles(files, 'upload')
+                      handlePhotoEditorFileSelection(files, 'upload')
                     }}
                   />
                   <input
-                    id="cook-import-camera-input"
-                    ref={importCameraInputRef}
+                    ref={photoEditorCameraInputRef}
                     type="file"
                     accept="image/*"
                     capture="environment"
-                    className="absolute left-[-9999px] h-px w-px opacity-0 pointer-events-none"
+                    className="hidden"
                     onChange={(event) => {
                       const files = event.target.files ? Array.from(event.target.files) : []
                       event.currentTarget.value = ''
-                      void addImportCaptureFiles(files, 'camera')
+                      handlePhotoEditorFileSelection(files, 'camera')
                     }}
                   />
-                  {importCaptureFiles.length > 0 && (
-                    <div className="space-y-1">
-                      <p className="text-caption text-casa-muted">Attached photos ({importCaptureFiles.length}) · meal photo is optional</p>
-                      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
-                        {importCaptureFiles.map((file, index) => {
-                          const selected = importMealPhotoIndex !== null && index === importMealPhotoIndex
-                          return (
-                            <div key={file.id} className={cn('rounded-lg border overflow-hidden', selected ? 'border-casa-gold' : 'border-casa-border')}>
-                              <Button
-                                variant="ghost"
-                                onClick={() => setImportMealPhotoIndex((current) => (current === index ? null : index))}
-                                className="block h-auto min-h-0 w-full rounded-none p-0"
-                                contentClassName="block w-full"
-                              >
-                                <img
-                                  src={file.previewUrl}
-                                  alt={file.name}
-                                  className="h-16 w-full object-cover bg-casa-surface"
-                                  loading="lazy"
-                                />
-                                <span className={cn('block px-1 py-1 text-caption truncate text-left', selected ? 'text-casa-navy font-semibold' : 'text-casa-muted')}>
-                                  {selected ? 'Meal photo' : 'Set meal photo'}
-                                </span>
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                fullWidth
-                                onClick={() => removeImportCaptureFile(file.id)}
-                                className="min-h-0 rounded-none border-t border-casa-divider px-1 py-1 text-caption text-casa-muted"
-                              >
-                                Remove
-                              </Button>
-                            </div>
-                          )
-                        })}
-                      </div>
-                      <Chip
-                        size="sm"
-                        selected={importMealPhotoIndex === null}
-                        onClick={() => setImportMealPhotoIndex(null)}
-                        className="mt-1"
-                      >
-                        No meal photo
-                      </Chip>
-                    </div>
-                  )}
-                </div>
-              )}
 
-              {importingRecipe && (
-                <p className="text-caption text-casa-muted animate-breathe">Extracting recipe…</p>
-              )}
-              {importError && <Alert tone="danger" title="Recipe import failed">{importError}</Alert>}
-
-              {importStep === 3 && importDraft && (
-                <div className="rounded-2xl border border-casa-border bg-casa-bg p-3 space-y-3">
-                  <div className="flex items-start gap-3">
-                    <img
-                      src={
-                        importDraft.primary_image_index === null
-                          ? (importDraft.image_url ?? recipeFallbackHero)
-                          : (importDraft.image_urls[importDraft.primary_image_index] ?? importDraft.image_url ?? recipeFallbackHero)
-                      }
-                      alt={importDraft.name}
-                      className="h-16 w-16 rounded-xl border border-casa-border object-cover bg-casa-surface flex-shrink-0"
-                      loading="lazy"
-                      referrerPolicy="no-referrer"
-                      onError={(event) => {
-                        const target = event.currentTarget
-                        if (target.src !== recipeFallbackHero) target.src = recipeFallbackHero
-                      }}
-                    />
-                    <div className="min-w-0">
-                      <p className="text-body-sm font-semibold text-casa-navy">{importDraft.name}</p>
-                      <p className="text-caption text-casa-muted">
-                        {importDraft.ingredients.length} ingredients · {importDraft.steps.length} steps · {Math.round(importDraft.confidence * 100)}% confidence
-                        {importDraft.servings ? ` · ${importDraft.servings}` : ''}
-                        {importDraft.cook_time ? ` · ${importDraft.cook_time}` : ''}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl border border-casa-border bg-casa-surface p-2">
-                    <p className="text-caption text-casa-muted mb-1">Recipe photos</p>
-                    <p className="text-caption text-casa-muted mb-2">Tap a photo to mark as meal photo (cover), or choose none.</p>
-                    <div className="flex items-center gap-2 mb-2">
-                      <input
-                        type="url"
-                        value={importExtraImageUrl}
-                        onChange={(event) => setImportExtraImageUrl(event.target.value)}
-                        placeholder="https://.../another-photo.jpg"
-                        className="flex-1 rounded-button border border-casa-border bg-casa-bg px-2.5 py-1.5 text-caption text-casa-text outline-none"
-                      />
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={addImportImageUrl}
-                      >
-                        Add image
-                      </Button>
-                    </div>
-                    {importDraft.image_urls.length === 0 ? (
-                      <p className="text-caption text-casa-muted">No images found yet.</p>
-                    ) : (
-                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                        {importDraft.image_urls.map((imageUrl, imageIndex) => {
-                          const selected = importDraft.primary_image_index !== null && imageIndex === importDraft.primary_image_index
-                          return (
-                            <Button
-                              key={`${imageUrl}-${imageIndex}`}
-                              variant="ghost"
-                              onClick={() => chooseImportPrimaryImage(imageIndex)}
-                              className={cn(
-                                'h-auto min-h-0 overflow-hidden rounded-lg border p-0 text-left',
-                                selected ? 'border-casa-gold' : 'border-casa-border hover:border-casa-gold/40',
-                              )}
-                              contentClassName="block w-full"
-                            >
-                              <img
-                                src={imageUrl}
-                                alt={`${importDraft.name} image ${imageIndex + 1}`}
-                                className="h-20 w-full object-cover"
-                                loading="lazy"
-                                referrerPolicy="no-referrer"
-                                onError={(event) => {
-                                  const target = event.currentTarget
-                                  if (target.src !== recipeFallbackHero) target.src = recipeFallbackHero
-                                }}
-                              />
-                              <span
-                                className={cn(
-                                  'block px-1.5 py-1 text-caption',
-                                  selected ? 'text-casa-navy font-semibold' : 'text-casa-muted'
-                                )}
-                              >
-                                {selected ? 'Meal photo selected' : 'Mark as meal photo'}
-                              </span>
-                            </Button>
-                          )
-                        })}
-                      </div>
-                    )}
-                    <Chip
-                      size="sm"
-                      selected={importDraft.primary_image_index === null}
-                      onClick={() => {
-                        setImportDraft((current) => current ? { ...current, primary_image_index: null, image_url: null } : current)
-                      }}
-                      className="mt-2"
-                    >
-                      No meal photo
-                    </Chip>
-                  </div>
-
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
-                    <div className="rounded-xl border border-casa-border bg-casa-surface p-2">
-                      <p className="text-caption text-casa-muted mb-1">Ingredients preview</p>
-                      <div className="max-h-52 overflow-y-auto space-y-1 pr-1">
-                        {importDraft.ingredients.map((ingredient, index) => {
-                          const normalized = normalizeRecipeIngredientFields({
-                            rawText: ingredient.raw_text,
-                            name: ingredient.name,
-                            quantity: ingredient.quantity,
-                            unit: ingredient.unit,
-                          })
-                          return (
-                            <div key={`${ingredient.raw_text}-${index}`} className="rounded-lg border border-casa-border bg-casa-bg px-2 py-1.5 text-caption text-casa-text">
-                              <p><span className="text-casa-muted">Item:</span> <span className="font-medium">{normalized.name || ingredient.raw_text}</span></p>
-                              <p className="text-caption text-casa-muted">
-                                Qty: {normalized.quantity || '—'} · Unit: {normalized.unit || '—'}
-                              </p>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-
-                    <div className="rounded-xl border border-casa-border bg-casa-surface p-2">
-                      <div className="mb-2 flex items-center justify-between gap-2">
-                        <p className="text-caption text-casa-muted">Directions preview (literal text, ordered)</p>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => void runImportFromCurrentSources()}
-                          disabled={importingRecipe}
-                          loading={importingRecipe}
-                        >
-                          Re-extract
-                        </Button>
-                      </div>
-                      <div className="max-h-56 overflow-y-auto space-y-2 pr-1">
-                        {importDraft.steps.map((step, stepIndex) => (
-                          <div key={`${step.step_number}-${stepIndex}`} className="rounded-lg border border-casa-border bg-casa-bg p-2">
-                            <div className="mb-1 flex flex-wrap items-center justify-between gap-1">
-                              <p className="text-caption font-semibold text-casa-muted">Step {stepIndex + 1}</p>
-                              <div className="flex items-center gap-1">
-                                <Chip
-                                  size="sm"
-                                  onClick={() => moveImportStep(stepIndex, -1)}
-                                  disabled={stepIndex === 0}
-                                >
-                                  Up
-                                </Chip>
-                                <Chip
-                                  size="sm"
-                                  onClick={() => moveImportStep(stepIndex, 1)}
-                                  disabled={stepIndex >= importDraft.steps.length - 1}
-                                >
-                                  Down
-                                </Chip>
-                                <Chip
-                                  tone="accent"
-                                  size="sm"
-                                  onClick={() => addImportStepAfter(stepIndex)}
-                                >
-                                  Add
-                                </Chip>
-                                <Chip
-                                  tone="danger"
-                                  size="sm"
-                                  onClick={() => removeImportStep(stepIndex)}
-                                  disabled={importDraft.steps.length <= 1}
-                                >
-                                  Remove
-                                </Chip>
-                              </div>
-                            </div>
-                            <textarea
-                              value={step.instruction}
-                              onChange={(event) => updateImportStepInstruction(stepIndex, event.target.value)}
-                              rows={3}
-                              className="w-full rounded-button border border-casa-border bg-casa-surface px-2 py-1.5 text-caption text-casa-text outline-none resize-y"
-                            />
-                          </div>
-                        ))}
-                        {importDraft.steps.length === 0 && (
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            fullWidth
-                            onClick={() => addImportStepAfter(-1)}
-                          >
-                            Add first step
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="px-4 py-3 border-t border-casa-divider flex items-center justify-end gap-2">
-              <Button
-                variant="secondary"
-                onClick={closeImportDialog}
-              >
-                Cancel
-              </Button>
-              {importStep === 1 && (
-                <Button
-                  variant="strong"
-                  disabled={!hasImportSource}
-                  onClick={() => setImportStep(2)}
-                >
-                  Next
-                </Button>
-              )}
-              {importStep === 2 && (
-                <>
-                  <Button
-                    variant="secondary"
-                    onClick={() => setImportStep(1)}
-                  >
-                    Back
-                  </Button>
-                  <Button
-                    variant="strong"
-                    disabled={importingRecipe || !hasImportSource}
-                    onClick={() => void runImportFromCurrentSources()}
-                    loading={importingRecipe}
-                  >
-                    Import
-                  </Button>
-                </>
-              )}
-              {importStep === 3 && (
-                <>
-                  <Button
-                    variant="secondary"
-                    onClick={() => setImportStep(2)}
-                  >
-                    Back
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    disabled={!importDraft || importSaving}
-                    onClick={() => void saveImportedRecipe({ openCookMode: false })}
-                    loading={importSaving}
-                  >
-                    Save recipe
-                  </Button>
-                  <Button
-                    variant="strong"
-                    disabled={!importDraft || importSaving}
-                    onClick={() => void saveImportedRecipe({ openCookMode: true })}
-                    loading={importSaving}
-                  >
-                    Save + Cook now
-                  </Button>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {cookRecipe && (
-        <div
-          className="fixed inset-0 z-modal casa-scrim flex items-start justify-center overflow-y-auto p-4 sm:p-6"
-          onClick={closeCookRecipe}
-        >
-          <div
-            className="w-[min(64rem,calc(100vw-2rem))] my-auto max-h-[calc(100vh-2rem)] rounded-modal border border-casa-border bg-casa-bg shadow-modal flex flex-col overflow-hidden"
-            onClick={(event) => event.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-label={cookRecipe.name}
-          >
-            {isRecipeEditMode ? (
-              <div className="px-5 py-3.5 border-b border-casa-divider flex items-center justify-between gap-2 flex-shrink-0">
-                <div className="flex items-center gap-3 min-w-0">
-                  <RecipeImage
-                    src={photoEditorPreviewUrl || photoEditorUrl || getRecipeImage(cookRecipe)}
-                    alt={cookRecipe.name}
-                    focalX={photoEditorFocalX}
-                    focalY={photoEditorFocalY}
-                    className="w-12 h-12 rounded-card object-cover border border-casa-border bg-casa-bg flex-shrink-0"
-                  />
-                  <div className="min-w-0">
-                    <p className="text-body font-semibold text-casa-navy truncate">
-                      {recipeEditorDraft?.name ?? cookRecipe.name}
-                    </p>
-                    <p className="text-caption text-casa-muted">Editing recipe</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    onClick={() => requestDeleteRecipe(cookRecipe)}
-                    disabled={deletingRecipeId === cookRecipe.id}
-                    loading={deletingRecipeId === cookRecipe.id}
-                    leadingIcon={<Trash2 size={12} />}
-                  >
-                    Delete
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="relative h-[150px] flex-shrink-0 overflow-hidden bg-casa-navy">
-                <RecipeImage
-                  src={getRecipeImage(cookRecipe)}
-                  alt=""
-                  focalX={parseRecipeImageFocus(cookRecipe.image_url).focalX}
-                  focalY={parseRecipeImageFocus(cookRecipe.image_url).focalY}
-                  loading="eager"
-                  className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-60"
-                />
-                <div
-                  className="absolute inset-0 bg-gradient-to-t from-casa-navy via-casa-navy/65 to-casa-navy/55"
-                  aria-hidden
-                />
-                <div className="absolute inset-0 p-4 flex items-end gap-4">
-                  <RecipeImage
-                    src={getRecipeImage(cookRecipe)}
-                    alt={cookRecipe.name}
-                    focalX={parseRecipeImageFocus(cookRecipe.image_url).focalX}
-                    focalY={parseRecipeImageFocus(cookRecipe.image_url).focalY}
-                    loading="eager"
-                    className="w-[104px] h-[104px] rounded-card object-cover border border-white/25 shadow-card flex-shrink-0 bg-casa-navy"
-                  />
-                  <div className="min-w-0 pb-1">
-                    <p className="text-caption font-semibold uppercase tracking-[0.18em] text-casa-info">
-                      Now cooking
-                    </p>
-                    <p className="mt-0.5 text-white font-semibold text-display-sm leading-tight line-clamp-2 drop-shadow">
-                      {cookRecipe.name}
-                    </p>
-                  </div>
-                </div>
-                <div className="absolute top-3 right-3 flex items-center gap-2">
-                  {cookRecipe.source_url && (
-                    <a
-                      href={cookRecipe.source_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="px-2.5 py-1.5 rounded-button bg-casa-surface/85 backdrop-blur border border-casa-border text-caption text-casa-navy hover:bg-casa-surface inline-flex items-center gap-1"
-                    >
-                      <ExternalLink size={12} />
-                      Original
-                    </a>
-                  )}
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={startRecipeEditing}
-                    className="bg-casa-surface/85 backdrop-blur"
-                  >
-                    Edit
-                  </Button>
-                </div>
-              </div>
-            )}
-            <div className="flex-1 min-h-0 p-4 flex flex-col gap-3 overflow-y-auto">
-              {isRecipeEditMode && recipeEditorDraft ? (
-                <>
-                  <div className="rounded-xl border border-casa-border bg-casa-bg p-3 space-y-2">
-                    <label className="block">
-                      <span className="text-body-sm text-casa-muted">Recipe name</span>
-                      <input
+                  {/* Photo Search */}
+                  <div className="space-y-2">
+                    <label htmlFor="recipe-photo-search" className="text-body-sm font-semibold text-casa-navy">Find a recipe image</label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="recipe-photo-search"
                         type="text"
-                        value={recipeEditorDraft.name}
-                        onChange={(event) => setRecipeEditorDraft((current) => current ? { ...current, name: event.target.value } : current)}
-                        className="mt-1 w-full rounded-button border border-casa-border bg-casa-surface px-3 py-2 text-body-lg text-casa-text outline-none"
-                      />
-                    </label>
-                    <div onPaste={photoEditorExpanded ? handlePhotoEditorPaste : undefined}>
-                      <DisclosureSection
-                        title="Photo"
-                        summary={photoEditorPendingFile ? 'New image ready to save' : 'Search, upload, take, paste, or crop'}
-                        icon={<Camera size={18} />}
-                        open={photoEditorExpanded}
-                        onOpenChange={(open) => {
-                          setPhotoEditorExpanded(open)
-                          if (open && photoSearchResults.length === 0 && !photoSearchLoading) {
+                        value={photoSearchQuery}
+                        onChange={(event) => setPhotoSearchQuery(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault()
                             void searchWebImages(photoSearchQuery)
                           }
                         }}
-                        className="overflow-hidden rounded-card border border-casa-border bg-casa-surface"
+                        placeholder="Search recipe photos..."
+                        className="flex-1 min-h-control"
+                      />
+                      <Button
+                        variant="secondary"
+                        size="md"
+                        onClick={() => void searchWebImages(photoSearchQuery)}
+                        disabled={photoSearchLoading}
+                        loading={photoSearchLoading}
+                        leadingIcon={<Search size={14} />}
+                        className="min-h-control"
                       >
-                        <div className="space-y-4">
+                        Search
+                      </Button>
+                    </div>
+                    {photoSearchResults.length > 0 && (
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2">
+                        {photoSearchResults.map((res) => (
                           <div
-                            className="rounded-card border border-dashed border-casa-border bg-casa-bg p-3"
-                            tabIndex={0}
-                            aria-label="Recipe photo inputs. Paste an image here, or choose another photo source."
-                          >
-                            <p className="text-body-sm font-semibold text-casa-navy">Add or replace photo</p>
-                            <p className="mt-1 text-caption text-casa-muted">
-                              Paste a screenshot anywhere in this section, upload an image, or take a photo.
-                            </p>
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              <Button
-                                variant="secondary"
-                                size="sm"
-                                onClick={() => triggerFileInput(photoEditorUploadInputRef)}
-                                disabled={recipeEditorSaving || photoEditorUploading}
-                                leadingIcon={<Upload size={14} />}
-                              >
-                                Choose image
-                              </Button>
-                              <Button
-                                variant="secondary"
-                                size="sm"
-                                onClick={() => triggerFileInput(photoEditorCameraInputRef)}
-                                disabled={recipeEditorSaving || photoEditorUploading}
-                                leadingIcon={<Camera size={14} />}
-                              >
-                                Take photo
-                              </Button>
-                              {photoEditorPendingFile && (
-                                <span role="status" className="flex min-h-control items-center text-caption font-semibold text-casa-success">
-                                  {photoEditorPendingFile.name || 'Pasted image'} ready to save
-                                </span>
-                              )}
-                              {photoEditorUploading && (
-                                <span role="status" className="flex min-h-control items-center text-caption text-casa-muted animate-breathe">
-                                  Uploading photo…
-                                </span>
-                              )}
-                            </div>
-                            <input
-                              ref={photoEditorUploadInputRef}
-                              type="file"
-                              accept="image/*"
-                              className="hidden"
-                              onChange={(event) => {
-                                const files = event.target.files ? Array.from(event.target.files) : []
-                                event.currentTarget.value = ''
-                                handlePhotoEditorFileSelection(files, 'upload')
-                              }}
-                            />
-                            <input
-                              ref={photoEditorCameraInputRef}
-                              type="file"
-                              accept="image/*"
-                              capture="environment"
-                              className="hidden"
-                              onChange={(event) => {
-                                const files = event.target.files ? Array.from(event.target.files) : []
-                                event.currentTarget.value = ''
-                                handlePhotoEditorFileSelection(files, 'camera')
-                              }}
-                            />
-                          </div>
-
-                          <div>
-                            <label htmlFor="recipe-photo-search" className="text-body-sm font-semibold text-casa-navy">
-                              Find a recipe image
-                            </label>
-                            <p className="mt-1 text-caption text-casa-muted">Searches Pexels and Unsplash.</p>
-                            <div className="mt-2 flex items-center gap-2">
-                              <Input
-                                id="recipe-photo-search"
-                                value={photoSearchQuery}
-                                onChange={(event) => setPhotoSearchQuery(event.target.value)}
-                                placeholder="e.g., chicken alfredo"
-                              />
-                              <Button
-                                variant="secondary"
-                                size="sm"
-                                onClick={() => void searchWebImages(photoSearchQuery)}
-                                disabled={photoSearchLoading}
-                                loading={photoSearchLoading}
-                              >
-                                Search
-                              </Button>
-                            </div>
-                            {photoSearchError && <p role="alert" className="mt-2 text-caption text-casa-error">{photoSearchError}</p>}
-                            {photoSearchResults.length > 0 && (
-                              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                                {photoSearchResults.map((option) => (
-                                  <Button
-                                    key={option.id}
-                                    variant="ghost"
-                                    onClick={() => {
-                                      setPhotoEditorRemoteUrl(option.url.split('#')[0] ?? option.url)
-                                      setPhotoEditorFocalX(50)
-                                      setPhotoEditorFocalY(42)
-                                    }}
-                                    className={cn(
-                                      'h-auto min-h-0 overflow-hidden rounded-card border p-0 text-left',
-                                      photoEditorUrl.trim() === option.url ? 'border-casa-gold' : 'border-casa-border hover:border-casa-gold/40'
-                                    )}
-                                    contentClassName="block w-full"
-                                  >
-                                    <img
-                                      src={option.url}
-                                      alt={option.title || 'Recipe image option'}
-                                      className="h-20 w-full object-cover"
-                                      loading="lazy"
-                                      referrerPolicy="no-referrer"
-                                    />
-                                    {option.source && (
-                                      <span className="block truncate border-t border-casa-divider/60 px-2 py-1 text-caption text-casa-muted">
-                                        {option.source}
-                                      </span>
-                                    )}
-                                  </Button>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-
-                          <label className="block">
-                            <span className="text-body-sm font-semibold text-casa-navy">Image URL</span>
-                            <Input
-                              value={photoEditorUrl}
-                              onChange={(event) => setPhotoEditorRemoteUrl(event.target.value)}
-                              placeholder="https://.../recipe-photo.jpg"
-                              className="mt-2"
-                            />
-                          </label>
-
-                          <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-[minmax(0,1fr)_14rem]">
-                            <div className="rounded-card border border-casa-border bg-casa-bg p-2">
-                              <img
-                                src={photoEditorPreviewUrl || photoEditorUrl.trim() || recipeFallbackHero}
-                                alt={`Preview for ${photoEditorName}`}
-                                className="h-56 w-full rounded-card border border-casa-border object-cover"
-                                style={{ objectPosition: `${photoEditorFocalX}% ${photoEditorFocalY}%` }}
-                                referrerPolicy="no-referrer"
-                                onError={(event) => {
-                                  const target = event.currentTarget
-                                  if (target.src !== recipeFallbackHero) target.src = recipeFallbackHero
-                                }}
-                              />
-                            </div>
-                            <div className="space-y-4">
-                              <label className="block text-body-sm font-semibold text-casa-navy">
-                                Horizontal crop focus
-                                <input
-                                  className="mt-2 w-full"
-                                  type="range"
-                                  min={0}
-                                  max={100}
-                                  value={photoEditorFocalX}
-                                  onChange={(event) => {
-                                    setPhotoEditorFocalX(Number(event.target.value))
-                                    setPhotoEditorDirty(true)
-                                  }}
-                                />
-                              </label>
-                              <label className="block text-body-sm font-semibold text-casa-navy">
-                                Vertical crop focus
-                                <input
-                                  className="mt-2 w-full"
-                                  type="range"
-                                  min={0}
-                                  max={100}
-                                  value={photoEditorFocalY}
-                                  onChange={(event) => {
-                                    setPhotoEditorFocalY(Number(event.target.value))
-                                    setPhotoEditorDirty(true)
-                                  }}
-                                />
-                              </label>
-                              <Button
-                                variant="secondary"
-                                size="sm"
-                                onClick={() => {
-                                  setPhotoEditorFocalX(50)
-                                  setPhotoEditorFocalY(42)
-                                  setPhotoEditorDirty(true)
-                                }}
-                              >
-                                Auto-crop
-                              </Button>
-                            </div>
-                          </div>
-                          {photoEditorError && <p role="alert" className="text-caption text-casa-error">{photoEditorError}</p>}
-                        </div>
-                      </DisclosureSection>
-                    </div>
-                    <div className="rounded-lg border border-casa-border bg-casa-surface p-2 space-y-2">
-                      <p className="text-body-sm text-casa-muted">Quick actions</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        <Chip
-                          onClick={() => applyPipeChoiceToRecipeDraft('left')}
-                        >
-                          Use left side of |
-                        </Chip>
-                        <Chip
-                          onClick={() => applyPipeChoiceToRecipeDraft('right')}
-                        >
-                          Use right side of |
-                        </Chip>
-                        {recipeQuickActions.map((action) => (
-                          <Chip
-                            key={action.id}
-                            onClick={() => applyRegexQuickAction(action)}
-                          >
-                            {action.name}
-                          </Chip>
-                        ))}
-                      </div>
-                      <div className="grid grid-cols-[1fr_auto] gap-2 items-start">
-                        <textarea
-                          value={recipeAiInstruction}
-                          onChange={(event) => setRecipeAiInstruction(event.target.value)}
-                          rows={2}
-                          placeholder='AI edit instruction (e.g. "split quantities using left side of | for 2 people").'
-                          className="rounded-button border border-casa-border bg-casa-bg px-2.5 py-2 text-body-sm text-casa-text outline-none resize-y"
-                        />
-                        <Button
-                          variant="secondary"
-                          onClick={() => void applyAiRecipeEdit()}
-                          disabled={recipeAiEditing}
-                          loading={recipeAiEditing}
-                        >
-                          Apply AI edit
-                        </Button>
-                      </div>
-                      {recipeAiError && <p className="text-body-sm text-casa-error">{recipeAiError}</p>}
-                      {recipeSuggestedQuickAction && (
-                        <div className="rounded-lg border border-casa-gold/40 bg-casa-gold/10 p-2 flex items-center justify-between gap-2">
-                          <div>
-                            <p className="text-body-sm font-semibold text-casa-navy">AI suggested quick action: {recipeSuggestedQuickAction.name}</p>
-                            {recipeSuggestedQuickAction.description && (
-                              <p className="text-body-sm text-casa-muted">{recipeSuggestedQuickAction.description}</p>
-                            )}
-                          </div>
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={saveSuggestedQuickAction}
-                          >
-                            Save action
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                    {recipeEditorError && <p className="text-body-sm text-casa-error">{recipeEditorError}</p>}
-                    {recipeEditorStatus && <p className="text-body-sm text-casa-muted">{recipeEditorStatus}</p>}
-                  </div>
-
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 flex-1 min-h-0">
-                    <div className="rounded-xl border border-casa-border bg-casa-bg p-2 flex flex-col min-h-0">
-                      <div className="mb-2 flex items-center justify-between">
-                        <p className="text-body-sm font-semibold text-casa-muted">Ingredients ({recipeEditorDraft.ingredients.length})</p>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={addRecipeDraftIngredient}
-                        >
-                          Add ingredient
-                        </Button>
-                      </div>
-                      <div className="space-y-1 overflow-y-auto pr-1">
-                        {recipeEditorDraft.ingredients.map((ingredient, index) => (
-                          <div key={`edit-ingredient-${index}`} className="rounded-lg border border-casa-border bg-casa-surface p-2 space-y-1">
-                            <div className="flex items-center gap-1.5">
-                              <input
-                                type="text"
-                                value={ingredient.quantity ?? ''}
-                                onChange={(event) => updateRecipeDraftIngredient(index, { quantity: event.target.value || null })}
-                                placeholder="Qty"
-                                className="w-16 rounded-button border border-casa-border bg-casa-bg px-2 py-1.5 text-body text-casa-text outline-none"
-                              />
-                              <input
-                                type="text"
-                                value={ingredient.unit ?? ''}
-                                onChange={(event) => updateRecipeDraftIngredient(index, { unit: event.target.value || null })}
-                                placeholder="Unit"
-                                className="w-16 rounded-button border border-casa-border bg-casa-bg px-2 py-1.5 text-body text-casa-text outline-none"
-                              />
-                              <input
-                                type="text"
-                                value={ingredient.name ?? ''}
-                                onChange={(event) => updateRecipeDraftIngredient(index, { name: event.target.value || null })}
-                                placeholder="Ingredient name"
-                                className="flex-1 rounded-button border border-casa-border bg-casa-bg px-2 py-1.5 text-body text-casa-text outline-none"
-                              />
-                              <Button
-                                variant="danger"
-                                size="sm"
-                                onClick={() => removeRecipeDraftIngredient(index)}
-                              >
-                                Remove
-                              </Button>
-                            </div>
-                            <input
-                              type="text"
-                              value={ingredient.raw_text}
-                              onChange={(event) => updateRecipeDraftIngredient(index, { raw_text: event.target.value })}
-                              placeholder="Raw ingredient text"
-                              className="w-full rounded-button border border-casa-border bg-casa-bg px-2 py-1.5 text-body-sm text-casa-muted outline-none"
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="rounded-xl border border-casa-border bg-casa-bg p-2 flex flex-col min-h-0">
-                      <div className="mb-2 flex items-center justify-between">
-                        <p className="text-body-sm font-semibold text-casa-muted">Directions ({recipeEditorDraft.steps.length})</p>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => addRecipeDraftStepAfter(recipeEditorDraft.steps.length - 1)}
-                        >
-                          Add step
-                        </Button>
-                      </div>
-                      <div className="space-y-2 overflow-y-auto pr-1">
-                        {recipeEditorDraft.steps.map((step, index) => (
-                          <div key={`edit-step-${index}`} className="rounded-lg border border-casa-border bg-casa-surface p-2">
-                            <div className="mb-1 flex items-center justify-between gap-1">
-                              <p className="text-body-sm font-semibold text-casa-muted">Step {index + 1}</p>
-                              <div className="flex items-center gap-1">
-                                <Chip
-                                  onClick={() => moveRecipeDraftStep(index, -1)}
-                                  disabled={index === 0}
-                                >
-                                  Up
-                                </Chip>
-                                <Chip
-                                  onClick={() => moveRecipeDraftStep(index, 1)}
-                                  disabled={index >= recipeEditorDraft.steps.length - 1}
-                                >
-                                  Down
-                                </Chip>
-                                <Chip
-                                  tone="accent"
-                                  onClick={() => addRecipeDraftStepAfter(index)}
-                                >
-                                  Add
-                                </Chip>
-                                <Chip
-                                  tone="danger"
-                                  onClick={() => removeRecipeDraftStep(index)}
-                                  disabled={recipeEditorDraft.steps.length <= 1}
-                                >
-                                  Remove
-                                </Chip>
-                              </div>
-                            </div>
-                            <textarea
-                              value={step.instruction}
-                              onChange={(event) => updateRecipeDraftStep(index, event.target.value)}
-                              rows={3}
-                              className="w-full rounded-button border border-casa-border bg-casa-bg px-2.5 py-2 text-body text-casa-text outline-none resize-y leading-relaxed"
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="flex flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_17.5rem] gap-3">
-                  <div className="order-1 lg:min-w-0">
-                    <div className="pb-2 flex items-center justify-between gap-2">
-                      <p className="text-body-sm font-bold text-casa-navy">
-                        {directionsViewMode === 'step'
-                          ? `Step ${stepIndex + 1} of ${Math.max(1, cookSteps.length)}`
-                          : `${cookSteps.length} steps`}
-                      </p>
-                      <SegmentedControl
-                        aria-label="Directions view"
-                        value={directionsViewMode}
-                        onChange={setDirectionsViewMode}
-                        options={[
-                          { value: 'step', label: 'Step-by-step' },
-                          { value: 'all', label: 'All steps' },
-                        ]}
-                      />
-                    </div>
-                    {directionsViewMode === 'step' && neededNowIngredientRows.length > 0 && (
-                      <div className="pb-3">
-                        <div className="rounded-card border border-casa-accent-subtle-border bg-casa-accent-subtle px-3 py-2">
-                          <p className="text-caption font-semibold uppercase tracking-[0.14em] text-casa-top-pick-band">Needed now</p>
-                          <div className="mt-1.5 flex flex-wrap gap-1.5">
-                            {neededNowIngredientRows.map((row) => (
-                              <span
-                                key={`needed-now-${row.id}`}
-                                className="inline-flex items-center gap-1 rounded-pill border border-casa-accent-subtle-border bg-casa-surface px-2.5 py-1 text-body-sm font-semibold text-casa-top-pick-band"
-                              >
-                                <span>{row.name}</span>
-                                {row.qty && <span className="font-normal text-casa-text-secondary">{row.qty}</span>}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    {directionsViewMode === 'step' && cookSteps.length > 1 && (
-                      <div className="pb-3 flex items-center gap-1" aria-hidden>
-                        {cookSteps.map((_, index) => (
-                          <span
-                            key={`step-seg-${index}`}
+                            key={res.url}
+                            onClick={() => setPhotoEditorRemoteUrl(res.url)}
                             className={cn(
-                              'h-1.5 flex-1 rounded-pill transition-colors',
-                              index <= stepIndex ? 'bg-casa-info' : 'bg-casa-control-border'
+                              'rounded-xl border overflow-hidden cursor-pointer',
+                              photoEditorUrl === res.url ? 'border-casa-gold ring-2 ring-casa-gold/40' : 'border-casa-border',
                             )}
-                          />
+                          >
+                            <img src={res.url} alt={res.title} className="h-20 w-full object-cover" />
+                          </div>
                         ))}
                       </div>
                     )}
-                    {directionsViewMode === 'all' && cookSteps.length > 1 && (
-                      <div className="pb-3">
-                        <Progress
-                          value={stepIndex + 1}
-                          max={Math.max(1, cookSteps.length)}
-                          aria-label="Cooking step progress"
-                          className="[&_.casa-progress]:h-[5px]"
-                        />
-                      </div>
-                    )}
-                    <div className="pt-2">
-                      {directionsViewMode === 'step' ? (
-                        <div ref={(el) => { currentStepRef.current = el }} className="pr-1 flex gap-3">
-                          <span className="text-casa-accent-soft-border font-extrabold leading-none text-display-md flex-shrink-0 tabular-nums">
-                            {stepIndex + 1}
-                          </span>
-                          <p className="text-display-sm text-casa-navy leading-snug pt-1">{currentStep?.instruction ?? 'No directions saved for this recipe yet.'}</p>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col pr-1">
-                          {(cookSteps.length > 0 ? cookSteps : [{ step_number: 1, instruction: 'No directions saved for this recipe yet.' }]).map((step, index) => {
-                            const isCurrent = cookSteps.length > 0 && index === stepIndex
-                            const isDone = cookSteps.length > 0 && index < stepIndex
-                            const canJump = cookSteps.length > 0
-                            return (
-                              <Button
-                                key={`${step.step_number}-${index}`}
-                                ref={isCurrent ? (el) => { currentStepRef.current = el } : undefined}
-                                variant="ghost"
-                                disabled={!canJump}
-                                onClick={() => canJump && setStepIndex(index)}
-                                className={cn(
-                                  'h-auto w-full scroll-mb-4 scroll-mt-4 justify-start text-left',
-                                  isCurrent
-                                    ? 'rounded-card border border-casa-accent-subtle-border bg-casa-accent-subtle p-4 my-1.5'
-                                    : 'items-start py-4 px-0.5 border-b border-casa-divider last:border-b-0'
-                                )}
-                                contentClassName="w-full items-start justify-start gap-3.5"
-                              >
-                                <span
-                                  className={cn(
-                                    'flex-none grid place-items-center w-[32px] h-[32px] rounded-pill text-body font-bold leading-none border transition-colors',
-                                    isDone
-                                      ? 'bg-casa-info border-casa-info text-white'
-                                      : isCurrent
-                                        ? 'bg-casa-accent-soft border-casa-accent-soft-border text-casa-navy'
-                                        : 'bg-casa-surface border-casa-control-border text-casa-text-tertiary'
-                                  )}
-                                >
-                                  {isDone ? <Check size={15} strokeWidth={3} /> : step.step_number}
-                                </span>
-                                <div className="min-w-0 flex-1">
-                                  {isCurrent && (
-                                    <p className="text-body-sm font-bold uppercase tracking-[0.12em] text-casa-info-strong mb-2">
-                                      Current step
-                                    </p>
-                                  )}
-                                  <p
-                                    className={cn(
-                                      'text-display-sm leading-snug pt-0.5',
-                                      isDone ? 'text-casa-text-tertiary' : 'text-casa-navy'
-                                    )}
-                                  >
-                                    {step.instruction}
-                                  </p>
-                                  {isCurrent && neededNowIngredientRows.length > 0 && (
-                                    <div className="mt-3 flex flex-wrap gap-1.5">
-                                      {neededNowIngredientRows.map((row) => (
-                                        <span
-                                          key={`mini-needed-${row.id}`}
-                                          className="inline-flex items-center gap-1.5 rounded-pill border border-casa-accent-soft-border bg-casa-surface px-3 py-1.5 text-body-sm font-semibold text-casa-top-pick-band"
-                                        >
-                                          {row.name}
-                                          {row.qty && <b className="font-semibold text-casa-text-secondary">{row.qty}</b>}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              </Button>
-                            )
-                          })}
-                        </div>
-                      )}
-                    </div>
                   </div>
 
-                  <div className="order-2">
-                    <div className="rounded-card border border-casa-border bg-casa-surface overflow-hidden lg:sticky lg:top-0 shadow-[0_1px_2px_1px_rgba(6,10,36,0.05)]">
-                    <div className="px-4 pt-3 pb-3 border-b border-casa-divider">
-                      <div className="flex items-baseline justify-between gap-2 mb-1.5">
-                        <p className="text-body font-bold text-casa-navy">Ingredients</p>
-                        <SegmentedControl
-                          aria-label="Ingredient units"
-                          value={showCupsConversion ? 'cups' : 'grams'}
-                          onChange={(value) => setShowCupsConversion(value === 'cups')}
-                          options={[
-                            { value: 'grams', label: 'Grams' },
-                            { value: 'cups', label: 'Cups' },
-                          ]}
+                  <div className="space-y-2">
+                    <label htmlFor="recipe-photo-url" className="text-body-sm font-semibold text-casa-navy">
+                      Image URL
+                    </label>
+                    <Input
+                      id="recipe-photo-url"
+                      type="url"
+                      value={photoEditorUrl}
+                      onChange={(event) => setPhotoEditorRemoteUrl(event.target.value)}
+                      placeholder="https://.../recipe-photo.jpg"
+                    />
+                  </div>
+
+                  <div className="space-y-3">
+                    <p className="text-body-sm font-semibold text-casa-navy">Adjust photo crop (hero)</p>
+                    <p className="text-caption text-casa-muted">
+                      Pan focus for widescreen display. 0% is left/top, 100% is right/bottom.
+                    </p>
+                    <div className="overflow-hidden rounded-xl border border-casa-border bg-casa-surface">
+                      <div className="relative aspect-[16/9] w-full bg-casa-surface">
+                        <img
+                          src={photoEditorPreviewUrl || recipeFallbackHero}
+                          alt="Crop preview"
+                          className="h-full w-full object-cover"
+                          style={{ objectPosition: `${photoEditorFocalX}% ${photoEditorFocalY}%` }}
                         />
                       </div>
-                      <p className="text-caption text-casa-text-tertiary mb-3">{cookIngredients.length} items · low-touch shelf</p>
-                      <SegmentedControl
-                        aria-label="Recipe quantity scale"
-                        value={recipeScale}
-                        onChange={setRecipeScale}
-                        fullWidth
-                        options={[
-                          { value: '0.5', label: '0.5×' },
-                          { value: '1', label: '1×' },
-                          { value: '2', label: '2×' },
-                        ]}
-                      />
                     </div>
-                    <div className="p-4">
-                      {cookIngredientRows.length === 0 ? (
-                        <p className="text-body-sm text-casa-muted">No ingredient breakdown saved for this recipe.</p>
-                      ) : (
-                        <div className="max-h-40 lg:max-h-[60vh] overflow-y-auto pr-1">
-                          {cookIngredientRows.map((row) => {
-                            const checked = checkedCookIngredients.has(row.id)
-                            return (
-                              <Checkbox
-                                key={row.id}
-                                checked={checked}
-                                onChange={() =>
-                                  setCheckedCookIngredients((current) => {
-                                    const next = new Set(current)
-                                    if (next.has(row.id)) next.delete(row.id)
-                                    else next.add(row.id)
-                                    return next
-                                  })
-                                }
-                                className="w-full border-b border-casa-divider py-3 last:border-b-0"
-                                label={(
-                                  <span
-                                    className={cn(
-                                      'text-body leading-snug transition-colors truncate',
-                                      checked ? 'text-casa-text-tertiary line-through' : 'text-casa-navy'
-                                    )}
-                                  >
-                                    {row.name}
-                                  </span>
-                                )}
-                                description={row.qty && (
-                                  <span
-                                    className={cn(
-                                      'flex-none whitespace-nowrap text-body font-semibold transition-colors',
-                                      checked ? 'text-casa-text-faint line-through' : 'text-casa-text-secondary'
-                                    )}
-                                  >
-                                    {row.qty}
-                                  </span>
-                                )}
-                              />
-                            )
-                          })}
-                        </div>
-                      )}
-                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+                      <label className="block text-body-sm font-semibold text-casa-navy">
+                        Horizontal crop focus
+                        <input
+                          className="mt-2 w-full"
+                          type="range"
+                          min={0}
+                          max={100}
+                          value={photoEditorFocalX}
+                          onChange={(event) => {
+                            setPhotoEditorFocalX(Number(event.target.value))
+                            setPhotoEditorDirty(true)
+                          }}
+                        />
+                      </label>
+                      <label className="block text-body-sm font-semibold text-casa-navy">
+                        Vertical crop focus
+                        <input
+                          className="mt-2 w-full"
+                          type="range"
+                          min={0}
+                          max={100}
+                          value={photoEditorFocalY}
+                          onChange={(event) => {
+                            setPhotoEditorFocalY(Number(event.target.value))
+                            setPhotoEditorDirty(true)
+                          }}
+                        />
+                      </label>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => {
+                          setPhotoEditorFocalX(50)
+                          setPhotoEditorFocalY(42)
+                          setPhotoEditorDirty(true)
+                        }}
+                      >
+                        Auto-crop
+                      </Button>
                     </div>
                   </div>
                 </div>
-              )}
+              </DisclosureSection>
+
+              {/* AI Quick Actions */}
+              <Card tone="subtle" padding="md" className="space-y-3">
+                <p className="text-caption font-bold uppercase tracking-wider text-casa-navy">Quick Recipe AI Adjustments</p>
+                <div className="flex flex-wrap gap-1.5">
+                  <Chip onClick={() => applyPipeChoiceToRecipeDraft('left')}>Left side of |</Chip>
+                  <Chip onClick={() => applyPipeChoiceToRecipeDraft('right')}>Right side of |</Chip>
+                  {recipeQuickActions.map((act) => (
+                    <Chip key={act.id} onClick={() => applyRegexQuickAction(act)}>
+                      {act.name}
+                    </Chip>
+                  ))}
+                </div>
+                <div className="flex gap-2 items-start">
+                  <Textarea
+                    value={recipeAiInstruction}
+                    onChange={(event) => setRecipeAiInstruction(event.target.value)}
+                    rows={2}
+                    placeholder='AI edit instruction (e.g. "scale ingredients for 2 people")'
+                    className="flex-1 text-body-sm"
+                  />
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    onClick={() => void applyAiRecipeEdit()}
+                    disabled={recipeAiEditing}
+                    loading={recipeAiEditing}
+                    className="min-h-control"
+                  >
+                    Apply AI edit
+                  </Button>
+                </div>
+                {recipeSuggestedQuickAction && (
+                  <div className="p-2.5 rounded-xl bg-casa-gold/15 border border-casa-gold/30 flex items-center justify-between gap-2">
+                    <span className="text-body-sm font-semibold text-casa-navy">
+                      Suggested Action: {recipeSuggestedQuickAction.name}
+                    </span>
+                    <Button variant="secondary" size="sm" onClick={saveSuggestedQuickAction}>
+                      Save Action
+                    </Button>
+                  </div>
+                )}
+              </Card>
+
+              {/* Ingredients & Steps Edit Grid */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Ingredients Edit Column */}
+                <Card tone="surface" padding="md" className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="font-display text-body-lg font-bold text-casa-navy">
+                      Ingredients ({recipeEditorDraft.ingredients.length})
+                    </p>
+                    <Button variant="secondary" size="sm" onClick={addRecipeDraftIngredient}>
+                      Add ingredient
+                    </Button>
+                  </div>
+                  <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
+                    {recipeEditorDraft.ingredients.map((ing, i) => (
+                      <div key={i} className="p-2.5 rounded-xl border border-casa-border bg-casa-bg space-y-1">
+                        <div className="flex items-center gap-1.5">
+                          <Input
+                            value={ing.quantity ?? ''}
+                            onChange={(e) => updateRecipeDraftIngredient(i, { quantity: e.target.value || null })}
+                            placeholder="Qty"
+                            className="w-16"
+                          />
+                          <Input
+                            value={ing.unit ?? ''}
+                            onChange={(e) => updateRecipeDraftIngredient(i, { unit: e.target.value || null })}
+                            placeholder="Unit"
+                            className="w-16"
+                          />
+                          <Input
+                            value={ing.name ?? ''}
+                            onChange={(e) => updateRecipeDraftIngredient(i, { name: e.target.value || null })}
+                            placeholder="Name"
+                            className="flex-1"
+                          />
+                          <IconButton
+                            icon={<Trash2 size={13} />}
+                            variant="danger"
+                            size="sm"
+                            onClick={() => removeRecipeDraftIngredient(i)}
+                            aria-label="Remove ingredient"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+
+                {/* Directions Edit Column */}
+                <Card tone="surface" padding="md" className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="font-display text-body-lg font-bold text-casa-navy">
+                      Directions ({recipeEditorDraft.steps.length})
+                    </p>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => addRecipeDraftStepAfter(recipeEditorDraft.steps.length - 1)}
+                    >
+                      Add step
+                    </Button>
+                  </div>
+                  <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
+                    {recipeEditorDraft.steps.map((st, i) => (
+                      <div key={i} className="p-2.5 rounded-xl border border-casa-border bg-casa-bg space-y-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-caption font-bold text-casa-navy">Step {i + 1}</span>
+                          <div className="flex items-center gap-1">
+                            <Chip size="sm" onClick={() => moveRecipeDraftStep(i, -1)} disabled={i === 0}>
+                              ↑
+                            </Chip>
+                            <Chip size="sm" onClick={() => moveRecipeDraftStep(i, 1)} disabled={i >= recipeEditorDraft.steps.length - 1}>
+                              ↓
+                            </Chip>
+                            <Chip size="sm" tone="danger" onClick={() => removeRecipeDraftStep(i)} disabled={recipeEditorDraft.steps.length <= 1}>
+                              Remove
+                            </Chip>
+                          </div>
+                        </div>
+                        <Textarea
+                          value={st.instruction}
+                          onChange={(e) => updateRecipeDraftStep(i, e.target.value)}
+                          rows={2}
+                          className="text-body-sm"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              </div>
             </div>
-            <div className="px-4 py-3 border-t border-casa-divider flex items-center justify-between">
-              {isRecipeEditMode ? (
-                <>
-                  <Button
-                    variant="secondary"
-                    onClick={cancelRecipeEditing}
-                    disabled={recipeEditorSaving}
-                  >
-                    Cancel edit
-                  </Button>
-                  <Button
-                    variant="strong"
-                    onClick={() => void saveRecipeEdits()}
-                    disabled={recipeEditorSaving}
-                    loading={recipeEditorSaving}
-                  >
-                    Save changes
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Button variant="secondary" onClick={() => setStepIndex((current) => Math.max(0, current - 1))} disabled={stepIndex <= 0} leadingIcon={<ChevronLeft size={14} />}>
-                    Prev
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={closeCookRecipe}
-                  >
-                    Close
-                  </Button>
-                  <Button
-                    variant="strong"
-                    onClick={() => {
-                      if (stepIndex >= cookSteps.length - 1) {
-                        closeCookRecipe()
-                        return
-                      }
-                      setStepIndex((current) => Math.min(Math.max(0, cookSteps.length - 1), current + 1))
-                    }}
-                    trailingIcon={<ChevronRight size={14} />}
-                  >
-                    {stepIndex >= cookSteps.length - 1 ? 'Finish' : 'Next step'}
-                  </Button>
-                </>
-              )}
+
+            <div className="p-4 border-t border-casa-border bg-casa-surface flex items-center justify-end gap-3">
+              <Button variant="secondary" onClick={cancelRecipeEditing} disabled={recipeEditorSaving} className="min-h-control">
+                Cancel edit
+              </Button>
+              <Button
+                variant="champagne"
+                onClick={() => void saveRecipeEdits()}
+                disabled={recipeEditorSaving}
+                loading={recipeEditorSaving}
+                className="font-bold min-h-control px-6"
+              >
+                Save changes
+              </Button>
             </div>
           </div>
-        </div>
+        </Modal>
       )}
+
+      {/* Assign Recipe to Day Modal */}
+      {assigningDay && (
+        <Modal
+          open={true}
+          onClose={() => setAssigningDay(null)}
+          title={`Assign Dinner for ${assigningDay.dayLabel}`}
+          size="lg"
+        >
+          <div className="space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-casa-border">
+              <div>
+                <span className="text-caption font-bold uppercase tracking-wider text-casa-gold">Weekly Horizon</span>
+                <Heading role="heading" className="font-display font-bold text-casa-navy text-heading">
+                  Assign Dinner for {assigningDay.dayLabel}
+                </Heading>
+              </div>
+              <IconButton
+                icon={<X size={16} />}
+                variant="ghost"
+                size="sm"
+                aria-label="Close"
+                onClick={() => setAssigningDay(null)}
+              />
+            </div>
+
+            <div className="relative">
+              <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-casa-muted pointer-events-none" />
+              <Input
+                placeholder="Search recipe library..."
+                value={assignDaySearch}
+                onChange={(e) => setAssignDaySearch(e.target.value)}
+                className="w-full pl-10"
+              />
+            </div>
+
+            <div className="max-h-[60vh] overflow-y-auto space-y-2 pr-1">
+              {recipes
+                .filter((r) => !assignDaySearch || r.name.toLowerCase().includes(assignDaySearch.toLowerCase()))
+                .map((recipe) => (
+                  <div
+                    key={recipe.id}
+                    onClick={() => void handleAssignRecipeToDay(recipe)}
+                    className="flex items-center justify-between gap-3 p-3 rounded-2xl border border-casa-border bg-casa-surface hover:border-casa-gold hover:bg-casa-gold/10 cursor-pointer transition-all duration-150 active:scale-[0.99]"
+                  >
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      {recipe.image_url ? (
+                        <img
+                          src={recipe.image_url}
+                          alt={recipe.name}
+                          className="w-12 h-12 rounded-xl object-cover border border-casa-border shrink-0"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 rounded-xl bg-casa-gold/15 flex items-center justify-center text-casa-gold shrink-0">
+                          <BookOpen size={20} />
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="font-display text-body font-bold text-casa-navy truncate">
+                          {formatRecipeTitle(recipe.name)}
+                        </p>
+                        <p className="text-caption text-casa-muted truncate">
+                          {recipe.cook_time ? `${recipe.cook_time} · ` : ''}{recipe.servings ? `${recipe.servings} servings` : 'Standard'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <Button
+                      variant="champagne"
+                      size="sm"
+                      className="shrink-0 font-bold min-h-[32px] px-3 text-caption"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        void handleAssignRecipeToDay(recipe)
+                      }}
+                    >
+                      Assign
+                    </Button>
+                  </div>
+                ))}
+            </div>
+          </div>
+        </Modal>
+      )}
+        </PageShell>
+      </div>
+
+      {/* Global Toast with Undo Notification */}
+      <Toast
+        open={Boolean(toastState?.open)}
+        message={toastState?.message ?? ''}
+        tone={toastState?.tone ?? 'info'}
+        actionLabel={toastState?.actionLabel}
+        onAction={toastState?.onAction}
+        onClose={() => setToastState(null)}
+      />
     </div>
   )
 }
+
+

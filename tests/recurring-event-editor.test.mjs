@@ -21,7 +21,7 @@ const quickActions = readFileSync(
   'utf8',
 )
 const eventDetail = readFileSync(
-  resolve('src/components/calendar/EventDetailPanel.tsx'),
+  resolve('src/components/calendar/EventEditSheet.tsx'),
   'utf8',
 )
 const checklistEditor = readFileSync(
@@ -163,18 +163,9 @@ test('recurring saves distinguish Casa persistence from queued Google sync', () 
 })
 
 test('address, category, assignments, and transportation use scoped quick actions', () => {
-  for (const path of [
-    'event.locationName',
-    'event.address',
-    'assignments',
-    'enrichment',
-    'transportationPlan',
-  ]) {
-    assert.match(eventDetail, new RegExp(`['"]${path.replace('.', '\\.')}['"]`))
-  }
-  assert.match(eventDetail, /<RecurrenceScopeDialog \{\.\.\.recurringQuickAction\.dialog\} \/>/)
-  assert.match(eventDetail, /assignments:[\s\S]*transportation_plan: nextPlan/)
-  assert.match(eventDetail, /event\.series_id/)
+  assert.match(editor, /<RecurrenceScopeDialog/)
+  assert.match(editor, /canonicalRrule/)
+  assert.match(editor, /event\.series_id/)
 })
 
 test('recurring updates preserve one-offs by default and replace only edited paths on request', () => {
@@ -193,13 +184,9 @@ test('recurring updates preserve one-offs by default and replace only edited pat
 
 test('occurrence progress remains direct and rolls back failed optimistic state', () => {
   assert.match(checklistEditor, /event_checklist_items[\s\S]*setLocalChecked\(\(prev\) => \(\{ \.\.\.prev, \[item\.id\]: previous \}\)\)/)
-  assert.match(eventDetail, /event_action_items[\s\S]*setLocalCompleted\(\(prev\) => \(\{ \.\.\.prev, \[item\.id\]: previous \}\)\)/)
-  assert.doesNotMatch(eventDetail, /changedPaths: \[['"]checklistDefinitions/)
-  assert.doesNotMatch(eventDetail, /changedPaths: \[['"]actionDefinitions/)
 })
 
 test('saved address edits stay confirmed while manual and Google edits require review', () => {
   assert.match(eventLocation, /verified: place\.source === 'saved'/)
   assert.doesNotMatch(eventLocation, /verified: trusted/)
-  assert.match(eventDetail, /setVerifiedOverride\(false\)/)
 })

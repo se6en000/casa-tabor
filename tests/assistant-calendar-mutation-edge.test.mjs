@@ -367,3 +367,202 @@ test('active-event attendee follow-ups become exact confirmation-gated updates',
   assert.equal(update.args.id, event.id)
   assert.deepEqual(update.args.members_add, ['Owen'])
 })
+
+test('active-event location and venue updates extract destination with linguistic variance', () => {
+  const cases = [
+    { input: 'update the location to Walgreens on Dixie Hwy', expected: 'Walgreens on Dixie Hwy' },
+    { input: 'change location to Walgreens on Dixie Hwy', expected: 'Walgreens on Dixie Hwy' },
+    { input: 'set venue to Bak Middle School of the Arts', expected: 'Bak Middle School of the Arts' },
+    { input: 'change venue to Palm Beach Public', expected: 'Palm Beach Public' },
+    { input: "it's at Palm Beach Pediatrics", expected: 'Palm Beach Pediatrics' },
+    { input: 'make the address 1011 N Flagler Dr', expected: '1011 N Flagler Dr' },
+    { input: 'move location to Publix on Palm Beach Lakes', expected: 'Publix on Palm Beach Lakes' },
+    { input: 'location is Walgreens on Dixie', expected: 'Walgreens on Dixie' },
+    { input: 'we are meeting at Starbucks', expected: 'Starbucks' },
+  ]
+
+  for (const { input, expected } of cases) {
+    const res = resolveActiveCalendarMutation(input, event, [event], { utcOffset: '-04:00' })
+    assert.ok(res, `Expected match for input: "${input}"`)
+    assert.equal(res.tool, 'update_event', `Expected update_event for: "${input}"`)
+    assert.equal(res.args.id, event.id)
+    assert.equal(res.args.expected_updated_at, event.updated_at)
+    assert.equal(res.args.location, expected, `Expected location "${expected}" for: "${input}"`)
+  }
+})
+
+test('active-event location removals clear venue and address fields', () => {
+  const clearCases = [
+    'clear the location',
+    'remove location',
+    'delete venue',
+    'set location to none',
+    'no location',
+  ]
+
+  for (const input of clearCases) {
+    const res = resolveActiveCalendarMutation(input, event, [event], { utcOffset: '-04:00' })
+    assert.ok(res, `Expected match for clear input: "${input}"`)
+    assert.equal(res.tool, 'update_event')
+    assert.equal(res.args.id, event.id)
+    assert.equal(res.args.location, '')
+    assert.equal(res.args.address, '')
+  }
+})
+
+test('active-event incomplete location and exploratory inquiries return conversational clarifications', () => {
+  const incompleteCases = [
+    'change location',
+    'update the venue',
+    'set place',
+    'edit location',
+  ]
+
+  for (const input of incompleteCases) {
+    const res = resolveActiveCalendarMutation(input, event, [event], { utcOffset: '-04:00' })
+    assert.ok(res, `Expected conversational response for: "${input}"`)
+    assert.match(res.text, /Where would you like to set the location for "Dentist appointment"\?/)
+  }
+
+  const inquiryCases = [
+    'update details?',
+    'what can I change?',
+    'edit details',
+  ]
+
+  for (const input of inquiryCases) {
+    const res = resolveActiveCalendarMutation(input, event, [event], { utcOffset: '-04:00' })
+    assert.ok(res, `Expected capability overview for: "${input}"`)
+    assert.match(res.text, /You can update the time, location, assigned driver, attendees, or prep notes/)
+  }
+})
+
+test('active-event title and renaming mutations support direct updates and slot-filling', () => {
+  const cases = [
+    { input: 'rename to Annual Dental Cleaning', expected: 'Annual Dental Cleaning' },
+    { input: 'change title to Ortho Checkup', expected: 'Ortho Checkup' },
+    { input: 'set name of this event to Soccer Finals', expected: 'Soccer Finals' },
+  ]
+
+  for (const { input, expected } of cases) {
+    const res = resolveActiveCalendarMutation(input, event, [event], { utcOffset: '-04:00' })
+    assert.ok(res, `Expected match for input: "${input}"`)
+    assert.equal(res.tool, 'update_event')
+    assert.equal(res.args.id, event.id)
+    assert.equal(res.args.title, expected)
+  }
+
+  const promptRes = resolveActiveCalendarMutation('rename event', event, [event], { utcOffset: '-04:00' })
+  assert.ok(promptRes)
+  assert.match(promptRes.text, /What would you like to rename "Dentist appointment" to\?/)
+})
+
+test('active-event category mutations support 14 categories and synonyms', () => {
+  const cases = [
+    { input: 'change category to Medical', expected: 'medical' },
+    { input: 'tag as School', expected: 'school' },
+    { input: 'set category to Sports', expected: 'sports' },
+    { input: 'make it Social', expected: 'social' },
+    { input: 'tag as Home Maintenance', expected: 'home_maintenance' },
+    { input: 'mark as Work', expected: 'work' },
+    { input: 'it is an errand', expected: 'errand' },
+  ]
+
+  for (const { input, expected } of cases) {
+    const res = resolveActiveCalendarMutation(input, event, [event], { utcOffset: '-04:00' })
+    assert.ok(res, `Expected match for input: "${input}"`)
+    assert.equal(res.tool, 'update_event')
+    assert.equal(res.args.id, event.id)
+    assert.equal(res.args.category, expected)
+  }
+
+  const promptRes = resolveActiveCalendarMutation('change category', event, [event], { utcOffset: '-04:00' })
+  assert.ok(promptRes)
+  assert.match(promptRes.text, /What category would you like to set for "Dentist appointment"/)
+})
+
+test('active-event driver and transportation logistics mutations', () => {
+  const driverCases = [
+    { input: 'Kelly is driving', expected: 'Kelly' },
+    { input: 'assign driver to Jake', expected: 'Jake' },
+    { input: 'switch driver to Kelly', expected: 'Kelly' },
+  ]
+
+  for (const { input, expected } of driverCases) {
+    const res = resolveActiveCalendarMutation(input, event, [event], { utcOffset: '-04:00', familyNames: ['Jake', 'Kelly', 'Owen'] })
+    assert.ok(res, `Expected match for input: "${input}"`)
+    assert.equal(res.tool, 'update_event')
+    assert.equal(res.args.id, event.id)
+    assert.equal(res.args.driver_name, expected)
+  }
+
+  const splitRes = resolveActiveCalendarMutation(
+    'Jake will drop off and Kelly pick up',
+    event,
+    [event],
+    { utcOffset: '-04:00', familyNames: ['Jake', 'Kelly', 'Owen'] },
+  )
+  assert.ok(splitRes)
+  assert.equal(splitRes.tool, 'update_event')
+  assert.equal(splitRes.args.driver_leg1, 'Jake')
+  assert.equal(splitRes.args.driver_leg2, 'Kelly')
+
+  const clearDriver = resolveActiveCalendarMutation('clear driver', event, [event], { utcOffset: '-04:00' })
+  assert.ok(clearDriver)
+  assert.equal(clearDriver.args.driver_name, '')
+
+  const behaviorCases = [
+    { input: 'stay on site', expected: 'stay' },
+    { input: 'two way', expected: 'two_way' },
+    { input: 'drop off only', expected: 'dropoff_only' },
+    { input: 'pickup only', expected: 'pickup_only' },
+    { input: 'no driving needed', expected: 'none' },
+  ]
+
+  for (const { input, expected } of behaviorCases) {
+    const res = resolveActiveCalendarMutation(input, event, [event], { utcOffset: '-04:00' })
+    assert.ok(res, `Expected match for behavior input: "${input}"`)
+    assert.equal(res.tool, 'update_event')
+    assert.equal(res.args.travel_behavior, expected)
+  }
+})
+
+test('active-event attendee modifications support addition, removal, and primary attendee', () => {
+  const options = { utcOffset: '-04:00', familyNames: ['Jake', 'Kelly', 'Owen', 'Liv', 'Emme'] }
+
+  const addMultiple = resolveActiveCalendarMutation('add Owen and Liv to the event', event, [event], options)
+  assert.ok(addMultiple)
+  assert.equal(addMultiple.tool, 'update_event')
+  assert.deepEqual(addMultiple.args.members_add, ['Owen', 'Liv'])
+
+  const removeMember = resolveActiveCalendarMutation('remove Jake from attendees', event, [event], options)
+  assert.ok(removeMember)
+  assert.equal(removeMember.tool, 'update_event')
+  assert.deepEqual(removeMember.args.members_remove, ['Jake'])
+
+  const primaryMember = resolveActiveCalendarMutation('this is for Emme', event, [event], options)
+  assert.ok(primaryMember)
+  assert.equal(primaryMember.tool, 'update_event')
+  assert.equal(primaryMember.args.primary_attendee, 'Emme')
+})
+
+test('active-event prep checklist, outfit, and notes mutations', () => {
+  const bringRes = resolveActiveCalendarMutation('bring water bottle and shin guards', event, [event], { utcOffset: '-04:00' })
+  assert.ok(bringRes)
+  assert.equal(bringRes.tool, 'update_event')
+  assert.deepEqual(bringRes.args.what_to_bring, ['water bottle', 'shin guards'])
+
+  const clearBring = resolveActiveCalendarMutation('clear what to bring', event, [event], { utcOffset: '-04:00' })
+  assert.ok(clearBring)
+  assert.deepEqual(clearBring.args.what_to_bring, [])
+
+  const outfitRes = resolveActiveCalendarMutation('wear soccer uniform and cleats', event, [event], { utcOffset: '-04:00' })
+  assert.ok(outfitRes)
+  assert.equal(outfitRes.args.outfit_suggestion, 'soccer uniform and cleats')
+
+  const noteRes = resolveActiveCalendarMutation('add note: fast for 8 hours before appointment', event, [event], { utcOffset: '-04:00' })
+  assert.ok(noteRes)
+  assert.equal(noteRes.args.notes, 'fast for 8 hours before appointment')
+})
+
+

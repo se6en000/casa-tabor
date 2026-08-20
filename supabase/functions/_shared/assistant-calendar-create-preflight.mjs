@@ -1,4 +1,13 @@
-const TITLE_STOP_WORDS = new Set(['a', 'an', 'at', 'event', 'for', 'on', 'the'])
+const TITLE_STOP_WORDS = new Set([
+  'a', 'an', 'and', 'at', 'by', 'event', 'for', 'from', 'in', 'is', 'it',
+  'my', 'of', 'on', 'our', 'the', 'to', 'with',
+])
+
+const GENERIC_ACTION_WORDS = new Set([
+  'submit', 'order', 'reminder', 'appointment', 'appt', 'meeting', 'call',
+  'schedule', 'task', 'pickup', 'pick', 'dropoff', 'drop', 'check', 'pay',
+  'buy', 'get', 'visit', 'go',
+])
 
 function normalizeTitle(value) {
   return String(value ?? '')
@@ -15,11 +24,25 @@ function titleTokens(value) {
 }
 
 function titleSimilarity(left, right) {
-  const leftTokens = new Set(titleTokens(left))
-  const rightTokens = new Set(titleTokens(right))
+  const leftToks = titleTokens(left)
+  const rightToks = titleTokens(right)
+  const leftTokens = new Set(leftToks)
+  const rightTokens = new Set(rightToks)
   if (leftTokens.size === 0 || rightTokens.size === 0) return 0
-  const overlap = [...leftTokens].filter((token) => rightTokens.has(token)).length
-  return overlap / Math.min(leftTokens.size, rightTokens.size)
+
+  const intersection = [...leftTokens].filter((token) => rightTokens.has(token))
+  const union = new Set([...leftTokens, ...rightTokens])
+  const jaccard = intersection.length / union.size
+
+  // Check if both sides contain distinctive non-generic entity tokens that contradict each other
+  // e.g. "Cosco" vs "Walmart", "Leo" vs "Maya", "Soccer" vs "Piano"
+  const leftDistinct = [...leftTokens].filter((t) => !rightTokens.has(t) && !GENERIC_ACTION_WORDS.has(t))
+  const rightDistinct = [...rightTokens].filter((t) => !leftTokens.has(t) && !GENERIC_ACTION_WORDS.has(t))
+  if (leftDistinct.length > 0 && rightDistinct.length > 0) {
+    return 0
+  }
+
+  return jaccard
 }
 
 function eventType(value) {
@@ -40,7 +63,11 @@ function overlapMinutes(left, right) {
 }
 
 function eventMemberNames(event) {
-  const rows = Array.isArray(event?.event_members) ? event.event_members : []
+  const rows = Array.isArray(event?.event_members)
+    ? event.event_members
+    : Array.isArray(event?.members)
+      ? event.members
+      : []
   return rows.flatMap((row) => {
     const name = row?.family_members?.name ?? row?.family_member?.name ?? row?.name
     return typeof name === 'string' && name.trim() ? [name.trim().toLowerCase()] : []
@@ -74,12 +101,16 @@ export function assessCalendarCreatePreflight(events, args) {
     }
   }
 
+  const isReminder = proposedType === 'reminder'
+  const duplicateThreshold = isReminder ? 0.85 : 0.65
+
   const probableDuplicates = candidates.filter((event) => {
     if (eventType(event?.event_type) !== proposedType) return false
     const existingInterval = interval(event)
     const nearby = proposedInterval && existingInterval &&
       Math.abs(proposedInterval.start - existingInterval.start) <= 2 * 60 * 60 * 1000
-    return nearby && titleSimilarity(event?.title, args?.title) >= 0.6
+    if (!nearby) return false
+    return titleSimilarity(event?.title, args?.title) >= duplicateThreshold
   })
 
   const requestedMembers = new Set(
@@ -87,11 +118,20 @@ export function assessCalendarCreatePreflight(events, args) {
       .map((name) => String(name).trim().toLowerCase())
       .filter(Boolean),
   )
-  const conflicts = candidates.filter((event) => {
-    if (overlapMinutes(proposedInterval, interval(event)) <= 15) return false
-    if (requestedMembers.size === 0) return true
-    return eventMemberNames(event).some((name) => requestedMembers.has(name))
-  })
+
+  // Reminders never cause or have calendar conflicts.
+  // Events only conflict if the SAME family member is double-booked across overlapping non-reminder events.
+  const conflicts = isReminder
+    ? []
+    : candidates.filter((event) => {
+        if (eventType(event?.event_type) === 'reminder') return false
+        if (overlapMinutes(proposedInterval, interval(event)) <= 15) return false
+        const existingMembers = eventMemberNames(event)
+        if (requestedMembers.size > 0 && existingMembers.length > 0) {
+          return existingMembers.some((name) => requestedMembers.has(name))
+        }
+        return false
+      })
 
   return {
     status: probableDuplicates.length > 0 || conflicts.length > 0
