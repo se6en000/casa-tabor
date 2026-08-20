@@ -49,7 +49,7 @@ export default function AmbientQuickCaptureBar({ className }: Props) {
   }, [query])
 
   // Voice Dictation hook (dual-path: Deepgram bridge on kiosk Pi + WebSpeech API on browser)
-  const { listening, start: startDictation, stop: stopDictation, toggle: toggleDictation } = useFieldDictation({
+  const { listening, start: startDictation, stop: stopDictation, toggle: toggleDictation, resetBuffer: resetDictationBuffer } = useFieldDictation({
     onText: (text) => {
       setQuery(text)
     },
@@ -74,7 +74,8 @@ export default function AmbientQuickCaptureBar({ className }: Props) {
   )
 
   const handleQuickAdd = async () => {
-    if (!query.trim() || !parsed) return
+    if (!query.trim() || !parsed || isSaving) return
+
     setIsSaving(true)
     setSaveFeedback(null)
 
@@ -149,11 +150,12 @@ export default function AmbientQuickCaptureBar({ className }: Props) {
       // Immediately clear and reset to quiet ambient state
       setQuery('')
       setIsFocused(false)
+      stopDictation()
+      resetDictationBuffer()
       if (textareaRef.current) {
         textareaRef.current.style.height = '28px'
         textareaRef.current.blur()
       }
-      stopDictation()
 
       setSaveFeedback(feedbackMsg)
 
@@ -174,11 +176,12 @@ export default function AmbientQuickCaptureBar({ className }: Props) {
     openQuickCreate(parsed?.startDate || undefined, query)
     setQuery('')
     setIsFocused(false)
+    stopDictation()
+    resetDictationBuffer()
     if (textareaRef.current) {
       textareaRef.current.style.height = '28px'
       textareaRef.current.blur()
     }
-    stopDictation()
   }
 
   return (

@@ -113,7 +113,7 @@ export default function PalmBeachFolioCard({
     setTimeout(() => setAiHighlight(false), 1200)
   }, [contextDate, familyMembers, savedPlaces])
 
-  const { listening, start: startDictation, stop: stopDictation, toggle: toggleDictation } = useFieldDictation({
+  const { listening, start: startDictation, stop: stopDictation, toggle: toggleDictation, resetBuffer: resetDictationBuffer } = useFieldDictation({
     onText: (text) => {
       setTitle(text)
     },
@@ -271,10 +271,22 @@ export default function PalmBeachFolioCard({
 
     await qc.invalidateQueries({ queryKey: ['events'] })
     navigator.vibrate?.([12, 40, 20])
+    
+    // Clear all fields and reset to ambient clean state
+    setTitle('')
+    setNotes('')
+    setSelectedMemberIds([])
+    setPlaceSelection(null)
+    setShowAdvancedTime(false)
+    setShowNotes(false)
+    setShowDatePicker(false)
+    stopDictation()
+    resetDictationBuffer()
+
     setSaving(false)
     setSaveSuccess('Saved.')
     onSaved?.(inserted.id)
-    setTimeout(onClose, 350)
+    setTimeout(onClose, 250)
   }
 
   const currentDate = useMemo(() => {
