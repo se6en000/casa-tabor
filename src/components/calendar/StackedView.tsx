@@ -131,7 +131,7 @@ export default function StackedView() {
       {/* ── Single-Row 8-Day Horizontal Ribbon with Crisp Outer Padding ── */}
       <div
         ref={ribbonRef}
-        className="flex-1 overflow-x-auto overflow-y-hidden overscroll-x-contain touch-pan-x scrollbar-none [transform:translateZ(0)] [will-change:scroll-position]"
+        className="flex-1 overflow-x-auto overflow-y-hidden overscroll-x-contain touch-pan-x scrollbar-none"
       >
         <div className="flex flex-row gap-4 px-6 py-2 w-max min-w-full h-full items-stretch">
           {days.map((day, idx) => {
@@ -156,7 +156,7 @@ export default function StackedView() {
             return (
               <div
                 key={format(day, 'yyyy-MM-dd')}
-                className="group/col flex flex-col flex-shrink-0 w-[20rem] sm:w-[22rem] md:w-[23rem] lg:w-[24rem] xl:w-[25rem] h-full touch-manipulation"
+                className="group/col flex flex-col flex-shrink-0 w-[20rem] sm:w-[22rem] md:w-[23rem] lg:w-[24rem] xl:w-[25rem] h-full touch-pan-x touch-pan-y"
                 onPointerDown={(event) => quickCreateGesture.onPointerDown(event, day)}
                 onPointerMove={quickCreateGesture.onPointerMove}
                 onPointerUp={quickCreateGesture.onPointerUp}
@@ -192,7 +192,7 @@ export default function StackedView() {
                 {/* Scrollable Events container for busy days (Vertical Scroll) */}
                 <div
                   ref={el => { columnScrollRefs.current[idx] = el }}
-                  className="flex-1 overflow-y-auto overscroll-y-contain space-y-2 pr-0.5 pb-36 md:pb-8 scrollbar-none touch-pan-y [transform:translateZ(0)]"
+                  className="flex-1 overflow-y-auto overscroll-y-contain space-y-2 pr-0.5 pb-36 md:pb-8 scrollbar-none touch-pan-x touch-pan-y"
                 >
                   {/* Inline Folio Card when creating on this day */}
                   <AnimatePresence>
@@ -458,7 +458,7 @@ function CompactReminderCard({ event, now = new Date(), isHighlighted = false, o
       role="button"
       tabIndex={0}
       className={cn(
-        'relative w-full rounded-widget border bg-amber-50/40 shadow-card cursor-pointer touch-manipulation overflow-hidden',
+        'relative w-full rounded-widget border bg-amber-50/40 shadow-card cursor-pointer touch-pan-x touch-pan-y overflow-hidden',
         'hover:shadow-card-hover hover:border-amber-400/80 transition-[box-shadow,border-color,opacity] duration-150 min-h-control',
         'grid grid-cols-[5.75rem_1fr]',
         isHighlighted ? 'border-2 border-casa-gold shadow-md' : 'border-amber-300/60',
@@ -538,7 +538,7 @@ function CompactAllDayCard({
       role="button"
       tabIndex={0}
       className={cn(
-        'relative w-full rounded-xl border bg-white/95 shadow-2xs cursor-pointer touch-manipulation overflow-hidden transition-[box-shadow,border-color,opacity] duration-150 px-3 py-2.5 flex items-center justify-between gap-2.5 min-h-[44px]',
+        'relative w-full rounded-xl border bg-white/95 shadow-2xs cursor-pointer touch-pan-x touch-pan-y overflow-hidden transition-[box-shadow,border-color,opacity] duration-150 px-3 py-2.5 flex items-center justify-between gap-2.5 min-h-[44px]',
         isHighlighted
           ? 'border-2 border-casa-gold shadow-md font-bold'
           : 'border-casa-gold/30 hover:shadow-card-hover hover:border-casa-gold',
@@ -734,7 +734,7 @@ function EventCard({ event, household, now = new Date(), isHighlighted = false, 
       role="button"
       tabIndex={0}
       className={cn(
-        'relative rounded-widget border cursor-pointer touch-manipulation shadow-card overflow-hidden transition-[box-shadow,border-color,opacity] duration-150 min-h-control',
+        'relative rounded-widget border cursor-pointer touch-pan-x touch-pan-y shadow-card overflow-hidden transition-[box-shadow,border-color,opacity] duration-150 min-h-control',
         'grid grid-cols-[5.75rem_1fr]',
         isHighlighted
           ? 'border-2 border-casa-gold shadow-md'
