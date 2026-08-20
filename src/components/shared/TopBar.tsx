@@ -16,7 +16,7 @@ export function TopBarC() {
   const { profile, signOut } = useProfileSession()
   const now = useLiveClock(10_000)
   const { data: weather } = useHomeWeather()
-  const { data: todayEvents = [] } = useTodayEvents(now)
+  const { data: todayEvents = [], isLoading: eventsLoading } = useTodayEvents(now)
 
   const happeningNow = useMemo(() =>
     todayEvents.filter(e =>
@@ -56,7 +56,12 @@ export function TopBarC() {
 
       {/* ── Center: current / next events ────────────── */}
       <div className="app-topbar-events flex-1 flex items-center justify-center gap-2 min-w-0 overflow-hidden">
-        {displayEvents.length > 0 ? (
+        {eventsLoading && todayEvents.length === 0 ? (
+          <span className="flex items-center gap-1.5 text-caption font-medium text-white/50 animate-pulse">
+            <span className="w-1.5 h-1.5 rounded-full bg-casa-gold" />
+            Syncing schedule...
+          </span>
+        ) : displayEvents.length > 0 ? (
           <>
             {isNow && (
               <span className="flex items-center gap-1 text-caption font-semibold text-white/50 uppercase tracking-wider flex-shrink-0">

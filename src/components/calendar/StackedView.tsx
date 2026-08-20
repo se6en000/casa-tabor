@@ -28,6 +28,7 @@ import { resolveEventMode } from '../../lib/eventPlanOverrides'
 import { useCalendarQuickCreateGesture } from '../../hooks/useCalendarQuickCreateGesture'
 import QuickCreateSheet from '../shared/QuickCreateSheet'
 import PalmBeachFolioCard from './PalmBeachFolioCard'
+import { EventCardSkeletonStack, CompactCardSkeleton } from './EventCardSkeleton'
 import { useReminderNeedsYouActions } from '../../hooks/useReminderNeedsYouActions'
 
 const SHARED_COLOR = 'var(--color-casa-gold)'
@@ -81,7 +82,7 @@ export default function StackedView() {
   // 8 days in a single horizontal ribbon: anchor → anchor+7
   const days = useMemo(() => Array.from({ length: 8 }, (_, i) => addDays(anchor, i)), [anchor])
 
-  const { data: allEvents } = useRollingEvents(anchor)
+  const { data: allEvents, isLoading: eventsLoading } = useRollingEvents(anchor)
   const household = householdData ?? []
 
   const activeEventId = aiDrawerOpen && sidecarTab === 'event' ? selectedSidecarEventId : null
@@ -265,9 +266,11 @@ export default function StackedView() {
                     }
                   </AnimatePresence>
 
-                  {dayEvents.length === 0 && !isCreatingHere && (
+                  {eventsLoading && (!allEvents || allEvents.length === 0) ? (
+                    today_ ? <EventCardSkeletonStack count={2} /> : <CompactCardSkeleton />
+                  ) : dayEvents.length === 0 && !isCreatingHere ? (
                     <p className="text-caption text-casa-muted/50 text-center pt-2">—</p>
-                  )}
+                  ) : null}
 
                   {/* Desktop Hover / Kiosk Touch Add Plinth Target */}
                   {!isCreatingHere && (

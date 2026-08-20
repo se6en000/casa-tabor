@@ -37,6 +37,7 @@ import { formatDurationLabel, isReminderOrChore, pickActiveHeroEvent, resolveRes
 import { cleanEventTitle, isBirthdayEvent } from '../utils/eventTitle'
 import { buttonClassName } from '../design-system/variants.mjs'
 import { Button, CalendarPill, Card, Chip, EmptyState, Heading, IconButton, PersonAvatarStack, PrimaryRail, Sheet, Text } from '../components/ui'
+import { EventCardSkeletonStack } from '../components/calendar/EventCardSkeleton'
 import SnoozeMenu from '../components/shared/SnoozeMenu'
 import type { SnoozeDuration } from '../utils/snoozeDuration'
 import GmailSyncStatusIndicator from '../components/shared/GmailSyncStatusIndicator'
@@ -468,7 +469,7 @@ export default function HomePage() {
           </div>
 
           {isLoading ? (
-            <Text role="body" muted className="animate-breathe py-8 text-center">Loading…</Text>
+            <EventCardSkeletonStack count={3} />
           ) : events.length === 0 ? (
             <EmptyState title="Nothing scheduled" description="Enjoy the quiet." />
           ) : (
