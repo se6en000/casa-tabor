@@ -34,7 +34,6 @@ import MiddayLogisticsWidget from './widgets/MiddayLogisticsWidget'
 import { useFamilyRoutineIntelligence } from '../../hooks/useFamilyRoutineIntelligence'
 import { resolveEventDriver } from '../../lib/driverConflictEngine'
 import GmailSyncStatusIndicator from '../shared/GmailSyncStatusIndicator'
-import AmbientQuickCaptureBar from './AmbientQuickCaptureBar'
 
 interface CalmKioskViewProps {
   onOpenEvent: (event: EventWithDetails) => void
@@ -307,10 +306,9 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
           </div>
         </div>
 
-        {/* ── Luxury Tonight's Kitchen & Quick Intake Stacked (Aligned with Right Rail 5 Cols) ── */}
-        <div className="hidden lg:flex lg:col-span-5 flex-col gap-2.5 justify-center">
-          {/* Tonight's Kitchen Editorial Showcase */}
-          <div className="w-full flex items-center justify-between gap-3 px-3.5 py-2 rounded-2xl bg-gradient-to-r from-casa-surface to-amber-500/[0.08] border border-casa-gold/35 shadow-2xs transition-all hover:border-casa-gold/60">
+        {/* ── Luxury Tonight's Kitchen Showcase (Sole Header Card, 5 cols) ── */}
+        <div className="hidden lg:flex lg:col-span-5 flex-col justify-center">
+          <div className="w-full flex items-center justify-between gap-3 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-casa-surface to-amber-500/[0.08] border border-casa-gold/35 shadow-2xs transition-all hover:border-casa-gold/60">
             <div className="flex items-center gap-3 min-w-0 flex-1">
               <div className="w-9 h-9 rounded-xl bg-casa-gold/20 text-casa-navy flex items-center justify-center font-bold shadow-2xs border border-casa-gold/30 shrink-0">
                 {dinnerPlan.mode === 'takeout' ? (
@@ -397,9 +395,6 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
               )}
             </div>
           </div>
-
-          {/* Quick Intake Bar */}
-          <AmbientQuickCaptureBar />
         </div>
       </div>
 
