@@ -195,7 +195,6 @@ async function fetchEventsForRange(start: Date, end: Date): Promise<RangeEventsR
     .lt('start_time', end.toISOString())
     .gt('end_time', start.toISOString())
     .neq('record_kind', 'series_template')
-    .is('deleted_at', null)
     .order('start_time')
 
   if (error) throw error
@@ -394,8 +393,8 @@ function useEventsForRange(queryKey: readonly unknown[], start: Date, end: Date)
     const isDuplicateOrHandled = (re: EventWithDetails) => {
       const reDate = format(new Date(re.start_time), 'yyyy-MM-dd')
       const reTitle = (re.title || '').toLowerCase()
-      const isReDrop = reTitle.includes('drop off')
-      const isRePick = reTitle.includes('pick up') || reTitle.includes('picked up')
+      const isReDrop = reTitle.includes('drop off') || reTitle.includes('dropoff')
+      const isRePick = reTitle.includes('pick up') || reTitle.includes('picked up') || reTitle.includes('pickup')
       const isReStrings = reTitle.includes('string')
 
       return allHandled.some((be) => {
@@ -409,11 +408,11 @@ function useEventsForRange(queryKey: readonly unknown[], start: Date, end: Date)
           if (reTitle.includes('emme') || beTitle.includes('emme')) return true
         }
 
-        if (isReDrop && (beTitle.includes('drop off') || beTitle.includes('dropped off') || (beTitle.includes('strings') && beTitle.includes('emme')))) {
+        if (isReDrop && (beTitle.includes('drop off') || beTitle.includes('dropped off') || beTitle.includes('dropoff') || (beTitle.includes('strings') && beTitle.includes('emme')))) {
           if ((reTitle.includes('palm beach') || reTitle.includes('pbp')) && (beTitle.includes('palm beach') || beTitle.includes('pbp') || beTitle.includes('strings'))) return true
           if (reTitle.includes('bak') && beTitle.includes('bak')) return true
         }
-        if (isRePick && (beTitle.includes('pick up') || beTitle.includes('picked up') || (beTitle.includes('strings') && beTitle.includes('emme')))) {
+        if (isRePick && (beTitle.includes('pick up') || beTitle.includes('picked up') || beTitle.includes('pickup') || (beTitle.includes('strings') && beTitle.includes('emme')))) {
           if ((reTitle.includes('palm beach') || reTitle.includes('pbp')) && (beTitle.includes('palm beach') || beTitle.includes('pbp') || beTitle.includes('owen & emme') || beTitle.includes('strings') || beTitle.includes('giselle'))) return true
           if (reTitle.includes('bak') && beTitle.includes('bak')) return true
         }

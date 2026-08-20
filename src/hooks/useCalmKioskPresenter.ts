@@ -17,7 +17,6 @@ import type { EventTransportationPlan, TransportationLeg } from '../lib/eventTra
 import {
   deserializeRoutineFromAvailabilityRules,
   deriveAmbientRoutineStatus,
-  generateConsolidatedRoutineActionEvents,
   type AmbientRoutineStatus,
   type FamilyRoutine,
 } from '../lib/familyRoutines'
@@ -155,36 +154,8 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     return deriveAmbientRoutineStatus(familyRoutines, familyMembers, now)
   }, [familyRoutines, familyMembers, now])
 
-  const routineTodayEvents = useMemo<EventWithDetails[]>(() => {
-    if (familyRoutines.length === 0 || familyMembers.length === 0) return []
-    const events = generateConsolidatedRoutineActionEvents({
-      routines: familyRoutines,
-      members: familyMembers,
-      date: now,
-      filterBySyncMode: true,
-    })
-    return events.map((ev): EventWithDetails => ({
-      ...ev,
-      members: (ev.members || []).map((m, idx) => ({
-        id: m.id || `m-${idx}`,
-        role: m.role || 'passenger',
-        family_member: m.family_member || familyMembers.find(f => f.id === m.family_member_id)!,
-      })).filter(m => Boolean(m.family_member)),
-      enrichment: ev.enrichment || null,
-      plan_override: (ev as any).plan_override || null,
-      logistics: [],
-      checklist: [],
-      actions: [],
-    }))
-  }, [familyRoutines, familyMembers, now])
-
-  const effectiveTodayEvents = useMemo<EventWithDetails[]>(() => {
-    const existingTitles = new Set(todayEvents.map((e) => (e.title || '').toLowerCase()))
-    const newRoutineEvents = routineTodayEvents.filter(
-      (re) => !existingTitles.has(re.title.toLowerCase())
-    )
-    return [...todayEvents, ...newRoutineEvents]
-  }, [todayEvents, routineTodayEvents])
+  // todayEvents from useTodayEvents is the single source of truth (already contains deduplicated physical + synthetic routine events)
+  const effectiveTodayEvents = todayEvents
 
   // Helper to test if an event is strictly a home cooking placeholder (handled by Tonight's Kitchen)
   const isMealEvent = (e: EventWithDetails) => {
