@@ -139,7 +139,6 @@ fi
   --enable-gpu-rasterization \
   --enable-zero-copy \
   --num-raster-threads=4 \
-  --enable-accelerated-2d-canvas \
   --use-gl=angle \
   --use-angle=gles \
   --disable-gpu-sandbox \
@@ -147,7 +146,7 @@ fi
   --enable-touch-drag-drop \
   --disable-pinch \
   --overscroll-history-navigation=0 \
-  --enable-features=ElasticOverscroll,CanvasOopRasterization,RawDraw \
+  --enable-features=ElasticOverscroll \
   --disable-features=TranslateUI,Translate \
   --noerrdialogs \
   --disable-infobars \

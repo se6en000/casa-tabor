@@ -107,7 +107,7 @@ export default function NowAndNextWidget({
   }
 
   return (
-    <div className="w-full h-full flex flex-col bg-transparent overflow-hidden min-h-0 cv-auto-widget">
+    <div className="w-full h-full flex flex-col bg-transparent overflow-hidden min-h-0">
       {/* ── Widget Header: Unified Rolling Horizon & Jump Anchors Strip ── */}
       <div className="flex items-center justify-between gap-3 pb-3 mb-1 shrink-0 px-0.5">
         {/* Left: Horizon Title & Jump Anchors */}

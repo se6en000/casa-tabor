@@ -214,7 +214,7 @@ export function DayEventCard({
         exit={{ opacity: 0, height: 0, marginBottom: 0, overflow: 'hidden' }}
         whileTap={{ scale: 0.97, opacity: 0.75 }}
         transition={{ duration: 0.3, delay: index * 0.04 }}
-        className="cursor-pointer list-none cv-auto-card"
+        className="cursor-pointer list-none"
         data-calendar-event
         data-sidecar-loadable="true"
         data-event-id={event.id}

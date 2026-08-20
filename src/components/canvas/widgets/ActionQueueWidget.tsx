@@ -275,7 +275,7 @@ export default function ActionQueueWidget({
   }
 
   return (
-    <div className="w-full h-full flex flex-col bg-casa-surface border border-casa-border/80 shadow-card rounded-3xl p-5 sm:p-6 overflow-hidden min-h-0 relative cv-auto-widget">
+    <div className="w-full h-full flex flex-col bg-casa-surface border border-casa-border/80 shadow-card rounded-3xl p-5 sm:p-6 overflow-hidden min-h-0 relative">
       {/* ── Global Click-Away Invisible Backdrop for menus ── */}
       {openMenuId && (
         <div

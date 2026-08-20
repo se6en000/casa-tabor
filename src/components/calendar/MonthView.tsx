@@ -254,7 +254,7 @@ function DayCell({
   const overflow = events.length - MAX_VISIBLE_EVENTS
 
   return (
-    <div className="relative cv-auto-card">
+    <div className="relative">
       <div
         className={cn(
           'group min-h-[150px] p-2 border-b border-r border-casa-divider cursor-pointer transition-colors select-none flex flex-col',

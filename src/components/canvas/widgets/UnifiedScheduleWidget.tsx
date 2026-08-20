@@ -57,7 +57,7 @@ export default function UnifiedScheduleWidget({
   }, [todayEvents])
 
   return (
-    <div className="lg:col-span-7 xl:col-span-8 flex flex-col rounded-3xl bg-casa-surface border border-casa-border/60 shadow-sm p-5 overflow-hidden min-h-0 cv-auto-widget">
+    <div className="lg:col-span-7 xl:col-span-8 flex flex-col rounded-3xl bg-casa-surface border border-casa-border/60 shadow-sm p-5 overflow-hidden min-h-0">
       {/* ── Widget Header ── */}
       <div className="flex items-center justify-between pb-3 mb-3 border-b border-casa-border/40 shrink-0">
         <div className="flex items-center gap-2.5">

@@ -297,21 +297,6 @@ html[data-density="kiosk"] .floating-dock-glass {
   background-color: rgba(250, 247, 242, 0.98);
 }
 
-/* ── Hardware Performance & Virtualization Utilities ─────────── */
-.cv-auto-row {
-  content-visibility: auto;
-  contain-intrinsic-size: 0 56px;
-}
-
-.cv-auto-card {
-  content-visibility: auto;
-  contain-intrinsic-size: 0 120px;
-}
-
-.cv-auto-widget {
-  contain: layout paint;
-}
-
 .topbar-gold-divider {
   width: 1px;
   height: 60%;
