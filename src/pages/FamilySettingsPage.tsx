@@ -19,13 +19,13 @@ import {
 import {
   deserializeRoutineFromAvailabilityRules,
   serializeRoutineToAvailabilityRules,
-  syncMemberRoutineExceptions,
   formatDisplayVenueName,
   type FamilyRoutine,
   type DayScheduleOverride,
   createSchoolRoutine,
   createCampRoutine,
 } from '../lib/familyRoutines'
+import { syncMemberRoutineExceptions } from '../lib/routineRecurrenceCoordinator'
 import SmartPlaceInput from '../components/calendar/SmartPlaceInput'
 
 const COLOR_OPTIONS = PROFILE_COLOR_OPTIONS
