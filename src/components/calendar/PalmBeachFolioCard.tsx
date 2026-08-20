@@ -71,12 +71,21 @@ export default function PalmBeachFolioCard({
   const [showAdvancedTime, setShowAdvancedTime] = useState(false)
   const [showNotes, setShowNotes] = useState(false)
   const [showDatePicker, setShowDatePicker] = useState(false)
-
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [saveSuccess, setSaveSuccess] = useState('')
   const [aiHighlight, setAiHighlight] = useState(false)
-  const [geminiParsedMeta, setGeminiParsedMeta] = useState<{ detailsCount: number; rawText: string } | null>(null)
+
+  const [geminiParsedMeta, setGeminiParsedMeta] = useState<{
+    detailsCount: number
+    rawText: string
+    summaryText: string
+    title: string
+    timeLabel: string
+    dateLabel: string
+    attendeesLabel: string
+    locationLabel: string
+  } | null>(null)
 
   const inputRef = useRef<HTMLInputElement>(null)
   const isMicHoldingRef = useRef(false)
@@ -123,6 +132,12 @@ export default function PalmBeachFolioCard({
     setGeminiParsedMeta({
       detailsCount: parsed.matchedDetailsCount,
       rawText: spokenText.trim(),
+      summaryText: parsed.summaryText,
+      title: parsed.title,
+      timeLabel: parsed.timeLabel,
+      dateLabel: parsed.dateLabel,
+      attendeesLabel: parsed.attendeesLabel,
+      locationLabel: parsed.locationLabel,
     })
 
     // Trigger golden celebration flash & tactile tick
@@ -340,6 +355,23 @@ export default function PalmBeachFolioCard({
       return '9:00 AM'
     }
   }, [startDT])
+
+  const isCustomTime = useMemo(() => {
+    if (allDay) return false
+    try {
+      const d = new Date(startDT)
+      const h = d.getHours()
+      const m = d.getMinutes()
+      return ![
+        { h: 9, m: 0 },
+        { h: 12, m: 0 },
+        { h: 15, m: 30 },
+        { h: 18, m: 30 },
+      ].some((p) => p.h === h && p.m === m)
+    } catch {
+      return false
+    }
+  }, [allDay, startDT])
 
   return (
     <motion.div
@@ -627,33 +659,45 @@ export default function PalmBeachFolioCard({
           )}
         </div>
 
-        {/* Gemini Parsed Indicator & Undo Pill */}
+        {/* Gemini Parsed Indicator & Rich Confirmation Summary */}
         <AnimatePresence>
           {geminiParsedMeta && (
             <motion.div
               initial={{ opacity: 0, y: -4 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -4 }}
-              className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-casa-gold/30 text-3xs font-medium text-amber-950"
+              className="p-3 rounded-2xl bg-gradient-to-r from-amber-500/[0.14] to-casa-gold/[0.09] border border-casa-gold/45 shadow-xs space-y-1"
             >
-              <div className="flex items-center gap-1.5 truncate">
-                <Sparkles size={12} className="text-amber-800 shrink-0" />
-                <span>
-                  <strong className="font-bold text-amber-900">✦ Gemini Auto-Fill:</strong> {geminiParsedMeta.detailsCount} logistics matched to fields below
-                </span>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Sparkles size={13} className="text-amber-800 shrink-0" />
+                  <span className="text-caption font-bold text-amber-950">
+                    ✦ Gemini Scheduled:
+                  </span>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setTitle(geminiParsedMeta.rawText)
+                    setGeminiParsedMeta(null)
+                  }}
+                  className="p-0 min-h-0 h-auto text-amber-900 hover:text-amber-950 underline font-bold whitespace-nowrap cursor-pointer shrink-0 text-3xs bg-transparent hover:bg-transparent"
+                >
+                  Undo ↺
+                </Button>
               </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setTitle(geminiParsedMeta.rawText)
-                  setGeminiParsedMeta(null)
-                }}
-                className="p-0 min-h-0 h-auto text-amber-800 hover:text-amber-950 underline font-bold whitespace-nowrap cursor-pointer shrink-0 ml-1 bg-transparent hover:bg-transparent"
-              >
-                Undo ↺
-              </Button>
+
+              {/* At-a-Glance Explicit Summary: "Pickleball" — Today at 8:00 PM · For Jake */}
+              <div className="text-caption text-casa-navy leading-snug">
+                <span className="font-bold text-amber-950">&ldquo;{geminiParsedMeta.title}&rdquo;</span>
+                {geminiParsedMeta.summaryText && (
+                  <span className="font-medium text-casa-navy/90">
+                    {' '}&mdash; {geminiParsedMeta.summaryText}
+                  </span>
+                )}
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -676,10 +720,18 @@ export default function PalmBeachFolioCard({
         {/* ── 1-Tap Time Preset Row (52px Touch-Optimized) ── */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between text-caption font-bold text-casa-muted">
-            <span className="flex items-center gap-1.5">
-              <Clock size={13} className="text-casa-gold" />
-              {allDay ? 'All Day' : `Starts at ${parsedStartTime}`}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="flex items-center gap-1.5 text-casa-navy">
+                <Clock size={13} className="text-casa-gold" />
+                <span>{allDay ? 'All Day' : `Starts at ${parsedStartTime}`}</span>
+              </span>
+              {!allDay && isCustomTime && (
+                <span className="px-2 py-0.5 rounded-full bg-casa-navy text-white font-bold text-3xs shadow-2xs border border-casa-gold/40 flex items-center gap-1">
+                  <Sparkles size={9} className="text-casa-gold" />
+                  <span>{parsedStartTime}</span>
+                </span>
+              )}
+            </div>
             <Button
               size="sm"
               variant="ghost"
@@ -692,7 +744,7 @@ export default function PalmBeachFolioCard({
           </div>
 
           {!showAdvancedTime ? (
-            <div className="grid grid-cols-4 gap-1.5">
+            <div className={cn('grid gap-1.5', isCustomTime ? 'grid-cols-5' : 'grid-cols-4')}>
               {[
                 { label: 'Morning', sub: '9:00 AM', h: 9, m: 0 },
                 { label: 'Midday', sub: '12:00 PM', h: 12, m: 0 },
@@ -712,7 +764,7 @@ export default function PalmBeachFolioCard({
                       variant={isSelected ? 'primary' : 'secondary'}
                       onClick={() => applyPresetTime(preset.h, preset.m)}
                       className={cn(
-                        'w-full min-h-[48px] px-2 py-1.5 rounded-xl text-center transition-all cursor-pointer active:scale-95 flex flex-col items-center justify-center',
+                        'w-full min-h-[48px] px-1 py-1.5 rounded-xl text-center transition-all cursor-pointer active:scale-95 flex flex-col items-center justify-center',
                         isSelected
                           ? 'bg-casa-navy text-white border-casa-navy shadow-xs ring-2 ring-casa-gold/60'
                           : 'bg-casa-sand/60 hover:bg-casa-sand text-casa-text border-casa-border/70',
@@ -726,6 +778,30 @@ export default function PalmBeachFolioCard({
                   </motion.div>
                 )
               })}
+
+              {/* 5th Dynamic Active Custom Time Chip if set */}
+              {isCustomTime && (
+                <motion.div
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  className="flex-1"
+                >
+                  <Button
+                    type="button"
+                    variant="primary"
+                    onClick={() => setShowAdvancedTime(true)}
+                    className="w-full min-h-[48px] px-1 py-1.5 rounded-xl text-center transition-all cursor-pointer active:scale-95 flex flex-col items-center justify-center bg-casa-navy text-white border-casa-navy shadow-xs ring-2 ring-casa-gold/70"
+                  >
+                    <div className="text-caption font-bold leading-tight flex items-center justify-center gap-0.5">
+                      <Sparkles size={10} className="text-casa-gold shrink-0" />
+                      <span className="truncate">{parsedStartTime}</span>
+                    </div>
+                    <div className="text-3xs leading-tight text-casa-gold font-semibold">
+                      Custom
+                    </div>
+                  </Button>
+                </motion.div>
+              )}
             </div>
           ) : (
             /* Custom Time / Duration Inputs */

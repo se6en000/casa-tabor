@@ -1,4 +1,4 @@
-import { addDays, nextDay, setHours, setMinutes, startOfDay } from 'date-fns'
+import { addDays, nextDay, setHours, setMinutes, startOfDay, format } from 'date-fns'
 import type { FamilyMember, SavedPlace } from '../types'
 
 export interface ParsedCalendarEntry {
@@ -13,6 +13,11 @@ export interface ParsedCalendarEntry {
   notes?: string
   confidence: number
   matchedDetailsCount: number
+  summaryText: string
+  timeLabel: string
+  dateLabel: string
+  attendeesLabel: string
+  locationLabel: string
 }
 
 const DAY_MAP: Record<string, 0 | 1 | 2 | 3 | 4 | 5 | 6> = {
@@ -62,6 +67,11 @@ export function parseCalendarNaturalLanguage(
       matchedPlace: null,
       confidence: 0,
       matchedDetailsCount: 0,
+      summaryText: '',
+      timeLabel: '9:00 AM',
+      dateLabel: 'Today',
+      attendeesLabel: '',
+      locationLabel: '',
     }
   }
 
@@ -75,10 +85,10 @@ export function parseCalendarNaturalLanguage(
     text = text.replace(/^(remind\s+me\s+to|remind\s+|reminder:?|todo:?|task:?|don't\s+forget\s+to|need\s+to|have\s+to)\s*/i, '')
   }
 
-  // Strip conversational scheduling filler verbs
-  text = text.replace(/^(schedule\s+a\s+|schedule\s+|add\s+a\s+|add\s+|book\s+a\s+|book\s+|create\s+a\s+|create\s+|plan\s+a\s+|plan\s+|set\s+up\s+a\s+|set\s+up\s+|put\s+(?:on\s+the\s+calendar|on\s+my\s+calendar)\s+)?/i, '')
+  // 2. Strip conversational scheduling filler verbs & intents
+  text = text.replace(/^(?:an?\s+appointment\s+(?:to\s+(?:go\s+)?(?:play\s+|do\s+|see\s+)?|for\s+)?|appointment\s+(?:to\s+(?:go\s+)?(?:play\s+|do\s+|see\s+)?|for\s+)?|i\s+have\s+(?:an?\s+)?(?:appointment\s+(?:to|for)\s+)?|i\s+need\s+to\s+(?:go\s+)?(?:play\s+|do\s+|see\s+)?|we\s+have\s+(?:an?\s+)?|schedule\s+(?:an?\s+)?(?:appointment\s+(?:to|for)\s+)?|add\s+(?:an?\s+)?(?:appointment\s+(?:to|for)\s+)?|book\s+(?:an?\s+)?(?:appointment\s+(?:to|for)\s+)?|create\s+(?:an?\s+)?(?:appointment\s+(?:to|for)\s+)?|plan\s+(?:an?\s+)?|set\s+up\s+(?:an?\s+)?(?:appointment\s+(?:to|for)\s+)?|put\s+(?:on\s+the\s+calendar|on\s+my\s+calendar)\s+|going\s+to\s+(?:play\s+)?|go\s+to\s+(?:play\s+)?|go\s+play\s+|to\s+go\s+play\s+|to\s+play\s+)/i, '')
 
-  // 2. Detect All-Day flag
+  // 3. Detect All-Day flag
   let allDay = false
   if (/\b(all\s+day|all-day)\b/i.test(text)) {
     allDay = true
@@ -86,14 +96,16 @@ export function parseCalendarNaturalLanguage(
     text = text.replace(/\b(all\s+day|all-day)\b/i, '')
   }
 
-  // 3. Match Family Members (Attendees)
+  // 4. Match Family Members (Attendees)
   const matchedMemberIds: string[] = []
+  const matchedMemberNames: string[] = []
   for (const member of familyMembers) {
     if (!member.name) continue
     const nameRegex = new RegExp(`\\b${member.name}\\b`, 'i')
     if (nameRegex.test(text)) {
       if (!matchedMemberIds.includes(member.id)) {
         matchedMemberIds.push(member.id)
+        matchedMemberNames.push(member.name)
       }
     }
   }
@@ -108,7 +120,7 @@ export function parseCalendarNaturalLanguage(
     text = text.replace(withRegex, '')
   }
 
-  // 4. Match Saved Places (Venues)
+  // 5. Match Saved Places (Venues)
   let matchedPlace: SavedPlace | null = null
   let extractedLocationName: string | null = null
 
@@ -150,18 +162,21 @@ export function parseCalendarNaturalLanguage(
     }
   }
 
-  // 5. Extract Date
+  // 6. Extract Date
   let targetDate = new Date(contextDate)
   let explicitDateFound = false
+  let dateLabel = 'Today'
 
   if (/\btoday\b/i.test(text)) {
     targetDate = new Date()
     explicitDateFound = true
+    dateLabel = 'Today'
     matchedDetailsCount++
     text = text.replace(/\btoday\b/i, '')
   } else if (/\btomorrow\b/i.test(text)) {
     targetDate = addDays(new Date(), 1)
     explicitDateFound = true
+    dateLabel = 'Tomorrow'
     matchedDetailsCount++
     text = text.replace(/\btomorrow\b/i, '')
   } else {
@@ -179,13 +194,14 @@ export function parseCalendarNaturalLanguage(
         }
         targetDate = calculated
         explicitDateFound = true
+        dateLabel = format(calculated, 'EEE, MMM d')
         matchedDetailsCount++
         text = text.replace(dayMatch[0], '')
       }
     }
   }
 
-  // 6. Extract Duration
+  // 7. Extract Duration
   let durationMinutes = eventType === 'reminder' ? 0 : 60
   const durationMatch = text.match(/\bfor\s+(\d+(?:\.\d+)?)\s*(hours?|hrs?|h|minutes?|mins?|m)\b/i)
   if (durationMatch) {
@@ -200,12 +216,12 @@ export function parseCalendarNaturalLanguage(
     text = text.replace(durationMatch[0], '')
   }
 
-  // 7. Extract Time
+  // 8. Extract Time
   let startHour = 9
   let startMinute = 0
   let explicitTimeFound = false
 
-  // Check specific time: "9:30 am", "9am", "3:45pm", "10 pm", "14:00"
+  // Check specific time: "9:30 am", "9am", "3:45pm", "8pm", "8 pm", "10 pm", "14:00"
   const time12Match = text.match(/\b(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i)
   const time24Match = text.match(/\b(?:at\s+)?(\d{1,2}):(\d{2})\b/i)
   const oclockMatch = text.match(/\b(?:at\s+)?(\d{1,2})\s*o'?clock\b/i)
@@ -259,8 +275,9 @@ export function parseCalendarNaturalLanguage(
     }
   }
 
-  // 8. Clean trailing prepositions & clean up title
+  // 9. Clean trailing prepositions & residual words in title
   let cleanTitle = text
+    .replace(/\b(to\s+play|to\s+go|to\s+do|to\s+see)\b/gi, '')
     .replace(/\s+/g, ' ')
     .replace(/\b(at|on|for|with|by|in|and)\s*$/i, '')
     .replace(/^[\s,·\-\/]+|[\s,·\-\/]+$/g, '')
@@ -278,6 +295,27 @@ export function parseCalendarNaturalLanguage(
   const start = setMinutes(setHours(startOfDay(targetDate), startHour), startMinute)
   const end = new Date(start.getTime() + durationMinutes * 60 * 1000)
 
+  // Format human-friendly time and labels
+  const timeLabel = allDay
+    ? 'All Day'
+    : format(start, startMinute === 0 ? 'h:mm a' : 'h:mm a').replace(':00', '')
+  const attendeesLabel = matchedMemberNames.join(' & ')
+  const locationLabel = matchedPlace ? matchedPlace.name : (extractedLocationName || '')
+
+  // Build crisp glanceable summary
+  const summaryParts: string[] = []
+  if (allDay) {
+    summaryParts.push(dateLabel === 'Today' ? 'All Day Today' : `All Day (${dateLabel})`)
+  } else {
+    summaryParts.push(`${dateLabel} at ${format(start, 'h:mm a')}`)
+  }
+  if (attendeesLabel) {
+    summaryParts.push(`For ${attendeesLabel}`)
+  }
+  if (locationLabel) {
+    summaryParts.push(`At ${locationLabel}`)
+  }
+
   return {
     title: cleanTitle,
     eventType,
@@ -293,6 +331,12 @@ export function parseCalendarNaturalLanguage(
       (matchedMemberIds.length > 0 ? 0.2 : 0) +
       0.1,
     matchedDetailsCount: Math.max(1, matchedDetailsCount),
+    summaryText: summaryParts.join(' · '),
+    timeLabel,
+    dateLabel,
+    attendeesLabel,
+    locationLabel,
   }
 }
+
 

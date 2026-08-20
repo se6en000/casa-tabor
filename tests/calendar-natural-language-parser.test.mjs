@@ -59,3 +59,21 @@ test('parseCalendarNaturalLanguage parses all-day event', () => {
   assert.equal(result.title, 'Board meeting')
   assert.equal(result.allDay, true)
 })
+
+test('parseCalendarNaturalLanguage cleans appointment conversational phrasing and generates rich summary', () => {
+  const contextDate = new Date('2026-08-20T12:00:00')
+  const result = parseCalendarNaturalLanguage(
+    'An appointment to go play Pickleball at 8pm for Jake',
+    contextDate,
+    mockFamily,
+    mockPlaces,
+  )
+
+  assert.equal(result.eventType, 'event')
+  assert.equal(result.title, 'Pickleball')
+  assert.match(result.startDT, /T20:00/)
+  assert.deepEqual(result.matchedMemberIds, ['mem-jake'])
+  assert.match(result.summaryText, /8:00 PM/i)
+  assert.match(result.summaryText, /For Jake/i)
+})
+
