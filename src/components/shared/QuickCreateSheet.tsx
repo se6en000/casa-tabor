@@ -1,12 +1,27 @@
-import { useState, useEffect, useRef } from 'react'
-import { CalendarDays, Plus } from 'lucide-react'
-import { addHours } from 'date-fns'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import {
+  Sparkles,
+  Mic,
+  Clock,
+  Users,
+  CalendarDays,
+  Bell,
+  ChevronDown,
+  ChevronUp,
+} from 'lucide-react'
+import { addHours, format } from 'date-fns'
 import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
 import { useSavedPlaces, savedPlaceAddress } from '../../hooks/useSavedPlaces'
 import { resolveDirectoryPlaceSave, type DirectoryPlaceSelection } from '../../utils/directorySuggestions'
 import { normalizeAllDayEventRange } from '../../utils/allDayEventRange'
+import {
+  parseSmartEvent,
+  QUICK_SLOT_TIMES,
+  toLocalDTString,
+} from '../../utils/smartEventParser'
+import { useFieldDictation } from '../../hooks/useFieldDictation'
 import DirectoryPlaceInput from './DirectoryPlaceInput'
 import {
   Alert,
@@ -15,6 +30,7 @@ import {
   DateTimeDial,
   DisclosureSection,
   Field,
+  IconButton,
   Input,
   PersonAvatarStack,
   Select,
@@ -30,35 +46,46 @@ interface Props {
   initialStart?: Date
 }
 
-function toLocalDT(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
-
-/** Snap a date to the nearest 5-minute mark (also zeroes seconds/ms). */
 function snapTo5(d: Date): Date {
   const step = 5 * 60 * 1000
   return new Date(Math.round(d.getTime() / step) * step)
 }
 
+function formatStartsAtLabel(dtString: string): string {
+  try {
+    const d = new Date(dtString)
+    if (Number.isNaN(d.getTime())) return 'Starts at 9:00 AM'
+    return `Starts at ${format(d, 'h:mm a')}`
+  } catch {
+    return 'Starts at 9:00 AM'
+  }
+}
+
 export default function QuickCreateSheet({ open, onClose, initialStart }: Props) {
   const qc = useQueryClient()
   const { data: familyMembers = [] } = useFamilyMembers()
+  const { data: savedPlaces = [] } = useSavedPlaces()
   const [viewportHeight, setViewportHeight] = useState<number | null>(null)
   const sheetRef = useRef<HTMLDivElement>(null)
 
   const defaultStart = snapTo5(initialStart ?? new Date())
   const defaultEnd = addHours(defaultStart, 1)
 
+  // Smart Input & Natural Language State
+  const [smartInput, setSmartInput] = useState('')
+  const [aiFeedback, setAiFeedback] = useState<string | null>(null)
+
+  // Core Form State
   const [title, setTitle] = useState('')
-  const [startDT, setStartDT] = useState(toLocalDT(defaultStart))
-  const [endDT, setEndDT] = useState(toLocalDT(defaultEnd))
+  const [startDT, setStartDT] = useState(toLocalDTString(defaultStart))
+  const [endDT, setEndDT] = useState(toLocalDTString(defaultEnd))
+  const [activeSlot, setActiveSlot] = useState<'morning' | 'midday' | 'afternoon' | 'evening' | null>('morning')
+  const [customTimeOpen, setCustomTimeOpen] = useState(false)
   const [allDay, setAllDay] = useState(false)
   const [eventType, setEventType] = useState<'event' | 'reminder'>('event')
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([])
   const [placeSelection, setPlaceSelection] = useState<DirectoryPlaceSelection>(null)
   const [placeFieldKey, setPlaceFieldKey] = useState(0)
-  const { data: savedPlaces = [] } = useSavedPlaces()
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [repeat, setRepeat] = useState<'none' | 'daily' | 'weekly' | 'monthly'>('none')
   const [notes, setNotes] = useState('')
@@ -67,14 +94,144 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
   const [saveSuccess, setSaveSuccess] = useState('')
   const [savePartial, setSavePartial] = useState(false)
 
-  // Re-initialise whenever the sheet opens with a new slot
+  // ── Smart Natural Language Parser Trigger ─────────────────────────────
+  const applySmartParse = useCallback(
+    (text: string) => {
+      if (!text.trim()) {
+        setAiFeedback(null)
+        return
+      }
+
+      const parsed = parseSmartEvent(text, {
+        referenceDate: initialStart ?? new Date(),
+        familyMembers,
+        savedPlaces,
+      })
+
+      if (parsed.title) setTitle(parsed.title)
+      setStartDT(parsed.startDT)
+      setEndDT(parsed.endDT)
+      setEventType(parsed.eventType)
+      if (parsed.quickSlot) setActiveSlot(parsed.quickSlot)
+
+      if (parsed.matchedMemberIds.length > 0) {
+        setSelectedMemberIds((prev) => {
+          const combined = Array.from(new Set([...prev, ...parsed.matchedMemberIds]))
+          return combined
+        })
+      }
+
+      if (parsed.matchedPlaceName) {
+        const place = savedPlaces.find(
+          (p) => p.name.toLowerCase() === parsed.matchedPlaceName?.toLowerCase(),
+        )
+        if (place) {
+          setPlaceSelection({
+            kind: 'directory',
+            placeId: place.id,
+            displayName: place.name,
+            address: savedPlaceAddress(place) || undefined,
+          })
+          setPlaceFieldKey((k) => k + 1)
+        }
+      }
+
+      // Generate brief visual reassurance badge
+      const feedbackParts: string[] = []
+      try {
+        const timeFormatted = format(parsed.startDate, 'h:mm a')
+        feedbackParts.push(timeFormatted)
+      } catch { /* ignore */ }
+
+      if (parsed.matchedMemberIds.length > 0) {
+        const names = parsed.matchedMemberIds
+          .map((id) => familyMembers.find((m) => m.id === id)?.name)
+          .filter(Boolean)
+        if (names.length > 0) feedbackParts.push(names.join(', '))
+      }
+      if (parsed.matchedPlaceName || parsed.rawLocation) {
+        feedbackParts.push(parsed.matchedPlaceName || parsed.rawLocation || '')
+      }
+
+      setAiFeedback(feedbackParts.length > 0 ? feedbackParts.join(' · ') : 'Smart parsed')
+    },
+    [familyMembers, savedPlaces, initialStart],
+  )
+
+  // ── Voice Dictation Hook with Dual Path (Pi WebSocket + Mac WebSpeech) ─
+  const {
+    listening: micListening,
+    start: startMic,
+    stop: stopMic,
+    toggle: toggleMic,
+  } = useFieldDictation({
+    onText: (dictated) => {
+      setSmartInput(dictated)
+      applySmartParse(dictated)
+    },
+    onFinal: (finalText) => {
+      if (finalText.trim()) {
+        setSmartInput(finalText)
+        applySmartParse(finalText)
+      }
+    },
+  })
+
+  // Pointer Handlers for Push-to-Talk (Hold to speak, release to stop)
+  const isPointerHoldingRef = useRef(false)
+  const handleMicPointerDown = (e: React.PointerEvent) => {
+    e.preventDefault()
+    isPointerHoldingRef.current = true
+    void startMic(smartInput)
+  }
+  const handleMicPointerUp = (e: React.PointerEvent) => {
+    e.preventDefault()
+    if (isPointerHoldingRef.current) {
+      isPointerHoldingRef.current = false
+      stopMic()
+    }
+  }
+
+  // Text change handler for typing / pasting
+  const handleSmartInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value
+    setSmartInput(val)
+    applySmartParse(val)
+  }
+
+  // ── Quick Time Slot Handlers ──────────────────────────────────────────
+  const handleSelectQuickSlot = (slotKey: 'morning' | 'midday' | 'afternoon' | 'evening') => {
+    setActiveSlot(slotKey)
+    const slot = QUICK_SLOT_TIMES[slotKey]
+    const base = initialStart ? new Date(initialStart) : new Date()
+    base.setHours(slot.hour, slot.minute, 0, 0)
+    const sStr = toLocalDTString(base)
+    const eStr = toLocalDTString(addHours(base, 1))
+    setStartDT(sStr)
+    setEndDT(eStr)
+  }
+
+  // 30s Kiosk Idle Reset
+  useEffect(() => {
+    if (!open) return
+    const idleTimer = window.setTimeout(() => {
+      if (!saving) onClose()
+    }, 30000)
+    return () => window.clearTimeout(idleTimer)
+  }, [open, saving, smartInput, onClose])
+
+  // Re-initialise whenever the sheet opens
   useEffect(() => {
     if (!open) return
     const s = snapTo5(initialStart ?? new Date())
     const frame = requestAnimationFrame(() => {
+      setSmartInput('')
+      setAiFeedback(null)
       setTitle('')
-      setStartDT(toLocalDT(s))
-      setEndDT(toLocalDT(addHours(s, 1)))
+      setStartDT(toLocalDTString(s))
+      setEndDT(toLocalDTString(addHours(s, 1)))
+      setActiveSlot('morning')
+      setCustomTimeOpen(false)
       setAllDay(false)
       setEventType('event')
       setSelectedMemberIds([])
@@ -111,46 +268,35 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
 
   useEffect(() => {
     if (!open) return
-
     const vv = window.visualViewport
     const updateViewport = () => {
       if (!vv) return
       setViewportHeight(vv.height)
     }
-
     if (vv) {
       updateViewport()
       vv.addEventListener('resize', updateViewport)
       vv.addEventListener('scroll', updateViewport)
     }
-
-    const handleFocusIn = (e: FocusEvent) => {
-      const target = e.target
-      if (!(target instanceof HTMLElement)) return
-      if (!target.matches('input, textarea, [contenteditable="true"]')) return
-      if (window.innerWidth >= 1024) return
-      setTimeout(() => {
-        target.scrollIntoView({ block: 'center', behavior: 'smooth' })
-      }, 120)
-    }
-
-    document.addEventListener('focusin', handleFocusIn)
     return () => {
       if (vv) {
         vv.removeEventListener('resize', updateViewport)
         vv.removeEventListener('scroll', updateViewport)
       }
-      document.removeEventListener('focusin', handleFocusIn)
       setViewportHeight(null)
     }
   }, [open])
 
+  // ── Database Event Creation Handler ───────────────────────────────────
   const handleSave = async () => {
-    if (!title.trim()) return
+    const effectiveTitle = title.trim() || smartInput.trim()
+    if (!effectiveTitle) return
+
     setSaveError('')
     setSaveSuccess('')
     setSavePartial(false)
     setSaving(true)
+
     const start = new Date(startDT)
     let end = new Date(endDT)
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
@@ -162,10 +308,6 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
     const allDayRange = allDay ? normalizeAllDayEventRange(startDT, endDT) : null
     const repeatRule = repeat === 'none' ? null : `FREQ=${repeat.toUpperCase()}`
 
-    // Resolve the location against saved_places (lookup-first) instead of
-    // trusting free-typed text, so quick-created events dedupe/link to the
-    // household directory and get a real address up front for the driving
-    // plan instead of an unstructured location string.
     const placeResolution = resolveDirectoryPlaceSave(
       placeSelection,
       savedPlaces.map((p) => ({ id: p.id, primary: p.name, aliases: p.aliases })),
@@ -174,6 +316,7 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
     let resolvedAddress: string | null = null
     let resolvedLat: number | null = null
     let resolvedLng: number | null = null
+
     if (placeResolution.action === 'link') {
       const place = savedPlaces.find((p) => p.id === placeResolution.placeId)
       resolvedLocationName = place?.name ?? null
@@ -209,7 +352,7 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
     }
 
     const { data: inserted, error } = await supabase.from('events').insert({
-      title: title.trim(),
+      title: effectiveTitle,
       description: notes.trim() || null,
       start_time: allDayRange?.start ?? start.toISOString(),
       end_time: allDayRange?.end ?? end.toISOString(),
@@ -240,7 +383,7 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
       })
       if (seriesError) {
         setSavePartial(true)
-        setSaveError(`Event was created, but its repeat pattern could not be configured: ${seriesError.message}`)
+        setSaveError(`Event was created, but repeat pattern failed: ${seriesError.message}`)
         setSaving(false)
         void qc.invalidateQueries({ queryKey: ['events'] })
         return
@@ -258,7 +401,7 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
       )
       if (memberError) {
         setSavePartial(true)
-        setSaveError(`Event was created, but people could not be added: ${memberError.message}`)
+        setSaveError(`Event was created, but people could not be linked: ${memberError.message}`)
         setSaving(false)
         void qc.invalidateQueries({ queryKey: ['events'] })
         return
@@ -279,20 +422,6 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
     window.setTimeout(onClose, 900)
   }
 
-  const handleAllDayChange = (checked: boolean) => {
-    setAllDay(checked)
-    if (checked) {
-      const date = startDT.slice(0, 10)
-      setStartDT(`${date}T00:00`)
-      setEndDT(`${date}T00:00`)
-    }
-  }
-
-  const handleAllDayDateChange = (date: string) => {
-    setStartDT(`${date}T00:00`)
-    setEndDT(`${date}T00:00`)
-  }
-
   const toggleMember = (memberId: string) => {
     setSelectedMemberIds((current) => (
       current.includes(memberId)
@@ -301,20 +430,19 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
     ))
   }
 
-  const detailsSummary = [
-    allDay ? 'All day' : null,
-    eventType === 'reminder' ? 'Reminder' : null,
-    repeat === 'none' ? null : `Repeats ${repeat}`,
-    notes.trim() ? 'Notes added' : null,
-  ].filter(Boolean).join(' · ') || 'All day, repeat, reminder, or notes'
+  const headerDateLabel = useMemo(() => {
+    const target = initialStart ?? new Date()
+    const isToday = new Date().toDateString() === target.toDateString()
+    return isToday ? 'Today' : format(target, 'EEEE, MMM d')
+  }, [initialStart])
 
   return (
     <Sheet
       open={open}
       onClose={onClose}
-      title="New Event"
+      title=""
       showHandle
-      panelClassName="sm:left-1/2 sm:right-auto sm:w-full sm:max-w-lg sm:-translate-x-1/2 sm:rounded-modal"
+      panelClassName="sm:left-1/2 sm:right-auto sm:w-full sm:max-w-xl sm:-translate-x-1/2 sm:rounded-modal"
       panelStyle={{
         bottom: 'max(0px, env(safe-area-inset-bottom))',
         maxHeight: viewportHeight ? `${Math.max(300, viewportHeight - 8)}px` : 'calc(100dvh - 8px)',
@@ -322,38 +450,160 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
       contentClassName="px-6 py-5"
       transition={{ type: 'spring', damping: 32, stiffness: 260 }}
     >
-      <div ref={sheetRef} tabIndex={-1} className="space-y-5">
-        <Field label="Event title" required>
-          <Input
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') void handleSave() }}
-            placeholder="What's happening?"
-            disabled={saving || Boolean(saveSuccess)}
-          />
-        </Field>
+      <div ref={sheetRef} tabIndex={-1} className="space-y-5 select-none">
+        {/* ── TOP HEADER: Date Badge + Event/Reminder Segmented Toggle ── */}
+        <div className="flex items-center justify-between gap-3 pt-1">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-casa-gold inline-block" />
+            <span className="font-serif text-xl font-bold tracking-tight text-casa-navy">
+              {headerDateLabel}
+            </span>
+            <Chip size="sm" tone="accent" icon={<Sparkles size={12} />}>
+              Quick Add
+            </Chip>
+          </div>
 
-        {allDay ? (
-          <Field label="Date">
-            <Input
-              type="date"
-              value={startDT.slice(0, 10)}
-              onChange={(event) => handleAllDayDateChange(event.target.value)}
+          {/* Event / Reminder Pill Toggle */}
+          <div className="flex items-center rounded-full p-1 bg-casa-sand/30 border border-casa-sand/50 shadow-inner">
+            <Button
+              size="sm"
+              variant={eventType === 'event' ? 'strong' : 'ghost'}
+              onClick={() => setEventType('event')}
+              className="rounded-full"
+            >
+              Event
+            </Button>
+            <Button
+              size="sm"
+              variant={eventType === 'reminder' ? 'strong' : 'ghost'}
+              onClick={() => setEventType('reminder')}
+              leadingIcon={<Bell size={12} />}
+              className="rounded-full"
+            >
+              Reminder
+            </Button>
+          </div>
+        </div>
+
+        {/* ── SMART NATURAL LANGUAGE AI INPUT BAR WITH MIC ──────────── */}
+        <div className="relative">
+          <div
+            className={`relative flex items-center rounded-2xl border-2 transition-all shadow-sm bg-white dark:bg-casa-navy/40 ${
+              micListening
+                ? 'border-casa-gold ring-4 ring-casa-gold/25 shadow-gold'
+                : 'border-casa-gold/40 focus-within:border-casa-gold focus-within:ring-2 focus-within:ring-casa-gold/20'
+            }`}
+          >
+            <input
+              type="text"
+              value={smartInput}
+              onChange={handleSmartInputChange}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void handleSave()
+              }}
+              placeholder="From 7 P.M to 9 pm Kelly is going to the gym..."
+              className="w-full px-4 py-3.5 text-base font-medium placeholder:text-casa-slate/50 text-casa-navy focus:outline-none bg-transparent"
               disabled={saving || Boolean(saveSuccess)}
             />
-          </Field>
-        ) : (
-          <DateTimeDial
-            startValue={startDT}
-            endValue={endDT}
-            onStartChange={setStartDT}
-            onEndChange={setEndDT}
-            startChangeEndOffsetMinutes={60}
-            defaultExpanded
-          />
-        )}
 
-        <Field label="People" hint="The first person selected is the primary attendee.">
+            {/* Embedded Microphone Button */}
+            <div className="pr-2 flex items-center gap-1.5">
+              <IconButton
+                icon={<Mic size={20} className={micListening ? 'animate-bounce text-casa-navy' : 'text-casa-slate'} />}
+                aria-label={micListening ? 'Listening... Release or click to stop' : 'Push to talk or click to speak'}
+                title={micListening ? 'Listening (Release to stop)' : 'Push to talk or click to speak'}
+                variant={micListening ? 'strong' : 'ghost'}
+                size="md"
+                onPointerDown={handleMicPointerDown}
+                onPointerUp={handleMicPointerUp}
+                onClick={() => toggleMic(smartInput)}
+                className={`rounded-xl transition-all ${
+                  micListening ? 'bg-casa-gold ring-2 ring-casa-gold/50 animate-pulse' : ''
+                }`}
+              />
+            </div>
+          </div>
+
+          {/* Live AI Parsing Extraction Badge */}
+          {aiFeedback && (
+            <div className="mt-1.5 px-3 py-1 rounded-lg bg-casa-gold/10 border border-casa-gold/20 flex items-center justify-between text-xs text-casa-gold-dark font-medium animate-fadeIn">
+              <span className="flex items-center gap-1.5">
+                <Sparkles size={12} className="text-casa-gold animate-spin-slow" />
+                <span>AI extracted: <strong>{aiFeedback}</strong></span>
+              </span>
+              <span className="text-xs opacity-75 text-casa-slate">Edit anytime below</span>
+            </div>
+          )}
+        </div>
+
+        {/* ── TIME & QUICK SLOTS SECTION ────────────────────────────── */}
+        <div className="space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5 text-sm font-semibold text-casa-navy">
+              <Clock size={16} className="text-casa-gold-dark" />
+              <span>{formatStartsAtLabel(startDT)}</span>
+            </div>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setCustomTimeOpen((prev) => !prev)}
+              trailingIcon={customTimeOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              className="text-xs uppercase tracking-wider font-bold"
+            >
+              Custom Time
+            </Button>
+          </div>
+
+          {/* 4 Quick Time Slot Buttons */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {(['morning', 'midday', 'afternoon', 'evening'] as const).map((slotKey) => {
+              const slot = QUICK_SLOT_TIMES[slotKey]
+              const isSelected = activeSlot === slotKey && !customTimeOpen
+              const timeLabel = slot.hour > 12 ? `${slot.hour - 12}:${slot.minute === 0 ? '00' : slot.minute} PM` : `${slot.hour}:${slot.minute === 0 ? '00' : slot.minute} AM`
+              return (
+                <Button
+                  key={slotKey}
+                  variant={isSelected ? 'strong' : 'subtle'}
+                  size="md"
+                  onClick={() => handleSelectQuickSlot(slotKey)}
+                  className={`w-full justify-between capitalize font-semibold ${
+                    isSelected ? 'bg-casa-navy text-white shadow-sm' : ''
+                  }`}
+                >
+                  <span>{slotKey}</span>
+                  <span className={`text-xs font-mono ml-1 ${isSelected ? 'text-casa-gold' : 'text-casa-slate'}`}>
+                    {timeLabel}
+                  </span>
+                </Button>
+              )
+            })}
+          </div>
+
+          {/* Custom Time Expander */}
+          {customTimeOpen && (
+            <div className="pt-2 border-t border-casa-sand/40">
+              <DateTimeDial
+                startValue={startDT}
+                endValue={endDT}
+                onStartChange={(val) => {
+                  setStartDT(val)
+                  setActiveSlot(null)
+                }}
+                onEndChange={setEndDT}
+                startChangeEndOffsetMinutes={60}
+                defaultExpanded
+              />
+            </div>
+          )}
+        </div>
+
+        {/* ── FAMILY & ATTENDEES CHIPS ──────────────────────────────── */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-casa-slate">
+            <Users size={14} />
+            <span>Family & Attendees</span>
+          </div>
+
           <div className="flex flex-wrap gap-2">
             {familyMembers.map((member) => {
               const selected = selectedMemberIds.includes(member.id)
@@ -377,44 +627,44 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
               )
             })}
           </div>
-        </Field>
+        </div>
 
-        <Field
-          label="Where"
-          hint="Search saved places or add a new one — Casa links it to the household directory."
-        >
+        {/* ── LOCATION / VENUE SEARCH INPUT ─────────────────────────── */}
+        <div className="space-y-1.5">
           <DirectoryPlaceInput
             key={placeFieldKey}
-            label="Where"
-            placeholder="Where is it?"
+            label="Location"
+            placeholder="Add location or saved venue"
             onChange={setPlaceSelection}
             onClear={() => setPlaceSelection(null)}
           />
-        </Field>
+        </div>
 
+        {/* ── DETAILS & RECURRENCE DISCLOSURE ───────────────────────── */}
         <DisclosureSection
-          title="More details"
-          summary={detailsSummary}
+          title="Add notes / details"
+          summary={allDay ? 'All day' : (repeat !== 'none' ? `Repeats ${repeat}` : '')}
           icon={<CalendarDays size={18} />}
           open={detailsOpen}
           onOpenChange={setDetailsOpen}
         >
-          <div className="space-y-4">
+          <div className="space-y-4 pt-2">
+            <Field label="Event Title Override (Optional)">
+              <Input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Explicit event title"
+                disabled={saving || Boolean(saveSuccess)}
+              />
+            </Field>
             <Switch
               checked={allDay}
-              onCheckedChange={handleAllDayChange}
+              onCheckedChange={setAllDay}
               label="All day"
               description="Keep this on the selected date without a specific time."
               disabled={saving || Boolean(saveSuccess)}
             />
-            <Switch
-              checked={eventType === 'reminder'}
-              onCheckedChange={(checked) => setEventType(checked ? 'reminder' : 'event')}
-              label="Reminder"
-              description="Create a reminder instead of a calendar event."
-              disabled={saving || Boolean(saveSuccess)}
-            />
-            <Field label="Repeat" hint="For a custom schedule, create the event first and use Edit details.">
+            <Field label="Repeat" hint="For recurring events or chores.">
               <Select
                 value={repeat}
                 onChange={(event) => setRepeat(event.target.value as typeof repeat)}
@@ -431,30 +681,42 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
                 value={notes}
                 onChange={(event) => setNotes(event.target.value)}
                 placeholder="Anything to remember?"
-                rows={3}
+                rows={2}
                 disabled={saving || Boolean(saveSuccess)}
               />
             </Field>
           </div>
         </DisclosureSection>
 
+        {/* ── SAVE STATUS / ALERTS ──────────────────────────────────── */}
         {saveError && (
           <Alert tone="danger" title={savePartial ? 'Event created with an issue' : 'Event was not created'}>
             {saveError}
           </Alert>
         )}
         {saveSuccess && <Alert tone="success" title="Event created">{saveSuccess}</Alert>}
-        <Button
-          fullWidth
-          size="lg"
-          variant="strong"
-          onClick={() => void handleSave()}
-          disabled={!title.trim() || Boolean(saveSuccess) || savePartial}
-          loading={saving}
-          leadingIcon={<Plus size={18} />}
-        >
-          Create Event
-        </Button>
+
+        {/* ── FOOTER ACTIONS: Cancel & Save Entry ────────────────────── */}
+        <div className="flex items-center justify-between gap-3 pt-2">
+          <Button
+            size="md"
+            variant="ghost"
+            onClick={onClose}
+          >
+            Cancel
+          </Button>
+
+          <Button
+            size="lg"
+            variant="strong"
+            onClick={() => void handleSave()}
+            disabled={(!smartInput.trim() && !title.trim()) || Boolean(saveSuccess) || savePartial}
+            loading={saving}
+            leadingIcon={<Sparkles size={18} />}
+          >
+            Save Entry
+          </Button>
+        </div>
       </div>
     </Sheet>
   )

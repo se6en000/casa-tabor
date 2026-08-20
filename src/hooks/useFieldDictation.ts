@@ -1,24 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 /**
- * Lightweight speech-to-text for filling a single text field (e.g. the grocery
- * quick-add input). Unlike useSpeechInput — which is built for the conversational
- * AI drawer (confirm/cancel/dismiss phrases, auto-send) — this hook just streams
- * recognized words into a field and stays out of the way.
+ * Lightweight speech-to-text for dictating into input fields (e.g. quick-add sheets).
  *
- * Dual path, matching the rest of the app:
- *   • Pi kiosk (Chromium/X11): DeepGram bridge over WebSocket (127.0.0.1:8767).
- *   • Mobile / desktop browsers: the native Web Speech API.
+ * Dual path:
+ *   • Pi kiosk (Chromium/Linux): Local DeepGram/Whisper bridge over WebSocket (ws://127.0.0.1:8767).
+ *   • Mobile / Mac / PC browsers: Native Web Speech API.
  *
- * The consumer passes an `onText(fullText)` callback; the hook seeds from the
- * field's current value on start, then emits base + dictated (committed finals +
- * live interim) so the field updates in real time while the sheet stays open.
+ * Ergonomics:
+ *   • Push-to-Talk: Hold down mic (pointerdown) -> speak -> release (pointerup) to stop & parse.
+ *   • Tap-to-Talk: Click to start -> speak -> auto-stops after 1.8s silence (or tap again to stop).
  */
 
 const BRIDGE = 'http://127.0.0.1:8766'
 const BRIDGE_WS = 'ws://127.0.0.1:8767'
 const SAFE_MODE = String(import.meta.env.VITE_SAFE_MODE ?? '').toLowerCase()
 const IS_SAFE_MODE = SAFE_MODE === '1' || SAFE_MODE === 'true' || SAFE_MODE === 'yes'
+const SILENCE_TIMEOUT_MS = 1800
 
 type DictationMode = 'unknown' | 'bridge' | 'webspeech'
 
@@ -38,7 +36,13 @@ function joinWords(...parts: string[]): string {
   return parts.map((p) => p.trim()).filter(Boolean).join(' ')
 }
 
-export function useFieldDictation({ onText }: { onText: (fullText: string) => void }) {
+export function useFieldDictation({
+  onText,
+  onFinal,
+}: {
+  onText: (fullText: string) => void
+  onFinal?: (fullText: string) => void
+}) {
   const [listening, setListening] = useState(false)
   const activeRef = useRef(false)
   const modeRef = useRef<DictationMode>('unknown')
@@ -47,11 +51,16 @@ export function useFieldDictation({ onText }: { onText: (fullText: string) => vo
   const wsRef = useRef<WebSocket | null>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null)
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const onTextRef = useRef(onText)
+  const onFinalRef = useRef(onFinal)
   useEffect(() => {
     onTextRef.current = onText
   }, [onText])
+  useEffect(() => {
+    onFinalRef.current = onFinal
+  }, [onFinal])
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const WebSpeech = useRef<any>(
@@ -63,16 +72,65 @@ export function useFieldDictation({ onText }: { onText: (fullText: string) => vo
 
   const supported = !IS_SAFE_MODE
 
-  const emit = useCallback((interim = '') => {
-    onTextRef.current(joinWords(baseRef.current, committedRef.current, interim))
+  const stopSilenceTimer = useCallback(() => {
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current)
+      silenceTimerRef.current = null
+    }
   }, [])
+
+  // ── Unified control ──────────────────────────────────────────────────────
+  const stopWebSpeech = useCallback(() => {
+    if (recognitionRef.current) {
+      try { recognitionRef.current.onend = null } catch { /* ignore */ }
+      try { recognitionRef.current.stop() } catch { /* ignore */ }
+      recognitionRef.current = null
+    }
+  }, [])
+
+  const stopWS = useCallback(() => {
+    if (wsRef.current) {
+      try { wsRef.current.send(JSON.stringify({ type: 'stop' })) } catch { /* ignore */ }
+      try { wsRef.current.close() } catch { /* ignore */ }
+      wsRef.current = null
+    }
+  }, [])
+
+  const emit = useCallback((interim = '') => {
+    const full = joinWords(baseRef.current, committedRef.current, interim)
+    onTextRef.current(full)
+    return full
+  }, [])
+
+  const stop = useCallback(() => {
+    if (!activeRef.current) return
+    activeRef.current = false
+    setListening(false)
+    stopSilenceTimer()
+
+    if (modeRef.current === 'webspeech') stopWebSpeech()
+    else stopWS()
+
+    const finalFull = emit('')
+    onFinalRef.current?.(finalFull)
+  }, [stopSilenceTimer, stopWebSpeech, stopWS, emit])
+
+  const restartSilenceTimer = useCallback(() => {
+    stopSilenceTimer()
+    silenceTimerRef.current = setTimeout(() => {
+      if (activeRef.current) {
+        stop()
+      }
+    }, SILENCE_TIMEOUT_MS)
+  }, [stopSilenceTimer, stop])
 
   const commitFinal = useCallback((text: string) => {
     const clean = text.trim()
     if (!clean) return
     committedRef.current = joinWords(committedRef.current, clean)
     emit('')
-  }, [emit])
+    restartSilenceTimer()
+  }, [emit, restartSilenceTimer])
 
   // ── Web Speech API path (mobile / desktop) ──────────────────────────────
   const startWebSpeech = useCallback(() => {
@@ -97,7 +155,10 @@ export function useFieldDictation({ onText }: { onText: (fullText: string) => vo
         else interim += t
       }
       if (finalAccum.trim()) commitFinal(finalAccum)
-      if (interim.trim()) emit(interim)
+      if (interim.trim()) {
+        emit(interim)
+        restartSilenceTimer()
+      }
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -107,35 +168,16 @@ export function useFieldDictation({ onText }: { onText: (fullText: string) => vo
     }
 
     recognition.onend = () => {
-      // continuous can still end on silence — restart while the user is holding
-      // the mic open so a paused speaker can keep going.
+      // continuous can still end on silence — if user is still active, restart
       if (activeRef.current) {
         try { recognition.start() } catch { /* ignore */ }
       }
     }
 
     try { recognition.start() } catch { /* ignore */ }
-  }, [WebSpeech, commitFinal, emit])
-
-  const stopWebSpeech = useCallback(() => {
-    if (recognitionRef.current) {
-      try { recognitionRef.current.onend = null } catch { /* ignore */ }
-      try { recognitionRef.current.stop() } catch { /* ignore */ }
-      recognitionRef.current = null
-    }
-  }, [])
+  }, [WebSpeech, commitFinal, emit, restartSilenceTimer])
 
   // ── Bridge path (Pi kiosk) ───────────────────────────────────────────────
-  const stopWS = useCallback(() => {
-    if (wsRef.current) {
-      try { wsRef.current.send(JSON.stringify({ type: 'stop' })) } catch { /* ignore */ }
-      try { wsRef.current.close() } catch { /* ignore */ }
-      wsRef.current = null
-    }
-  }, [])
-
-  // Ref indirection lets ws.onclose re-invoke the latest startBridge for
-  // reconnect without a self-referential closure (which the compiler rejects).
   const startBridgeRef = useRef<() => void>(() => {})
   const startBridge = useCallback(() => {
     if (!activeRef.current) return
@@ -154,8 +196,23 @@ export function useFieldDictation({ onText }: { onText: (fullText: string) => vo
       if (!activeRef.current) return
       try {
         const msg = JSON.parse(evt.data as string)
-        if (msg.type === 'interim' && typeof msg.text === 'string') emit(msg.text)
-        else if (msg.type === 'final' && typeof msg.text === 'string') commitFinal(msg.text)
+        if (msg.type === 'interim' && typeof msg.text === 'string') {
+          emit(msg.text)
+          restartSilenceTimer()
+        } else if (msg.type === 'final' && typeof msg.text === 'string') {
+          // If bridge returns cumulative text in legacy mode, replace committedRef
+          committedRef.current = msg.text.trim()
+          emit('')
+          restartSilenceTimer()
+        } else if (msg.type === 'transcript' && typeof msg.text === 'string') {
+          if (msg.is_final) {
+            committedRef.current = msg.text.trim()
+            emit('')
+          } else {
+            emit(msg.interim || msg.text)
+          }
+          restartSilenceTimer()
+        }
       } catch { /* ignore */ }
     }
 
@@ -163,21 +220,10 @@ export function useFieldDictation({ onText }: { onText: (fullText: string) => vo
 
     ws.onclose = () => {
       wsRef.current = null
-      // Reconnect while the user is still dictating.
       if (activeRef.current) setTimeout(() => startBridgeRef.current(), 400)
     }
-  }, [commitFinal, emit])
+  }, [emit, restartSilenceTimer])
   useEffect(() => { startBridgeRef.current = startBridge }, [startBridge])
-
-  // ── Unified control ──────────────────────────────────────────────────────
-  const stop = useCallback(() => {
-    if (!activeRef.current) return
-    activeRef.current = false
-    setListening(false)
-    if (modeRef.current === 'webspeech') stopWebSpeech()
-    else stopWS()
-    emit('') // settle field to base + committed, drop trailing interim
-  }, [stopWebSpeech, stopWS, emit])
 
   const start = useCallback(async (seed: string) => {
     if (activeRef.current || IS_SAFE_MODE) return
@@ -185,26 +231,23 @@ export function useFieldDictation({ onText }: { onText: (fullText: string) => vo
     committedRef.current = ''
     activeRef.current = true
     setListening(true)
+    restartSilenceTimer()
 
     if (modeRef.current === 'unknown') {
       const hasBridge = await probeBridge()
       modeRef.current = hasBridge ? 'bridge' : (WebSpeech ? 'webspeech' : 'bridge')
     }
-    // A late stop() during the async probe should abort the launch.
     if (!activeRef.current) return
 
     if (modeRef.current === 'webspeech') startWebSpeech()
     else startBridge()
-  }, [WebSpeech, startWebSpeech, startBridge])
+  }, [WebSpeech, startWebSpeech, startBridge, restartSilenceTimer])
 
   const toggle = useCallback((seed: string) => {
     if (activeRef.current) stop()
     else void start(seed)
   }, [start, stop])
 
-  // Clear the accumulated transcript so continued dictation starts fresh into an
-  // empty field — WITHOUT stopping the mic. Used after an item is added so the
-  // user can keep speaking the next item hands-free.
   const resetBuffer = useCallback((seed = '') => {
     baseRef.current = seed.trim()
     committedRef.current = ''
@@ -213,10 +256,11 @@ export function useFieldDictation({ onText }: { onText: (fullText: string) => vo
   useEffect(() => {
     return () => {
       activeRef.current = false
+      stopSilenceTimer()
       stopWebSpeech()
       stopWS()
     }
-  }, [stopWebSpeech, stopWS])
+  }, [stopSilenceTimer, stopWebSpeech, stopWS])
 
   return { supported, listening, start, stop, toggle, resetBuffer }
 }

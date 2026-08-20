@@ -16,7 +16,6 @@ import EventDetailPanel from './EventDetailPanel'
 import EventEditSheet from './EventEditSheet'
 import { isReminder, isAllDayReminder, isTimedReminder } from '../../utils/holidays'
 import SwipeableReminderPill from '../shared/SwipeableReminderPill'
-import EventContextMenu from '../shared/EventContextMenu'
 import { WeatherIcon } from '../shared/WeatherIcon'
 import BounceScroll from '../shared/BounceScroll'
 import { eventOverlapsDay, getEventDisplayStartDay } from '../../utils/eventTime'
@@ -92,7 +91,6 @@ export default function StackedView() {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [editEventId,     setEditEventId]     = useState<string | null>(null)
   const [deleteIntentEventId, setDeleteIntentEventId] = useState<string | null>(null)
-  const [contextMenu, setContextMenu] = useState<{ event: EventWithDetails; x: number; y: number } | null>(null)
   const [quickCreate, setQuickCreate] = useState<{ open: boolean; start?: Date }>({ open: false })
   const quickCreateGesture = useCalendarQuickCreateGesture<Date>({
     resolveStart: (day) => {
@@ -111,11 +109,6 @@ export default function StackedView() {
   const editEvent     = editEventId     ? (events.find(e => e.id === editEventId)     ?? null) : null
 
   const { completeReminder } = useReminderNeedsYouActions()
-
-  const deleteEvent = useCallback((ev: EventWithDetails) => {
-    setDeleteIntentEventId(ev.id)
-    setEditEventId(ev.id)
-  }, [])
 
   return (
     <BounceScroll
@@ -228,8 +221,6 @@ export default function StackedView() {
                           household={household}
                           isSelected={selectedEventId === event.id}
                           onClick={() => setSelectedEventId(event.id)}
-                          onDoubleClick={() => { setSelectedEventId(null); setEditEventId(event.id) }}
-                          onLongPress={(ev, x, y) => setContextMenu({ event: ev, x, y })}
                         />
                       ))
                     }
@@ -260,15 +251,6 @@ export default function StackedView() {
         />
       )}
 
-      <EventContextMenu
-        event={contextMenu?.event ?? null}
-        x={contextMenu?.x ?? 0}
-        y={contextMenu?.y ?? 0}
-        onClose={() => setContextMenu(null)}
-        onEdit={ev => setEditEventId(ev.id)}
-        onDelete={deleteEvent}
-        onComplete={ev => completeReminder(ev.id)}
-      />
       <QuickCreateSheet
         open={quickCreate.open}
         initialStart={quickCreate.start}
@@ -285,11 +267,9 @@ interface EventCardProps {
   household: FamilyMember[]
   isSelected: boolean
   onClick: () => void
-  onDoubleClick: () => void
-  onLongPress: (event: EventWithDetails, x: number, y: number) => void
 }
 
-function EventCard({ event, household, isSelected, onClick, onDoubleClick, onLongPress }: EventCardProps) {
+function EventCard({ event, household, isSelected, onClick }: EventCardProps) {
   const color = getPrimaryColor(event)
   const enr = event.enrichment
   const snippet = getSnippet(event)
@@ -325,33 +305,6 @@ function EventCard({ event, household, isSelected, onClick, onDoubleClick, onLon
   }, [event.id])
   const responsibilityChip = deriveResponsibilityChip(event, household)
 
-  // Long-press detection
-  const lpTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const lpOrigin = useRef<{ x: number; y: number } | null>(null)
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    const t = e.touches[0]
-    lpOrigin.current = { x: t.clientX, y: t.clientY }
-    lpTimer.current = setTimeout(() => {
-      lpTimer.current = null
-      if (!lpOrigin.current) return
-      navigator.vibrate?.(30)
-      onLongPress(event, lpOrigin.current.x, lpOrigin.current.y)
-      lpOrigin.current = null
-    }, 500)
-  }
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!lpTimer.current || !lpOrigin.current) return
-    const t = e.touches[0]
-    if (Math.hypot(t.clientX - lpOrigin.current.x, t.clientY - lpOrigin.current.y) > 10) {
-      clearTimeout(lpTimer.current); lpTimer.current = null; lpOrigin.current = null
-    }
-  }
-  const handleTouchEnd = () => {
-    if (lpTimer.current) { clearTimeout(lpTimer.current); lpTimer.current = null }
-    lpOrigin.current = null
-  }
-
   return (
     <motion.div
       layout
@@ -360,15 +313,11 @@ function EventCard({ event, household, isSelected, onClick, onDoubleClick, onLon
       exit={{ opacity: 0, y: -4 }}
       transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
       onClick={(e) => { e.stopPropagation(); onClick() }}
-      onDoubleClick={(e) => { e.stopPropagation(); onDoubleClick() }}
       onKeyDown={(e) => {
         if (e.key !== 'Enter' && e.key !== ' ') return
         e.preventDefault()
         onClick()
       }}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
       role="button"
       tabIndex={0}
       className={cn(
