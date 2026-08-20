@@ -49,11 +49,13 @@ export function useFieldDictation({
   onText,
   onFinal,
   onComplete,
+  autoSubmitOnSilence = false,
   silenceTimeoutMs = DEFAULT_SILENCE_TIMEOUT_MS,
 }: {
   onText: (fullText: string) => void
   onFinal?: (fullText: string) => void
   onComplete?: (fullText: string) => void
+  autoSubmitOnSilence?: boolean
   silenceTimeoutMs?: number
 }) {
   const [listening, setListening] = useState(false)
@@ -115,8 +117,8 @@ export function useFieldDictation({
     return full
   }, [])
 
-  const stop = useCallback(() => {
-    if (!activeRef.current) return
+  const stop = useCallback((): string => {
+    if (!activeRef.current) return ''
     activeRef.current = false
     setListening(false)
     stopSilenceTimer()
@@ -126,16 +128,20 @@ export function useFieldDictation({
 
     const finalFull = emit('')
     onFinalRef.current?.(finalFull)
+    return finalFull
   }, [stopSilenceTimer, stopWebSpeech, stopWS, emit])
 
   const restartSilenceTimer = useCallback(() => {
     stopSilenceTimer()
     silenceTimerRef.current = setTimeout(() => {
       if (activeRef.current) {
-        stop()
+        const finalText = stop()
+        if (autoSubmitOnSilence && finalText) {
+          onFinalRef.current?.(finalText)
+        }
       }
     }, silenceTimeoutMs)
-  }, [stopSilenceTimer, stop, silenceTimeoutMs])
+  }, [stopSilenceTimer, stop, autoSubmitOnSilence, silenceTimeoutMs])
 
   const commitFinal = useCallback((text: string) => {
     const clean = text.trim()
@@ -263,9 +269,9 @@ export function useFieldDictation({
     else startBridge()
   }, [WebSpeech, startWebSpeech, startBridge, restartSilenceTimer])
 
-  const toggle = useCallback((seed: string) => {
-    if (activeRef.current) stop()
-    else void start(seed)
+  const toggle = useCallback((seed: string): string | void => {
+    if (activeRef.current) return stop()
+    void start(seed)
   }, [start, stop])
 
   const resetBuffer = useCallback((seed = '') => {

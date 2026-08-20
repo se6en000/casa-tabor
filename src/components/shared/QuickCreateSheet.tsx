@@ -10,6 +10,7 @@ import {
   ChevronUp,
 } from 'lucide-react'
 import { addHours, format } from 'date-fns'
+import { cn } from '../../utils/cn'
 import { supabase } from '../../lib/supabase'
 import { syncAndMaterializeRecurringSeries, triggerGoogleEventSync } from '../../lib/eventMutations'
 import { useQueryClient } from '@tanstack/react-query'
@@ -54,16 +55,6 @@ function snapTo5(d: Date): Date {
   return new Date(Math.round(d.getTime() / step) * step)
 }
 
-function formatStartsAtLabel(dtString: string): string {
-  try {
-    const d = new Date(dtString)
-    if (Number.isNaN(d.getTime())) return 'Starts at 9:00 AM'
-    return `Starts at ${format(d, 'h:mm a')}`
-  } catch {
-    return 'Starts at 9:00 AM'
-  }
-}
-
 export default function QuickCreateSheet({ open, onClose, initialStart }: Props) {
   const qc = useQueryClient()
   const { data: familyMembers = [] } = useFamilyMembers()
@@ -103,10 +94,7 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
   const [saveSuccess, setSaveSuccess] = useState('')
   const [savePartial, setSavePartial] = useState(false)
 
-  const visibleFamilyMembers = useMemo(
-    () => familyMembers.filter((m: FamilyMember) => !m.archived && !m.is_guest),
-    [familyMembers],
-  )
+  const visibleFamilyMembers = useMemo(() => familyMembers, [familyMembers])
 
   // ── Smart Natural Language Extraction ─────────────────────────────────
   const applySmartParse = useCallback((text: string) => {
@@ -115,44 +103,48 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
       return
     }
     const baseDate = initialStart ? new Date(initialStart) : new Date()
-    const parsed = parseSmartEvent(
-      text,
-      baseDate,
-      visibleFamilyMembers.map((m: FamilyMember) => ({ id: m.id, name: m.name, role: m.role })),
-      savedPlaces.map((p) => ({ id: p.id, name: p.name, aliases: p.aliases, address: p.address })),
-    )
+    const parsed = parseSmartEvent(text, {
+      referenceDate: baseDate,
+      familyMembers: visibleFamilyMembers.map((m: FamilyMember) => ({ id: m.id, name: m.name })),
+      savedPlaces: savedPlaces.map((p) => ({ id: p.id, name: p.name, aliases: p.aliases })),
+    })
 
-    if (parsed.startTime) {
-      setStartDT(toLocalDTString(parsed.startTime))
-      setActiveSlot(null)
+    if (parsed.startDate) {
+      setStartDT(parsed.startDT)
+      setActiveSlot(parsed.quickSlot)
     }
-    if (parsed.endTime) {
-      setEndDT(toLocalDTString(parsed.endTime))
+    if (parsed.endDate) {
+      setEndDT(parsed.endDT)
     }
     if (parsed.eventType) {
       setEventType(parsed.eventType)
     }
-    if (parsed.attendeeIds && parsed.attendeeIds.length > 0) {
-      setSelectedMemberIds(parsed.attendeeIds)
+    if (parsed.matchedMemberIds && parsed.matchedMemberIds.length > 0) {
+      setSelectedMemberIds(parsed.matchedMemberIds)
     }
-    if (parsed.place) {
-      setPlaceSelection({
-        mode: 'saved_place',
-        placeId: parsed.place.id,
-        primaryText: parsed.place.name,
-      })
+    if (parsed.matchedPlaceName) {
+      const saved = savedPlaces.find(
+        (p) => p.name.toLowerCase() === parsed.matchedPlaceName?.toLowerCase(),
+      )
+      if (saved) {
+        setPlaceSelection({
+          mode: 'existing',
+          placeId: saved.id,
+        })
+      }
     }
 
     // Build friendly pill summary
     const highlights: string[] = []
-    if (parsed.startTime) highlights.push(format(parsed.startTime, 'h:mm a'))
-    if (parsed.attendeeIds && parsed.attendeeIds.length > 0) {
-      const names = parsed.attendeeIds
-        .map((id) => visibleFamilyMembers.find((m: FamilyMember) => m.id === id)?.name)
+    if (parsed.startDate) highlights.push(format(parsed.startDate, 'h:mm a'))
+    if (parsed.matchedMemberIds && parsed.matchedMemberIds.length > 0) {
+      const names = parsed.matchedMemberIds
+        .map((id: string) => visibleFamilyMembers.find((m: FamilyMember) => m.id === id)?.name)
         .filter(Boolean)
       if (names.length > 0) highlights.push(names.join(', '))
     }
-    if (parsed.place) highlights.push(parsed.place.name)
+    if (parsed.matchedPlaceName) highlights.push(parsed.matchedPlaceName)
+    else if (parsed.rawLocation) highlights.push(parsed.rawLocation)
 
     if (highlights.length > 0) {
       setAiFeedback(`✦ Detected: ${highlights.join(' · ')}`)
@@ -181,12 +173,12 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
 
   // Pointer Handlers for Push-to-Talk (Hold to speak, release to stop)
   const isPointerHoldingRef = useRef(false)
-  const handleMicPointerDown = (e: React.PointerEvent) => {
+  const handleMicPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
     e.preventDefault()
     isPointerHoldingRef.current = true
     void startMic(smartInput)
   }
-  const handleMicPointerUp = (e: React.PointerEvent) => {
+  const handleMicPointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
     e.preventDefault()
     if (isPointerHoldingRef.current) {
       isPointerHoldingRef.current = false
@@ -550,7 +542,6 @@ export default function QuickCreateSheet({ open, onClose, initialStart }: Props)
                   )}
                 >
                   <span className="text-caption font-bold">{slot.label}</span>
-                  <span className="text-caption text-casa-muted mt-0.5">{slot.time}</span>
                 </Button>
               )
             })}
