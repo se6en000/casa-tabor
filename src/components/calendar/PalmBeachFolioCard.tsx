@@ -87,9 +87,18 @@ export default function PalmBeachFolioCard({
     locationLabel: string
   } | null>(null)
 
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
   const isMicHoldingRef = useRef(false)
   const isHoldingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Auto-expand textarea height as text flows in realtime
+  useEffect(() => {
+    const el = inputRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    const newHeight = Math.min(Math.max(el.scrollHeight, 28), 120)
+    el.style.height = `${newHeight}px`
+  }, [title])
 
   // Voice Dictation & Gemini AI parsing
   const handleGeminiParse = useCallback((spokenText: string) => {
@@ -513,14 +522,14 @@ export default function PalmBeachFolioCard({
       <div className="space-y-2">
         <div
           className={cn(
-            'relative flex items-center gap-2.5 p-2 rounded-2xl border transition-all duration-300',
+            'relative flex items-start gap-2.5 p-2.5 rounded-2xl border transition-all duration-300',
             listening
               ? 'bg-gradient-to-r from-casa-surface to-amber-500/[0.12] border-casa-gold ring-2 ring-casa-gold/35 shadow-[0_0_20px_rgba(201,169,110,0.25)]'
               : 'bg-casa-sand/40 border-casa-gold/30 focus-within:border-casa-gold focus-within:bg-white focus-within:ring-2 focus-within:ring-casa-gold/20',
           )}
         >
           {/* Left Jewel Button: Tap to toggle listening, Hold to speak until release */}
-          <div className="relative shrink-0 flex items-center justify-center">
+          <div className="relative shrink-0 flex items-center justify-center pt-0.5">
             <AnimatePresence>
               {listening && (
                 <>
@@ -614,15 +623,16 @@ export default function PalmBeachFolioCard({
             />
           </div>
 
-          {/* Title Text Input */}
-          <div className="flex-1 min-w-0">
-            <input
+          {/* Title Auto-Expanding Textarea */}
+          <div className="flex-1 min-w-0 flex items-center pt-1">
+            <textarea
               ref={inputRef}
-              type="text"
+              rows={1}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
                   if (geminiParsedMeta && title.trim()) {
                     void handleSave()
                   } else if (title.trim()) {
@@ -636,26 +646,28 @@ export default function PalmBeachFolioCard({
                   ? 'Listening... speak naturally...'
                   : eventType === 'reminder'
                     ? 'Remind to... "Call dentist at 2pm"'
-                    : 'What\'s happening? "Tennis with Jake tomorrow 9am"...'
+                    : 'What\'s happening? "Live needs to babysit at Springmeyer at 6pm"...'
               }
               disabled={saving}
-              className="w-full bg-transparent font-sans text-body-lg sm:text-body-base font-medium text-casa-navy placeholder:font-normal placeholder:text-casa-muted/70 focus:outline-hidden p-0 leading-snug"
+              className="w-full bg-transparent resize-none overflow-hidden font-sans text-body-lg sm:text-body-base font-medium text-casa-navy placeholder:font-normal placeholder:text-casa-muted/70 focus:outline-hidden p-0 leading-relaxed"
             />
           </div>
 
           {title.length > 0 && (
-            <IconButton
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setTitle('')
-                setGeminiParsedMeta(null)
-              }}
-              aria-label="Clear title"
-              icon={<X size={14} className="text-casa-muted hover:text-casa-navy" />}
-              className="w-6 h-6 rounded-full flex items-center justify-center shrink-0"
-            />
+            <div className="pt-1 shrink-0">
+              <IconButton
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setTitle('')
+                  setGeminiParsedMeta(null)
+                }}
+                aria-label="Clear title"
+                icon={<X size={14} className="text-casa-muted hover:text-casa-navy" />}
+                className="w-6 h-6 rounded-full flex items-center justify-center shrink-0"
+              />
+            </div>
           )}
         </div>
 

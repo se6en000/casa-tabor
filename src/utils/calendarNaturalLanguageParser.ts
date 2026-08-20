@@ -45,6 +45,47 @@ function toLocalDT(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
+const MEMBER_PHONETIC_ALIASES: Record<string, string[]> = {
+  liv: ['live', 'olivia', 'livy', 'livvy', 'lyv'],
+  emme: ['emma', 'emmie', 'em', 'emi'],
+  jake: ['jacob', 'jakes', "jake's"],
+  kelly: ['kelli', 'kellie', 'kel', "kelly's"],
+  owen: ['owan', 'owens', "owen's"],
+  giselle: ['gisela', 'gigi', 'gisele', 'gizelle', "giselle's"],
+  milo: ['mylo', "milo's"],
+  tabor: ['tabors', 'the family', 'family', 'tabor family'],
+}
+
+const ACTION_VERB_TITLE_MAP: Record<string, string> = {
+  babysit: 'Babysitting',
+  babysitting: 'Babysitting',
+  pickleball: 'Pickleball',
+  tennis: 'Tennis',
+  swim: 'Swim Practice',
+  swimming: 'Swim Practice',
+  soccer: 'Soccer',
+  baseball: 'Baseball',
+  dentist: 'Dentist Appointment',
+  doctor: 'Doctor Appointment',
+  haircut: 'Haircut',
+  dinner: 'Dinner',
+  lunch: 'Lunch',
+  breakfast: 'Breakfast',
+  brunch: 'Brunch',
+  coffee: 'Coffee',
+  tutoring: 'Tutoring',
+  tutor: 'Tutoring',
+  piano: 'Piano Lesson',
+  guitar: 'Guitar Lesson',
+  golf: 'Golf',
+  gym: 'Workout',
+  workout: 'Workout',
+}
+
+function normalizeTight(str: string): string {
+  return str.toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
 export function parseCalendarNaturalLanguage(
   rawInput: string,
   contextDate: Date = new Date(),
@@ -96,62 +137,100 @@ export function parseCalendarNaturalLanguage(
     text = text.replace(/\b(all\s+day|all-day)\b/i, '')
   }
 
-  // 4. Match Family Members (Attendees)
+  // 4. Match Family Members (Attendees) with Phonetic & STT Aliases
   const matchedMemberIds: string[] = []
   const matchedMemberNames: string[] = []
+
   for (const member of familyMembers) {
     if (!member.name) continue
-    const nameRegex = new RegExp(`\\b${member.name}\\b`, 'i')
-    if (nameRegex.test(text)) {
-      if (!matchedMemberIds.includes(member.id)) {
-        matchedMemberIds.push(member.id)
-        matchedMemberNames.push(member.name)
+    const baseName = member.name.toLowerCase()
+    const allAliases = [
+      baseName,
+      ...(MEMBER_PHONETIC_ALIASES[baseName] || []),
+    ]
+
+    for (const alias of allAliases) {
+      // Check if alias exists in text (including "[Alias] needs to..." or "with [Alias]")
+      const aliasPattern = new RegExp(`\\b${alias}\\b`, 'i')
+      if (aliasPattern.test(text)) {
+        if (!matchedMemberIds.includes(member.id)) {
+          matchedMemberIds.push(member.id)
+          matchedMemberNames.push(member.name)
+        }
+        // Clean from text: "with [Alias]", "for [Alias]", "[Alias] needs to", "[Alias] has to", "[Alias] is"
+        text = text.replace(new RegExp(`\\b(?:with|for|and)\\s+${alias}\\b`, 'gi'), '')
+        text = text.replace(new RegExp(`\\b${alias}\\s+(?:needs?\\s+to|has\\s+to|is|will)\\s*`, 'gi'), '')
+        text = text.replace(new RegExp(`\\b${alias}\\b`, 'gi'), '')
+        break
       }
     }
   }
+
   if (matchedMemberIds.length > 0) {
     matchedDetailsCount += matchedMemberIds.length
   }
 
-  // Clean "with [Name]" or "for [Name]" or "and [Name]" from title
-  for (const member of familyMembers) {
-    if (!member.name) continue
-    const withRegex = new RegExp(`\\b(with|for|and)\\s+${member.name}\\b`, 'gi')
-    text = text.replace(withRegex, '')
-  }
-
-  // 5. Match Saved Places (Venues)
+  // 5. Match Saved Places (Venues) with Fuzzy Spacing & Phonetic Sound-Alike Matching
   let matchedPlace: SavedPlace | null = null
   let extractedLocationName: string | null = null
 
   for (const place of savedPlaces) {
     if (!place.name) continue
-    const placeRegex = new RegExp(`\\b${place.name}\\b`, 'i')
+    const placeTight = normalizeTight(place.name)
+    const placeAliasesTight = (place.aliases || []).map(normalizeTight)
+
+    // Build common variations (e.g. springmeyer -> spring myers, spring meyer, springmeyers)
+    const candidatesTight = [placeTight, ...placeAliasesTight]
+    if (placeTight.includes('meyer')) {
+      candidatesTight.push(placeTight.replace(/meyer/g, 'myers'))
+      candidatesTight.push(placeTight.replace(/meyer/g, 'meyers'))
+      candidatesTight.push(placeTight.replace(/meyer/g, 'meier'))
+    }
+
+    // Check direct regex in text
+    let matched = false
+    const placeRegex = new RegExp(`\\b(?:at\\s+the|at|in|near)?\\s*${place.name}\\b`, 'i')
     if (placeRegex.test(text)) {
       matchedPlace = place
       matchedDetailsCount++
-      text = text.replace(new RegExp(`\\b(?:at|in|near)?\\s*${place.name}\\b`, 'gi'), '')
-      break
+      text = text.replace(placeRegex, '')
+      matched = true
     }
-    // Check aliases if any
-    if (place.aliases && Array.isArray(place.aliases)) {
+
+    if (!matched && place.aliases && Array.isArray(place.aliases)) {
       for (const alias of place.aliases) {
         if (!alias) continue
-        const aliasRegex = new RegExp(`\\b${alias}\\b`, 'i')
+        const aliasRegex = new RegExp(`\\b(?:at\\s+the|at|in|near)?\\s*${alias}\\b`, 'i')
         if (aliasRegex.test(text)) {
           matchedPlace = place
           matchedDetailsCount++
-          text = text.replace(new RegExp(`\\b(?:at|in|near)?\\s*${alias}\\b`, 'gi'), '')
+          text = text.replace(aliasRegex, '')
+          matched = true
           break
         }
       }
     }
+
+    // Fuzzy check for space-separated or STT-mutated venue words (e.g. "at the spring Myers" -> "Springmeyer")
+    if (!matched) {
+      const atLocationMatch = text.match(/\b(?:at\s+the|at|in|near)\s+([A-Za-z0-9\s'&.-]{3,30}?)(?=\s+(?:at\s+\d|\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)|tomorrow|today|this|next|on\s+[A-Za-z]+|for\s+\d)|$)/i)
+      if (atLocationMatch && atLocationMatch[1]) {
+        const spokenLocTight = normalizeTight(atLocationMatch[1])
+        if (candidatesTight.some(c => c === spokenLocTight || (c.length > 5 && spokenLocTight.length > 5 && (c.includes(spokenLocTight) || spokenLocTight.includes(c))))) {
+          matchedPlace = place
+          matchedDetailsCount++
+          text = text.replace(atLocationMatch[0], '')
+          matched = true
+        }
+      }
+    }
+
     if (matchedPlace) break
   }
 
   // If no saved place matched, check for generic "at [Location Name]"
   if (!matchedPlace) {
-    const locMatch = text.match(/\b(?:at|in)\s+([A-Z][A-Za-z0-9\s'&.-]{2,30})(?=\s+(?:tomorrow|today|this|next|on|at\s+\d|\d{1,2}(?::\d{2})?\s*(?:am|pm)|for\s+\d)|$)/)
+    const locMatch = text.match(/\b(?:at\s+the|at|in)\s+([A-Z][A-Za-z0-9\s'&.-]{2,30})(?=\s+(?:tomorrow|today|this|next|on|at\s+\d|\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)|for\s+\d)|$)/i)
     if (locMatch && locMatch[1]) {
       const candLoc = locMatch[1].trim()
       if (!/^(morning|afternoon|evening|night|noon|midnight|today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)$/i.test(candLoc)) {
@@ -216,20 +295,19 @@ export function parseCalendarNaturalLanguage(
     text = text.replace(durationMatch[0], '')
   }
 
-  // 8. Extract Time
+  // 8. Extract Time (with robust support for p.m., a.m., pm, am, 6pm, 6:00 pm, etc.)
   let startHour = 9
   let startMinute = 0
   let explicitTimeFound = false
 
-  // Check specific time: "9:30 am", "9am", "3:45pm", "8pm", "8 pm", "10 pm", "14:00"
-  const time12Match = text.match(/\b(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i)
+  const time12Match = text.match(/\b(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)\b/i)
   const time24Match = text.match(/\b(?:at\s+)?(\d{1,2}):(\d{2})\b/i)
   const oclockMatch = text.match(/\b(?:at\s+)?(\d{1,2})\s*o'?clock\b/i)
 
   if (time12Match) {
     let hour = parseInt(time12Match[1], 10)
     const minute = time12Match[2] ? parseInt(time12Match[2], 10) : 0
-    const period = time12Match[3].toLowerCase()
+    const period = time12Match[3].toLowerCase().replace(/\./g, '')
     if (period === 'pm' && hour < 12) hour += 12
     if (period === 'am' && hour === 12) hour = 0
     startHour = hour
@@ -275,16 +353,19 @@ export function parseCalendarNaturalLanguage(
     }
   }
 
-  // 9. Clean trailing prepositions & residual words in title
+  // 9. Clean residual conversational filler and transform verbs to natural event titles
   let cleanTitle = text
-    .replace(/\b(to\s+play|to\s+go|to\s+do|to\s+see)\b/gi, '')
+    .replace(/\b(to\s+play|to\s+go|to\s+do|to\s+see|needs?\s+to|has\s+to|have\s+to)\b/gi, '')
     .replace(/\s+/g, ' ')
     .replace(/\b(at|on|for|with|by|in|and)\s*$/i, '')
-    .replace(/^[\s,·\-\/]+|[\s,·\-\/]+$/g, '')
+    .replace(/^[\s,·\-\/.]+|[\s,·\-\/.]+$/g, '')
     .trim()
 
-  // If clean title is empty (e.g. user just said "Friday at 9am"), give a sensible default
-  if (!cleanTitle) {
+  // Map action verbs into clean editorial titles (e.g. "babysit" -> "Babysitting")
+  const lowerClean = cleanTitle.toLowerCase()
+  if (ACTION_VERB_TITLE_MAP[lowerClean]) {
+    cleanTitle = ACTION_VERB_TITLE_MAP[lowerClean]
+  } else if (!cleanTitle) {
     cleanTitle = eventType === 'reminder' ? 'Reminder' : 'New Event'
   } else {
     // Capitalize first letter

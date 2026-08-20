@@ -12,6 +12,7 @@ const mockFamily = [
 const mockPlaces = [
   { id: 'place-amped', name: 'Amped Fitness Signature', aliases: ['Amped', 'Gym'], address: '123 Gym Way' },
   { id: 'place-breakers', name: 'The Breakers', aliases: ['Breakers'], address: '1 S County Rd' },
+  { id: 'place-springmeyer', name: 'Springmeyer', aliases: ['Springmeyer Home'], address: '456 Palm St' },
 ]
 
 test('parseCalendarNaturalLanguage parses spoken event with time, venue, and attendee', () => {
@@ -76,4 +77,24 @@ test('parseCalendarNaturalLanguage cleans appointment conversational phrasing an
   assert.match(result.summaryText, /8:00 PM/i)
   assert.match(result.summaryText, /For Jake/i)
 })
+
+test('parseCalendarNaturalLanguage handles phonetic member Live, fuzzy place spring Myers, 6 p.m., and babysit verb conversion', () => {
+  const contextDate = new Date('2026-08-20T12:00:00')
+  const result = parseCalendarNaturalLanguage(
+    'Live needs to babysit at the spring Myers at 6 p.m.',
+    contextDate,
+    mockFamily,
+    mockPlaces,
+  )
+
+  assert.equal(result.eventType, 'event')
+  assert.equal(result.title, 'Babysitting')
+  assert.match(result.startDT, /T18:00/)
+  assert.deepEqual(result.matchedMemberIds, ['mem-liv'])
+  assert.equal(result.matchedPlace?.id, 'place-springmeyer')
+  assert.match(result.summaryText, /6:00 PM/i)
+  assert.match(result.summaryText, /For Liv/i)
+  assert.match(result.summaryText, /At Springmeyer/i)
+})
+
 
