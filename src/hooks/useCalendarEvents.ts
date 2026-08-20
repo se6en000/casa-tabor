@@ -414,7 +414,7 @@ function useEventsForRange(queryKey: readonly unknown[], start: Date, end: Date)
           if (reTitle.includes('bak') && beTitle.includes('bak')) return true
         }
         if (isRePick && (beTitle.includes('pick up') || beTitle.includes('picked up') || (beTitle.includes('strings') && beTitle.includes('emme')))) {
-          if ((reTitle.includes('palm beach') || reTitle.includes('pbp')) && (beTitle.includes('palm beach') || beTitle.includes('pbp') || beTitle.includes('owen & emme') || beTitle.includes('strings'))) return true
+          if ((reTitle.includes('palm beach') || reTitle.includes('pbp')) && (beTitle.includes('palm beach') || beTitle.includes('pbp') || beTitle.includes('owen & emme') || beTitle.includes('strings') || beTitle.includes('giselle'))) return true
           if (reTitle.includes('bak') && beTitle.includes('bak')) return true
         }
         return false
@@ -429,22 +429,31 @@ function useEventsForRange(queryKey: readonly unknown[], start: Date, end: Date)
       (event) => event.status !== 'cancelled' && !event.deleted_at && eventOverlapsRange(event, start, end)
     )
 
-    // Deduplicate any overlapping identical events on the exact same date/time/title
+    // Deduplicate any overlapping identical events on the exact same date/time/title or pickup/dropoff collisions
     // (e.g. if an event has a Google-synced occurrence and a local placeholder occurrence, prefer Google)
     const seenEventKeys = new Map<string, EventWithDetails>()
     for (const ev of filteredBaseEvents) {
       const cleanTitle = (ev.title || '').trim().toLowerCase()
       const startTime = ev.start_time
-      const key = `${cleanTitle}__${startTime}`
+      const isPickup = cleanTitle.includes('pick up') || cleanTitle.includes('picked up')
+      const isDropoff = cleanTitle.includes('drop off') || cleanTitle.includes('dropped off')
       
-      const existing = seenEventKeys.get(key)
+      // Normalized key for exact matches or routine collisions on identical start times
+      const semanticKey = isPickup && (cleanTitle.includes('palm beach') || cleanTitle.includes('pbp') || cleanTitle.includes('owen') || cleanTitle.includes('emme'))
+        ? `pbp_pickup__${startTime}`
+        : isDropoff && (cleanTitle.includes('palm beach') || cleanTitle.includes('pbp') || cleanTitle.includes('owen') || cleanTitle.includes('emme'))
+        ? `pbp_dropoff__${startTime}`
+        : `${cleanTitle}__${startTime}`
+      
+      const existing = seenEventKeys.get(semanticKey)
       if (!existing) {
-        seenEventKeys.set(key, ev)
+        seenEventKeys.set(semanticKey, ev)
       } else {
-        // If one has a google_event_id or series_id, prefer it over the local placeholder
-        const isBetter = Boolean(ev.google_event_id || ev.series_id) && !existing.google_event_id && !existing.series_id
+        // If one has a google_event_id or is verified, prefer it over the unlinked placeholder
+        const isBetter = (Boolean(ev.google_event_id) && !existing.google_event_id) ||
+          (Boolean(ev.series_id) && !existing.series_id && !existing.google_event_id)
         if (isBetter) {
-          seenEventKeys.set(key, ev)
+          seenEventKeys.set(semanticKey, ev)
         }
       }
     }

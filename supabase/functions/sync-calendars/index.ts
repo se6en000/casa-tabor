@@ -357,8 +357,28 @@ async function upsertEvent(
   }
   const start = ev.start as Record<string, string> | undefined
   const end = ev.end as Record<string, string> | undefined
-  const startTime = start?.dateTime ?? (start?.date ? start.date + 'T00:00:00Z' : null)
-  const endTime = end?.dateTime ?? (end?.date ? end.date + 'T23:59:59Z' : null)
+  const isAllDay = !start?.dateTime && Boolean(start?.date)
+  let startTime: string | null = null
+  let endTime: string | null = null
+
+  if (isAllDay && start?.date) {
+    startTime = `${start.date}T00:00:00Z`
+    if (end?.date) {
+      // Google Calendar API provides end.date as an exclusive boundary (the day after the event ends).
+      // In Casa Tabor, all-day events end at 23:59:59Z on the final inclusive day.
+      const endD = new Date(`${end.date}T00:00:00Z`)
+      endD.setUTCDate(endD.getUTCDate() - 1)
+      const startD = new Date(`${start.date}T00:00:00Z`)
+      const safeEndD = endD < startD ? startD : endD
+      const endIsoDate = safeEndD.toISOString().slice(0, 10)
+      endTime = `${endIsoDate}T23:59:59Z`
+    } else {
+      endTime = `${start.date}T23:59:59Z`
+    }
+  } else {
+    startTime = start?.dateTime ?? (start?.date ? start.date + 'T00:00:00Z' : null)
+    endTime = end?.dateTime ?? (end?.date ? end.date + 'T23:59:59Z' : null)
+  }
   if (!startTime || !endTime) return
 
   let { data: existing } = await sb

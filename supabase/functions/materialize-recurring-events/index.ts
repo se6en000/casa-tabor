@@ -26,7 +26,9 @@ type SeriesRow = {
     start_time: string
     end_time: string
     all_day: boolean
-  }
+    status: string
+    deleted_at: string | null
+  } | null
 }
 
 function defaultRange(now: Date): { rangeStart: string; rangeEnd: string } {
@@ -84,7 +86,7 @@ Deno.serve(async (req) => {
       .from('event_series')
       .select(`
         id, timezone, recurrence_lines, revision, template_event_id,
-        template:events!event_series_template_event_id_fkey(start_time,end_time,all_day)
+        template:events!event_series_template_event_id_fkey(start_time,end_time,all_day,status,deleted_at)
       `)
       .eq('status', 'active')
       .order('last_materialized_at', { ascending: true, nullsFirst: true })
@@ -100,6 +102,22 @@ Deno.serve(async (req) => {
 
     const results = []
     for (const series of seriesRows) {
+      if (!series.template || series.template.status === 'cancelled' || Boolean(series.template.deleted_at)) {
+        console.warn(`[Materialize] Series ${series.id} template is cancelled or deleted. Retiring series...`)
+        const nowIso = new Date().toISOString()
+        const purgeAfterIso = new Date(Date.now() + 30 * 86400000).toISOString()
+        await supabase
+          .from('event_series')
+          .update({
+            status: 'deleted',
+            deleted_at: nowIso,
+            purge_after: purgeAfterIso,
+            updated_at: nowIso,
+          })
+          .eq('id', series.id)
+        continue
+      }
+
       const durationMs = new Date(series.template.end_time).getTime()
         - new Date(series.template.start_time).getTime()
       const generated = recurrenceEngine.generateOccurrences({
