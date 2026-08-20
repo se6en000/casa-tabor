@@ -79,6 +79,7 @@ export default function PalmBeachFolioCard({
 
   const inputRef = useRef<HTMLInputElement>(null)
   const isMicHoldingRef = useRef(false)
+  const isHoldingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Voice Dictation & AI parsing
   const handleDictationComplete = useCallback((spokenText: string) => {
@@ -469,17 +470,27 @@ export default function PalmBeachFolioCard({
               aria-label="Voice input"
               icon={<Mic size={18} className={cn(listening && 'stroke-[2.5]')} />}
               onPointerDown={() => {
-                isMicHoldingRef.current = true
-                navigator.vibrate?.(12)
-                void startDictation(title)
+                isHoldingTimerRef.current = setTimeout(() => {
+                  isMicHoldingRef.current = true
+                  navigator.vibrate?.(15)
+                  void startDictation(title)
+                }, 500)
               }}
               onPointerUp={() => {
+                if (isHoldingTimerRef.current) {
+                  clearTimeout(isHoldingTimerRef.current)
+                  isHoldingTimerRef.current = null
+                }
                 if (isMicHoldingRef.current) {
                   isMicHoldingRef.current = false
                   stopDictation()
                 }
               }}
               onPointerLeave={() => {
+                if (isHoldingTimerRef.current) {
+                  clearTimeout(isHoldingTimerRef.current)
+                  isHoldingTimerRef.current = null
+                }
                 if (isMicHoldingRef.current) {
                   isMicHoldingRef.current = false
                   stopDictation()

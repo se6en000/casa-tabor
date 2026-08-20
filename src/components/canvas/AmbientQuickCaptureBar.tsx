@@ -255,9 +255,9 @@ export default function AmbientQuickCaptureBar({ className }: Props) {
                 onPointerDown={() => {
                   isHoldingTimerRef.current = setTimeout(() => {
                     isMicHoldingRef.current = true
-                    navigator.vibrate?.(12)
+                    navigator.vibrate?.(15)
                     void startDictation(query)
-                  }, 180)
+                  }, 500)
                 }}
                 onPointerUp={() => {
                   if (isHoldingTimerRef.current) {
