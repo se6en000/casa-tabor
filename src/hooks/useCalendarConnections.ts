@@ -55,8 +55,11 @@ export function useCalendarConnections() {
 export function useStartConnect() {
   return useMutation({
     mutationFn: async (familyMemberId: string) => {
+      const returnUrl = typeof window !== 'undefined'
+        ? `${window.location.origin}/settings/google`
+        : 'https://casa-tabor.vercel.app/settings/google'
       const { data, error } = await supabase.functions.invoke('google-oauth-start', {
-        body: { family_member_id: familyMemberId },
+        body: { family_member_id: familyMemberId, return_url: returnUrl },
       })
       if (error) {
         console.error('[useStartConnect] invoke error:', error)

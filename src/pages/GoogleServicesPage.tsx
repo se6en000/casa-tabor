@@ -124,8 +124,15 @@ export default function GoogleServicesPage() {
   // OAuth start mutation
   const connectGoogle = useMutation({
     mutationFn: async ({ memberId, includeGmail }: { memberId: string; includeGmail: boolean }) => {
+      const returnUrl = typeof window !== 'undefined'
+        ? `${window.location.origin}/settings/google`
+        : 'https://casa-tabor.vercel.app/settings/google'
       const { data, error } = await supabase.functions.invoke('google-oauth-start', {
-        body: { family_member_id: memberId, include_gmail: includeGmail },
+        body: {
+          family_member_id: memberId,
+          include_gmail: includeGmail,
+          return_url: returnUrl,
+        },
       })
       if (error || !data?.url) throw new Error('Failed to start OAuth')
       window.open(data.url as string, '_self')
