@@ -395,7 +395,6 @@ async function upsertEvent(
         status: 'confirmed',
         google_connection_id: connection.id,
         google_calendar_id: calendarId,
-        is_read_only: isReadOnly || connection.access_mode !== 'writable',
         source_member_id: sourceMemberId,
         updated_at: new Date().toISOString(),
       }).eq('id', eventId)
@@ -411,7 +410,6 @@ async function upsertEvent(
         google_event_id: ev.id as string,
         google_calendar_id: calendarId,
         google_connection_id: connection.id,
-        is_read_only: isReadOnly || connection.access_mode !== 'writable',
         source_member_id: sourceMemberId,
         status: 'confirmed',
         updated_at: new Date().toISOString(),
@@ -424,6 +422,7 @@ async function upsertEvent(
       await sb.from('event_members').delete().eq('event_id', eventId)
       await sb.from('event_members').insert([...memberIds].map(fm => ({ event_id: eventId, family_member_id: fm, role: 'attendee', rsvp_status: 'accepted' })))
     }
+  } else {
     // New event — check for an existing event at this time for this member.
     // If one exists and is enriched, patch the incoming Google event with our canonical data
     // so both calendar entries stay consistent. Then skip the DB insert.
@@ -469,7 +468,6 @@ async function upsertEvent(
       google_event_id: ev.id as string,
       google_calendar_id: calendarId,
       google_connection_id: connection.id,
-      is_read_only: isReadOnly || connection.access_mode !== 'writable',
       source_member_id: sourceMemberId,
       status: 'confirmed',
       updated_at: new Date().toISOString()
