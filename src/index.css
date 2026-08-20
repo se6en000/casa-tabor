@@ -931,7 +931,6 @@ html[data-density="kiosk"] .ai-composer-kiosk-only {
 
 /* STATE 1: IDLE */
 .copilot-state-idle .copilot-svg-root {
-  filter: drop-shadow(0 0 4px rgba(212, 175, 55, 0.45)) drop-shadow(0 0 10px rgba(246, 226, 182, 0.25));
   animation: copilot-idle-breathe 3.8s infinite ease-in-out;
 }
 
@@ -1021,13 +1020,13 @@ html[data-density="kiosk"] .ai-composer-kiosk-only {
 
 /* KEYFRAMES */
 @keyframes copilot-idle-breathe {
-  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 3px rgba(212, 175, 55, 0.35)); }
-  50% { transform: scale(1.04); filter: drop-shadow(0 0 7px rgba(212, 175, 55, 0.7)) drop-shadow(0 0 14px rgba(246, 226, 182, 0.35)); }
+  0%, 100% { transform: scale(1); opacity: 0.92; }
+  50% { transform: scale(1.04); opacity: 1; }
 }
 
 @keyframes copilot-star-twinkle {
   0%, 100% { transform: scale(0.82) rotate(0deg); opacity: 0.65; }
-  50% { transform: scale(1.22) rotate(15deg); opacity: 1; filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.9)); }
+  50% { transform: scale(1.22) rotate(15deg); opacity: 1; }
 }
 
 @keyframes copilot-shimmer-pass {

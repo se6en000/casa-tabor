@@ -138,7 +138,7 @@ fi
   --ignore-gpu-blocklist \
   --enable-gpu-rasterization \
   --enable-zero-copy \
-  --num-raster-threads=4 \
+  --num-raster-threads=2 \
   --use-gl=angle \
   --use-angle=gles \
   --disable-gpu-sandbox \
