@@ -64,14 +64,20 @@ import uvicorn
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("sensor-bridge")
 
-SUPABASE_URL = "https://sjiejymuuuqzqukyeagk.supabase.co"
-SUPABASE_SERVICE_KEY = "sb_secret_HpkjyskE55sDH_hLNKEK1g_BVrA7f2U"
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://sjiejymuuuqzqukyeagk.supabase.co")
+SUPABASE_SERVICE_KEY = os.environ.get(
+    "SUPABASE_ANON_KEY",
+    os.environ.get(
+        "SUPABASE_SERVICE_KEY",
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNqaWVqeW11dXVxenF1a3llYWdrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5MTY3MzIsImV4cCI6MjA5NTQ5MjczMn0.sfEpSQkkq7ZbIwjEffEfEKIir15RgqZMGILO_mF4XhM",
+    ),
+)
 SUPABASE_SENSOR_ID  = "00000000-0000-0000-0000-000000000001"  # fixed row for latest reading
 
 _push_enabled           = False
 _push_checked_at        = 0.0
 _push_enabled_since     = 0.0   # when push was last turned on (0 = not active)
-PUSH_CHECK_INTERVAL     = 15
+PUSH_CHECK_INTERVAL     = 60
 PUSH_AUTO_DISABLE_S     = 600   # auto-disable push after 10 minutes
 SUPABASE_SETTINGS_KEY   = "display_config"
 

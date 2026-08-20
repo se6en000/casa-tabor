@@ -263,8 +263,8 @@ function useEventTransportationPlans(anchor: Date) {
         transportation_plan: row.transportation_plan,
       }))
     },
-    staleTime: 60_000,
-    refetchInterval: isPageVisible ? 60_000 : false,
+    staleTime: 5 * 60_000,
+    refetchInterval: isPageVisible ? 10 * 60_000 : false,
     refetchIntervalInBackground: false,
   })
 }
@@ -275,8 +275,8 @@ function useEventsForRange(queryKey: readonly unknown[], start: Date, end: Date)
   const eventsQuery = useQuery({
     queryKey,
     queryFn: () => fetchEventsForRange(start, end),
-    staleTime: 20_000,
-    refetchInterval: isPageVisible ? 20_000 : false,
+    staleTime: 5 * 60_000,
+    refetchInterval: isPageVisible ? 10 * 60_000 : false,
     refetchIntervalInBackground: false,
   })
   const transportationQuery = useEventTransportationPlans(start)
@@ -518,8 +518,8 @@ export function useWeekEventIndex(selectedDate: Date) {
       if (error) throw error
       return data ?? []
     },
-    staleTime: 30_000,
-    refetchInterval: isPageVisible ? 30_000 : false,
+    staleTime: 5 * 60_000,
+    refetchInterval: isPageVisible ? 10 * 60_000 : false,
     refetchIntervalInBackground: false,
   })
 }

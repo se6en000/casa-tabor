@@ -60,7 +60,8 @@ export function useGoogleSyncTriage() {
   // Query failed sync jobs
   const { data: failedJobs = [], isLoading, refetch } = useQuery<FailedSyncJob[]>({
     queryKey: ['google-sync-triage'],
-    refetchInterval: 15_000,
+    staleTime: 60_000,
+    refetchInterval: 5 * 60_000,
     queryFn: async () => {
       const { data: jobs, error } = await supabase
         .from('google_sync_jobs')
