@@ -19,7 +19,10 @@ export default function SwipeableReminderPill({ id: _id, title, members, onClick
     <Chip
       size="sm"
       tone="accent"
-      onClick={onClick}
+      onClick={(e) => {
+        e.stopPropagation()
+        onClick?.()
+      }}
       icon={<Bell size={13} />}
     >
       <span className="truncate">{title}</span>
