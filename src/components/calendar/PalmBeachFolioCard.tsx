@@ -3,7 +3,7 @@ import { format, addHours, addDays, setHours, setMinutes, isToday, isTomorrow, i
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Mic, Sparkles, Clock,
-  ChevronDown, ChevronUp, Bell, Users, Plus, CheckCircle2,
+  ChevronDown, ChevronUp, Bell, Users, Plus, CheckCircle2, X,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
@@ -76,13 +76,14 @@ export default function PalmBeachFolioCard({
   const [saveError, setSaveError] = useState('')
   const [saveSuccess, setSaveSuccess] = useState('')
   const [aiHighlight, setAiHighlight] = useState(false)
+  const [geminiParsedMeta, setGeminiParsedMeta] = useState<{ detailsCount: number; rawText: string } | null>(null)
 
   const inputRef = useRef<HTMLInputElement>(null)
   const isMicHoldingRef = useRef(false)
   const isHoldingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Voice Dictation & AI parsing
-  const handleDictationComplete = useCallback((spokenText: string) => {
+  // Voice Dictation & Gemini AI parsing
+  const handleGeminiParse = useCallback((spokenText: string) => {
     if (!spokenText.trim()) return
     const parsed = parseCalendarNaturalLanguage(spokenText, contextDate, familyMembers, savedPlaces)
 
@@ -105,12 +106,29 @@ export default function PalmBeachFolioCard({
         mode: 'existing',
         placeId: parsed.matchedPlace.id,
       })
+    } else if (parsed.locationName) {
+      setPlaceSelection({
+        mode: 'new',
+        input: {
+          name: parsed.locationName,
+        },
+      })
     }
+
+    if (parsed.notes) {
+      setNotes(parsed.notes)
+      setShowNotes(true)
+    }
+
+    setGeminiParsedMeta({
+      detailsCount: parsed.matchedDetailsCount,
+      rawText: spokenText.trim(),
+    })
 
     // Trigger golden celebration flash & tactile tick
     setAiHighlight(true)
     navigator.vibrate?.([10, 30, 14])
-    setTimeout(() => setAiHighlight(false), 1200)
+    setTimeout(() => setAiHighlight(false), 1400)
   }, [contextDate, familyMembers, savedPlaces])
 
   const { listening, start: startDictation, stop: stopDictation, toggle: toggleDictation, resetBuffer: resetDictationBuffer } = useFieldDictation({
@@ -118,20 +136,31 @@ export default function PalmBeachFolioCard({
       setTitle(text)
     },
     onComplete: (finalText) => {
-      handleDictationComplete(finalText)
+      handleGeminiParse(finalText)
     },
   })
 
   // Focus title on mount & parse initialQuery if provided
   useEffect(() => {
     if (initialQuery && initialQuery.trim()) {
-      handleDictationComplete(initialQuery)
+      handleGeminiParse(initialQuery)
     }
     const timer = setTimeout(() => {
       inputRef.current?.focus()
     }, 100)
     return () => clearTimeout(timer)
-  }, [initialQuery, handleDictationComplete])
+  }, [initialQuery, handleGeminiParse])
+
+  const resolvedPlaceLabel = useMemo(() => {
+    if (!placeSelection) return undefined
+    if (placeSelection.mode === 'existing') {
+      return savedPlaces.find((p) => p.id === placeSelection.placeId)?.name
+    }
+    if (placeSelection.mode === 'new') {
+      return placeSelection.input.name
+    }
+    return undefined
+  }, [placeSelection, savedPlaces])
 
   // Date change handler (scoped specifically to this entry card)
   const handleDateChange = (newDate: Date) => {
@@ -448,39 +477,70 @@ export default function PalmBeachFolioCard({
         </div>
       </div>
 
-      {/* ── Title Input & Press-and-Hold Jewel Voice Mic ── */}
-      <div className="space-y-3">
-        <div className="relative flex items-center">
-          <input
-            ref={inputRef}
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') void handleSave()
-              if (e.key === 'Escape') onClose()
-            }}
-            placeholder={
-              listening
-                ? 'Listening... speak naturally...'
-                : eventType === 'reminder'
-                  ? 'Remind to... or hold mic'
-                  : "What's happening? or hold mic"
-            }
-            disabled={saving}
-            className={cn(
-              'w-full pl-3.5 pr-14 py-2.5 min-h-[44px] bg-casa-sand/50 border rounded-xl font-body text-body text-casa-text placeholder:text-casa-muted/70 transition-all outline-hidden',
-              listening
-                ? 'border-casa-gold ring-2 ring-casa-gold/30 bg-casa-gold/5'
-                : 'border-casa-border/80 focus:border-casa-gold focus:bg-white',
-            )}
-          />
+      {/* ── Title Input & Signature Golden Jewel Mic ── */}
+      <div className="space-y-2">
+        <div
+          className={cn(
+            'relative flex items-center gap-2.5 p-2 rounded-2xl border transition-all duration-300',
+            listening
+              ? 'bg-gradient-to-r from-casa-surface to-amber-500/[0.12] border-casa-gold ring-2 ring-casa-gold/35 shadow-[0_0_20px_rgba(201,169,110,0.25)]'
+              : 'bg-casa-sand/40 border-casa-gold/30 focus-within:border-casa-gold focus-within:bg-white focus-within:ring-2 focus-within:ring-casa-gold/20',
+          )}
+        >
+          {/* Left Jewel Button: Tap to toggle listening, Hold to speak until release */}
+          <div className="relative shrink-0 flex items-center justify-center">
+            <AnimatePresence>
+              {listening && (
+                <>
+                  <motion.span
+                    initial={{ scale: 0.9, opacity: 0.8 }}
+                    animate={{ scale: 1.45, opacity: 0 }}
+                    transition={{ duration: 1.8, repeat: Infinity, ease: 'easeOut' }}
+                    className="absolute inset-0 rounded-xl bg-amber-400/40 pointer-events-none"
+                  />
+                  <motion.span
+                    initial={{ scale: 0.9, opacity: 0.6 }}
+                    animate={{ scale: 1.25, opacity: 0 }}
+                    transition={{ duration: 1.8, repeat: Infinity, ease: 'easeOut', delay: 0.4 }}
+                    className="absolute inset-0 rounded-xl bg-casa-gold/30 pointer-events-none"
+                  />
+                </>
+              )}
+            </AnimatePresence>
 
-          {/* Press-and-Hold / Tap-to-Dictate Jewel Mic Button (44px target) */}
-          <div className="absolute right-1.5 flex items-center">
             <IconButton
-              aria-label="Voice input"
-              icon={<Mic size={18} className={cn(listening && 'stroke-[2.5]')} />}
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-label={listening ? 'Listening... click or release to stop' : 'Tap to dictate with Gemini or hold to speak'}
+              icon={
+                listening ? (
+                  <div className="flex items-center justify-center gap-[2.5px] h-4 px-0.5">
+                    <motion.span
+                      animate={{ height: ['4px', '14px', '7px', '16px', '4px'] }}
+                      transition={{ duration: 0.75, repeat: Infinity, ease: 'easeInOut' }}
+                      className="w-[2px] rounded-full bg-casa-navy"
+                    />
+                    <motion.span
+                      animate={{ height: ['11px', '5px', '17px', '9px', '11px'] }}
+                      transition={{ duration: 0.65, repeat: Infinity, ease: 'easeInOut', delay: 0.1 }}
+                      className="w-[2px] rounded-full bg-casa-navy"
+                    />
+                    <motion.span
+                      animate={{ height: ['6px', '16px', '4px', '13px', '6px'] }}
+                      transition={{ duration: 0.85, repeat: Infinity, ease: 'easeInOut', delay: 0.2 }}
+                      className="w-[2px] rounded-full bg-casa-navy"
+                    />
+                    <motion.span
+                      animate={{ height: ['14px', '7px', '13px', '5px', '14px'] }}
+                      transition={{ duration: 0.7, repeat: Infinity, ease: 'easeInOut', delay: 0.15 }}
+                      className="w-[2px] rounded-full bg-casa-navy"
+                    />
+                  </div>
+                ) : (
+                  <Mic size={17} className="text-amber-800 transition-transform group-hover:scale-105" />
+                )
+              }
               onPointerDown={() => {
                 isHoldingTimerRef.current = setTimeout(() => {
                   isMicHoldingRef.current = true
@@ -514,14 +574,89 @@ export default function PalmBeachFolioCard({
                 }
               }}
               className={cn(
-                'min-h-[44px] min-w-[44px] rounded-xl flex items-center justify-center transition-all select-none active:scale-95',
+                'w-9 h-9 min-h-0 rounded-xl flex items-center justify-center font-bold shadow-2xs border shrink-0 transition-all select-none active:scale-95 cursor-pointer group',
                 listening
-                  ? 'bg-casa-gold text-casa-navy shadow-glow-gold animate-bounce'
-                  : 'bg-casa-navy/10 hover:bg-casa-gold/20 text-casa-navy hover:text-casa-gold border border-casa-gold/30',
+                  ? 'bg-gradient-to-tr from-amber-500 to-casa-gold text-casa-navy border-casa-gold shadow-[0_0_16px_rgba(201,169,110,0.55)] ring-2 ring-casa-gold/60'
+                  : 'bg-casa-gold/20 text-casa-navy border-casa-gold/30 hover:bg-casa-gold/30 hover:border-casa-gold/60'
               )}
             />
           </div>
+
+          {/* Title Text Input */}
+          <div className="flex-1 min-w-0">
+            <input
+              ref={inputRef}
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  if (geminiParsedMeta && title.trim()) {
+                    void handleSave()
+                  } else if (title.trim()) {
+                    handleGeminiParse(title)
+                  }
+                }
+                if (e.key === 'Escape') onClose()
+              }}
+              placeholder={
+                listening
+                  ? 'Listening... speak naturally...'
+                  : eventType === 'reminder'
+                    ? 'Remind to... "Call dentist at 2pm"'
+                    : 'What\'s happening? "Tennis with Jake tomorrow 9am"...'
+              }
+              disabled={saving}
+              className="w-full bg-transparent font-sans text-body-lg sm:text-body-base font-medium text-casa-navy placeholder:font-normal placeholder:text-casa-muted/70 focus:outline-hidden p-0 leading-snug"
+            />
+          </div>
+
+          {title.length > 0 && (
+            <IconButton
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setTitle('')
+                setGeminiParsedMeta(null)
+              }}
+              aria-label="Clear title"
+              icon={<X size={14} className="text-casa-muted hover:text-casa-navy" />}
+              className="w-6 h-6 rounded-full flex items-center justify-center shrink-0"
+            />
+          )}
         </div>
+
+        {/* Gemini Parsed Indicator & Undo Pill */}
+        <AnimatePresence>
+          {geminiParsedMeta && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-casa-gold/30 text-3xs font-medium text-amber-950"
+            >
+              <div className="flex items-center gap-1.5 truncate">
+                <Sparkles size={12} className="text-amber-800 shrink-0" />
+                <span>
+                  <strong className="font-bold text-amber-900">✦ Gemini Auto-Fill:</strong> {geminiParsedMeta.detailsCount} logistics matched to fields below
+                </span>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setTitle(geminiParsedMeta.rawText)
+                  setGeminiParsedMeta(null)
+                }}
+                className="p-0 min-h-0 h-auto text-amber-800 hover:text-amber-950 underline font-bold whitespace-nowrap cursor-pointer shrink-0 ml-1 bg-transparent hover:bg-transparent"
+              >
+                Undo ↺
+              </Button>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Live Audio Listening Waveform Shimmer */}
         <AnimatePresence>
@@ -530,10 +665,10 @@ export default function PalmBeachFolioCard({
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-casa-gold/15 border border-casa-gold/40 text-caption font-bold text-casa-navy"
+              className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-casa-gold/15 border border-casa-gold/40 text-caption font-bold text-casa-navy"
             >
               <Sparkles size={14} className="text-casa-gold animate-spin" />
-              <span>Voice AI active — release or pause to auto-fill</span>
+              <span>Gemini live voice listening — release or pause to auto-fill</span>
             </motion.div>
           )}
         </AnimatePresence>
@@ -566,23 +701,29 @@ export default function PalmBeachFolioCard({
               ].map((preset) => {
                 const isSelected = !allDay && new Date(startDT).getHours() === preset.h && new Date(startDT).getMinutes() === preset.m
                 return (
-                  <Button
+                  <motion.div
                     key={preset.label}
-                    type="button"
-                    variant={isSelected ? 'primary' : 'secondary'}
-                    onClick={() => applyPresetTime(preset.h, preset.m)}
-                    className={cn(
-                      'min-h-[48px] px-2 py-1.5 rounded-xl text-center transition-all cursor-pointer active:scale-95 flex flex-col items-center justify-center',
-                      isSelected
-                        ? 'bg-casa-navy text-white border-casa-navy shadow-xs'
-                        : 'bg-casa-sand/60 hover:bg-casa-sand text-casa-text border-casa-border/70',
-                    )}
+                    animate={aiHighlight && isSelected ? { scale: [1, 1.05, 1] } : {}}
+                    transition={{ duration: 0.35 }}
+                    className="flex-1"
                   >
-                    <div className="text-caption font-bold leading-tight">{preset.label}</div>
-                    <div className={cn('text-3xs leading-tight', isSelected ? 'text-casa-gold' : 'text-casa-muted')}>
-                      {preset.sub}
-                    </div>
-                  </Button>
+                    <Button
+                      type="button"
+                      variant={isSelected ? 'primary' : 'secondary'}
+                      onClick={() => applyPresetTime(preset.h, preset.m)}
+                      className={cn(
+                        'w-full min-h-[48px] px-2 py-1.5 rounded-xl text-center transition-all cursor-pointer active:scale-95 flex flex-col items-center justify-center',
+                        isSelected
+                          ? 'bg-casa-navy text-white border-casa-navy shadow-xs ring-2 ring-casa-gold/60'
+                          : 'bg-casa-sand/60 hover:bg-casa-sand text-casa-text border-casa-border/70',
+                      )}
+                    >
+                      <div className="text-caption font-bold leading-tight">{preset.label}</div>
+                      <div className={cn('text-3xs leading-tight', isSelected ? 'text-casa-gold' : 'text-casa-muted')}>
+                        {preset.sub}
+                      </div>
+                    </Button>
+                  </motion.div>
                 )
               })}
             </div>
@@ -668,22 +809,31 @@ export default function PalmBeachFolioCard({
             {familyMembers.map((member: FamilyMember) => {
               const isSelected = selectedMemberIds.includes(member.id)
               return (
-                <Chip
+                <motion.div
                   key={member.id}
-                  size="md"
-                  selected={isSelected}
-                  onClick={() => toggleMember(member.id)}
-                  disabled={saving || Boolean(saveSuccess)}
-                  icon={
-                    <PersonAvatarStack
-                      people={[{ id: member.id, name: member.name, color: member.color_hex }]}
-                      size="sm"
-                      max={1}
-                    />
-                  }
+                  animate={aiHighlight && isSelected ? { scale: [1, 1.08, 1] } : {}}
+                  transition={{ duration: 0.35 }}
                 >
-                  {member.name}
-                </Chip>
+                  <Chip
+                    size="md"
+                    selected={isSelected}
+                    onClick={() => toggleMember(member.id)}
+                    disabled={saving || Boolean(saveSuccess)}
+                    className={cn(
+                      'transition-all select-none cursor-pointer',
+                      isSelected && 'ring-2 ring-casa-gold/60 shadow-xs'
+                    )}
+                    icon={
+                      <PersonAvatarStack
+                        people={[{ id: member.id, name: member.name, color: member.color_hex }]}
+                        size="sm"
+                        max={1}
+                      />
+                    }
+                  >
+                    {member.name}
+                  </Chip>
+                </motion.div>
               )
             })}
           </div>
@@ -695,6 +845,7 @@ export default function PalmBeachFolioCard({
             <DirectoryPlaceInput
               label="Where"
               placeholder="Add location or saved venue"
+              displayLabel={resolvedPlaceLabel}
               onChange={setPlaceSelection}
               onClear={() => setPlaceSelection(null)}
             />
