@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import {
   format,
   addDays,
@@ -10,17 +10,25 @@ import {
 } from 'date-fns'
 import {
   ChevronRight,
-  Check,
+  ChevronDown,
+  ChevronUp,
   CheckCircle2,
   CheckSquare,
 } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { useRollingEvents, type EventWithDetails } from '../../hooks/useCalendarEvents'
 import { getEventStartDate, getEventEndDate, eventOverlapsDay } from '../../utils/eventTime'
 import { useLiveClock } from '../../hooks/useLiveClock'
+import { usePageVisibility } from '../../hooks/usePageVisibility'
+import {
+  fetchTodoCompletions,
+  saveTodoToggle,
+  subscribeToTodoSync,
+  getStoredTodoCompletions,
+} from '../../utils/todoCompletionsSync.ts'
 import { inferEventMode, inferEventPlanKind } from '../../lib/eventCommandCenter'
 import { isReminderOrChore } from '../../lib/heroFocus.mjs'
 import { openEventDetails } from '../../utils/openEventDetails'
-import { useReminderNeedsYouActions } from '../../hooks/useReminderNeedsYouActions'
 import GmailSyncStatusIndicator from '../shared/GmailSyncStatusIndicator'
 import { EventSyncStatusDot } from '../calendar/EventSyncStatusDot'
 import { IconButton } from '../ui'
@@ -57,12 +65,39 @@ interface MobileTodayViewProps {
 
 export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate }: MobileTodayViewProps) {
   const now = useLiveClock(30_000)
+  const isPageVisible = usePageVisibility()
   const { data: rollingEvents = [] } = useRollingEvents(now)
-  const { completeReminder } = useReminderNeedsYouActions()
+  const [showCompletedTodos, setShowCompletedTodos] = useState(true)
 
-  const [completedTodoIds, setCompletedTodoIds] = useState<Set<string>>(new Set())
+  const { data: serverCompletions } = useQuery({
+    queryKey: ['household-todo-completions'],
+    queryFn: fetchTodoCompletions,
+    staleTime: 60_000,
+    refetchInterval: isPageVisible ? 120_000 : false,
+  })
 
-  // Toggle To-Do completion with haptic feedback
+  const [completedItems, setCompletedItems] = useState<Record<string, boolean>>(() => {
+    return getStoredTodoCompletions()
+  })
+
+  useEffect(() => {
+    if (serverCompletions && Object.keys(serverCompletions).length > 0) {
+      setCompletedItems((prev) => ({ ...serverCompletions, ...prev }))
+    }
+  }, [serverCompletions])
+
+  useEffect(() => {
+    const unsubscribe = subscribeToTodoSync((id, completed, fullMap) => {
+      setCompletedItems((prev) => ({
+        ...prev,
+        ...fullMap,
+        [id]: completed,
+      }))
+    })
+    return unsubscribe
+  }, [])
+
+  // Toggle To-Do completion with haptic feedback & realtime cross-device sync
   const handleToggleTodo = async (id: string, e?: React.MouseEvent) => {
     e?.stopPropagation()
     try {
@@ -71,21 +106,11 @@ export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate 
       // Haptics optional
     }
 
-    setCompletedTodoIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) {
-        next.delete(id)
-      } else {
-        next.add(id)
-      }
-      return next
+    setCompletedItems((prev) => {
+      const nextVal = !prev[id]
+      void saveTodoToggle(id, nextVal)
+      return { ...prev, [id]: nextVal }
     })
-
-    try {
-      await completeReminder(id)
-    } catch (err) {
-      console.error('Failed to complete to-do:', err)
-    }
   }
 
   // To-Do items: Filtered strictly to Due Today and Missed/Overdue uncompleted items
@@ -102,8 +127,12 @@ export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate 
   }, [rollingEvents, now])
 
   const pendingTodos = useMemo(() => {
-    return todoItems.filter((t) => !completedTodoIds.has(t.id))
-  }, [todoItems, completedTodoIds])
+    return todoItems.filter((t) => !completedItems[t.id])
+  }, [todoItems, completedItems])
+
+  const completedTodos = useMemo(() => {
+    return todoItems.filter((t) => Boolean(completedItems[t.id]))
+  }, [todoItems, completedItems])
 
   // Next 7 Days Horizon (Day 0 = Today, Day 1 = Tomorrow, ..., Day 6)
   const next7Days = useMemo(() => {
@@ -149,7 +178,9 @@ export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate 
             </span>
           </div>
           <span className="text-caption text-casa-muted font-medium">
-            {pendingTodos.length} {pendingTodos.length === 1 ? 'task' : 'tasks'}
+            {completedTodos.length > 0
+              ? `${pendingTodos.length} left · ${completedTodos.length} done`
+              : `${pendingTodos.length} ${pendingTodos.length === 1 ? 'task' : 'tasks'}`}
           </span>
         </div>
 
@@ -160,12 +191,12 @@ export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate 
           </div>
         ) : (
           <div className="flex flex-col gap-1.5">
-            {todoItems.map((todo) => {
-              const isCompleted = completedTodoIds.has(todo.id)
+            {/* ── Active Pending To-Dos ── */}
+            {pendingTodos.map((todo) => {
               const memberName = todo.members?.[0]?.family_member?.name || null
               const memberColorClass = getMemberColorClass(todo.members?.[0]?.family_member?.color_hex)
               const startDate = getEventStartDate(todo)
-              const isMissed = isBefore(startDate, startOfDay(now)) && !isCompleted
+              const isMissed = isBefore(startDate, startOfDay(now))
               const isToday = isSameDay(startDate, now)
 
               return (
@@ -181,32 +212,21 @@ export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate 
                       openEventDetails(todo.id)
                     }
                   }}
-                  className={cn(
-                    'flex items-center gap-3 p-3 rounded-xl bg-casa-surface border border-casa-border shadow-2xs hover:border-casa-gold active:scale-[0.98] transition-all duration-150 cursor-pointer',
-                    isCompleted && 'opacity-60 bg-casa-surface/50'
-                  )}
+                  className="flex items-center gap-3 p-3 rounded-xl bg-casa-surface border border-casa-border shadow-2xs hover:border-casa-gold active:scale-[0.98] transition-all duration-150 cursor-pointer"
                 >
                   {/* Accessible Checkbox Toggle */}
                   <IconButton
-                    variant={isCompleted ? 'primary' : 'ghost'}
+                    variant="ghost"
                     size="sm"
-                    icon={<Check size={14} strokeWidth={3} className={isCompleted ? 'text-white' : 'text-casa-muted/60'} />}
-                    aria-label={`Mark ${todo.title} as ${isCompleted ? 'incomplete' : 'complete'}`}
+                    icon={<div className="w-4.5 h-4.5 rounded-full border-[1.5px] border-slate-300 hover:border-casa-navy bg-white shadow-2xs transition-colors" />}
+                    aria-label={`Mark ${todo.title} as complete`}
                     onClick={(e) => void handleToggleTodo(todo.id, e)}
-                    className={cn(
-                      'rounded-full shrink-0 transition-all duration-150',
-                      isCompleted ? 'bg-emerald-500 text-white' : 'border border-casa-border hover:border-casa-gold bg-casa-bg'
-                    )}
+                    className="rounded-full shrink-0 transition-all duration-150 h-7 w-7 min-h-[44px] min-w-[44px] p-0 flex items-center justify-center text-casa-muted hover:text-casa-navy hover:bg-casa-surface-subtle"
                   />
 
                   {/* To-Do Title and Metadata */}
                   <div className="min-w-0 flex-1">
-                    <div
-                      className={cn(
-                        'text-body-sm font-semibold text-casa-navy truncate transition-all duration-150',
-                        isCompleted && 'line-through text-casa-muted'
-                      )}
-                    >
+                    <div className="text-body-sm font-semibold text-casa-navy truncate transition-all duration-150">
                       {todo.title}
                     </div>
                     <div className="flex items-center gap-2 text-2xs text-casa-muted mt-0.5 truncate">
@@ -232,6 +252,75 @@ export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate 
                 </div>
               )
             })}
+
+            {/* ── Option B: Completed Today Section (Expanded by default) ── */}
+            {completedTodos.length > 0 && (
+              <div className="pt-2 border-t border-casa-border/40 mt-1 flex flex-col gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setShowCompletedTodos(!showCompletedTodos)}
+                  className="flex items-center justify-between py-1 px-1 rounded-lg text-casa-muted hover:text-casa-navy transition-colors text-caption font-semibold cursor-pointer min-h-[36px]"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
+                    <span>Completed Today ({completedTodos.length})</span>
+                  </div>
+                  {showCompletedTodos ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                </button>
+
+                {showCompletedTodos && (
+                  <div className="flex flex-col gap-1">
+                    {completedTodos.map((todo) => {
+                      const memberName = todo.members?.[0]?.family_member?.name || null
+                      const memberColorClass = getMemberColorClass(todo.members?.[0]?.family_member?.color_hex)
+
+                      return (
+                        <div
+                          key={todo.id}
+                          role="button"
+                          tabIndex={0}
+                          data-tactile="true"
+                          onClick={() => openEventDetails(todo.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              openEventDetails(todo.id)
+                            }
+                          }}
+                          className="flex items-center gap-3 p-2.5 rounded-xl bg-emerald-500/[0.04] border border-emerald-500/15 active:scale-[0.98] transition-all duration-150 cursor-pointer"
+                        >
+                          <IconButton
+                            variant="ghost"
+                            size="sm"
+                            icon={<CheckCircle2 size={16} className="text-emerald-600" />}
+                            aria-label={`Mark ${todo.title} as incomplete`}
+                            onClick={(e) => void handleToggleTodo(todo.id, e)}
+                            className="rounded-full shrink-0 transition-all duration-150 h-7 w-7 min-h-[44px] min-w-[44px] p-0 flex items-center justify-center text-emerald-700 bg-emerald-100/70 hover:bg-emerald-200"
+                          />
+
+                          <div className="min-w-0 flex-1">
+                            <div className="text-body-sm font-normal line-through text-casa-muted/70 truncate transition-all duration-150">
+                              {todo.title}
+                            </div>
+                            <div className="flex items-center gap-2 text-2xs text-casa-muted/60 mt-0.5 truncate">
+                              <span>Today</span>
+                              {memberName && (
+                                <span className="flex items-center gap-1 opacity-70">
+                                  <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', memberColorClass)} />
+                                  <span>{memberName}</span>
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <ChevronRight size={14} className="text-casa-muted/40 shrink-0" />
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </section>
