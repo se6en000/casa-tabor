@@ -1,60 +1,60 @@
-import { useMemo, useState, useCallback, useEffect } from 'react'
-import { addDays, format, differenceInMinutes, parseISO } from 'date-fns'
+import { useMemo, useState, useEffect, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { format, addDays, parseISO } from 'date-fns'
+import type { FamilyMember, MemberAvailabilityException } from '../types'
 import { useFamilyMembers } from './useFamilyMembers'
 import { useMemberAvailability } from './useMemberAvailability'
 import { useTodayEvents, useTomorrowEvents, type EventWithDetails } from './useCalendarEvents'
-import { usePageVisibility } from './usePageVisibility'
-import {
-  fetchTodoCompletions,
-  saveTodoToggle,
-  subscribeToTodoSync,
-  getStoredTodoCompletions,
-} from '../utils/todoCompletionsSync.ts'
-import { isReminderOrChore } from '../lib/heroFocus.mjs'
 import {
   deserializeRoutineFromAvailabilityRules,
-  deriveAmbientRoutineStatus,
-  isRoutineDropoffException,
-  getEstimatedDriveMinutes,
-  applyTimeToDate,
-  formatChildNames,
+  formatDisplayVenueName,
   type FamilyRoutine,
   type AmbientRoutineStatus,
+  deriveAmbientRoutineStatus,
+  resolveDayTypeForDate,
+  type RoutineDayType,
 } from '../lib/familyRoutines'
-import type { FamilyMember, MemberAvailabilityException } from '../types'
-import { resolveEventDriver } from '../lib/driverConflictEngine'
+import { isReminderOrChore } from '../lib/heroFocus.mjs'
+import {
+  fetchTodoCompletions,
+  getStoredTodoCompletions,
+  saveTodoToggle,
+  subscribeToTodoSync,
+} from '../utils/todoCompletionsSync'
+import { usePageVisibility } from './usePageVisibility'
+
+export { resolveDayTypeForDate, type RoutineDayType }
 
 export interface DepartureItem {
   id: string
+  title?: string
   venueName: string
   venueAddress: string
-  arrivalWindow: string
-  schoolStartTime: string
-  departureTime: string
-  leaveByTimeFormatted: string
-  minutesUntilLeave: number
+  shortVenueName?: string
+  departureTime: string // ISO string
+  leaveByTimeFormatted: string // e.g. "7:42 AM"
+  arrivalWindow: string // e.g. "8:00 AM"
   driveMinutes: number
   driverName: string
   driverMember: FamilyMember | null
   children: FamilyMember[]
-  childNamesFormatted: string
+  childNamesFormatted: string // e.g. "Emme & Owen"
   isException: boolean
-  exceptionLabel: string | null
+  exceptionLabel: string | null // e.g. "Early Strings"
+  isCompleted: boolean // True if departureTime + 20 min grace window has passed
   isLeaveNow: boolean
   isPrepUrgent: boolean
-  isUpcoming: boolean
-  isCompleted: boolean
+  minutesUntilLeave: number
+  isDeparted: boolean
+  isWeekendActivity?: boolean
 }
-
-export type TomorrowDeparture = DepartureItem
 
 export interface BedtimePrepItem {
   id: string
   label: string
   completed: boolean
   childName?: string
-  iconType: 'music' | 'backpack' | 'bottle' | 'lunch' | 'sports' | 'general'
+  iconType?: 'backpack' | 'bottle' | 'lunch' | 'music' | 'sports' | 'gift' | 'general'
 }
 
 export interface FamilyRoutineIntelligence {
@@ -63,6 +63,12 @@ export interface FamilyRoutineIntelligence {
   isMorning: boolean
   isDaytime: boolean
   targetDate: Date
+  todayDayType: RoutineDayType
+  tomorrowDayType: RoutineDayType
+  isTodayWeekend: boolean
+  isTomorrowWeekend: boolean
+  isTodaySchoolDay: boolean
+  isTomorrowSchoolDay: boolean
   todayDayName: string
   todayFormattedDate: string
   todayDepartures: DepartureItem[]
@@ -89,6 +95,44 @@ export interface FamilyRoutineIntelligence {
 
 const STORAGE_PREFIX = 'casa_bedtime_prep_'
 
+function getEstimatedDriveMinutes(venueName = '', venueAddress = ''): number {
+  const text = `${venueName} ${venueAddress}`.toLowerCase()
+  if (text.includes('bak middle')) return 18
+  if (text.includes('palm beach public')) return 10
+  if (text.includes('phipps') || text.includes('soccer')) return 12
+  if (text.includes('echo lake')) return 18
+  if (text.includes('cocoanut row')) return 10
+  if (text.includes('great lawn') || text.includes('pompano')) return 35
+  if (text.includes('cox science') || text.includes('aquarium')) return 10
+  return 15
+}
+
+function resolveEventDriver(
+  evt: EventWithDetails,
+  familyMembers: FamilyMember[],
+): { id: string | null; name: string | null } {
+  if (evt.plan_override?.driver_overrides) {
+    const overrideKeys = Object.keys(evt.plan_override.driver_overrides)
+    if (overrideKeys.length > 0) {
+      const driverMemberId = evt.plan_override.driver_overrides[overrideKeys[0]]
+      const driver = familyMembers.find((m) => m.id === driverMemberId)
+      if (driver) return { id: driver.id, name: driver.name }
+    }
+  }
+
+  const driverMember = (evt.members || []).find((m) => m.role === 'driver')?.family_member
+  if (driverMember) {
+    return { id: driverMember.id, name: driverMember.name }
+  }
+
+  const titleLower = (evt.title || '').toLowerCase()
+  if (titleLower.includes('jake')) return { id: null, name: 'Jake' }
+  if (titleLower.includes('kelly')) return { id: null, name: 'Kelly' }
+  if (titleLower.includes('giselle')) return { id: null, name: 'Giselle' }
+
+  return { id: null, name: 'Jake' }
+}
+
 function deriveDeparturesForDate(
   targetDate: Date,
   now: Date,
@@ -97,10 +141,84 @@ function deriveDeparturesForDate(
   availabilityExceptions: MemberAvailabilityException[] = [],
   calendarEvents: EventWithDetails[] = [],
 ): DepartureItem[] {
-  if (familyRoutines.length === 0 || familyMembers.length === 0) return []
-
+  const dayType = resolveDayTypeForDate(targetDate, familyRoutines, availabilityExceptions)
   const dateKey = format(targetDate, 'yyyy-MM-dd')
   const dayOfWeek = targetDate.getDay()
+
+  // ─────────────────────────────────────────────────────────────
+  // 1. WEEKEND or HOLIDAY / BREAK DEPARTURES (Event-Driven Flow)
+  // ─────────────────────────────────────────────────────────────
+  if (dayType === 'weekend' || dayType === 'holiday_break') {
+    const departures: DepartureItem[] = []
+
+    const hardEvents = calendarEvents
+      .filter((evt) => {
+        if (evt.event_type === 'reminder' || isReminderOrChore(evt)) return false
+        try {
+          const start = parseISO(evt.start_time)
+          const evtDateStr = format(start, 'yyyy-MM-dd')
+          return evtDateStr === dateKey
+        } catch {
+          return false
+        }
+      })
+      .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+
+    for (const evt of hardEvents) {
+      try {
+        const start = parseISO(evt.start_time)
+        const driveMins = evt.enrichment?.drive_time_mins || getEstimatedDriveMinutes(evt.location_name || '', evt.address || '')
+        const departureDate = new Date(start.getTime() - driveMins * 60 * 1000)
+        const isCompleted = now.getTime() > departureDate.getTime() + 20 * 60 * 1000
+        const minutesUntilLeave = Math.round((departureDate.getTime() - now.getTime()) / 60000)
+        const isLeaveNow = minutesUntilLeave <= 5 && !isCompleted
+        const isPrepUrgent = minutesUntilLeave > 5 && minutesUntilLeave <= 20 && !isCompleted
+        const isDeparted = isCompleted
+
+        const { id: resolvedDriverId, name: resolvedDriverName } = resolveEventDriver(evt, familyMembers)
+        const driverMember = familyMembers.find((m) => m.id === resolvedDriverId) || null
+
+        const eventAttendees = (evt.members || [])
+          .map((m) => m.family_member)
+          .filter((m): m is FamilyMember => Boolean(m))
+
+        const attendeeNames = eventAttendees.length > 0
+          ? eventAttendees.map((m) => m.name).join(' & ')
+          : 'Tabor Family'
+
+        departures.push({
+          id: `dep-event-${evt.id}-${dateKey}`,
+          title: evt.title,
+          venueName: evt.location_name || evt.address || evt.title,
+          venueAddress: evt.address || '',
+          shortVenueName: formatDisplayVenueName(evt.location_name || evt.title),
+          departureTime: departureDate.toISOString(),
+          leaveByTimeFormatted: evt.all_day ? 'Flexible' : format(departureDate, 'h:mm a'),
+          arrivalWindow: evt.all_day ? 'All Day' : format(start, 'h:mm a'),
+          driveMinutes: driveMins,
+          driverName: resolvedDriverName || 'Jake',
+          driverMember,
+          children: eventAttendees,
+          childNamesFormatted: attendeeNames,
+          isException: false,
+          exceptionLabel: evt.title,
+          isCompleted,
+          isLeaveNow,
+          isPrepUrgent,
+          minutesUntilLeave,
+          isDeparted,
+          isWeekendActivity: true,
+        })
+      } catch {}
+    }
+
+    return departures
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 2. SCHOOL DAY DEPARTURES (Weekday Routine Logistics)
+  // ─────────────────────────────────────────────────────────────
+  if (familyRoutines.length === 0 || familyMembers.length === 0) return []
 
   const activeRoutines = familyRoutines.filter((r) => {
     if (!r.enabled) return false
@@ -153,7 +271,6 @@ function deriveDeparturesForDate(
         const evtDateStr = format(start, 'yyyy-MM-dd')
         if (evtDateStr !== dateKey) return false
         const hour = start.getHours() + start.getMinutes() / 60
-        // Morning window: between 5:30 AM and 9:30 AM
         if (hour < 5.5 || hour > 9.5) return false
 
         const isChildAttendee = (evt.members || []).some(
@@ -180,7 +297,6 @@ function deriveDeparturesForDate(
     if (childMorningEvents.length > 0) {
       const earlyEvt = childMorningEvents[0]
       const evtStart = parseISO(earlyEvt.start_time)
-      const evtEnd = parseISO(earlyEvt.end_time)
       effStartLocal = format(evtStart, 'HH:mm')
       effVenueName = earlyEvt.location_name || earlyEvt.address || routine.venueName
       effVenueAddress = earlyEvt.address || routine.venueAddress
@@ -199,32 +315,27 @@ function deriveDeparturesForDate(
       const driveMins = earlyEvt.enrichment?.drive_time_mins || getEstimatedDriveMinutes(effVenueName, effVenueAddress)
       if (earlyEvt.enrichment?.departure_time) {
         customDepartureTime = earlyEvt.enrichment.departure_time
-        customWindowStartTime = evtStart
-        customSchoolStartTime = evtEnd
       } else {
-        customWindowStartTime = evtStart
-        customSchoolStartTime = evtEnd > evtStart ? evtEnd : new Date(evtStart.getTime() + 15 * 60000)
-        customDepartureTime = new Date(evtStart.getTime() - driveMins * 60000).toISOString()
+        const depDate = new Date(evtStart.getTime() - driveMins * 60 * 1000)
+        customDepartureTime = depDate.toISOString()
       }
+      customWindowStartTime = evtStart
+      customSchoolStartTime = evtStart
     } else {
-      const dayOverride = routine.dayOverrides?.find(
-        (o) => o.dayOfWeek === dayOfWeek && o.enabled !== false,
-      )
-
-      effStartLocal = (dayOverride?.startLocal || routine.startLocal).slice(0, 5)
-      effDropDriverName = dayOverride?.dropoffDriverName || routine.dropoffDriverName || 'Jake'
-      effDropDriverId = dayOverride?.dropoffDriverId !== undefined ? dayOverride.dropoffDriverId : (routine.dropoffDriverId || null)
-      overrideLabel = dayOverride?.label?.trim() || null
+      const override = (routine.dayOverrides || []).find((o) => o.dayOfWeek === dayOfWeek && o.enabled)
+      effStartLocal = override?.startLocal || routine.startLocal
+      effDropDriverName = override?.dropoffDriverName || routine.dropoffDriverName || 'Jake'
+      effDropDriverId = override?.dropoffDriverId || routine.dropoffDriverId || null
+      overrideLabel = override?.label || null
       effVenueName = routine.venueName
       effVenueAddress = routine.venueAddress
-      isException = isRoutineDropoffException(routine, targetDate)
+      isException = Boolean(override?.startLocal && override.startLocal !== routine.startLocal)
     }
 
-    const venueKey = effVenueName.trim().toLowerCase()
-    const dropKey = `${venueKey}|${effStartLocal}|${effDropDriverName}|${overrideLabel || ''}`
+    const groupKey = `${effVenueName}::${effStartLocal}::${effDropDriverName}`
 
-    if (!groups.has(dropKey)) {
-      groups.set(dropKey, {
+    if (!groups.has(groupKey)) {
+      groups.set(groupKey, {
         venueName: effVenueName,
         venueAddress: effVenueAddress,
         startLocal: effStartLocal,
@@ -238,52 +349,69 @@ function deriveDeparturesForDate(
         customSchoolStartTime,
       })
     } else {
-      const g = groups.get(dropKey)!
+      const g = groups.get(groupKey)!
       if (!g.children.some((c) => c.id === child.id)) {
         g.children.push(child)
       }
-      if (isException) g.isException = true
+      if (isException) {
+        g.isException = true
+        if (overrideLabel) g.label = overrideLabel
+      }
     }
   }
 
   const departures: DepartureItem[] = []
-  for (const [key, group] of groups.entries()) {
-    const driveMinutes = getEstimatedDriveMinutes(group.venueName, group.venueAddress)
-    const targetArrivalTime = group.customSchoolStartTime || applyTimeToDate(targetDate, group.startLocal)
-    const departureTime = group.customDepartureTime
-      ? new Date(group.customDepartureTime)
-      : new Date(targetArrivalTime.getTime() - driveMinutes * 60000)
 
-    const driverMember = familyMembers.find(
-      (m) => m.id === group.driverId || m.name.toLowerCase() === group.driverName.toLowerCase(),
-    ) || null
+  for (const [key, grp] of groups.entries()) {
+    const [hoursStr, minsStr] = grp.startLocal.split(':')
+    const targetHours = parseInt(hoursStr, 10) || 8
+    const targetMins = parseInt(minsStr, 10) || 0
 
-    const minutesUntilLeave = differenceInMinutes(departureTime, now)
-    const isLeaveNow = minutesUntilLeave <= 0 && minutesUntilLeave >= -20
-    const isPrepUrgent = minutesUntilLeave > 0 && minutesUntilLeave <= 15
-    const isUpcoming = minutesUntilLeave > 15
-    const isCompleted = minutesUntilLeave < -20
+    const driveMins = getEstimatedDriveMinutes(grp.venueName, grp.venueAddress)
+
+    const windowStart = grp.customWindowStartTime || new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), targetHours, targetMins)
+    const schoolStart = grp.customSchoolStartTime || windowStart
+
+    const departureDate = grp.customDepartureTime
+      ? new Date(grp.customDepartureTime)
+      : new Date(schoolStart.getTime() - driveMins * 60 * 1000)
+
+    const isCompleted = now.getTime() > departureDate.getTime() + 20 * 60 * 1000
+    const minutesUntilLeave = Math.round((departureDate.getTime() - now.getTime()) / 60000)
+    const isLeaveNow = minutesUntilLeave <= 5 && !isCompleted
+    const isPrepUrgent = minutesUntilLeave > 5 && minutesUntilLeave <= 20 && !isCompleted
+    const isDeparted = isCompleted
+
+    const driverMember = familyMembers.find((m) => m.id === grp.driverId) || null
+
+    const childNames = grp.children.map((c) => c.name)
+    const childNamesFormatted =
+      childNames.length === 1
+        ? childNames[0]
+        : childNames.slice(0, -1).join(', ') + ' & ' + childNames[childNames.length - 1]
 
     departures.push({
-      id: `departure-${key}-${dateKey}`,
-      venueName: group.venueName,
-      venueAddress: group.venueAddress,
-      arrivalWindow: format(targetArrivalTime, 'h:mm a'),
-      schoolStartTime: format(targetArrivalTime, 'h:mm a'),
-      departureTime: departureTime.toISOString(),
-      leaveByTimeFormatted: format(departureTime, 'h:mm a'),
-      minutesUntilLeave,
-      driveMinutes,
-      driverName: group.driverName,
+      id: `dep-${key}-${dateKey}`,
+      title: 'School Drop-off',
+      venueName: grp.venueName,
+      venueAddress: grp.venueAddress,
+      shortVenueName: formatDisplayVenueName(grp.venueName),
+      departureTime: departureDate.toISOString(),
+      leaveByTimeFormatted: format(departureDate, 'h:mm a'),
+      arrivalWindow: format(windowStart, 'h:mm a'),
+      driveMinutes: driveMins,
+      driverName: grp.driverName,
       driverMember,
-      children: group.children,
-      childNamesFormatted: formatChildNames(group.children),
-      isException: group.isException,
-      exceptionLabel: group.label,
+      children: grp.children,
+      childNamesFormatted,
+      isException: grp.isException,
+      exceptionLabel: grp.label,
+      isCompleted,
       isLeaveNow,
       isPrepUrgent,
-      isUpcoming,
-      isCompleted,
+      minutesUntilLeave,
+      isDeparted,
+      isWeekendActivity: false,
     })
   }
 
@@ -291,6 +419,7 @@ function deriveDeparturesForDate(
 }
 
 function derivePrepChecklist(
+  dayType: RoutineDayType,
   departures: DepartureItem[],
   dateKey: string,
   completedMap: Record<string, boolean>,
@@ -298,98 +427,214 @@ function derivePrepChecklist(
 ): BedtimePrepItem[] {
   const items: BedtimePrepItem[] = []
 
-  // Collect text hints from both departures and morning calendar events
-  const textCorpus: { label: string; childName?: string }[] = []
-  for (const dep of departures) {
-    if (dep.exceptionLabel) {
-      textCorpus.push({ label: dep.exceptionLabel, childName: dep.childNamesFormatted })
-    }
-  }
+  // ─────────────────────────────────────────────────────────────
+  // 1. SCHOOL DAY PREP (Sun night → Thu night for Mon–Fri school)
+  // ─────────────────────────────────────────────────────────────
+  if (dayType === 'school_day') {
+    const idBackpacks = `item-backpacks-${dateKey}`
+    items.push({
+      id: idBackpacks,
+      label: 'Backpacks & homework folders packed',
+      completed: Boolean(completedMap[idBackpacks]),
+      iconType: 'backpack',
+    })
 
-  for (const evt of calendarEvents) {
-    try {
-      const start = parseISO(evt.start_time)
-      const evtDateStr = format(start, 'yyyy-MM-dd')
-      if (evtDateStr === dateKey && !evt.all_day) {
-        const hour = start.getHours() + start.getMinutes() / 60
-        // Daytime / school prep window: events starting before 2:00 PM (14.0)
-        if (hour < 14.0) {
-          const title = evt.title || ''
-          const desc = evt.description || ''
-          const childName = (evt.members || []).find((m) => m.role === 'passenger')?.family_member?.name || ''
-          textCorpus.push({ label: `${title} ${desc}`, childName })
+    const idLunch = `item-lunch-${dateKey}`
+    items.push({
+      id: idLunch,
+      label: 'Lunchboxes & morning snacks staged',
+      completed: Boolean(completedMap[idLunch]),
+      iconType: 'lunch',
+    })
+
+    const idBottles = `item-bottles-${dateKey}`
+    items.push({
+      id: idBottles,
+      label: 'Water bottles filled & chilled',
+      completed: Boolean(completedMap[idBottles]),
+      iconType: 'bottle',
+    })
+
+    // Contextual conditional items: ONLY if tomorrow actually has music/sports/devices
+    for (const dep of departures) {
+      if (dep.isException && dep.exceptionLabel) {
+        const text = dep.exceptionLabel.toLowerCase()
+        if (text.includes('string') || text.includes('violin') || text.includes('instrument') || text.includes('orchestra')) {
+          const id = `item-music-${dateKey}`
+          if (!items.some((i) => i.id === id)) {
+            items.push({
+              id,
+              label: `${dep.childNamesFormatted}: Pack instrument & sheet music folder`,
+              completed: Boolean(completedMap[id]),
+              childName: dep.childNamesFormatted,
+              iconType: 'music',
+            })
+          }
+        }
+        if (text.includes('sport') || text.includes('pe') || text.includes('gym') || text.includes('athletic')) {
+          const id = `item-sports-${dateKey}`
+          if (!items.some((i) => i.id === id)) {
+            items.push({
+              id,
+              label: `${dep.childNamesFormatted}: Stage athletic uniform & shoes`,
+              completed: Boolean(completedMap[id]),
+              childName: dep.childNamesFormatted,
+              iconType: 'sports',
+            })
+          }
         }
       }
-    } catch {}
-  }
-
-  let hasMusicItem = false
-  let hasSportsItem = false
-  let hasDeviceItem = false
-
-  for (const item of textCorpus) {
-    const text = item.label.toLowerCase()
-    if (!hasMusicItem && (text.includes('string') || text.includes('music') || text.includes('violin') || text.includes('instrument') || text.includes('orchestra'))) {
-      hasMusicItem = true
-      const id = `item-music-${dateKey}`
-      const prefix = item.childName ? `${item.childName}: ` : ''
-      items.push({
-        id,
-        label: `${prefix}Pack instrument & sheet music folder`,
-        completed: Boolean(completedMap[id]),
-        childName: item.childName,
-        iconType: 'music',
-      })
     }
-    if (!hasSportsItem && (text.includes('sport') || text.includes('pe') || text.includes('gym') || text.includes('athletic') || text.includes('soccer') || text.includes('tennis') || text.includes('swim'))) {
-      hasSportsItem = true
-      const id = `item-sports-${dateKey}`
-      const prefix = item.childName ? `${item.childName}: ` : ''
-      items.push({
-        id,
-        label: `${prefix}Stage athletic uniform & shoes`,
-        completed: Boolean(completedMap[id]),
-        childName: item.childName,
-        iconType: 'sports',
-      })
+  } else if (dayType === 'weekend') {
+    // ─────────────────────────────────────────────────────────────
+    // 2. WEEKEND READINESS PREP (Fri & Sat nights for Sat & Sun)
+    // ─────────────────────────────────────────────────────────────
+    let hasBirthdayItem = false
+    let hasSportsItem = false
+    let hasMusicItem = false
+    let hasProjectItem = false
+    let hasMedicalItem = false
+    let hasOutingItem = false
+
+    for (const evt of calendarEvents) {
+      try {
+        const start = parseISO(evt.start_time)
+        const evtDateStr = format(start, 'yyyy-MM-dd')
+        if (evtDateStr !== dateKey) continue
+
+        const title = (evt.title || '').toLowerCase()
+        const loc = (evt.location_name || '').toLowerCase()
+        const passengerName = (evt.members || []).find((m) => m.role === 'passenger')?.family_member?.name || ''
+        const prefix = passengerName ? `${passengerName}: ` : ''
+
+        // 1. Birthday party / celebration (Get gift & card ready)
+        if (!hasBirthdayItem && (title.includes('birthday') || title.includes('bday') || title.includes('b-day') || title.includes('party'))) {
+          hasBirthdayItem = true
+          const id = `item-birthday-${dateKey}`
+          items.push({
+            id,
+            label: `${prefix}Get birthday gift & card ready / wrap present`,
+            completed: Boolean(completedMap[id]),
+            childName: passengerName,
+            iconType: 'gift',
+          })
+        }
+
+        // 2. Sports (Soccer, Tennis, Swim, Game, Practice, Tournament, Martial Arts)
+        if (!hasSportsItem && (title.includes('soccer') || title.includes('tennis') || title.includes('baseball') || title.includes('basketball') || title.includes('swim') || title.includes('karate') || title.includes('gymnastics') || title.includes('practice') || title.includes('game') || title.includes('match') || title.includes('tournament') || title.includes('league'))) {
+          hasSportsItem = true
+          const id = `item-sports-${dateKey}`
+          items.push({
+            id,
+            label: `${prefix}Stage athletic uniform, cleats & sports gear`,
+            completed: Boolean(completedMap[id]),
+            childName: passengerName,
+            iconType: 'sports',
+          })
+        }
+
+        // 3. Formal music lessons / strings / orchestra (exclude festivals/concerts in park)
+        const isFormalMusic = (title.includes('violin') || title.includes('viola') || title.includes('cello') || title.includes('piano') || title.includes('guitar') || title.includes('strings') || title.includes('orchestra') || title.includes('music lesson') || title.includes('recital')) && !title.includes('fest') && !title.includes('festival')
+        if (!hasMusicItem && isFormalMusic) {
+          hasMusicItem = true
+          const id = `item-music-${dateKey}`
+          items.push({
+            id,
+            label: `${prefix}Pack instrument & sheet music folder`,
+            completed: Boolean(completedMap[id]),
+            childName: passengerName,
+            iconType: 'music',
+          })
+        }
+
+        // 4. Community service / volunteer / clean-up / project
+        if (!hasProjectItem && (title.includes('clean-up') || title.includes('cleanup') || title.includes('volunteer') || title.includes('project uplift') || title.includes('community service') || title.includes('workday'))) {
+          hasProjectItem = true
+          const id = `item-project-${dateKey}`
+          items.push({
+            id,
+            label: 'Stage project supplies, work gear & sun protection',
+            completed: Boolean(completedMap[id]),
+            iconType: 'general',
+          })
+        }
+
+        // 5. Doctor / Pediatrician / Dentist / Clinic
+        if (!hasMedicalItem && (title.includes('doctor') || title.includes('pediatric') || title.includes('dentist') || title.includes('checkup') || title.includes('well-child') || title.includes('clinic') || title.includes('appointment'))) {
+          hasMedicalItem = true
+          const id = `item-medical-${dateKey}`
+          items.push({
+            id,
+            label: 'Prepare check-in forms & insurance cards',
+            completed: Boolean(completedMap[id]),
+            iconType: 'general',
+          })
+        }
+
+        // 6. Outings / Science Center / Festival / Beach / Aquarium
+        if (!hasOutingItem && (title.includes('fest') || title.includes('festival') || title.includes('science center') || title.includes('aquarium') || title.includes('museum') || title.includes('zoo') || loc.includes('science center') || loc.includes('aquarium') || loc.includes('museum') || loc.includes('lawn') || loc.includes('beach') || loc.includes('park'))) {
+          hasOutingItem = true
+          const id = `item-outing-${dateKey}`
+          items.push({
+            id,
+            label: 'Stage tickets, passes & family day essentials',
+            completed: Boolean(completedMap[id]),
+            iconType: 'general',
+          })
+        }
+      } catch {}
     }
-    if (!hasDeviceItem && (text.includes('iready') || text.includes('assessment') || text.includes('chromebook') || text.includes('ipad test'))) {
-      hasDeviceItem = true
-      const id = `item-device-${dateKey}`
-      const prefix = item.childName ? `${item.childName}: ` : ''
+
+    // 7. Proactive To-Dos / Reminders for Tomorrow
+    const tomorrowReminders = calendarEvents.filter((e) => e.event_type === 'reminder')
+    for (const rem of tomorrowReminders) {
+      const id = `item-reminder-${rem.id}`
       items.push({
         id,
-        label: `${prefix}Charge school device & pack headphones`,
+        label: `To-Do: ${rem.title}`,
         completed: Boolean(completedMap[id]),
-        childName: item.childName,
         iconType: 'general',
       })
     }
+
+    // 8. Weekend Hydration
+    const idBottles = `item-bottles-${dateKey}`
+    items.push({
+      id: idBottles,
+      label: 'Water bottles filled & chilled for weekend activities',
+      completed: Boolean(completedMap[idBottles]),
+      iconType: 'bottle',
+    })
+
+    // If no specific gear was needed, add relaxed weekend flow item
+    if (!hasBirthdayItem && !hasSportsItem && !hasProjectItem && !hasMusicItem && !hasMedicalItem && !hasOutingItem && tomorrowReminders.length === 0) {
+      const idOpen = `item-weekend-open-${dateKey}`
+      items.push({
+        id: idOpen,
+        label: 'Weekend recharge · Family breakfast & open morning flow',
+        completed: Boolean(completedMap[idOpen]),
+        iconType: 'general',
+      })
+    }
+  } else {
+    // ─────────────────────────────────────────────────────────────
+    // 3. SCHOOL HOLIDAY / BREAK PREP
+    // ─────────────────────────────────────────────────────────────
+    const idHoliday = `item-holiday-${dateKey}`
+    items.push({
+      id: idHoliday,
+      label: 'School holiday break · No morning school routine required',
+      completed: Boolean(completedMap[idHoliday]),
+      iconType: 'general',
+    })
+    const idBottles = `item-bottles-${dateKey}`
+    items.push({
+      id: idBottles,
+      label: 'Water bottles filled & chilled for day activities',
+      completed: Boolean(completedMap[idBottles]),
+      iconType: 'bottle',
+    })
   }
-
-  const idBackpacks = `item-backpacks-${dateKey}`
-  items.push({
-    id: idBackpacks,
-    label: 'Backpacks & homework folders packed',
-    completed: Boolean(completedMap[idBackpacks]),
-    iconType: 'backpack',
-  })
-
-  const idBottles = `item-bottles-${dateKey}`
-  items.push({
-    id: idBottles,
-    label: 'Water bottles filled & chilled',
-    completed: Boolean(completedMap[idBottles]),
-    iconType: 'bottle',
-  })
-
-  const idLunch = `item-lunch-${dateKey}`
-  items.push({
-    id: idLunch,
-    label: 'Lunchboxes & morning snacks staged',
-    completed: Boolean(completedMap[idLunch]),
-    iconType: 'lunch',
-  })
 
   return items
 }
@@ -411,6 +656,18 @@ export function useFamilyRoutineIntelligence(now: Date = new Date()): FamilyRout
   const currentMinute = now.getMinutes()
   const decimalTime = currentHour + currentMinute / 60
 
+  const todayKey = useMemo(() => format(now, 'yyyy-MM-dd'), [now])
+  const tomorrowDate = useMemo(() => addDays(now, 1), [now])
+  const tomorrowKey = useMemo(() => format(tomorrowDate, 'yyyy-MM-dd'), [tomorrowDate])
+
+  const todayDayType = useMemo<RoutineDayType>(() => {
+    return resolveDayTypeForDate(now, familyRoutines, availabilityExceptions)
+  }, [now, familyRoutines, availabilityExceptions])
+
+  const tomorrowDayType = useMemo<RoutineDayType>(() => {
+    return resolveDayTypeForDate(tomorrowDate, familyRoutines, availabilityExceptions)
+  }, [tomorrowDate, familyRoutines, availabilityExceptions])
+
   // Derive TODAY's morning routine departures
   const todayDepartures = useMemo<DepartureItem[]>(() => {
     return deriveDeparturesForDate(now, now, familyRoutines, familyMembers as FamilyMember[], availabilityExceptions, todayEvents)
@@ -430,11 +687,6 @@ export function useFamilyRoutineIntelligence(now: Date = new Date()): FamilyRout
     return !allTodayDeparturesCompleted
   }, [decimalTime, hasTodayDepartures, allTodayDeparturesCompleted])
 
-  // Phase computation:
-  // Evening Prep: 5:30 PM (17.5) to 11:00 PM (23.0)
-  // Rest: 11:00 PM (23.0) to 6:00 AM (6.0)
-  // Morning Action: 6:00 AM (6.0) until all morning departures complete (max 9:30 AM)
-  // Daytime Whereabouts: immediately after morning departures complete, up to 5:30 PM (17.5)
   const phase: FamilyRoutineIntelligence['phase'] = useMemo(() => {
     if (decimalTime >= 17.5 && decimalTime < 23.0) return 'evening_prep'
     if (decimalTime >= 6.0 && decimalTime < 9.5) {
@@ -451,15 +703,11 @@ export function useFamilyRoutineIntelligence(now: Date = new Date()): FamilyRout
   const isMorning = phase === 'morning_action'
   const isDaytime = phase === 'daytime_whereabouts'
 
-  const todayKey = useMemo(() => format(now, 'yyyy-MM-dd'), [now])
-  const tomorrowDate = useMemo(() => addDays(now, 1), [now])
-  const tomorrowKey = useMemo(() => format(tomorrowDate, 'yyyy-MM-dd'), [tomorrowDate])
-
   const nextTodayDeparture = useMemo(() => {
     return todayDepartures.find((d) => !d.isCompleted) || todayDepartures[0] || null
   }, [todayDepartures])
 
-  // Derive TOMORROW's morning routine departures
+  // Derive TOMORROW's departures
   const tomorrowDepartures = useMemo<DepartureItem[]>(() => {
     return deriveDeparturesForDate(tomorrowDate, now, familyRoutines, familyMembers as FamilyMember[], availabilityExceptions, tomorrowEvents)
   }, [tomorrowDate, now, familyRoutines, familyMembers, availabilityExceptions, tomorrowEvents])
@@ -538,12 +786,12 @@ export function useFamilyRoutineIntelligence(now: Date = new Date()): FamilyRout
   }, [tomorrowKey])
 
   const todayPrepChecklist = useMemo<BedtimePrepItem[]>(() => {
-    return derivePrepChecklist(todayDepartures, todayKey, completedItems, todayEvents)
-  }, [todayDepartures, todayKey, completedItems, todayEvents])
+    return derivePrepChecklist(todayDayType, todayDepartures, todayKey, completedItems, todayEvents)
+  }, [todayDayType, todayDepartures, todayKey, completedItems, todayEvents])
 
   const prepChecklist = useMemo<BedtimePrepItem[]>(() => {
-    return derivePrepChecklist(tomorrowDepartures, tomorrowKey, completedItems, tomorrowEvents)
-  }, [tomorrowDepartures, tomorrowKey, completedItems, tomorrowEvents])
+    return derivePrepChecklist(tomorrowDayType, tomorrowDepartures, tomorrowKey, completedItems, tomorrowEvents)
+  }, [tomorrowDayType, tomorrowDepartures, tomorrowKey, completedItems, tomorrowEvents])
 
   const completedCount = useMemo(() => {
     return prepChecklist.filter((item) => item.completed).length
@@ -563,6 +811,12 @@ export function useFamilyRoutineIntelligence(now: Date = new Date()): FamilyRout
     isMorning,
     isDaytime,
     targetDate: now,
+    todayDayType,
+    tomorrowDayType,
+    isTodayWeekend: todayDayType === 'weekend',
+    isTomorrowWeekend: tomorrowDayType === 'weekend',
+    isTodaySchoolDay: todayDayType === 'school_day',
+    isTomorrowSchoolDay: tomorrowDayType === 'school_day',
     todayDayName: format(now, 'EEEE'),
     todayFormattedDate: format(now, 'MMMM d'),
     todayDepartures,

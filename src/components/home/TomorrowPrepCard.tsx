@@ -4,6 +4,7 @@ import {
   Sun,
   Music,
   Check,
+  Sparkles,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { useFamilyRoutineIntelligence } from '../../hooks/useFamilyRoutineIntelligence'
@@ -22,6 +23,7 @@ export default function TomorrowPrepCard({
   const {
     tomorrowDayName,
     tomorrowFormattedDate,
+    isTomorrowWeekend,
     tomorrowDepartures,
     hasTomorrowExceptions,
     primaryTomorrowException,
@@ -69,20 +71,40 @@ export default function TomorrowPrepCard({
                   : 'bg-casa-navy/10 text-casa-navy',
               )}
             >
-              <Moon size={16} strokeWidth={2} className={isNavy ? 'text-amber-400' : 'text-casa-gold'} />
+              {isTomorrowWeekend ? (
+                <Sparkles size={16} strokeWidth={2} className={isNavy ? 'text-amber-400' : 'text-casa-gold'} />
+              ) : (
+                <Moon size={16} strokeWidth={2} className={isNavy ? 'text-amber-400' : 'text-casa-gold'} />
+              )}
             </div>
             <div className="min-w-0">
-              <div
-                className={cn(
-                  'text-caption font-bold uppercase tracking-wider leading-tight',
-                  isNavy ? 'text-amber-400' : 'text-casa-gold',
-                )}
-              >
-                Tomorrow Morning Readiness
+              <div className="flex items-center gap-2">
+                <span
+                  className={cn(
+                    'text-caption font-bold uppercase tracking-wider leading-tight',
+                    isNavy ? 'text-amber-400' : 'text-casa-gold',
+                  )}
+                >
+                  {isTomorrowWeekend ? 'Weekend Readiness' : 'Tomorrow Morning Readiness'}
+                </span>
+                <span
+                  className={cn(
+                    'text-3xs uppercase font-bold px-2 py-0.5 rounded-full border',
+                    isTomorrowWeekend
+                      ? isNavy
+                        ? 'bg-amber-400/10 border-amber-400/25 text-amber-300'
+                        : 'bg-amber-500/10 border-amber-500/25 text-amber-800'
+                      : isNavy
+                      ? 'bg-white/10 border-white/15 text-slate-300'
+                      : 'bg-casa-navy/5 border-casa-border text-casa-navy',
+                  )}
+                >
+                  {isTomorrowWeekend ? 'Weekend' : 'School Day'}
+                </span>
               </div>
               <div
                 className={cn(
-                  'text-body-sm font-semibold font-serif',
+                  'text-body-sm font-semibold font-serif mt-0.5',
                   isNavy ? 'text-white' : 'text-casa-navy',
                 )}
               >
@@ -118,7 +140,7 @@ export default function TomorrowPrepCard({
               </div>
             )}
 
-            {/* 1-Tap Theme Quick Switcher Capsule (Quiet, zero noisy banner) */}
+            {/* 1-Tap Theme Quick Switcher */}
             <Button
               variant="secondary"
               size="sm"
@@ -209,7 +231,7 @@ export default function TomorrowPrepCard({
           </motion.div>
         )}
 
-        {/* ── Departures Schedule Lineup or Weekend Schedule Notice ── */}
+        {/* ── Departures & Commitments Lineup ── */}
         <div className="space-y-2">
           <div
             className={cn(
@@ -217,8 +239,13 @@ export default function TomorrowPrepCard({
               isNavy ? 'text-slate-400' : 'text-casa-muted',
             )}
           >
-            Morning Schedule
+            {isTomorrowWeekend
+              ? tomorrowDepartures.length > 0
+                ? "Tomorrow's Activities & Commitments"
+                : 'Morning Schedule'
+              : 'Morning Departures'}
           </div>
+
           {tomorrowDepartures.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {tomorrowDepartures.map((dep) => (
@@ -245,22 +272,24 @@ export default function TomorrowPrepCard({
                       >
                         {dep.leaveByTimeFormatted}
                       </span>
-                      <span
-                        className={cn(
-                          'text-caption',
-                          isNavy ? 'text-slate-400' : 'text-casa-muted',
-                        )}
-                      >
-                        ({dep.driveMinutes}m drive)
-                      </span>
+                      {dep.driveMinutes > 0 && dep.leaveByTimeFormatted !== 'Flexible' && (
+                        <span
+                          className={cn(
+                            'text-caption',
+                            isNavy ? 'text-slate-400' : 'text-casa-muted',
+                          )}
+                        >
+                          ({dep.driveMinutes}m drive)
+                        </span>
+                      )}
                     </div>
                     <div
                       className={cn(
-                        'text-body-sm font-medium truncate',
+                        'text-body-sm font-semibold truncate',
                         isNavy ? 'text-white' : 'text-casa-navy',
                       )}
                     >
-                      {dep.childNamesFormatted}
+                      {dep.isWeekendActivity && dep.title ? dep.title : dep.childNamesFormatted}
                     </div>
                     <div
                       className={cn(
@@ -268,7 +297,9 @@ export default function TomorrowPrepCard({
                         isNavy ? 'text-slate-400' : 'text-casa-muted',
                       )}
                     >
-                      {dep.venueName}
+                      {dep.isWeekendActivity && dep.title
+                        ? `${dep.childNamesFormatted} @ ${dep.venueName}`
+                        : dep.venueName}
                     </div>
                   </div>
 
@@ -314,7 +345,7 @@ export default function TomorrowPrepCard({
               </div>
               <div className="min-w-0">
                 <div className="text-body-sm font-semibold leading-tight">
-                  No School Departures Tomorrow
+                  No Early Departures Tomorrow
                 </div>
                 <div
                   className={cn(
@@ -329,7 +360,7 @@ export default function TomorrowPrepCard({
           )}
         </div>
 
-        {/* ── Interactive Bedtime Prep Checklist ── */}
+        {/* ── Interactive Bedtime & Weekend Readiness Checklist ── */}
         {prepChecklist.length > 0 && (
           <div className="space-y-2 pt-1">
             <div
@@ -338,7 +369,7 @@ export default function TomorrowPrepCard({
                 isNavy ? 'text-slate-400' : 'text-casa-muted',
               )}
             >
-              Bedtime Prep Checklist
+              {isTomorrowWeekend ? 'Weekend Readiness Checklist' : 'Bedtime Prep Checklist'}
             </div>
             <div className="space-y-1.5">
               {prepChecklist.map((item) => (

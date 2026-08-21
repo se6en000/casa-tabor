@@ -1,5 +1,5 @@
 import { format, setHours, setMinutes, setSeconds, setMilliseconds } from 'date-fns'
-import type { CalendarEvent, FamilyMember, MemberAvailabilityRule } from '../types'
+import type { CalendarEvent, FamilyMember, MemberAvailabilityRule, MemberAvailabilityException } from '../types'
 
 export type RoutineSyncMode = 'none' | 'exceptions_only' | 'all'
 
@@ -886,6 +886,41 @@ export {
   extractDesiredRoutineSeries,
   getFirstOccurrenceDate,
 } from './routineRecurrenceCoordinator.ts'
+
+export type RoutineDayType = 'school_day' | 'weekend' | 'holiday_break'
+
+export function resolveDayTypeForDate(
+  targetDate: Date,
+  familyRoutines: FamilyRoutine[],
+  availabilityExceptions: MemberAvailabilityException[] = [],
+): RoutineDayType {
+  const dayOfWeek = targetDate.getDay() // 0=Sun, 6=Sat
+  if (dayOfWeek === 0 || dayOfWeek === 6) {
+    return 'weekend'
+  }
+
+  const dateKey = format(targetDate, 'yyyy-MM-dd')
+  const childRoutines = familyRoutines.filter((r) => r.enabled && r.routineType === 'school')
+  if (childRoutines.length > 0) {
+    const allChildrenDayOff = childRoutines.every((r) => {
+      return availabilityExceptions.some((ex) => {
+        if (ex.member_id !== r.memberId) return false
+        if (ex.override_type !== 'day_off') return false
+        try {
+          const exStart = format(new Date(ex.start_at), 'yyyy-MM-dd')
+          const exEnd = format(new Date(ex.end_at), 'yyyy-MM-dd')
+          return dateKey >= exStart && dateKey <= exEnd
+        } catch {
+          return false
+        }
+      })
+    })
+    if (allChildrenDayOff) return 'holiday_break'
+  }
+
+  return 'school_day'
+}
+
 
 
 

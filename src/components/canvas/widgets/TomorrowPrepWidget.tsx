@@ -3,6 +3,7 @@ import {
   Sun,
   Music,
   Check,
+  Sparkles,
 } from 'lucide-react'
 import { cn } from '../../../utils/cn'
 import { useFamilyRoutineIntelligence } from '../../../hooks/useFamilyRoutineIntelligence'
@@ -24,6 +25,7 @@ export default function TomorrowPrepWidget({
   const {
     tomorrowDayName,
     tomorrowFormattedDate,
+    isTomorrowWeekend,
     tomorrowDepartures,
     hasTomorrowExceptions,
     primaryTomorrowException,
@@ -49,13 +51,22 @@ export default function TomorrowPrepWidget({
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-3 relative z-10">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center text-casa-gold border border-white/10">
-            <Moon size={20} strokeWidth={2} />
+            {isTomorrowWeekend ? (
+              <Sparkles size={20} strokeWidth={2} className="text-casa-gold" />
+            ) : (
+              <Moon size={20} strokeWidth={2} className="text-casa-gold" />
+            )}
           </div>
           <div>
-            <div className="text-caption font-bold uppercase tracking-widest text-casa-gold">
-              Tomorrow's Readiness
+            <div className="flex items-center gap-2">
+              <span className="text-caption font-bold uppercase tracking-widest text-casa-gold">
+                {isTomorrowWeekend ? 'Weekend Readiness' : "Tomorrow's Readiness"}
+              </span>
+              <span className="text-3xs uppercase font-bold px-2 py-0.5 rounded-full bg-white/10 border border-white/15 text-white/80">
+                {isTomorrowWeekend ? 'Weekend' : 'School Day'}
+              </span>
             </div>
-            <div className="text-body font-serif font-semibold text-white">
+            <div className="text-body font-serif font-semibold text-white mt-0.5">
               {tomorrowDayName}, {tomorrowFormattedDate}
             </div>
           </div>
@@ -133,10 +144,14 @@ export default function TomorrowPrepWidget({
         </div>
       )}
 
-      {/* ── Departures Lineup or Weekend Schedule Notice ── */}
+      {/* ── Commitments & Departures Lineup ── */}
       <div className="space-y-2 relative z-10">
         <div className="text-caption font-bold uppercase tracking-widest text-white/60">
-          Morning Schedule
+          {isTomorrowWeekend
+            ? tomorrowDepartures.length > 0
+              ? "Tomorrow's Activities & Commitments"
+              : 'Morning Schedule'
+            : 'Morning Departures'}
         </div>
         {tomorrowDepartures.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -155,15 +170,19 @@ export default function TomorrowPrepWidget({
                     <span className="text-body font-mono font-bold text-white">
                       {dep.leaveByTimeFormatted}
                     </span>
-                    <span className="text-caption text-white/60">
-                      ({dep.driveMinutes}m)
-                    </span>
+                    {dep.driveMinutes > 0 && dep.leaveByTimeFormatted !== 'Flexible' && (
+                      <span className="text-caption text-white/60">
+                        ({dep.driveMinutes}m drive)
+                      </span>
+                    )}
                   </div>
                   <div className="text-body-sm font-semibold text-white truncate">
-                    {dep.childNamesFormatted}
+                    {dep.isWeekendActivity && dep.title ? dep.title : dep.childNamesFormatted}
                   </div>
                   <div className="text-caption text-white/60 truncate">
-                    {dep.venueName}
+                    {dep.isWeekendActivity && dep.title
+                      ? `${dep.childNamesFormatted} @ ${dep.venueName}`
+                      : dep.venueName}
                   </div>
                 </div>
 
@@ -183,7 +202,7 @@ export default function TomorrowPrepWidget({
             </div>
             <div className="min-w-0">
               <div className="text-body-sm font-semibold leading-tight">
-                No School Departures Tomorrow
+                No Early Departures Tomorrow
               </div>
               <div className="text-caption text-white/60 mt-0.5">
                 Weekend / open morning flow · Check your agenda for daytime activities
@@ -193,11 +212,11 @@ export default function TomorrowPrepWidget({
         )}
       </div>
 
-      {/* ── Interactive Bedtime Prep Checklist ── */}
+      {/* ── Interactive Bedtime & Weekend Prep Checklist ── */}
       {prepChecklist.length > 0 && (
         <div className="space-y-2 pt-1 relative z-10">
           <div className="text-caption font-bold uppercase tracking-widest text-white/60">
-            Bedtime Prep Checklist
+            {isTomorrowWeekend ? 'Weekend Readiness Checklist' : 'Bedtime Prep Checklist'}
           </div>
           <div className="space-y-1.5">
             {prepChecklist.map((item) => (
