@@ -43,7 +43,14 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
   const dinnerPlan = useAppStore((s) => s.dinnerPlan)
   const setActiveView = useCalendarStore((s) => s.setActiveView)
   const [showPastEvents, setShowPastEvents] = useState(false)
-  const [showOverdueTodos, setShowOverdueTodos] = useState(false)
+  const [showOverdueTodos, setShowOverdueTodos] = useState<boolean>(() => {
+    try {
+      const stored = localStorage.getItem('casa:calm:overdue-collapsed')
+      return stored === null ? true : stored !== 'true'
+    } catch {
+      return true
+    }
+  })
   const [todosExpanded, setTodosExpanded] = useState(false)
   const [mobileSubTab, setMobileSubTab] = useState<'schedule' | 'triage' | 'kitchen'>('schedule')
   const [heroManualView, setHeroManualView] = useState<'today' | 'tomorrow' | null>(null)
@@ -70,6 +77,16 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
       return false
     }
   })
+
+  const toggleOverdueTodos = () => {
+    setShowOverdueTodos((prev) => {
+      const next = !prev
+      try {
+        localStorage.setItem('casa:calm:overdue-collapsed', String(!next))
+      } catch {}
+      return next
+    })
+  }
 
   const toggleTodosSection = () => {
     setTodosSectionCollapsed((prev) => {
@@ -1195,7 +1212,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                     className="overflow-hidden space-y-1"
                   >
 
-              {/* ── Concept A: Collapsible Overdue Fold ── */}
+              {/* ── Concept A: Collapsible Overdue Fold (Expanded by default when items exist) ── */}
               {overdueReminders.length > 0 && (
                 <div className="mb-1.5">
                   <Button
@@ -1203,10 +1220,10 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                     size="sm"
                     fullWidth
                     align="between"
-                    onClick={() => setShowOverdueTodos(!showOverdueTodos)}
-                    className="min-h-[30px] h-8 py-0.5 px-2 rounded-lg bg-amber-500/[0.07] hover:bg-amber-500/[0.14] text-caption text-amber-900 border border-amber-500/20 transition-colors"
+                    onClick={toggleOverdueTodos}
+                    className="min-h-[32px] h-8 py-0.5 px-2.5 rounded-lg bg-amber-500/[0.08] hover:bg-amber-500/[0.14] text-caption text-amber-900 border border-amber-500/25 transition-colors shadow-2xs"
                   >
-                    <span className="inline-flex items-center gap-1.5 font-medium text-caption text-amber-900">
+                    <span className="inline-flex items-center gap-1.5 font-semibold text-caption text-amber-900">
                       <Clock size={12} className="text-amber-700 shrink-0" />
                       <span>
                         {overdueReminders.length} {overdueReminders.length === 1 ? 'item' : 'items'} pending from earlier today
@@ -1215,13 +1232,14 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                     {showOverdueTodos ? <ChevronUp size={12} className="text-amber-800 shrink-0" /> : <ChevronDown size={12} className="text-amber-800 shrink-0" />}
                   </Button>
 
-                  <AnimatePresence>
+                  <AnimatePresence initial={false}>
                     {showOverdueTodos && (
                       <motion.div
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: 'auto' }}
                         exit={{ opacity: 0, height: 0 }}
-                        className="space-y-0.5 pt-1 overflow-hidden"
+                        transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                        className="space-y-1 pt-1 overflow-hidden"
                       >
                         {overdueReminders.map((evt) => {
                           const avatarPeople = evt.members.map((m) => ({
@@ -1246,7 +1264,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                                   onOpenEvent(evt)
                                 }
                               }}
-                              className="w-full flex items-center justify-between py-1 px-2 rounded-xl transition-all duration-150 cursor-pointer group gap-2.5 select-none active:scale-[0.99] min-h-[36px] bg-amber-500/[0.04] border border-amber-500/15 hover:bg-amber-500/[0.08]"
+                              className="w-full flex items-center justify-between py-1.5 px-2.5 rounded-xl transition-all duration-150 cursor-pointer group gap-2.5 select-none active:scale-[0.99] min-h-[38px] bg-amber-500/[0.06] border border-amber-500/25 hover:bg-amber-500/[0.12] hover:border-amber-500/40 shadow-2xs"
                             >
                               <div className="flex items-center gap-2.5 min-w-0 flex-1">
                                 <IconButton
@@ -1262,18 +1280,18 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                                   className="rounded-full shrink-0 transition-all duration-150 text-casa-muted hover:text-casa-navy hover:bg-casa-surface-subtle h-6 w-6 min-h-0 p-0"
                                   aria-label={`Mark ${evt.title} done`}
                                   icon={
-                                    <div className="w-4.5 h-4.5 rounded-full border-[1.5px] border-amber-500 hover:border-casa-navy bg-white shadow-2xs" />
+                                    <div className="w-4.5 h-4.5 rounded-full border-[1.5px] border-amber-600 hover:border-casa-navy bg-white shadow-2xs group-hover:scale-105 transition-transform" />
                                   }
                                 />
 
                                 <span className="font-mono text-caption font-bold text-amber-950 shrink-0 tabular-nums">
                                   {format(parseISO(evt.start_time), 'h:mm a')}
                                 </span>
-                                <span className="px-1.5 py-0.2 rounded text-3xs font-semibold bg-amber-500/20 text-amber-950 shrink-0">
+                                <span className="px-1.5 py-0.5 rounded text-3xs font-bold uppercase tracking-wider bg-amber-500/25 text-amber-950 border border-amber-500/35 shrink-0">
                                   Overdue
                                 </span>
 
-                                <span className="text-body-sm font-medium text-casa-navy truncate transition-colors flex-1 group-hover:text-amber-900">
+                                <span className="text-body-sm font-semibold text-casa-navy truncate transition-colors flex-1 group-hover:text-amber-950">
                                   {evt.title}
                                 </span>
                               </div>
