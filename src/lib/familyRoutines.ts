@@ -56,6 +56,8 @@ export interface RoutinePayload {
   venueName: string
   shortVenueName?: string | null
   venueAddress: string
+  startLocal?: string
+  endLocal?: string
   dayOverrides?: DayScheduleOverride[]
   startDate?: string | null
   endDate?: string | null
@@ -696,6 +698,8 @@ export function serializeRoutineToAvailabilityRules(routine: FamilyRoutine): Arr
     venueName: routine.venueName,
     shortVenueName: routine.shortVenueName || null,
     venueAddress: routine.venueAddress,
+    startLocal: routine.startLocal,
+    endLocal: routine.endLocal,
     dayOverrides: routine.dayOverrides || [],
     startDate: routine.startDate || null,
     endDate: routine.endDate || null,
@@ -785,6 +789,13 @@ export function deserializeRoutineFromAvailabilityRules(
     syncMode = 'exceptions_only'
   }
 
+  const overrides = payload.dayOverrides || []
+  const nonOverriddenRule = routineRules.find(
+    (r) => !overrides.some((o) => o.dayOfWeek === r.day_of_week && o.enabled !== false && Boolean(o.startLocal || o.endLocal))
+  )
+  const baseStart = payload.startLocal || nonOverriddenRule?.start_local || first.start_local
+  const baseEnd = payload.endLocal || nonOverriddenRule?.end_local || first.end_local
+
   return {
     memberId,
     title: payload.title || 'Routine',
@@ -792,12 +803,12 @@ export function deserializeRoutineFromAvailabilityRules(
     venueName: payload.venueName ?? '',
     shortVenueName: payload.shortVenueName ?? null,
     venueAddress: payload.venueAddress ?? '',
-    dayOverrides: payload.dayOverrides || [],
+    dayOverrides: overrides,
     startDate: payload.startDate || null,
     endDate: payload.endDate || null,
     daysOfWeek: days.length > 0 ? days : [1, 2, 3, 4, 5],
-    startLocal: first.start_local.slice(0, 5),
-    endLocal: first.end_local.slice(0, 5),
+    startLocal: baseStart.slice(0, 5),
+    endLocal: baseEnd.slice(0, 5),
     dropoffDriverName: payload.dropoffDriverName || 'Jake',
     dropoffDriverId: payload.dropoffDriverId,
     pickupDriverName: payload.pickupDriverName || 'Kelly',

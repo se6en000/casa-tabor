@@ -1,12 +1,10 @@
 import type { PrepItem, DeliveryTransitItem, DeliveryTransitStage } from '../types'
 import {
-  isToday,
-  isYesterday,
-  isTomorrow,
   format,
   isBefore,
   startOfDay,
   isSameDay,
+  differenceInCalendarDays,
 } from 'date-fns'
 
 export interface VendorTransactionIdentity {
@@ -409,8 +407,11 @@ export function formatDeliveryEta(
 ): string | null {
   if (stage === 'delivered') {
     if (!deliveryDate) return 'Delivered'
-    if (now && isToday(deliveryDate)) return 'Delivered today'
-    if (now && isYesterday(deliveryDate)) return 'Delivered yesterday'
+    if (now) {
+      const diff = differenceInCalendarDays(deliveryDate, now)
+      if (diff === 0) return 'Delivered today'
+      if (diff === -1) return 'Delivered yesterday'
+    }
     return `Delivered ${format(deliveryDate, 'MMM d')}`
   }
 
@@ -423,13 +424,14 @@ export function formatDeliveryEta(
   }
 
   if (now) {
-    if (isToday(deliveryDate)) {
+    const diff = differenceInCalendarDays(deliveryDate, now)
+    if (diff === 0) {
       return rawEta || 'Today'
     }
-    if (isYesterday(deliveryDate)) {
+    if (diff === -1) {
       return rawEta ? `Yesterday (${rawEta})` : 'Yesterday'
     }
-    if (isTomorrow(deliveryDate)) {
+    if (diff === 1) {
       return rawEta ? `Tomorrow (${rawEta})` : 'Tomorrow'
     }
     if (isBefore(deliveryDate, startOfDay(now))) {

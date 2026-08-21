@@ -303,10 +303,14 @@ function derivePrepChecklist(
       const start = parseISO(evt.start_time)
       const evtDateStr = format(start, 'yyyy-MM-dd')
       if (evtDateStr === dateKey && !evt.all_day) {
-        const title = evt.title || ''
-        const desc = evt.description || ''
-        const childName = (evt.members || []).find((m) => m.role === 'passenger')?.family_member?.name || ''
-        textCorpus.push({ label: `${title} ${desc}`, childName })
+        const hour = start.getHours() + start.getMinutes() / 60
+        // Daytime / school prep window: events starting before 2:00 PM (14.0)
+        if (hour < 14.0) {
+          const title = evt.title || ''
+          const desc = evt.description || ''
+          const childName = (evt.members || []).find((m) => m.role === 'passenger')?.family_member?.name || ''
+          textCorpus.push({ label: `${title} ${desc}`, childName })
+        }
       }
     } catch {}
   }
