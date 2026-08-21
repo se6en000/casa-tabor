@@ -35,10 +35,6 @@ export default function TomorrowPrepCard({
   const { heroTheme, toggleHeroTheme } = useHeroTheme(now)
   const isNavy = heroTheme === 'navy'
 
-  if (tomorrowDepartures.length === 0) {
-    return null
-  }
-
   return (
     <Card
       className={cn(
@@ -213,7 +209,7 @@ export default function TomorrowPrepCard({
           </motion.div>
         )}
 
-        {/* ── Departures Schedule Lineup ── */}
+        {/* ── Departures Schedule Lineup or Weekend Schedule Notice ── */}
         <div className="space-y-2">
           <div
             className={cn(
@@ -221,83 +217,116 @@ export default function TomorrowPrepCard({
               isNavy ? 'text-slate-400' : 'text-casa-muted',
             )}
           >
-            Morning Departures
+            Morning Schedule
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {tomorrowDepartures.map((dep) => (
-              <div
-                key={dep.id}
-                className={cn(
-                  'p-3 rounded-xl border flex items-center justify-between gap-2.5 transition-colors',
-                  isNavy
-                    ? dep.isException
-                      ? 'bg-slate-800/80 border-amber-500/30 text-white'
-                      : 'bg-slate-800/80 border-white/10 text-white hover:bg-slate-700/80'
-                    : dep.isException
-                    ? 'border-amber-400/40 bg-amber-50/40 text-casa-navy'
-                    : 'border-casa-border bg-casa-surface/60 text-casa-navy',
-                )}
-              >
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <span
+          {tomorrowDepartures.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {tomorrowDepartures.map((dep) => (
+                <div
+                  key={dep.id}
+                  className={cn(
+                    'p-3 rounded-xl border flex items-center justify-between gap-2.5 transition-colors',
+                    isNavy
+                      ? dep.isException
+                        ? 'bg-slate-800/80 border-amber-500/30 text-white'
+                        : 'bg-slate-800/80 border-white/10 text-white hover:bg-slate-700/80'
+                      : dep.isException
+                      ? 'border-amber-400/40 bg-amber-50/40 text-casa-navy'
+                      : 'border-casa-border bg-casa-surface/60 text-casa-navy',
+                  )}
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span
+                        className={cn(
+                          'text-body-sm font-bold font-mono',
+                          isNavy ? 'text-white' : 'text-casa-navy',
+                        )}
+                      >
+                        {dep.leaveByTimeFormatted}
+                      </span>
+                      <span
+                        className={cn(
+                          'text-caption',
+                          isNavy ? 'text-slate-400' : 'text-casa-muted',
+                        )}
+                      >
+                        ({dep.driveMinutes}m drive)
+                      </span>
+                    </div>
+                    <div
                       className={cn(
-                        'text-body-sm font-bold font-mono',
+                        'text-body-sm font-medium truncate',
                         isNavy ? 'text-white' : 'text-casa-navy',
                       )}
                     >
-                      {dep.leaveByTimeFormatted}
-                    </span>
-                    <span
+                      {dep.childNamesFormatted}
+                    </div>
+                    <div
                       className={cn(
-                        'text-caption',
+                        'text-caption truncate',
                         isNavy ? 'text-slate-400' : 'text-casa-muted',
                       )}
                     >
-                      ({dep.driveMinutes}m drive)
+                      {dep.venueName}
+                    </div>
+                  </div>
+
+                  <div className="text-right shrink-0">
+                    <div
+                      className={cn(
+                        'text-caption text-3xs uppercase font-medium',
+                        isNavy ? 'text-slate-400' : 'text-casa-muted',
+                      )}
+                    >
+                      Driver
+                    </div>
+                    <span
+                      className={cn(
+                        'inline-flex items-center px-2 py-0.5 rounded-full border text-caption font-semibold',
+                        isNavy
+                          ? 'bg-white/10 border-white/15 text-slate-200'
+                          : 'bg-casa-navy/5 border-casa-border text-casa-navy',
+                      )}
+                    >
+                      {dep.driverName}
                     </span>
                   </div>
-                  <div
-                    className={cn(
-                      'text-body-sm font-medium truncate',
-                      isNavy ? 'text-white' : 'text-casa-navy',
-                    )}
-                  >
-                    {dep.childNamesFormatted}
-                  </div>
-                  <div
-                    className={cn(
-                      'text-caption truncate',
-                      isNavy ? 'text-slate-400' : 'text-casa-muted',
-                    )}
-                  >
-                    {dep.venueName}
-                  </div>
                 </div>
-
-                <div className="text-right shrink-0">
-                  <div
-                    className={cn(
-                      'text-caption text-3xs uppercase font-medium',
-                      isNavy ? 'text-slate-400' : 'text-casa-muted',
-                    )}
-                  >
-                    Driver
-                  </div>
-                  <span
-                    className={cn(
-                      'inline-flex items-center px-2 py-0.5 rounded-full border text-caption font-semibold',
-                      isNavy
-                        ? 'bg-white/10 border-white/15 text-slate-200'
-                        : 'bg-casa-navy/5 border-casa-border text-casa-navy',
-                    )}
-                  >
-                    {dep.driverName}
-                  </span>
+              ))}
+            </div>
+          ) : (
+            <div
+              className={cn(
+                'p-3.5 rounded-xl border flex items-center gap-3 transition-colors',
+                isNavy
+                  ? 'bg-slate-800/80 border-white/10 text-white'
+                  : 'bg-casa-surface-subtle border-casa-border text-casa-navy',
+              )}
+            >
+              <div
+                className={cn(
+                  'w-8 h-8 rounded-lg flex items-center justify-center shrink-0',
+                  isNavy ? 'bg-emerald-500/20 text-emerald-400' : 'bg-emerald-50 text-emerald-600',
+                )}
+              >
+                <Check size={16} strokeWidth={2.5} />
+              </div>
+              <div className="min-w-0">
+                <div className="text-body-sm font-semibold leading-tight">
+                  No School Departures Tomorrow
+                </div>
+                <div
+                  className={cn(
+                    'text-caption mt-0.5',
+                    isNavy ? 'text-slate-400' : 'text-casa-muted',
+                  )}
+                >
+                  Weekend / open morning schedule · Ready for family activities &amp; relaxation
                 </div>
               </div>
-            ))}
-          </div>
+            </div>
+          )}
         </div>
 
         {/* ── Interactive Bedtime Prep Checklist ── */}
