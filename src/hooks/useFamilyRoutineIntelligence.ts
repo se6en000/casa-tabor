@@ -97,10 +97,9 @@ const STORAGE_PREFIX = 'casa_bedtime_prep_'
 
 function getEstimatedDriveMinutes(venueName = '', venueAddress = ''): number {
   const text = `${venueName} ${venueAddress}`.toLowerCase()
-  if (text.includes('bak middle')) return 18
+  if (text.includes('bak middle') || text.includes('bak') || text.includes('echo lake')) return 18
   if (text.includes('palm beach public')) return 10
   if (text.includes('phipps') || text.includes('soccer')) return 12
-  if (text.includes('echo lake')) return 18
   if (text.includes('cocoanut row')) return 10
   if (text.includes('great lawn') || text.includes('pompano')) return 35
   if (text.includes('cox science') || text.includes('aquarium')) return 10

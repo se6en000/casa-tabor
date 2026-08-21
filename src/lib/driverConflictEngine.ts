@@ -124,10 +124,41 @@ export function resolveEventDriver(
 export function isEventAtHome(evt: EventWithDetails | null | undefined): boolean {
   if (!evt) return false
   const loc = (evt.location_name || '').toLowerCase().trim()
-  if (loc === 'home') return true
   const addr = (evt.address || '').toLowerCase().trim()
-  if (addr.includes('3209 washington')) return true
-  if (!addr && (!loc || loc === 'home' || loc === 'house')) return true
+
+  // 1. Explicit at-home names
+  if (
+    loc === 'home' ||
+    loc === 'house' ||
+    loc === 'at home' ||
+    loc.startsWith('home ') ||
+    loc.includes('(no drive)') ||
+    loc.includes('home (no drive)')
+  ) {
+    return true
+  }
+
+  // 2. Household address match
+  if (addr.includes('3209 washington') || addr.includes('washington road')) {
+    return true
+  }
+
+  // 3. Empty address with home-like or empty location name
+  if (!addr && (!loc || loc === 'home' || loc === 'house' || loc === 'at home' || loc === 'home (no drive)')) {
+    return true
+  }
+
+  // 4. Transportation plan with explicitly 0 legs
+  const planLegs = evt.plan_override?.transportation_plan?.legs
+  if (Array.isArray(planLegs) && planLegs.length === 0) {
+    return true
+  }
+
+  // 5. Explicit mode override of none
+  if ((evt.plan_override as any)?.mode_override === 'none') {
+    return true
+  }
+
   return false
 }
 
@@ -145,17 +176,18 @@ export function isEventRequiringDriving(evt: EventWithDetails | null | undefined
     return planLegs.some((l) => Boolean(l.driverName && l.driverName.trim()))
   }
 
-  // 2. Explicit driver assigned in event_members
+  // 2. If at home or no-ride mode, strictly no driving commitment needed
+  if (isEventAtHome(evt)) return false
+  if ((evt.plan_override as any)?.mode_override === 'none') return false
+
+  // 3. Explicit driver assigned in event_members for off-site event
   const hasExplicitDriver = evt.members?.some((m) => m.role === 'driver')
   if (hasExplicitDriver) return true
 
-  // 3. If at home with no explicit driving legs, no driver commitment needed
-  if (isEventAtHome(evt)) return false
-
   // 4. Offsite event: check if drive_time_mins or off-site location exists
   const hasOffsiteLocation = Boolean(
-    (evt.location_name && evt.location_name.toLowerCase().trim() !== 'home') ||
-    (evt.address && !evt.address.toLowerCase().includes('3209 washington')),
+    (evt.location_name && evt.location_name.toLowerCase().trim() !== 'home' && evt.location_name.toLowerCase().trim() !== 'at home') ||
+    (evt.address && !evt.address.toLowerCase().includes('3209 washington') && !evt.address.toLowerCase().includes('washington road')),
   )
 
   return hasOffsiteLocation
@@ -198,7 +230,7 @@ export function analyzeDriverSchedule(
 
     const driveTimeMin = isEventAtHome(evt)
       ? 0
-      : (evt.enrichment?.drive_time_mins || DEFAULT_TRANSIT_TIME_MINUTES)
+      : (evt.enrichment?.drive_time_mins ?? DEFAULT_TRANSIT_TIME_MINUTES)
 
     const commitment: DriverCommitment = {
       eventId: evt.id,
@@ -237,10 +269,16 @@ export function analyzeDriverSchedule(
       const next = commitments[i + 1]
 
       const gapMin = next.startMin - current.endMin
-      const neededTransit = next.driveTimeMin || DEFAULT_TRANSIT_TIME_MINUTES
+      const isNextAtHome = isEventAtHome(next.rawEvent)
+      const neededTransit = isNextAtHome ? 0 : (next.driveTimeMin ?? DEFAULT_TRANSIT_TIME_MINUTES)
       const bufferMin = gapMin - neededTransit
 
       if (bufferMin < 0) {
+        const isTimeOverlap = current.endMin > next.startMin
+        const message = isTimeOverlap
+          ? `${driverName} has an event time overlap: "${current.title}" ends after "${next.title}" begins.`
+          : `${driverName} has a direct transit crunch: "${current.title}" ends while "${next.title}" requires departure with ~${neededTransit}m drive.`
+
         conflicts.push({
           type: 'OVERLAP',
           severity: 'CRITICAL',
@@ -250,9 +288,9 @@ export function analyzeDriverSchedule(
           eventA: current,
           eventB: next,
           deficitMin: Math.abs(bufferMin),
-          message: `${driverName} has a direct conflict: "${current.title}" ends while "${next.title}" requires departure with ~${neededTransit}m drive.`,
+          message,
         })
-      } else if (bufferMin < MIN_SAFE_BUFFER_MINUTES) {
+      } else if (neededTransit > 0 && bufferMin < MIN_SAFE_BUFFER_MINUTES) {
         conflicts.push({
           type: 'TIGHT_TRANSIT',
           severity: 'WARNING',

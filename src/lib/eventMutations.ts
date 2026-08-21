@@ -172,7 +172,10 @@ export async function materializeSyntheticRoutineEvent(
   const address = (overrides?.venue?.address ?? syntheticEvent.address ?? '').trim()
   const eventType = overrides?.mode ?? syntheticEvent.event_type ?? 'event'
   const category = (overrides?.category ?? syntheticEvent.enrichment?.category ?? 'School').toLowerCase().replace(/\s+/g, '_')
-  const driveMins = isAllDay ? 0 : (overrides?.venue?.driveMinutes ?? syntheticEvent.enrichment?.drive_time_mins ?? (locationName.toLowerCase().includes('palm beach') ? 10 : 15))
+  const locLower = `${locationName} ${address}`.toLowerCase()
+  const isHomeLoc = locLower === 'home' || locLower === 'house' || locLower.includes('3209 washington')
+  const defaultDriveMins = isHomeLoc ? 0 : (locLower.includes('bak') || locLower.includes('echo lake')) ? 20 : (locLower.includes('palm beach public') || locLower.includes('cocoanut')) ? 10 : 15
+  const driveMins = isAllDay ? 0 : (overrides?.venue?.driveMinutes ?? syntheticEvent.enrichment?.drive_time_mins ?? defaultDriveMins)
   const routeSummary = isAllDay ? null : (overrides?.venue?.routeSummary ?? syntheticEvent.enrichment?.route_summary ?? (driveMins ? `${driveMins} min drive` : null))
 
   const depTimeIso = (!isAllDay && driveMins > 0)

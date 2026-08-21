@@ -20,6 +20,7 @@ import type { EventWithDetails } from '../../../hooks/useCalendarEvents'
 import type { FamilyMember } from '../../../types'
 import { useFamilyRoutineIntelligence } from '../../../hooks/useFamilyRoutineIntelligence'
 import { analyzeDriverSchedule, resolveEventDriver, type DriverConflictItem } from '../../../lib/driverConflictEngine'
+import { resolveCanonicalDeparture } from '../../../lib/canonicalEventDeparture'
 import { getDisplayMemberColor } from '../../../design-system/memberColors'
 import { supabase } from '../../../lib/supabase'
 import { updateEventVenue, invalidateAllCalendarQueries } from '../../../lib/eventMutations'
@@ -176,6 +177,17 @@ export default function MiddayLogisticsWidget({
     const rawStatuses = routineIntel.ambientStatuses || []
     const map = new Map<string, SchoolDismissalGroup>()
 
+    const calculateLeaveBy = (dismissalTimeFormatted: string, isBak: boolean): string => {
+      const mins = parseMinutes(dismissalTimeFormatted)
+      const drive = isBak ? 20 : 10
+      const leaveMins = mins - drive
+      const h = Math.floor(leaveMins / 60)
+      const m = leaveMins % 60
+      const period = h >= 12 ? 'PM' : 'AM'
+      const displayH = h > 12 ? h - 12 : (h === 0 ? 12 : h)
+      return `${displayH}:${String(m).padStart(2, '0')} ${period}`
+    }
+
     if (rawStatuses.length === 0) {
       return [
         {
@@ -186,7 +198,7 @@ export default function MiddayLogisticsWidget({
           childrenNames: ['Emme', 'Owen'],
           driverName: 'Giselle',
           driverColor: getDisplayMemberColor(familyMembers.find((m) => m.name.toLowerCase() === 'giselle')?.color_hex),
-          leaveByFormatted: '1:42 PM',
+          leaveByFormatted: '1:50 PM',
         },
         {
           id: 'bak-dismissal',
@@ -196,7 +208,7 @@ export default function MiddayLogisticsWidget({
           childrenNames: ['Liv'],
           driverName: 'Jake',
           driverColor: getDisplayMemberColor(familyMembers.find((m) => m.name.toLowerCase() === 'jake')?.color_hex),
-          leaveByFormatted: '3:08 PM',
+          leaveByFormatted: '3:10 PM',
         },
       ]
     }
@@ -223,7 +235,7 @@ export default function MiddayLogisticsWidget({
           childrenNames: [status.childName],
           driverName: driver,
           driverColor,
-          leaveByFormatted: isBak ? '3:08 PM' : '1:42 PM',
+          leaveByFormatted: calculateLeaveBy(status.endsAtFormatted, isBak),
         })
       }
     }
@@ -321,6 +333,7 @@ export default function MiddayLogisticsWidget({
           >
             {middayCommitments.map((evt, idx) => {
               const driverResolution = resolveEventDriver(evt, familyMembers)
+              const depInfo = resolveCanonicalDeparture(evt, { now })
               const assignedName =
                 driverResolution.name ||
                 evt.members?.[0]?.family_member?.name ||
@@ -365,16 +378,25 @@ export default function MiddayLogisticsWidget({
                   </div>
 
                   <div className="flex items-center justify-between pt-2 border-t border-casa-border/40 text-caption">
-                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white border border-casa-border/50 text-caption font-medium text-casa-text-secondary">
-                      <Car size={13} className="text-casa-gold" />
-                      <span>
-                        {evt.enrichment?.departure_time ? (
-                          <>Leave by <strong className="text-casa-navy">{format(parseISO(evt.enrichment.departure_time), 'h:mm a')}</strong></>
-                        ) : (
-                          'Live travel buffer clear'
-                        )}
-                      </span>
-                    </div>
+                    {depInfo.isAtHome ? (
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200/80 text-caption font-medium text-emerald-800">
+                        <House size={13} className="text-emerald-600" />
+                        <span>At Home · No Drive</span>
+                      </div>
+                    ) : depInfo.isDriving && depInfo.formattedLeaveBy ? (
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white border border-casa-border/50 text-caption font-medium text-casa-text-secondary">
+                        <Car size={13} className="text-casa-gold" />
+                        <span>
+                          Leave by <strong className="text-casa-navy font-bold">{depInfo.formattedLeaveBy}</strong>
+                          <span className="text-casa-muted ml-1 font-normal">({depInfo.driveMinutes}m drive)</span>
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white border border-casa-border/50 text-caption font-medium text-casa-text-secondary">
+                        <Car size={13} className="text-casa-gold" />
+                        <span>Live travel buffer clear</span>
+                      </div>
+                    )}
                   </div>
                 </motion.div>
               )
