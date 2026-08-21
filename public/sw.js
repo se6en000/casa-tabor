@@ -32,7 +32,28 @@ self.addEventListener('push', function (event) {
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
-// ── Notification click — open/focus the app ──────────────────────────────────
+// ── Push action dispatcher ───────────────────────────────────────────────────
+async function handlePushAction(action, eventId, prepItemId, snoozeMinutes = 15) {
+  if (!action || action === 'open' || (!eventId && !prepItemId)) return;
+  try {
+    await fetch('/functions/v1/notification-action', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action,
+        event_id: eventId,
+        prep_item_id: prepItemId,
+        snooze_minutes: snoozeMinutes,
+      }),
+    });
+  } catch (err) {
+    console.warn('[SW] Push action fetch failed:', err);
+  }
+}
+
+// ── Notification click — open/focus the app or execute action ────────────────
 self.addEventListener('notificationclick', function (event) {
   event.notification.close();
   const data = event.notification.data || {};
@@ -40,26 +61,34 @@ self.addEventListener('notificationclick', function (event) {
   const action = event.action || 'open';
   const eventId = data.eventId || null;
   const prepItemId = data.prepItemId || null;
+  const snoozeMinutes = data.snoozeMinutes || 15;
+
+  const isInlineAction = action && action !== 'open';
 
   event.waitUntil(
-    self.clients
-      .matchAll({ type: 'window', includeUncontrolled: true })
-      .then(clients => {
-        // If app is already open, focus it and send the notification event
-        for (const client of clients) {
-          if (client.url.includes(self.location.origin) && 'focus' in client) {
-            client.postMessage({ type: 'PUSH_NOTIFICATION_ACTION', action, url: targetUrl, eventId, prepItemId });
-            return client.focus();
-          }
+    (async () => {
+      // If user clicked an action button (e.g. Done, Snooze, Thumbs Down), execute it
+      if (isInlineAction) {
+        await handlePushAction(action, eventId, prepItemId, snoozeMinutes);
+      }
+
+      // Notify any active window clients
+      const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      for (const client of clients) {
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          client.postMessage({ type: 'PUSH_NOTIFICATION_ACTION', action, url: targetUrl, eventId, prepItemId });
+          if (!isInlineAction) return client.focus();
+          return;
         }
-        // Otherwise open a new window with deep-link params
-        if (self.clients.openWindow) {
-          const u = new URL(targetUrl, self.location.origin);
-          if (eventId) u.searchParams.set('event_id', eventId);
-          if (prepItemId) u.searchParams.set('prep_item_id', prepItemId);
-          if (action && action !== 'open') u.searchParams.set('push_action', action);
-          return self.clients.openWindow(u.toString());
-        }
-      })
+      }
+
+      // If default notification body was clicked and no client is open, open a new window
+      if (!isInlineAction && self.clients.openWindow) {
+        const u = new URL(targetUrl, self.location.origin);
+        if (eventId) u.searchParams.set('event_id', eventId);
+        if (prepItemId) u.searchParams.set('prep_item_id', prepItemId);
+        return self.clients.openWindow(u.toString());
+      }
+    })()
   );
 });

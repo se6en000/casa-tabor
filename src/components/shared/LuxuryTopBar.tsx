@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useRef } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { format, isAfter, isBefore } from 'date-fns'
 import {
@@ -13,7 +13,6 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useLiveClock } from '../../hooks/useLiveClock'
 import { useHomeWeather } from '../../hooks/useHomeWeather'
 import { useTodayEvents } from '../../hooks/useCalendarEvents'
-import { useNotifications } from '../../hooks/useNotifications'
 import { useWeekConflicts } from '../../hooks/useConflicts'
 import { usePrepItems } from '../../hooks/usePrepItems'
 import { useRollingEvents } from '../../hooks/useCalendarEvents'
@@ -26,7 +25,6 @@ import { cn } from '../../utils/cn'
 import { IconButton, JewelCapsuleCopilot } from '../ui'
 import { useAppStore } from '../../stores/appStore'
 import { WeatherIcon } from './WeatherIcon'
-import NotificationDrawer from './NotificationDrawer'
 
 /* ════════════════════════════════════════════════════════════════
    LuxuryTopBar — Unified premium navigation bar (Architectural Atelier)
@@ -486,8 +484,6 @@ function CopilotAction() {
 export default function LuxuryTopBar() {
   const { experienceMode, canvasSubmode } = useAppStore()
   const location = useLocation()
-  const [notifOpen, setNotifOpen] = useState(false)
-  const { unreadCount } = useNotifications()
 
   const isCanvas = experienceMode === 'living_canvas'
   const isCalm = isCanvas && canvasSubmode === 'calm'
@@ -495,79 +491,42 @@ export default function LuxuryTopBar() {
   const isWarm = isCalm // Warm material when in calm mode
 
   return (
-    <>
-      <header
-        className={cn(
-          'app-topbar hidden lg:flex w-full items-center justify-between flex-shrink-0 z-sticky transition-all duration-300',
-          'luxury-topbar',
-          isWarm && 'luxury-topbar--warm',
+    <header
+      className={cn(
+        'app-topbar hidden lg:flex w-full items-center justify-between flex-shrink-0 z-sticky transition-all duration-300',
+        'luxury-topbar',
+        isWarm && 'luxury-topbar--warm',
+      )}
+      role="banner"
+      aria-label="Casa Tabor main navigation"
+    >
+      {/* ── Left cluster: Brand + Nav + Mode ────────────── */}
+      <div className="flex items-center gap-3 min-w-0">
+        <BrandZone isWarm={isWarm} />
+
+        {/* Gold divider between brand and nav */}
+        <span className="topbar-gold-divider hidden md:block" />
+
+        {/* Navigation Rail — ALWAYS FIRST so nav buttons NEVER shift position */}
+        <NavRail isWarm={isWarm} isCanvas={isCanvas} />
+      </div>
+
+      {/* ── Right cluster: Info + Utility + AI ──────────── */}
+      <div className="flex items-center gap-2 flex-shrink-0">
+        <AmbientInfo isWarm={isWarm} showEvents={!isCanvas} />
+
+        <span className="topbar-gold-divider hidden lg:block" />
+
+        <UtilityTrack isWarm={isWarm} isCanvas={isCanvas} />
+
+        {!isCook && (
+          <>
+            <span className="topbar-gold-divider hidden sm:block" />
+            <CopilotAction />
+          </>
         )}
-        role="banner"
-        aria-label="Casa Tabor main navigation"
-      >
-        {/* ── Left cluster: Brand + Nav + Mode ────────────── */}
-        <div className="flex items-center gap-3 min-w-0">
-          <BrandZone isWarm={isWarm} />
-
-          {/* Gold divider between brand and nav */}
-          <span className="topbar-gold-divider hidden md:block" />
-
-          {/* Navigation Rail — ALWAYS FIRST so nav buttons NEVER shift position */}
-          <NavRail isWarm={isWarm} isCanvas={isCanvas} />
-        </div>
-
-        {/* ── Right cluster: Info + Utility + Notifications + AI ──────────── */}
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <AmbientInfo isWarm={isWarm} showEvents={!isCanvas} />
-
-          <span className="topbar-gold-divider hidden lg:block" />
-
-          <UtilityTrack isWarm={isWarm} isCanvas={isCanvas} />
-
-          {/* Mobile Refresh Button */}
-          <div className="sm:hidden">
-            <IconButton
-              icon={<RefreshCw size={16} strokeWidth={1.8} />}
-              aria-label="Refresh Page"
-              onClick={() => window.location.reload()}
-              size="sm"
-              variant="ghost"
-              className={cn(
-                'w-9 h-9 rounded-full flex items-center justify-center transition-colors',
-                isWarm ? 'bg-casa-surface/60 border border-casa-border/40 text-casa-navy' : 'bg-white/10 text-white'
-              )}
-            />
-          </div>
-
-          {/* Mobile Notification Bell Button */}
-          <div className="relative sm:hidden">
-            <IconButton
-              icon={<Bell size={16} strokeWidth={1.8} />}
-              aria-label="Household Notifications"
-              onClick={() => setNotifOpen(true)}
-              size="sm"
-              variant="ghost"
-              className={cn(
-                'w-9 h-9 rounded-full flex items-center justify-center relative transition-colors',
-                isWarm ? 'bg-casa-surface/60 border border-casa-border/40 text-casa-navy' : 'bg-white/10 text-white'
-              )}
-            />
-            {unreadCount > 0 && (
-              <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-red-500 border-2 border-casa-surface pointer-events-none" />
-            )}
-          </div>
-
-          {!isCook && (
-            <>
-              <span className="topbar-gold-divider hidden sm:block" />
-              <CopilotAction />
-            </>
-          )}
-        </div>
-      </header>
-
-      <NotificationDrawer open={notifOpen} onClose={() => setNotifOpen(false)} />
-    </>
+      </div>
+    </header>
   )
 }
 

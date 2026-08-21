@@ -1,9 +1,7 @@
 import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
-import { Home, Calendar, ShoppingCart, Sun, Settings, Music, MoreHorizontal, Bell, ChefHat, Sparkles } from 'lucide-react'
+import { Home, Calendar, ShoppingCart, Sun, Settings, Music, MoreHorizontal, ChefHat, Sparkles } from 'lucide-react'
 import { cn } from '../../utils/cn'
-import { useNotifications } from '../../hooks/useNotifications'
-import NotificationDrawer from './NotificationDrawer'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useCalendarStore } from '../../stores/calendarStore'
 import { Button } from '../ui'
@@ -16,9 +14,7 @@ const primaryTabs = [
 
 export default function NavBar() {
   const [moreOpen, setMoreOpen] = useState(false)
-  const [notifOpen, setNotifOpen] = useState(false)
   const navigate = useNavigate()
-  const { unreadCount } = useNotifications()
   const { setActiveView } = useCalendarStore()
 
   return (
@@ -51,11 +47,6 @@ export default function NavBar() {
           )}
         >
           <MoreHorizontal size={22} strokeWidth={1.8} />
-          {unreadCount > 0 && !moreOpen && (
-            <span className="absolute top-1 right-2 min-w-[14px] h-3.5 px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-caption font-bold leading-none">
-              {unreadCount > 9 ? '9+' : unreadCount}
-            </span>
-          )}
           <span className="app-bottom-nav-label text-caption font-medium">More</span>
         </Button>
       </nav>
@@ -153,31 +144,11 @@ export default function NavBar() {
                   </div>
                   <span className="text-body-md font-medium text-casa-navy">Household Settings</span>
                 </Button>
-
-                <Button variant="ghost"
-                  className="w-full flex items-center gap-4 px-5 py-3.5 hover:bg-casa-bg active:bg-casa-bg transition-colors relative"
-                  onClick={() => { setNotifOpen(true); setMoreOpen(false) }}
-                >
-                  <div className="w-9 h-9 rounded-xl bg-red-500/10 flex items-center justify-center flex-shrink-0 relative">
-                    <Bell size={18} strokeWidth={1.8} className="text-red-500" />
-                    {unreadCount > 0 && (
-                      <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-caption font-bold leading-none">
-                        {unreadCount > 9 ? '9+' : unreadCount}
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-body-md font-medium text-casa-navy">Activity</span>
-                  {unreadCount > 0 && (
-                    <span className="ml-auto text-caption text-casa-muted">{unreadCount} new</span>
-                  )}
-                </Button>
               </div>
             </motion.div>
           </>
         )}
       </AnimatePresence>
-
-      <NotificationDrawer open={notifOpen} onClose={() => setNotifOpen(false)} />
     </>
   )
 }

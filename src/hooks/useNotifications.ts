@@ -5,7 +5,24 @@ import { usePageVisibility } from './usePageVisibility'
 
 export interface Notification {
   id: string
-  type: 'event_added' | 'event_updated' | 'event_enriched' | 'gmail_import' | 'conflict' | 'briefing_ready' | 'policy_conflict' | 'policy_prep' | 'directory_suggestions'
+  type:
+    | 'event_added'
+    | 'event_updated'
+    | 'event_enriched'
+    | 'gmail_import'
+    | 'conflict'
+    | 'briefing_ready'
+    | 'policy_conflict'
+    | 'policy_prep'
+    | 'directory_suggestions'
+    | 'push_event_30'
+    | 'push_event_5'
+    | 'push_reminder_30'
+    | 'push_reminder_5'
+    | 'push_action_done'
+    | 'push_action_snooze'
+    | 'push_action_thumbs_down'
+    | 'rate_limit_warning'
   title: string
   body: string | null
   event_id: string | null

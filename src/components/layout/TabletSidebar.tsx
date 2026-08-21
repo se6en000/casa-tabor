@@ -6,7 +6,6 @@ import { cn } from '../../utils/cn'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
 import { useLiveClock } from '../../hooks/useLiveClock'
 import { useCalendarStore } from '../../stores/calendarStore'
-import { useNotifications } from '../../hooks/useNotifications'
 import { useTodayEvents } from '../../hooks/useCalendarEvents'
 import { useMemberAvailability } from '../../hooks/useMemberAvailability'
 import { useAppStore } from '../../stores/appStore'
@@ -16,7 +15,6 @@ import {
   indexAvailabilityRulesByMember,
 } from '../../lib/memberAvailability'
 import { getPersistedDriverOverrideMemberIds } from '../../lib/eventPlanOverrides'
-import NotificationDrawer from '../shared/NotificationDrawer'
 import { useState, useMemo, useEffect } from 'react'
 import BounceScroll from '../shared/BounceScroll'
 import { Button, IconButton } from '../ui'
@@ -40,8 +38,6 @@ export default function TabletSidebar({ aiDrawerOpen = false }: TabletSidebarPro
   const { data: family } = useFamilyMembers()
   const { visibleMembers, toggleMember, setActiveView } = useCalendarStore()
   const { setCanvasSubmode } = useAppStore()
-  useNotifications()
-  const [notifOpen, setNotifOpen] = useState(false)
   const [familyOpen, setFamilyOpen] = useState(true)
   const [collapsed, setCollapsed] = useState(() => {
     const saved = localStorage.getItem('sidebar-collapsed')
@@ -94,53 +90,58 @@ export default function TabletSidebar({ aiDrawerOpen = false }: TabletSidebarPro
   }, [homeFamily, todayEvents, now])
 
   return (
-    <>
-      <aside className={cn(
-        'hidden lg:flex flex-none bg-casa-bg-2 border-r border-casa-border flex-col h-full min-h-0 overflow-hidden z-30 transition-all duration-300',
-        // Preserve contract: collapsed ? 'w-20' : 'basis-1/5'
-        isEffectivelyCollapsed ? 'w-20' : 'basis-1/5',
-      )}>
+    <aside className={cn(
+      'hidden lg:flex flex-none bg-casa-bg-2 border-r border-casa-border flex-col h-full min-h-0 overflow-hidden z-30 transition-all duration-300',
+      // Preserve contract: collapsed ? 'w-20' : 'basis-1/5'
+      isEffectivelyCollapsed ? 'w-20' : 'w-64 xl:w-72'
+    )}>
+      {/* Top Header */}
+      <div className="flex items-center justify-between px-4 py-4 border-b border-casa-border/50">
+        {!isEffectivelyCollapsed && (
+          <span className="font-display font-bold text-body-lg text-casa-navy">Casa Tabor</span>
+        )}
+        <IconButton
+          icon={isEffectivelyCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+          aria-label={isEffectivelyCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          onClick={() => setCollapsed(!collapsed)}
+          variant="ghost"
+          size="sm"
+          className="text-casa-muted hover:text-casa-navy mx-auto"
+        />
+      </div>
 
-        <BounceScroll
-          className="flex-1 min-h-0"
-          innerClassName={cn('pt-3 pb-4 flex flex-col', isEffectivelyCollapsed ? 'px-2' : 'px-4')}
-        >
-          <div className={cn('flex mb-2', isEffectivelyCollapsed ? 'justify-center' : 'justify-end')}>
-            <IconButton
-              icon={isEffectivelyCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-              aria-label={isEffectivelyCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              onClick={() => setCollapsed(c => !c)}
-              title={isEffectivelyCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              size="sm"
+      <BounceScroll className="flex-1 overflow-y-auto overflow-x-hidden p-3 space-y-6">
+        {/* Navigation */}
+        <nav className="space-y-1">
+          {NAV.map(({ to, icon: Icon, label }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={to === '/'}
+              onClick={() => {
+                if (to === '/') setCanvasSubmode('interactive')
+                if (to === '/calendar') setActiveView('today')
+              }}
+              className={({ isActive }) =>
+                cn(
+                  'flex items-center gap-3 px-3 py-2.5 rounded-card transition-colors font-medium text-body-sm min-h-[44px]',
+                  isActive
+                    ? 'bg-casa-gold/15 text-casa-navy font-semibold'
+                    : 'text-casa-muted hover:text-casa-navy hover:bg-casa-surface/60'
+                )
+              }
+            >
+              <Icon size={20} className="flex-shrink-0" />
+              {!isEffectivelyCollapsed && <span>{label}</span>}
+            </NavLink>
+          ))}
+        </nav>
+
+        {/* Family Member Section */}
+        {!isEffectivelyCollapsed && homeFamily.length > 0 && (
+          <div className="pt-2 border-t border-casa-border/40">
+            <Button
               variant="ghost"
-            />
-          </div>
-
-          {/* Nav */}
-          <div className="flex flex-col gap-0.5">
-            {NAV.map(({ to, icon: Icon, label }) => (
-              <NavLink
-                key={to}
-                to={to}
-                end={to === '/'}
-                onClick={
-                  to === '/calendar'
-                    ? () => setActiveView('stacked')
-                    : to === '/'
-                    ? () => setCanvasSubmode('calm')
-                    : undefined
-                }
-                title={isEffectivelyCollapsed ? label : undefined}
-                className={({ isActive }) =>
-                  cn(
-                    'flex items-center rounded-xl transition-colors font-medium',
-                    isEffectivelyCollapsed ? 'justify-center p-3 aspect-square' : 'gap-3 px-4 py-3 text-body',
-                    isActive
-                      ? 'bg-casa-navy text-white'
-                      : 'text-casa-muted hover:text-casa-navy hover:bg-casa-bg',
-                  )
-                }
-              >
                 {({ isActive }) => (
                   <>
                     <Icon size={isEffectivelyCollapsed ? 22 : 19} strokeWidth={isActive ? 2 : 1.8} />

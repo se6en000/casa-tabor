@@ -3,32 +3,33 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   CalendarPlus, CalendarCheck, Sparkles, Mail, AlertTriangle,
   Sun, X, CheckCheck, Trash2, ChevronRight, ClipboardList, Users,
+  Clock, CheckCircle2, ShieldAlert,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useNotifications, type Notification } from '../../hooks/useNotifications'
 import { cn } from '../../utils/cn'
+import { humanizeNotificationSource } from '../../utils/notificationSource'
 import BounceScroll from './BounceScroll'
 import { Button } from '../ui'
 
 const TYPE_CONFIG: Record<Notification['type'], { icon: React.ElementType; color: string; bg: string }> = {
-  event_added:     { icon: CalendarPlus,  color: 'text-emerald-600',  bg: 'bg-emerald-50' },
-  event_updated:   { icon: CalendarCheck, color: 'text-blue-600',     bg: 'bg-blue-50' },
-  event_enriched:  { icon: Sparkles,      color: 'text-casa-gold',    bg: 'bg-amber-50' },
-  gmail_import:    { icon: Mail,          color: 'text-purple-600',   bg: 'bg-purple-50' },
-  conflict:        { icon: AlertTriangle, color: 'text-red-500',      bg: 'bg-red-50' },
-  policy_conflict: { icon: AlertTriangle, color: 'text-red-500',      bg: 'bg-red-50' },
-  policy_prep:     { icon: ClipboardList, color: 'text-sky-600',      bg: 'bg-sky-50' },
-  briefing_ready:  { icon: Sun,           color: 'text-orange-500',   bg: 'bg-orange-50' },
-  directory_suggestions: { icon: Users,   color: 'text-emerald-600',  bg: 'bg-emerald-50' },
-}
-
-const SOURCE_LABEL: Record<string, string> = {
-  ai:          'via AI',
-  gmail:       'via Gmail',
-  sms:         'via SMS',
-  google_sync: 'via Google',
-  system:      '',
-  manual:      '',
+  event_added:             { icon: CalendarPlus,  color: 'text-emerald-600',  bg: 'bg-emerald-50' },
+  event_updated:           { icon: CalendarCheck, color: 'text-blue-600',     bg: 'bg-blue-50' },
+  event_enriched:          { icon: Sparkles,      color: 'text-casa-gold',    bg: 'bg-amber-50' },
+  gmail_import:            { icon: Mail,          color: 'text-purple-600',   bg: 'bg-purple-50' },
+  conflict:                { icon: AlertTriangle, color: 'text-red-500',      bg: 'bg-red-50' },
+  policy_conflict:         { icon: AlertTriangle, color: 'text-red-500',      bg: 'bg-red-50' },
+  policy_prep:             { icon: ClipboardList, color: 'text-sky-600',      bg: 'bg-sky-50' },
+  briefing_ready:          { icon: Sun,           color: 'text-orange-500',   bg: 'bg-orange-50' },
+  directory_suggestions:   { icon: Users,         color: 'text-emerald-600',  bg: 'bg-emerald-50' },
+  push_event_30:           { icon: Clock,         color: 'text-amber-600',    bg: 'bg-amber-50' },
+  push_event_5:            { icon: Clock,         color: 'text-amber-600',    bg: 'bg-amber-50' },
+  push_reminder_30:        { icon: Clock,         color: 'text-sky-600',      bg: 'bg-sky-50' },
+  push_reminder_5:         { icon: Clock,         color: 'text-sky-600',      bg: 'bg-sky-50' },
+  push_action_done:        { icon: CheckCircle2,  color: 'text-emerald-600',  bg: 'bg-emerald-50' },
+  push_action_snooze:      { icon: Clock,         color: 'text-amber-600',    bg: 'bg-amber-50' },
+  push_action_thumbs_down: { icon: CheckCircle2,  color: 'text-slate-600',    bg: 'bg-slate-50' },
+  rate_limit_warning:      { icon: ShieldAlert,   color: 'text-rose-600',     bg: 'bg-rose-50' },
 }
 
 interface Props {
@@ -51,8 +52,8 @@ export default function NotificationDrawer({ open, onClose }: Props) {
     } else if (n.type === 'gmail_import') {
       navigate('/settings/gmail-scan')
       onClose()
-    } else if (n.type === 'conflict') {
-      navigate('/')
+    } else if (n.type === 'conflict' || n.type === 'policy_conflict') {
+      navigate('/actions')
       onClose()
     } else if (n.type === 'directory_suggestions') {
       navigate('/settings/places')
@@ -126,8 +127,11 @@ export default function NotificationDrawer({ open, onClose }: Props) {
                   {notifications.map((n) => {
                     const cfg = TYPE_CONFIG[n.type] ?? TYPE_CONFIG.event_added
                     const Icon = cfg.icon
-                    const sourceLabel = SOURCE_LABEL[n.source ?? ''] ?? ''
-                    const isClickable = !!(n.event_id || ['briefing_ready', 'gmail_import', 'conflict'].includes(n.type))
+                    const sourceLabel = n.source ? humanizeNotificationSource(n.source) : ''
+                    const isClickable = !!(
+                      n.event_id ||
+                      ['briefing_ready', 'gmail_import', 'conflict', 'policy_conflict', 'directory_suggestions'].includes(n.type)
+                    )
 
                     return (
                       <li key={n.id}>
