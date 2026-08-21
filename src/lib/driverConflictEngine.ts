@@ -125,36 +125,50 @@ export function isEventAtHome(evt: EventWithDetails | null | undefined): boolean
   if (!evt) return false
   const loc = (evt.location_name || '').toLowerCase().trim()
   const addr = (evt.address || '').toLowerCase().trim()
+  const title = (evt.title || '').toLowerCase().trim()
 
-  // 1. Explicit at-home names
+  // 1. Explicit at-home names & phrases
   if (
     loc === 'home' ||
     loc === 'house' ||
     loc === 'at home' ||
-    loc.startsWith('home ') ||
+    loc.startsWith('home') ||
     loc.includes('(no drive)') ||
-    loc.includes('home (no drive)')
+    loc.includes('no drive') ||
+    loc.includes('no driving') ||
+    loc.includes('virtual') ||
+    loc.includes('zoom') ||
+    loc.includes('online') ||
+    loc.includes('at home')
   ) {
     return true
   }
 
   // 2. Household address match
-  if (addr.includes('3209 washington') || addr.includes('washington road')) {
+  if (addr.includes('3209 washington') || addr.includes('washington road') || addr.includes('washington rd')) {
     return true
   }
 
   // 3. Empty address with home-like or empty location name
-  if (!addr && (!loc || loc === 'home' || loc === 'house' || loc === 'at home' || loc === 'home (no drive)')) {
+  if (!addr && (!loc || loc === 'home' || loc === 'house' || loc === 'at home' || loc.includes('home'))) {
     return true
   }
 
-  // 4. Transportation plan with explicitly 0 legs
+  // 4. Common home lessons & activities without off-site address
+  if (
+    (title.includes('practice violin') || title.includes('violin practice') || title.includes('piano practice')) &&
+    (!addr || addr.includes('3209 washington') || addr.includes('washington road') || loc === 'home' || !loc)
+  ) {
+    return true
+  }
+
+  // 5. Transportation plan with explicitly 0 legs
   const planLegs = evt.plan_override?.transportation_plan?.legs
   if (Array.isArray(planLegs) && planLegs.length === 0) {
     return true
   }
 
-  // 5. Explicit mode override of none
+  // 6. Explicit mode override of none
   if ((evt.plan_override as any)?.mode_override === 'none') {
     return true
   }
@@ -180,14 +194,24 @@ export function isEventRequiringDriving(evt: EventWithDetails | null | undefined
   if (isEventAtHome(evt)) return false
   if ((evt.plan_override as any)?.mode_override === 'none') return false
 
-  // 3. Explicit driver assigned in event_members for off-site event
-  const hasExplicitDriver = evt.members?.some((m) => m.role === 'driver')
-  if (hasExplicitDriver) return true
+  const loc = (evt.location_name || '').toLowerCase().trim()
+  const addr = (evt.address || '').toLowerCase().trim()
+  const isHomeAddress = !addr || addr.includes('3209 washington') || addr.includes('washington road') || addr.includes('washington rd')
+  const isHomeLocation = !loc || loc === 'home' || loc === 'at home' || loc.startsWith('home')
 
-  // 4. Offsite event: check if drive_time_mins or off-site location exists
+  // 3. If home location or empty address without explicit off-site drive metrics, no driving needed
+  if (isHomeAddress && (isHomeLocation || !evt.enrichment?.drive_time_mins || evt.enrichment.drive_time_mins === 0)) {
+    return false
+  }
+
+  // 4. Explicit driver assigned in event_members for off-site event
+  const hasExplicitDriver = evt.members?.some((m) => m.role === 'driver')
+  if (hasExplicitDriver && !isHomeAddress) return true
+
+  // 5. Offsite event: check if real off-site location or address exists
   const hasOffsiteLocation = Boolean(
-    (evt.location_name && evt.location_name.toLowerCase().trim() !== 'home' && evt.location_name.toLowerCase().trim() !== 'at home') ||
-    (evt.address && !evt.address.toLowerCase().includes('3209 washington') && !evt.address.toLowerCase().includes('washington road')),
+    (!isHomeAddress && addr.length > 0) ||
+    (!isHomeLocation && loc.length > 0 && (evt.enrichment?.drive_time_mins ?? 0) > 0)
   )
 
   return hasOffsiteLocation
@@ -267,6 +291,16 @@ export function analyzeDriverSchedule(
     for (let i = 0; i < commitments.length - 1; i++) {
       const current = commitments[i]
       const next = commitments[i + 1]
+
+      // If either event is at home or neither requires driving, skip driver transit calculation
+      if (
+        isEventAtHome(current.rawEvent) ||
+        isEventAtHome(next.rawEvent) ||
+        !isEventRequiringDriving(current.rawEvent) ||
+        !isEventRequiringDriving(next.rawEvent)
+      ) {
+        continue
+      }
 
       const gapMin = next.startMin - current.endMin
       const isNextAtHome = isEventAtHome(next.rawEvent)

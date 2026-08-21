@@ -91,6 +91,39 @@ test('analyzeDriverSchedule does NOT produce a false conflict when violin practi
   assert.equal(analysis.conflicts.length, 0)
 })
 
+test('analyzeDriverSchedule ignores overlap between at-home doc appointment and violin lesson', () => {
+  const events = [
+    {
+      id: 'evt-doc-pga',
+      title: "Liv's Doc Apt P.A. PGA",
+      start_time: '2026-08-21T15:40:00.000Z',
+      end_time: '2026-08-21T16:40:00.000Z',
+      all_day: false,
+      location_name: 'Home',
+      address: '4200 PGA Blvd, Palm Beach Gardens, FL',
+      members: [
+        { id: 'm-1', role: 'driver', family_member: { id: 'jake-id', name: 'Jake', can_drive: true } },
+      ],
+    },
+    {
+      id: 'evt-violin',
+      title: 'Emme Practice Violin with Meredith',
+      start_time: '2026-08-21T16:30:00.000Z',
+      end_time: '2026-08-21T17:30:00.000Z',
+      all_day: false,
+      location_name: '',
+      address: '',
+      members: [
+        { id: 'm-2', role: 'driver', family_member: { id: 'jake-id', name: 'Jake', can_drive: true } },
+      ],
+    },
+  ]
+
+  const analysis = analyzeDriverSchedule(events, familyMembers)
+  assert.equal(analysis.hasConflict, false, 'At-home events should not create driver transit crunches even when overlapping')
+  assert.equal(analysis.conflicts.length, 0)
+})
+
 test('estimateVenueDriveMinutes standardizes Bak Middle School to 20 minutes and PBP to 10 minutes', () => {
   assert.equal(estimateVenueDriveMinutes('Bak Middle School of the Arts', '1725 Echo Lake Dr'), 20)
   assert.equal(estimateVenueDriveMinutes('Bak', ''), 20)

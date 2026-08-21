@@ -19,12 +19,17 @@ import { cn } from '../../../utils/cn'
 import type { EventWithDetails } from '../../../hooks/useCalendarEvents'
 import type { FamilyMember } from '../../../types'
 import { useFamilyRoutineIntelligence } from '../../../hooks/useFamilyRoutineIntelligence'
-import { analyzeDriverSchedule, resolveEventDriver, type DriverConflictItem } from '../../../lib/driverConflictEngine'
+import { analyzeDriverSchedule, resolveEventDriver, isEventAtHome, type DriverConflictItem } from '../../../lib/driverConflictEngine'
 import { resolveCanonicalDeparture } from '../../../lib/canonicalEventDeparture'
 import { getDisplayMemberColor } from '../../../design-system/memberColors'
 import { supabase } from '../../../lib/supabase'
-import { updateEventVenue, invalidateAllCalendarQueries } from '../../../lib/eventMutations'
+import {
+  updateEventVenue,
+  materializeSyntheticRoutineEvent,
+  invalidateAllCalendarQueries,
+} from '../../../lib/eventMutations'
 import { saveEventTransportationOverride } from '../../../lib/eventPlanOverrides'
+import { applyEventAggregatePatch } from '../../../lib/eventAggregateCache'
 
 import { Button } from '../../ui'
 
@@ -62,6 +67,7 @@ export default function MiddayLogisticsWidget({
 }: MiddayLogisticsWidgetProps) {
   const queryClient = useQueryClient()
   const [resolvingActionId, setResolvingActionId] = useState<string | null>(null)
+  const [dismissedConflictIds, setDismissedConflictIds] = useState<Set<string>>(new Set())
   const routineIntel = useFamilyRoutineIntelligence(now)
 
   // Driver conflict calculation
@@ -69,7 +75,17 @@ export default function MiddayLogisticsWidget({
     return analyzeDriverSchedule(todayEvents, familyMembers)
   }, [todayEvents, familyMembers])
 
-  const primaryConflict: DriverConflictItem | undefined = driverAnalysis.conflicts[0]
+  const primaryConflict: DriverConflictItem | undefined = useMemo(() => {
+    return driverAnalysis.conflicts.find((c) => {
+      if (dismissedConflictIds.has(c.eventA.eventId) || dismissedConflictIds.has(c.eventB.eventId)) {
+        return false
+      }
+      if (isEventAtHome(c.eventA.rawEvent) || isEventAtHome(c.eventB.rawEvent)) {
+        return false
+      }
+      return true
+    })
+  }, [driverAnalysis.conflicts, dismissedConflictIds])
 
   // Alternative driver candidate for quick 1-tap reassignment
   const alternativeDriver = useMemo(() => {
@@ -86,26 +102,84 @@ export default function MiddayLogisticsWidget({
   // Quick Action 1: Mark an event as At Home (No Drive Needed)
   const handleQuickMarkAtHome = async (targetEvent: EventWithDetails) => {
     if (!targetEvent?.id || resolvingActionId) return
-    setResolvingActionId(`home-${targetEvent.id}`)
-    try {
-      await updateEventVenue(
-        supabase,
-        queryClient,
-        targetEvent,
-        { name: 'Home', address: '', driveMinutes: 0, distanceMiles: 0 },
-        { familyMembers },
-      )
-      await saveEventTransportationOverride({
-        supabase,
-        queryClient,
-        event: targetEvent,
-        transportationPlan: {
+    const actionKey = `home-${targetEvent.id}`
+    setResolvingActionId(actionKey)
+
+    // 1. Immediately dismiss conflict from local state
+    setDismissedConflictIds((prev) => {
+      const next = new Set(prev)
+      next.add(targetEvent.id)
+      if (primaryConflict?.eventA?.eventId) next.add(primaryConflict.eventA.eventId)
+      return next
+    })
+
+    // 2. Immediately apply optimistic cache patch so all cards refresh instantly
+    applyEventAggregatePatch(queryClient, targetEvent.id, {
+      location_name: 'Home',
+      address: '',
+      plan_override: {
+        ...(targetEvent.plan_override ?? {
+          event_id: targetEvent.id,
+          verified: true,
+          waits: false,
+          mode_override: null,
+          two_driver_confirmed: false,
+          driver_overrides: null,
+          location_projection_blocked: false,
+          updated_at: new Date().toISOString(),
+        }),
+        transportation_plan: {
           version: 1,
           source: 'manual',
           waitOnSite: false,
           legs: [],
         },
-      })
+        location_signature: 'home|',
+        updated_at: new Date().toISOString(),
+      },
+      enrichment: targetEvent.enrichment
+        ? {
+            ...targetEvent.enrichment,
+            drive_time_mins: 0,
+            departure_time: null,
+            route_summary: null,
+            updated_at: new Date().toISOString(),
+          }
+        : null,
+    })
+
+    try {
+      if (targetEvent.id.startsWith('routine-')) {
+        await materializeSyntheticRoutineEvent(
+          supabase,
+          queryClient,
+          targetEvent,
+          {
+            travelBehavior: 'none',
+            venue: { name: 'Home', address: '', driveMinutes: 0, distanceMiles: 0 },
+          },
+          { familyMembers, homeAddress: '3209 Washington Road, West Palm Beach, FL' },
+        )
+      } else {
+        await updateEventVenue(
+          supabase,
+          queryClient,
+          targetEvent,
+          { name: 'Home', address: '', driveMinutes: 0, distanceMiles: 0 },
+          { familyMembers },
+        )
+        await saveEventTransportationOverride({
+          supabase,
+          queryClient,
+          event: targetEvent,
+          transportationPlan: {
+            version: 1,
+            source: 'manual',
+            waitOnSite: false,
+            legs: [],
+          },
+        })
+      }
       invalidateAllCalendarQueries(queryClient, targetEvent.id)
     } catch (err) {
       console.warn('[MiddayLogisticsWidget] Failed to mark event at home:', err)
@@ -120,14 +194,64 @@ export default function MiddayLogisticsWidget({
     newDriver: FamilyMember,
   ) => {
     if (!targetEvent?.id || resolvingActionId) return
-    setResolvingActionId(`driver-${targetEvent.id}`)
+    const actionKey = `driver-${targetEvent.id}`
+    setResolvingActionId(actionKey)
+
+    // 1. Immediately dismiss conflict from local state
+    setDismissedConflictIds((prev) => {
+      const next = new Set(prev)
+      next.add(targetEvent.id)
+      return next
+    })
+
+    // 2. Immediately apply optimistic cache patch
+    applyEventAggregatePatch(queryClient, targetEvent.id, {
+      members: [
+        ...(targetEvent.members?.filter((m) => m.role !== 'driver') ?? []),
+        {
+          id: `driver-override-${newDriver.id}`,
+          role: 'driver',
+          family_member: newDriver,
+        },
+      ],
+      plan_override: {
+        ...(targetEvent.plan_override ?? {
+          event_id: targetEvent.id,
+          verified: true,
+          waits: false,
+          mode_override: null,
+          two_driver_confirmed: false,
+          driver_overrides: null,
+          transportation_plan: null,
+          location_signature: null,
+          location_projection_blocked: false,
+          updated_at: new Date().toISOString(),
+        }),
+        driver_overrides: { 0: newDriver.id },
+        updated_at: new Date().toISOString(),
+      },
+    })
+
     try {
-      await saveEventTransportationOverride({
-        supabase,
-        queryClient,
-        event: targetEvent,
-        driverOverrides: { 0: newDriver.id },
-      })
+      if (targetEvent.id.startsWith('routine-')) {
+        await materializeSyntheticRoutineEvent(
+          supabase,
+          queryClient,
+          targetEvent,
+          {
+            driverLeg1: newDriver.name,
+            driverLeg2: newDriver.name,
+          },
+          { familyMembers, homeAddress: '3209 Washington Road, West Palm Beach, FL' },
+        )
+      } else {
+        await saveEventTransportationOverride({
+          supabase,
+          queryClient,
+          event: targetEvent,
+          driverOverrides: { 0: newDriver.id },
+        })
+      }
       invalidateAllCalendarQueries(queryClient, targetEvent.id)
     } catch (err) {
       console.warn('[MiddayLogisticsWidget] Failed to reassign driver:', err)
