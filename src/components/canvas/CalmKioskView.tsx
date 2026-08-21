@@ -135,7 +135,6 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
     overdueReminders,
     activeReminders,
     completedItems,
-    setCompletedItems,
     tomorrowEvents,
     isDinnerPast,
     totalAttentionCount,
@@ -157,6 +156,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
     ambientRoutineStatuses,
     handleResolveConflict,
     handleCompletePrep,
+    handleCompleteReminder,
     setCanvasSubmode,
     navigateTo,
     isRefreshing,
@@ -1270,12 +1270,12 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                                 <IconButton
                                   size="sm"
                                   variant="ghost"
-                                  onClick={(e) => {
+                                  onClick={async (e) => {
                                     e.stopPropagation()
-                                    setCompletedItems((prev) => ({
-                                      ...prev,
-                                      [evt.id]: !prev[evt.id],
-                                    }))
+                                    try {
+                                      navigator.vibrate?.(10)
+                                    } catch {}
+                                    await handleCompleteReminder(evt.id)
                                   }}
                                   className="rounded-full shrink-0 transition-all duration-150 text-casa-muted hover:text-casa-navy hover:bg-casa-surface-subtle h-6 w-6 min-h-0 p-0"
                                   aria-label={`Mark ${evt.title} done`}
@@ -1350,12 +1350,12 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                           <IconButton
                             size="sm"
                             variant="ghost"
-                            onClick={(e) => {
+                            onClick={async (e) => {
                               e.stopPropagation()
-                              setCompletedItems((prev) => ({
-                                ...prev,
-                                [evt.id]: !prev[evt.id],
-                              }))
+                              try {
+                                navigator.vibrate?.(10)
+                              } catch {}
+                              await handleCompleteReminder(evt.id)
                             }}
                             className={cn(
                               'rounded-full shrink-0 transition-all duration-150 h-6 w-6 min-h-0 p-0',

@@ -1,8 +1,16 @@
-import { useMemo, useState, useCallback } from 'react'
+import { useMemo, useState, useCallback, useEffect } from 'react'
 import { addDays, format, differenceInMinutes, parseISO } from 'date-fns'
+import { useQuery } from '@tanstack/react-query'
 import { useFamilyMembers } from './useFamilyMembers'
 import { useMemberAvailability } from './useMemberAvailability'
 import { useTodayEvents, useTomorrowEvents, type EventWithDetails } from './useCalendarEvents'
+import { usePageVisibility } from './usePageVisibility'
+import {
+  fetchRoutineChecklistCompletions,
+  saveRoutineChecklistToggle,
+  subscribeToRoutineChecklistSync,
+  getStoredRoutineChecklistCompletions,
+} from '../utils/routineChecklistSync'
 import { isReminderOrChore } from '../lib/heroFocus.mjs'
 import {
   deserializeRoutineFromAvailabilityRules,
@@ -446,36 +454,67 @@ export function useFamilyRoutineIntelligence(now: Date = new Date()): FamilyRout
     return tomorrowDepartures.find((d) => d.isException) || null
   }, [tomorrowDepartures])
 
+  const isPageVisible = usePageVisibility()
+  const { data: serverCompletions } = useQuery({
+    queryKey: ['routine-checklist-completions'],
+    queryFn: fetchRoutineChecklistCompletions,
+    staleTime: 60_000,
+    refetchInterval: isPageVisible ? 120_000 : false,
+  })
+
   // Bedtime & Morning Prep Checklist state management
   const [completedItems, setCompletedItems] = useState<Record<string, boolean>>(() => {
     try {
       const stored = localStorage.getItem(`${STORAGE_PREFIX}${todayKey}`)
       const tomorrowStored = localStorage.getItem(`${STORAGE_PREFIX}${tomorrowKey}`)
+      const unifiedStored = getStoredRoutineChecklistCompletions()
       return {
         ...(stored ? JSON.parse(stored) : {}),
         ...(tomorrowStored ? JSON.parse(tomorrowStored) : {}),
+        ...unifiedStored,
       }
     } catch {
-      return {}
+      return getStoredRoutineChecklistCompletions()
     }
   })
 
+  useEffect(() => {
+    if (serverCompletions && Object.keys(serverCompletions).length > 0) {
+      setCompletedItems((prev) => ({ ...serverCompletions, ...prev }))
+    }
+  }, [serverCompletions])
+
+  useEffect(() => {
+    const unsubscribe = subscribeToRoutineChecklistSync((id, completed, fullMap) => {
+      setCompletedItems((prev) => ({
+        ...prev,
+        ...fullMap,
+        [id]: completed,
+      }))
+    })
+    return unsubscribe
+  }, [])
+
   const toggleTodayPrepItem = useCallback((id: string) => {
     setCompletedItems((prev) => {
-      const next = { ...prev, [id]: !prev[id] }
+      const nextVal = !prev[id]
+      const next = { ...prev, [id]: nextVal }
       try {
         localStorage.setItem(`${STORAGE_PREFIX}${todayKey}`, JSON.stringify(next))
       } catch {}
+      void saveRoutineChecklistToggle(id, nextVal)
       return next
     })
   }, [todayKey])
 
   const togglePrepItem = useCallback((id: string) => {
     setCompletedItems((prev) => {
-      const next = { ...prev, [id]: !prev[id] }
+      const nextVal = !prev[id]
+      const next = { ...prev, [id]: nextVal }
       try {
         localStorage.setItem(`${STORAGE_PREFIX}${tomorrowKey}`, JSON.stringify(next))
       } catch {}
+      void saveRoutineChecklistToggle(id, nextVal)
       return next
     })
   }, [tomorrowKey])

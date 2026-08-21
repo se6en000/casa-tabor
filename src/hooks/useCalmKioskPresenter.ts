@@ -57,6 +57,7 @@ export interface CalmKioskPresenterState {
   ambientRoutineStatuses: AmbientRoutineStatus[]
   handleResolveConflict: (conflict: Conflict, resolution: string) => void
   handleCompletePrep: (item: PrepItem) => void
+  handleCompleteReminder: (id: string) => Promise<void>
   pickupsCount: number
   isEvening: boolean
   isDinnerPast: boolean
@@ -101,13 +102,30 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
 
   const resolveConflict = useResolveConflict()
   const completePrep = useCompletePrepItem()
-  const { queueMissedReminders } = useReminderNeedsYouActions()
+  const { completeReminder, queueMissedReminders } = useReminderNeedsYouActions()
 
   useEffect(() => {
     if (todayEvents.length > 0) {
       void queueMissedReminders(todayEvents, now).catch(() => {})
     }
   }, [todayEvents, now, queueMissedReminders])
+
+  const handleCompleteReminder = useCallback(
+    async (id: string) => {
+      setCompletedItems((prev) => ({ ...prev, [id]: true }))
+      try {
+        await completeReminder(id)
+      } catch (err) {
+        console.error('Failed to complete reminder:', err)
+        setCompletedItems((prev) => {
+          const next = { ...prev }
+          delete next[id]
+          return next
+        })
+      }
+    },
+    [completeReminder],
+  )
 
   const activeConflicts = useMemo(
     () => conflicts.filter((c) => !c.resolved),
@@ -855,6 +873,7 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     ambientRoutineStatuses,
     handleResolveConflict,
     handleCompletePrep,
+    handleCompleteReminder,
     pickupsCount,
     isEvening,
     isDinnerPast,
