@@ -69,20 +69,22 @@ export default function MobileFloatingDock({ onOpenQuickCreate }: MobileFloating
 
   return (
     <>
-      {/* ── Single-Thumb Floating Quick Add FAB (lg:hidden) ── */}
-      <div className="lg:hidden fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] right-4 z-sticky pointer-events-auto">
-        <Button
-          variant="ghost"
-          onClick={() => {
-            triggerHaptic()
-            onOpenQuickCreate?.()
-          }}
-          aria-label="Create new event, reminder, or task"
-          className="w-13 h-13 rounded-full bg-casa-navy hover:bg-slate-800 text-casa-gold p-0 flex items-center justify-center border-2 border-casa-gold/40 shadow-[0_8px_24px_rgba(27,42,74,0.35)] active:scale-90 transition-all duration-150 cursor-pointer"
-        >
-          <Plus size={26} strokeWidth={2.6} className="text-casa-gold" />
-        </Button>
-      </div>
+      {/* ── Single-Thumb Floating Quick Add FAB (lg:hidden, hidden on grocery page to prevent overlap) ── */}
+      {!location.pathname.startsWith('/grocery') && (
+        <div className="lg:hidden fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] right-4 z-sticky pointer-events-auto">
+          <Button
+            variant="ghost"
+            onClick={() => {
+              triggerHaptic()
+              onOpenQuickCreate?.()
+            }}
+            aria-label="Create new event, reminder, or task"
+            className="w-13 h-13 rounded-full bg-casa-navy hover:bg-slate-800 text-casa-gold p-0 flex items-center justify-center border-2 border-casa-gold/40 shadow-[0_8px_24px_rgba(27,42,74,0.35)] active:scale-90 transition-all duration-150 cursor-pointer"
+          >
+            <Plus size={26} strokeWidth={2.6} className="text-casa-gold" />
+          </Button>
+        </div>
+      )}
 
       {/* ── Edge-Anchored Luxury Translucent Bottom Navigation Bar (lg:hidden) ── */}
       <nav

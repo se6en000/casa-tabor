@@ -119,7 +119,7 @@ export default function TabletSidebar({ aiDrawerOpen = false }: TabletSidebarPro
               to={to}
               end={to === '/'}
               onClick={() => {
-                if (to === '/') setCanvasSubmode('interactive')
+                if (to === '/') setCanvasSubmode('calm')
                 if (to === '/calendar') setActiveView('today')
               }}
               className={({ isActive }) =>
@@ -137,121 +137,103 @@ export default function TabletSidebar({ aiDrawerOpen = false }: TabletSidebarPro
           ))}
         </nav>
 
-        {/* Family Member Section */}
+        {/* Family — collapsible filter + who's home */}
         {!isEffectivelyCollapsed && homeFamily.length > 0 && (
-          <div className="pt-2 border-t border-casa-border/40">
+          <div className="mt-3">
             <Button
               variant="ghost"
-                {({ isActive }) => (
-                  <>
-                    <Icon size={isEffectivelyCollapsed ? 22 : 19} strokeWidth={isActive ? 2 : 1.8} />
-                    {!isEffectivelyCollapsed && label}
-                  </>
-                )}
-              </NavLink>
-            ))}
-          </div>
+              fullWidth
+              align="between"
+              onClick={() => setFamilyOpen(o => !o)}
+              trailingIcon={(
+                <ChevronDown
+                  size={13}
+                  className={cn('transition-transform duration-200', familyOpen ? 'rotate-0' : '-rotate-90')}
+                />
+              )}
+              className="min-h-control px-1.5 text-caption font-semibold text-casa-text-faint uppercase tracking-[0.18em] hover:text-casa-text-secondary transition-colors"
+            >
+              Family
+            </Button>
 
-          {/* Family — collapsible filter + who's home */}
-          {!isEffectivelyCollapsed && (
-            <div className="mt-3">
-              <Button
-                variant="ghost"
-                fullWidth
-                align="between"
-                onClick={() => setFamilyOpen(o => !o)}
-                trailingIcon={(
-                  <ChevronDown
-                    size={13}
-                    className={cn('transition-transform duration-200', familyOpen ? 'rotate-0' : '-rotate-90')}
-                  />
-                )}
-                className="min-h-control px-1.5 text-caption font-semibold text-casa-text-faint uppercase tracking-[0.18em] hover:text-casa-text-secondary transition-colors"
-              >
-                Family
-              </Button>
+            <AnimatePresence initial={false}>
+              {familyOpen && (
+                <motion.div
+                  key="family-list"
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+                  className="overflow-hidden"
+                >
+                  <div className="flex flex-col gap-0.5">
+                    {homeFamily.map(m => {
+                      const active = visibleMembers.length === 0 || visibleMembers.includes(m.id)
+                      const status = whoStatus.find(s => s.member.id === m.id)
+                      const busy = !!status?.activeNow
+                      const nowWindowEnd = new Date(now.getTime() + (30 * 60 * 1000))
+                      const availabilityAssessment = evaluateMemberAvailabilityForWindow(
+                        m,
+                        now,
+                        nowWindowEnd,
+                        rulesByMember.get(m.id) ?? [],
+                        exceptionsByMember.get(m.id) ?? [],
+                        { requireCanDrive: false },
+                      )
+                      const statusLabel = status?.activeNow
+                        ? status.activeNow.location_name
+                          ? `Out · ${status.activeNow.location_name.split(' ').slice(0, 3).join(' ')}`
+                          : `Busy until ${format(new Date(status.activeNow.end_time), 'h:mm a')}`
+                        : !availabilityAssessment.available
+                          ? availabilityAssessment.reason ?? 'Unavailable'
+                          : availabilityAssessment.softUnavailable
+                            ? `${availabilityAssessment.reason ?? 'Blocked hours'} (flex)`
+                          : status?.nextUp
+                            ? `Next: ${format(new Date(status.nextUp.start_time), 'h:mm a')}`
+                            : 'Free today'
+                      const constrained = !availabilityAssessment.available || availabilityAssessment.softUnavailable
 
-              <AnimatePresence initial={false}>
-                {familyOpen && (
-                  <motion.div
-                    key="family-list"
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
-                    className="overflow-hidden"
-                  >
-                    <div className="flex flex-col gap-0.5">
-                      {homeFamily.map(m => {
-                        const active = visibleMembers.length === 0 || visibleMembers.includes(m.id)
-                        const status = whoStatus.find(s => s.member.id === m.id)
-                        const busy = !!status?.activeNow
-                        const nowWindowEnd = new Date(now.getTime() + (30 * 60 * 1000))
-                        const availabilityAssessment = evaluateMemberAvailabilityForWindow(
-                          m,
-                          now,
-                          nowWindowEnd,
-                          rulesByMember.get(m.id) ?? [],
-                          exceptionsByMember.get(m.id) ?? [],
-                          { requireCanDrive: false },
-                        )
-                        const statusLabel = status?.activeNow
-                          ? status.activeNow.location_name
-                            ? `Out · ${status.activeNow.location_name.split(' ').slice(0, 3).join(' ')}`
-                            : `Busy until ${format(new Date(status.activeNow.end_time), 'h:mm a')}`
-                          : !availabilityAssessment.available
-                            ? availabilityAssessment.reason ?? 'Unavailable'
-                            : availabilityAssessment.softUnavailable
-                              ? `${availabilityAssessment.reason ?? 'Blocked hours'} (flex)`
-                            : status?.nextUp
-                              ? `Next: ${format(new Date(status.nextUp.start_time), 'h:mm a')}`
-                              : 'Free today'
-                        const constrained = !availabilityAssessment.available || availabilityAssessment.softUnavailable
-
-                        return (
-                          <Button
-                            variant="ghost"
-                            fullWidth
-                            align="start"
-                            key={m.id}
-                            onClick={() => toggleMember(m.id)}
-                            contentClassName="gap-2.5"
-                            className={cn(
-                              'min-h-control px-1.5 py-1.5 rounded-xl transition-colors',
-                              active ? 'bg-transparent' : 'bg-transparent hover:bg-casa-surface/35',
-                            )}
+                      return (
+                        <Button
+                          variant="ghost"
+                          fullWidth
+                          align="start"
+                          key={m.id}
+                          onClick={() => toggleMember(m.id)}
+                          contentClassName="gap-2.5"
+                          className={cn(
+                            'min-h-control px-1.5 py-1.5 rounded-xl transition-colors',
+                            active ? 'bg-transparent' : 'bg-transparent hover:bg-casa-surface/35',
+                          )}
+                        >
+                          <span
+                            className="relative w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-body font-bold text-white"
+                            style={{ backgroundColor: m.color_hex }}
                           >
-                            <span
-                              className="relative w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-body font-bold text-white"
-                              style={{ backgroundColor: m.color_hex }}
-                            >
-                              {m.name[0]}
-                              <span className={cn(
-                                'absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-casa-bg-2',
-                                !active ? 'bg-casa-muted/30' : busy || constrained ? 'bg-amber-400' : 'bg-emerald-400',
-                              )} />
-                            </span>
-                            <div className="flex-1 min-w-0">
-                              <p className={cn('text-body font-semibold leading-tight transition-opacity', active ? 'text-casa-navy opacity-100' : 'text-casa-navy opacity-45')}>
-                                {m.name}
-                              </p>
-                              <p className={cn('text-caption leading-tight font-normal tabular-nums truncate mt-0.5', active ? 'text-casa-text-faint' : 'text-casa-text-faint/80')}>
-                                {statusLabel}
-                              </p>
-                            </div>
-                          </Button>
-                        )
-                      })}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          )}
-        </BounceScroll>
-      </aside>
-
-      <NotificationDrawer open={notifOpen} onClose={() => setNotifOpen(false)} />
-    </>
+                            {m.name[0]}
+                            <span className={cn(
+                              'absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-casa-bg-2',
+                              !active ? 'bg-casa-muted/30' : busy || constrained ? 'bg-amber-400' : 'bg-emerald-400',
+                            )} />
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <p className={cn('text-body font-semibold leading-tight transition-opacity', active ? 'text-casa-navy opacity-100' : 'text-casa-navy opacity-45')}>
+                              {m.name}
+                            </p>
+                            <p className={cn('text-caption leading-tight font-normal tabular-nums truncate mt-0.5', active ? 'text-casa-text-faint' : 'text-casa-text-faint/80')}>
+                              {statusLabel}
+                            </p>
+                          </div>
+                        </Button>
+                      )
+                    })}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+      </BounceScroll>
+    </aside>
   )
 }

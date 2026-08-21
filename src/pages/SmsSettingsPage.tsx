@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
-import { CheckCircle, MessageSquare, Bell, Clock, Send, ExternalLink, Copy } from 'lucide-react'
+import { CheckCircle, MessageSquare, Bell, Clock, Send, ExternalLink, Copy, Smartphone, AlertCircle } from 'lucide-react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
 import { SettingsPageHeader, SettingsToggle as Toggle } from '../components/settings'
 import { Button, Field as FormField, Input } from '../components/ui'
+import { subscribeDeviceToPush, sendDeviceTestPush } from '../hooks/usePushNotifications'
 
 interface SmsConfig {
   enabled: boolean
@@ -60,6 +61,34 @@ export default function SmsSettingsPage() {
   const [config, setConfig] = useState<SmsConfig>(DEFAULTS)
   const [saved, setSaved] = useState(false)
   const hydratedRef = useRef(false)
+
+  // Push subscription state for current device
+  const [pushStatus, setPushStatus] = useState<string | null>(null)
+  const [pushLoading, setPushLoading] = useState(false)
+
+  const handleEnrollDevice = async () => {
+    setPushLoading(true)
+    setPushStatus('Requesting permission and registering device…')
+    const result = await subscribeDeviceToPush()
+    if (result.ok) {
+      setPushStatus('Successfully enrolled this device for Web Push!')
+    } else {
+      setPushStatus(result.error || `Permission: ${result.permission}`)
+    }
+    setPushLoading(false)
+  }
+
+  const handleTestPush = async () => {
+    setPushLoading(true)
+    setPushStatus('Sending test push to subscribed devices…')
+    const result = await sendDeviceTestPush()
+    if (result.ok) {
+      setPushStatus('Test push dispatched! Check your lock screen / notification center.')
+    } else {
+      setPushStatus(result.error || 'Failed to dispatch test push.')
+    }
+    setPushLoading(false)
+  }
 
   // Load family members for the notify selector
   const { data: members = [] } = useQuery<{ id: string; name: string; phone: string | null }[]>({
@@ -141,11 +170,61 @@ export default function SmsSettingsPage() {
   return (
     <>
       <div className="mb-6">
-        <SettingsPageHeader icon={MessageSquare} title="Notifications" description="SMS alerts via Twilio" />
+        <SettingsPageHeader icon={MessageSquare} title="Notifications & Alerts" description="Web push alerts and Twilio SMS configuration" />
       </div>
 
       <div className="space-y-4">
-        {/* Master toggle + Twilio credentials */}
+        {/* Device Push Notifications Enrolment Card */}
+        <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-casa-gold/15 flex items-center justify-center text-casa-gold flex-shrink-0">
+                <Smartphone size={20} />
+              </div>
+              <div>
+                <h3 className="text-body font-bold text-casa-navy">This Device (Web Push)</h3>
+                <p className="text-caption text-casa-muted mt-0.5">
+                  Receive real-time 30-minute event reminders and conflict alerts directly on your lock screen.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 pt-4 border-t border-casa-divider flex items-center gap-3 flex-wrap">
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={pushLoading}
+              onClick={handleEnrollDevice}
+              className="min-h-[44px]"
+            >
+              <Smartphone size={16} className="mr-2" />
+              <span>Enable / Re-enlist This Phone</span>
+            </Button>
+
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={pushLoading}
+              onClick={handleTestPush}
+              className="min-h-[44px]"
+            >
+              <Send size={16} className="mr-2" />
+              <span>Send Test Push Now</span>
+            </Button>
+          </div>
+
+          {pushStatus && (
+            <div className="mt-3 p-3 rounded-xl bg-casa-bg border border-casa-border text-caption text-casa-navy flex items-center gap-2">
+              <AlertCircle size={16} className="text-casa-gold flex-shrink-0" />
+              <span>{pushStatus}</span>
+            </div>
+          )}
+
+          <p className="text-2xs text-casa-muted mt-3">
+            Tip: On iPhone (iOS), ensure you open Casa Tabor from the icon on your <strong>Home Screen</strong> (added via Safari &gt; Share &gt; Add to Home Screen) to receive lockscreen push notifications.
+          </p>
+        </div>
         <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
           <Toggle
             checked={config.enabled}

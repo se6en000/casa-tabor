@@ -8,13 +8,14 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  RotateCcw,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { type GroceryItem } from '../../hooks/useGroceryList'
 import { categoryIconBadgeClassName, getCategoryTone } from '../../utils/groceryVisuals'
 import { useFieldDictation } from '../../hooks/useFieldDictation'
 import { normalizeGroceryNameKey } from '../../utils/groceryPredictionDeferrals'
-import { Button, Checkbox, Chip, Heading, IconButton } from '../ui'
+import { Button, Chip, Heading, IconButton } from '../ui'
 import type { CategoryVisualDef } from '../grocery/GroceryAisleGrid'
 
 const QUICK_STAPLES = [
@@ -55,6 +56,14 @@ export interface MobileGroceryViewProps {
   onAddItem: (name: string, options?: { allowDuplicate?: boolean }) => void
 }
 
+/** Helper to split batch comma/newline inputs into distinct items */
+function splitBatchGroceryInput(raw: string): string[] {
+  return raw
+    .split(/[,;\n]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+}
+
 export default function MobileGroceryView({
   items,
   activeCategories,
@@ -74,6 +83,7 @@ export default function MobileGroceryView({
 }: MobileGroceryViewProps) {
   const [inputValue, setInputValue] = useState('')
   const [isCartOpen, setIsCartOpen] = useState(false)
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string | null>(null)
   const [localDeletingIds, setLocalDeletingIds] = useState<Set<string>>(new Set())
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -99,7 +109,7 @@ export default function MobileGroceryView({
     onUndoDelete?.(id)
   }
 
-  // Voice dictation (Strictly Press-and-Hold)
+  // Voice dictation (Strictly Press-and-Hold / Tap-to-Speak)
   const [isPressingMic, setIsPressingMic] = useState(false)
   const {
     supported: dictationSupported,
@@ -136,7 +146,12 @@ export default function MobileGroceryView({
     const captured = stopDictation()
     const textToAdd = (captured || inputValue).trim()
     if (textToAdd) {
-      onAddItem(textToAdd, { allowDuplicate: false })
+      const parts = splitBatchGroceryInput(textToAdd)
+      if (parts.length > 1) {
+        parts.forEach((p) => onAddItem(p, { allowDuplicate: false }))
+      } else {
+        onAddItem(textToAdd, { allowDuplicate: false })
+      }
       setInputValue('')
       resetDictation('')
     }
@@ -153,7 +168,12 @@ export default function MobileGroceryView({
     const captured = stopDictation()
     const textToAdd = (captured || inputValue).trim()
     if (textToAdd) {
-      onAddItem(textToAdd, { allowDuplicate: false })
+      const parts = splitBatchGroceryInput(textToAdd)
+      if (parts.length > 1) {
+        parts.forEach((p) => onAddItem(p, { allowDuplicate: false }))
+      } else {
+        onAddItem(textToAdd, { allowDuplicate: false })
+      }
       setInputValue('')
       resetDictation('')
     }
@@ -183,7 +203,14 @@ export default function MobileGroceryView({
   const handleAddCurrentInput = (allowDuplicate = false) => {
     if (!trimmedInput) return
     triggerHaptic(10)
-    onAddItem(trimmedInput, { allowDuplicate })
+    const batch = splitBatchGroceryInput(trimmedInput)
+    if (batch.length > 1) {
+      batch.forEach((item) => {
+        onAddItem(item, { allowDuplicate })
+      })
+    } else {
+      onAddItem(trimmedInput, { allowDuplicate })
+    }
     setInputValue('')
     resetDictation('')
     inputRef.current?.focus()
@@ -201,22 +228,27 @@ export default function MobileGroceryView({
     onAddItem(stapleName, { allowDuplicate: false })
   }
 
+  // Filtered categories based on selected pill
+  const visibleCategories = selectedCategoryFilter
+    ? activeCategories.filter((c) => c.key === selectedCategoryFilter)
+    : activeCategories
+
   return (
-    <div className="flex flex-col min-h-full bg-casa-bg text-casa-text pb-44">
-      {/* ── Sticky Top Header ── */}
-      <header className="sticky top-0 z-sticky bg-casa-surface/98 backdrop-blur-xl border-b border-casa-border px-4 py-3 shadow-xs">
-        <div className="flex items-center justify-between gap-2">
+    <div className="flex flex-col min-h-full bg-casa-bg text-casa-text pb-48">
+      {/* ── Sticky Top Header with Safe-Area Inset (Concept A: Streamliner) ── */}
+      <header className="sticky top-0 z-sticky bg-casa-surface/96 backdrop-blur-xl border-b border-casa-border/80 px-4 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] pb-3 shadow-xs">
+        <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
-            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-casa-gold/20 text-casa-gold border border-casa-gold/30 shrink-0">
-              <ShoppingCart size={16} />
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-casa-gold/15 text-casa-gold border border-casa-gold/30 shrink-0 shadow-2xs">
+              <ShoppingCart size={17} />
             </span>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <Heading role="display-sm" className="font-display text-lg font-bold text-casa-navy leading-none truncate">
-                  Grocery List
+                <Heading role="display-sm" className="font-serif text-lg font-bold text-casa-navy leading-none tracking-tight truncate">
+                  Provisions
                 </Heading>
-                <Chip tone="accent" size="sm" className="font-bold text-2xs px-2 py-0.5">
-                  {uncheckedCount} left
+                <Chip tone="accent" size="sm" className="font-bold text-2xs px-2 py-0.5 shadow-2xs">
+                  {uncheckedCount} to buy
                 </Chip>
               </div>
               <p className="text-2xs text-casa-muted mt-0.5 truncate font-mono">
@@ -234,193 +266,239 @@ export default function MobileGroceryView({
                 onClearCompleted()
               }}
               leadingIcon={<Trash2 size={13} />}
-              className="text-2xs font-semibold text-casa-error hover:bg-casa-error/10 shrink-0 px-2.5 h-8"
+              className="text-2xs font-semibold text-casa-error hover:bg-casa-error/10 shrink-0 px-2.5 h-8 border border-casa-error/20 rounded-xl"
             >
               Clear cart ({checkedCount})
             </Button>
           )}
         </div>
+
+        {/* Category Quick-Filter Ribbon */}
+        {activeCategories.length > 1 && (
+          <div className="flex items-center gap-1.5 overflow-x-auto pt-2.5 pb-0.5 no-scrollbar -mx-1 px-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                triggerHaptic(6)
+                setSelectedCategoryFilter(null)
+              }}
+              className={cn(
+                'px-2.5 py-1 rounded-lg text-2xs font-medium shrink-0 transition-all border shadow-2xs h-auto min-h-0',
+                selectedCategoryFilter === null
+                  ? 'bg-casa-navy text-white border-casa-navy font-semibold hover:bg-casa-navy hover:text-white'
+                  : 'bg-casa-surface text-casa-muted border-casa-border hover:border-casa-gold/40'
+              )}
+            >
+              All ({uncheckedCount})
+            </Button>
+            {activeCategories.map((cat) => {
+              const isSelected = selectedCategoryFilter === cat.key
+              return (
+                <Button
+                  key={`filter-${cat.key}`}
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    triggerHaptic(6)
+                    setSelectedCategoryFilter(isSelected ? null : cat.key)
+                  }}
+                  className={cn(
+                    'px-2.5 py-1 rounded-lg text-2xs font-medium shrink-0 transition-all border shadow-2xs flex items-center gap-1.5 h-auto min-h-0',
+                    isSelected
+                      ? 'bg-casa-gold text-white border-casa-gold font-semibold shadow-xs hover:bg-casa-gold hover:text-white'
+                      : 'bg-casa-surface text-casa-muted border-casa-border hover:border-casa-gold/40'
+                  )}
+                >
+                  <span>{cat.label}</span>
+                  <span className={cn('text-3xs font-mono', isSelected ? 'text-white/90' : 'text-casa-muted/70')}>
+                    {cat.items.length}
+                  </span>
+                </Button>
+              )
+            })}
+          </div>
+        )}
       </header>
 
-      {/* ── Main Checklist Content ── */}
-      <main className="flex-1 px-3 pt-3 space-y-3">
+      {/* ── Main Checklist Content: High-Density Continuous Canvas (Concept A) ── */}
+      <main className="flex-1 px-3 pt-3 space-y-4">
         {activeCategories.length === 0 && completedItems.length === 0 ? (
-          <div className="rounded-3xl border border-casa-border bg-casa-surface p-8 text-center space-y-2 mt-4">
-            <div className="w-12 h-12 rounded-2xl bg-casa-gold/15 text-casa-gold flex items-center justify-center mx-auto">
+          <div className="rounded-3xl border border-casa-border bg-casa-surface p-8 text-center space-y-2.5 mt-4 shadow-xs">
+            <div className="w-12 h-12 rounded-2xl bg-casa-gold/15 text-casa-gold flex items-center justify-center mx-auto shadow-2xs">
               <ShoppingCart size={24} />
             </div>
-            <p className="font-display text-base font-bold text-casa-navy">All Shopped Up!</p>
+            <p className="font-serif text-lg font-bold text-casa-navy">All Shopped Up!</p>
             <p className="text-caption text-casa-muted max-w-xs mx-auto">
-              Your grocery basket is empty. Use the quick-add bar below or tap any common staple to add items.
+              Your grocery basket is empty. Add provisions using the docked bar below or tap any common staple.
             </p>
           </div>
         ) : (
-          activeCategories.map((group) => {
-            const CategoryIcon = group.visual.icon
-            return (
-              <section
-                key={`mobile-group-${group.key}`}
-                className="overflow-hidden rounded-2xl border border-casa-border/80 bg-casa-surface shadow-2xs"
-              >
-                {/* Category Header */}
-                <div className="flex items-center justify-between border-b border-casa-border/70 bg-gradient-to-b from-casa-bg to-casa-bg-2 px-3.5 py-2.5">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div
-                      className={cn(
-                        'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-casa-border/80 bg-white shadow-2xs text-casa-navy',
-                        categoryIconBadgeClassName(getCategoryTone(group.key))
-                      )}
-                    >
-                      <CategoryIcon size={14} />
+          <div className="rounded-2xl border border-casa-border/80 bg-casa-surface overflow-hidden shadow-xs divide-y divide-casa-divider/60">
+            {visibleCategories.map((group) => {
+              const CategoryIcon = group.visual.icon
+              return (
+                <section key={`mobile-group-${group.key}`} className="overflow-hidden">
+                  {/* Category Header (Subtle Section Divider) */}
+                  <div className="flex items-center justify-between bg-casa-bg/60 px-3.5 py-2 border-b border-casa-border/40">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div
+                        className={cn(
+                          'flex h-5 w-5 shrink-0 items-center justify-center rounded border border-casa-border/60 bg-white shadow-2xs text-casa-navy',
+                          categoryIconBadgeClassName(getCategoryTone(group.key))
+                        )}
+                      >
+                        <CategoryIcon size={12} />
+                      </div>
+                      <span className="truncate font-mono text-2xs font-bold uppercase tracking-wider text-casa-navy">
+                        {group.label}
+                      </span>
                     </div>
-                    <span className="truncate font-display text-body-sm font-semibold text-casa-navy">
-                      {group.label}
+                    <span className="text-3xs font-mono font-semibold text-casa-muted bg-white/80 px-2 py-0.5 rounded-full border border-casa-border/60 shadow-2xs">
+                      {group.items.length}
                     </span>
                   </div>
-                  <span className="text-3xs font-mono font-semibold text-casa-muted bg-casa-bg-2 px-2 py-0.5 rounded-full border border-casa-border/60">
-                    {group.items.length}
-                  </span>
-                </div>
 
-                {/* Items in Category */}
-                <div className="divide-y divide-casa-divider/70">
-                  {group.items.length === 0 ? (
-                    <div className="px-3.5 py-3 text-center text-3xs font-mono text-casa-muted italic bg-casa-surface-subtle/50">
-                      All provisions in cart ✓
-                    </div>
-                  ) : (
-                    <AnimatePresence initial={false}>
-                      {group.items.map((item) => {
-                        const isDismissQueued = dismissingIds.has(item.id)
-                        const isDismissExiting = dismissingExitingIds.has(item.id)
-                        const isDeleting = (deletingIds?.has(item.id) ?? false) || localDeletingIds.has(item.id)
-                        const visualChecked = item.checked || isDismissQueued
-                        const isSpotlighted = spotlightedItemId === item.id
+                  {/* High-Density Typographic Items */}
+                  <div className="divide-y divide-casa-divider/40">
+                    {group.items.length === 0 ? (
+                      <div className="px-3.5 py-2.5 text-center text-3xs font-mono text-casa-muted italic bg-casa-surface-subtle/30">
+                        All provisions in cart ✓
+                      </div>
+                    ) : (
+                      <AnimatePresence initial={false}>
+                        {group.items.map((item) => {
+                          const isDismissQueued = dismissingIds.has(item.id)
+                          const isDismissExiting = dismissingExitingIds.has(item.id)
+                          const isDeleting = (deletingIds?.has(item.id) ?? false) || localDeletingIds.has(item.id)
+                          const visualChecked = item.checked || isDismissQueued
+                          const isSpotlighted = spotlightedItemId === item.id
 
-                        return (
-                          <motion.div
-                            key={item.id}
-                            id={`grocery-item-${item.id}`}
-                            layout
-                            initial={{ opacity: 0, y: -4 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, height: 0, scale: 0.96 }}
-                            transition={{ duration: 0.2 }}
-                            className={cn(
-                              'flex items-center gap-3 px-3.5 py-3 transition-colors duration-150',
-                              (visualChecked || isDeleting) && 'opacity-50 bg-casa-surface-subtle',
-                              isDismissExiting && 'opacity-0 scale-95',
-                              isSpotlighted && 'bg-casa-accent-subtle'
-                            )}
-                          >
-                            {/* Large 48px+ Brass Checkbox Touch Trigger */}
-                            {!isDeleting && (
-                              <IconButton
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  triggerHaptic(8)
-                                  onToggleItem(item.id, !visualChecked)
-                                }}
-                                aria-label={visualChecked ? `Mark ${item.name} as needed` : `Mark ${item.name} as in cart`}
-                                className="flex-shrink-0 -ml-1 p-0 hover:bg-transparent"
-                                icon={
-                                  <div
+                          return (
+                            <motion.div
+                              key={item.id}
+                              id={`grocery-item-${item.id}`}
+                              layout
+                              initial={{ opacity: 0, y: -4 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, height: 0, scale: 0.96 }}
+                              transition={{ duration: 0.18 }}
+                              className={cn(
+                                'flex items-center gap-3 px-3 py-2.5 transition-colors duration-150',
+                                (visualChecked || isDeleting) && 'opacity-50 bg-casa-surface-subtle/60',
+                                isDismissExiting && 'opacity-0 scale-95',
+                                isSpotlighted && 'bg-casa-gold/15'
+                              )}
+                            >
+                              {/* 44px+ Round Brass Checkbox Trigger */}
+                              {!isDeleting && (
+                                <IconButton
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    triggerHaptic(8)
+                                    onToggleItem(item.id, !visualChecked)
+                                  }}
+                                  aria-label={visualChecked ? `Mark ${item.name} as needed` : `Mark ${item.name} as in cart`}
+                                  className="flex-shrink-0 -ml-1.5 p-0 hover:bg-transparent"
+                                  icon={
+                                    <div
+                                      className={cn(
+                                        'w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all duration-200',
+                                        visualChecked
+                                          ? 'bg-casa-gold border-casa-gold text-white shadow-2xs scale-95'
+                                          : 'border-casa-border hover:border-casa-gold/60 bg-casa-surface text-transparent'
+                                      )}
+                                    >
+                                      <Check size={11} strokeWidth={3} />
+                                    </div>
+                                  }
+                                />
+                              )}
+
+                              {/* Item Details */}
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-baseline gap-1.5 flex-wrap">
+                                  <span
                                     className={cn(
-                                      'w-[22px] h-[22px] rounded-lg border flex items-center justify-center transition-all duration-200',
-                                      visualChecked
-                                        ? 'bg-casa-gold border-casa-gold text-white shadow-2xs scale-95'
-                                        : 'border-casa-border bg-white text-transparent'
+                                      'text-body-sm font-medium text-casa-navy leading-tight transition-all',
+                                      (visualChecked || isDeleting) && 'line-through text-casa-muted/70'
                                     )}
                                   >
-                                    <svg className="w-3.5 h-3.5 stroke-current stroke-[2.5]" viewBox="0 0 24 24" fill="none">
-                                      <polyline points="20 6 9 17 4 12" />
-                                    </svg>
-                                  </div>
-                                }
-                              />
-                            )}
+                                    {item.name}
+                                  </span>
 
-                            {/* Item Details */}
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-baseline gap-1.5 flex-wrap">
-                                <span
-                                  className={cn(
-                                    'text-body-sm font-medium text-casa-navy leading-snug transition-all',
-                                    (visualChecked || isDeleting) && 'line-through text-casa-muted/70'
+                                  {isDeleting ? (
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                      <span className="text-3xs font-mono font-medium text-casa-error bg-casa-error/10 px-2 py-0.5 rounded-full border border-casa-error/20">
+                                        Deleted
+                                      </span>
+                                      {onUndoDelete && (
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => handleUndo(item.id)}
+                                          className="text-3xs font-semibold text-casa-gold hover:underline p-0 h-auto min-h-0 flex items-center gap-1"
+                                        >
+                                          <RotateCcw size={10} />
+                                          Undo
+                                        </Button>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    (item.quantity || item.unit) && (
+                                      <span className="inline-flex items-center px-1.5 py-0.2 rounded bg-casa-bg border border-casa-border/70 text-3xs font-mono font-medium text-casa-muted shrink-0 shadow-2xs">
+                                        {item.quantity}
+                                        {item.unit ? ` ${item.unit}` : ''}
+                                      </span>
+                                    )
                                   )}
-                                >
-                                  {item.name}
-                                </span>
-
-                                {isDeleting ? (
-                                  <div className="flex items-center gap-1.5 shrink-0">
-                                    <span className="text-3xs font-mono font-medium text-casa-error bg-casa-error/10 px-2 py-0.5 rounded-full border border-casa-error/20">
-                                      Deleted
-                                    </span>
-                                    {onUndoDelete && (
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => handleUndo(item.id)}
-                                        className="text-3xs font-semibold text-casa-gold hover:underline p-0 h-auto min-h-0"
-                                      >
-                                        Undo
-                                      </Button>
-                                    )}
-                                  </div>
-                                ) : (
-                                  (item.quantity || item.unit) && (
-                                    <span className="inline-flex items-center px-1.5 py-0.2 rounded bg-casa-bg-2 border border-casa-border/70 text-3xs font-mono font-medium text-casa-muted shrink-0">
-                                      {item.quantity}
-                                      {item.unit ? ` ${item.unit}` : ''}
-                                    </span>
-                                  )
+                                </div>
+                                {item.notes && !isDeleting && (
+                                  <p className="text-3xs text-casa-muted/80 italic leading-tight truncate mt-0.5">
+                                    {item.notes}
+                                  </p>
                                 )}
                               </div>
-                              {item.notes && !isDeleting && (
-                                <p className="text-3xs text-casa-muted/80 italic leading-tight truncate mt-0.5">
-                                  {item.notes}
-                                </p>
-                              )}
-                            </div>
 
-                            {/* Delete Action (with 44px min hit area) */}
-                            {!isDeleting && (
-                              <IconButton
-                                icon={<X size={15} />}
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleDelete(item.id)}
-                                aria-label={`Delete ${item.name}`}
-                                className="-mr-1.5 p-2 h-9 w-9 text-casa-muted/50 hover:text-casa-error hover:bg-casa-error/10 shrink-0 rounded-xl"
-                              />
-                            )}
-                          </motion.div>
-                        )
-                      })}
-                    </AnimatePresence>
-                  )}
-                </div>
-              </section>
-            )
-          })
+                              {/* Quick Delete Action (44px min hit area) */}
+                              {!isDeleting && (
+                                <IconButton
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDelete(item.id)}
+                                  aria-label={`Delete ${item.name}`}
+                                  icon={<X size={15} />}
+                                  className="-mr-1.5 text-casa-muted/40 hover:text-casa-error hover:bg-casa-error/10 rounded-xl"
+                                />
+                              )}
+                            </motion.div>
+                          )
+                        })}
+                      </AnimatePresence>
+                    )}
+                  </div>
+                </section>
+              )
+            })}
+          </div>
         )}
 
-        {/* ── Collapsible "In Cart / Completed" Section ── */}
+        {/* ── Collapsible "In Cart / Completed" Drawer ── */}
         {completedItems.length > 0 && (
-          <section className="overflow-hidden rounded-2xl border border-casa-border bg-casa-surface/60 mt-4 shadow-2xs">
-            <button
-              type="button"
+          <section className="overflow-hidden rounded-2xl border border-casa-border bg-casa-surface/80 mt-4 shadow-2xs">
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => {
                 triggerHaptic(6)
                 setIsCartOpen((prev) => !prev)
               }}
-              className="w-full flex items-center justify-between px-4 py-3 bg-casa-surface/90 text-left transition-colors active:bg-casa-bg"
+              className="w-full flex items-center justify-between px-4 py-3 bg-casa-surface text-left transition-colors active:bg-casa-bg h-auto min-h-0 rounded-none"
             >
               <div className="flex items-center gap-2">
-                <span className="h-6 w-6 rounded-full bg-emerald-500/15 text-emerald-600 flex items-center justify-center">
-                  <Check size={14} strokeWidth={2.5} />
+                <span className="h-6 w-6 rounded-full bg-emerald-500/15 text-emerald-600 flex items-center justify-center shadow-2xs">
+                  <Check size={13} strokeWidth={2.5} />
                 </span>
                 <span className="text-body-sm font-bold text-casa-navy">
                   In Cart ({completedItems.length})
@@ -432,7 +510,7 @@ export default function MobileGroceryView({
                 </span>
                 {isCartOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
               </div>
-            </button>
+            </Button>
 
             <AnimatePresence initial={false}>
               {isCartOpen && (
@@ -441,36 +519,40 @@ export default function MobileGroceryView({
                   animate={{ height: 'auto', opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
                   transition={{ duration: 0.2 }}
-                  className="divide-y divide-casa-divider border-t border-casa-divider overflow-hidden"
+                  className="divide-y divide-casa-divider/50 border-t border-casa-divider overflow-hidden"
                 >
                   {completedItems.map((item) => (
                     <div
                       key={`completed-${item.id}`}
                       className="flex items-center gap-3 px-3.5 py-2.5 opacity-60 hover:opacity-100 transition-opacity bg-casa-bg/30"
                     >
-                      <div className="flex items-center justify-center -ml-1.5 p-1.5 shrink-0">
-                        <Checkbox
-                          checked={true}
-                          onChange={() => {
-                            triggerHaptic(8)
-                            onToggleItem(item.id, false)
-                          }}
-                          label={`Return ${item.name} to list`}
-                          className="min-h-0 shrink-0 gap-0 pt-0 [&>span:last-child]:sr-only"
-                        />
-                      </div>
+                      <IconButton
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          triggerHaptic(8)
+                          onToggleItem(item.id, false)
+                        }}
+                        aria-label={`Return ${item.name} to list`}
+                        className="flex-shrink-0 -ml-1.5 p-0 hover:bg-transparent"
+                        icon={
+                          <div className="w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-2xs">
+                            <Check size={11} strokeWidth={3} />
+                          </div>
+                        }
+                      />
                       <div className="min-w-0 flex-1">
                         <span className="text-body-sm line-through text-casa-muted font-medium truncate block">
                           {item.name}
                         </span>
                       </div>
                       <IconButton
-                        icon={<X size={14} />}
                         variant="ghost"
                         size="sm"
                         onClick={() => handleDelete(item.id)}
                         aria-label={`Delete ${item.name}`}
-                        className="-mr-1.5 h-8 w-8 text-casa-muted/50 hover:text-casa-error hover:bg-casa-error/10 shrink-0"
+                        icon={<X size={14} />}
+                        className="-mr-1.5 text-casa-muted/40 hover:text-casa-error hover:bg-casa-error/10"
                       />
                     </div>
                   ))}
@@ -481,9 +563,9 @@ export default function MobileGroceryView({
         )}
       </main>
 
-      {/* ── Floating Translucent Quick-Add Capsule (docked above floating nav) ── */}
-      <div className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] left-3.5 right-3.5 max-w-md mx-auto z-sticky px-3 py-1.5 floating-dock-glass border border-casa-gold/30 rounded-2xl shadow-[0_8px_24px_rgba(27,42,74,0.06)] pointer-events-auto">
-        <div className="max-w-md mx-auto space-y-2">
+      {/* ── Docked Super-Input Bar (Concept A: Keyboard-Aware Streamliner) ── */}
+      <div className="fixed bottom-[calc(4.25rem+env(safe-area-inset-bottom))] left-3 right-3 max-w-md mx-auto z-sticky px-3 py-2 floating-dock-glass border border-casa-gold/30 rounded-2xl shadow-[0_8px_28px_rgba(27,42,74,0.1)] pointer-events-auto">
+        <div className="max-w-md mx-auto space-y-1.5">
           {/* Duplicate Alert Banner */}
           <AnimatePresence initial={false}>
             {duplicateSuggestion && (
@@ -493,15 +575,15 @@ export default function MobileGroceryView({
                 exit={{ opacity: 0, height: 0 }}
                 className="overflow-hidden"
               >
-                <div className="flex items-center justify-between gap-2 rounded-xl border border-casa-gold/40 bg-casa-gold/10 px-3 py-1.5 mb-1">
-                  <p className="text-2xs text-casa-navy truncate">
-                    <span className="font-semibold">{duplicateSuggestion.name}</span> is already on your list
+                <div className="flex items-center justify-between gap-2 rounded-xl border border-casa-gold/40 bg-casa-gold/15 px-3 py-1.5 mb-1 shadow-2xs">
+                  <p className="text-2xs text-casa-navy truncate font-medium">
+                    <span className="font-bold">{duplicateSuggestion.name}</span> is already on your list
                   </p>
                   <Button
                     variant="secondary"
                     size="sm"
                     onClick={() => handleAddCurrentInput(true)}
-                    className="h-6 text-3xs px-2 shrink-0 font-semibold"
+                    className="h-6 text-3xs px-2 shrink-0 font-bold bg-white text-casa-navy border border-casa-gold/40"
                   >
                     Add anyway
                   </Button>
@@ -510,11 +592,11 @@ export default function MobileGroceryView({
             )}
           </AnimatePresence>
 
-          {/* Input & Voice Row */}
-          <div className="flex items-center gap-1.5 bg-casa-bg rounded-2xl border border-casa-border px-2.5 h-12 shadow-inner focus-within:ring-2 focus-within:ring-casa-gold/40 focus-within:border-casa-gold/60 transition-all">
+          {/* Unified Input Container */}
+          <div className="flex items-center gap-1.5 bg-casa-surface/90 rounded-xl border border-casa-border px-2.5 h-11 shadow-inner focus-within:ring-2 focus-within:ring-casa-gold/40 focus-within:border-casa-gold/60 transition-all">
             {dictationSupported && (
               <IconButton
-                icon={<Mic size={17} />}
+                icon={<Mic size={16} />}
                 variant={listening ? 'primary' : 'ghost'}
                 size="sm"
                 onPointerDown={handleMicPointerDown}
@@ -529,7 +611,7 @@ export default function MobileGroceryView({
               />
             )}
 
-            {/* Undulating Champagne Waveform on mobile while listening */}
+            {/* Tactile Waveform when speaking */}
             {listening && (
               <div className="tactile-waveform shrink-0 mr-1" aria-label="Listening audio waveform">
                 <span />
@@ -549,8 +631,8 @@ export default function MobileGroceryView({
               enterKeyHint="done"
               autoComplete="off"
               autoCorrect="off"
-              placeholder={listening ? 'Listening… release to add' : 'Add grocery item…'}
-              className="flex-1 min-w-0 bg-transparent text-body-sm text-casa-text placeholder:text-casa-muted outline-none"
+              placeholder={listening ? 'Listening… release to add' : 'Add item or paste list…'}
+              className="flex-1 min-w-0 bg-transparent text-body-sm text-casa-navy placeholder:text-casa-muted/70 outline-none"
             />
 
             <Button
@@ -558,15 +640,15 @@ export default function MobileGroceryView({
               size="sm"
               onClick={() => handleAddCurrentInput(false)}
               disabled={!trimmedInput}
-              className="h-8 px-3 shrink-0 font-bold text-2xs"
+              className="h-8 px-3 shrink-0 font-bold text-2xs bg-casa-gold text-white shadow-2xs hover:bg-casa-gold/90"
             >
               Add
             </Button>
           </div>
 
-          {/* Quick 1-Tap Staples Ribbon */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar -mx-1 px-1">
-            <span className="text-3xs font-mono font-bold uppercase tracking-wider text-casa-gold shrink-0">
+          {/* Quick 1-Tap Staples Ribbon (Non-colliding) */}
+          <div className="flex items-center gap-1 overflow-x-auto pt-0.5 pb-0.5 no-scrollbar -mx-1 px-1">
+            <span className="text-3xs font-mono font-bold uppercase tracking-wider text-casa-gold shrink-0 mr-0.5">
               Quick:
             </span>
             {QUICK_STAPLES.map((staple) => {
@@ -578,9 +660,9 @@ export default function MobileGroceryView({
                   size="sm"
                   onClick={() => handleQuickStapleAdd(staple)}
                   disabled={alreadyOnList}
-                  className="shrink-0 text-3xs font-medium bg-casa-surface hover:border-casa-gold/40 py-0.5 px-2 cursor-pointer shadow-2xs"
+                  className="shrink-0 text-3xs font-medium bg-casa-surface hover:border-casa-gold/50 py-0.5 px-2 cursor-pointer shadow-2xs"
                 >
-                  {alreadyOnList ? <Check size={11} className="inline mr-0.5 -mt-0.5" /> : '+ '}
+                  {alreadyOnList ? <Check size={10} className="inline mr-0.5 -mt-0.5 text-emerald-600" /> : '+ '}
                   {staple}
                 </Chip>
               )
