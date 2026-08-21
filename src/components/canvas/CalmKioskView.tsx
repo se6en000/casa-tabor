@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { format, parseISO, differenceInMinutes, subMinutes } from 'date-fns'
+import { format, parseISO, differenceInMinutes, subMinutes, startOfDay, isBefore } from 'date-fns'
 import {
   MapPin,
   Car,
@@ -25,7 +25,7 @@ import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { useAppStore } from '../../stores/appStore'
 import { useCalendarStore } from '../../stores/calendarStore'
 import { cn } from '../../utils/cn'
-import { formatDurationLong } from '../../utils/eventTime'
+import { formatDurationLong, getEventStartDate } from '../../utils/eventTime'
 import { Button, IconButton, PersonAvatarStack, JourneyProgressBar } from '../ui'
 import { getDisplayMemberColor } from '../../design-system/memberColors'
 import TomorrowPrepWidget from './widgets/TomorrowPrepWidget'
@@ -1234,104 +1234,123 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                   >
 
               {/* ── Concept A: Collapsible Overdue Fold (Expanded by default when items exist) ── */}
-              {overdueReminders.length > 0 && (
-                <div className="mb-1.5">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    fullWidth
-                    align="between"
-                    onClick={toggleOverdueTodos}
-                    className="min-h-[32px] h-8 py-0.5 px-2.5 rounded-lg bg-amber-500/[0.08] hover:bg-amber-500/[0.14] text-caption text-amber-900 border border-amber-500/25 transition-colors shadow-2xs"
-                  >
-                    <span className="inline-flex items-center gap-1.5 font-semibold text-caption text-amber-900">
-                      <Clock size={12} className="text-amber-700 shrink-0" />
-                      <span>
-                        {overdueReminders.length} {overdueReminders.length === 1 ? 'item' : 'items'} pending from earlier today
+              {overdueReminders.length > 0 && (() => {
+                const hasPastDayOverdue = overdueReminders.some((evt) => isBefore(getEventStartDate(evt), startOfDay(now)))
+                return (
+                  <div className="mb-1.5">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      fullWidth
+                      align="between"
+                      onClick={toggleOverdueTodos}
+                      className="min-h-[32px] h-8 py-0.5 px-2.5 rounded-lg bg-amber-500/[0.08] hover:bg-amber-500/[0.14] text-caption text-amber-900 border border-amber-500/25 transition-colors shadow-2xs"
+                    >
+                      <span className="inline-flex items-center gap-1.5 font-semibold text-caption text-amber-900">
+                        <Clock size={12} className="text-amber-700 shrink-0" />
+                        <span>
+                          {hasPastDayOverdue
+                            ? `${overdueReminders.length} overdue ${overdueReminders.length === 1 ? 'item' : 'items'} pending`
+                            : `${overdueReminders.length} ${overdueReminders.length === 1 ? 'item' : 'items'} pending from earlier today`}
+                        </span>
                       </span>
-                    </span>
-                    {showOverdueTodos ? <ChevronUp size={12} className="text-amber-800 shrink-0" /> : <ChevronDown size={12} className="text-amber-800 shrink-0" />}
-                  </Button>
+                      {showOverdueTodos ? <ChevronUp size={12} className="text-amber-800 shrink-0" /> : <ChevronDown size={12} className="text-amber-800 shrink-0" />}
+                    </Button>
 
-                  <AnimatePresence initial={false}>
-                    {showOverdueTodos && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
-                        transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                        className="space-y-1 pt-1 overflow-hidden"
-                      >
-                        {overdueReminders.map((evt) => {
-                          const avatarPeople = evt.members.map((m) => ({
-                            id: m.family_member?.id || m.id,
-                            name: m.family_member?.name || 'Member',
-                            color: m.family_member?.color_hex || 'var(--color-casa-navy)',
-                          }))
+                    <AnimatePresence initial={false}>
+                      {showOverdueTodos && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                          className="space-y-1 pt-1 overflow-hidden"
+                        >
+                          {overdueReminders.map((evt) => {
+                            const avatarPeople = evt.members.map((m) => ({
+                              id: m.family_member?.id || m.id,
+                              name: m.family_member?.name || 'Member',
+                              color: m.family_member?.color_hex || 'var(--color-casa-navy)',
+                            }))
+                            const startDate = getEventStartDate(evt)
+                            const isPastDay = isBefore(startDate, startOfDay(now))
 
-                          return (
-                            <div
-                              key={evt.id}
-                              role="button"
-                              tabIndex={0}
-                              data-tactile="true"
-                              data-calendar-event
-                              data-sidecar-loadable="true"
-                              data-event-id={evt.id}
-                              onClick={() => onOpenEvent(evt)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter' || e.key === ' ') {
-                                  e.preventDefault()
-                                  onOpenEvent(evt)
-                                }
-                              }}
-                              className="w-full flex items-center justify-between py-1.5 px-2.5 rounded-xl transition-all duration-150 cursor-pointer group gap-2.5 select-none active:scale-[0.99] min-h-[38px] bg-amber-500/[0.06] border border-amber-500/25 hover:bg-amber-500/[0.12] hover:border-amber-500/40 shadow-2xs"
-                            >
-                              <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                                <IconButton
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={async (e) => {
-                                    e.stopPropagation()
-                                    try {
-                                      navigator.vibrate?.(10)
-                                    } catch {}
-                                    await handleToggleReminder(evt.id)
-                                  }}
-                                  className="rounded-full shrink-0 transition-all duration-150 text-casa-muted hover:text-casa-navy hover:bg-casa-surface-subtle h-6 w-6 min-h-0 p-0"
-                                  aria-label={`Mark ${evt.title} done`}
-                                  icon={
-                                    <div className="w-4.5 h-4.5 rounded-full border-[1.5px] border-amber-600 hover:border-casa-navy bg-white shadow-2xs group-hover:scale-105 transition-transform" />
+                            return (
+                              <div
+                                key={evt.id}
+                                role="button"
+                                tabIndex={0}
+                                data-tactile="true"
+                                data-calendar-event
+                                data-sidecar-loadable="true"
+                                data-event-id={evt.id}
+                                onClick={() => onOpenEvent(evt)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault()
+                                    onOpenEvent(evt)
                                   }
-                                />
+                                }}
+                                className="w-full flex items-center justify-between py-1.5 px-2.5 rounded-xl transition-all duration-150 cursor-pointer group gap-2.5 select-none active:scale-[0.99] min-h-[38px] bg-amber-500/[0.06] border border-amber-500/25 hover:bg-amber-500/[0.12] hover:border-amber-500/40 shadow-2xs"
+                              >
+                                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                  <IconButton
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={async (e) => {
+                                      e.stopPropagation()
+                                      try {
+                                        navigator.vibrate?.(10)
+                                      } catch {}
+                                      await handleToggleReminder(evt.id)
+                                    }}
+                                    className="rounded-full shrink-0 transition-all duration-150 text-casa-muted hover:text-casa-navy hover:bg-casa-surface-subtle h-6 w-6 min-h-0 p-0"
+                                    aria-label={`Mark ${evt.title} done`}
+                                    icon={
+                                      <div className="w-4.5 h-4.5 rounded-full border-[1.5px] border-amber-600 hover:border-casa-navy bg-white shadow-2xs group-hover:scale-105 transition-transform" />
+                                    }
+                                  />
 
-                                <span className="font-mono text-caption font-bold text-amber-950 shrink-0 tabular-nums">
-                                  {format(parseISO(evt.start_time), 'h:mm a')}
-                                </span>
-                                <span className="px-1.5 py-0.5 rounded text-3xs font-bold uppercase tracking-wider bg-amber-500/25 text-amber-950 border border-amber-500/35 shrink-0">
-                                  Overdue
-                                </span>
+                                  {isPastDay ? (
+                                    <span className="font-mono text-caption font-bold text-amber-950 shrink-0 tabular-nums">
+                                      {evt.all_day ? format(startDate, 'MMM d') : format(startDate, 'MMM d · h:mm a')}
+                                    </span>
+                                  ) : (
+                                    <span className="font-mono text-caption font-bold text-amber-950 shrink-0 tabular-nums">
+                                      {format(parseISO(evt.start_time), 'h:mm a')}
+                                    </span>
+                                  )}
 
-                                <span className="text-body-sm font-semibold text-casa-navy truncate transition-colors flex-1 group-hover:text-amber-950">
-                                  {evt.title}
-                                </span>
+                                  <span className={cn(
+                                    'px-1.5 py-0.5 rounded text-3xs font-bold uppercase tracking-wider shrink-0',
+                                    isPastDay
+                                      ? 'bg-rose-500/20 text-rose-950 border border-rose-500/30'
+                                      : 'bg-amber-500/25 text-amber-950 border border-amber-500/35'
+                                  )}>
+                                    {isPastDay ? 'Missed' : 'Overdue'}
+                                  </span>
+
+                                  <span className="text-body-sm font-semibold text-casa-navy truncate transition-colors flex-1 group-hover:text-amber-950">
+                                    {evt.title}
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  {avatarPeople.length > 0 && <PersonAvatarStack people={avatarPeople} size="sm" max={2} />}
+                                  <ChevronRight
+                                    size={14}
+                                    className="text-casa-muted/40 group-hover:text-casa-navy transition-transform group-hover:translate-x-0.5"
+                                  />
+                                </div>
                               </div>
-
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                {avatarPeople.length > 0 && <PersonAvatarStack people={avatarPeople} size="sm" max={2} />}
-                                <ChevronRight
-                                  size={14}
-                                  className="text-casa-muted/40 group-hover:text-casa-navy transition-transform group-hover:translate-x-0.5"
-                                />
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-              )}
+                            )
+                          })}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )
+              })()}
 
               {/* ── Active & Upcoming To-Dos (Capped at 3 visible by default) ── */}
               {activeReminders.length > 0 && (

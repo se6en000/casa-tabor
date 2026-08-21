@@ -118,7 +118,10 @@ export function truncateRecurrenceLinesForFuture(recurrenceLines, originalStart)
 
 export function buildRecurringSeriesPatch(context, scope, selectedEvent) {
   if (!RECURRENCE_SCOPES.has(scope)) throw new Error('Unsupported recurrence scope.')
-  const seriesPatch = { timezone: context.series.timezone }
+  const seriesPatch = {
+    timezone: context.series.timezone,
+    recurrence_lines: context.series.recurrence_lines,
+  }
   if (scope !== 'future') return seriesPatch
 
   const originalStart = selectedEvent.original_start_time ??

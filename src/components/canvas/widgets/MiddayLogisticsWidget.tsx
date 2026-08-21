@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { format, parseISO } from 'date-fns'
 import {
   Sun,
@@ -9,14 +9,21 @@ import {
   ShieldCheck,
   AlertTriangle,
   GraduationCap,
+  House,
+  RefreshCw,
+  ExternalLink,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
+import { useQueryClient } from '@tanstack/react-query'
 import { cn } from '../../../utils/cn'
 import type { EventWithDetails } from '../../../hooks/useCalendarEvents'
 import type { FamilyMember } from '../../../types'
 import { useFamilyRoutineIntelligence } from '../../../hooks/useFamilyRoutineIntelligence'
 import { analyzeDriverSchedule, resolveEventDriver, type DriverConflictItem } from '../../../lib/driverConflictEngine'
 import { getDisplayMemberColor } from '../../../design-system/memberColors'
+import { supabase } from '../../../lib/supabase'
+import { updateEventVenue, invalidateAllCalendarQueries } from '../../../lib/eventMutations'
+import { saveEventTransportationOverride } from '../../../lib/eventPlanOverrides'
 
 import { Button } from '../../ui'
 
@@ -52,6 +59,8 @@ export default function MiddayLogisticsWidget({
   isTomorrowActive = false,
   className,
 }: MiddayLogisticsWidgetProps) {
+  const queryClient = useQueryClient()
+  const [resolvingActionId, setResolvingActionId] = useState<string | null>(null)
   const routineIntel = useFamilyRoutineIntelligence(now)
 
   // Driver conflict calculation
@@ -60,6 +69,71 @@ export default function MiddayLogisticsWidget({
   }, [todayEvents, familyMembers])
 
   const primaryConflict: DriverConflictItem | undefined = driverAnalysis.conflicts[0]
+
+  // Alternative driver candidate for quick 1-tap reassignment
+  const alternativeDriver = useMemo(() => {
+    if (!primaryConflict) return null
+    return (
+      familyMembers.find(
+        (m) =>
+          m.can_drive &&
+          m.name.toLowerCase() !== primaryConflict.driverName.toLowerCase(),
+      ) || null
+    )
+  }, [familyMembers, primaryConflict])
+
+  // Quick Action 1: Mark an event as At Home (No Drive Needed)
+  const handleQuickMarkAtHome = async (targetEvent: EventWithDetails) => {
+    if (!targetEvent?.id || resolvingActionId) return
+    setResolvingActionId(`home-${targetEvent.id}`)
+    try {
+      await updateEventVenue(
+        supabase,
+        queryClient,
+        targetEvent,
+        { name: 'Home', address: '', driveMinutes: 0, distanceMiles: 0 },
+        { familyMembers },
+      )
+      await saveEventTransportationOverride({
+        supabase,
+        queryClient,
+        event: targetEvent,
+        transportationPlan: {
+          version: 1,
+          source: 'manual',
+          waitOnSite: false,
+          legs: [],
+        },
+      })
+      invalidateAllCalendarQueries(queryClient, targetEvent.id)
+    } catch (err) {
+      console.warn('[MiddayLogisticsWidget] Failed to mark event at home:', err)
+    } finally {
+      setResolvingActionId(null)
+    }
+  }
+
+  // Quick Action 2: Reassign conflicting driving leg to another family driver
+  const handleQuickReassignDriver = async (
+    targetEvent: EventWithDetails,
+    newDriver: FamilyMember,
+  ) => {
+    if (!targetEvent?.id || resolvingActionId) return
+    setResolvingActionId(`driver-${targetEvent.id}`)
+    try {
+      await saveEventTransportationOverride({
+        supabase,
+        queryClient,
+        event: targetEvent,
+        driverOverrides: { 0: newDriver.id },
+      })
+      invalidateAllCalendarQueries(queryClient, targetEvent.id)
+    } catch (err) {
+      console.warn('[MiddayLogisticsWidget] Failed to reassign driver:', err)
+    } finally {
+      setResolvingActionId(null)
+    }
+  }
 
   // Find all upcoming midday commitments today (excluding pure routine items)
   const middayCommitments = useMemo<EventWithDetails[]>(() => {
@@ -311,15 +385,75 @@ export default function MiddayLogisticsWidget({
 
       {/* ── Driver Collision Alert (Prominent only when a real collision occurs) ── */}
       {primaryConflict && (
-        <div className="p-3.5 sm:p-4 rounded-2xl bg-amber-500/10 border border-amber-400/50 text-amber-950 flex items-start gap-3">
-          <AlertTriangle size={18} className="text-amber-700 shrink-0 mt-0.5" />
-          <div className="min-w-0 flex-1">
-            <div className="text-caption font-bold uppercase tracking-wide text-amber-900">
-              Driver Transit Buffer Crunch · {primaryConflict.driverName}
+        <div className="p-3.5 sm:p-4 rounded-2xl bg-amber-500/10 border border-amber-400/50 text-amber-950 flex flex-col gap-3">
+          <div className="flex items-start gap-3">
+            <AlertTriangle size={18} className="text-amber-700 shrink-0 mt-0.5" />
+            <div className="min-w-0 flex-1">
+              <div className="text-caption font-bold uppercase tracking-wide text-amber-900 flex items-center justify-between">
+                <span>Driver Transit Buffer Crunch · {primaryConflict.driverName}</span>
+                <span className="text-caption font-bold text-amber-800 bg-amber-100/80 px-2 py-0.5 rounded-md border border-amber-300/60">
+                  Direct Conflict
+                </span>
+              </div>
+              <p className="text-body-sm text-amber-950/90 mt-0.5 leading-snug">
+                {primaryConflict.message}
+              </p>
             </div>
-            <p className="text-body-sm text-amber-950/90 mt-0.5 leading-snug">
-              {primaryConflict.message}
-            </p>
+          </div>
+
+          {/* 1-Tap Quick Action Resolution Chips */}
+          <div className="pt-2 border-t border-amber-400/30 flex flex-wrap items-center gap-2">
+            <span className="text-caption font-bold uppercase tracking-wider text-amber-900/80 text-2xs mr-1">
+              1-Tap Fix:
+            </span>
+
+            {/* Quick Action: Mark Event B as At Home if appropriate */}
+            {primaryConflict.eventB?.rawEvent && (
+              <Button
+                variant="secondary"
+                size="sm"
+                loading={resolvingActionId === `home-${primaryConflict.eventB.rawEvent.id}`}
+                disabled={Boolean(resolvingActionId)}
+                leadingIcon={<House size={13} className="text-amber-700" />}
+                onClick={() => handleQuickMarkAtHome(primaryConflict.eventB.rawEvent)}
+                className="rounded-xl bg-white hover:bg-amber-50 border border-amber-300 text-amber-950 shadow-2xs text-caption font-bold"
+              >
+                "{primaryConflict.eventB.title}" is At Home (No Drive)
+              </Button>
+            )}
+
+            {/* Quick Action: Reassign Driver to alternative parent/caregiver */}
+            {alternativeDriver && primaryConflict.eventB?.rawEvent && (
+              <Button
+                variant="secondary"
+                size="sm"
+                loading={resolvingActionId === `driver-${primaryConflict.eventB.rawEvent.id}`}
+                disabled={Boolean(resolvingActionId)}
+                leadingIcon={<RefreshCw size={13} className="text-amber-700" />}
+                onClick={() =>
+                  handleQuickReassignDriver(
+                    primaryConflict.eventB.rawEvent,
+                    alternativeDriver,
+                  )
+                }
+                className="rounded-xl bg-white hover:bg-amber-50 border border-amber-300 text-amber-950 shadow-2xs text-caption font-bold"
+              >
+                Assign {alternativeDriver.name} to Drive
+              </Button>
+            )}
+
+            {/* Open Details Button */}
+            {onOpenEvent && primaryConflict.eventB?.rawEvent && (
+              <Button
+                variant="ghost"
+                size="sm"
+                leadingIcon={<ExternalLink size={13} className="text-amber-800" />}
+                onClick={() => onOpenEvent(primaryConflict.eventB.rawEvent)}
+                className="rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-400/40 text-amber-950 text-caption font-bold"
+              >
+                Open Details
+              </Button>
+            )}
           </div>
         </div>
       )}

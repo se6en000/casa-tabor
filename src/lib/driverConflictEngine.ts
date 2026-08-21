@@ -119,6 +119,49 @@ export function resolveEventDriver(
 }
 
 /**
+ * Determines whether an event takes place at home without off-site driving needed.
+ */
+export function isEventAtHome(evt: EventWithDetails | null | undefined): boolean {
+  if (!evt) return false
+  const loc = (evt.location_name || '').toLowerCase().trim()
+  if (loc === 'home') return true
+  const addr = (evt.address || '').toLowerCase().trim()
+  if (addr.includes('3209 washington')) return true
+  if (!addr && (!loc || loc === 'home' || loc === 'house')) return true
+  return false
+}
+
+/**
+ * Determines whether an event requires an active household driver commitment.
+ */
+export function isEventRequiringDriving(evt: EventWithDetails | null | undefined): boolean {
+  if (!evt) return false
+  if (evt.all_day) return false
+
+  // 1. Explicit transportation plan with legs
+  const planLegs = evt.plan_override?.transportation_plan?.legs
+  if (Array.isArray(planLegs)) {
+    if (planLegs.length === 0) return false
+    return planLegs.some((l) => Boolean(l.driverName && l.driverName.trim()))
+  }
+
+  // 2. Explicit driver assigned in event_members
+  const hasExplicitDriver = evt.members?.some((m) => m.role === 'driver')
+  if (hasExplicitDriver) return true
+
+  // 3. If at home with no explicit driving legs, no driver commitment needed
+  if (isEventAtHome(evt)) return false
+
+  // 4. Offsite event: check if drive_time_mins or off-site location exists
+  const hasOffsiteLocation = Boolean(
+    (evt.location_name && evt.location_name.toLowerCase().trim() !== 'home') ||
+    (evt.address && !evt.address.toLowerCase().includes('3209 washington')),
+  )
+
+  return hasOffsiteLocation
+}
+
+/**
  * Evaluates driver commitments across events for a specific day and detects collisions.
  */
 export function analyzeDriverSchedule(
@@ -132,6 +175,7 @@ export function analyzeDriverSchedule(
 
   events.forEach((evt) => {
     if (evt.all_day) return
+    if (!isEventRequiringDriving(evt)) return
 
     const { id: resolvedDriverId, name: effectiveDriverName } = resolveEventDriver(evt, familyMembers)
     if (!effectiveDriverName) return
@@ -152,7 +196,9 @@ export function analyzeDriverSchedule(
       endMin = startMin + 45
     }
 
-    const driveTimeMin = evt.enrichment?.drive_time_mins || DEFAULT_TRANSIT_TIME_MINUTES
+    const driveTimeMin = isEventAtHome(evt)
+      ? 0
+      : (evt.enrichment?.drive_time_mins || DEFAULT_TRANSIT_TIME_MINUTES)
 
     const commitment: DriverCommitment = {
       eventId: evt.id,

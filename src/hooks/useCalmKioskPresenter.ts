@@ -1,6 +1,17 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { format, parseISO, differenceInMinutes, subMinutes, startOfDay, differenceInCalendarDays } from 'date-fns'
+import {
+  format,
+  parseISO,
+  differenceInMinutes,
+  subMinutes,
+  startOfDay,
+  endOfDay,
+  isBefore,
+  isSameDay,
+  differenceInCalendarDays,
+} from 'date-fns'
+import { getEventStartDate } from '../utils/eventTime'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLiveClock, greetingFor } from './useLiveClock'
 import { useTodayEvents, useTomorrowEvents, useRollingEvents, type EventWithDetails } from './useCalendarEvents'
@@ -456,21 +467,19 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
       })
   }, [effectiveTodayEvents, now])
 
-  // Today's chores & reminders with suggested times (never hero)
+  // Rolling chores & reminders (past 7 days through end of today, never hero)
   const todayReminders = useMemo(() => {
-    return effectiveTodayEvents
+    const todayEnd = endOfDay(now)
+    return rollingEvents
       .filter((e) => {
         if (isMealEvent(e)) return false
-        return isReminderOrChore(e)
+        if (!isReminderOrChore(e) && e.event_type !== 'reminder') return false
+        const startDate = getEventStartDate(e)
+        // Rolling: includes past 7 days (missed/overdue) up through end of today
+        return isBefore(startDate, todayEnd) || isSameDay(startDate, now)
       })
-      .sort((a, b) => {
-        try {
-          return parseISO(a.start_time).getTime() - parseISO(b.start_time).getTime()
-        } catch {
-          return 0
-        }
-      })
-  }, [effectiveTodayEvents])
+      .sort((a, b) => getEventStartDate(a).getTime() - getEventStartDate(b).getTime())
+  }, [rollingEvents, now])
 
   // Reminders breakdown (reactive to completedItems)
   const openReminders = useMemo(() => {
@@ -478,15 +487,29 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
   }, [todayReminders, completedItems])
 
   const overdueReminders = useMemo(() => {
-    return todayReminders.filter(
-      (evt) => !evt.all_day && !completedItems[evt.id] && parseISO(evt.start_time).getTime() < now.getTime()
-    )
+    const startOfTodayMs = startOfDay(now).getTime()
+    const nowMs = now.getTime()
+    return todayReminders.filter((evt) => {
+      if (completedItems[evt.id]) return false
+      const startMs = getEventStartDate(evt).getTime()
+      // Past days (missed) OR earlier today (past timed event)
+      const isPastDay = startMs < startOfTodayMs
+      const isEarlierToday = !evt.all_day && startMs < nowMs
+      return isPastDay || isEarlierToday
+    })
   }, [todayReminders, completedItems, now])
 
   const activeReminders = useMemo(() => {
-    return todayReminders.filter(
-      (evt) => !completedItems[evt.id] && (evt.all_day || parseISO(evt.start_time).getTime() >= now.getTime())
-    )
+    const startOfTodayMs = startOfDay(now).getTime()
+    const nowMs = now.getTime()
+    return todayReminders.filter((evt) => {
+      if (completedItems[evt.id]) return false
+      const startMs = getEventStartDate(evt).getTime()
+      // Today only: either all-day or scheduled for now / in the future today
+      const isToday = startMs >= startOfTodayMs
+      const isFutureOrAllDay = evt.all_day || startMs >= nowMs
+      return isToday && isFutureOrAllDay
+    })
   }, [todayReminders, completedItems, now])
 
   const completedReminders = useMemo(() => {

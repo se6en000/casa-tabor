@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Sparkles, Trash2, Navigation } from 'lucide-react'
+import { Sparkles, Trash2, Navigation, House, Car, ShieldCheck } from 'lucide-react'
 import type { LivingFlowProps } from './types'
 import type { FamilyMember } from '../../../types'
 import { useLivingFlowState } from './hooks/useLivingFlowState'
@@ -147,7 +147,7 @@ export default function LivingFlowSidecar({
               />
             ) : null}
 
-            {/* Living Route Timeline (Shown if travel / drive is required) */}
+            {/* Living Route Timeline (Shown if offsite travel / drive is required) */}
             {isDrivingOuting ? (
               <LivingRouteTimeline
                 departureDate={departureDate}
@@ -165,6 +165,76 @@ export default function LivingFlowSidecar({
                 onAssignDriver={setDriver}
               />
             ) : null}
+
+            {/* Explicit Location & Transit Status Card (When at Home or Local) */}
+            {!isDrivingOuting && (
+              <div className="p-3.5 sm:p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase text-slate-800 tracking-wider flex items-center gap-1.5">
+                    <House size={14} className="text-amber-600" />
+                    <span>Location & Logistics</span>
+                  </span>
+                  <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300 inline-flex items-center gap-1">
+                    <ShieldCheck size={12} className="text-emerald-700" />
+                    <span>At Home</span>
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-slate-100 border border-slate-200">
+                  <Button
+                    variant={state.travelBehavior === 'none' ? 'primary' : 'ghost'}
+                    size="sm"
+                    onClick={() => setTravelBehavior('none')}
+                    className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 min-h-[44px] cursor-pointer ${
+                      state.travelBehavior === 'none'
+                        ? 'bg-slate-900 text-white shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                    }`}
+                  >
+                    <House size={14} />
+                    <span>At Home (No Drive)</span>
+                  </Button>
+                  <Button
+                    variant={state.travelBehavior !== 'none' ? 'primary' : 'ghost'}
+                    size="sm"
+                    onClick={() => setTravelBehavior(state.travelBehavior === 'none' ? 'stay' : state.travelBehavior)}
+                    className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 min-h-[44px] cursor-pointer ${
+                      state.travelBehavior !== 'none'
+                        ? 'bg-slate-900 text-white shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                    }`}
+                  >
+                    <Car size={14} />
+                    <span>Needs Family Ride</span>
+                  </Button>
+                </div>
+
+                {state.travelBehavior === 'none' ? (
+                  <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium pt-0.5">
+                    <ShieldCheck size={14} className="text-emerald-600 shrink-0" />
+                    <span>0m transit buffer · No driver locked into transit</span>
+                  </div>
+                ) : (
+                  <div className="pt-2 border-t border-slate-100">
+                    <LivingRouteTimeline
+                      departureDate={departureDate}
+                      arrivalDate={state.startDate}
+                      pickupDepartureDate={pickupDepartureDate}
+                      returnDate={returnDate}
+                      durationMinutes={state.durationMinutes}
+                      venue={state.venue}
+                      travelBehavior={state.travelBehavior}
+                      driverLeg1={state.driverLeg1}
+                      driverLeg2={state.driverLeg2}
+                      familyMembers={familyMembers}
+                      selectedMemberIds={state.selectedMemberIds}
+                      onSetTravelBehavior={setTravelBehavior}
+                      onAssignDriver={setDriver}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Living Prep & What to Bring Checklist */}
             <LivingPrepCard event={event} />
