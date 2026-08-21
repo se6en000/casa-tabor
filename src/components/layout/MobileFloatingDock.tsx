@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   Home,
@@ -18,6 +19,38 @@ interface MobileFloatingDockProps {
 export default function MobileFloatingDock({ onOpenQuickCreate }: MobileFloatingDockProps) {
   const location = useLocation()
   const { setCanvasSubmode } = useAppStore()
+  const [isKeyboardActive, setIsKeyboardActive] = useState(false)
+
+  // Auto-hide bottom nav when on-screen keyboard is active / input is focused
+  useEffect(() => {
+    const isInputElement = (el: Element | null) => {
+      if (!el) return false
+      const tag = el.tagName.toLowerCase()
+      return tag === 'input' || tag === 'textarea' || (el as HTMLElement).isContentEditable
+    }
+
+    const onFocusIn = (e: FocusEvent) => {
+      if (isInputElement(e.target as Element)) {
+        setIsKeyboardActive(true)
+      }
+    }
+
+    const onFocusOut = () => {
+      setTimeout(() => {
+        if (!isInputElement(document.activeElement)) {
+          setIsKeyboardActive(false)
+        }
+      }, 60)
+    }
+
+    window.addEventListener('focusin', onFocusIn)
+    window.addEventListener('focusout', onFocusOut)
+
+    return () => {
+      window.removeEventListener('focusin', onFocusIn)
+      window.removeEventListener('focusout', onFocusOut)
+    }
+  }, [])
 
   const triggerHaptic = () => {
     try {
@@ -69,8 +102,8 @@ export default function MobileFloatingDock({ onOpenQuickCreate }: MobileFloating
 
   return (
     <>
-      {/* ── Single-Thumb Floating Quick Add FAB (lg:hidden, hidden on grocery page to prevent overlap) ── */}
-      {!location.pathname.startsWith('/grocery') && (
+      {/* ── Single-Thumb Floating Quick Add FAB (lg:hidden, hidden on grocery page or when keyboard is open) ── */}
+      {!location.pathname.startsWith('/grocery') && !isKeyboardActive && (
         <div className="lg:hidden fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] right-4 z-sticky pointer-events-auto">
           <Button
             variant="ghost"
@@ -89,7 +122,10 @@ export default function MobileFloatingDock({ onOpenQuickCreate }: MobileFloating
       {/* ── Edge-Anchored Luxury Translucent Bottom Navigation Bar (lg:hidden) ── */}
       <nav
         aria-label="Mobile Navigation Bar"
-        className="lg:hidden fixed bottom-0 left-0 right-0 z-sticky floating-dock-glass border-t border-casa-gold/30 shadow-[0_-4px_24px_rgba(27,42,74,0.06)] flex items-center justify-around px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] transition-all duration-300 pointer-events-auto"
+        className={cn(
+          'lg:hidden fixed bottom-0 left-0 right-0 z-sticky floating-dock-glass border-t border-casa-gold/30 shadow-[0_-4px_24px_rgba(27,42,74,0.06)] flex items-center justify-around px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] transition-all duration-300 pointer-events-auto',
+          isKeyboardActive ? 'translate-y-full opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'
+        )}
       >
         {navTabs.map((tab) => (
           <NavLink

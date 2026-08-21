@@ -18,19 +18,6 @@ import { normalizeGroceryNameKey } from '../../utils/groceryPredictionDeferrals'
 import { Button, Chip, Heading, IconButton } from '../ui'
 import type { CategoryVisualDef } from '../grocery/GroceryAisleGrid'
 
-const QUICK_STAPLES = [
-  'Milk',
-  'Eggs',
-  'Bread',
-  'Bananas',
-  'Chicken',
-  'Coffee',
-  'Butter',
-  'Avocados',
-  'Apples',
-  'Spinach',
-]
-
 export interface MobileCategoryGroup {
   key: string
   label: string
@@ -82,6 +69,7 @@ export default function MobileGroceryView({
   onAddItem,
 }: MobileGroceryViewProps) {
   const [inputValue, setInputValue] = useState('')
+  const [isInputFocused, setIsInputFocused] = useState(false)
   const [isCartOpen, setIsCartOpen] = useState(false)
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string | null>(null)
   const [localDeletingIds, setLocalDeletingIds] = useState<Set<string>>(new Set())
@@ -223,18 +211,13 @@ export default function MobileGroceryView({
     }
   }
 
-  const handleQuickStapleAdd = (stapleName: string) => {
-    triggerHaptic(8)
-    onAddItem(stapleName, { allowDuplicate: false })
-  }
-
   // Filtered categories based on selected pill
   const visibleCategories = selectedCategoryFilter
     ? activeCategories.filter((c) => c.key === selectedCategoryFilter)
     : activeCategories
 
   return (
-    <div className="flex flex-col min-h-full bg-casa-bg text-casa-text pb-48">
+    <div className="flex flex-col min-h-full bg-casa-bg text-casa-text pb-36">
       {/* ── Sticky Top Header with Safe-Area Inset (Concept A: Streamliner) ── */}
       <header className="sticky top-0 z-sticky bg-casa-surface/96 backdrop-blur-xl border-b border-casa-border/80 px-4 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] pb-3 shadow-xs">
         <div className="flex items-center justify-between gap-3">
@@ -330,7 +313,7 @@ export default function MobileGroceryView({
             </div>
             <p className="font-serif text-lg font-bold text-casa-navy">All Shopped Up!</p>
             <p className="text-caption text-casa-muted max-w-xs mx-auto">
-              Your grocery basket is empty. Add provisions using the docked bar below or tap any common staple.
+              Your grocery basket is empty. Type an item below or dictate using the mic.
             </p>
           </div>
         ) : (
@@ -563,8 +546,15 @@ export default function MobileGroceryView({
         )}
       </main>
 
-      {/* ── Docked Super-Input Bar (Concept A: Keyboard-Aware Streamliner) ── */}
-      <div className="fixed bottom-[calc(4.25rem+env(safe-area-inset-bottom))] left-3 right-3 max-w-md mx-auto z-sticky px-3 py-2 floating-dock-glass border border-casa-gold/30 rounded-2xl shadow-[0_8px_28px_rgba(27,42,74,0.1)] pointer-events-auto">
+      {/* ── Docked Super-Input Bar (Keyboard-Aware Flush Docking, No Quick Chips) ── */}
+      <div
+        className={cn(
+          'fixed left-3 right-3 max-w-md mx-auto z-sticky px-2.5 py-2 floating-dock-glass border border-casa-gold/30 rounded-2xl shadow-[0_8px_28px_rgba(27,42,74,0.1)] pointer-events-auto transition-all duration-250 ease-out',
+          isInputFocused
+            ? 'bottom-[calc(0.5rem+env(safe-area-inset-bottom))]'
+            : 'bottom-[calc(4.25rem+env(safe-area-inset-bottom))]'
+        )}
+      >
         <div className="max-w-md mx-auto space-y-1.5">
           {/* Duplicate Alert Banner */}
           <AnimatePresence initial={false}>
@@ -627,11 +617,13 @@ export default function MobileGroceryView({
               type="text"
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
+              onFocus={() => setIsInputFocused(true)}
+              onBlur={() => setIsInputFocused(false)}
               onKeyDown={handleKeyDown}
               enterKeyHint="done"
               autoComplete="off"
               autoCorrect="off"
-              placeholder={listening ? 'Listening… release to add' : 'Add item or paste list…'}
+              placeholder={listening ? 'Listening… release to add' : 'Add grocery item (Enter to batch)…'}
               className="flex-1 min-w-0 bg-transparent text-body-sm text-casa-navy placeholder:text-casa-muted/70 outline-none"
             />
 
@@ -644,29 +636,6 @@ export default function MobileGroceryView({
             >
               Add
             </Button>
-          </div>
-
-          {/* Quick 1-Tap Staples Ribbon (Non-colliding) */}
-          <div className="flex items-center gap-1 overflow-x-auto pt-0.5 pb-0.5 no-scrollbar -mx-1 px-1">
-            <span className="text-3xs font-mono font-bold uppercase tracking-wider text-casa-gold shrink-0 mr-0.5">
-              Quick:
-            </span>
-            {QUICK_STAPLES.map((staple) => {
-              const alreadyOnList = Boolean(findDuplicate(staple))
-              return (
-                <Chip
-                  key={`mobile-staple-${staple}`}
-                  tone="neutral"
-                  size="sm"
-                  onClick={() => handleQuickStapleAdd(staple)}
-                  disabled={alreadyOnList}
-                  className="shrink-0 text-3xs font-medium bg-casa-surface hover:border-casa-gold/50 py-0.5 px-2 cursor-pointer shadow-2xs"
-                >
-                  {alreadyOnList ? <Check size={10} className="inline mr-0.5 -mt-0.5 text-emerald-600" /> : '+ '}
-                  {staple}
-                </Chip>
-              )
-            })}
           </div>
         </div>
       </div>
