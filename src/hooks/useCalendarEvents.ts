@@ -2,7 +2,7 @@
 import { useEffect, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
-import { startOfWeek, endOfWeek, addDays, startOfDay, startOfMonth, endOfMonth, eachDayOfInterval, format } from 'date-fns'
+import { startOfWeek, endOfWeek, addDays, subDays, startOfDay, startOfMonth, endOfMonth, eachDayOfInterval, format } from 'date-fns'
 import { eventOverlapsRange } from '../utils/eventTime'
 import { normalizePossessiveSuffixCasing } from '../utils/eventTitle'
 import type {
@@ -479,11 +479,11 @@ export function useWeekEvents(selectedDate: Date) {
   return useEventsForRange(['events', 'week', weekStart.toISOString()], weekStart, weekEnd)
 }
 
-/** Fetches 14 days starting from `today` for AI context and rolling views. */
+/** Fetches past 7 days through +14 days for calendar deduplication, AI context, and rolling views. */
 export function useRollingEvents(today: Date) {
-  const start = startOfDay(today)
-  // Preserve existing coverage (today through +14 days) using an exclusive end.
-  const end   = addDays(start, 15)
+  const start = subDays(startOfDay(today), 7)
+  // Preserve existing forward coverage (+14 days) using an exclusive end.
+  const end   = addDays(startOfDay(today), 15)
 
   return useEventsForRange(['events', 'rolling', start.toISOString()], start, end)
 }

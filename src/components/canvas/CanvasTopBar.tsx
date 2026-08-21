@@ -10,7 +10,7 @@ import { useRollingEvents } from '../../hooks/useCalendarEvents'
 import { useGoogleSyncTriage } from '../../hooks/useGoogleSyncTriage'
 import { clusterPrepItems } from '../../utils/prepItemClusters'
 import { splitActionableAndTransitItems } from '../../utils/needsYouFeed'
-import { isItemAlreadyScheduled } from '../../utils/calendarEventMatcher'
+import { isItemAlreadyScheduled, isExpiredEventSuggestion } from '../../utils/calendarEventMatcher'
 import { cn } from '../../utils/cn'
 import { IconButton, JewelCapsuleCopilot } from '../ui'
 import { useAppStore } from '../../stores/appStore'
@@ -37,10 +37,10 @@ export default function CanvasTopBar() {
   const activeConflicts = useMemo(() => conflicts.filter((c) => !c.resolved), [conflicts])
   const activePrep = useMemo(() => prepItems.filter((p) => !p.dismissed), [prepItems])
 
-  // Filter out items already on the calendar
+  // Filter out items already on the calendar or expired event suggestions
   const unscheduledPrep = useMemo(() => {
-    return activePrep.filter((p) => !isItemAlreadyScheduled(p, rollingEvents))
-  }, [activePrep, rollingEvents])
+    return activePrep.filter((p) => !isExpiredEventSuggestion(p, now) && !isItemAlreadyScheduled(p, rollingEvents))
+  }, [activePrep, rollingEvents, now])
 
   // Pure actionable items (excluding passive in-transit delivery tracking)
   const { actionableItems } = useMemo(

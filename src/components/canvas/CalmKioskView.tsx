@@ -184,7 +184,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
 
   const routineIntel = useFamilyRoutineIntelligence(now)
   const isNextEventFarAway = !nextEvent || (minutesUntilNext !== null && minutesUntilNext > 90)
-  const showMorningLaunchpad = routineIntel.isMorning && routineIntel.hasTodayDepartures && isNextEventFarAway
+  const showMorningLaunchpad = routineIntel.isMorningActionActive && isNextEventFarAway
 
   const isLeaveNow = Boolean(
     isTravelEvent &&

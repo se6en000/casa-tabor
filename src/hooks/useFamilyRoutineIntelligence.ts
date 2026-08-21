@@ -67,6 +67,8 @@ export interface FamilyRoutineIntelligence {
   todayFormattedDate: string
   todayDepartures: DepartureItem[]
   hasTodayDepartures: boolean
+  allTodayDeparturesCompleted: boolean
+  isMorningActionActive: boolean
   nextTodayDeparture: DepartureItem | null
   todayPrepChecklist: BedtimePrepItem[]
   toggleTodayPrepItem: (id: string) => void
@@ -294,8 +296,6 @@ function derivePrepChecklist(
   completedMap: Record<string, boolean>,
   calendarEvents: EventWithDetails[] = [],
 ): BedtimePrepItem[] {
-  if (departures.length === 0 && calendarEvents.length === 0) return []
-
   const items: BedtimePrepItem[] = []
 
   // Collect text hints from both departures and morning calendar events
@@ -411,17 +411,41 @@ export function useFamilyRoutineIntelligence(now: Date = new Date()): FamilyRout
   const currentMinute = now.getMinutes()
   const decimalTime = currentHour + currentMinute / 60
 
+  // Derive TODAY's morning routine departures
+  const todayDepartures = useMemo<DepartureItem[]>(() => {
+    return deriveDeparturesForDate(now, now, familyRoutines, familyMembers as FamilyMember[], availabilityExceptions, todayEvents)
+  }, [now, familyRoutines, familyMembers, availabilityExceptions, todayEvents])
+
+  const hasTodayDepartures = todayDepartures.length > 0
+
+  // True if today has departures and every single departure has departed and completed its grace window
+  const allTodayDeparturesCompleted = useMemo(() => {
+    if (todayDepartures.length === 0) return false
+    return todayDepartures.every((d) => d.isCompleted)
+  }, [todayDepartures])
+
+  const isMorningActionActive = useMemo(() => {
+    if (decimalTime < 6.0 || decimalTime >= 9.5) return false
+    if (!hasTodayDepartures) return false
+    return !allTodayDeparturesCompleted
+  }, [decimalTime, hasTodayDepartures, allTodayDeparturesCompleted])
+
   // Phase computation:
   // Evening Prep: 5:30 PM (17.5) to 11:00 PM (23.0)
   // Rest: 11:00 PM (23.0) to 6:00 AM (6.0)
-  // Morning Action: 6:00 AM (6.0) to 9:30 AM (9.5)
-  // Daytime Whereabouts: 9:30 AM (9.5) to 5:30 PM (17.5)
+  // Morning Action: 6:00 AM (6.0) until all morning departures complete (max 9:30 AM)
+  // Daytime Whereabouts: immediately after morning departures complete, up to 5:30 PM (17.5)
   const phase: FamilyRoutineIntelligence['phase'] = useMemo(() => {
     if (decimalTime >= 17.5 && decimalTime < 23.0) return 'evening_prep'
-    if (decimalTime >= 6.0 && decimalTime < 9.5) return 'morning_action'
+    if (decimalTime >= 6.0 && decimalTime < 9.5) {
+      if (hasTodayDepartures && allTodayDeparturesCompleted) {
+        return 'daytime_whereabouts'
+      }
+      return 'morning_action'
+    }
     if (decimalTime >= 9.5 && decimalTime < 17.5) return 'daytime_whereabouts'
     return 'rest'
-  }, [decimalTime])
+  }, [decimalTime, hasTodayDepartures, allTodayDeparturesCompleted])
 
   const isEvening = phase === 'evening_prep'
   const isMorning = phase === 'morning_action'
@@ -431,12 +455,6 @@ export function useFamilyRoutineIntelligence(now: Date = new Date()): FamilyRout
   const tomorrowDate = useMemo(() => addDays(now, 1), [now])
   const tomorrowKey = useMemo(() => format(tomorrowDate, 'yyyy-MM-dd'), [tomorrowDate])
 
-  // Derive TODAY's morning routine departures
-  const todayDepartures = useMemo<DepartureItem[]>(() => {
-    return deriveDeparturesForDate(now, now, familyRoutines, familyMembers as FamilyMember[], availabilityExceptions, todayEvents)
-  }, [now, familyRoutines, familyMembers, availabilityExceptions, todayEvents])
-
-  const hasTodayDepartures = todayDepartures.length > 0
   const nextTodayDeparture = useMemo(() => {
     return todayDepartures.find((d) => !d.isCompleted) || todayDepartures[0] || null
   }, [todayDepartures])
@@ -549,6 +567,8 @@ export function useFamilyRoutineIntelligence(now: Date = new Date()): FamilyRout
     todayFormattedDate: format(now, 'MMMM d'),
     todayDepartures,
     hasTodayDepartures,
+    allTodayDeparturesCompleted,
+    isMorningActionActive,
     nextTodayDeparture,
     todayPrepChecklist,
     toggleTodayPrepItem,

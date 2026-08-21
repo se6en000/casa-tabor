@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import type { PrepItem } from '../types'
 import { type SnoozeDuration, computeSnoozeUntil } from '../utils/snoozeDuration'
+import { isExpiredEventSuggestion } from '../utils/calendarEventMatcher'
 import { usePageVisibility } from './usePageVisibility'
 
 /**
@@ -44,13 +45,19 @@ export function usePrepItems() {
         .order('priority', { ascending: false })
         .order('due_by', { ascending: true })
       if (error) throw error
-      // Overdue items (due_by already passed) surface first regardless of priority --
-      // they're the most urgent thing on the list, not something to hide.
+      // Overdue actionable items (due_by already passed) surface first regardless of priority --
+      // they're the most urgent thing on the list.
+      // Date-bound event suggestions strictly in the past are expired, not overdue todos.
       const nowMs = Date.now()
+      const nowObj = new Date(nowMs)
       const rows = data ?? []
       return [...rows].sort((a, b) => {
-        const aOverdue = a.due_by ? new Date(a.due_by).getTime() < nowMs : false
-        const bOverdue = b.due_by ? new Date(b.due_by).getTime() < nowMs : false
+        const isExpA = isExpiredEventSuggestion(a, nowObj)
+        const isExpB = isExpiredEventSuggestion(b, nowObj)
+        if (isExpA !== isExpB) return isExpA ? 1 : -1
+
+        const aOverdue = a.due_by && !isExpA ? new Date(a.due_by).getTime() < nowMs : false
+        const bOverdue = b.due_by && !isExpB ? new Date(b.due_by).getTime() < nowMs : false
         if (aOverdue !== bOverdue) return aOverdue ? -1 : 1
         return 0 // preserve the priority/due_by ordering from the query within each group
       })

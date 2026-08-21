@@ -243,6 +243,18 @@ export function detectSuggestedActionBundle(item: PrepItem | null): SuggestedAct
     const targetDateIso = item.event_date || item.due_by || '2026-08-20'
     const parsed = parseDateSafe(targetDateIso)
 
+    let prepDateStr = '2026-08-19'
+    let prepDisplayDate = 'Wed, Aug 19 · 8:00 PM'
+    if (parsed) {
+      const [yyyy, mm, dd] = parsed.dateStr.split('-').map(Number)
+      const prevDate = new Date(yyyy, mm - 1, dd - 1, 12, 0, 0)
+      const pY = prevDate.getFullYear()
+      const pM = prevDate.getMonth()
+      const pD = prevDate.getDate()
+      prepDateStr = `${pY}-${String(pM + 1).padStart(2, '0')}-${String(pD).padStart(2, '0')}`
+      prepDisplayDate = `${DAY_NAMES[prevDate.getDay()]}, ${MONTH_NAMES[pM]} ${pD} · 8:00 PM`
+    }
+
     return {
       bundleId: `bundle_iready_${item.id || 'current'}`,
       title: `${targetTitle} Action Bundle`,
@@ -253,8 +265,8 @@ export function detectSuggestedActionBundle(item: PrepItem | null): SuggestedAct
           type: 'reminder',
           title: 'Good Night Sleep & Healthy Breakfast Prep',
           subtitle: 'Ensure child is well-rested and has a nutritious breakfast before testing',
-          date: parsed?.dateStr || '2026-08-19',
-          displayDate: parsed ? `${parsed.dateStr} · 8:00 PM` : 'Wed, Aug 19 · 8:00 PM',
+          date: prepDateStr,
+          displayDate: prepDisplayDate,
           allDay: false,
           badgeLabel: 'PREP TASK',
           defaultSelected: true,

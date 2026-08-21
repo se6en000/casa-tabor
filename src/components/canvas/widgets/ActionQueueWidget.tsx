@@ -41,6 +41,7 @@ import {
 } from '../../../utils/actionInspectionSynthesis'
 import { clusterPrepItems, buildGmailWebUrl, type PrepItemCluster } from '../../../utils/prepItemClusters'
 import { splitActionableAndTransitItems } from '../../../utils/needsYouFeed'
+import { computeDueDateBadge } from '../../../utils/calendarEventMatcher'
 import { useCreateSuggestedEvent } from '../../../hooks/useCreateSuggestedEvent'
 import { useAppStore } from '../../../stores/appStore'
 import { useGoogleSyncTriage, formatSyncError } from '../../../hooks/useGoogleSyncTriage'
@@ -679,15 +680,14 @@ export default function ActionQueueWidget({
                       </div>
 
                       <div className="flex items-center gap-2">
-                        {heroItem.due_by ? (
-                          <span className="text-caption text-casa-error font-semibold px-2 py-0.5 rounded-full bg-rose-50 border border-rose-200/80">
-                            Due Today
-                          </span>
-                        ) : (
-                          <span className="text-caption text-casa-muted font-mono font-medium">
-                            Pending Review
-                          </span>
-                        )}
+                        {(() => {
+                          const badge = computeDueDateBadge(heroItem.due_by)
+                          return (
+                            <span className={badge.className}>
+                              {badge.label}
+                            </span>
+                          )
+                        })()}
 
                         <div className="relative">
                           <IconButton
@@ -1158,10 +1158,26 @@ export default function ActionQueueWidget({
                             ) : null}
 
                             {item.due_by ? (
-                              <>
-                                <span>·</span>
-                                <span className="text-casa-error font-medium">Due Today</span>
-                              </>
+                              (() => {
+                                const badge = computeDueDateBadge(item.due_by)
+                                return (
+                                  <>
+                                    <span>·</span>
+                                    <span
+                                      className={cn(
+                                        'font-medium',
+                                        badge.tone === 'overdue' || badge.tone === 'today'
+                                          ? 'text-casa-error'
+                                          : badge.tone === 'tomorrow'
+                                            ? 'text-casa-gold'
+                                            : 'text-casa-navy'
+                                      )}
+                                    >
+                                      {badge.label}
+                                    </span>
+                                  </>
+                                )
+                              })()
                             ) : null}
 
                             {(item.source_type === 'gmail' || item.source_ref?.startsWith('gmail:')) && (

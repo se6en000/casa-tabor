@@ -20,7 +20,7 @@ import { useGoogleSyncTriage } from '../../hooks/useGoogleSyncTriage'
 import { useGmailHealth } from '../../hooks/useGmailHealth'
 import { clusterPrepItems } from '../../utils/prepItemClusters'
 import { splitActionableAndTransitItems } from '../../utils/needsYouFeed'
-import { isItemAlreadyScheduled } from '../../utils/calendarEventMatcher'
+import { isItemAlreadyScheduled, isExpiredEventSuggestion } from '../../utils/calendarEventMatcher'
 import { cn } from '../../utils/cn'
 import { IconButton, JewelCapsuleCopilot } from '../ui'
 import { useAppStore } from '../../stores/appStore'
@@ -327,8 +327,8 @@ function UtilityTrack({
   const activePrep = useMemo(() => prepItems.filter((p) => !p.dismissed), [prepItems])
 
   const unscheduledPrep = useMemo(() => {
-    return activePrep.filter((p) => !isItemAlreadyScheduled(p, rollingEvents))
-  }, [activePrep, rollingEvents])
+    return activePrep.filter((p) => !isExpiredEventSuggestion(p, now) && !isItemAlreadyScheduled(p, rollingEvents))
+  }, [activePrep, rollingEvents, now])
 
   const { actionableItems } = useMemo(
     () => splitActionableAndTransitItems(unscheduledPrep),

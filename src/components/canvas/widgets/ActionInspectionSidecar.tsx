@@ -62,7 +62,7 @@ import { useFamilyMembers } from '../../../hooks/useFamilyMembers'
 import { useAppStore } from '../../../stores/appStore'
 import { useRollingEvents } from '../../../hooks/useCalendarEvents'
 import { useLiveClock } from '../../../hooks/useLiveClock'
-import { findMatchingCalendarEvent } from '../../../utils/calendarEventMatcher.ts'
+import { findMatchingCalendarEvent, computeDueDateBadge } from '../../../utils/calendarEventMatcher.ts'
 import { supabase } from '../../../lib/supabase'
 
 import type { ActionAiContext } from '../../../hooks/useAIAssistant'
@@ -452,9 +452,14 @@ export default function ActionInspectionSidecar({
           </span>
 
           {activeItem?.due_by ? (
-            <span className="text-caption font-bold px-2.5 py-1 rounded-full bg-rose-50 border border-rose-200/80 text-casa-error shrink-0">
-              Due Today
-            </span>
+            (() => {
+              const dueBadge = computeDueDateBadge(activeItem.due_by, now)
+              return (
+                <span className={cn('shrink-0', dueBadge.className)}>
+                  {dueBadge.label}
+                </span>
+              )
+            })()
           ) : (
             <span className="text-caption font-bold px-2.5 py-1 rounded-full bg-casa-gold/15 border border-casa-gold/30 text-casa-top-pick-band shrink-0">
               Priority Focus

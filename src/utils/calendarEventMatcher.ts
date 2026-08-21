@@ -285,3 +285,122 @@ export function isItemAlreadyScheduled(
 
   return Boolean(matchingEvt)
 }
+
+/**
+ * Evaluates whether a prep item represents an event suggestion whose scheduled
+ * date is strictly in the past (prior to today).
+ */
+export function isExpiredEventSuggestion(item: PrepItem | null | undefined, now: Date = new Date()): boolean {
+  if (!item) return false
+
+  // Exclude real actionable to-dos, bills, payments, and delivery tracking
+  if (
+    item.type === 'payment' ||
+    item.type === 'forms' ||
+    item.type === 'delivery' ||
+    item.category === 'bills_payments'
+  ) {
+    if (item.source_pattern_key !== 'event_suggestion' && item.type !== 'appointment' && item.type !== 'event_suggestion') {
+      return false
+    }
+  }
+
+  const bundle = detectSuggestedActionBundle(item)
+  const hasBundleEvent = Boolean(bundle?.actions?.some((a) => a.type === 'event'))
+
+  const isExplicitSuggestion =
+    item.source_pattern_key === 'event_suggestion' ||
+    item.type === 'appointment' ||
+    item.type === 'event_suggestion' ||
+    item.attention_stage === 'suggested_event'
+
+  if (!isExplicitSuggestion && !hasBundleEvent) {
+    return false
+  }
+
+  // Extract the scheduled event date
+  const eventAction = hasBundleEvent ? bundle?.actions?.find((a) => a.type === 'event') : null
+  const targetDateStr = extractDateKey(eventAction?.date || item.event_date || item.due_by)
+  if (!targetDateStr) return false
+
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+
+  // If the target date is strictly prior to today's date
+  return targetDateStr < todayStr
+}
+
+export interface DueDateBadgeInfo {
+  label: string
+  tone: 'overdue' | 'today' | 'tomorrow' | 'upcoming' | 'none'
+  className: string
+}
+
+/**
+ * Computes a truthful, context-aware due date badge string and styling.
+ */
+export function computeDueDateBadge(dueByStr?: string | null, now: Date = new Date()): DueDateBadgeInfo {
+  if (!dueByStr) {
+    return {
+      label: 'Pending Review',
+      tone: 'none',
+      className: 'text-caption text-casa-muted font-mono font-medium',
+    }
+  }
+
+  const dueDateKey = extractDateKey(dueByStr)
+  if (!dueDateKey) {
+    return {
+      label: 'Pending Review',
+      tone: 'none',
+      className: 'text-caption text-casa-muted font-mono font-medium',
+    }
+  }
+
+  const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+
+  const tomorrow = new Date(now)
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  const tomorrowKey = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`
+
+  if (dueDateKey < todayKey) {
+    return {
+      label: 'Overdue',
+      tone: 'overdue',
+      className: 'text-caption text-rose-700 font-bold px-2 py-0.5 rounded-full bg-rose-100/90 border border-rose-300',
+    }
+  }
+
+  if (dueDateKey === todayKey) {
+    return {
+      label: 'Due Today',
+      tone: 'today',
+      className: 'text-caption text-casa-error font-semibold px-2 py-0.5 rounded-full bg-rose-50 border border-rose-200/80',
+    }
+  }
+
+  if (dueDateKey === tomorrowKey) {
+    return {
+      label: 'Due Tomorrow',
+      tone: 'tomorrow',
+      className: 'text-caption text-casa-gold font-semibold px-2 py-0.5 rounded-full bg-casa-gold/15 border border-casa-gold/30',
+    }
+  }
+
+  // Future date: format as "Due Aug 28"
+  try {
+    const [, mm, dd] = dueDateKey.split('-').map(Number)
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    return {
+      label: `Due ${monthNames[mm - 1]} ${dd}`,
+      tone: 'upcoming',
+      className: 'text-caption text-casa-navy font-medium px-2 py-0.5 rounded-full bg-casa-surface border border-casa-border',
+    }
+  } catch {
+    return {
+      label: `Due ${dueDateKey}`,
+      tone: 'upcoming',
+      className: 'text-caption text-casa-navy font-medium px-2 py-0.5 rounded-full bg-casa-surface border border-casa-border',
+    }
+  }
+}
+

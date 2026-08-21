@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CheckCircle, Monitor, Clock, Eye, Sunset, Sliders, Cpu, Palette, Image, Type, Sparkles, LayoutGrid } from 'lucide-react'
+import { CheckCircle, Monitor, Clock, Eye, Sunset, Sliders, Cpu, Palette, Image, Type, Sparkles, LayoutGrid, Sun, Moon } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { cn } from '../utils/cn'
@@ -9,6 +9,7 @@ import { Button, Card, SectionHeader as SharedSectionHeader } from '../component
 import { useTheme, PRESETS, type ThemeColors } from '../contexts/ThemeContext'
 import { DEFAULT_FONT_SCALE, MAX_FONT_SCALE, MIN_FONT_SCALE } from '../design-system/tokens.mjs'
 import { useAppStore } from '../stores/appStore'
+import { useHeroTheme } from '../hooks/useHeroTheme'
 import {
   useRoomTone,
   getZoneForHour,
@@ -175,6 +176,14 @@ export default function DisplaySettingsPage() {
     applyDayPreset,
   } = useTheme()
   const { experienceMode, setExperienceMode } = useAppStore()
+  const {
+    preference: heroPreference,
+    dayTheme: heroDayTheme,
+    nightTheme: heroNightTheme,
+    setPreference: setHeroPreference,
+    setDayTheme: setHeroDayTheme,
+    setNightTheme: setHeroNightTheme,
+  } = useHeroTheme()
   const [config, setConfig] = useState<DisplayConfig>(DISPLAY_DEFAULTS)
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
   const [previewZone, setPreviewZone] = useState<RoomToneZone>('day')
@@ -418,6 +427,129 @@ export default function DisplaySettingsPage() {
             label="Manual override: force Midnight Gallery"
             desc="Keep Midnight Gallery on all day until you turn this off."
           />
+        </div>
+
+        {/* ── HERO COMPONENT AESTHETIC & DAYPART MODE ── */}
+        <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
+          <SectionHeader icon={Sparkles} label="Hero Component Aesthetic" />
+          <p className="mb-4 text-body-sm text-casa-text-secondary">
+            Choose whether the Active Morning Departures and Tomorrow Morning Readiness hero cards display in deep Obsidian Navy or warm Belgian Linen, or automatically transition according to your daypart schedule.
+          </p>
+
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <Button
+                variant={heroPreference === 'auto' ? 'strong' : 'secondary'}
+                onClick={() => setHeroPreference('auto')}
+                className={cn(
+                  'h-auto min-h-control-lg flex-col items-start p-3 text-left transition-all',
+                  heroPreference === 'auto' ? 'border-2 border-casa-navy shadow-card-hover' : 'border-casa-border',
+                )}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <Sun size={15} className="text-casa-gold" />
+                  <span className="text-body-sm font-bold">Auto Daypart</span>
+                </div>
+                <span className="text-caption text-casa-text-secondary font-normal">
+                  Transitions between daytime &amp; evening themes based on time.
+                </span>
+              </Button>
+
+              <Button
+                variant={heroPreference === 'navy' ? 'strong' : 'secondary'}
+                onClick={() => setHeroPreference('navy')}
+                className={cn(
+                  'h-auto min-h-control-lg flex-col items-start p-3 text-left transition-all',
+                  heroPreference === 'navy' ? 'border-2 border-casa-navy shadow-card-hover' : 'border-casa-border',
+                )}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <Moon size={15} className="text-amber-400" />
+                  <span className="text-body-sm font-bold">Always Navy</span>
+                </div>
+                <span className="text-caption text-casa-text-secondary font-normal">
+                  Obsidian Navy finish active 24/7 across all dayparts.
+                </span>
+              </Button>
+
+              <Button
+                variant={heroPreference === 'linen' ? 'strong' : 'secondary'}
+                onClick={() => setHeroPreference('linen')}
+                className={cn(
+                  'h-auto min-h-control-lg flex-col items-start p-3 text-left transition-all',
+                  heroPreference === 'linen' ? 'border-2 border-casa-navy shadow-card-hover' : 'border-casa-border',
+                )}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <Sun size={15} className="text-amber-600" />
+                  <span className="text-body-sm font-bold">Always Linen</span>
+                </div>
+                <span className="text-caption text-casa-text-secondary font-normal">
+                  Warm Belgian Linen finish active 24/7 across all dayparts.
+                </span>
+              </Button>
+            </div>
+
+            {heroPreference === 'auto' && (
+              <div className="p-4 rounded-xl bg-casa-surface-subtle border border-casa-border grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <div className="text-caption font-bold uppercase tracking-wider text-casa-navy mb-2">
+                    Daytime (6:00 AM – 7:00 PM)
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <label className="flex items-center gap-2 text-body-sm text-casa-navy cursor-pointer">
+                      <input
+                        type="radio"
+                        name="hero-day-theme"
+                        checked={heroDayTheme === 'linen'}
+                        onChange={() => setHeroDayTheme('linen')}
+                        className="accent-casa-gold"
+                      />
+                      <span>Belgian Linen</span>
+                    </label>
+                    <label className="flex items-center gap-2 text-body-sm text-casa-navy cursor-pointer">
+                      <input
+                        type="radio"
+                        name="hero-day-theme"
+                        checked={heroDayTheme === 'navy'}
+                        onChange={() => setHeroDayTheme('navy')}
+                        className="accent-casa-gold"
+                      />
+                      <span>Obsidian Navy</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-caption font-bold uppercase tracking-wider text-casa-navy mb-2">
+                    Nighttime (7:00 PM – 6:00 AM)
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <label className="flex items-center gap-2 text-body-sm text-casa-navy cursor-pointer">
+                      <input
+                        type="radio"
+                        name="hero-night-theme"
+                        checked={heroNightTheme === 'navy'}
+                        onChange={() => setHeroNightTheme('navy')}
+                        className="accent-casa-gold"
+                      />
+                      <span>Obsidian Navy</span>
+                    </label>
+                    <label className="flex items-center gap-2 text-body-sm text-casa-navy cursor-pointer">
+                      <input
+                        type="radio"
+                        name="hero-night-theme"
+                        checked={heroNightTheme === 'linen'}
+                        onChange={() => setHeroNightTheme('linen')}
+                        className="accent-casa-gold"
+                      />
+                      <span>Belgian Linen</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* ─────────────────────────────────────────────────────────────────── */}

@@ -16,7 +16,7 @@ import { type SnoozeDuration, snoozeDurationLabel } from '../utils/snoozeDuratio
 import { useAttentionStore } from '../stores/attentionStore'
 import { useAppStore } from '../stores/appStore'
 import { clusterPrepItems } from '../utils/prepItemClusters'
-import { isItemAlreadyScheduled } from '../utils/calendarEventMatcher.ts'
+import { isItemAlreadyScheduled, isExpiredEventSuggestion } from '../utils/calendarEventMatcher.ts'
 import { supabase } from '../lib/supabase'
 import type { PrepItem, Conflict, FamilyMember } from '../types'
 
@@ -104,30 +104,39 @@ export function useTurboCanvasPresenter(): TurboCanvasPresenterState {
     [prepItems, pendingDismissalIds]
   )
 
-  // Filter out prep items whose suggested calendar events are already scheduled on the calendar
+  // Filter out prep items whose suggested calendar events are already scheduled on the calendar,
+  // or are expired date-bound event suggestions strictly in the past
   const unscheduledPrep = useMemo(() => {
-    if (rollingEvents.length === 0) return unpushedPrep
-    const duplicateIds: string[] = []
+    const staleOrDuplicateIds: string[] = []
     const filtered = unpushedPrep.filter((p) => {
-      const alreadyScheduled = isItemAlreadyScheduled(p, rollingEvents)
-      if (alreadyScheduled) {
-        duplicateIds.push(p.id)
+      const isExpired = isExpiredEventSuggestion(p, now)
+      if (isExpired) {
+        staleOrDuplicateIds.push(p.id)
         return false
       }
+
+      if (rollingEvents.length > 0) {
+        const alreadyScheduled = isItemAlreadyScheduled(p, rollingEvents)
+        if (alreadyScheduled) {
+          staleOrDuplicateIds.push(p.id)
+          return false
+        }
+      }
+
       return true
     })
 
-    // Silently auto-archive duplicate prep items in Supabase in the background
-    if (duplicateIds.length > 0) {
+    // Silently auto-archive duplicate or expired prep items in Supabase in the background
+    if (staleOrDuplicateIds.length > 0) {
       void supabase
         .from('prep_items')
         .update({ dismissed: true, dismissed_at: new Date().toISOString() })
-        .in('id', duplicateIds)
+        .in('id', staleOrDuplicateIds)
         .then(() => {})
     }
 
     return filtered
-  }, [unpushedPrep, rollingEvents])
+  }, [unpushedPrep, rollingEvents, now])
 
   const activePrep = useMemo(
     () => unscheduledPrep.filter((p) => !pushedPrepIds[p.id]),

@@ -6,7 +6,6 @@ import {
 } from 'lucide-react'
 import { cn } from '../../../utils/cn'
 import { useFamilyRoutineIntelligence } from '../../../hooks/useFamilyRoutineIntelligence'
-
 import { Button } from '../../ui'
 
 interface TomorrowPrepWidgetProps {
@@ -34,10 +33,6 @@ export default function TomorrowPrepWidget({
     totalPrepCount,
     allPrepCompleted,
   } = useFamilyRoutineIntelligence(now)
-
-  if (tomorrowDepartures.length === 0) {
-    return null
-  }
 
   return (
     <div
@@ -138,48 +133,64 @@ export default function TomorrowPrepWidget({
         </div>
       )}
 
-      {/* ── Departures Lineup ── */}
+      {/* ── Departures Lineup or Weekend Schedule Notice ── */}
       <div className="space-y-2 relative z-10">
         <div className="text-caption font-bold uppercase tracking-widest text-white/60">
-          Morning Departures
+          Morning Schedule
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-          {tomorrowDepartures.map((dep) => (
-            <div
-              key={dep.id}
-              className={cn(
-                'p-3.5 rounded-2xl border flex items-center justify-between gap-2.5 transition-colors',
-                dep.isException
-                  ? 'border-amber-400/40 bg-amber-500/10 text-white'
-                  : 'border-white/10 bg-white/5 text-white',
-              )}
-            >
-              <div className="min-w-0">
-                <div className="flex items-center gap-1.5 mb-0.5">
-                  <span className="text-body font-mono font-bold text-white">
-                    {dep.leaveByTimeFormatted}
-                  </span>
-                  <span className="text-caption text-white/60">
-                    ({dep.driveMinutes}m)
-                  </span>
+        {tomorrowDepartures.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {tomorrowDepartures.map((dep) => (
+              <div
+                key={dep.id}
+                className={cn(
+                  'p-3.5 rounded-2xl border flex items-center justify-between gap-2.5 transition-colors',
+                  dep.isException
+                    ? 'border-amber-400/40 bg-amber-500/10 text-white'
+                    : 'border-white/10 bg-white/5 text-white',
+                )}
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <span className="text-body font-mono font-bold text-white">
+                      {dep.leaveByTimeFormatted}
+                    </span>
+                    <span className="text-caption text-white/60">
+                      ({dep.driveMinutes}m)
+                    </span>
+                  </div>
+                  <div className="text-body-sm font-semibold text-white truncate">
+                    {dep.childNamesFormatted}
+                  </div>
+                  <div className="text-caption text-white/60 truncate">
+                    {dep.venueName}
+                  </div>
                 </div>
-                <div className="text-body-sm font-semibold text-white truncate">
-                  {dep.childNamesFormatted}
-                </div>
-                <div className="text-caption text-white/60 truncate">
-                  {dep.venueName}
+
+                <div className="text-right shrink-0">
+                  <div className="text-3xs uppercase font-medium text-white/50 mb-0.5">Driver</div>
+                  <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-white/15 border border-white/10 text-caption font-bold text-white">
+                    {dep.driverName}
+                  </span>
                 </div>
               </div>
-
-              <div className="text-right shrink-0">
-                <div className="text-3xs uppercase font-medium text-white/50 mb-0.5">Driver</div>
-                <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-white/15 border border-white/10 text-caption font-bold text-white">
-                  {dep.driverName}
-                </span>
+            ))}
+          </div>
+        ) : (
+          <div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-white flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+              <Check size={16} strokeWidth={2.5} />
+            </div>
+            <div className="min-w-0">
+              <div className="text-body-sm font-semibold leading-tight">
+                No School Departures Tomorrow
+              </div>
+              <div className="text-caption text-white/60 mt-0.5">
+                Weekend / open morning flow · Check your agenda for daytime activities
               </div>
             </div>
-          ))}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* ── Interactive Bedtime Prep Checklist ── */}

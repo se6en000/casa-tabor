@@ -22,9 +22,12 @@ export default function MorningLaunchpadWidget({
     nextTodayDeparture,
     todayPrepChecklist,
     toggleTodayPrepItem,
+    hasTodayDepartures,
+    allTodayDeparturesCompleted,
+    isMorning,
   } = useFamilyRoutineIntelligence(now)
 
-  if (todayDepartures.length === 0) {
+  if (!hasTodayDepartures || allTodayDeparturesCompleted || !isMorning) {
     return null
   }
 

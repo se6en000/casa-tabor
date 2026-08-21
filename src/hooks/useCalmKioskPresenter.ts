@@ -30,8 +30,9 @@ import {
 import { isReminderOrChore } from '../lib/heroFocus.mjs'
 import { clusterPrepItems } from '../utils/prepItemClusters'
 import { splitActionableAndTransitItems } from '../utils/needsYouFeed'
-import { isItemAlreadyScheduled } from '../utils/calendarEventMatcher'
+import { isItemAlreadyScheduled, isExpiredEventSuggestion } from '../utils/calendarEventMatcher'
 import { useGoogleSyncTriage } from './useGoogleSyncTriage'
+import { supabase } from '../lib/supabase'
 import type { Conflict, PrepItem, FamilyMember } from '../types'
 
 export interface CalmKioskPresenterState {
@@ -186,8 +187,36 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
   const { failedJobs } = useGoogleSyncTriage()
 
   const unscheduledPrep = useMemo(() => {
-    return activePrep.filter((p) => !isItemAlreadyScheduled(p, rollingEvents))
-  }, [activePrep, rollingEvents])
+    const staleOrDuplicateIds: string[] = []
+    const filtered = activePrep.filter((p) => {
+      const isExpired = isExpiredEventSuggestion(p, now)
+      if (isExpired) {
+        staleOrDuplicateIds.push(p.id)
+        return false
+      }
+
+      if (rollingEvents.length > 0) {
+        const alreadyScheduled = isItemAlreadyScheduled(p, rollingEvents)
+        if (alreadyScheduled) {
+          staleOrDuplicateIds.push(p.id)
+          return false
+        }
+      }
+
+      return true
+    })
+
+    // Silently auto-archive duplicate or expired prep items in Supabase in the background
+    if (staleOrDuplicateIds.length > 0) {
+      void supabase
+        .from('prep_items')
+        .update({ dismissed: true, dismissed_at: new Date().toISOString() })
+        .in('id', staleOrDuplicateIds)
+        .then(() => {})
+    }
+
+    return filtered
+  }, [activePrep, rollingEvents, now])
 
   const { actionableItems } = useMemo(
     () => splitActionableAndTransitItems(unscheduledPrep),

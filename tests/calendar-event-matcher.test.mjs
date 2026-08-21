@@ -5,10 +5,13 @@ import {
   isFuzzyEventTitleMatch,
   findMatchingCalendarEvent,
   isItemAlreadyScheduled,
+  isExpiredEventSuggestion,
+  computeDueDateBadge,
 } from '../src/utils/calendarEventMatcher.ts'
 import {
   extractSmartActionTitle,
   isGenericNewsletterOrFragment,
+  detectSuggestedActionBundle,
 } from '../src/utils/actionInspectionSynthesis.ts'
 
 test('extractSmartActionTitle extracts clean title from newsletter items', () => {
@@ -179,4 +182,89 @@ test('isItemAlreadyScheduled identifies match between newsletter prep item and "
 
   assert.equal(isItemAlreadyScheduled(newsletterPrepItem, calendarEvents), true)
 })
+
+test('isExpiredEventSuggestion identifies past event suggestions while keeping future/today items active', () => {
+  const simulatedToday = new Date(2026, 7, 21, 10, 0, 0) // Friday, Aug 21, 2026
+
+  const pastEventSuggestion = {
+    id: 'prep-past-iready',
+    type: 'appointment',
+    source_type: 'gmail',
+    source_pattern_key: 'event_suggestion',
+    description: 'Suggested Appointment: i-Ready Math Diagnostic — First diagnostic assessment for i-Ready Math.',
+    event_date: '2026-08-20T12:00:00.000Z',
+    due_by: '2026-08-20T12:00:00.000Z',
+  }
+  assert.equal(isExpiredEventSuggestion(pastEventSuggestion, simulatedToday), true)
+
+  const todayEventSuggestion = {
+    id: 'prep-today-iready',
+    type: 'appointment',
+    source_type: 'gmail',
+    source_pattern_key: 'event_suggestion',
+    description: 'Suggested Appointment: i-Ready Math Diagnostic',
+    event_date: '2026-08-21T12:00:00.000Z',
+    due_by: '2026-08-21T12:00:00.000Z',
+  }
+  assert.equal(isExpiredEventSuggestion(todayEventSuggestion, simulatedToday), false)
+
+  const futureEventSuggestion = {
+    id: 'prep-future-iready',
+    type: 'appointment',
+    source_type: 'gmail',
+    source_pattern_key: 'event_suggestion',
+    description: 'Suggested Appointment: i-Ready Math Diagnostic',
+    event_date: '2026-08-28T12:00:00.000Z',
+    due_by: '2026-08-28T12:00:00.000Z',
+  }
+  assert.equal(isExpiredEventSuggestion(futureEventSuggestion, simulatedToday), false)
+
+  const nonSuggestion = {
+    id: 'prep-general',
+    type: 'forms',
+    description: 'General paperwork waiver',
+    due_by: '2026-08-20T12:00:00.000Z',
+  }
+  assert.equal(isExpiredEventSuggestion(nonSuggestion, simulatedToday), false)
+})
+
+test('computeDueDateBadge returns truthful badges for overdue, today, tomorrow, and future dates', () => {
+  const simulatedToday = new Date(2026, 7, 21, 10, 0, 0) // Aug 21, 2026
+
+  const overdueBadge = computeDueDateBadge('2026-08-20T12:00:00Z', simulatedToday)
+  assert.equal(overdueBadge.label, 'Overdue')
+  assert.equal(overdueBadge.tone, 'overdue')
+
+  const todayBadge = computeDueDateBadge('2026-08-21T15:00:00Z', simulatedToday)
+  assert.equal(todayBadge.label, 'Due Today')
+  assert.equal(todayBadge.tone, 'today')
+
+  const tomorrowBadge = computeDueDateBadge('2026-08-22T09:00:00Z', simulatedToday)
+  assert.equal(tomorrowBadge.label, 'Due Tomorrow')
+  assert.equal(tomorrowBadge.tone, 'tomorrow')
+
+  const futureBadge = computeDueDateBadge('2026-08-28T09:00:00Z', simulatedToday)
+  assert.equal(futureBadge.label, 'Due Aug 28')
+  assert.equal(futureBadge.tone, 'upcoming')
+
+  const noDateBadge = computeDueDateBadge(null, simulatedToday)
+  assert.equal(noDateBadge.label, 'Pending Review')
+  assert.equal(noDateBadge.tone, 'none')
+})
+
+test('detectSuggestedActionBundle cleanly formats display dates for night-before prep and event', () => {
+  const item = {
+    id: 'prep-iready-bundle',
+    event_title: 'i-Ready Math Diagnostic',
+    description: 'First diagnostic assessment for i-Ready Math on August 20.',
+    event_date: '2026-08-20',
+  }
+
+  const bundle = detectSuggestedActionBundle(item)
+  assert.ok(bundle)
+  assert.equal(bundle.actions.length, 2)
+  assert.equal(bundle.actions[0].displayDate, 'Wed, Aug 19 · 8:00 PM')
+  assert.equal(bundle.actions[1].displayDate, 'Thu, Aug 20 · All Day')
+})
+
 
