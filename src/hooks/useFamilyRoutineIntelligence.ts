@@ -6,11 +6,11 @@ import { useMemberAvailability } from './useMemberAvailability'
 import { useTodayEvents, useTomorrowEvents, type EventWithDetails } from './useCalendarEvents'
 import { usePageVisibility } from './usePageVisibility'
 import {
-  fetchRoutineChecklistCompletions,
-  saveRoutineChecklistToggle,
-  subscribeToRoutineChecklistSync,
-  getStoredRoutineChecklistCompletions,
-} from '../utils/routineChecklistSync'
+  fetchTodoCompletions,
+  saveTodoToggle,
+  subscribeToTodoSync,
+  getStoredTodoCompletions,
+} from '../utils/todoCompletionsSync.ts'
 import { isReminderOrChore } from '../lib/heroFocus.mjs'
 import {
   deserializeRoutineFromAvailabilityRules,
@@ -456,8 +456,8 @@ export function useFamilyRoutineIntelligence(now: Date = new Date()): FamilyRout
 
   const isPageVisible = usePageVisibility()
   const { data: serverCompletions } = useQuery({
-    queryKey: ['routine-checklist-completions'],
-    queryFn: fetchRoutineChecklistCompletions,
+    queryKey: ['household-todo-completions'],
+    queryFn: fetchTodoCompletions,
     staleTime: 60_000,
     refetchInterval: isPageVisible ? 120_000 : false,
   })
@@ -467,14 +467,14 @@ export function useFamilyRoutineIntelligence(now: Date = new Date()): FamilyRout
     try {
       const stored = localStorage.getItem(`${STORAGE_PREFIX}${todayKey}`)
       const tomorrowStored = localStorage.getItem(`${STORAGE_PREFIX}${tomorrowKey}`)
-      const unifiedStored = getStoredRoutineChecklistCompletions()
+      const unifiedStored = getStoredTodoCompletions()
       return {
         ...(stored ? JSON.parse(stored) : {}),
         ...(tomorrowStored ? JSON.parse(tomorrowStored) : {}),
         ...unifiedStored,
       }
     } catch {
-      return getStoredRoutineChecklistCompletions()
+      return getStoredTodoCompletions()
     }
   })
 
@@ -485,7 +485,7 @@ export function useFamilyRoutineIntelligence(now: Date = new Date()): FamilyRout
   }, [serverCompletions])
 
   useEffect(() => {
-    const unsubscribe = subscribeToRoutineChecklistSync((id, completed, fullMap) => {
+    const unsubscribe = subscribeToTodoSync((id, completed, fullMap) => {
       setCompletedItems((prev) => ({
         ...prev,
         ...fullMap,
@@ -502,7 +502,7 @@ export function useFamilyRoutineIntelligence(now: Date = new Date()): FamilyRout
       try {
         localStorage.setItem(`${STORAGE_PREFIX}${todayKey}`, JSON.stringify(next))
       } catch {}
-      void saveRoutineChecklistToggle(id, nextVal)
+      void saveTodoToggle(id, nextVal)
       return next
     })
   }, [todayKey])
@@ -514,7 +514,7 @@ export function useFamilyRoutineIntelligence(now: Date = new Date()): FamilyRout
       try {
         localStorage.setItem(`${STORAGE_PREFIX}${tomorrowKey}`, JSON.stringify(next))
       } catch {}
-      void saveRoutineChecklistToggle(id, nextVal)
+      void saveTodoToggle(id, nextVal)
       return next
     })
   }, [tomorrowKey])

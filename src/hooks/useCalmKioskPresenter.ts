@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { format, parseISO, differenceInMinutes, subMinutes, startOfDay, differenceInCalendarDays } from 'date-fns'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLiveClock, greetingFor } from './useLiveClock'
 import { useTodayEvents, useTomorrowEvents, useRollingEvents, type EventWithDetails } from './useCalendarEvents'
 import { useWeekConflicts, useResolveConflict } from './useConflicts'
@@ -10,6 +10,13 @@ import { useFamilyMembers } from './useFamilyMembers'
 import { useHomeWeather } from './useHomeWeather'
 import { useReminderNeedsYouActions } from './useReminderNeedsYouActions'
 import { useMemberAvailability } from './useMemberAvailability'
+import { usePageVisibility } from './usePageVisibility'
+import {
+  fetchTodoCompletions,
+  saveTodoToggle,
+  subscribeToTodoSync,
+  getStoredTodoCompletions,
+} from '../utils/todoCompletionsSync.ts'
 import { useAppStore } from '../stores/appStore'
 import { fetchTonightDinnerPlan, isValidDinnerPlan } from '../utils/dinnerPlanSync'
 import { inferEventMode, inferEventPlanKind } from '../lib/eventCommandCenter'
@@ -45,6 +52,7 @@ export interface CalmKioskPresenterState {
   openReminders: EventWithDetails[]
   overdueReminders: EventWithDetails[]
   activeReminders: EventWithDetails[]
+  completedReminders: EventWithDetails[]
   completedItems: Record<string, boolean>
   setCompletedItems: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
   todayEvents: EventWithDetails[]
@@ -58,6 +66,7 @@ export interface CalmKioskPresenterState {
   handleResolveConflict: (conflict: Conflict, resolution: string) => void
   handleCompletePrep: (item: PrepItem) => void
   handleCompleteReminder: (id: string) => Promise<void>
+  handleToggleReminder: (id: string) => Promise<void>
   pickupsCount: number
   isEvening: boolean
   isDinnerPast: boolean
@@ -88,7 +97,7 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
   const queryClient = useQueryClient()
   const { setCanvasSubmode } = useAppStore()
   const now = useLiveClock(10_000)
-  const [completedItems, setCompletedItems] = useState<Record<string, boolean>>({})
+  const isPageVisible = usePageVisibility()
   const [isRefreshing, setIsRefreshing] = useState(false)
   const { data: todayEvents = [] } = useTodayEvents(now)
   const { data: tomorrowEvents = [] } = useTomorrowEvents(now)
@@ -102,7 +111,7 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
 
   const resolveConflict = useResolveConflict()
   const completePrep = useCompletePrepItem()
-  const { completeReminder, queueMissedReminders } = useReminderNeedsYouActions()
+  const { queueMissedReminders } = useReminderNeedsYouActions()
 
   useEffect(() => {
     if (todayEvents.length > 0) {
@@ -110,21 +119,50 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     }
   }, [todayEvents, now, queueMissedReminders])
 
+  const { data: serverCompletions } = useQuery({
+    queryKey: ['household-todo-completions'],
+    queryFn: fetchTodoCompletions,
+    staleTime: 60_000,
+    refetchInterval: isPageVisible ? 120_000 : false,
+  })
+
+  const [completedItems, setCompletedItems] = useState<Record<string, boolean>>(() => {
+    return getStoredTodoCompletions()
+  })
+
+  useEffect(() => {
+    if (serverCompletions && Object.keys(serverCompletions).length > 0) {
+      setCompletedItems((prev) => ({ ...serverCompletions, ...prev }))
+    }
+  }, [serverCompletions])
+
+  useEffect(() => {
+    const unsubscribe = subscribeToTodoSync((id, completed, fullMap) => {
+      setCompletedItems((prev) => ({
+        ...prev,
+        ...fullMap,
+        [id]: completed,
+      }))
+    })
+    return unsubscribe
+  }, [])
+
+  const handleToggleReminder = useCallback(
+    async (id: string) => {
+      setCompletedItems((prev) => {
+        const nextVal = !prev[id]
+        void saveTodoToggle(id, nextVal)
+        return { ...prev, [id]: nextVal }
+      })
+    },
+    [],
+  )
+
   const handleCompleteReminder = useCallback(
     async (id: string) => {
-      setCompletedItems((prev) => ({ ...prev, [id]: true }))
-      try {
-        await completeReminder(id)
-      } catch (err) {
-        console.error('Failed to complete reminder:', err)
-        setCompletedItems((prev) => {
-          const next = { ...prev }
-          delete next[id]
-          return next
-        })
-      }
+      await handleToggleReminder(id)
     },
-    [completeReminder],
+    [handleToggleReminder],
   )
 
   const activeConflicts = useMemo(
@@ -418,9 +456,13 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
 
   const activeReminders = useMemo(() => {
     return todayReminders.filter(
-      (evt) => evt.all_day || completedItems[evt.id] || parseISO(evt.start_time).getTime() >= now.getTime()
+      (evt) => !completedItems[evt.id] && (evt.all_day || parseISO(evt.start_time).getTime() >= now.getTime())
     )
   }, [todayReminders, completedItems, now])
+
+  const completedReminders = useMemo(() => {
+    return todayReminders.filter((evt) => Boolean(completedItems[evt.id]))
+  }, [todayReminders, completedItems])
 
   const refreshBriefing = useCallback(async () => {
     setIsRefreshing(true)
@@ -861,6 +903,7 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     openReminders,
     overdueReminders,
     activeReminders,
+    completedReminders,
     completedItems,
     setCompletedItems,
     todayEvents: effectiveTodayEvents,
@@ -874,6 +917,7 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     handleResolveConflict,
     handleCompletePrep,
     handleCompleteReminder,
+    handleToggleReminder,
     pickupsCount,
     isEvening,
     isDinnerPast,

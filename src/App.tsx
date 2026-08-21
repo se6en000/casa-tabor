@@ -24,6 +24,7 @@ import { useAppStore } from './stores/appStore'
 import SidecarCompanion from './components/shared/SidecarCompanion'
 import CanvasUndoToast from './components/canvas/CanvasUndoToast'
 import { useTonightDinnerSync } from './hooks/useTonightDinnerSync'
+import { useHouseholdTodoSync } from './hooks/useHouseholdTodoSync'
 import { useReminderNeedsYouActions } from './hooks/useReminderNeedsYouActions'
 
 const SAFE_MODE = String(import.meta.env.VITE_SAFE_MODE ?? '').toLowerCase()
@@ -68,6 +69,7 @@ function AppShell() {
   usePushNotifications()
   useAppUpdater()
   useTonightDinnerSync()
+  useHouseholdTodoSync()
 
   const { settings } = useScreensaverSettings()
   const ssMs   = settings.enabled && !IS_SAFE_MODE ? settings.screensaverMins * 60_000 : Infinity

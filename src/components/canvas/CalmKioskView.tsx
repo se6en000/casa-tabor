@@ -77,6 +77,24 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
       return false
     }
   })
+  const [completedSectionCollapsed, setCompletedSectionCollapsed] = useState<boolean>(() => {
+    try {
+      // Expanded by default as requested!
+      return localStorage.getItem('casa:calm:completed-todos-collapsed') === 'true'
+    } catch {
+      return false
+    }
+  })
+
+  const toggleCompletedSection = () => {
+    setCompletedSectionCollapsed((prev) => {
+      const next = !prev
+      try {
+        localStorage.setItem('casa:calm:completed-todos-collapsed', String(next))
+      } catch {}
+      return next
+    })
+  }
 
   const toggleOverdueTodos = () => {
     setShowOverdueTodos((prev) => {
@@ -132,9 +150,10 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
     pastEvents,
     upcomingAppointments,
     todayReminders,
+    openReminders,
     overdueReminders,
     activeReminders,
-    completedItems,
+    completedReminders,
     tomorrowEvents,
     isDinnerPast,
     totalAttentionCount,
@@ -156,7 +175,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
     ambientRoutineStatuses,
     handleResolveConflict,
     handleCompletePrep,
-    handleCompleteReminder,
+    handleToggleReminder,
     setCanvasSubmode,
     navigateTo,
     isRefreshing,
@@ -1189,7 +1208,9 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                     Today's To-Dos
                   </h3>
                   <span className="px-1.5 py-0.5 rounded-full text-3xs font-semibold bg-amber-500/10 text-amber-900 border border-amber-500/20">
-                    {todayReminders.length}
+                    {completedReminders.length > 0
+                      ? `${openReminders.length} left · ${completedReminders.length} done`
+                      : `${todayReminders.length}`}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1275,7 +1296,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                                     try {
                                       navigator.vibrate?.(10)
                                     } catch {}
-                                    await handleCompleteReminder(evt.id)
+                                    await handleToggleReminder(evt.id)
                                   }}
                                   className="rounded-full shrink-0 transition-all duration-150 text-casa-muted hover:text-casa-navy hover:bg-casa-surface-subtle h-6 w-6 min-h-0 p-0"
                                   aria-label={`Mark ${evt.title} done`}
@@ -1316,7 +1337,6 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
               {activeReminders.length > 0 && (
                 <div className="space-y-0.5">
                   {(todosExpanded ? activeReminders : activeReminders.slice(0, 3)).map((evt) => {
-                    const isDone = Boolean(completedItems[evt.id])
                     const avatarPeople = evt.members.map((m) => ({
                       id: m.family_member?.id || m.id,
                       name: m.family_member?.name || 'Member',
@@ -1339,12 +1359,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                             onOpenEvent(evt)
                           }
                         }}
-                        className={cn(
-                          'w-full flex items-center justify-between py-1 px-2 rounded-xl transition-all duration-150 cursor-pointer group gap-2.5 select-none active:scale-[0.99] min-h-[36px]',
-                          isDone
-                            ? 'bg-casa-surface-subtle/40 opacity-50'
-                            : 'hover:bg-casa-surface hover:shadow-2xs'
-                        )}
+                        className="w-full flex items-center justify-between py-1 px-2 rounded-xl transition-all duration-150 cursor-pointer group gap-2.5 select-none active:scale-[0.99] min-h-[36px] hover:bg-casa-surface hover:shadow-2xs"
                       >
                         <div className="flex items-center gap-2.5 min-w-0 flex-1">
                           <IconButton
@@ -1355,21 +1370,12 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                               try {
                                 navigator.vibrate?.(10)
                               } catch {}
-                              await handleCompleteReminder(evt.id)
+                              await handleToggleReminder(evt.id)
                             }}
-                            className={cn(
-                              'rounded-full shrink-0 transition-all duration-150 h-6 w-6 min-h-0 p-0',
-                              isDone
-                                ? 'text-emerald-700 bg-emerald-100/60 hover:bg-emerald-200'
-                                : 'text-casa-muted hover:text-casa-navy hover:bg-casa-surface-subtle'
-                            )}
-                            aria-label={isDone ? `Mark ${evt.title} incomplete` : `Mark ${evt.title} done`}
+                            className="rounded-full shrink-0 transition-all duration-150 h-6 w-6 min-h-0 p-0 text-casa-muted hover:text-casa-navy hover:bg-casa-surface-subtle"
+                            aria-label={`Mark ${evt.title} done`}
                             icon={
-                              isDone ? (
-                                <CheckCircle2 size={18} className="text-emerald-600" />
-                              ) : (
-                                <div className="w-4.5 h-4.5 rounded-full border-[1.5px] border-slate-300 hover:border-casa-navy bg-white shadow-2xs transition-colors" />
-                              )
+                              <div className="w-4.5 h-4.5 rounded-full border-[1.5px] border-slate-300 hover:border-casa-navy bg-white shadow-2xs transition-colors" />
                             }
                           />
 
@@ -1383,12 +1389,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                             </span>
                           )}
 
-                          <span
-                            className={cn(
-                              'text-body-sm truncate transition-colors flex-1',
-                              isDone ? 'line-through text-casa-muted' : 'font-normal text-casa-navy group-hover:text-casa-navy'
-                            )}
-                          >
+                          <span className="text-body-sm font-normal text-casa-navy group-hover:text-casa-navy truncate transition-colors flex-1">
                             {evt.title}
                           </span>
                         </div>
@@ -1424,6 +1425,114 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                       )}
                     </Button>
                   )}
+                </div>
+              )}
+
+              {/* ── Option B: Completed Today Section (Expanded by default so family sees what's done) ── */}
+              {completedReminders.length > 0 && (
+                <div className="pt-2 border-t border-casa-border/40 mt-1.5">
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={toggleCompletedSection}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        toggleCompletedSection()
+                      }
+                    }}
+                    className="w-full flex items-center justify-between py-1 px-1.5 rounded-lg hover:bg-casa-surface-subtle/70 transition-colors cursor-pointer select-none group min-h-[32px] text-casa-muted mb-0.5"
+                    aria-expanded={!completedSectionCollapsed}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
+                      <span className="text-caption font-semibold text-casa-muted group-hover:text-casa-navy transition-colors">
+                        Completed Today ({completedReminders.length})
+                      </span>
+                    </div>
+                    <div className="w-5 h-5 rounded flex items-center justify-center text-casa-muted group-hover:text-casa-navy transition-transform">
+                      {completedSectionCollapsed ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
+                    </div>
+                  </div>
+
+                  <AnimatePresence initial={false}>
+                    {!completedSectionCollapsed && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                        className="space-y-0.5 overflow-hidden"
+                      >
+                        {completedReminders.map((evt) => {
+                          const avatarPeople = evt.members.map((m) => ({
+                            id: m.family_member?.id || m.id,
+                            name: m.family_member?.name || 'Member',
+                            color: m.family_member?.color_hex || 'var(--color-casa-navy)',
+                          }))
+
+                          return (
+                            <div
+                              key={evt.id}
+                              role="button"
+                              tabIndex={0}
+                              data-tactile="true"
+                              data-calendar-event
+                              data-sidecar-loadable="true"
+                              data-event-id={evt.id}
+                              onClick={() => onOpenEvent(evt)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault()
+                                  onOpenEvent(evt)
+                                }
+                              }}
+                              className="w-full flex items-center justify-between py-1 px-2 rounded-xl transition-all duration-150 cursor-pointer group gap-2.5 select-none active:scale-[0.99] min-h-[36px] bg-emerald-500/[0.04] border border-emerald-500/15 hover:bg-emerald-500/[0.08]"
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                <IconButton
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={async (e) => {
+                                    e.stopPropagation()
+                                    try {
+                                      navigator.vibrate?.(10)
+                                    } catch {}
+                                    await handleToggleReminder(evt.id)
+                                  }}
+                                  className="rounded-full shrink-0 transition-all duration-150 text-emerald-700 hover:text-emerald-900 bg-emerald-100/70 hover:bg-emerald-200 h-6 w-6 min-h-0 p-0"
+                                  aria-label={`Mark ${evt.title} incomplete`}
+                                  icon={<CheckCircle2 size={16} className="text-emerald-600" />}
+                                />
+
+                                {evt.all_day ? (
+                                  <span className="font-sans text-caption font-semibold text-casa-muted/70 shrink-0">
+                                    All Day
+                                  </span>
+                                ) : (
+                                  <span className="font-mono text-caption font-semibold text-casa-muted/70 shrink-0 tabular-nums">
+                                    {format(parseISO(evt.start_time), 'h:mm a')}
+                                  </span>
+                                )}
+
+                                <span className="text-body-sm truncate transition-colors flex-1 line-through text-casa-muted/70">
+                                  {evt.title}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-1.5 shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
+                                {avatarPeople.length > 0 && <PersonAvatarStack people={avatarPeople} size="sm" max={2} />}
+                                <ChevronRight
+                                  size={14}
+                                  className="text-casa-muted/40 group-hover:text-casa-navy transition-transform group-hover:translate-x-0.5"
+                                />
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               )}
                   </motion.div>
