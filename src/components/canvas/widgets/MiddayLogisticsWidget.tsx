@@ -14,10 +14,9 @@ import {
   ExternalLink,
   Sparkles,
   Calendar,
-  ArrowRight,
   ListTodo,
+  Navigation,
 } from 'lucide-react'
-import { motion } from 'framer-motion'
 import { useQueryClient } from '@tanstack/react-query'
 import { cn } from '../../../utils/cn'
 import type { EventWithDetails } from '../../../hooks/useCalendarEvents'
@@ -34,6 +33,7 @@ import {
 } from '../../../lib/eventMutations'
 import { saveEventTransportationOverride } from '../../../lib/eventPlanOverrides'
 import { applyEventAggregatePatch } from '../../../lib/eventAggregateCache'
+import { openEventDetails } from '../../../utils/openEventDetails'
 
 import { Button, IconButton } from '../../ui'
 
@@ -68,7 +68,7 @@ export default function MiddayLogisticsWidget({
   now = new Date(),
   todayEvents = [],
   openReminders = [],
-  todayReminders = [],
+  todayReminders: _todayReminders = [],
   completedReminders = [],
   onToggleReminder,
   tomorrowEvents = [],
@@ -121,7 +121,6 @@ export default function MiddayLogisticsWidget({
     const actionKey = `home-${targetEvent.id}`
     setResolvingActionId(actionKey)
 
-    // 1. Immediately dismiss conflict from local state
     setDismissedConflictIds((prev) => {
       const next = new Set(prev)
       next.add(targetEvent.id)
@@ -129,7 +128,6 @@ export default function MiddayLogisticsWidget({
       return next
     })
 
-    // 2. Immediately apply optimistic cache patch so all cards refresh instantly
     applyEventAggregatePatch(queryClient, targetEvent.id, {
       location_name: 'Home',
       address: '',
@@ -218,14 +216,12 @@ export default function MiddayLogisticsWidget({
     const actionKey = `driver-${targetEvent.id}`
     setResolvingActionId(actionKey)
 
-    // 1. Immediately dismiss conflict from local state
     setDismissedConflictIds((prev) => {
       const next = new Set(prev)
       next.add(targetEvent.id)
       return next
     })
 
-    // 2. Immediately apply optimistic cache patch
     applyEventAggregatePatch(queryClient, targetEvent.id, {
       members: [
         ...(targetEvent.members?.filter((m) => m.role !== 'driver') ?? []),
@@ -310,8 +306,10 @@ export default function MiddayLogisticsWidget({
           return 0
         }
       })
-      .slice(0, 2)
   }, [todayEvents, now])
+
+  // Primary Milestone Spotlight (First upcoming commitment today)
+  const primaryMilestone = middayCommitments[0] || null
 
   // Split open reminders into overdue vs upcoming today
   const overdueReminders = useMemo(() => {
@@ -329,7 +327,10 @@ export default function MiddayLogisticsWidget({
     })
   }, [openReminders, now])
 
-  // Tomorrow's highlighted events for weekend radar
+  // Top priority focus item (overdue first, then first open task)
+  const priorityFocusReminder = overdueReminders[0] || openReminders[0] || null
+
+  // Tomorrow's highlighted events for weekend preview
   const tomorrowHighlightEvents = useMemo(() => {
     return (tomorrowEvents || [])
       .filter((e) => {
@@ -418,6 +419,19 @@ export default function MiddayLogisticsWidget({
     return Array.from(map.values()).sort((a, b) => a.minutesFromMidnight - b.minutesFromMidnight)
   }, [routineIntel.isTodayWeekend, routineIntel.isTodaySchoolDay, routineIntel.ambientStatuses])
 
+  const handleOpenMilestone = (evt: EventWithDetails) => {
+    if (onOpenEvent) {
+      onOpenEvent(evt)
+    }
+    openEventDetails(evt.id)
+  }
+
+  const mapsUrlForMilestone = (evt: EventWithDetails) => {
+    const q = (evt.address || evt.location_name || '').trim()
+    if (!q) return null
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`
+  }
+
   return (
     <div
       className={cn(
@@ -450,66 +464,32 @@ export default function MiddayLogisticsWidget({
             )}
           >
             {routineIntel.isTodayWeekend ? (
-              <Sparkles size={20} strokeWidth={2} className={isNavy ? 'text-amber-400' : 'text-casa-gold'} />
+              <Sparkles size={20} strokeWidth={2.2} />
             ) : (
               <Sun size={20} strokeWidth={2.2} />
             )}
           </div>
-          <div>
+          <div className="min-w-0">
             <div
               className={cn(
-                'text-caption font-bold uppercase tracking-widest flex items-center gap-1.5',
-                isNavy ? 'text-amber-400' : 'text-amber-800',
+                'text-caption font-bold uppercase tracking-widest leading-tight',
+                isNavy ? 'text-amber-400' : 'text-casa-gold',
               )}
             >
-              <span>{routineIntel.isTodayWeekend ? 'Weekend Flow & Household Focus' : 'Midday & Afternoon Logistics'}</span>
+              {routineIntel.isTodayWeekend ? 'Weekend Household Pulse' : 'Household Logistics Radar'}
             </div>
             <div
               className={cn(
-                'text-body font-serif font-semibold',
+                'text-body font-serif font-semibold mt-0.5',
                 isNavy ? 'text-white' : 'text-casa-navy',
               )}
             >
-              {format(now, 'EEEE, MMMM d')}
+              {routineIntel.todayDayName}, {routineIntel.todayFormattedDate}
             </div>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
-          {/* Dynamic Status Capsule (Real State Awareness) */}
-          {!primaryConflict && (
-            <span
-              className={cn(
-                'hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-caption font-semibold shadow-2xs border',
-                isNavy
-                  ? 'bg-white/10 border-white/10 text-white/80'
-                  : 'bg-casa-surface-subtle border-casa-border/60 text-casa-text-secondary',
-              )}
-            >
-              {overdueReminders.length > 0 ? (
-                <>
-                  <AlertTriangle size={13} className="text-amber-500" />
-                  <span>{overdueReminders.length} Overdue · {openReminders.length} Open</span>
-                </>
-              ) : openReminders.length > 0 ? (
-                <>
-                  <Clock size={13} className={isNavy ? 'text-amber-400' : 'text-casa-gold'} />
-                  <span>{openReminders.length} Open Task{openReminders.length > 1 ? 's' : ''}</span>
-                </>
-              ) : middayCommitments.length > 0 ? (
-                <>
-                  <Car size={13} className={isNavy ? 'text-amber-400' : 'text-casa-gold'} />
-                  <span>{middayCommitments.length} Staged</span>
-                </>
-              ) : (
-                <>
-                  <ShieldCheck size={14} className="text-emerald-500" />
-                  <span>{routineIntel.isTodayWeekend ? 'Weekend Flow Clear' : 'Logistics Clear'}</span>
-                </>
-              )}
-            </span>
-          )}
-
           {/* 1-Tap Mode Toggle (Today vs Tomorrow) */}
           {onToggleTomorrowView && (
             <div
@@ -558,8 +538,6 @@ export default function MiddayLogisticsWidget({
               </Button>
             </div>
           )}
-
-
         </div>
       </div>
 
@@ -625,7 +603,7 @@ export default function MiddayLogisticsWidget({
                 leadingIcon={<House size={13} className={isNavy ? 'text-amber-300' : 'text-amber-700'} />}
                 onClick={() => handleQuickMarkAtHome(primaryConflict.eventB.rawEvent)}
                 className={cn(
-                  'rounded-xl text-caption font-bold shadow-2xs',
+                  'rounded-xl text-caption font-bold shadow-2xs min-h-[44px]',
                   isNavy
                     ? 'bg-slate-900 hover:bg-slate-800 border-amber-400/30 text-amber-100'
                     : 'bg-white hover:bg-amber-50 border-amber-300 text-amber-950',
@@ -649,7 +627,7 @@ export default function MiddayLogisticsWidget({
                   )
                 }
                 className={cn(
-                  'rounded-xl text-caption font-bold shadow-2xs',
+                  'rounded-xl text-caption font-bold shadow-2xs min-h-[44px]',
                   isNavy
                     ? 'bg-slate-900 hover:bg-slate-800 border-amber-400/30 text-amber-100'
                     : 'bg-white hover:bg-amber-50 border-amber-300 text-amber-950',
@@ -666,7 +644,7 @@ export default function MiddayLogisticsWidget({
                 leadingIcon={<ExternalLink size={13} className={isNavy ? 'text-amber-300' : 'text-amber-800'} />}
                 onClick={() => onOpenEvent(primaryConflict.eventB.rawEvent)}
                 className={cn(
-                  'rounded-xl text-caption font-bold',
+                  'rounded-xl text-caption font-bold min-h-[44px]',
                   isNavy
                     ? 'bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/30 text-amber-200'
                     : 'bg-amber-500/10 hover:bg-amber-500/20 border border-amber-400/40 text-amber-950',
@@ -679,512 +657,187 @@ export default function MiddayLogisticsWidget({
         </div>
       )}
 
-      {/* ── Section B: Weekend Flow Momentum OR Weekday Active Tasks ── */}
-      {routineIntel.isTodayWeekend ? (
-        // On weekends: High-level Household Pulse & Momentum summary (Zero raw list duplication with right sidebar)
-        <div className="space-y-3">
-          {overdueReminders.length > 0 && (
-            <div className={cn(
-              'p-4 rounded-2xl border shadow-2xs flex items-center justify-between gap-3.5 transition-all',
-              isNavy
-                ? 'bg-amber-500/10 border-amber-400/30 text-amber-200'
-                : 'bg-amber-500/8 border-amber-400/40 text-amber-950'
-            )}>
-              <div className="flex items-center gap-3 min-w-0 flex-1">
-                <div className={cn(
-                  'w-9 h-9 rounded-xl flex items-center justify-center font-bold shrink-0',
-                  isNavy ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-500/15 text-amber-800'
-                )}>
-                  <AlertTriangle size={18} className="text-amber-600 shrink-0 animate-pulse" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-3xs font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-amber-500/25 border border-amber-500/35 text-amber-950">
-                      Priority Focus
-                    </span>
-                    <span className="text-caption font-semibold truncate text-amber-900">
-                      {overdueReminders[0].title}
-                    </span>
-                  </div>
-                  <p className={cn('text-caption mt-0.5 truncate', isNavy ? 'text-white/70' : 'text-casa-muted')}>
-                    {overdueReminders.length === 1 ? '1 item requiring attention from earlier today' : `${overdueReminders.length} items pending attention`}
-                  </p>
-                </div>
-              </div>
+      {/* ── Primary Spotlight: Editorial Family Milestone on Deck ── */}
+      {primaryMilestone ? (
+        (() => {
+          const driverResolution = resolveEventDriver(primaryMilestone, familyMembers)
+          const depInfo = resolveCanonicalDeparture(primaryMilestone, { now })
+          const attendeeName =
+            primaryMilestone.members?.[0]?.family_member?.name ||
+            driverResolution.name ||
+            'Family'
+          const formattedStartTime = format(parseISO(primaryMilestone.start_time), 'h:mm a')
+          const formattedEndTime = format(parseISO(primaryMilestone.end_time), 'h:mm a')
+          const mapsUrl = mapsUrlForMilestone(primaryMilestone)
 
-              <IconButton
-                size="sm"
-                variant="ghost"
-                onClick={async (e) => {
-                  e.stopPropagation()
-                  if (onToggleReminder && overdueReminders[0]) {
-                    try { navigator.vibrate?.(10) } catch {}
-                    await onToggleReminder(overdueReminders[0].id)
-                  }
-                }}
-                className={cn(
-                  'rounded-full shrink-0 transition-all min-h-[38px] min-w-[38px] p-0 flex items-center justify-center',
-                  isNavy ? 'hover:bg-amber-400/20 text-amber-300' : 'hover:bg-emerald-100 text-slate-500 hover:text-emerald-700'
-                )}
-                aria-label={`Mark ${overdueReminders[0].title} complete`}
-                icon={
-                  <div className="w-6 h-6 rounded-full border-2 border-amber-600/80 hover:border-emerald-600 bg-white/10 flex items-center justify-center transition-colors shadow-2xs">
-                    <div className="w-3 h-3 rounded-full bg-current opacity-40 hover:opacity-100 transition-opacity" />
-                  </div>
-                }
-              />
-            </div>
-          )}
-
-          {/* Weekend Household Momentum Bar */}
-          <div className={cn(
-            'p-4 rounded-2xl border shadow-2xs flex flex-wrap items-center justify-between gap-3',
-            isNavy ? 'bg-white/5 border-white/10 text-white' : 'bg-casa-surface-subtle/80 border-casa-border/80 text-casa-navy'
-          )}>
-            <div className="flex items-center gap-3">
-              <div className={cn(
-                'w-9 h-9 rounded-xl flex items-center justify-center font-bold shrink-0',
-                isNavy ? 'bg-white/10 text-amber-400' : 'bg-casa-gold/20 text-casa-navy'
-              )}>
-                <ListTodo size={17} className={isNavy ? 'text-amber-400' : 'text-casa-gold'} />
-              </div>
-              <div>
-                <h4 className={cn('font-sans text-body-sm font-bold', isNavy ? 'text-white' : 'text-casa-navy')}>
-                  Weekend Household Flow
-                </h4>
-                <p className={cn('text-caption', isNavy ? 'text-white/70' : 'text-casa-text-secondary')}>
-                  {completedReminders.length} of {todayReminders.length || openReminders.length + completedReminders.length} tasks completed today
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span className={cn(
-                'text-caption font-bold px-3 py-1 rounded-full border shadow-2xs',
-                isNavy ? 'bg-slate-900 border-white/15 text-amber-300' : 'bg-white border-casa-border/60 text-casa-navy'
-              )}>
-                {openReminders.length === 0 ? 'All Clear' : `${openReminders.length} Open`}
-              </span>
-            </div>
-          </div>
-        </div>
-      ) : openReminders.length > 0 && (
-        <div className="space-y-2.5">
-          <div className="flex items-center justify-between">
-            <span
+          return (
+            <div
               className={cn(
-                'text-caption font-bold uppercase tracking-wider flex items-center gap-1.5',
-                isNavy ? 'text-amber-400' : 'text-amber-800',
+                'p-5 sm:p-6 rounded-2xl border relative z-10 space-y-4 transition-all',
+                isNavy
+                  ? 'bg-white/5 border-white/15 text-white'
+                  : 'bg-casa-surface-subtle/80 border-casa-border/80 text-casa-navy',
               )}
             >
-              <ListTodo size={14} className={isNavy ? 'text-amber-400' : 'text-casa-gold'} />
-              <span>Today's Active Focus & Tasks</span>
-            </span>
-            <span
-              className={cn(
-                'text-caption font-semibold',
-                isNavy ? 'text-white/60' : 'text-casa-muted',
-              )}
-            >
-              {openReminders.length} Open · {completedReminders.length} Done
-            </span>
-          </div>
-
-          <div
-            className={cn(
-              'grid gap-3',
-              openReminders.length > 1 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1',
-            )}
-          >
-            {openReminders.slice(0, 4).map((task) => {
-              const assignedName = task.members?.[0]?.family_member?.name || 'Family'
-              const isOverdue = overdueReminders.some((r) => r.id === task.id)
-              const formattedTime = task.all_day
-                ? 'All Day'
-                : (() => {
-                    try {
-                      return format(parseISO(task.start_time), 'h:mm a')
-                    } catch {
-                      return 'Today'
-                    }
-                  })()
-
-              return (
-                <motion.div
-                  key={task.id}
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  onClick={() => onOpenEvent && onOpenEvent(task)}
-                  className={cn(
-                    'p-4 rounded-2xl border shadow-2xs cursor-pointer transition-all flex flex-col justify-between space-y-3 group',
-                    isNavy
-                      ? 'bg-white/5 border-white/10 hover:border-amber-400/40 text-white'
-                      : isOverdue
-                      ? 'bg-gradient-to-br from-amber-500/5 via-casa-surface to-casa-surface border-amber-400/50 text-casa-navy hover:border-amber-500/80'
-                      : 'bg-casa-surface-subtle/80 border-casa-border/80 hover:border-casa-gold/60 text-casa-navy',
-                  )}
-                >
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <span
-                        className={cn(
-                          'inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-caption font-mono font-bold border shadow-2xs',
-                          isOverdue
-                            ? isNavy
-                              ? 'bg-amber-950/80 border-amber-400/40 text-amber-300'
-                              : 'bg-amber-100/90 border-amber-300 text-amber-900'
-                            : isNavy
-                            ? 'bg-slate-900 border-white/15 text-white/90'
-                            : 'bg-white border-casa-border/60 text-casa-navy',
-                        )}
-                      >
-                        {isOverdue && <AlertTriangle size={11} className="text-amber-500 shrink-0" />}
-                        <span>{formattedTime}</span>
-                        {isOverdue && <span className="text-3xs uppercase font-extrabold ml-0.5">OVERDUE</span>}
-                      </span>
-
-                      <span
-                        className={cn(
-                          'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-caption font-bold border shadow-2xs',
-                          isNavy
-                            ? 'bg-slate-900 border-white/15 text-white'
-                            : 'bg-white border-casa-border/60 text-casa-navy',
-                        )}
-                      >
-                        <span className={cn('w-2 h-2 rounded-full shrink-0', isNavy ? 'bg-amber-400' : 'bg-casa-gold')} />
-                        <span>{assignedName}</span>
-                      </span>
-                    </div>
-
-                    <div className={cn('font-display text-body font-bold leading-snug truncate pt-0.5', isNavy ? 'text-white' : 'text-casa-navy')}>
-                      {task.title}
-                    </div>
-                  </div>
-
-                  <div
+              {/* Header Badges */}
+              <div className="flex flex-wrap items-center justify-between gap-2.5">
+                <div className="flex items-center gap-2">
+                  <span
                     className={cn(
-                      'flex items-center justify-between pt-2 border-t text-caption',
-                      isNavy ? 'border-white/10' : 'border-casa-border/40',
+                      'text-caption font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-lg border shadow-2xs',
+                      isNavy
+                        ? 'bg-amber-400/20 text-amber-300 border-amber-400/30'
+                        : 'bg-amber-500/15 text-amber-800 border-amber-500/25',
                     )}
                   >
-                    <span className={cn('text-caption font-medium', isNavy ? 'text-white/60' : 'text-casa-muted')}>
-                      1-Tap to Complete
-                    </span>
-
-                    <IconButton
-                      size="sm"
-                      variant="ghost"
-                      onClick={async (e) => {
-                        e.stopPropagation()
-                        if (onToggleReminder) {
-                          try {
-                            navigator.vibrate?.(10)
-                          } catch {}
-                          await onToggleReminder(task.id)
-                        }
-                      }}
-                      className={cn(
-                        'rounded-full shrink-0 transition-all min-h-[32px] min-w-[32px] p-0 flex items-center justify-center',
-                        isNavy
-                          ? 'hover:bg-amber-400/20 text-amber-300'
-                          : 'hover:bg-emerald-100 text-slate-500 hover:text-emerald-700',
-                      )}
-                      aria-label={`Mark ${task.title} complete`}
-                      icon={
-                        <div className="w-5 h-5 rounded-full border-2 border-slate-400/80 hover:border-emerald-600 bg-white/10 flex items-center justify-center transition-colors">
-                          <div className="w-2.5 h-2.5 rounded-full bg-current opacity-40 hover:opacity-100 transition-opacity" />
-                        </div>
-                      }
-                    />
-                  </div>
-                </motion.div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* ── Midday Commitments Section (Editorial Schedule Cards) ── */}
-      {middayCommitments.length > 0 && (
-        <div className="space-y-2.5">
-          <div className="flex items-center justify-between">
-            <span
-              className={cn(
-                'text-caption font-bold uppercase tracking-wider',
-                isNavy ? 'text-amber-400' : 'text-casa-text-secondary',
-              )}
-            >
-              {routineIntel.isTodayWeekend ? "Today's Schedule & Activities" : "Today's Midday Commitments"}
-            </span>
-            <span
-              className={cn(
-                'text-caption font-semibold',
-                isNavy ? 'text-white/60' : 'text-casa-muted',
-              )}
-            >
-              {middayCommitments.length} Upcoming
-            </span>
-          </div>
-
-          <div
-            className={cn(
-              'grid gap-3.5',
-              middayCommitments.length > 1 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1',
-            )}
-          >
-            {middayCommitments.map((evt, idx) => {
-              const driverResolution = resolveEventDriver(evt, familyMembers)
-              const depInfo = resolveCanonicalDeparture(evt, { now })
-              const assignedName =
-                driverResolution.name ||
-                evt.members?.[0]?.family_member?.name ||
-                'Family'
-
-              return (
-                <motion.div
-                  key={evt.id || idx}
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  onClick={() => onOpenEvent && onOpenEvent(evt)}
-                  className={cn(
-                    'p-4 sm:p-5 rounded-2xl border shadow-2xs cursor-pointer transition-all space-y-2.5 flex flex-col justify-between',
-                    isNavy
-                      ? 'bg-white/5 border-white/10 hover:border-amber-400/40 text-white'
-                      : 'bg-casa-surface-subtle/80 border-casa-border/80 hover:border-casa-gold/60 text-casa-navy',
-                  )}
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <span
-                        className={cn(
-                          'inline-flex items-center gap-1.5 text-caption font-mono font-bold px-2.5 py-0.5 rounded-lg border shadow-2xs',
-                          isNavy
-                            ? 'bg-slate-900 border-white/15 text-white'
-                            : 'bg-white border-casa-border/50 text-casa-navy',
-                        )}
-                      >
-                        <Clock size={13} className={isNavy ? 'text-amber-400' : 'text-casa-gold'} />
-                        <span>{format(parseISO(evt.start_time), 'h:mm a')} – {format(parseISO(evt.end_time), 'h:mm a')}</span>
-                      </span>
-                      <span
-                        className={cn(
-                          'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-caption font-bold border shadow-2xs',
-                          isNavy
-                            ? 'bg-slate-900 border-white/15 text-white'
-                            : 'bg-white border-casa-border/60 text-casa-navy',
-                        )}
-                      >
-                        <span className={cn('w-2 h-2 rounded-full shrink-0', isNavy ? 'bg-amber-400' : 'bg-casa-gold')} />
-                        <span>{assignedName}</span>
-                      </span>
-                    </div>
-
-                    <div>
-                      <h3
-                        className={cn(
-                          'font-display text-body-lg sm:text-heading font-bold leading-snug',
-                          isNavy ? 'text-white' : 'text-casa-navy',
-                        )}
-                      >
-                        {evt.title}
-                      </h3>
-                      {evt.location_name && (
-                        <div
-                          className={cn(
-                            'flex items-center gap-1.5 text-caption mt-0.5',
-                            isNavy ? 'text-white/70' : 'text-casa-text-secondary',
-                          )}
-                        >
-                          <MapPin size={13} className={isNavy ? 'text-amber-400 shrink-0' : 'text-casa-gold shrink-0'} />
-                          <span className="truncate">{evt.location_name}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div
+                    Next on Deck
+                  </span>
+                  <span
                     className={cn(
-                      'flex items-center justify-between pt-2 border-t text-caption',
-                      isNavy ? 'border-white/10' : 'border-casa-border/40',
+                      'inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-caption font-bold border shadow-2xs',
+                      isNavy
+                        ? 'bg-slate-900 border-white/15 text-white'
+                        : 'bg-white border-casa-border/60 text-casa-navy',
                     )}
                   >
-                    {depInfo.isAtHome ? (
-                      <div
-                        className={cn(
-                          'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-caption font-medium border',
-                          isNavy
-                            ? 'bg-emerald-950/60 border-emerald-500/30 text-emerald-300'
-                            : 'bg-emerald-50 border-emerald-200/80 text-emerald-800',
-                        )}
-                      >
-                        <House size={13} className={isNavy ? 'text-emerald-400' : 'text-emerald-600'} />
-                        <span>At Home · No Drive</span>
-                      </div>
-                    ) : depInfo.isDriving && depInfo.formattedLeaveBy ? (
-                      <div
-                        className={cn(
-                          'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-caption font-medium border',
-                          isNavy
-                            ? 'bg-white/10 border-white/15 text-white/80'
-                            : 'bg-white border-casa-border/50 text-casa-text-secondary',
-                        )}
-                      >
-                        <Car size={13} className={isNavy ? 'text-amber-400' : 'text-casa-gold'} />
-                        <span>
-                          Leave by <strong className={isNavy ? 'text-white font-bold' : 'text-casa-navy font-bold'}>{depInfo.formattedLeaveBy}</strong>
-                          <span className={isNavy ? 'text-white/60 ml-1 font-normal' : 'text-casa-muted ml-1 font-normal'}>({depInfo.driveMinutes}m drive)</span>
-                        </span>
-                      </div>
-                    ) : (
-                      <div
-                        className={cn(
-                          'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-caption font-medium border',
-                          isNavy
-                            ? 'bg-white/10 border-white/15 text-white/80'
-                            : 'bg-white border-casa-border/50 text-casa-text-secondary',
-                        )}
-                      >
-                        <Car size={13} className={isNavy ? 'text-amber-400' : 'text-casa-gold'} />
-                        <span>Live travel buffer clear</span>
-                      </div>
+                    <span className={cn('w-2 h-2 rounded-full shrink-0', isNavy ? 'bg-amber-400' : 'bg-casa-gold')} />
+                    <span>{attendeeName}</span>
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span
+                    className={cn(
+                      'inline-flex items-center gap-1.5 text-caption font-mono font-bold px-3 py-1 rounded-lg border shadow-2xs',
+                      isNavy
+                        ? 'bg-slate-900 border-white/15 text-white'
+                        : 'bg-white border-casa-border/60 text-casa-navy',
                     )}
-                  </div>
-                </motion.div>
-              )
-            })}
-          </div>
-        </div>
-      )}
+                  >
+                    <Clock size={13} className={isNavy ? 'text-amber-400' : 'text-casa-gold'} />
+                    <span>{formattedStartTime} – {formattedEndTime}</span>
+                  </span>
 
-      {/* ── Tomorrow's Weekend Horizon Radar (Preview of Sunday / Weekend Schedule) ── */}
-      {routineIntel.isTodayWeekend && tomorrowHighlightEvents.length > 0 && (
-        <div
-          className={cn(
-            'pt-3 space-y-2.5 border-t',
-            isNavy ? 'border-white/10' : 'border-casa-border/60',
-          )}
-        >
-          <div className="flex items-center justify-between text-caption font-bold uppercase tracking-wider">
-            <span className={cn('flex items-center gap-1.5', isNavy ? 'text-amber-400' : 'text-casa-text-secondary')}>
-              <Calendar size={14} className={isNavy ? 'text-amber-400' : 'text-casa-gold'} />
-              <span>Tomorrow's Weekend Schedule</span>
-            </span>
-            <span className={cn('font-semibold', isNavy ? 'text-white/60' : 'text-casa-muted')}>
-              {tomorrowEvents?.length || 2} Scheduled
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {tomorrowHighlightEvents.map((evt) => {
-              const formattedTime = evt.all_day
-                ? 'All Day'
-                : (() => {
-                    try {
-                      return format(parseISO(evt.start_time), 'h:mm a')
-                    } catch {
-                      return 'Tomorrow'
-                    }
-                  })()
-
-              return (
-                <div
-                  key={evt.id}
-                  onClick={() => onOpenEvent && onOpenEvent(evt)}
-                  className={cn(
-                    'p-3.5 rounded-2xl border flex flex-col justify-between space-y-2 cursor-pointer transition-all shadow-2xs group',
-                    isNavy
-                      ? 'bg-white/5 border-white/10 hover:border-amber-400/40 text-white'
-                      : 'bg-casa-surface-subtle/80 border-casa-border/80 hover:border-casa-gold/60 text-casa-navy',
-                  )}
-                >
-                  <div className="flex items-center justify-between gap-2">
+                  {driverResolution.name && (
                     <span
                       className={cn(
-                        'text-caption font-mono font-bold px-2.5 py-0.5 rounded-lg border shadow-2xs',
+                        'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-caption font-bold border shadow-2xs',
                         isNavy
-                          ? 'bg-slate-900 border-white/15 text-white'
+                          ? 'bg-white/10 border-white/15 text-white/90'
                           : 'bg-white border-casa-border/60 text-casa-navy',
                       )}
                     >
-                      {formattedTime}
+                      <Car size={12} className={isNavy ? 'text-amber-400' : 'text-casa-gold'} />
+                      <span>{driverResolution.name}</span>
                     </span>
-                    {evt.location_name && (
-                      <span className={cn('text-caption truncate text-2xs max-w-[140px]', isNavy ? 'text-white/60' : 'text-casa-muted')}>
-                        {evt.location_name}
+                  )}
+                </div>
+              </div>
+
+              {/* Title & Location */}
+              <div>
+                <h3
+                  onClick={() => handleOpenMilestone(primaryMilestone)}
+                  className={cn(
+                    'font-display text-heading-lg sm:text-title font-bold leading-tight cursor-pointer hover:underline',
+                    isNavy ? 'text-white' : 'text-casa-navy',
+                  )}
+                >
+                  {primaryMilestone.title}
+                </h3>
+
+                {primaryMilestone.location_name && (
+                  <div
+                    className={cn(
+                      'flex items-center gap-1.5 text-body-sm mt-1.5 font-medium',
+                      isNavy ? 'text-white/80' : 'text-casa-text-secondary',
+                    )}
+                  >
+                    <MapPin size={14} className={isNavy ? 'text-amber-400 shrink-0' : 'text-casa-gold shrink-0'} />
+                    <span>{primaryMilestone.location_name}</span>
+                    {primaryMilestone.address && (
+                      <span className={cn('text-caption', isNavy ? 'text-white/50' : 'text-casa-muted')}>
+                        · {primaryMilestone.address}
                       </span>
                     )}
                   </div>
+                )}
+              </div>
 
-                  <div className={cn('font-display font-bold text-body-sm truncate', isNavy ? 'text-white' : 'text-casa-navy')}>
-                    {evt.title}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-
-          {onToggleTomorrowView && (
-            <div className="pt-1">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={onToggleTomorrowView}
-                trailingIcon={<ArrowRight size={13} />}
+              {/* Transit Buffer & Quick Actions */}
+              <div
                 className={cn(
-                  'w-full rounded-xl text-caption font-bold shadow-2xs py-2 min-h-[38px] justify-between',
-                  isNavy
-                    ? 'bg-white/10 hover:bg-white/15 border-white/15 text-white'
-                    : 'bg-casa-surface-subtle hover:bg-casa-surface border-casa-border text-casa-navy',
+                  'flex flex-wrap items-center justify-between gap-3 pt-3 border-t',
+                  isNavy ? 'border-white/10' : 'border-casa-border/60',
                 )}
               >
-                <span>View Tomorrow's Readiness & Prep Checklist ({routineIntel.completedCount}/{routineIntel.totalPrepCount || (routineIntel.isTomorrowWeekend ? 2 : 3)} Ready)</span>
-              </Button>
-            </div>
-          )}
-        </div>
-      )}
+                <div>
+                  {depInfo.isAtHome ? (
+                    <span className={cn('inline-flex items-center gap-1.5 text-caption font-medium', isNavy ? 'text-emerald-300' : 'text-emerald-700')}>
+                      <House size={14} />
+                      <span>At Home · No Drive Needed</span>
+                    </span>
+                  ) : depInfo.isDriving && depInfo.formattedLeaveBy ? (
+                    <span className={cn('inline-flex items-center gap-1.5 text-caption font-medium', isNavy ? 'text-white/90' : 'text-casa-navy')}>
+                      <Car size={14} className={isNavy ? 'text-amber-400' : 'text-casa-gold'} />
+                      <span>
+                        Leave by <strong className="font-bold">{depInfo.formattedLeaveBy}</strong> ({depInfo.driveMinutes}m drive)
+                      </span>
+                    </span>
+                  ) : (
+                    <span className={cn('inline-flex items-center gap-1.5 text-caption font-medium', isNavy ? 'text-white/70' : 'text-casa-muted')}>
+                      <ShieldCheck size={14} className="text-emerald-500" />
+                      <span>Travel buffer clear</span>
+                    </span>
+                  )}
+                </div>
 
-      {/* ── Reassuring Open / Clear Logistics State (ONLY when truly NO tasks, NO schedule, NO dismissals) ── */}
-      {openReminders.length === 0 && middayCommitments.length === 0 && schoolDismissals.length === 0 && !primaryConflict && (
-        <div
-          className={cn(
-            'p-4 sm:p-5 rounded-2xl border flex items-center gap-3.5 shadow-2xs transition-all',
-            isNavy
-              ? 'bg-white/5 border-white/10 text-white'
-              : 'bg-casa-surface-subtle/80 border-casa-border/80 text-casa-navy',
-          )}
-        >
-          <div
-            className={cn(
-              'w-10 h-10 rounded-xl border flex items-center justify-center shrink-0',
-              isNavy
-                ? 'bg-amber-400/10 border-amber-400/20 text-amber-300'
-                : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-700',
-            )}
-          >
-            <ShieldCheck size={20} />
-          </div>
-          <div className="space-y-0.5">
-            <div className={cn('text-body-sm font-bold', isNavy ? 'text-white' : 'text-casa-navy')}>
-              {routineIntel.isTodayWeekend ? 'Weekend schedule is open & all daily tasks complete' : 'Afternoon logistics are clear'}
-            </div>
-            <div className={cn('text-caption leading-relaxed', isNavy ? 'text-white/70' : 'text-casa-text-secondary')}>
-              {routineIntel.isTodayWeekend
-                ? `All ${todayReminders.length || 0} to-dos completed. Enjoy family time and weekend flow.`
-                : 'No additional school dismissals or transit pickups staged for today.'}
-            </div>
-          </div>
-        </div>
-      )}
+                <div className="flex items-center gap-2">
+                  {mapsUrl && (
+                    <a
+                      href={mapsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="no-underline"
+                    >
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        leadingIcon={<Navigation size={13} />}
+                        className={cn(
+                          'rounded-xl text-caption font-bold shadow-2xs min-h-[44px]',
+                          isNavy
+                            ? 'bg-white/10 hover:bg-white/20 border-white/20 text-white'
+                            : 'bg-white hover:bg-casa-surface border-casa-border text-casa-navy',
+                        )}
+                      >
+                        Directions
+                      </Button>
+                    </a>
+                  )}
 
-      {/* ── Dedicated Afternoon School Dismissals Roster (Rendered ONLY on school days with active dismissals) ── */}
-      {schoolDismissals.length > 0 && (
-        <div
-          className={cn(
-            'pt-2 space-y-2.5 border-t',
-            isNavy ? 'border-white/10' : 'border-casa-border/60',
-          )}
-        >
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    leadingIcon={<ExternalLink size={13} />}
+                    onClick={() => handleOpenMilestone(primaryMilestone)}
+                    className={cn(
+                      'rounded-xl text-caption font-bold min-h-[44px]',
+                      isNavy
+                        ? 'bg-white/5 hover:bg-white/10 border border-white/10 text-white'
+                        : 'bg-casa-surface-subtle hover:bg-white border border-casa-border text-casa-navy',
+                    )}
+                  >
+                    Details
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )
+        })()
+      ) : schoolDismissals.length > 0 ? (
+        /* ── Weekday Afternoon School Dismissals Roster ── */
+        <div className="space-y-3 relative z-10">
           <div className="flex items-center justify-between text-caption font-bold uppercase tracking-wider">
             <span className={cn('flex items-center gap-1.5', isNavy ? 'text-amber-400' : 'text-casa-text-secondary')}>
               <GraduationCap size={15} className={isNavy ? 'text-amber-400' : 'text-casa-gold'} />
@@ -1200,7 +853,7 @@ export default function MiddayLogisticsWidget({
               <div
                 key={dismissal.id}
                 className={cn(
-                  'p-3.5 sm:p-4 rounded-2xl border flex flex-col justify-between space-y-2.5 transition-all shadow-2xs',
+                  'p-4 rounded-2xl border flex flex-col justify-between space-y-2.5 transition-all shadow-2xs',
                   isNavy
                     ? 'bg-white/5 border-white/10 hover:border-amber-400/40 text-white'
                     : 'bg-casa-surface-subtle/80 border-casa-border/80 hover:border-casa-gold/60 text-casa-navy',
@@ -1231,7 +884,7 @@ export default function MiddayLogisticsWidget({
                 </div>
 
                 <div>
-                  <div className={cn('font-sans font-bold text-body-sm truncate', isNavy ? 'text-white' : 'text-casa-navy')}>
+                  <div className={cn('font-sans font-bold text-body truncate', isNavy ? 'text-white' : 'text-casa-navy')}>
                     {dismissal.venueName}
                   </div>
                   <div className={cn('text-caption font-medium', isNavy ? 'text-white/70' : 'text-casa-text-secondary')}>
@@ -1242,11 +895,11 @@ export default function MiddayLogisticsWidget({
                 {dismissal.leaveByFormatted && (
                   <div
                     className={cn(
-                      'text-caption font-medium flex items-center gap-1.5 pt-1.5 border-t',
+                      'text-caption font-medium flex items-center gap-1.5 pt-2 border-t',
                       isNavy ? 'border-white/10 text-white/70' : 'border-casa-border/40 text-casa-text-secondary',
                     )}
                   >
-                    <Car size={12} className={isNavy ? 'text-amber-400 shrink-0' : 'text-casa-gold shrink-0'} />
+                    <Car size={13} className={isNavy ? 'text-amber-400 shrink-0' : 'text-casa-gold shrink-0'} />
                     <span>
                       Leave by <strong className={isNavy ? 'text-white font-bold' : 'text-casa-navy font-bold'}>{dismissal.leaveByFormatted}</strong>
                     </span>
@@ -1254,6 +907,160 @@ export default function MiddayLogisticsWidget({
                 )}
               </div>
             ))}
+          </div>
+        </div>
+      ) : (
+        /* ── Serene Sanctuary State (When today is open & in rhythm) ── */
+        <div
+          className={cn(
+            'p-5 sm:p-6 rounded-2xl border flex items-center gap-4 shadow-2xs transition-all relative z-10',
+            isNavy
+              ? 'bg-white/5 border-white/10 text-white'
+              : 'bg-casa-surface-subtle/80 border-casa-border/80 text-casa-navy',
+          )}
+        >
+          <div
+            className={cn(
+              'w-12 h-12 rounded-2xl border flex items-center justify-center shrink-0',
+              isNavy
+                ? 'bg-amber-400/10 border-amber-400/20 text-amber-300'
+                : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-700',
+            )}
+          >
+            <ShieldCheck size={24} />
+          </div>
+          <div className="space-y-1 min-w-0 flex-1">
+            <div className={cn('text-body font-serif font-bold text-body-lg', isNavy ? 'text-white' : 'text-casa-navy')}>
+              {routineIntel.isTodayWeekend ? 'Weekend Flow Clear · Casa Tabor in Rhythm' : 'Afternoon Logistics Clear'}
+            </div>
+            <div className={cn('text-caption leading-relaxed', isNavy ? 'text-white/70' : 'text-casa-text-secondary')}>
+              {openReminders.length === 0
+                ? 'All daily household routines and tasks are complete. Enjoy the afternoon flow.'
+                : `${openReminders.length} tasks remain open for today with no conflicting commitments.`}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Household Focus & Tasks Companion Ribbon ── */}
+      {openReminders.length > 0 && priorityFocusReminder ? (
+        <div
+          className={cn(
+            'p-3.5 sm:p-4 rounded-2xl border shadow-2xs flex items-center justify-between gap-3 relative z-10 transition-all',
+            isNavy
+              ? 'bg-amber-500/10 border-amber-400/30 text-amber-200'
+              : 'bg-amber-500/8 border-amber-400/40 text-amber-950',
+          )}
+        >
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <div
+              className={cn(
+                'w-9 h-9 rounded-xl flex items-center justify-center font-bold shrink-0',
+                isNavy ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-500/15 text-amber-800',
+              )}
+            >
+              <ListTodo size={17} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-3xs font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-amber-500/25 border border-amber-500/35 text-amber-950">
+                  Today's Active Focus & Tasks
+                </span>
+                <span className="text-caption font-bold truncate">
+                  {priorityFocusReminder.title}
+                </span>
+              </div>
+              <p className={cn('text-caption mt-0.5 truncate', isNavy ? 'text-white/70' : 'text-casa-muted')}>
+                {openReminders.length === 1
+                  ? '1 task active for today'
+                  : `${openReminders.length} tasks active · ${completedReminders.length} completed`}
+              </p>
+            </div>
+          </div>
+
+          <IconButton
+            size="sm"
+            variant="ghost"
+            onClick={async (e) => {
+              e.stopPropagation()
+              if (onToggleReminder && priorityFocusReminder) {
+                try {
+                  navigator.vibrate?.(10)
+                } catch {}
+                await onToggleReminder(priorityFocusReminder.id)
+              }
+            }}
+            className={cn(
+              'rounded-full shrink-0 transition-all min-h-[44px] min-w-[44px] p-0 flex items-center justify-center',
+              isNavy ? 'hover:bg-amber-400/20 text-amber-300' : 'hover:bg-emerald-100 text-slate-500 hover:text-emerald-700',
+            )}
+            aria-label={`Mark ${priorityFocusReminder.title} complete`}
+            icon={
+              <div className="w-6 h-6 rounded-full border-2 border-amber-600/80 hover:border-emerald-600 bg-white/10 flex items-center justify-center transition-colors shadow-2xs">
+                <div className="w-3 h-3 rounded-full bg-current opacity-40 hover:opacity-100 transition-opacity" />
+              </div>
+            }
+          />
+        </div>
+      ) : null}
+
+      {/* ── Tomorrow's Weekend Schedule Companion Ribbon ── */}
+      {routineIntel.isTodayWeekend && tomorrowHighlightEvents.length > 0 && (
+        <div
+          className={cn(
+            'pt-3 space-y-2.5 border-t relative z-10',
+            isNavy ? 'border-white/10' : 'border-casa-border/60',
+          )}
+        >
+          <div className="flex items-center justify-between text-caption font-bold uppercase tracking-wider">
+            <span className={cn('flex items-center gap-1.5', isNavy ? 'text-amber-400' : 'text-casa-text-secondary')}>
+              <Calendar size={14} className={isNavy ? 'text-amber-400' : 'text-casa-gold'} />
+              <span>Tomorrow's Weekend Schedule</span>
+            </span>
+            <span className={cn('font-semibold', isNavy ? 'text-white/60' : 'text-casa-muted')}>
+              {tomorrowEvents?.length || 2} Scheduled
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {tomorrowHighlightEvents.map((evt) => {
+              const formattedTime = evt.all_day
+                ? 'All Day'
+                : (() => {
+                    try {
+                      return format(parseISO(evt.start_time), 'h:mm a')
+                    } catch {
+                      return 'Tomorrow'
+                    }
+                  })()
+
+              return (
+                <div
+                  key={evt.id}
+                  onClick={() => onOpenEvent && onOpenEvent(evt)}
+                  className={cn(
+                    'p-3 rounded-2xl border flex items-center justify-between gap-2 cursor-pointer transition-all shadow-2xs min-h-[44px]',
+                    isNavy
+                      ? 'bg-white/5 border-white/10 hover:border-amber-400/40 text-white'
+                      : 'bg-casa-surface-subtle/80 border-casa-border/80 hover:border-casa-gold/60 text-casa-navy',
+                  )}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span className="text-caption font-mono font-bold">{formattedTime}</span>
+                      {evt.location_name && (
+                        <span className={cn('text-caption truncate text-2xs', isNavy ? 'text-white/60' : 'text-casa-muted')}>
+                          · {evt.location_name}
+                        </span>
+                      )}
+                    </div>
+                    <div className={cn('font-display font-bold text-body-sm truncate', isNavy ? 'text-white' : 'text-casa-navy')}>
+                      {evt.title}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}
