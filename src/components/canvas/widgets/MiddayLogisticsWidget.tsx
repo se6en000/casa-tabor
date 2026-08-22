@@ -12,6 +12,7 @@ import {
   House,
   RefreshCw,
   ExternalLink,
+  Sparkles,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useQueryClient } from '@tanstack/react-query'
@@ -301,7 +302,16 @@ export default function MiddayLogisticsWidget({
 
   // Group active school routines by venue & dismissal time, sorted chronologically ascending
   const schoolDismissals = useMemo<SchoolDismissalGroup[]>(() => {
+    // Only derive school dismissals on active school days (never on weekends or breaks)
+    if (routineIntel.isTodayWeekend || !routineIntel.isTodaySchoolDay) {
+      return []
+    }
+
     const rawStatuses = routineIntel.ambientStatuses || []
+    if (rawStatuses.length === 0) {
+      return []
+    }
+
     const map = new Map<string, SchoolDismissalGroup>()
 
     const calculateLeaveBy = (dismissalTimeFormatted: string, isBak: boolean): string => {
@@ -313,31 +323,6 @@ export default function MiddayLogisticsWidget({
       const period = h >= 12 ? 'PM' : 'AM'
       const displayH = h > 12 ? h - 12 : (h === 0 ? 12 : h)
       return `${displayH}:${String(m).padStart(2, '0')} ${period}`
-    }
-
-    if (rawStatuses.length === 0) {
-      return [
-        {
-          id: 'pbp-dismissal',
-          venueName: 'Palm Beach Public Elementary School',
-          dismissalTimeFormatted: '2:00 PM',
-          minutesFromMidnight: 14 * 60,
-          childrenNames: ['Emme', 'Owen'],
-          driverName: 'Giselle',
-          driverColor: getDisplayMemberColor(familyMembers.find((m) => m.name.toLowerCase() === 'giselle')?.color_hex),
-          leaveByFormatted: '1:50 PM',
-        },
-        {
-          id: 'bak-dismissal',
-          venueName: 'Bak Middle School of the Arts',
-          dismissalTimeFormatted: '3:30 PM',
-          minutesFromMidnight: 15 * 60 + 30,
-          childrenNames: ['Liv'],
-          driverName: 'Jake',
-          driverColor: getDisplayMemberColor(familyMembers.find((m) => m.name.toLowerCase() === 'jake')?.color_hex),
-          leaveByFormatted: '3:10 PM',
-        },
-      ]
     }
 
     for (const status of rawStatuses) {
@@ -368,26 +353,60 @@ export default function MiddayLogisticsWidget({
     }
 
     return Array.from(map.values()).sort((a, b) => a.minutesFromMidnight - b.minutesFromMidnight)
-  }, [routineIntel.ambientStatuses, familyMembers])
+  }, [routineIntel.isTodayWeekend, routineIntel.isTodaySchoolDay, routineIntel.ambientStatuses, familyMembers])
 
   return (
     <div
       className={cn(
-        'w-full rounded-3xl p-6 sm:p-7 bg-white text-casa-navy border border-casa-border/80 shadow-md relative overflow-hidden flex flex-col justify-between space-y-5 transition-all duration-300',
+        'w-full rounded-3xl p-6 sm:p-7 relative overflow-hidden flex flex-col justify-between space-y-5 transition-all duration-300',
+        isNavy
+          ? 'bg-gradient-to-br from-casa-navy via-slate-900 to-slate-950 text-white border border-white/10 shadow-xl'
+          : 'bg-casa-surface text-casa-navy border border-casa-border shadow-card',
         className,
       )}
     >
+      {/* Background ambient glow */}
+      {isNavy && (
+        <div className="absolute top-0 right-0 w-96 h-96 bg-casa-gold/10 rounded-full blur-3xl pointer-events-none" />
+      )}
+
       {/* ── Top Header Row with Quiet Logistics Badge & 1-Tap View Switcher ── */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-casa-border/60 pb-3 relative z-10">
+      <div
+        className={cn(
+          'flex flex-wrap items-center justify-between gap-3 pb-3 relative z-10 border-b',
+          isNavy ? 'border-white/10' : 'border-casa-divider/60',
+        )}
+      >
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-amber-500/15 flex items-center justify-center text-amber-700 border border-amber-400/30 shrink-0">
-            <Sun size={20} strokeWidth={2.2} />
+          <div
+            className={cn(
+              'w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 border transition-colors',
+              isNavy
+                ? 'bg-white/10 text-casa-gold border-white/10'
+                : 'bg-amber-500/15 text-amber-700 border-amber-400/30',
+            )}
+          >
+            {routineIntel.isTodayWeekend ? (
+              <Sparkles size={20} strokeWidth={2} className={isNavy ? 'text-amber-400' : 'text-casa-gold'} />
+            ) : (
+              <Sun size={20} strokeWidth={2.2} />
+            )}
           </div>
           <div>
-            <div className="text-caption font-bold uppercase tracking-widest text-amber-800 flex items-center gap-1.5">
-              <span>Midday &amp; Afternoon Logistics</span>
+            <div
+              className={cn(
+                'text-caption font-bold uppercase tracking-widest flex items-center gap-1.5',
+                isNavy ? 'text-amber-400' : 'text-amber-800',
+              )}
+            >
+              <span>{routineIntel.isTodayWeekend ? 'Weekend Flow & Logistics' : 'Midday & Afternoon Logistics'}</span>
             </div>
-            <div className="text-body font-serif font-semibold text-casa-navy">
+            <div
+              className={cn(
+                'text-body font-serif font-semibold',
+                isNavy ? 'text-white' : 'text-casa-navy',
+              )}
+            >
               {format(now, 'EEEE, MMMM d')}
             </div>
           </div>
@@ -396,15 +415,27 @@ export default function MiddayLogisticsWidget({
         <div className="flex flex-wrap items-center gap-2.5">
           {/* Quiet Luxury Logistics Status (No giant billboard) */}
           {!primaryConflict && (
-            <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-casa-surface-subtle border border-casa-border/60 text-caption font-semibold text-casa-text-secondary shadow-2xs">
-              <ShieldCheck size={14} className="text-casa-gold" />
-              <span>Logistics Clear</span>
+            <span
+              className={cn(
+                'hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-caption font-semibold shadow-2xs border',
+                isNavy
+                  ? 'bg-white/10 border-white/10 text-white/80'
+                  : 'bg-casa-surface-subtle border-casa-border/60 text-casa-text-secondary',
+              )}
+            >
+              <ShieldCheck size={14} className={isNavy ? 'text-amber-400' : 'text-casa-gold'} />
+              <span>{routineIntel.isTodayWeekend ? 'Weekend Flow Clear' : 'Logistics Clear'}</span>
             </span>
           )}
 
           {/* 1-Tap Mode Toggle (Today vs Tomorrow) */}
           {onToggleTomorrowView && (
-            <div className="inline-flex items-center p-1 rounded-full bg-casa-surface-subtle border border-casa-border shadow-2xs">
+            <div
+              className={cn(
+                'inline-flex items-center p-1 rounded-full border shadow-2xs',
+                isNavy ? 'bg-white/5 border-white/10' : 'bg-casa-surface-subtle border-casa-border',
+              )}
+            >
               <Button
                 variant={!isTomorrowActive ? 'primary' : 'ghost'}
                 size="sm"
@@ -412,7 +443,11 @@ export default function MiddayLogisticsWidget({
                 className={cn(
                   'px-3.5 py-1.5 rounded-full text-caption font-bold transition-all min-h-[36px] flex items-center gap-1.5',
                   !isTomorrowActive
-                    ? 'bg-casa-navy text-white shadow-2xs'
+                    ? isNavy
+                      ? 'bg-casa-gold text-casa-navy shadow-2xs'
+                      : 'bg-casa-navy text-white shadow-2xs'
+                    : isNavy
+                    ? 'text-white/60 hover:text-white'
                     : 'text-casa-muted hover:text-casa-navy',
                 )}
               >
@@ -426,13 +461,17 @@ export default function MiddayLogisticsWidget({
                 className={cn(
                   'px-3.5 py-1.5 rounded-full text-caption font-bold transition-all min-h-[36px] flex items-center gap-1.5',
                   isTomorrowActive
-                    ? 'bg-casa-navy text-white shadow-2xs'
+                    ? isNavy
+                      ? 'bg-casa-gold text-casa-navy shadow-2xs'
+                      : 'bg-casa-navy text-white shadow-2xs'
+                    : isNavy
+                    ? 'text-white/60 hover:text-white'
                     : 'text-casa-muted hover:text-casa-navy',
                 )}
               >
                 <Moon size={13} />
                 <span>
-                  Tomorrow ({routineIntel.completedCount}/{routineIntel.totalPrepCount || 5} Ready)
+                  Tomorrow ({routineIntel.completedCount}/{routineIntel.totalPrepCount || (routineIntel.isTomorrowWeekend ? 2 : 3)} Ready)
                 </span>
               </Button>
             </div>
@@ -448,7 +487,7 @@ export default function MiddayLogisticsWidget({
             className={cn(
               'rounded-full text-caption font-semibold flex items-center gap-1.5 transition-all px-3 py-1.5 min-h-[36px]',
               isNavy
-                ? 'bg-casa-navy text-white hover:bg-slate-800 border-casa-navy'
+                ? 'bg-white/10 hover:bg-white/20 border-white/15 text-white shadow-2xs'
                 : 'bg-casa-surface-subtle hover:bg-casa-surface border-casa-border text-casa-muted hover:text-casa-navy shadow-2xs',
             )}
           >
@@ -467,14 +506,24 @@ export default function MiddayLogisticsWidget({
         </div>
       </div>
 
-      {/* ── Midday Commitments Section (Warm Linen Editorial Cards) ── */}
+      {/* ── Midday Commitments Section (Editorial Cards) ── */}
       {middayCommitments.length > 0 && (
         <div className="space-y-2.5">
           <div className="flex items-center justify-between">
-            <span className="text-caption font-bold uppercase tracking-wider text-casa-text-secondary">
-              Today's Midday Commitments
+            <span
+              className={cn(
+                'text-caption font-bold uppercase tracking-wider',
+                isNavy ? 'text-amber-400' : 'text-casa-text-secondary',
+              )}
+            >
+              {routineIntel.isTodayWeekend ? "Today's Activities & Schedule" : "Today's Midday Commitments"}
             </span>
-            <span className="text-caption font-semibold text-casa-muted">
+            <span
+              className={cn(
+                'text-caption font-semibold',
+                isNavy ? 'text-white/60' : 'text-casa-muted',
+              )}
+            >
               {middayCommitments.length} Upcoming
             </span>
           </div>
@@ -501,15 +550,34 @@ export default function MiddayLogisticsWidget({
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
                   onClick={() => onOpenEvent && onOpenEvent(evt)}
-                  className="p-4 sm:p-5 rounded-2xl bg-casa-surface-subtle/80 border border-casa-border/80 hover:border-casa-gold/60 shadow-2xs cursor-pointer transition-all space-y-2.5 flex flex-col justify-between"
+                  className={cn(
+                    'p-4 sm:p-5 rounded-2xl border shadow-2xs cursor-pointer transition-all space-y-2.5 flex flex-col justify-between',
+                    isNavy
+                      ? 'bg-white/5 border-white/10 hover:border-amber-400/40 text-white'
+                      : 'bg-casa-surface-subtle/80 border-casa-border/80 hover:border-casa-gold/60 text-casa-navy',
+                  )}
                 >
                   <div className="space-y-2">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="inline-flex items-center gap-1.5 text-caption font-mono font-bold text-casa-navy bg-white px-2.5 py-0.5 rounded-lg border border-casa-border/50 shadow-2xs">
-                        <Clock size={13} className="text-casa-gold" />
+                      <span
+                        className={cn(
+                          'inline-flex items-center gap-1.5 text-caption font-mono font-bold px-2.5 py-0.5 rounded-lg border shadow-2xs',
+                          isNavy
+                            ? 'bg-slate-900 border-white/15 text-white'
+                            : 'bg-white border-casa-border/50 text-casa-navy',
+                        )}
+                      >
+                        <Clock size={13} className={isNavy ? 'text-amber-400' : 'text-casa-gold'} />
                         <span>{format(parseISO(evt.start_time), 'h:mm a')} – {format(parseISO(evt.end_time), 'h:mm a')}</span>
                       </span>
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-caption font-bold bg-white border border-casa-border/60 text-casa-navy shadow-2xs">
+                      <span
+                        className={cn(
+                          'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-caption font-bold border shadow-2xs',
+                          isNavy
+                            ? 'bg-slate-900 border-white/15 text-white'
+                            : 'bg-white border-casa-border/60 text-casa-navy',
+                        )}
+                      >
                         <span
                           className="w-2 h-2 rounded-full shrink-0"
                           style={{ backgroundColor: memberDotColor }}
@@ -519,35 +587,71 @@ export default function MiddayLogisticsWidget({
                     </div>
 
                     <div>
-                      <h3 className="font-display text-body-lg sm:text-heading font-bold text-casa-navy leading-snug">
+                      <h3
+                        className={cn(
+                          'font-display text-body-lg sm:text-heading font-bold leading-snug',
+                          isNavy ? 'text-white' : 'text-casa-navy',
+                        )}
+                      >
                         {evt.title}
                       </h3>
                       {evt.location_name && (
-                        <div className="flex items-center gap-1.5 text-caption text-casa-text-secondary mt-0.5">
-                          <MapPin size={13} className="text-casa-gold shrink-0" />
+                        <div
+                          className={cn(
+                            'flex items-center gap-1.5 text-caption mt-0.5',
+                            isNavy ? 'text-white/70' : 'text-casa-text-secondary',
+                          )}
+                        >
+                          <MapPin size={13} className={isNavy ? 'text-amber-400 shrink-0' : 'text-casa-gold shrink-0'} />
                           <span className="truncate">{evt.location_name}</span>
                         </div>
                       )}
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between pt-2 border-t border-casa-border/40 text-caption">
+                  <div
+                    className={cn(
+                      'flex items-center justify-between pt-2 border-t text-caption',
+                      isNavy ? 'border-white/10' : 'border-casa-border/40',
+                    )}
+                  >
                     {depInfo.isAtHome ? (
-                      <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200/80 text-caption font-medium text-emerald-800">
-                        <House size={13} className="text-emerald-600" />
+                      <div
+                        className={cn(
+                          'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-caption font-medium border',
+                          isNavy
+                            ? 'bg-emerald-950/60 border-emerald-500/30 text-emerald-300'
+                            : 'bg-emerald-50 border-emerald-200/80 text-emerald-800',
+                        )}
+                      >
+                        <House size={13} className={isNavy ? 'text-emerald-400' : 'text-emerald-600'} />
                         <span>At Home · No Drive</span>
                       </div>
                     ) : depInfo.isDriving && depInfo.formattedLeaveBy ? (
-                      <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white border border-casa-border/50 text-caption font-medium text-casa-text-secondary">
-                        <Car size={13} className="text-casa-gold" />
+                      <div
+                        className={cn(
+                          'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-caption font-medium border',
+                          isNavy
+                            ? 'bg-white/10 border-white/15 text-white/80'
+                            : 'bg-white border-casa-border/50 text-casa-text-secondary',
+                        )}
+                      >
+                        <Car size={13} className={isNavy ? 'text-amber-400' : 'text-casa-gold'} />
                         <span>
-                          Leave by <strong className="text-casa-navy font-bold">{depInfo.formattedLeaveBy}</strong>
-                          <span className="text-casa-muted ml-1 font-normal">({depInfo.driveMinutes}m drive)</span>
+                          Leave by <strong className={isNavy ? 'text-white font-bold' : 'text-casa-navy font-bold'}>{depInfo.formattedLeaveBy}</strong>
+                          <span className={isNavy ? 'text-white/60 ml-1 font-normal' : 'text-casa-muted ml-1 font-normal'}>({depInfo.driveMinutes}m drive)</span>
                         </span>
                       </div>
                     ) : (
-                      <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white border border-casa-border/50 text-caption font-medium text-casa-text-secondary">
-                        <Car size={13} className="text-casa-gold" />
+                      <div
+                        className={cn(
+                          'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-caption font-medium border',
+                          isNavy
+                            ? 'bg-white/10 border-white/15 text-white/80'
+                            : 'bg-white border-casa-border/50 text-casa-text-secondary',
+                        )}
+                      >
+                        <Car size={13} className={isNavy ? 'text-amber-400' : 'text-casa-gold'} />
                         <span>Live travel buffer clear</span>
                       </div>
                     )}
@@ -561,25 +665,54 @@ export default function MiddayLogisticsWidget({
 
       {/* ── Driver Collision Alert (Prominent only when a real collision occurs) ── */}
       {primaryConflict && (
-        <div className="p-3.5 sm:p-4 rounded-2xl bg-amber-500/10 border border-amber-400/50 text-amber-950 flex flex-col gap-3">
+        <div
+          className={cn(
+            'p-3.5 sm:p-4 rounded-2xl border flex flex-col gap-3',
+            isNavy
+              ? 'bg-amber-500/15 border-amber-400/40 text-amber-100'
+              : 'bg-amber-500/10 border-amber-400/50 text-amber-950',
+          )}
+        >
           <div className="flex items-start gap-3">
-            <AlertTriangle size={18} className="text-amber-700 shrink-0 mt-0.5" />
+            <AlertTriangle size={18} className={isNavy ? 'text-amber-400 shrink-0 mt-0.5' : 'text-amber-700 shrink-0 mt-0.5'} />
             <div className="min-w-0 flex-1">
-              <div className="text-caption font-bold uppercase tracking-wide text-amber-900 flex items-center justify-between">
+              <div
+                className={cn(
+                  'text-caption font-bold uppercase tracking-wide flex items-center justify-between',
+                  isNavy ? 'text-amber-300' : 'text-amber-900',
+                )}
+              >
                 <span>Driver Transit Buffer Crunch · {primaryConflict.driverName}</span>
-                <span className="text-caption font-bold text-amber-800 bg-amber-100/80 px-2 py-0.5 rounded-md border border-amber-300/60">
+                <span
+                  className={cn(
+                    'text-caption font-bold px-2 py-0.5 rounded-md border',
+                    isNavy
+                      ? 'text-amber-200 bg-amber-950/80 border-amber-400/40'
+                      : 'text-amber-800 bg-amber-100/80 border-amber-300/60',
+                  )}
+                >
                   Direct Conflict
                 </span>
               </div>
-              <p className="text-body-sm text-amber-950/90 mt-0.5 leading-snug">
+              <p className={cn('text-body-sm mt-0.5 leading-snug', isNavy ? 'text-amber-100/90' : 'text-amber-950/90')}>
                 {primaryConflict.message}
               </p>
             </div>
           </div>
 
           {/* 1-Tap Quick Action Resolution Chips */}
-          <div className="pt-2 border-t border-amber-400/30 flex flex-wrap items-center gap-2">
-            <span className="text-caption font-bold uppercase tracking-wider text-amber-900/80 text-2xs mr-1">
+          <div
+            className={cn(
+              'pt-2 border-t flex flex-wrap items-center gap-2',
+              isNavy ? 'border-amber-400/20' : 'border-amber-400/30',
+            )}
+          >
+            <span
+              className={cn(
+                'text-caption font-bold uppercase tracking-wider text-2xs mr-1',
+                isNavy ? 'text-amber-300/90' : 'text-amber-900/80',
+              )}
+            >
               1-Tap Fix:
             </span>
 
@@ -590,9 +723,14 @@ export default function MiddayLogisticsWidget({
                 size="sm"
                 loading={resolvingActionId === `home-${primaryConflict.eventB.rawEvent.id}`}
                 disabled={Boolean(resolvingActionId)}
-                leadingIcon={<House size={13} className="text-amber-700" />}
+                leadingIcon={<House size={13} className={isNavy ? 'text-amber-300' : 'text-amber-700'} />}
                 onClick={() => handleQuickMarkAtHome(primaryConflict.eventB.rawEvent)}
-                className="rounded-xl bg-white hover:bg-amber-50 border border-amber-300 text-amber-950 shadow-2xs text-caption font-bold"
+                className={cn(
+                  'rounded-xl text-caption font-bold shadow-2xs',
+                  isNavy
+                    ? 'bg-slate-900 hover:bg-slate-800 border-amber-400/30 text-amber-100'
+                    : 'bg-white hover:bg-amber-50 border-amber-300 text-amber-950',
+                )}
               >
                 "{primaryConflict.eventB.title}" is At Home (No Drive)
               </Button>
@@ -605,14 +743,19 @@ export default function MiddayLogisticsWidget({
                 size="sm"
                 loading={resolvingActionId === `driver-${primaryConflict.eventB.rawEvent.id}`}
                 disabled={Boolean(resolvingActionId)}
-                leadingIcon={<RefreshCw size={13} className="text-amber-700" />}
+                leadingIcon={<RefreshCw size={13} className={isNavy ? 'text-amber-300' : 'text-amber-700'} />}
                 onClick={() =>
                   handleQuickReassignDriver(
                     primaryConflict.eventB.rawEvent,
                     alternativeDriver,
                   )
                 }
-                className="rounded-xl bg-white hover:bg-amber-50 border border-amber-300 text-amber-950 shadow-2xs text-caption font-bold"
+                className={cn(
+                  'rounded-xl text-caption font-bold shadow-2xs',
+                  isNavy
+                    ? 'bg-slate-900 hover:bg-slate-800 border-amber-400/30 text-amber-100'
+                    : 'bg-white hover:bg-amber-50 border-amber-300 text-amber-950',
+                )}
               >
                 Assign {alternativeDriver.name} to Drive
               </Button>
@@ -623,9 +766,14 @@ export default function MiddayLogisticsWidget({
               <Button
                 variant="ghost"
                 size="sm"
-                leadingIcon={<ExternalLink size={13} className="text-amber-800" />}
+                leadingIcon={<ExternalLink size={13} className={isNavy ? 'text-amber-300' : 'text-amber-800'} />}
                 onClick={() => onOpenEvent(primaryConflict.eventB.rawEvent)}
-                className="rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-400/40 text-amber-950 text-caption font-bold"
+                className={cn(
+                  'rounded-xl text-caption font-bold',
+                  isNavy
+                    ? 'bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/30 text-amber-200'
+                    : 'bg-amber-500/10 hover:bg-amber-500/20 border border-amber-400/40 text-amber-950',
+                )}
               >
                 Open Details
               </Button>
@@ -634,56 +782,122 @@ export default function MiddayLogisticsWidget({
         </div>
       )}
 
-      {/* ── Dedicated Afternoon School Dismissals Roster (Strict Left-to-Right Ascending) ── */}
-      <div className="pt-2 border-t border-casa-border/60 space-y-2.5">
-        <div className="flex items-center justify-between text-caption font-bold text-casa-text-secondary uppercase tracking-wider">
-          <span className="flex items-center gap-1.5">
-            <GraduationCap size={15} className="text-casa-gold" />
-            <span>Afternoon School Dismissals</span>
-          </span>
-          <span className="font-semibold text-casa-muted">
-            {schoolDismissals.length} Staged
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {schoolDismissals.map((dismissal) => (
-            <div
-              key={dismissal.id}
-              className="p-3.5 sm:p-4 rounded-2xl bg-casa-surface-subtle/80 border border-casa-border/80 hover:border-casa-gold/60 flex flex-col justify-between space-y-2.5 transition-all shadow-2xs"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-body-sm font-mono font-bold text-casa-navy bg-white px-2.5 py-0.5 rounded-lg border border-casa-border/60 shadow-2xs">
-                  {dismissal.dismissalTimeFormatted}
-                </span>
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-caption font-bold bg-white border border-casa-border/60 text-casa-navy shadow-2xs">
-                  <span
-                    className="w-2 h-2 rounded-full shrink-0"
-                    style={{ backgroundColor: dismissal.driverColor || 'var(--color-casa-navy)' }}
-                  />
-                  <span>{dismissal.driverName} drives</span>
-                </span>
-              </div>
-
-              <div>
-                <div className="font-sans font-bold text-body-sm text-casa-navy truncate">
-                  {dismissal.venueName}
-                </div>
-                <div className="text-caption text-casa-text-secondary font-medium">
-                  {dismissal.childrenNames.join(' & ')}
-                </div>
-              </div>
-
-              {dismissal.leaveByFormatted && (
-                <div className="text-caption text-casa-text-secondary font-medium flex items-center gap-1.5 pt-1.5 border-t border-casa-border/40">
-                  <Car size={12} className="text-casa-gold shrink-0" />
-                  <span>Leave by <strong className="text-casa-navy">{dismissal.leaveByFormatted}</strong></span>
-                </div>
-              )}
+      {/* ── Reassuring Open / Clear Logistics State (When no midday transit or dismissals are staged) ── */}
+      {middayCommitments.length === 0 && schoolDismissals.length === 0 && !primaryConflict && (
+        <div
+          className={cn(
+            'p-4 sm:p-5 rounded-2xl border flex items-center gap-3.5 shadow-2xs transition-all',
+            isNavy
+              ? 'bg-white/5 border-white/10 text-white'
+              : 'bg-casa-surface-subtle/80 border-casa-border/80 text-casa-navy',
+          )}
+        >
+          <div
+            className={cn(
+              'w-10 h-10 rounded-xl border flex items-center justify-center shrink-0',
+              isNavy
+                ? 'bg-amber-400/10 border-amber-400/20 text-amber-300'
+                : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-700',
+            )}
+          >
+            <ShieldCheck size={20} />
+          </div>
+          <div className="space-y-0.5">
+            <div className={cn('text-body-sm font-bold', isNavy ? 'text-white' : 'text-casa-navy')}>
+              {routineIntel.isTodayWeekend ? 'Weekend schedule is open & clear' : 'Afternoon logistics are clear'}
             </div>
-          ))}
+            <div className={cn('text-caption leading-relaxed', isNavy ? 'text-white/70' : 'text-casa-text-secondary')}>
+              {routineIntel.isTodayWeekend
+                ? 'No school routines active today. Enjoy family time and weekend activities.'
+                : 'No additional school dismissals or transit pickups staged for today.'}
+            </div>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* ── Dedicated Afternoon School Dismissals Roster (Rendered ONLY on school days with active dismissals) ── */}
+      {schoolDismissals.length > 0 && (
+        <div
+          className={cn(
+            'pt-2 space-y-2.5 border-t',
+            isNavy ? 'border-white/10' : 'border-casa-border/60',
+          )}
+        >
+          <div className="flex items-center justify-between text-caption font-bold uppercase tracking-wider">
+            <span className={cn('flex items-center gap-1.5', isNavy ? 'text-amber-400' : 'text-casa-text-secondary')}>
+              <GraduationCap size={15} className={isNavy ? 'text-amber-400' : 'text-casa-gold'} />
+              <span>Afternoon School Dismissals</span>
+            </span>
+            <span className={cn('font-semibold', isNavy ? 'text-white/60' : 'text-casa-muted')}>
+              {schoolDismissals.length} Staged
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {schoolDismissals.map((dismissal) => (
+              <div
+                key={dismissal.id}
+                className={cn(
+                  'p-3.5 sm:p-4 rounded-2xl border flex flex-col justify-between space-y-2.5 transition-all shadow-2xs',
+                  isNavy
+                    ? 'bg-white/5 border-white/10 hover:border-amber-400/40 text-white'
+                    : 'bg-casa-surface-subtle/80 border-casa-border/80 hover:border-casa-gold/60 text-casa-navy',
+                )}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span
+                    className={cn(
+                      'text-body-sm font-mono font-bold px-2.5 py-0.5 rounded-lg border shadow-2xs',
+                      isNavy
+                        ? 'bg-slate-900 border-white/15 text-white'
+                        : 'bg-white border-casa-border/60 text-casa-navy',
+                    )}
+                  >
+                    {dismissal.dismissalTimeFormatted}
+                  </span>
+                  <span
+                    className={cn(
+                      'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-caption font-bold border shadow-2xs',
+                      isNavy
+                        ? 'bg-slate-900 border-white/15 text-white'
+                        : 'bg-white border-casa-border/60 text-casa-navy',
+                    )}
+                  >
+                    <span
+                      className="w-2 h-2 rounded-full shrink-0"
+                      style={{ backgroundColor: dismissal.driverColor || (isNavy ? 'var(--color-casa-gold)' : 'var(--color-casa-navy)') }}
+                    />
+                    <span>{dismissal.driverName} drives</span>
+                  </span>
+                </div>
+
+                <div>
+                  <div className={cn('font-sans font-bold text-body-sm truncate', isNavy ? 'text-white' : 'text-casa-navy')}>
+                    {dismissal.venueName}
+                  </div>
+                  <div className={cn('text-caption font-medium', isNavy ? 'text-white/70' : 'text-casa-text-secondary')}>
+                    {dismissal.childrenNames.join(' & ')}
+                  </div>
+                </div>
+
+                {dismissal.leaveByFormatted && (
+                  <div
+                    className={cn(
+                      'text-caption font-medium flex items-center gap-1.5 pt-1.5 border-t',
+                      isNavy ? 'border-white/10 text-white/70' : 'border-casa-border/40 text-casa-text-secondary',
+                    )}
+                  >
+                    <Car size={12} className={isNavy ? 'text-amber-400 shrink-0' : 'text-casa-gold shrink-0'} />
+                    <span>
+                      Leave by <strong className={isNavy ? 'text-white font-bold' : 'text-casa-navy font-bold'}>{dismissal.leaveByFormatted}</strong>
+                    </span>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
