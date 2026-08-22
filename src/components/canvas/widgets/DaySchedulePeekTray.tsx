@@ -78,8 +78,8 @@ export function DaySchedulePeekTray({
                       : 'bg-casa-gold/15 border-casa-gold/80 text-casa-navy'
                   )}
                 >
-                  <div className="w-4 h-4 rounded bg-casa-gold text-casa-navy flex items-center justify-center shrink-0 mt-0.5 font-bold text-3xs">
-                    ✨
+                  <div className="w-5 h-5 rounded-md bg-casa-gold/20 text-casa-navy flex items-center justify-center shrink-0 mt-0.5 border border-casa-gold/40">
+                    <Sparkles size={11} className="text-casa-gold" />
                   </div>
                   <div className="min-w-0 flex-1 space-y-0.5">
                     <div className="flex items-center gap-1.5 flex-wrap">

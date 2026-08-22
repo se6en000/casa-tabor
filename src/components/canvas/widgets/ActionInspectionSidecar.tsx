@@ -783,7 +783,7 @@ export default function ActionInspectionSidecar({
                                       )}
                                     >
                                       <Eye size={10} className={activePeekActionId === act.id ? 'text-white' : 'text-amber-700'} />
-                                      <span>{activePeekActionId === act.id ? 'Hide Day Schedule ▲' : '✨ Day Schedule ▾'}</span>
+                                      <span>{activePeekActionId === act.id ? 'Hide Schedule' : 'Day Schedule'}</span>
                                     </Button>
                                   )}
                                 </div>
@@ -963,7 +963,7 @@ export default function ActionInspectionSidecar({
                       )}
                     >
                       <Eye size={10} className={activePeekActionId === 'suggested-single-event' ? 'text-white' : 'text-amber-700'} />
-                      <span>{activePeekActionId === 'suggested-single-event' ? 'Hide Day Schedule ▲' : '✨ Day Schedule ▾'}</span>
+                      <span>{activePeekActionId === 'suggested-single-event' ? 'Hide Schedule' : 'Day Schedule'}</span>
                     </Button>
                   </div>
 

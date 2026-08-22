@@ -28,9 +28,10 @@ export function useDayEventsPeek(proposedAction: ProposedActionSlot | null, enab
         }
       }
 
-      // Fetch with buffer to ensure no events are missed across timezone boundaries
-      const rangeStart = `${dateStr}T00:00:00-12:00`
-      const rangeEnd = `${dateStr}T23:59:59+14:00`
+      // Fetch with 36-hour buffer to ensure all events on target date are captured regardless of timezone
+      const d = new Date(`${dateStr}T12:00:00Z`)
+      const rangeStart = new Date(d.getTime() - 36 * 3600 * 1000).toISOString()
+      const rangeEnd = new Date(d.getTime() + 36 * 3600 * 1000).toISOString()
 
       const { data, error } = await supabase
         .from('events')

@@ -216,13 +216,16 @@ export function evaluateDayScheduleWithProposedSlot(
     return true
   })
 
-  // Deduplicate redundant duplicate events with same start time and topic (e.g. Early Strings)
-  const seenKeys = new Set<string>()
+  // Smart deduplicate redundant duplicate events with same start time and topic (e.g. Early Strings or transit repeats)
+  const seenSlotTopics = new Set<string>()
   const dayEvents: CalendarEventSummary[] = []
   for (const evt of filteredEvents) {
-    const key = `${evt.start_time}_${evt.title.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 12)}`
-    if (seenKeys.has(key)) continue
-    seenKeys.add(key)
+    const sTime = evt.start_time ? evt.start_time.slice(0, 16) : ''
+    const topicKey = evt.title.toLowerCase().replace(/[^a-z0-9]/g, '')
+    const broadTopic = topicKey.includes('string') ? 'strings' : topicKey.includes('giselle') ? 'giselle' : topicKey.slice(0, 10)
+    const slotKey = `${sTime}_${broadTopic}`
+    if (seenSlotTopics.has(slotKey)) continue
+    seenSlotTopics.add(slotKey)
     dayEvents.push(evt)
   }
 
