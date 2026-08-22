@@ -210,6 +210,7 @@ export function evaluateDayScheduleWithProposedSlot(
   // Filter events belonging to this target day (by local date comparison), excluding vanilla routines
   const filteredEvents = (existingEvents || []).filter((e) => {
     if (!e.start_time) return false
+    if ((e as any).status === 'cancelled' || (e as any).deleted_at) return false
     const eventDay = getLocalDateStr(e.start_time)
     if (eventDay !== dateStr) return false
     if (isFamilyDailyRoutineEvent(e)) return false

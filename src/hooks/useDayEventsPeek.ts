@@ -51,6 +51,8 @@ export function useDayEventsPeek(proposedAction: ProposedActionSlot | null, enab
             family_member:family_members(id, name, color_hex)
           )
         `)
+        .is('deleted_at', null)
+        .neq('status', 'cancelled')
         .gte('start_time', rangeStart)
         .lte('start_time', rangeEnd)
         .order('start_time', { ascending: true })
