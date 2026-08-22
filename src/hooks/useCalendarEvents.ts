@@ -189,12 +189,34 @@ interface RangeEventsResult {
 }
 
 async function fetchEventsForRange(start: Date, end: Date): Promise<RangeEventsResult> {
+  // 1. Attempt ultra-fast single-pass server-side RPC first
+  try {
+    const { data: rpcData, error: rpcError } = await supabase.rpc('get_calendar_feed', {
+      p_start: start.toISOString(),
+      p_end: end.toISOString(),
+    })
+    if (!rpcError && Array.isArray(rpcData)) {
+      const normalized = rpcData.map(normalizeEventRow)
+      const active = normalized
+        .filter((event) => event.status !== 'cancelled' && !event.deleted_at)
+        .filter((event) => eventOverlapsRange(event, start, end))
+      const cancelled = normalized
+        .filter((event) => event.status === 'cancelled' || Boolean(event.deleted_at))
+
+      return { active, cancelled }
+    }
+  } catch {
+    // Fall back to standard query if RPC unavailable
+  }
+
+  // 2. Fallback query
   const { data: events, error } = await supabase
     .from('events')
     .select(EVENT_SUMMARY_SELECT)
     .lt('start_time', end.toISOString())
     .gt('end_time', start.toISOString())
     .neq('record_kind', 'series_template')
+    .is('deleted_at', null)
     .order('start_time')
 
   if (error) throw error
@@ -562,7 +584,7 @@ function _fireInvalidation() {
   _debounceTimer = setTimeout(() => {
     _debounceTimer = null
     _invalidateCallbacks.forEach(f => f())
-  }, 80)
+  }, 500)
 }
 
 function _firePlanInvalidation() {
@@ -570,7 +592,7 @@ function _firePlanInvalidation() {
   _planDebounceTimer = setTimeout(() => {
     _planDebounceTimer = null
     _planInvalidateCallbacks.forEach(f => f())
-  }, 80)
+  }, 500)
 }
 
 function _subscribeRealtimeChannel() {
@@ -590,7 +612,6 @@ function _subscribeRealtimeChannel() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'event_enrichments' }, _fireInvalidation)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'event_logistics' }, _fireInvalidation)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'event_checklist_items' }, _fireInvalidation)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'google_sync_jobs' }, _fireInvalidation)
     .subscribe((status, err) => {
       if (status === 'SUBSCRIBED') {
         // Connected / reconnected: catch up on any missed updates
@@ -687,15 +708,33 @@ function useRealtimeEventInvalidation() {
 export function useTodayEvents(date: Date) {
   const dayStart = startOfDay(date)
   const dayEnd = addDays(dayStart, 1)
+  const rolling = useRollingEvents(date)
 
-  return useEventsForRange(['events', 'today', dayStart.toISOString()], dayStart, dayEnd)
+  const todayEvents = useMemo(() => {
+    if (!rolling.data) return undefined
+    return rolling.data.filter(ev => eventOverlapsRange(ev, dayStart, dayEnd))
+  }, [rolling.data, dayStart.getTime(), dayEnd.getTime()])
+
+  return {
+    ...rolling,
+    data: todayEvents,
+  }
 }
 
 export function useTomorrowEvents(date: Date) {
   const tomorrowStart = startOfDay(addDays(date, 1))
   const tomorrowEnd = addDays(tomorrowStart, 1)
+  const rolling = useRollingEvents(date)
 
-  return useEventsForRange(['events', 'tomorrow', tomorrowStart.toISOString()], tomorrowStart, tomorrowEnd)
+  const tomorrowEvents = useMemo(() => {
+    if (!rolling.data) return undefined
+    return rolling.data.filter(ev => eventOverlapsRange(ev, tomorrowStart, tomorrowEnd))
+  }, [rolling.data, tomorrowStart.getTime(), tomorrowEnd.getTime()])
+
+  return {
+    ...rolling,
+    data: tomorrowEvents,
+  }
 }
 
 export function useMonthEvents(selectedDate: Date) {

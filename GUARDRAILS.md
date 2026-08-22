@@ -15,3 +15,11 @@
 * **Module Integrity:** When modifying the family management, calendar, school tracking, or todo modules, prioritize clean, testable architecture.
 * **Deployment Readiness:** Ensure all code changes are ready for Vercel deployment. No hardcoded placeholders.
 * **Communication Style:** When explaining your implementation decisions to me, use short, concise responses. Always use bullet points for longer explanations.
+
+## 4. Database & Query Performance Guardrails (Strict)
+* **Single Rolling Store & In-Memory Slicing:** Never write independent hooks or queries that fetch overlapping date ranges or subsets of an existing domain over the network. Sub-views (Today, Tomorrow, Week, Month, Kiosk) must derive from a single unified rolling cache (`useRollingEvents`, `useCalendarFeed`) via `useMemo` (0ms navigation, zero redundant HTTP calls).
+* **No Deep Correlated PostgREST Joins:** Never write PostgREST `.select(...)` strings that nest sub-resources across multiple tables (which cause Postgres subplan execution loops and sequential scans). Complex multi-table aggregations must use a dedicated Postgres RPC (`public.get_calendar_feed`) or Database View.
+* **Atomic Server-Side Mutations:** Any write operation affecting $\ge 2$ related tables (e.g. event + members + enrichment + overrides) must execute as a single atomic Postgres transaction/RPC (`public.upsert_event_bundle`) instead of 4–5 sequential client HTTP roundtrips.
+* **Throttled Realtime (Min 500ms Debounce):** Realtime subscriptions must never be mounted in individual UI components. All table listeners must be managed by centralized singletons with a minimum 500ms debounce window to prevent multi-device thundering herds (Desktop, Mobile, Kiosk).
+* **Index Every Foreign Key:** Every foreign key in a database migration must have an accompanying `CREATE INDEX IF NOT EXISTS idx_<table_column>` to prevent sequential table scans during joins and cascaded lookups.
+* **Background Worker Governance:** Background `pg_cron` jobs invoking `net.http_post` must have minimum intervals of 5–15 minutes and strict `timeout_milliseconds := 15000`. Run periodic log pruning on `cron.job_run_details`.

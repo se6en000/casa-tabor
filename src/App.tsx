@@ -27,6 +27,8 @@ import { useTonightDinnerSync } from './hooks/useTonightDinnerSync'
 import { useHouseholdTodoSync } from './hooks/useHouseholdTodoSync'
 import { useReminderNeedsYouActions } from './hooks/useReminderNeedsYouActions'
 
+import { AlertTriangle } from 'lucide-react'
+
 const SAFE_MODE = String(import.meta.env.VITE_SAFE_MODE ?? '').toLowerCase()
 const IS_SAFE_MODE = SAFE_MODE === '1' || SAFE_MODE === 'true' || SAFE_MODE === 'yes'
 
@@ -37,7 +39,9 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error
     if (this.state.error) {
       return (
         <div className="app-shell flex flex-col items-center justify-center bg-casa-bg gap-4 px-page-gutter text-center">
-          <p className="font-display text-display-sm">😞</p>
+          <div className="w-12 h-12 rounded-full bg-casa-gold/10 flex items-center justify-center text-casa-gold">
+            <AlertTriangle className="w-6 h-6" />
+          </div>
           <p className="font-semibold text-casa-navy">Something went wrong</p>
           <p className="text-casa-muted text-body-sm">{(this.state.error as Error).message}</p>
           <Button variant="ghost"

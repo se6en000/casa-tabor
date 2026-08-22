@@ -48,7 +48,7 @@ export function useNotifications() {
       return data as unknown as Notification[]
     },
     refetchInterval: isPageVisible ? 60_000 : false, // stop background polling when the page is hidden
-    staleTime: 30_000,
+    staleTime: 60_000,
   })
 
   const unreadCount = notifications.filter(n => !n.read).length

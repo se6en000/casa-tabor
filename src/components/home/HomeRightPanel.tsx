@@ -327,7 +327,7 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem, 
       }
     },
     refetchInterval: isPageVisible ? 5 * 60_000 : false,
-    staleTime: 30_000,
+    staleTime: 2 * 60_000,
   })
 
   const nextEvent = allTodayEvents.find(event => new Date(event.end_time) >= now) ?? null

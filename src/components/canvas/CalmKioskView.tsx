@@ -18,12 +18,15 @@ import {
   ArrowRight,
   Gift,
   RotateCw,
+  Sun,
+  Moon,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useCalmKioskPresenter } from '../../hooks/useCalmKioskPresenter'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { useAppStore } from '../../stores/appStore'
 import { useCalendarStore } from '../../stores/calendarStore'
+import { useHeroTheme } from '../../hooks/useHeroTheme'
 import { cn } from '../../utils/cn'
 import { formatDurationLong, getEventStartDate } from '../../utils/eventTime'
 import { Button, IconButton, PersonAvatarStack, JourneyProgressBar } from '../ui'
@@ -181,6 +184,9 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
     isRefreshing,
     refreshBriefing,
   } = useCalmKioskPresenter()
+
+  const { heroTheme, toggleHeroTheme } = useHeroTheme(now)
+  const isHeroNavy = heroTheme === 'navy'
 
   const routineIntel = useFamilyRoutineIntelligence(now)
   const isNextEventFarAway = !nextEvent || (minutesUntilNext !== null && minutesUntilNext > 90)
@@ -531,20 +537,34 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
               data-sidecar-loadable="true"
               data-event-id={nextEvent.id}
               className={cn(
-                'w-full rounded-3xl p-6 sm:p-7 bg-gradient-to-br from-casa-navy via-slate-900 to-slate-950 text-white border border-white/10 shadow-xl relative overflow-hidden group cursor-pointer transition-all duration-300',
+                'w-full rounded-3xl p-6 sm:p-7 relative overflow-hidden group cursor-pointer transition-all duration-300',
+                isHeroNavy
+                  ? 'bg-gradient-to-br from-casa-navy via-slate-900 to-slate-950 text-white border border-white/10 shadow-xl'
+                  : 'bg-casa-surface text-casa-navy border border-casa-border shadow-card',
                 isLeaveNow
-                  ? 'ring-2 ring-amber-400/60 shadow-glow-gold'
+                  ? isHeroNavy
+                    ? 'ring-2 ring-amber-400/60 shadow-glow-gold'
+                    : 'ring-2 ring-amber-500/80 shadow-glow-gold'
                   : isPrepUrgent
-                  ? 'ring-1 ring-amber-400/30'
+                  ? isHeroNavy
+                    ? 'ring-1 ring-amber-400/30'
+                    : 'ring-1 ring-amber-500/40'
                   : '',
               )}
               onClick={() => onOpenEvent(nextEvent)}
             >
               {/* Background ambient glow */}
-              <div className="absolute top-0 right-0 w-96 h-96 bg-casa-gold/10 rounded-full blur-3xl pointer-events-none" />
+              {isHeroNavy && (
+                <div className="absolute top-0 right-0 w-96 h-96 bg-casa-gold/10 rounded-full blur-3xl pointer-events-none" />
+              )}
 
               <div>
-                <div className="flex items-center justify-between gap-2 mb-4">
+                <div
+                  className={cn(
+                    'flex flex-wrap items-center justify-between gap-2 mb-4 pb-3 border-b',
+                    isHeroNavy ? 'border-white/10' : 'border-casa-divider/60',
+                  )}
+                >
                   {(() => {
                     let statusLabel = 'NEXT UP'
                     let dotClass = 'bg-casa-gold'
@@ -605,14 +625,19 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                     return (
                       <div className="flex items-center gap-2">
                         <span className={cn('w-2.5 h-2.5 rounded-full', dotClass)} />
-                        <span className="text-caption font-bold uppercase tracking-widest text-casa-gold">
+                        <span
+                          className={cn(
+                            'text-caption font-bold uppercase tracking-widest',
+                            isHeroNavy ? 'text-casa-gold' : 'text-casa-gold',
+                          )}
+                        >
                           {statusLabel}
                         </span>
                       </div>
                     )
                   })()}
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     {selectedHeroEventId && selectedHeroEventId !== primaryHeroEvent?.id && (
                       <Button
                         variant="ghost"
@@ -621,42 +646,106 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                           e.stopPropagation()
                           setSelectedHeroEventId(null)
                         }}
-                        className="text-3xs text-casa-gold hover:text-white underline font-semibold transition-colors mr-1 cursor-pointer h-7 px-2 min-h-0"
+                        className={cn(
+                          'text-3xs underline font-semibold transition-colors mr-1 cursor-pointer h-7 px-2 min-h-0',
+                          isHeroNavy ? 'text-casa-gold hover:text-white' : 'text-amber-800 hover:text-casa-navy',
+                        )}
                         title="Reset to primary priority event"
                       >
                         Reset to Primary
                       </Button>
                     )}
-                    <span className="text-caption text-white/80 font-mono bg-white/10 px-3 py-1 rounded-full border border-white/10">
+                    <span
+                      className={cn(
+                        'text-caption font-mono px-3 py-1 rounded-full border',
+                        isHeroNavy
+                          ? 'text-white/80 bg-white/10 border-white/10'
+                          : 'text-casa-navy bg-casa-surface-subtle border-casa-border',
+                      )}
+                    >
                       {nextEvent.all_day
                         ? 'All Day'
                         : `${format(parseISO(nextEvent.start_time), 'h:mm a')} – ${format(parseISO(nextEvent.end_time), 'h:mm a')}`}
                     </span>
+
+                    {/* 1-Tap Theme Quick Switcher Capsule */}
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        toggleHeroTheme()
+                      }}
+                      aria-label={`Switch hero finish to ${isHeroNavy ? 'Belgian Linen' : 'Obsidian Navy'}`}
+                      title={`Switch hero finish to ${isHeroNavy ? 'Belgian Linen' : 'Obsidian Navy'}`}
+                      className={cn(
+                        'rounded-full text-caption font-semibold flex items-center gap-1.5 transition-all px-3 py-1 min-h-[30px]',
+                        isHeroNavy
+                          ? 'bg-white/10 hover:bg-white/15 border-white/15 text-slate-200 hover:text-white'
+                          : 'bg-casa-navy/5 hover:bg-casa-navy/10 border-casa-border text-casa-muted hover:text-casa-navy',
+                      )}
+                    >
+                      {isHeroNavy ? (
+                        <>
+                          <Moon size={13} strokeWidth={2} className="text-amber-400" />
+                          <span className="text-3xs uppercase tracking-wider font-bold">Navy</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sun size={13} strokeWidth={2} className="text-casa-gold" />
+                          <span className="text-3xs uppercase tracking-wider font-bold">Linen</span>
+                        </>
+                      )}
+                    </Button>
                   </div>
                 </div>
 
-                <h2 className="font-display text-display-sm sm:text-display-md font-bold !text-white tracking-tight leading-tight group-hover:text-casa-gold transition-colors">
+                <h2
+                  className={cn(
+                    'font-display text-display-sm sm:text-display-md font-bold tracking-tight leading-tight transition-colors',
+                    isHeroNavy ? '!text-white group-hover:text-casa-gold' : '!text-casa-navy group-hover:text-casa-gold',
+                  )}
+                >
                   {nextEvent.title}
                 </h2>
 
                 {nextEvent.description && (
-                  <p className="text-white/70 text-body-sm mt-2.5 line-clamp-2 leading-relaxed">
+                  <p
+                    className={cn(
+                      'text-body-sm mt-2.5 line-clamp-2 leading-relaxed',
+                      isHeroNavy ? 'text-white/70' : 'text-casa-text-secondary',
+                    )}
+                  >
                     {nextEvent.description}
                   </p>
                 )}
 
                 {locationDisplayText && (
-                  <div className="flex items-center gap-2 text-white/80 mt-2.5 text-body-sm">
+                  <div
+                    className={cn(
+                      'flex items-center gap-2 mt-2.5 text-body-sm',
+                      isHeroNavy ? 'text-white/80' : 'text-casa-muted',
+                    )}
+                  >
                     <MapPin size={15} className="text-casa-gold shrink-0" />
                     <span className="truncate">{locationDisplayText}</span>
                   </div>
                 )}
 
                 {prepSummaryText && (
-                  <div className="flex items-center gap-2 text-slate-300/90 mt-2 text-caption">
+                  <div
+                    className={cn(
+                      'flex items-center gap-2 mt-2 text-caption',
+                      isHeroNavy ? 'text-slate-300/90' : 'text-casa-muted',
+                    )}
+                  >
                     <Gift size={15} className="text-casa-gold shrink-0" />
-                    <span className="font-semibold text-white/90 shrink-0">Bring:</span>
-                    <span className="text-white/75 truncate">{prepSummaryText}</span>
+                    <span className={cn('font-semibold shrink-0', isHeroNavy ? 'text-white/90' : 'text-casa-navy')}>
+                      Bring:
+                    </span>
+                    <span className={cn('truncate', isHeroNavy ? 'text-white/75' : 'text-casa-navy/80')}>
+                      {prepSummaryText}
+                    </span>
                   </div>
                 )}
 
@@ -685,19 +774,38 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                     }
 
                     return (
-                      <div className="flex flex-wrap items-center justify-between gap-3 py-2.5 px-4 rounded-2xl bg-white/[0.04] border border-white/10 text-caption text-white/70">
+                      <div
+                        className={cn(
+                          'flex flex-wrap items-center justify-between gap-3 py-2.5 px-4 rounded-2xl border text-caption',
+                          isHeroNavy
+                            ? 'bg-white/[0.04] border-white/10 text-white/70'
+                            : 'bg-casa-surface-subtle border-casa-border text-casa-text-secondary',
+                        )}
+                      >
                         <div className="flex items-center gap-2">
                           <Car size={14} className="text-casa-gold" />
-                          <span className="font-medium text-white/90">
+                          <span className={cn('font-medium', isHeroNavy ? 'text-white/90' : 'text-casa-navy')}>
                             {originName} → {destinationName}
                           </span>
                           {driveTimeMins ? (
-                            <span className="text-2xs font-mono font-bold px-2 py-0.5 rounded-full bg-white/10 text-casa-gold border border-white/10">
+                            <span
+                              className={cn(
+                                'text-2xs font-mono font-bold px-2 py-0.5 rounded-full border',
+                                isHeroNavy
+                                  ? 'bg-white/10 text-casa-gold border-white/10'
+                                  : 'bg-casa-gold/15 text-casa-gold border-casa-gold/30',
+                              )}
+                            >
                               ~{driveTimeMins} min
                             </span>
                           ) : null}
                         </div>
-                        <div className="flex items-center gap-1.5 text-2xs font-medium text-white/50">
+                        <div
+                          className={cn(
+                            'flex items-center gap-1.5 text-2xs font-medium',
+                            isHeroNavy ? 'text-white/50' : 'text-casa-muted',
+                          )}
+                        >
                           <Clock size={12} className="text-casa-gold/70" />
                           <span>
                             {leaveAt
@@ -712,7 +820,12 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
               </div>
 
               {/* Members and Logistics Footer */}
-              <div className="pt-5 mt-5 border-t border-white/10 flex flex-wrap items-center justify-between gap-4">
+              <div
+                className={cn(
+                  'pt-5 mt-5 border-t flex flex-wrap items-center justify-between gap-4',
+                  isHeroNavy ? 'border-white/10' : 'border-casa-divider/60',
+                )}
+              >
                 <div className="flex items-center gap-2 flex-wrap">
                   {nextEvent.members.map((m) => {
                     const isDriver =
@@ -723,7 +836,12 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                     return (
                       <span
                         key={m.id}
-                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-caption font-semibold bg-white/10 text-white border border-white/10 transition-all"
+                        className={cn(
+                          'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-caption font-semibold transition-all border',
+                          isHeroNavy
+                            ? 'bg-white/10 text-white border-white/10'
+                            : 'bg-casa-surface-subtle text-casa-navy border-casa-border',
+                        )}
                         style={{
                           borderLeft: `3px solid ${m.family_member?.color_hex ?? 'var(--color-casa-gold)'}`,
                         }}
@@ -759,7 +877,12 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
 
               {/* ── Concurrent Companion Events (Simultaneous Family Activities) ── */}
               {concurrentEvents.length > 0 && (
-                <div className="mt-5 pt-4 border-t border-white/10">
+                <div
+                  className={cn(
+                    'mt-5 pt-4 border-t',
+                    isHeroNavy ? 'border-white/10' : 'border-casa-divider/60',
+                  )}
+                >
                   <div className="flex items-center justify-between gap-2 mb-2.5">
                     <div className="flex items-center gap-2">
                       <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -769,7 +892,12 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                           : `Also Active (${concurrentEvents.length})`}
                       </span>
                     </div>
-                    <span className="text-3xs text-white/40 uppercase tracking-wider font-medium">
+                    <span
+                      className={cn(
+                        'text-3xs uppercase tracking-wider font-medium',
+                        isHeroNavy ? 'text-white/40' : 'text-casa-muted',
+                      )}
+                    >
                       Tap card to focus
                     </span>
                   </div>
@@ -819,14 +947,22 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                               setSelectedHeroEventId(evt.id)
                             }
                           }}
-                          className="group/item flex items-center justify-between gap-3 p-3 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 hover:border-casa-gold/50 transition-all cursor-pointer shadow-2xs active:scale-[0.98]"
+                          className={cn(
+                            'group/item flex items-center justify-between gap-3 p-3 rounded-2xl border transition-all cursor-pointer shadow-2xs active:scale-[0.98]',
+                            isHeroNavy
+                              ? 'bg-white/5 hover:bg-white/10 border-white/10 hover:border-casa-gold/50 text-white'
+                              : 'bg-casa-surface-subtle hover:bg-casa-surface-subtle/80 border-casa-border hover:border-casa-gold/50 text-casa-navy',
+                          )}
                           title={`Focus on ${evt.title}`}
                         >
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5 mb-1 flex-wrap">
                               {evtMember && (
                                 <span
-                                  className="inline-flex items-center px-2 py-0.5 rounded-full text-3xs font-bold text-white bg-white/15"
+                                  className={cn(
+                                    'inline-flex items-center px-2 py-0.5 rounded-full text-3xs font-bold',
+                                    isHeroNavy ? 'text-white bg-white/15' : 'text-casa-navy bg-white border border-casa-border',
+                                  )}
                                   style={{
                                     borderLeft: `3px solid ${evtMember.color_hex || 'var(--color-casa-gold)'}`,
                                   }}
@@ -834,12 +970,17 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                                   {evtMember.name}
                                 </span>
                               )}
-                              <span className="text-3xs text-white/60 font-mono">
+                              <span
+                                className={cn(
+                                  'text-3xs font-mono',
+                                  isHeroNavy ? 'text-white/60' : 'text-casa-muted',
+                                )}
+                              >
                                 {evt.all_day ? 'All Day' : `${format(parseISO(evt.start_time), 'h:mm a')}`}
                               </span>
                               {isUnderway && (
-                                <span className="inline-flex items-center gap-1 text-3xs font-bold text-emerald-400">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                <span className="inline-flex items-center gap-1 text-3xs font-bold text-emerald-600 dark:text-emerald-400">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                                   Now
                                 </span>
                               )}
@@ -851,18 +992,35 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                               )}
                             </div>
 
-                            <h4 className="text-caption font-semibold text-white truncate group-hover/item:text-casa-gold transition-colors">
+                            <h4
+                              className={cn(
+                                'text-caption font-semibold truncate transition-colors group-hover/item:text-casa-gold',
+                                isHeroNavy ? 'text-white' : 'text-casa-navy',
+                              )}
+                            >
                               {evt.title}
                             </h4>
 
                             {prepSummary ? (
-                              <p className="text-2xs text-white/70 truncate mt-0.5 flex items-center gap-1.5 font-normal">
+                              <p
+                                className={cn(
+                                  'text-2xs truncate mt-0.5 flex items-center gap-1.5 font-normal',
+                                  isHeroNavy ? 'text-white/70' : 'text-casa-muted',
+                                )}
+                              >
                                 <Gift size={11} className="text-casa-gold shrink-0" />
-                                <span className="font-semibold text-white/85 shrink-0">Bring:</span>
+                                <span className={cn('font-semibold shrink-0', isHeroNavy ? 'text-white/85' : 'text-casa-navy')}>
+                                  Bring:
+                                </span>
                                 <span className="truncate">{prepSummary}</span>
                               </p>
                             ) : evt.location_name ? (
-                              <p className="text-2xs text-white/60 truncate flex items-center gap-1 mt-0.5 font-normal">
+                              <p
+                                className={cn(
+                                  'text-2xs truncate flex items-center gap-1 mt-0.5 font-normal',
+                                  isHeroNavy ? 'text-white/60' : 'text-casa-muted',
+                                )}
+                              >
                                 <MapPin size={11} className="text-casa-gold shrink-0" />
                                 <span>{evt.location_name}</span>
                               </p>
@@ -882,7 +1040,12 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
 
               {/* ── Concept A: Flight Deck Radar (Up Next on Deck Horizon) ── */}
               {concurrentEvents.length === 0 && upcomingOnDeck.length > 0 && (
-                <div className="mt-5 pt-4 border-t border-white/10 space-y-2.5">
+                <div
+                  className={cn(
+                    'mt-5 pt-4 border-t space-y-2.5',
+                    isHeroNavy ? 'border-white/10' : 'border-casa-divider/60',
+                  )}
+                >
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <Clock size={13} className="text-casa-gold" />
@@ -890,7 +1053,12 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                         Up Next on Deck ({upcomingOnDeck.length})
                       </span>
                     </div>
-                    <span className="text-3xs text-white/40 uppercase tracking-wider font-medium">
+                    <span
+                      className={cn(
+                        'text-3xs uppercase tracking-wider font-medium',
+                        isHeroNavy ? 'text-white/40' : 'text-casa-muted',
+                      )}
+                    >
                       Today's Follow-up Sequence
                     </span>
                   </div>
@@ -912,13 +1080,32 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                             if (item.event) onOpenEvent(item.event)
                           }
                         }}
-                        className="p-3 rounded-2xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 transition-all flex flex-col justify-between space-y-1.5 cursor-pointer shadow-2xs group/deck min-h-[44px]"
+                        className={cn(
+                          'p-3 rounded-2xl border transition-all flex flex-col justify-between space-y-1.5 cursor-pointer shadow-2xs group/deck min-h-[44px]',
+                          isHeroNavy
+                            ? 'bg-white/[0.06] hover:bg-white/[0.12] border-white/10 text-white'
+                            : 'bg-casa-surface-subtle hover:bg-casa-surface-subtle/80 border-casa-border text-casa-navy',
+                        )}
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-caption font-mono font-bold text-white bg-white/10 px-2 py-0.5 rounded-md border border-white/10">
+                          <span
+                            className={cn(
+                              'text-caption font-mono font-bold px-2 py-0.5 rounded-md border',
+                              isHeroNavy
+                                ? 'text-white bg-white/10 border-white/10'
+                                : 'text-casa-navy bg-white border-casa-border',
+                            )}
+                          >
                             {item.timeFormatted}
                           </span>
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-caption font-bold bg-white/10 border border-white/15 text-white shadow-2xs">
+                          <span
+                            className={cn(
+                              'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-caption font-bold border shadow-2xs',
+                              isHeroNavy
+                                ? 'bg-white/10 border-white/15 text-white'
+                                : 'bg-white border-casa-border text-casa-navy',
+                            )}
+                          >
                             <span
                               className="w-2 h-2 rounded-full shrink-0"
                               style={{ backgroundColor: item.driverColor }}
@@ -928,18 +1115,33 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                         </div>
 
                         <div>
-                          <div className="text-body-sm font-bold text-white group-hover/deck:text-casa-gold transition-colors truncate">
+                          <div
+                            className={cn(
+                              'text-body-sm font-bold transition-colors truncate group-hover/deck:text-casa-gold',
+                              isHeroNavy ? 'text-white' : 'text-casa-navy',
+                            )}
+                          >
                             {item.title}
                           </div>
                           {item.subtitle && (
-                            <div className="text-caption text-white/60 truncate">
+                            <div
+                              className={cn(
+                                'text-caption truncate',
+                                isHeroNavy ? 'text-white/60' : 'text-casa-muted',
+                              )}
+                            >
                               {item.subtitle}
                             </div>
                           )}
                         </div>
 
                         {item.leaveByText && (
-                          <div className="text-caption text-casa-gold font-medium flex items-center gap-1.5 pt-1 border-t border-white/10">
+                          <div
+                            className={cn(
+                              'text-caption text-casa-gold font-medium flex items-center gap-1.5 pt-1 border-t',
+                              isHeroNavy ? 'border-white/10' : 'border-casa-divider/60',
+                            )}
+                          >
                             <Car size={12} className="text-casa-gold shrink-0" />
                             <span>{item.leaveByText}</span>
                           </div>

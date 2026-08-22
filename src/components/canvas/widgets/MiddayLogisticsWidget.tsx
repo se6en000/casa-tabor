@@ -19,6 +19,7 @@ import { cn } from '../../../utils/cn'
 import type { EventWithDetails } from '../../../hooks/useCalendarEvents'
 import type { FamilyMember } from '../../../types'
 import { useFamilyRoutineIntelligence } from '../../../hooks/useFamilyRoutineIntelligence'
+import { useHeroTheme } from '../../../hooks/useHeroTheme'
 import { analyzeDriverSchedule, resolveEventDriver, isEventAtHome, type DriverConflictItem } from '../../../lib/driverConflictEngine'
 import { resolveCanonicalDeparture } from '../../../lib/canonicalEventDeparture'
 import { getDisplayMemberColor } from '../../../design-system/memberColors'
@@ -69,6 +70,8 @@ export default function MiddayLogisticsWidget({
   const [resolvingActionId, setResolvingActionId] = useState<string | null>(null)
   const [dismissedConflictIds, setDismissedConflictIds] = useState<Set<string>>(new Set())
   const routineIntel = useFamilyRoutineIntelligence(now)
+  const { heroTheme, toggleHeroTheme } = useHeroTheme(now)
+  const isNavy = heroTheme === 'navy'
 
   // Driver conflict calculation
   const driverAnalysis = useMemo(() => {
@@ -434,6 +437,33 @@ export default function MiddayLogisticsWidget({
               </Button>
             </div>
           )}
+
+          {/* 1-Tap Theme Quick Switcher Capsule */}
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={toggleHeroTheme}
+            aria-label={`Switch hero finish to ${isNavy ? 'Belgian Linen' : 'Obsidian Navy'}`}
+            title={`Switch hero finish to ${isNavy ? 'Belgian Linen' : 'Obsidian Navy'}`}
+            className={cn(
+              'rounded-full text-caption font-semibold flex items-center gap-1.5 transition-all px-3 py-1.5 min-h-[36px]',
+              isNavy
+                ? 'bg-casa-navy text-white hover:bg-slate-800 border-casa-navy'
+                : 'bg-casa-surface-subtle hover:bg-casa-surface border-casa-border text-casa-muted hover:text-casa-navy shadow-2xs',
+            )}
+          >
+            {isNavy ? (
+              <>
+                <Moon size={13} strokeWidth={2} className="text-amber-400" />
+                <span className="text-3xs uppercase tracking-wider font-bold">Navy</span>
+              </>
+            ) : (
+              <>
+                <Sun size={13} strokeWidth={2} className="text-casa-gold" />
+                <span className="text-3xs uppercase tracking-wider font-bold">Linen</span>
+              </>
+            )}
+          </Button>
         </div>
       </div>
 

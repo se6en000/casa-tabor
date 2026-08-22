@@ -66,10 +66,13 @@ log = logging.getLogger("sensor-bridge")
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://sjiejymuuuqzqukyeagk.supabase.co")
 SUPABASE_SERVICE_KEY = os.environ.get(
-    "SUPABASE_ANON_KEY",
+    "SUPABASE_SERVICE_ROLE_KEY",
     os.environ.get(
         "SUPABASE_SERVICE_KEY",
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNqaWVqeW11dXVxenF1a3llYWdrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5MTY3MzIsImV4cCI6MjA5NTQ5MjczMn0.sfEpSQkkq7ZbIwjEffEfEKIir15RgqZMGILO_mF4XhM",
+        os.environ.get(
+            "SUPABASE_ANON_KEY",
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNqaWVqeW11dXVxenF1a3llYWdrIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3OTkxNjczMiwiZXhwIjoyMDk1NDkyNzMyfQ._w1wgyA8hhJVb6URdgbJkSuMyazxdoydk8WNmSO32m8",
+        ),
     ),
 )
 SUPABASE_SENSOR_ID  = "00000000-0000-0000-0000-000000000001"  # fixed row for latest reading
@@ -148,6 +151,10 @@ def _is_push_enabled() -> bool:
             headers={"apikey": SUPABASE_SERVICE_KEY, "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}"},
             timeout=3,
         )
+        if not res.ok:
+            log.warning("Push config fetch returned HTTP %d: %s", res.status_code, res.text[:200])
+            _push_checked_at = now + 60  # back off for 60s on error
+            return _push_enabled
         rows = res.json()
         if rows and isinstance(rows, list):
             cfg = rows[0].get("value", {})

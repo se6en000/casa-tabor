@@ -122,7 +122,7 @@ function sensorDataToZone(cct: number, lux: number): RoomToneZone {
   return 'day'
 }
 
-const SENSOR_POLL_MS    = 5_000
+const SENSOR_POLL_MS    = 20_000
 const SENSOR_ROW_ID     = '00000000-0000-0000-0000-000000000001'
 
 export function useRoomTone() {
@@ -134,6 +134,7 @@ export function useRoomTone() {
       return data?.value as DisplayConfig | null
     },
     refetchInterval: isPageVisible ? 60_000 : false,
+    staleTime: 5 * 60_000,
   })
 
   const cfg: DisplayConfig = useMemo(
