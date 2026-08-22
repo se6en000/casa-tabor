@@ -34,9 +34,9 @@ test('JourneyProgressBar has dedicated Linen styling contracts for text, track, 
   )
 })
 
-test('CalmKioskView passes heroTheme to JourneyProgressBar', () => {
+test('ImminentTransitWidget passes heroTheme to JourneyProgressBar', () => {
   const fileContent = readFileSync(
-    join(REPO_ROOT, 'src/components/canvas/CalmKioskView.tsx'),
+    join(REPO_ROOT, 'src/components/canvas/widgets/ImminentTransitWidget.tsx'),
     'utf8',
   )
   assert.match(

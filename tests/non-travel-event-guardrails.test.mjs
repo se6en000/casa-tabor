@@ -16,6 +16,10 @@ const calmKioskViewSource = readFileSync(
   new URL('../src/components/canvas/CalmKioskView.tsx', import.meta.url),
   'utf8',
 )
+const imminentWidgetSource = readFileSync(
+  new URL('../src/components/canvas/widgets/ImminentTransitWidget.tsx', import.meta.url),
+  'utf8',
+)
 const presenterSource = readFileSync(
   new URL('../src/hooks/useCalmKioskPresenter.ts', import.meta.url),
   'utf8',
@@ -75,8 +79,8 @@ test('CalmKioskView and useCalmKioskPresenter strictly gate travel UI and progre
   assert.match(presenterSource, /const mode = inferEventMode\(nextEvent\)/)
   assert.match(presenterSource, /const kind = inferEventPlanKind\(nextEvent, mode\)/)
   assert.match(presenterSource, /if \(kind !== 'travel'\) return false/)
-  assert.match(calmKioskViewSource, /driveTimeMins=\{isTravelEvent \? driveTimeMins : null\}/)
-  assert.match(calmKioskViewSource, /leaveAt=\{isTravelEvent \? leaveAt : null\}/)
-  assert.match(calmKioskViewSource, /\{isTravelEvent && \(nextEvent\.address \|\| nextEvent\.location_name\) && \(/)
+  assert.match(imminentWidgetSource, /driveTimeMins=\{isTravelEvent \? driveTimeMins : null\}/)
+  assert.match(imminentWidgetSource, /leaveAt=\{isTravelEvent \? leaveAt : null\}/)
+  assert.match(imminentWidgetSource, /\{isTravelEvent && \(event\.address \|\| event\.location_name\) && \(/)
   assert.match(mobileSource, /isHeroTravel/)
 })

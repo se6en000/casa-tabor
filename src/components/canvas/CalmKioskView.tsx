@@ -1,7 +1,6 @@
-import { useState, useMemo } from 'react'
-import { format, parseISO, differenceInMinutes, subMinutes, startOfDay, isBefore } from 'date-fns'
+import { useState } from 'react'
+import { format, parseISO, startOfDay, isBefore } from 'date-fns'
 import {
-  MapPin,
   Car,
   Utensils,
   ShoppingBag,
@@ -14,30 +13,24 @@ import {
   Sparkles,
   Calendar,
   CheckCircle2,
-  Navigation,
   ArrowRight,
-  Gift,
   RotateCw,
-  Sun,
-  Moon,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useCalmKioskPresenter } from '../../hooks/useCalmKioskPresenter'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { useAppStore } from '../../stores/appStore'
 import { useCalendarStore } from '../../stores/calendarStore'
-import { useHeroTheme } from '../../hooks/useHeroTheme'
 import { cn } from '../../utils/cn'
-import { formatDurationLong, getEventStartDate } from '../../utils/eventTime'
-import { Button, IconButton, PersonAvatarStack, JourneyProgressBar } from '../ui'
+import { getEventStartDate } from '../../utils/eventTime'
+import { Button, IconButton, PersonAvatarStack } from '../ui'
 import { getDisplayMemberColor } from '../../design-system/memberColors'
 import TomorrowPrepWidget from './widgets/TomorrowPrepWidget'
+import ImminentTransitWidget from './widgets/ImminentTransitWidget'
+import { useHeroIntelligence } from '../../hooks/useHeroIntelligence'
 import MorningLaunchpadWidget from './widgets/MorningLaunchpadWidget'
 import MiddayLogisticsWidget from './widgets/MiddayLogisticsWidget'
-import { useFamilyRoutineIntelligence } from '../../hooks/useFamilyRoutineIntelligence'
-import { resolveEventDriver } from '../../lib/driverConflictEngine'
 import GmailSyncStatusIndicator from '../shared/GmailSyncStatusIndicator'
-
 interface CalmKioskViewProps {
   onOpenEvent: (event: EventWithDetails) => void
 }
@@ -145,10 +138,6 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
     dailyBriefing,
     timeHorizonLabel,
     weather,
-    nextEvent,
-    primaryHeroEvent,
-    concurrentEvents,
-    selectedHeroEventId,
     setSelectedHeroEventId,
     pastEvents,
     upcomingAppointments,
@@ -160,18 +149,6 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
     tomorrowEvents,
     isDinnerPast,
     totalAttentionCount,
-    minutesUntilNext,
-    driveTimeMins,
-    leaveAt,
-    minutesUntilLeave,
-    isTravelEvent,
-    originName,
-    destinationName,
-    returnDestinationName,
-    driverName,
-    driverFamilyMemberId,
-    prepSummaryText,
-    locationDisplayText,
     activeConflicts,
     activePrep,
     familyMembers,
@@ -185,133 +162,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
     refreshBriefing,
   } = useCalmKioskPresenter()
 
-  const { heroTheme, toggleHeroTheme } = useHeroTheme(now)
-  const isHeroNavy = heroTheme === 'navy'
-
-  const routineIntel = useFamilyRoutineIntelligence(now)
-  const isNextEventFarAway = !nextEvent || (minutesUntilNext !== null && minutesUntilNext > 90)
-  const showMorningLaunchpad = routineIntel.isMorningActionActive && isNextEventFarAway
-
-  const isLeaveNow = Boolean(
-    isTravelEvent &&
-      minutesUntilLeave !== null &&
-      minutesUntilLeave <= 0 &&
-      minutesUntilNext !== null &&
-      minutesUntilNext > 0 &&
-      minutesUntilNext <= 60,
-  )
-  const isPrepUrgent = Boolean(
-    isTravelEvent &&
-      minutesUntilLeave !== null &&
-      minutesUntilLeave > 0 &&
-      minutesUntilLeave <= 15 &&
-      minutesUntilNext !== null &&
-      minutesUntilNext <= 75,
-  )
-
-  // Concept A: Flight Deck Radar (Upcoming On-Deck Items within 2.5 hours)
-  const upcomingOnDeck = useMemo(() => {
-    if (!nextEvent) return []
-    const items: Array<{
-      id: string
-      title: string
-      subtitle?: string
-      timeFormatted: string
-      driverName: string
-      driverColor: string
-      leaveByText?: string
-      event?: EventWithDetails
-      minutesFromNow: number
-    }> = []
-
-    const currentEventStartTime = (() => {
-      try {
-        return parseISO(nextEvent.start_time).getTime()
-      } catch {
-        return now.getTime()
-      }
-    })()
-
-    // 1. Other daytime appointments today starting after current event or within 2.5 hours
-    for (const evt of upcomingAppointments) {
-      if (evt.id === nextEvent.id) continue
-      if (evt.all_day) continue
-      if (evt.id?.startsWith('routine-')) continue
-      try {
-        const start = parseISO(evt.start_time).getTime()
-        const minsAway = differenceInMinutes(parseISO(evt.start_time), now)
-        if (start >= currentEventStartTime - 15 * 60 * 1000 && minsAway <= 180 && minsAway > -30) {
-          const { name: dName } = resolveEventDriver(evt, familyMembers)
-          const dMember = familyMembers.find((m) => m.name.toLowerCase() === dName.toLowerCase())
-          const dColor = getDisplayMemberColor(dMember?.color_hex)
-          const leaveBy = evt.enrichment?.departure_time
-            ? `Leave by ${format(parseISO(evt.enrichment.departure_time), 'h:mm a')}`
-            : minsAway > 0
-            ? `Starts in ${formatDurationLong(minsAway)}`
-            : 'Starting soon'
-
-          items.push({
-            id: evt.id,
-            title: evt.title,
-            subtitle: evt.location_name || evt.address || undefined,
-            timeFormatted: format(parseISO(evt.start_time), 'h:mm a'),
-            driverName: dName,
-            driverColor: dColor,
-            leaveByText: leaveBy,
-            event: evt,
-            minutesFromNow: minsAway,
-          })
-        }
-      } catch {}
-    }
-
-    // 2. School dismissals within the next 3 hours
-    const rawStatuses = routineIntel.ambientStatuses || []
-    for (const status of rawStatuses) {
-      const isBak = status.venueName.toLowerCase().includes('bak')
-      const fallbackDriver = isBak ? 'Jake' : 'Giselle'
-      const driver = status.pickupDriverName || fallbackDriver
-      const dMember = familyMembers.find((m) => m.name.toLowerCase() === driver.toLowerCase())
-      const dColor = getDisplayMemberColor(dMember?.color_hex)
-
-      const dismissalTimeStr = status.endsAtFormatted
-      const match = dismissalTimeStr.match(/(\d+):(\d+)\s*(AM|PM)/i)
-      if (match) {
-        let hours = parseInt(match[1], 10)
-        const mins = parseInt(match[2], 10)
-        const period = match[3].toUpperCase()
-        if (period === 'PM' && hours !== 12) hours += 12
-        if (period === 'AM' && hours === 12) hours = 0
-        const dismissalMinutesFromMidnight = hours * 60 + mins
-        const nowMinutesFromMidnight = now.getHours() * 60 + now.getMinutes()
-        const diffMins = dismissalMinutesFromMidnight - nowMinutesFromMidnight
-
-        if (diffMins > 0 && diffMins <= 210) {
-          items.push({
-            id: `dismissal-${status.venueName}`,
-            title: status.venueName,
-            subtitle: `${status.childName} · School Dismissal`,
-            timeFormatted: status.endsAtFormatted,
-            driverName: `${driver} drives`,
-            driverColor: dColor,
-            leaveByText: isBak ? 'Leave by 3:08 PM' : 'Leave by 1:42 PM',
-            minutesFromNow: diffMins,
-          })
-        }
-      }
-    }
-
-    const seen = new Set<string>()
-    const deduped: typeof items = []
-    for (const it of items) {
-      const key = `${it.title}-${it.timeFormatted}`
-      if (!seen.has(key)) {
-        seen.add(key)
-        deduped.push(it)
-      }
-    }
-    return deduped.sort((a, b) => a.minutesFromNow - b.minutesFromNow).slice(0, 2)
-  }, [nextEvent, upcomingAppointments, routineIntel.ambientStatuses, familyMembers, now])
+  const heroIntel = useHeroIntelligence(now, upcomingAppointments, familyMembers, heroManualView || 'today')
 
   return (
     <div className="w-full h-full flex flex-col justify-start px-4 sm:px-6 lg:px-8 xl:px-10 pt-5 sm:pt-6 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-8 overflow-y-auto scrollbar-hide">
@@ -512,7 +363,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
           mobileSubTab === 'triage' ? 'hidden lg:flex' : 'flex'
         )}>
           <AnimatePresence mode="wait" initial={false}>
-            {heroManualView === 'tomorrow' ? (
+            {heroIntel.archetype === 'tomorrow_readiness' ? (
               <motion.div
                 key="tomorrow-hero"
                 initial={{ opacity: 0, y: 3 }}
@@ -528,7 +379,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                   onOpenEvent={onOpenEvent}
                 />
               </motion.div>
-            ) : showMorningLaunchpad ? (
+            ) : heroIntel.archetype === 'morning_launchpad' ? (
               <motion.div
                 key="launchpad-hero"
                 initial={{ opacity: 0, y: 3 }}
@@ -539,9 +390,32 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
               >
                 <MorningLaunchpadWidget now={now} onOpenEvent={onOpenEvent} />
               </motion.div>
-            ) : routineIntel.isDaytime && (!nextEvent || (minutesUntilNext !== null && minutesUntilNext > 30) || nextEvent.all_day) ? (
+            ) : heroIntel.archetype === 'imminent_transit' && heroIntel.imminentEvent ? (
               <motion.div
-                key="today-hero"
+                key={`imminent-${heroIntel.imminentEvent.id}`}
+                initial={{ opacity: 0, y: 3 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -3 }}
+                transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
+                className="w-full"
+              >
+                <ImminentTransitWidget
+                  now={now}
+                  event={heroIntel.imminentEvent}
+                  onOpenEvent={onOpenEvent}
+                  minutesUntilNext={heroIntel.minutesUntilNext}
+                  minutesUntilLeave={heroIntel.minutesUntilLeave}
+                  driveTimeMins={heroIntel.driveTimeMins}
+                  isTravelEvent={heroIntel.isTravelEvent}
+                  isLeaveNow={heroIntel.isLeaveNow}
+                  isPrepUrgent={heroIntel.isPrepUrgent}
+                  concurrentEvents={heroIntel.concurrentEvents}
+                  onSelectHeroEventId={(id) => setSelectedHeroEventId(id)}
+                />
+              </motion.div>
+            ) : (
+              <motion.div
+                key="today-logistics-hero"
                 initial={{ opacity: 0, y: 3 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -3 }}
@@ -557,646 +431,16 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                   onToggleReminder={handleToggleReminder}
                   tomorrowEvents={tomorrowEvents}
                   familyMembers={familyMembers}
-                  nextEvent={nextEvent}
+                  nextEvent={heroIntel.imminentEvent}
                   onOpenEvent={onOpenEvent}
                   onToggleTomorrowView={() => setHeroManualView('tomorrow')}
                   isTomorrowActive={false}
                 />
               </motion.div>
-            ) : nextEvent ? (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              data-calendar-event
-              data-sidecar-loadable="true"
-              data-event-id={nextEvent.id}
-              className={cn(
-                'w-full rounded-3xl p-6 sm:p-7 relative overflow-hidden group cursor-pointer transition-all duration-300',
-                isHeroNavy
-                  ? 'bg-gradient-to-br from-casa-navy via-slate-900 to-slate-950 text-white border border-white/10 shadow-xl'
-                  : 'bg-casa-surface text-casa-navy border border-casa-border shadow-card',
-                isLeaveNow
-                  ? isHeroNavy
-                    ? 'ring-2 ring-amber-400/60 shadow-glow-gold'
-                    : 'ring-2 ring-amber-500/80 shadow-glow-gold'
-                  : isPrepUrgent
-                  ? isHeroNavy
-                    ? 'ring-1 ring-amber-400/30'
-                    : 'ring-1 ring-amber-500/40'
-                  : '',
-              )}
-              onClick={() => onOpenEvent(nextEvent)}
-            >
-              {/* Background ambient glow */}
-              {isHeroNavy && (
-                <div className="absolute top-0 right-0 w-96 h-96 bg-casa-gold/10 rounded-full blur-3xl pointer-events-none" />
-              )}
-
-              <div>
-                <div
-                  className={cn(
-                    'flex flex-wrap items-center justify-between gap-2 mb-4 pb-3 border-b',
-                    isHeroNavy ? 'border-white/10' : 'border-casa-divider/60',
-                  )}
-                >
-                  {(() => {
-                    let statusLabel = 'NEXT UP'
-                    let dotClass = 'bg-casa-gold'
-
-                    const isUnderway = minutesUntilNext !== null && minutesUntilNext <= 0 && minutesUntilNext > -180
-                    const effectiveMinsToLeave = minutesUntilLeave !== null ? minutesUntilLeave : (minutesUntilNext !== null ? minutesUntilNext - 10 : null)
-                    const isAmbient = !isUnderway && ((effectiveMinsToLeave !== null && effectiveMinsToLeave > 60) || (minutesUntilNext !== null && minutesUntilNext > 60))
-
-                    if (nextEvent.all_day) {
-                      statusLabel = 'ALL DAY EVENT'
-                      dotClass = 'bg-emerald-400'
-                    } else if (isUnderway) {
-                      try {
-                        const end = parseISO(nextEvent.end_time)
-                        const minsToEnd = differenceInMinutes(end, now)
-                        if (minsToEnd <= 0) {
-                          statusLabel = 'CONCLUDED · WRAPPING UP'
-                          dotClass = 'bg-emerald-400'
-                        } else if (minsToEnd <= 10) {
-                          statusLabel = `WRAPPING UP · ENDS IN ${formatDurationLong(minsToEnd)}`
-                          dotClass = 'bg-amber-400 animate-pulse'
-                        } else {
-                          statusLabel = 'HAPPENING NOW'
-                          dotClass = 'bg-emerald-400 animate-pulse'
-                        }
-                      } catch {
-                        statusLabel = 'HAPPENING NOW'
-                        dotClass = 'bg-emerald-400 animate-pulse'
-                      }
-                    } else if (isAmbient) {
-                      // Ambient Mode (More than 60 minutes away) — Peaceful, quiet, no anxiety
-                      try {
-                        statusLabel = `TODAY AT ${format(parseISO(nextEvent.start_time), 'h:mm a')}`
-                      } catch {
-                        statusLabel = 'NEXT UP'
-                      }
-                      dotClass = 'bg-casa-gold/80'
-                    } else if (isTravelEvent) {
-                      // Active Departure Window (≤ 60m away)
-                      if (minutesUntilLeave !== null && minutesUntilLeave <= 0) {
-                        statusLabel = minutesUntilLeave >= -5 ? 'TIME TO LEAVE NOW' : `EN ROUTE · ${driveTimeMins ? `${driveTimeMins}M DRIVE` : 'IN TRANSIT'}`
-                        dotClass = 'bg-amber-400 animate-pulse'
-                      } else if (minutesUntilLeave !== null && minutesUntilLeave <= 15) {
-                        statusLabel = `PREPARE TO LEAVE · ${formatDurationLong(minutesUntilLeave)} BUFFER`
-                        dotClass = 'bg-amber-400 animate-pulse'
-                      } else if (minutesUntilLeave !== null && minutesUntilLeave <= 60) {
-                        statusLabel = `LEAVE IN ${formatDurationLong(minutesUntilLeave)}`
-                        dotClass = 'bg-emerald-400'
-                      } else {
-                        statusLabel = `TODAY AT ${format(parseISO(nextEvent.start_time), 'h:mm a')}`
-                        dotClass = 'bg-casa-gold/80'
-                      }
-                    } else if (minutesUntilNext !== null && minutesUntilNext > 0) {
-                      statusLabel = `STARTS IN ${formatDurationLong(minutesUntilNext)}`
-                      dotClass = 'bg-emerald-400'
-                    }
-
-                    return (
-                      <div className="flex items-center gap-2">
-                        <span className={cn('w-2.5 h-2.5 rounded-full', dotClass)} />
-                        <span
-                          className={cn(
-                            'text-caption font-bold uppercase tracking-widest',
-                            isHeroNavy ? 'text-casa-gold' : 'text-casa-gold',
-                          )}
-                        >
-                          {statusLabel}
-                        </span>
-                      </div>
-                    )
-                  })()}
-
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {selectedHeroEventId && selectedHeroEventId !== primaryHeroEvent?.id && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setSelectedHeroEventId(null)
-                        }}
-                        className={cn(
-                          'text-3xs underline font-semibold transition-colors mr-1 cursor-pointer h-7 px-2 min-h-0',
-                          isHeroNavy ? 'text-casa-gold hover:text-white' : 'text-amber-800 hover:text-casa-navy',
-                        )}
-                        title="Reset to primary priority event"
-                      >
-                        Reset to Primary
-                      </Button>
-                    )}
-                    <span
-                      className={cn(
-                        'text-caption font-mono px-3 py-1 rounded-full border',
-                        isHeroNavy
-                          ? 'text-white/80 bg-white/10 border-white/10'
-                          : 'text-casa-navy bg-casa-surface-subtle border-casa-border',
-                      )}
-                    >
-                      {nextEvent.all_day
-                        ? 'All Day'
-                        : `${format(parseISO(nextEvent.start_time), 'h:mm a')} – ${format(parseISO(nextEvent.end_time), 'h:mm a')}`}
-                    </span>
-
-                    {/* 1-Tap Theme Quick Switcher Capsule */}
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        toggleHeroTheme()
-                      }}
-                      aria-label={`Switch hero finish to ${isHeroNavy ? 'Belgian Linen' : 'Obsidian Navy'}`}
-                      title={`Switch hero finish to ${isHeroNavy ? 'Belgian Linen' : 'Obsidian Navy'}`}
-                      className={cn(
-                        'rounded-full text-caption font-semibold flex items-center gap-1.5 transition-all px-3 py-1 min-h-[30px]',
-                        isHeroNavy
-                          ? 'bg-white/10 hover:bg-white/15 border-white/15 text-slate-200 hover:text-white'
-                          : 'bg-casa-navy/5 hover:bg-casa-navy/10 border-casa-border text-casa-muted hover:text-casa-navy',
-                      )}
-                    >
-                      {isHeroNavy ? (
-                        <>
-                          <Moon size={13} strokeWidth={2} className="text-amber-400" />
-                          <span className="text-3xs uppercase tracking-wider font-bold">Navy</span>
-                        </>
-                      ) : (
-                        <>
-                          <Sun size={13} strokeWidth={2} className="text-casa-gold" />
-                          <span className="text-3xs uppercase tracking-wider font-bold">Linen</span>
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </div>
-
-                <h2
-                  className={cn(
-                    'font-display text-display-sm sm:text-display-md font-bold tracking-tight leading-tight transition-colors',
-                    isHeroNavy ? '!text-white group-hover:text-casa-gold' : '!text-casa-navy group-hover:text-casa-gold',
-                  )}
-                >
-                  {nextEvent.title}
-                </h2>
-
-                {nextEvent.description && (
-                  <p
-                    className={cn(
-                      'text-body-sm mt-2.5 line-clamp-2 leading-relaxed',
-                      isHeroNavy ? 'text-white/70' : 'text-casa-text-secondary',
-                    )}
-                  >
-                    {nextEvent.description}
-                  </p>
-                )}
-
-                {locationDisplayText && (
-                  <div
-                    className={cn(
-                      'flex items-center gap-2 mt-2.5 text-body-sm',
-                      isHeroNavy ? 'text-white/80' : 'text-casa-muted',
-                    )}
-                  >
-                    <MapPin size={15} className="text-casa-gold shrink-0" />
-                    <span className="truncate">{locationDisplayText}</span>
-                  </div>
-                )}
-
-                {prepSummaryText && (
-                  <div
-                    className={cn(
-                      'flex items-center gap-2 mt-2 text-caption',
-                      isHeroNavy ? 'text-slate-300/90' : 'text-casa-muted',
-                    )}
-                  >
-                    <Gift size={15} className="text-casa-gold shrink-0" />
-                    <span className={cn('font-semibold shrink-0', isHeroNavy ? 'text-white/90' : 'text-casa-navy')}>
-                      Bring:
-                    </span>
-                    <span className={cn('truncate', isHeroNavy ? 'text-white/75' : 'text-casa-navy/80')}>
-                      {prepSummaryText}
-                    </span>
-                  </div>
-                )}
-
-                {/* Logistics Bar: Live Journey Tracker (≤ 60m) vs Peaceful Ambient Route Preview (> 60m) */}
-                <div className="mt-5">
-                  {(() => {
-                    const isUnderway = minutesUntilNext !== null && minutesUntilNext <= 0 && minutesUntilNext > -180
-                    const effectiveMinsToLeave = minutesUntilLeave !== null ? minutesUntilLeave : (minutesUntilNext !== null ? minutesUntilNext - 10 : null)
-                    const isAmbient = !isUnderway && ((effectiveMinsToLeave !== null && effectiveMinsToLeave > 60) || (minutesUntilNext !== null && minutesUntilNext > 60))
-
-                    if (!isAmbient) {
-                      return (
-                        <JourneyProgressBar
-                          now={now}
-                          leaveAt={isTravelEvent ? leaveAt : null}
-                          startTime={nextEvent.start_time}
-                          endTime={nextEvent.end_time}
-                          driveTimeMins={isTravelEvent ? driveTimeMins : null}
-                          isAllDay={Boolean(nextEvent.all_day)}
-                          showLabels={true}
-                          originName={originName}
-                          destinationName={destinationName}
-                          returnDestinationName={returnDestinationName}
-                          theme={isHeroNavy ? 'navy' : 'linen'}
-                        />
-                      )
-                    }
-
-                    return (
-                      <div
-                        className={cn(
-                          'flex flex-wrap items-center justify-between gap-3 py-2.5 px-4 rounded-2xl border text-caption',
-                          isHeroNavy
-                            ? 'bg-white/[0.04] border-white/10 text-white/70'
-                            : 'bg-casa-surface-subtle border-casa-border text-casa-text-secondary',
-                        )}
-                      >
-                        <div className="flex items-center gap-2">
-                          <Car size={14} className="text-casa-gold" />
-                          <span className={cn('font-medium', isHeroNavy ? 'text-white/90' : 'text-casa-navy')}>
-                            {originName} → {destinationName}
-                          </span>
-                          {driveTimeMins ? (
-                            <span
-                              className={cn(
-                                'text-2xs font-mono font-bold px-2 py-0.5 rounded-full border',
-                                isHeroNavy
-                                  ? 'bg-white/10 text-casa-gold border-white/10'
-                                  : 'bg-casa-gold/15 text-casa-gold border-casa-gold/30',
-                              )}
-                            >
-                              ~{driveTimeMins} min
-                            </span>
-                          ) : null}
-                        </div>
-                        <div
-                          className={cn(
-                            'flex items-center gap-1.5 text-2xs font-medium',
-                            isHeroNavy ? 'text-white/50' : 'text-casa-muted',
-                          )}
-                        >
-                          <Clock size={12} className="text-casa-gold/70" />
-                          <span>
-                            {leaveAt
-                              ? `Live tracking begins at ${format(subMinutes(leaveAt, 60), 'h:mm a')}`
-                              : 'Live tracking activates 60m before departure'}
-                          </span>
-                        </div>
-                      </div>
-                    )
-                  })()}
-                </div>
-              </div>
-
-              {/* Members and Logistics Footer */}
-              <div
-                className={cn(
-                  'pt-5 mt-5 border-t flex flex-wrap items-center justify-between gap-4',
-                  isHeroNavy ? 'border-white/10' : 'border-casa-divider/60',
-                )}
-              >
-                <div className="flex items-center gap-2 flex-wrap">
-                  {nextEvent.members.map((m) => {
-                    const isDriver =
-                      Boolean(isTravelEvent &&
-                        ((driverFamilyMemberId && m.family_member?.id === driverFamilyMemberId) ||
-                        (driverName && m.family_member?.name?.toLowerCase() === driverName.toLowerCase())))
-
-                    return (
-                      <span
-                        key={m.id}
-                        className={cn(
-                          'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-caption font-semibold transition-all border',
-                          isHeroNavy
-                            ? 'bg-white/10 text-white border-white/10'
-                            : 'bg-casa-surface-subtle text-casa-navy border-casa-border',
-                        )}
-                        style={{
-                          borderLeft: `3px solid ${m.family_member?.color_hex ?? 'var(--color-casa-gold)'}`,
-                        }}
-                      >
-                        {isDriver && <Car size={13} className="text-casa-gold shrink-0" />}
-                        <span>{m.family_member?.name}</span>
-                      </span>
-                    )
-                  })}
-                  {isTravelEvent && (nextEvent.address || nextEvent.location_name) && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        const dest = encodeURIComponent(nextEvent.address || nextEvent.location_name || '')
-                        window.open(`https://www.google.com/maps/search/?api=1&query=${dest}`, '_blank')
-                      }}
-                      title="Open navigation directions"
-                      className="h-8 px-3 rounded-xl bg-casa-gold/20 hover:bg-casa-gold/30 text-casa-gold text-caption font-bold flex items-center gap-1.5 shrink-0 border border-casa-gold/40"
-                    >
-                      <Navigation size={13} className="text-casa-gold" />
-                      <span>Directions</span>
-                    </Button>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-1 text-casa-gold font-bold text-body-sm group-hover:translate-x-1 transition-transform">
-                  <span>View Details</span>
-                  <ChevronRight size={16} />
-                </div>
-              </div>
-
-              {/* ── Concurrent Companion Events (Simultaneous Family Activities) ── */}
-              {concurrentEvents.length > 0 && (
-                <div
-                  className={cn(
-                    'mt-5 pt-4 border-t',
-                    isHeroNavy ? 'border-white/10' : 'border-casa-divider/60',
-                  )}
-                >
-                  <div className="flex items-center justify-between gap-2 mb-2.5">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                      <span className="text-caption font-bold uppercase tracking-widest text-casa-gold">
-                        {concurrentEvents.length === 1
-                          ? 'Also Happening Right Now'
-                          : `Also Active (${concurrentEvents.length})`}
-                      </span>
-                    </div>
-                    <span
-                      className={cn(
-                        'text-3xs uppercase tracking-wider font-medium',
-                        isHeroNavy ? 'text-white/40' : 'text-casa-muted',
-                      )}
-                    >
-                      Tap card to focus
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    {concurrentEvents.map((evt) => {
-                      let isUnderway = false
-                      try {
-                        const start = parseISO(evt.start_time).getTime()
-                        const end = parseISO(evt.end_time).getTime()
-                        isUnderway = !evt.all_day && now.getTime() >= start && now.getTime() <= end
-                      } catch {}
-
-                      const evtMember = evt.members?.[0]?.family_member
-                      const isEvtTravel = Boolean(
-                        !evt.all_day &&
-                          evt.event_type !== 'reminder' &&
-                          (evt.address || evt.location_name) &&
-                          !['home', 'at home'].includes((evt.location_name || '').toLowerCase())
-                      )
-
-                      let prepSummary: string | null = null
-                      if (evt.checklist && evt.checklist.length > 0) {
-                        const pending = evt.checklist.filter((item) => !item.checked)
-                        const list = pending.length > 0 ? pending : evt.checklist
-                        const labels = list.map((item) => item.label?.trim()).filter(Boolean)
-                        if (labels.length > 0) prepSummary = labels.join(' · ')
-                      } else if (evt.enrichment?.what_to_bring) {
-                        const raw = evt.enrichment.what_to_bring as unknown
-                        if (Array.isArray(raw) && raw.length > 0) prepSummary = raw.join(' · ')
-                        else if (typeof raw === 'string' && raw.trim()) prepSummary = raw.trim()
-                      }
-
-                      return (
-                        <div
-                          key={evt.id}
-                          role="button"
-                          tabIndex={0}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setSelectedHeroEventId(evt.id)
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault()
-                              e.stopPropagation()
-                              setSelectedHeroEventId(evt.id)
-                            }
-                          }}
-                          className={cn(
-                            'group/item flex items-center justify-between gap-3 p-3 rounded-2xl border transition-all cursor-pointer shadow-2xs active:scale-[0.98]',
-                            isHeroNavy
-                              ? 'bg-white/5 hover:bg-white/10 border-white/10 hover:border-casa-gold/50 text-white'
-                              : 'bg-casa-surface-subtle hover:bg-casa-surface-subtle/80 border-casa-border hover:border-casa-gold/50 text-casa-navy',
-                          )}
-                          title={`Focus on ${evt.title}`}
-                        >
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-                              {evtMember && (
-                                <span
-                                  className={cn(
-                                    'inline-flex items-center px-2 py-0.5 rounded-full text-3xs font-bold',
-                                    isHeroNavy ? 'text-white bg-white/15' : 'text-casa-navy bg-white border border-casa-border',
-                                  )}
-                                  style={{
-                                    borderLeft: `3px solid ${evtMember.color_hex || 'var(--color-casa-gold)'}`,
-                                  }}
-                                >
-                                  {evtMember.name}
-                                </span>
-                              )}
-                              <span
-                                className={cn(
-                                  'text-3xs font-mono',
-                                  isHeroNavy ? 'text-white/60' : 'text-casa-muted',
-                                )}
-                              >
-                                {evt.all_day ? 'All Day' : `${format(parseISO(evt.start_time), 'h:mm a')}`}
-                              </span>
-                              {isUnderway && (
-                                <span className="inline-flex items-center gap-1 text-3xs font-bold text-emerald-600 dark:text-emerald-400">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                  Now
-                                </span>
-                              )}
-                              {isEvtTravel && evt.enrichment?.drive_time_mins && (
-                                <span className="text-3xs text-casa-gold font-semibold flex items-center gap-0.5">
-                                  <Car size={10} />
-                                  {evt.enrichment.drive_time_mins}m drive
-                                </span>
-                              )}
-                            </div>
-
-                            <h4
-                              className={cn(
-                                'text-caption font-semibold truncate transition-colors group-hover/item:text-casa-gold',
-                                isHeroNavy ? 'text-white' : 'text-casa-navy',
-                              )}
-                            >
-                              {evt.title}
-                            </h4>
-
-                            {prepSummary ? (
-                              <p
-                                className={cn(
-                                  'text-2xs truncate mt-0.5 flex items-center gap-1.5 font-normal',
-                                  isHeroNavy ? 'text-white/70' : 'text-casa-muted',
-                                )}
-                              >
-                                <Gift size={11} className="text-casa-gold shrink-0" />
-                                <span className={cn('font-semibold shrink-0', isHeroNavy ? 'text-white/85' : 'text-casa-navy')}>
-                                  Bring:
-                                </span>
-                                <span className="truncate">{prepSummary}</span>
-                              </p>
-                            ) : evt.location_name ? (
-                              <p
-                                className={cn(
-                                  'text-2xs truncate flex items-center gap-1 mt-0.5 font-normal',
-                                  isHeroNavy ? 'text-white/60' : 'text-casa-muted',
-                                )}
-                              >
-                                <MapPin size={11} className="text-casa-gold shrink-0" />
-                                <span>{evt.location_name}</span>
-                              </p>
-                            ) : null}
-                          </div>
-
-                          <div className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-casa-gold/15 group-hover/item:bg-casa-gold/25 text-casa-gold text-caption font-bold shrink-0 transition-all border border-casa-gold/30">
-                            <span className="text-2xs">Focus</span>
-                            <ChevronRight size={13} className="group-hover/item:translate-x-0.5 transition-transform" />
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* ── Concept A: Flight Deck Radar (Up Next on Deck Horizon) ── */}
-              {concurrentEvents.length === 0 && upcomingOnDeck.length > 0 && (
-                <div
-                  className={cn(
-                    'mt-5 pt-4 border-t space-y-2.5',
-                    isHeroNavy ? 'border-white/10' : 'border-casa-divider/60',
-                  )}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <Clock size={13} className="text-casa-gold" />
-                      <span className="text-caption font-bold uppercase tracking-widest text-casa-gold">
-                        Up Next on Deck ({upcomingOnDeck.length})
-                      </span>
-                    </div>
-                    <span
-                      className={cn(
-                        'text-3xs uppercase tracking-wider font-medium',
-                        isHeroNavy ? 'text-white/40' : 'text-casa-muted',
-                      )}
-                    >
-                      Today's Follow-up Sequence
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    {upcomingOnDeck.map((item) => (
-                      <div
-                        key={item.id}
-                        role="button"
-                        tabIndex={0}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          if (item.event) onOpenEvent(item.event)
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault()
-                            e.stopPropagation()
-                            if (item.event) onOpenEvent(item.event)
-                          }
-                        }}
-                        className={cn(
-                          'p-3 rounded-2xl border transition-all flex flex-col justify-between space-y-1.5 cursor-pointer shadow-2xs group/deck min-h-[44px]',
-                          isHeroNavy
-                            ? 'bg-white/[0.06] hover:bg-white/[0.12] border-white/10 text-white'
-                            : 'bg-casa-surface-subtle hover:bg-casa-surface-subtle/80 border-casa-border text-casa-navy',
-                        )}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span
-                            className={cn(
-                              'text-caption font-mono font-bold px-2 py-0.5 rounded-md border',
-                              isHeroNavy
-                                ? 'text-white bg-white/10 border-white/10'
-                                : 'text-casa-navy bg-white border-casa-border',
-                            )}
-                          >
-                            {item.timeFormatted}
-                          </span>
-                          <span
-                            className={cn(
-                              'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-caption font-bold border shadow-2xs',
-                              isHeroNavy
-                                ? 'bg-white/10 border-white/15 text-white'
-                                : 'bg-white border-casa-border text-casa-navy',
-                            )}
-                          >
-                            <span
-                              className="w-2 h-2 rounded-full shrink-0"
-                              style={{ backgroundColor: item.driverColor }}
-                            />
-                            <span>{item.driverName}</span>
-                          </span>
-                        </div>
-
-                        <div>
-                          <div
-                            className={cn(
-                              'text-body-sm font-bold transition-colors truncate group-hover/deck:text-casa-gold',
-                              isHeroNavy ? 'text-white' : 'text-casa-navy',
-                            )}
-                          >
-                            {item.title}
-                          </div>
-                          {item.subtitle && (
-                            <div
-                              className={cn(
-                                'text-caption truncate',
-                                isHeroNavy ? 'text-white/60' : 'text-casa-muted',
-                              )}
-                            >
-                              {item.subtitle}
-                            </div>
-                          )}
-                        </div>
-
-                        {item.leaveByText && (
-                          <div
-                            className={cn(
-                              'text-caption text-casa-gold font-medium flex items-center gap-1.5 pt-1 border-t',
-                              isHeroNavy ? 'border-white/10' : 'border-casa-divider/60',
-                            )}
-                          >
-                            <Car size={12} className="text-casa-gold shrink-0" />
-                            <span>{item.leaveByText}</span>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </motion.div>
-          ) : (
-            <TomorrowPrepWidget
-              now={now}
-              showViewToggle={true}
-              onToggleTodayView={() => setHeroManualView('today')}
-            />
-          )}
+            )}
           </AnimatePresence>
 
-          {/* Stylized Ambient Daily Briefing Prose */}
+                    {/* Stylized Ambient Daily Briefing Prose */}
           {dailyBriefing && (
             <div className="px-1 py-1 flex items-start gap-3">
               <div className="p-1.5 rounded-xl bg-amber-500/15 text-casa-gold shrink-0 mt-0.5 border border-amber-500/20">

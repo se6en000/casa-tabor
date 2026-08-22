@@ -679,8 +679,96 @@ export default function MiddayLogisticsWidget({
         </div>
       )}
 
-      {/* ── Section B: Today's Active Focus & Tasks (When to-dos are pending) ── */}
-      {openReminders.length > 0 && (
+      {/* ── Section B: Weekend Flow Momentum OR Weekday Active Tasks ── */}
+      {routineIntel.isTodayWeekend ? (
+        // On weekends: High-level Household Pulse & Momentum summary (Zero raw list duplication with right sidebar)
+        <div className="space-y-3">
+          {overdueReminders.length > 0 && (
+            <div className={cn(
+              'p-4 rounded-2xl border shadow-2xs flex items-center justify-between gap-3.5 transition-all',
+              isNavy
+                ? 'bg-amber-500/10 border-amber-400/30 text-amber-200'
+                : 'bg-amber-500/8 border-amber-400/40 text-amber-950'
+            )}>
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div className={cn(
+                  'w-9 h-9 rounded-xl flex items-center justify-center font-bold shrink-0',
+                  isNavy ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-500/15 text-amber-800'
+                )}>
+                  <AlertTriangle size={18} className="text-amber-600 shrink-0 animate-pulse" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-3xs font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-amber-500/25 border border-amber-500/35 text-amber-950">
+                      Priority Focus
+                    </span>
+                    <span className="text-caption font-semibold truncate text-amber-900">
+                      {overdueReminders[0].title}
+                    </span>
+                  </div>
+                  <p className={cn('text-caption mt-0.5 truncate', isNavy ? 'text-white/70' : 'text-casa-muted')}>
+                    {overdueReminders.length === 1 ? '1 item requiring attention from earlier today' : `${overdueReminders.length} items pending attention`}
+                  </p>
+                </div>
+              </div>
+
+              <IconButton
+                size="sm"
+                variant="ghost"
+                onClick={async (e) => {
+                  e.stopPropagation()
+                  if (onToggleReminder && overdueReminders[0]) {
+                    try { navigator.vibrate?.(10) } catch {}
+                    await onToggleReminder(overdueReminders[0].id)
+                  }
+                }}
+                className={cn(
+                  'rounded-full shrink-0 transition-all min-h-[38px] min-w-[38px] p-0 flex items-center justify-center',
+                  isNavy ? 'hover:bg-amber-400/20 text-amber-300' : 'hover:bg-emerald-100 text-slate-500 hover:text-emerald-700'
+                )}
+                aria-label={`Mark ${overdueReminders[0].title} complete`}
+                icon={
+                  <div className="w-6 h-6 rounded-full border-2 border-amber-600/80 hover:border-emerald-600 bg-white/10 flex items-center justify-center transition-colors shadow-2xs">
+                    <div className="w-3 h-3 rounded-full bg-current opacity-40 hover:opacity-100 transition-opacity" />
+                  </div>
+                }
+              />
+            </div>
+          )}
+
+          {/* Weekend Household Momentum Bar */}
+          <div className={cn(
+            'p-4 rounded-2xl border shadow-2xs flex flex-wrap items-center justify-between gap-3',
+            isNavy ? 'bg-white/5 border-white/10 text-white' : 'bg-casa-surface-subtle/80 border-casa-border/80 text-casa-navy'
+          )}>
+            <div className="flex items-center gap-3">
+              <div className={cn(
+                'w-9 h-9 rounded-xl flex items-center justify-center font-bold shrink-0',
+                isNavy ? 'bg-white/10 text-amber-400' : 'bg-casa-gold/20 text-casa-navy'
+              )}>
+                <ListTodo size={17} className={isNavy ? 'text-amber-400' : 'text-casa-gold'} />
+              </div>
+              <div>
+                <h4 className={cn('font-sans text-body-sm font-bold', isNavy ? 'text-white' : 'text-casa-navy')}>
+                  Weekend Household Flow
+                </h4>
+                <p className={cn('text-caption', isNavy ? 'text-white/70' : 'text-casa-text-secondary')}>
+                  {completedReminders.length} of {todayReminders.length || openReminders.length + completedReminders.length} tasks completed today
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className={cn(
+                'text-caption font-bold px-3 py-1 rounded-full border shadow-2xs',
+                isNavy ? 'bg-slate-900 border-white/15 text-amber-300' : 'bg-white border-casa-border/60 text-casa-navy'
+              )}>
+                {openReminders.length === 0 ? 'All Clear' : `${openReminders.length} Open`}
+              </span>
+            </div>
+          </div>
+        </div>
+      ) : openReminders.length > 0 && (
         <div className="space-y-2.5">
           <div className="flex items-center justify-between">
             <span
