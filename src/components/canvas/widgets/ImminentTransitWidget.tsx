@@ -6,7 +6,10 @@ import {
   Gift,
   Navigation,
   ChevronRight,
+  Moon,
+  Layers,
 } from 'lucide-react'
+import type { DepartureItem } from '../../../hooks/useFamilyRoutineIntelligence' 
 import { motion } from 'framer-motion'
 import { cn } from '../../../utils/cn'
 import type { EventWithDetails } from '../../../hooks/useCalendarEvents'
@@ -26,6 +29,9 @@ interface ImminentTransitWidgetProps {
   isPrepUrgent?: boolean
   concurrentEvents?: EventWithDetails[]
   onSelectHeroEventId?: (eventId: string) => void
+  schoolDropoffs?: DepartureItem[]
+  tomorrowSummary?: { eventCount: number; prepItemsReady: number; totalPrepItems: number } | null
+  onToggleTomorrowView?: () => void
   className?: string
 }
 
@@ -50,6 +56,9 @@ export default function ImminentTransitWidget({
   isPrepUrgent = false,
   concurrentEvents = [],
   onSelectHeroEventId,
+  schoolDropoffs = [],
+  tomorrowSummary = null,
+  onToggleTomorrowView,
   className,
 }: ImminentTransitWidgetProps) {
   const { heroTheme } = useHeroTheme(now)
@@ -401,7 +410,7 @@ export default function ImminentTransitWidget({
         </div>
       </div>
 
-      {/* ── Concurrent Companion Events (Simultaneous Family Activities) ── */}
+      {/* ── Multi-Track Concurrent Events (1-to-Many Simultaneous Family Logistics) ── */}
       {concurrentEvents.length > 0 && (
         <div
           className={cn(
@@ -411,20 +420,19 @@ export default function ImminentTransitWidget({
         >
           <div className="flex items-center justify-between gap-2 mb-2.5">
             <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-caption font-bold uppercase tracking-widest text-casa-gold">
-                {concurrentEvents.length === 1
-                  ? 'Also Happening Right Now'
-                  : `Also Active (${concurrentEvents.length})`}
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+              <span className="text-3xs font-bold uppercase tracking-widest text-casa-gold flex items-center gap-1.5">
+                <Layers size={12} className="text-casa-gold" />
+                <span>Simultaneous Family Logistics ({concurrentEvents.length} Active)</span>
               </span>
             </div>
             <span
               className={cn(
-                'text-3xs uppercase tracking-wider font-medium',
-                isHeroNavy ? 'text-white/40' : 'text-casa-muted',
+                'text-3xs font-medium',
+                isHeroNavy ? 'text-white/50' : 'text-casa-muted',
               )}
             >
-              Tap card to focus
+              1-Tap to switch spotlight
             </span>
           </div>
 
@@ -461,7 +469,7 @@ export default function ImminentTransitWidget({
                       ? 'bg-white/5 hover:bg-white/10 border-white/10 hover:border-casa-gold/50 text-white'
                       : 'bg-casa-surface-subtle hover:bg-casa-surface-subtle/80 border-casa-border hover:border-casa-gold/50 text-casa-navy',
                   )}
-                  title={`Focus on ${evt.title}`}
+                  title={`Switch spotlight to ${evt.title}`}
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 mb-1 flex-wrap">
@@ -504,7 +512,7 @@ export default function ImminentTransitWidget({
                     </h4>
                   </div>
 
-                  <div className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-casa-gold/15 group-hover/item:bg-casa-gold/25 text-casa-gold text-caption font-bold shrink-0 transition-all border border-casa-gold/30">
+                  <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-casa-gold/15 group-hover/item:bg-casa-gold/25 text-casa-gold text-caption font-bold shrink-0 transition-all border border-casa-gold/30">
                     <span className="text-2xs">Focus</span>
                     <ChevronRight size={13} className="group-hover/item:translate-x-0.5 transition-transform" />
                   </div>
@@ -512,6 +520,99 @@ export default function ImminentTransitWidget({
               )
             })}
           </div>
+        </div>
+      )}
+
+      {/* ── Early Morning Companion: School Drop-offs Ahead ── */}
+      {schoolDropoffs && schoolDropoffs.length > 0 && (
+        <div
+          className={cn(
+            'mt-5 pt-4 border-t flex flex-wrap items-center justify-between gap-3',
+            isHeroNavy ? 'border-white/10' : 'border-casa-divider/60',
+          )}
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div
+              className={cn(
+                'w-7 h-7 rounded-xl flex items-center justify-center font-bold shrink-0',
+                isHeroNavy ? 'bg-amber-400/20 text-amber-300' : 'bg-casa-gold/20 text-casa-navy',
+              )}
+            >
+              <Car size={14} className="text-casa-gold" />
+            </div>
+            <div className="min-w-0">
+              <span className="text-3xs font-bold uppercase tracking-wider text-casa-gold block">
+                School Launchpad Ahead
+              </span>
+              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                {schoolDropoffs.map((d) => (
+                  <span
+                    key={d.id}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (onOpenEvent && d.rawEvent) onOpenEvent(d.rawEvent)
+                    }}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-caption font-semibold border transition-all cursor-pointer shadow-2xs hover:scale-105 active:scale-95',
+                      isHeroNavy ? 'bg-white/10 border-white/15 text-white' : 'bg-casa-surface-subtle border-casa-border text-casa-navy',
+                    )}
+                  >
+                    <span>{d.shortVenueName || d.venueName}</span>
+                    <span className="opacity-40">·</span>
+                    <span className="font-mono text-3xs opacity-90">{d.driverName ? `${d.driverName} drives` : d.leaveByTimeFormatted}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Evening Companion: Tomorrow Prep Preview Ribbon ── */}
+      {tomorrowSummary && (
+        <div
+          className={cn(
+            'mt-5 pt-4 border-t flex flex-wrap items-center justify-between gap-3',
+            isHeroNavy ? 'border-white/10' : 'border-casa-divider/60',
+          )}
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div
+              className={cn(
+                'w-7 h-7 rounded-xl flex items-center justify-center font-bold shrink-0',
+                isHeroNavy ? 'bg-indigo-500/20 text-indigo-300' : 'bg-indigo-50 text-indigo-700',
+              )}
+            >
+              <Moon size={14} className={isHeroNavy ? 'text-indigo-300' : 'text-indigo-600'} />
+            </div>
+            <div className="min-w-0">
+              <span className="text-3xs font-bold uppercase tracking-wider text-indigo-400 block">
+                Tomorrow at a Glance
+              </span>
+              <span className={cn('text-caption font-medium truncate block', isHeroNavy ? 'text-white/80' : 'text-casa-text-secondary')}>
+                {tomorrowSummary.eventCount} {tomorrowSummary.eventCount === 1 ? 'event' : 'events'} · Prep: {tomorrowSummary.prepItemsReady} of {tomorrowSummary.totalPrepItems} ready
+              </span>
+            </div>
+          </div>
+
+          {onToggleTomorrowView && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onToggleTomorrowView()
+              }}
+              className={cn(
+                'px-3 py-1.5 rounded-xl text-caption font-bold border transition-all flex items-center gap-1 shrink-0 shadow-2xs hover:scale-105 active:scale-95',
+                isHeroNavy
+                  ? 'bg-white/10 hover:bg-white/15 border-white/15 text-white'
+                  : 'bg-casa-surface-subtle hover:bg-casa-surface-subtle/80 border-casa-border text-casa-navy',
+              )}
+            >
+              <span>Tomorrow Flow</span>
+              <ChevronRight size={13} />
+            </button>
+          )}
         </div>
       )}
     </motion.div>

@@ -391,11 +391,13 @@ function deriveDeparturesForDate(
       ? new Date(grp.customDepartureTime)
       : new Date(schoolStart.getTime() - driveMins * 60 * 1000)
 
-    const isCompleted = now.getTime() > departureDate.getTime() + 20 * 60 * 1000
+    // Dropoff is completed immediately upon arriving at school (schoolStart time or departure + drive time)
+    const arrivalTime = schoolStart.getTime()
+    const isCompleted = now.getTime() >= arrivalTime
     const minutesUntilLeave = Math.round((departureDate.getTime() - now.getTime()) / 60000)
     const isLeaveNow = minutesUntilLeave <= 5 && !isCompleted
     const isPrepUrgent = minutesUntilLeave > 5 && minutesUntilLeave <= 20 && !isCompleted
-    const isDeparted = isCompleted
+    const isDeparted = now.getTime() >= departureDate.getTime()
 
     const driverMember = familyMembers.find((m) => m.id === grp.driverId) || null
 

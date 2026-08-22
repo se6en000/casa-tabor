@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { parseISO, differenceInMinutes, subMinutes } from 'date-fns'
 import type { EventWithDetails } from './useCalendarEvents'
 import type { FamilyMember } from '../types'
-import { useFamilyRoutineIntelligence, type FamilyRoutineIntelligence } from './useFamilyRoutineIntelligence'
+import { useFamilyRoutineIntelligence, type FamilyRoutineIntelligence, type DepartureItem } from './useFamilyRoutineIntelligence'
 import { inferEventMode, inferEventPlanKind } from '../lib/eventCommandCenter'
 
 export type HeroArchetype =
@@ -24,6 +24,8 @@ export interface HeroIntelligenceState {
   isLeaveNow: boolean
   isPrepUrgent: boolean
   isEventUnderway: boolean
+  pendingSchoolDropoffs: DepartureItem[]
+  tomorrowSummary: { eventCount: number; prepItemsReady: number; totalPrepItems: number } | null
 }
 
 // Helper to check if an event requires travel / off-site transit
@@ -288,6 +290,20 @@ export function useHeroIntelligence(
     isEventUnderway,
   ])
 
+  const pendingSchoolDropoffs = useMemo(() => {
+    if (!routineIntel.isTodaySchoolDay || routineIntel.allTodayDeparturesCompleted) return []
+    return routineIntel.todayDepartures.filter((d) => !d.isCompleted)
+  }, [routineIntel.isTodaySchoolDay, routineIntel.allTodayDeparturesCompleted, routineIntel.todayDepartures])
+
+  const tomorrowSummary = useMemo(() => {
+    if (decimalTime < 17.0) return null
+    return {
+      eventCount: routineIntel.tomorrowDepartures.length,
+      prepItemsReady: routineIntel.completedCount,
+      totalPrepItems: routineIntel.totalPrepCount,
+    }
+  }, [decimalTime, routineIntel.tomorrowDepartures.length, routineIntel.completedCount, routineIntel.totalPrepCount])
+
   return {
     archetype,
     routineIntel,
@@ -300,5 +316,7 @@ export function useHeroIntelligence(
     isLeaveNow,
     isPrepUrgent,
     isEventUnderway,
+    pendingSchoolDropoffs,
+    tomorrowSummary,
   }
 }

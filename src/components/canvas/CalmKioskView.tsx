@@ -411,6 +411,9 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                   isPrepUrgent={heroIntel.isPrepUrgent}
                   concurrentEvents={heroIntel.concurrentEvents}
                   onSelectHeroEventId={(id) => setSelectedHeroEventId(id)}
+                  schoolDropoffs={heroIntel.pendingSchoolDropoffs}
+                  tomorrowSummary={heroIntel.tomorrowSummary}
+                  onToggleTomorrowView={() => setHeroManualView('tomorrow')}
                 />
               </motion.div>
             ) : (
