@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { format, startOfWeek, addDays, isToday, startOfDay } from 'date-fns'
+import { Bell } from 'lucide-react'
 import { useWeekEvents } from '../../hooks/useCalendarEvents'
 import { useCalendarStore } from '../../stores/calendarStore'
 import { useAppStore } from '../../stores/appStore'
@@ -11,7 +12,7 @@ import EventEditSheet from './EventEditSheet'
 import PalmBeachFolioCard from './PalmBeachFolioCard'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { cn } from '../../utils/cn'
-import { cleanEventTitle } from '../../utils/eventTitle'
+import { cleanEventTitle, formatGlanceTitle } from '../../utils/eventTitle'
 import { isHoliday, holidayLabel, HOLIDAY_COLOR, isReminder, REMINDER_COLOR } from '../../utils/holidays'
 import { getEventDisplayEnd, getEventDisplayStartDay, isEventMultiDay } from '../../utils/eventTime'
 
@@ -455,7 +456,16 @@ export default function WeekView() {
                     backgroundColor: color,
                   }}
                 >
-                  {holiday ? holidayLabel(ev.title) : reminder ? `🔔 ${ev.title}` : cleanEventTitle(ev.title)}
+                  {holiday ? (
+                    holidayLabel(ev.title)
+                  ) : reminder ? (
+                    <span className="flex items-center gap-1 truncate">
+                      <Bell size={11} className="shrink-0 text-amber-200" />
+                      <span className="truncate">{cleanEventTitle(ev.title)}</span>
+                    </span>
+                  ) : (
+                    formatGlanceTitle(ev.title)
+                  )}
                 </button>
               )
             })}
@@ -577,7 +587,7 @@ export default function WeekView() {
               opacity: 0.95,
             }}
           >
-            <p className="font-body font-semibold text-body-sm truncate leading-tight">{drag.event.title}</p>
+            <p className="font-body font-semibold text-body-sm truncate leading-tight">{formatGlanceTitle(drag.event.title)}</p>
             {dropInfo && (
               <>
                 <p className="text-caption font-body opacity-85 mt-0.5">

@@ -1,9 +1,9 @@
 import { useMemo, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { Repeat, Navigation } from 'lucide-react'
+import { Repeat, Navigation, MapPin } from 'lucide-react'
 import { format } from 'date-fns'
 import { cn } from '../../utils/cn'
-import { cleanEventTitle } from '../../utils/eventTitle'
+import { cleanEventTitle, formatGlanceTitle } from '../../utils/eventTitle'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 
 import { EventSyncStatusDot } from './EventSyncStatusDot'
@@ -40,10 +40,10 @@ function getEventPosition(event: EventWithDetails) {
   const end = new Date(event.end_time)
   const startHour = start.getHours() + start.getMinutes() / 60
   const endHour = end.getHours() + end.getMinutes() / 60
-  const duration = endHour - startHour
+  const duration = Math.max(endHour - startHour, 0.25)
 
   const top = (startHour - GRID_START_HOUR) * HOUR_HEIGHT
-  const height = Math.max(duration * HOUR_HEIGHT, 28) // min height 28px
+  const height = Math.max(duration * HOUR_HEIGHT, 42) // min height 42px for full glanceability
 
   return { top, height }
 }
@@ -57,7 +57,7 @@ export default function EventBlock({ event, onClick, onDoubleClick, columnCount 
   const widthPercent = 95 / columnCount
   const leftPercent = 2.5 + columnIndex * widthPercent
 
-  const isCompact = height < 50
+  const isCompact = height < 56
 
   const hasNoRide = Boolean(event.plan_override?.transportation_plan && Array.isArray(event.plan_override.transportation_plan.legs) && event.plan_override.transportation_plan.legs.length === 0)
   const departureAt = useMemo(() => {
@@ -68,6 +68,11 @@ export default function EventBlock({ event, onClick, onDoubleClick, columnCount 
     }
     return null
   }, [event.enrichment?.departure_time, event.enrichment?.drive_time_mins, event.start_time, event.all_day, hasNoRide])
+
+  const primaryMember = event.members && event.members.length > 0
+    ? (event.members.find(m => m.role === 'primary') ?? event.members[0])?.family_member
+    : null
+  const otherMembersCount = (event.members?.length ?? 0) > 1 ? (event.members!.length - 1) : 0
 
   // ── Long-press drag detection ────────────────────────────────
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -108,8 +113,10 @@ export default function EventBlock({ event, onClick, onDoubleClick, columnCount 
     touchOrigin.current = null
   }
 
+  const timePrefix = format(start, 'h:mmaaa').toLowerCase().replace(':00', '')
+
   return (
-      <motion.button
+    <motion.button
       data-event-block
       data-calendar-event
       data-sidecar-loadable="true"
@@ -126,10 +133,10 @@ export default function EventBlock({ event, onClick, onDoubleClick, columnCount 
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       className={cn(
-        'absolute rounded-lg px-2.5 py-1.5 text-left',
+        'absolute rounded-lg px-2 py-1 text-left flex flex-col justify-between',
         'hover:brightness-110 hover:shadow-card-hover',
         'overflow-hidden cursor-pointer',
-        'text-white transition-all duration-150',
+        'text-white transition-all duration-150 shadow-2xs',
         isActive ? 'ring-2 ring-casa-gold ring-offset-1 ring-offset-casa-bg z-20 font-bold shadow-md' : 'border-0',
         isDragging ? 'opacity-30' : 'opacity-100',
       )}
@@ -141,41 +148,58 @@ export default function EventBlock({ event, onClick, onDoubleClick, columnCount 
         backgroundColor: color,
         ...(isActive ? { zIndex: 20 } : {}),
       }}
+      title={`${cleanEventTitle(event.title)} (${format(start, 'h:mm a')} – ${format(end, 'h:mm a')})`}
     >
-      <p className={cn(
-        'font-body font-semibold truncate leading-tight',
-        isCompact ? 'text-caption' : 'text-body-sm',
-        isActive && 'font-bold text-white'
-      )}>
-        {cleanEventTitle(event.title)}
-      </p>
+      <div className="min-w-0 w-full">
+        {/* Title line with start time prefix */}
+        <div className="flex items-baseline gap-1.5 min-w-0 pr-3.5">
+          <span className="font-mono text-caption font-bold opacity-90 shrink-0 tabular-nums leading-none">
+            {timePrefix}
+          </span>
+          <p className={cn(
+            'font-body font-semibold truncate leading-tight',
+            isCompact ? 'text-caption' : 'text-body-sm',
+            isActive && 'font-bold text-white'
+          )}>
+            {formatGlanceTitle(event.title)}
+          </p>
+        </div>
 
-      {/* Leave by & Time range */}
-      {departureAt ? (
-        <p className="text-caption font-mono font-bold text-amber-200 truncate flex items-center gap-1 mt-0.5">
-          <Navigation size={9} className="shrink-0 text-amber-300" />
-          <span>Leave {format(departureAt, 'h:mm a')}</span>
-        </p>
-      ) : !isCompact ? (
-        <p className="text-caption font-body opacity-80 mt-0.5">
-          {format(start, 'h:mm a')} – {format(end, 'h:mm a')}
-        </p>
-      ) : null}
+        {/* Departure line */}
+        {departureAt && (
+          <p className="text-caption font-mono font-bold text-amber-200 truncate flex items-center gap-1 mt-0.5">
+            <Navigation size={9} className="shrink-0 text-amber-300" />
+            <span>Leave {format(departureAt, 'h:mm a')}</span>
+          </p>
+        )}
 
-      {/* Compact member metadata avoids oversized controls inside the time grid. */}
-      {!isCompact && event.members && event.members.length > 0 && (() => {
-        const primary = event.members.find(m => m.role === 'primary') ?? event.members[0]
-        const others = event.members.filter(m => m !== primary)
-        return (
-          <div className="mt-1 truncate text-caption font-semibold text-white/90">
-            <span
-            >
-              {primary.family_member?.name ?? '?'}
+        {/* Time range when not compact and no departure */}
+        {!departureAt && !isCompact && (
+          <p className="text-caption font-body opacity-80 mt-0.5">
+            {format(start, 'h:mm a')} – {format(end, 'h:mm a')}
+          </p>
+        )}
+      </div>
+
+      {/* Footer metadata: Member Badge & Location */}
+      {(primaryMember || event.location_name) && (
+        <div className="flex items-center gap-1.5 mt-0.5 text-caption font-semibold text-white/90 truncate pr-2 shrink-0">
+          {primaryMember && (
+            <span className="inline-flex items-center gap-1 truncate">
+              <span className="w-3.5 h-3.5 rounded-full bg-white/25 text-overline font-bold inline-flex items-center justify-center uppercase shrink-0">
+                {primaryMember.name.charAt(0)}
+              </span>
+              <span className="truncate">{primaryMember.name}{otherMembersCount > 0 ? ` +${otherMembersCount}` : ''}</span>
             </span>
-            {others.length > 0 && <span> +{others.length}</span>}
-          </div>
-        )
-      })()}
+          )}
+          {event.location_name && !isCompact && (
+            <span className="inline-flex items-center gap-0.5 opacity-75 truncate text-caption">
+              <MapPin size={9} className="shrink-0" />
+              <span className="truncate">{event.location_name}</span>
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Google Sync Status dot — top right corner */}
       <EventSyncStatusDot

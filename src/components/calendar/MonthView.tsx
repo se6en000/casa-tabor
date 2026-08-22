@@ -4,14 +4,14 @@ import {
   addDays, addMonths, subMonths, isSameMonth, isToday,
 } from 'date-fns'
 import { AnimatePresence, motion } from 'framer-motion'
-import { X, Clock, MapPin, Navigation, Plus } from 'lucide-react'
+import { X, Clock, MapPin, Navigation, Plus, Bell } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { useCalendarStore } from '../../stores/calendarStore'
 import { useAppStore } from '../../stores/appStore'
 import { useMonthEvents } from '../../hooks/useCalendarEvents'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { isHoliday, holidayLabel, HOLIDAY_COLOR, isReminder, isAllDayReminder, REMINDER_COLOR } from '../../utils/holidays'
-import { cleanEventTitle } from '../../utils/eventTitle'
+import { cleanEventTitle, formatGlanceTitle } from '../../utils/eventTitle'
 import { eventOverlapsDay, getEventStartDate } from '../../utils/eventTime'
 import { useCalendarQuickCreateGesture } from '../../hooks/useCalendarQuickCreateGesture'
 import PalmBeachFolioCard from './PalmBeachFolioCard'
@@ -45,7 +45,6 @@ function buildMonthGrid(selectedDate: Date): Date[] {
 }
 
 const DOW_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-const MAX_VISIBLE_EVENTS = 3
 
 // ── Day cell popover ─────────────────────────────────────────────────────────
 
@@ -129,27 +128,31 @@ function DayPopover({ day, events, activeEventId, onClose, onSelectDay, onSelect
               } : undefined}
               onClick={() => { onSelectEvent(event); onClose() }}
             >
-              <div
-                className={cn(
-                  'rounded-full shrink-0 mt-1.5 transition-transform',
-                  isActive ? 'w-2 h-2 ring-1 ring-white' : 'w-1.5 h-1.5'
-                )}
-                style={{ backgroundColor: color }}
-              />
+              {reminder ? (
+                <Bell size={12} className="shrink-0 text-casa-warning mt-1" />
+              ) : (
+                <div
+                  className={cn(
+                    'rounded-full shrink-0 mt-1.5 transition-transform',
+                    isActive ? 'w-2 h-2 ring-1 ring-white' : 'w-1.5 h-1.5'
+                  )}
+                  style={{ backgroundColor: color }}
+                />
+              )}
               <div className="min-w-0 flex-1">
                 <p className={cn(
                   'text-body-sm font-semibold truncate',
                   holiday ? 'text-red-700' : reminder ? 'text-amber-700' : 'text-casa-navy',
                   isActive && 'text-casa-navy font-bold'
                 )}>
-                  {holiday ? holidayLabel(event.title) : reminder ? `🔔 ${event.title}` : event.title}
+                  {holiday ? holidayLabel(event.title) : cleanEventTitle(event.title)}
                 </p>
                 {reminder && (
                   <span className="text-caption font-semibold uppercase tracking-wide text-casa-warning">Reminder</span>
                 )}
                 <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                   {!isAllDay && !reminder && (
-                    <span className="flex items-center gap-1 text-caption text-casa-muted">
+                    <span className="flex items-center gap-1 text-caption text-casa-muted font-mono">
                       <Clock size={10} />
                       {format(start, 'h:mm a')}
                     </span>
@@ -232,9 +235,7 @@ function DayCell({
   events,
   isCurrentMonth,
   isPopoverOpen,
-  isExpanded,
   activeEventId,
-  onToggleExpand,
   onOpen,
   onClose,
   onDrillIn,
@@ -249,15 +250,13 @@ function DayCell({
   onDoubleClick,
 }: DayCellProps) {
   const todayDay = isToday(day)
-  const visible = isExpanded ? events : events.slice(0, MAX_VISIBLE_EVENTS)
-  const overflow = events.length - MAX_VISIBLE_EVENTS
 
   return (
-    <div className="relative">
+    <div className="relative flex flex-col min-h-0">
       <div
         className={cn(
-          'group min-h-[150px] p-2 border-b border-r border-casa-divider cursor-pointer transition-colors select-none flex flex-col',
-          isCurrentMonth ? 'bg-casa-bg hover:bg-casa-surface' : 'bg-casa-divider/30',
+          'group min-h-[140px] p-1.5 sm:p-2 border-b border-r border-casa-divider cursor-pointer transition-colors select-none flex flex-col flex-1',
+          isCurrentMonth ? 'bg-casa-bg hover:bg-casa-surface/80' : 'bg-casa-divider/20 text-casa-muted/60',
         )}
         onClick={events.length > 0 ? onOpen : () => onDrillIn(day)}
         onTouchStart={onTouchStart}
@@ -270,26 +269,40 @@ function DayCell({
         onDoubleClick={onDoubleClick}
       >
         {/* Date number header */}
-        <div className="flex items-start justify-end mb-1 shrink-0">
+        <div className="flex items-center justify-between mb-1 shrink-0">
+          <span className="text-overline font-bold uppercase tracking-wider text-casa-muted/70 pl-0.5">
+            {events.length > 0 ? `${events.length} item${events.length > 1 ? 's' : ''}` : ''}
+          </span>
           <span className={cn(
-            'w-8 h-8 flex items-center justify-center rounded-full font-semibold leading-none',
+            'w-7 h-7 flex items-center justify-center rounded-full font-semibold text-caption leading-none transition-transform group-hover:scale-105',
             todayDay
-              ? 'bg-casa-gold text-white'
+              ? 'bg-casa-gold text-white font-bold shadow-2xs'
               : isCurrentMonth
-              ? 'text-casa-navy group-hover:text-casa-gold'
-              : 'text-casa-muted/50',
+              ? 'text-casa-navy group-hover:text-casa-gold font-bold'
+              : 'text-casa-muted/40',
           )}>
             {format(day, 'd')}
           </span>
         </div>
 
-        {/* Event dots / pills */}
-        <div className="space-y-1 flex-1">
-          {visible.map(event => {
+        {/* Event dots / pills — Auto-expanded so all events are visible at a single glance */}
+        <div className="space-y-1 flex-1 min-h-0">
+          {events.map(event => {
             const holiday = isHoliday(event)
             const reminder = !holiday && isReminder(event)
             const color = holiday ? HOLIDAY_COLOR : reminder ? REMINDER_COLOR : getPrimaryColor(event)
             const isActive = activeEventId === event.id
+            const isAllDay = event.all_day || isAllDayReminder(event)
+            const start = getEventStartDate(event)
+            const timeStr = !isAllDay && !holiday && !reminder
+              ? format(start, 'h:mmaaa').toLowerCase().replace(':00', '')
+              : null
+            
+            const primaryMember = event.members && event.members.length > 0
+              ? (event.members.find(m => m.role === 'primary') ?? event.members[0])?.family_member
+              : null
+            const hasDrive = Boolean(event.enrichment?.departure_time || event.enrichment?.drive_time_mins)
+
             return (
               <div
                 key={event.id}
@@ -299,73 +312,61 @@ function DayCell({
                 data-event-id={event.id}
                 data-active={isActive ? 'true' : undefined}
                 className={cn(
-                  'flex items-center gap-1.5 px-2 py-1 rounded-md text-body-sm font-medium leading-tight truncate cursor-pointer transition-all duration-150 relative select-none',
+                  'flex items-center gap-1.5 px-1.5 py-1 rounded-md text-caption font-medium leading-tight cursor-pointer transition-all duration-150 relative select-none shadow-2xs',
                   holiday && 'font-semibold tracking-tight',
                   reminder && 'font-semibold',
                   isActive
                     ? 'ring-2 ring-casa-gold font-bold shadow-sm z-10'
-                    : 'border border-transparent hover:brightness-90',
+                    : 'border border-transparent hover:brightness-95 hover:shadow-xs',
                 )}
                 style={{
                   backgroundColor: isActive
-                    ? (holiday ? 'var(--color-casa-surface)' : color + '33')
-                    : color + '22',
-                  color: holiday ? 'var(--color-casa-error)' : reminder ? 'var(--color-casa-warning)' : color,
+                    ? (holiday ? 'var(--color-casa-surface)' : color + '38')
+                    : color + '20',
+                  color: holiday ? 'var(--color-casa-error)' : reminder ? 'var(--color-casa-warning)' : 'var(--color-casa-navy)',
+                  borderLeft: `2.5px solid ${color}`,
                 }}
                 onClick={e => { e.stopPropagation(); onSelectEvent(event) }}
+                title={`${event.title}${timeStr ? ` (${timeStr})` : ''}`}
               >
-                <span
-                  className={cn(
-                    'rounded-full shrink-0 transition-transform',
-                    isActive ? 'w-2 h-2 ring-1 ring-white' : 'w-1.5 h-1.5'
-                  )}
-                  style={{ backgroundColor: color }}
-                />
-                <span className="truncate flex-1">{holiday ? holidayLabel(event.title) : reminder ? `🔔 ${event.title}` : cleanEventTitle(event.title)}</span>
-                {!holiday && !reminder && <EventSyncStatusDot event={event} size="xs" className="shrink-0 ml-auto" />}
+                {/* Bell for reminders */}
+                {reminder && (
+                  <Bell size={10} className="shrink-0 text-casa-warning" />
+                )}
+
+                {/* Time Prefix */}
+                {timeStr && (
+                  <span className="font-mono text-caption font-bold text-casa-navy/80 shrink-0 tabular-nums">
+                    {timeStr}
+                  </span>
+                )}
+
+                {/* Event Title */}
+                <span className="truncate flex-1 font-semibold text-casa-navy leading-tight">
+                  {holiday ? holidayLabel(event.title) : reminder ? cleanEventTitle(event.title) : formatGlanceTitle(event.title)}
+                </span>
+
+                {/* Drive / Departure Icon if transit */}
+                {hasDrive && !isAllDay && !reminder && (
+                  <Navigation size={9} className="shrink-0 text-casa-gold opacity-90" />
+                )}
+
+                {/* Member Initial Jewel */}
+                {primaryMember && !holiday && (
+                  <span
+                    className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-overline font-bold text-white shrink-0 uppercase"
+                    style={{ backgroundColor: primaryMember.color_hex || color }}
+                    title={primaryMember.name}
+                  >
+                    {primaryMember.name.charAt(0)}
+                  </span>
+                )}
+
+                {/* Sync Status Dot */}
+                {!holiday && !reminder && <EventSyncStatusDot event={event} size="xs" className="shrink-0 ml-0.5" />}
               </div>
             )
           })}
-
-          {/* "+# more" expand button */}
-          {!isExpanded && overflow > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              fullWidth
-              align="between"
-              className="pl-1.5 pr-1 py-0.5 min-h-[28px] mt-0.5 rounded text-body-sm font-bold text-casa-gold hover:text-amber-700 hover:bg-casa-gold/15 transition-all group/more cursor-pointer"
-              onClick={e => {
-                e.stopPropagation()
-                onToggleExpand()
-              }}
-              title={`Show all ${events.length} events for ${format(day, 'MMMM d')}`}
-              aria-label={`Show ${overflow} more events`}
-            >
-              <span>+{overflow} more</span>
-              <span className="text-caption opacity-70 group-hover/more:translate-y-0.5 transition-transform" aria-hidden="true">▾</span>
-            </Button>
-          )}
-
-          {/* "− Show less" collapse button */}
-          {isExpanded && overflow > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              fullWidth
-              align="between"
-              className="pl-1.5 pr-1 py-0.5 min-h-[28px] mt-1 rounded text-caption font-bold text-casa-muted hover:text-casa-navy hover:bg-casa-divider/50 transition-all group/less cursor-pointer"
-              onClick={e => {
-                e.stopPropagation()
-                onToggleExpand()
-              }}
-              title="Collapse to 3 events"
-              aria-label="Collapse to 3 events"
-            >
-              <span>− Show less</span>
-              <span className="text-caption opacity-70 group-hover/less:-translate-y-0.5 transition-transform" aria-hidden="true">▴</span>
-            </Button>
-          )}
         </div>
       </div>
 
@@ -394,8 +395,6 @@ interface MonthSectionProps {
   visibleMembers: string[]
   activeEventId: string | null
   openPopoverKey: string | null
-  expandedDayKeys: Set<string>
-  onToggleExpand: (dayKey: string) => void
   onOpenPopover: (dayKey: string) => void
   onClosePopover: () => void
   onDrillIn: (day: Date) => void
@@ -416,8 +415,6 @@ function MonthSection({
   visibleMembers,
   activeEventId,
   openPopoverKey,
-  expandedDayKeys,
-  onToggleExpand,
   onOpenPopover,
   onClosePopover,
   onDrillIn,
@@ -488,9 +485,9 @@ function MonthSection({
               events={dayEvents}
               isCurrentMonth={isSameMonth(day, monthDate)}
               isPopoverOpen={openPopoverKey === key}
-              isExpanded={expandedDayKeys.has(key)}
+              isExpanded={false}
               activeEventId={activeEventId}
-              onToggleExpand={() => onToggleExpand(key)}
+              onToggleExpand={() => {}}
               onOpen={() => onOpenPopover(key)}
               onClose={onClosePopover}
               onDrillIn={onDrillIn}
@@ -529,21 +526,11 @@ export default function MonthView() {
   })
 
   const [openPopoverKey, setOpenPopoverKey] = useState<string | null>(null)
-  const [expandedDayKeys, setExpandedDayKeys] = useState<Set<string>>(new Set())
   const [folioPopover, setFolioPopover] = useState<{ open: boolean; start: Date } | null>(null)
 
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const isProgrammaticScroll = useRef(false)
   const lastObservedMonth = useRef<string>(format(selectedDate, 'yyyy-MM'))
-
-  const toggleDayExpanded = useCallback((dayKey: string) => {
-    setExpandedDayKeys(prev => {
-      const next = new Set(prev)
-      if (next.has(dayKey)) next.delete(dayKey)
-      else next.add(dayKey)
-      return next
-    })
-  }, [])
 
   const quickCreateGesture = useCalendarQuickCreateGesture<Date>({
     resolveStart: (day) => {
@@ -725,8 +712,6 @@ export default function MonthView() {
             visibleMembers={visibleMembers}
             activeEventId={activeEventId}
             openPopoverKey={openPopoverKey}
-            expandedDayKeys={expandedDayKeys}
-            onToggleExpand={toggleDayExpanded}
             onOpenPopover={setOpenPopoverKey}
             onClosePopover={() => setOpenPopoverKey(null)}
             onDrillIn={drillIntoDay}

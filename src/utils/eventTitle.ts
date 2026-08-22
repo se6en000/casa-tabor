@@ -7,6 +7,24 @@ export function cleanEventTitle(title: string): string {
 }
 
 /**
+ * Compresses verbose boilerplate in event titles for tight visual contexts
+ * (Month View pills, compact Week View blocks) without losing meaning or names.
+ */
+export function formatGlanceTitle(title: string): string {
+  if (!title) return ''
+  let cleaned = cleanEventTitle(title)
+  cleaned = cleaned
+    .replace(/^Drop off\s+([A-Za-z0-9\s]+?)\s+@\s+/i, '$1 @ ')
+    .replace(/^Pick up\s+([A-Za-z0-9\s]+?)\s+@\s+/i, 'Pick up $1 @ ')
+    .replace(/\bAppointment for\b/gi, '')
+    .replace(/\bAppointment\b/gi, 'Apt')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  return cleaned
+}
+
+/**
  * Detects birthday events for festive card theming. Trusts the enrichment
  * category first (source of truth going forward); falls back to a title
  * keyword match so existing events created before category enrichment still
