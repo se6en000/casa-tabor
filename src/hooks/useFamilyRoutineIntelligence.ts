@@ -770,20 +770,20 @@ export function useFamilyRoutineIntelligence(now: Date = new Date()): FamilyRout
   }, [todayDepartures])
 
   const isMorningActionActive = useMemo(() => {
-    if (decimalTime < 6.0 || decimalTime >= 9.5) return false
+    if (decimalTime < 6.0 || decimalTime >= 8.5) return false
     if (!hasTodayDepartures) return false
     return !allTodayDeparturesCompleted
   }, [decimalTime, hasTodayDepartures, allTodayDeparturesCompleted])
 
   const phase: FamilyRoutineIntelligence['phase'] = useMemo(() => {
     if (decimalTime >= 17.5 && decimalTime < 23.0) return 'evening_prep'
-    if (decimalTime >= 6.0 && decimalTime < 9.5) {
+    if (decimalTime >= 6.0 && decimalTime < 8.5) {
       if (hasTodayDepartures && allTodayDeparturesCompleted) {
         return 'daytime_whereabouts'
       }
       return 'morning_action'
     }
-    if (decimalTime >= 9.5 && decimalTime < 17.5) return 'daytime_whereabouts'
+    if (decimalTime >= 8.5 && decimalTime < 17.5) return 'daytime_whereabouts'
     return 'rest'
   }, [decimalTime, hasTodayDepartures, allTodayDeparturesCompleted])
 

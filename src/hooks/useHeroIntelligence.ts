@@ -238,10 +238,24 @@ export function useHeroIntelligence(
       return 'tomorrow_readiness'
     }
 
-    // 2. Weekday Morning Launchpad (6:00 AM – 9:15 AM)
+    // 2. Imminent Event Transit / Live Appointment Spotlight (Takes Top Priority)
+    // Active whenever any hard event (e.g. 6:30 AM workout, 7:30 PM dinner) is in departure window, starting within 45m, or underway.
+    const isImminentUrgent =
+      imminentEvent &&
+      !imminentEvent.all_day &&
+      ((minutesUntilLeave !== null && minutesUntilLeave <= 45 && minutesUntilNext !== null && minutesUntilNext > -180) ||
+        (minutesUntilNext !== null && minutesUntilNext <= 45 && minutesUntilNext > -180) ||
+        isEventUnderway)
+
+    if (isImminentUrgent) {
+      return 'imminent_transit'
+    }
+
+    // 3. Weekday Morning Launchpad (6:00 AM – 8:30 AM on school days)
+    // Strictly stops once all school drop-offs are completed OR when past 8:30 AM
     if (
       decimalTime >= 6.0 &&
-      decimalTime < 9.25 &&
+      decimalTime < 8.5 &&
       routineIntel.isTodaySchoolDay &&
       routineIntel.hasTodayDepartures &&
       !routineIntel.allTodayDeparturesCompleted
@@ -249,28 +263,17 @@ export function useHeroIntelligence(
       return 'morning_launchpad'
     }
 
-    // 3. Imminent Event Transit Spotlight (Within 45m of travel departure or event start)
-    const isImminentUrgent =
-      imminentEvent &&
-      !imminentEvent.all_day &&
-      ((minutesUntilLeave !== null && minutesUntilLeave <= 45) ||
-        (minutesUntilNext !== null && minutesUntilNext <= 45 && minutesUntilNext > -180))
-
-    if (isImminentUrgent) {
-      return 'imminent_transit'
-    }
-
-    // 4. Weekend Flow & Household Rhythm (9:00 AM – 8:00 PM on weekends)
+    // 4. Weekend Flow & Household Rhythm (6:00 AM – 8:00 PM on weekends when no imminent event)
     if (routineIntel.isTodayWeekend && decimalTime < 20.0) {
       return 'weekend_flow'
     }
 
-    // 5. Weekday Daytime Logistics (9:15 AM – 5:30 PM on school/work days)
-    if (!routineIntel.isTodayWeekend && decimalTime >= 9.25 && decimalTime < 17.5) {
+    // 5. Weekday Daytime Logistics (After morning drop-offs / 8:30 AM – 5:30 PM)
+    if (!routineIntel.isTodayWeekend && decimalTime < 17.5) {
       return 'daytime_logistics'
     }
 
-    // 6. Evening Wind-down & Tomorrow Prep (Evening 5:30 PM+ or Night)
+    // 6. Evening Wind-down & Tomorrow Readiness (Evening 5:30 PM+ or Night when no live event)
     return 'tomorrow_readiness'
   }, [
     manualView,
@@ -282,6 +285,7 @@ export function useHeroIntelligence(
     imminentEvent,
     minutesUntilLeave,
     minutesUntilNext,
+    isEventUnderway,
   ])
 
   return {
