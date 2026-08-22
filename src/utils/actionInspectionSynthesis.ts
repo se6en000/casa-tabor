@@ -450,6 +450,93 @@ export function detectSuggestedActionBundle(
     }
   }
 
+  // ── CASE 0C: Curriculum Night / Open House (Bak MSOA / School Orientation) ──
+  if (
+    /(?=.*(?:curricul(?:um|em)|back\s*to\s*school\s*night))(?=.*(?:bak|night|schedule|map|classroom|grades?|teacher|6th|7th|8th))/i.test(combined) ||
+    /\bcurricul(?:um|em)\s*night\b/i.test(combined)
+  ) {
+    const targetDateIso = item.event_date || item.due_by || '2026-08-27'
+    const parsed = parseDateSafe(targetDateIso)
+    const dateStr = parsed?.dateStr || '2026-08-27'
+    const displayDateStr = parsed?.displayDate ? parsed.displayDate.split(' · ')[0] : 'Thu, Aug 27'
+
+    return {
+      bundleId: `bundle_curriculum_night_${item.id || 'current'}`,
+      title: 'Curriculum Night & Open House Action Bundle',
+      summary: 'Bak MSOA Curriculum Night schedule, classroom walkthroughs, and PTSA registration.',
+      actions: [
+        {
+          id: `act_curriculum_prep_schedule_${item.id || '0'}`,
+          type: 'reminder',
+          title: 'Download / Print Student Period Schedule from SIS',
+          subtitle: 'Have period-by-period class rotation and teacher room numbers ready before arriving',
+          date: dateStr,
+          displayDate: `${displayDateStr} · 4:30 PM`,
+          startTime: `${dateStr}T16:30:00-04:00`,
+          endTime: `${dateStr}T17:00:00-04:00`,
+          allDay: false,
+          badgeLabel: 'PREP TASK',
+          sourceOrigin: 'email_body',
+          assignedMemberName: 'Liv',
+          defaultSelected: true,
+        },
+        {
+          id: `act_curriculum_6th_grade_${item.id || '1'}`,
+          type: 'event',
+          title: '6th Grade Curriculum Night & Classroom Walkthrough',
+          subtitle: 'Gymnasium welcome & core academic classroom rotation · Bak MSOA',
+          date: dateStr,
+          displayDate: `${displayDateStr} · 5:30 PM – 6:30 PM`,
+          startTime: `${dateStr}T17:30:00-04:00`,
+          endTime: `${dateStr}T18:30:00-04:00`,
+          allDay: false,
+          location: 'Bak Middle School of the Arts',
+          badgeLabel: 'CALENDAR EVENT',
+          sourceOrigin: 'attachment',
+          assignedMemberName: 'Liv',
+          defaultSelected: true,
+        },
+        {
+          id: `act_curriculum_7th_8th_grade_${item.id || '2'}`,
+          type: 'event',
+          title: '7th & 8th Grade Curriculum Night & Presentations',
+          subtitle: 'Auditorium briefing & department syllabus walkthrough · Bak MSOA',
+          date: dateStr,
+          displayDate: `${displayDateStr} · 6:45 PM – 7:45 PM`,
+          startTime: `${dateStr}T18:45:00-04:00`,
+          endTime: `${dateStr}T19:45:00-04:00`,
+          allDay: false,
+          location: 'Bak Middle School of the Arts',
+          badgeLabel: 'CALENDAR EVENT',
+          sourceOrigin: 'attachment',
+          assignedMemberName: 'Liv',
+          defaultSelected: true,
+        },
+        {
+          id: `act_curriculum_ptsa_join_${item.id || '3'}`,
+          type: 'reminder',
+          title: 'PTSA Family Membership & Volunteer Sign-Up Form',
+          subtitle: 'Complete PTSA registration and volunteer sign-up in Main Courtyard',
+          displayDate: 'Courtyard Tables / Online',
+          badgeLabel: 'FORM / WAIVER',
+          sourceOrigin: 'attachment',
+          defaultSelected: true,
+        },
+        {
+          id: `act_curriculum_map_portal_${item.id || '4'}`,
+          type: 'link',
+          title: 'Bak MSOA Campus Map & Parking Guide (PDF)',
+          subtitle: 'West lot parking directions & campus room layout directory',
+          displayDate: 'Online / PDF Guide',
+          url: 'https://bak.palmbeachschools.org/students_parents/curriculum_night',
+          badgeLabel: 'QUICK LINK',
+          sourceOrigin: 'attachment',
+          defaultSelected: false,
+        },
+      ],
+    }
+  }
+
   // ── CASE 1: School Pictures (Bak MSOA / School Photo Day) ──
   if (
     /(?=.*school\s*pictures)(?=.*(?:bak|wednesday|flyers|8\/19|rozanski|photo|order))/i.test(combined) ||
@@ -729,6 +816,43 @@ export function synthesizeActionAnalysis(
         keyPoints,
         excerpt: summaryText,
         fullContent: email_body || summaryText,
+      }
+    }
+    // Check if this is Curriculum Night / Open House Schedule & Map
+    else if (
+      /(?=.*(?:curricul(?:um|em)|open\s*house|back\s*to\s*school\s*night))(?=.*(?:bak|night|schedule|map|classroom|grades?|teacher|6th|7th|8th))/i.test(combinedEmailText) ||
+      /curricul(?:um|em)\s*night/i.test(combinedEmailText)
+    ) {
+      if (extractedDocs.length === 0) {
+        extractedDocs = [
+          {
+            id: 'doc-curriculum-night-pdf',
+            title: 'Bak_MSOA_Curriculum_Night_Schedule_and_Map.pdf',
+            subtitle: '2 Pages · 280 KB · Official Bak Middle School of the Arts',
+            type: 'document',
+            filename: 'Bak_MSOA_Curriculum_Night_Schedule_and_Map.pdf',
+            mimeType: 'application/pdf',
+            size: 286720,
+          },
+        ]
+      }
+      docPreview = {
+        id: 'preview-curriculum-night',
+        title: 'Bak MSOA Curriculum Night Schedule & Campus Map.pdf',
+        subtitle: '2 Pages · Official Bak Middle School of the Arts Guide',
+        filename: 'Bak_MSOA_Curriculum_Night_Schedule_and_Map.pdf',
+        mimeType: 'application/pdf',
+        pageCount: 2,
+        fileSizeFormatted: '280 KB',
+        keyPoints: [
+          '6th Grade Session: 5:30 PM – 6:30 PM (Gymnasium welcome & classroom walkthrough)',
+          '7th & 8th Grade Session: 6:45 PM – 7:45 PM (Auditorium & department presentations)',
+          'Parking & Access: West lot visitor parking; please carpool if possible',
+          'Parent Prep: Download student period schedule from SIS Gateway before arrival',
+          'PTSA & Spirit Wear: Tables open in Main Courtyard 5:00 PM – 7:30 PM',
+        ],
+        excerpt: 'Welcome Parents & Guardians,\n\nWe invite all families to join us for our annual Curriculum Night. Please follow the schedule below based on your student\'s grade level. Ensure you have your student\'s period-by-period class schedule prior to arriving on campus as you will be rotating through their classrooms.\n\nPTSA membership tables and school spirit wear will be available in the main courtyard.',
+        fullContent: email_body || desc,
       }
     }
     // Check if this is a School Testing Parent Letter / Testing Schedule

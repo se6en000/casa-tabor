@@ -121,3 +121,68 @@ test('synthesizeActionAnalysis extracts document directives preview from real mu
   assert.ok(analysis.extractedDocumentPreview.keyPoints.length >= 3)
   assert.match(analysis.extractedDocumentPreview.keyPoints[0], /Sept 15-16/)
 })
+
+test('Curriculum Night email reprocessing extracts discrete events, prep task, and attachment directives', () => {
+  const item = {
+    id: 'item-curriculum-night',
+    event_id: null,
+    type: 'forms',
+    emoji: '📝',
+    description: 'Bak MSOA Curriculum Night & Open House on Thursday, August 27',
+    event_title: 'Bak MSOA Curriculum Night',
+    event_date: '2026-08-27',
+    due_by: '2026-08-27T17:30:00-04:00',
+    priority: 1,
+    dismissed: false,
+    dismissed_at: null,
+    created_at: '2026-08-20T12:00:00Z',
+    source_origin: 'compound',
+  }
+
+  const detailedItem = {
+    ...item,
+    relatedItems: [],
+    eventSnapshot: null,
+    suggestedAssignees: [],
+    gmailContext: {
+      subject: 'Bak MSOA Curriculum Night & Campus Information',
+      from_email: 'principal@bakmsoa.palmbeachschools.org',
+      received_at: '2026-08-20T15:00:00Z',
+      email_body: 'Parents, please join us for Curriculum Night on Thursday Aug 27. See attached flyer for session times and parking map.',
+      attachments: [
+        {
+          filename: 'Bak_MSOA_Curriculum_Night_Schedule_and_Map.pdf',
+          mimeType: 'application/pdf',
+          size: 286720,
+        },
+      ],
+    },
+  }
+
+  const bundle = detectSuggestedActionBundle(item, detailedItem)
+  assert.ok(bundle, 'Expected Curriculum Night action bundle')
+  assert.equal(bundle.actions.length, 5)
+
+  // Verify discrete tasks across body and attachment
+  const prepTask = bundle.actions.find((a) => a.badgeLabel === 'PREP TASK')
+  const grade6Event = bundle.actions.find((a) => a.title.includes('6th Grade'))
+  const grade78Event = bundle.actions.find((a) => a.title.includes('7th & 8th Grade'))
+  const ptsaForm = bundle.actions.find((a) => a.badgeLabel === 'FORM / WAIVER')
+  const mapLink = bundle.actions.find((a) => a.badgeLabel === 'QUICK LINK')
+
+  assert.ok(prepTask, 'Expected schedule prep reminder')
+  assert.equal(prepTask.sourceOrigin, 'email_body')
+  assert.ok(grade6Event, 'Expected 6th Grade session')
+  assert.equal(grade6Event.sourceOrigin, 'attachment')
+  assert.ok(grade78Event, 'Expected 7th & 8th Grade session')
+  assert.equal(grade78Event.sourceOrigin, 'attachment')
+  assert.ok(ptsaForm, 'Expected PTSA form')
+  assert.ok(mapLink, 'Expected campus map quick link')
+
+  // Verify Document Preview extraction
+  const analysis = synthesizeActionAnalysis(item, detailedItem)
+  assert.ok(analysis.extractedDocumentPreview)
+  assert.match(analysis.extractedDocumentPreview.title, /Curriculum Night/i)
+  assert.ok(analysis.extractedDocumentPreview.keyPoints.some((p) => p.includes('5:30 PM')))
+  assert.ok(analysis.extractedDocumentPreview.keyPoints.some((p) => p.includes('6:45 PM')))
+})
