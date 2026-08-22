@@ -187,8 +187,8 @@ export default function ActionInspectionSidecar({
 
   // Dynamic Synthesis Engine
   const analysis = useMemo(() => {
-    return synthesizeActionAnalysis(activeItem, detailedItem)
-  }, [activeItem, detailedItem])
+    return synthesizeActionAnalysis(activeItem, detailedItem, siblingItems)
+  }, [activeItem, detailedItem, siblingItems])
 
   const senderDomain = useMemo(() => {
     if (analysis.senderEmail.includes('@')) {
@@ -931,6 +931,21 @@ export default function ActionInspectionSidecar({
                                   >
                                     {act.badgeLabel || (isReminder ? 'PREP TASK' : 'CALENDAR EVENT')}
                                   </span>
+
+                                  {act.sourceOrigin && (
+                                    <span
+                                      className={cn(
+                                        'text-3xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border',
+                                        act.sourceOrigin === 'attachment'
+                                          ? 'bg-purple-100/90 text-purple-900 border-purple-300'
+                                          : act.sourceOrigin === 'compound'
+                                          ? 'bg-emerald-100/90 text-emerald-950 border-emerald-300'
+                                          : 'bg-slate-100 text-slate-800 border-slate-200'
+                                      )}
+                                    >
+                                      {act.sourceOrigin === 'attachment' ? 'From Attachment' : act.sourceOrigin === 'compound' ? 'Email & Attachment' : 'From Email'}
+                                    </span>
+                                  )}
 
                                   <span className="text-caption font-bold text-casa-navy">
                                     {act.displayDate}

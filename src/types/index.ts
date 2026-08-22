@@ -309,6 +309,7 @@ export interface PrepItem {
   last_snoozed_at?: string | null
   is_user_labeled?: boolean | null
   cluster_id?: string | null
+  source_origin?: 'email_body' | 'attachment' | 'compound' | null
 }
 
 /**

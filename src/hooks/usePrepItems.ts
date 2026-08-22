@@ -222,11 +222,20 @@ export function useDownvotePrepItem() {
   }
 }
 
+export interface PrepItemGmailAttachment {
+  filename: string
+  mimeType: string
+  size: number
+  attachmentId?: string | null
+}
+
 export interface PrepItemGmailContext {
   subject: string | null
   from_email: string | null
   received_at: string | null
   email_body: string | null
+  attachments?: PrepItemGmailAttachment[] | null
+  extracted_document_summary?: string | null
 }
 
 export interface PrepItemEventSnapshot {
@@ -280,7 +289,7 @@ export function usePrepItemDetails(item: PrepItem | null) {
           if (UUID_RE.test(memberId)) {
             const { data } = await supabase
               .from('gmail_processed_messages')
-              .select('subject, from_email, received_at, email_body')
+              .select('subject, from_email, received_at, email_body, attachments, extracted_document_summary')
               .eq('family_member_id', memberId)
               .eq('gmail_message_id', messageId)
               .maybeSingle()
@@ -290,7 +299,7 @@ export function usePrepItemDetails(item: PrepItem | null) {
           if (!gmailContext) {
             const { data } = await supabase
               .from('gmail_processed_messages')
-              .select('subject, from_email, received_at, email_body')
+              .select('subject, from_email, received_at, email_body, attachments, extracted_document_summary')
               .eq('gmail_message_id', messageId)
               .limit(1)
               .maybeSingle()

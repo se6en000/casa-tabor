@@ -21,7 +21,7 @@ test('scanner canonicalizes normalized mail before candidate classification and 
   assert.match(scanner, /from\('canonical_inbox_emails'\)/)
   assert.match(scanner, /eq\('canonical_email_id', canonicalEmail\.id\)/)
   assert.match(scanner, /duplicate delivery of canonical inbox email/)
-  assert.match(scanner, /const searchText = `\$\{details\.subject\}\\n\$\{details\.snippet\}\\n\$\{details\.body\}`/)
+  assert.match(scanner, /const searchText = `\$\{details\.subject\}\\n\$\{details\.snippet\}\\n\$\{details\.body\}/)
 })
 
 test('scanner keeps the canonical email link on every terminal processed-message outcome', () => {

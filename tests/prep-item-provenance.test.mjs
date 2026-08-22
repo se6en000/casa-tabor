@@ -29,7 +29,7 @@ test('usePrepItemDetails is a real query, not a stub', () => {
 test('gmail source_ref is parsed into memberId/messageId to fetch the real email body', () => {
   assert.match(prepHooks, /\/\^gmail:\(\[\^:\]\+\):\(\.\+\)\$\//)
   assert.match(prepHooks, /from\('gmail_processed_messages'\)/)
-  assert.match(prepHooks, /select\('subject, from_email, received_at, email_body'\)/)
+  assert.match(prepHooks, /select\('subject, from_email, received_at, email_body/)
 })
 
 test('calendar_ai items fetch a linked event snapshot for validation context', () => {

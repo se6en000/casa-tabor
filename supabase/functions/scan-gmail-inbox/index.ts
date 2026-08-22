@@ -215,6 +215,65 @@ async function getMessageDetails(msgId: string, accessToken: string) {
   }
 }
 
+async function fetchGmailAttachment(msgId: string, attachmentId: string, accessToken: string): Promise<string | null> {
+  try {
+    const res = await gmailFetch(`/users/me/messages/${msgId}/attachments/${attachmentId}`, accessToken)
+    if (!res.ok) return null
+    const data = await res.json()
+    if (!data.data) return null
+    return String(data.data).replace(/-/g, '+').replace(/_/g, '/')
+  } catch {
+    return null
+  }
+}
+
+async function extractAttachmentDirectives(
+  attachmentBase64: string,
+  mimeType: string,
+  filename: string,
+  llmConfig: { provider?: string; model?: string; api_key: string },
+  usage?: UsageAccumulator,
+): Promise<string | null> {
+  try {
+    const model = 'gemini-2.5-flash'
+    const res = await providerFetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${llmConfig.api_key}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            {
+              inlineData: {
+                mimeType: mimeType.includes('pdf') ? 'application/pdf' : mimeType,
+                data: attachmentBase64,
+              },
+            },
+            {
+              text: `You are analyzing an attached document or flyer ("${filename}") for a household family assistant.
+Extract all key directives, schedules, testing dates, permission slips, digital waiver requirements, equipment needs, or parent action items.
+Provide a concise plain-text summary with bullet points:
+- Key Dates & Times: [list exact dates & times]
+- Required Forms / Waivers / Fees: [list any required actions]
+- Important Rules / Equipment: [list required or prohibited items]
+- Plain Text Excerpt: [brief 2-3 paragraph excerpt of the most important content]`,
+            },
+          ],
+        }],
+        generationConfig: { maxOutputTokens: 800, temperature: 0.1 },
+      }),
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    if (usage) {
+      usage.inputTokens += toNonNegativeInt(data?.usageMetadata?.promptTokenCount)
+      usage.outputTokens += toNonNegativeInt(data?.usageMetadata?.candidatesTokenCount)
+    }
+    return data.candidates?.[0]?.content?.parts?.[0]?.text ?? null
+  } catch {
+    return null
+  }
+}
+
 // ── Token refresh ─────────────────────────────────────────────────
 
 async function refreshToken(rt: string, clientId: string, clientSecret: string) {
@@ -327,6 +386,7 @@ export interface InboxActionItem {
   vendor?: string
   transaction_id?: string
   transaction_status?: string
+  source_origin?: 'email_body' | 'attachment' | 'compound'
 }
 
 async function classifyEmail(
@@ -338,6 +398,7 @@ async function classifyEmail(
   llmConfig: { provider?: string; model?: string; api_key: string },
   matchingRules: HouseholdCaptureRule[] = [],
   usage?: UsageAccumulator,
+  extractedDocumentSummary?: string | null,
 ): Promise<EmailIntent | null> {
   const emailDate = date ? new Date(date) : new Date()
   const emailDateIso = !isNaN(emailDate.getTime()) ? emailDate.toISOString() : new Date().toISOString()
@@ -345,15 +406,18 @@ async function classifyEmail(
   const rulesBlock = matchingRules.length > 0
     ? `\nHOUSEHOLD LEARNED RULES FOR THIS SENDER:\n${matchingRules.map(r => `- [${r.pattern_type}: ${r.pattern_value}] ${r.rule_directive}`).join('\n')}\n`
     : ''
+  const documentDirectivesBlock = extractedDocumentSummary
+    ? `\nEXTRACTED DOCUMENT DIRECTIVES & SCHEDULE (From Attached PDF/Flyer):\n${extractedDocumentSummary}\n`
+    : ''
 
   const prompt = `You are the inbox classifier for a family calendar app.
 EMAIL SENT DATE: ${emailDateFormatted} (Header: ${date || emailDateIso})
 Family members: ${familyMembers.map(m => `${m.name} (${m.role})`).join(', ')}
-${rulesBlock}
-Classify this email. Note: An email may contain ONE or MULTIPLE distinct family events/dates (for example: School Pictures, Grade 6 Open House, and Grades 7 & 8 Open House).
+${rulesBlock}${documentDirectivesBlock}
+Classify this email. Note: An email may contain ONE or MULTIPLE distinct family events/dates (for example: School Pictures, Grade 6 Open House, and Grades 7 & 8 Open House, or milestones described in the attached flyer).
 
 CRITICAL DATE ANCHORING:
-- All relative dates/times in the email body (such as "today", "tonight", "this morning", "this afternoon", "tomorrow", "this Friday", "next week") MUST be resolved relative to the EMAIL SENT DATE (${emailDateFormatted}), NEVER relative to the current scan date.
+- All relative dates/times in the email body or attachments (such as "today", "tonight", "this morning", "this afternoon", "tomorrow", "this Friday", "next week") MUST be resolved relative to the EMAIL SENT DATE (${emailDateFormatted}), NEVER relative to the current scan date.
 - If an email sent on ${emailDateFormatted} mentions an event "today at 3pm", its start_datetime must be on ${emailDateFormatted} (e.g. ${emailDateFormatted}T15:00:00).
 - If an email was sent in the past and describes something that already occurred on that day, accurately record that past date.
 
@@ -421,7 +485,8 @@ async function extractInboxActions(
   llmConfig: { provider?: string; model?: string; api_key: string },
   matchingRules: HouseholdCaptureRule[] = [],
   usage?: UsageAccumulator,
-  attachments: { filename: string; mimeType: string; size: number }[] = [],
+  attachments: { filename: string; mimeType: string; size: number; attachmentId?: string | null }[] = [],
+  extractedDocumentSummary?: string | null,
 ): Promise<InboxActionItem[]> {
   const emailDate = date ? new Date(date) : new Date()
   const emailDateIso = !isNaN(emailDate.getTime()) ? emailDate.toISOString() : new Date().toISOString()
@@ -432,11 +497,14 @@ async function extractInboxActions(
   const attachmentsBlock = attachments.length > 0
     ? `\nATTACHED DOCUMENTS & FLYERS:\n${attachments.map(a => `- ${a.filename} (${a.mimeType}, ${Math.round(a.size / 1024)} KB)`).join('\n')}\n`
     : ''
+  const documentDirectivesBlock = extractedDocumentSummary
+    ? `\nEXTRACTED DOCUMENT DIRECTIVES & SCHEDULE (From Attached PDF/Flyer):\n${extractedDocumentSummary}\n`
+    : ''
 
   const prompt = `You extract actionable family inbox tasks and decompose attached school/event directives into discrete milestones.
 EMAIL SENT DATE: ${emailDateFormatted} (Header: ${date || emailDateIso})
 Family members: ${familyMembers.map(m => `${m.name} (${m.role})`).join(', ')}
-${rulesBlock}${attachmentsBlock}
+${rulesBlock}${attachmentsBlock}${documentDirectivesBlock}
 Return ALL tasks that require family follow-up:
 - forms (permission slips, waivers, bus transportation registrations like 'Register Your Ride', Student ID pickup, PTO forms, Adopt-A-Class)
 - payment (bill, statement, tuition, dues, membership fees, school donations/supplies)
@@ -447,11 +515,11 @@ Return ALL tasks that require family follow-up:
 - general (school dismissal adjustments, teacher notes requiring parent action)
 
 CRITICAL DATE ANCHORING:
-- All relative dates/times in the email body (such as "today", "tonight", "this morning", "this afternoon", "tomorrow", "due today", "arriving today between 2pm-6pm", "arriving Monday") MUST be resolved relative to the EMAIL SENT DATE (${emailDateFormatted}), NEVER relative to the current scan date.
+- All relative dates/times in the email body or attachments (such as "today", "tonight", "this morning", "this afternoon", "tomorrow", "due today", "arriving today between 2pm-6pm", "arriving Monday") MUST be resolved relative to the EMAIL SENT DATE (${emailDateFormatted}), NEVER relative to the current scan date.
 - If an email sent on ${emailDateFormatted} mentions a delivery "today by 3:44pm", its due_datetime must be on ${emailDateFormatted} (e.g. ${emailDateFormatted}T15:44:00), NOT today's date.
 - If an email mentions an order confirmation or delivery arriving on a FUTURE date (such as "arriving Monday, Aug 24"), set due_datetime to that future date (e.g. 2026-08-24T18:00:00Z) and set transaction_status to "confirmed" or "shipped". NEVER set transaction_status to "delivered" when the arrival is scheduled for a future date.
 - Set transaction_status to "delivered" ONLY when the email explicitly confirms past drop-off (e.g. "Your package has been delivered", "Delivered on front porch").
-- When an email is a school newsletter or sports league announcement, extract each distinct form, fee, registration, or required supply item.
+- When an email or attachment is a school newsletter, testing letter, permission packet, or sports announcement, extract each distinct form, fee, testing milestone, or required equipment item as its own separate action item.
 
 EMAIL:
 Subject: ${subject}
@@ -471,7 +539,8 @@ Respond ONLY JSON:
       "priority": 1,
       "vendor": "merchant or service name, or empty",
       "transaction_id": "exact transaction identifier, or empty",
-      "transaction_status": "confirmed|payment|shipped|out_for_delivery|delivered|problem, or empty"
+      "transaction_status": "confirmed|payment|shipped|out_for_delivery|delivered|problem, or empty",
+      "source_origin": "email_body|attachment|compound"
     }
   ]
 }
@@ -1088,11 +1157,41 @@ async function handleGmailScan(req: Request): Promise<Response> {
           continue
         }
 
+        // ── Multimodal Document Extraction for Attachments ─────────
+        let extractedDocumentSummary: string | null = null
+        if (details.attachments && details.attachments.length > 0 && llm.api_key) {
+          const docDirectives: string[] = []
+          for (const att of details.attachments.slice(0, 2)) {
+            if (att.attachmentId && att.size <= 5 * 1024 * 1024) {
+              const isPdf = att.mimeType?.toLowerCase().includes('pdf') || att.filename.toLowerCase().endsWith('.pdf')
+              const isImage = att.mimeType?.toLowerCase().startsWith('image/') || /\.(jpe?g|png|webp)$/i.test(att.filename)
+              if (isPdf || isImage) {
+                const base64 = await fetchGmailAttachment(msgId, att.attachmentId, accessToken)
+                if (base64) {
+                  const summary = await extractAttachmentDirectives(
+                    base64,
+                    isPdf ? 'application/pdf' : att.mimeType,
+                    att.filename,
+                    llm,
+                    llmUsage,
+                  )
+                  if (summary) {
+                    docDirectives.push(`[Attachment: ${att.filename}]\n${summary}`)
+                  }
+                }
+              }
+            }
+          }
+          if (docDirectives.length > 0) {
+            extractedDocumentSummary = docDirectives.join('\n\n')
+          }
+        }
+
         const matchingRules = filterMatchingCaptureRules(learnedRules, details.from, details.subject)
-        const searchText = `${details.subject}\n${details.snippet}\n${details.body}`
+        const searchText = `${details.subject}\n${details.snippet}\n${details.body}\n${extractedDocumentSummary || ''}`
         const isTravel = TRAVEL_KEYWORDS.test(searchText) || TRAVEL_SENDER_DOMAINS.some(d => details.from.toLowerCase().includes(d))
         const isCalendar = CALENDAR_KEYWORDS.test(searchText) || matchingRules.length > 0
-        const isActionCandidate = ACTION_KEYWORDS.test(searchText) || matchingRules.length > 0
+        const isActionCandidate = ACTION_KEYWORDS.test(searchText) || matchingRules.length > 0 || !!extractedDocumentSummary
         const familyEvidenceCandidate = classifyFamilyEvidenceCandidate({
           subject: details.subject,
           from: details.from,
@@ -1108,6 +1207,8 @@ async function handleGmailScan(req: Request): Promise<Response> {
             from_email: details.from,
             received_at: details.date ? new Date(details.date).toISOString() : null,
             intent: 'skip', skipped_reason: 'no keywords',
+            attachments: details.attachments || [],
+            extracted_document_summary: extractedDocumentSummary,
             is_user_labeled: false,
           }, { onConflict: 'family_member_id,gmail_message_id' })
           skipped++
@@ -1125,9 +1226,21 @@ async function handleGmailScan(req: Request): Promise<Response> {
             llm,
             matchingRules,
             llmUsage,
+            extractedDocumentSummary,
           ),
           (isActionCandidate || isUserLabeled) && !backfillFamilyEvidenceOnly
-            ? extractInboxActions(details.subject, details.from, details.date, details.body, familyMembers, llm, matchingRules, llmUsage, details.attachments || [])
+            ? extractInboxActions(
+                details.subject,
+                details.from,
+                details.date,
+                details.body,
+                familyMembers,
+                llm,
+                matchingRules,
+                llmUsage,
+                details.attachments || [],
+                extractedDocumentSummary,
+              )
             : Promise.resolve([] as InboxActionItem[]),
         ])
 
@@ -1383,6 +1496,8 @@ async function handleGmailScan(req: Request): Promise<Response> {
               from_email: details.from, received_at: emailReceivedAt,
               intent: 'update_event', updated_event_id: matchedEvent.id,
               email_body: details.body.slice(0, 8000),
+              attachments: details.attachments || [],
+              extracted_document_summary: extractedDocumentSummary,
               is_user_labeled: isUserLabeled,
             }, { onConflict: 'family_member_id,gmail_message_id' })
             updated++
@@ -1446,6 +1561,8 @@ async function handleGmailScan(req: Request): Promise<Response> {
           skipped_reason: skippedReason,
           created_event_id: null,
           email_body: details.body.slice(0, 8000),
+          attachments: details.attachments || [],
+          extracted_document_summary: extractedDocumentSummary,
           is_user_labeled: isUserLabeled,
           training_source: isUserLabeled ? 'gmail_label_casa' : null,
         }, { onConflict: 'family_member_id,gmail_message_id' })

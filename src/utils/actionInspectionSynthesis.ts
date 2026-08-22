@@ -17,7 +17,8 @@ export interface SuggestedActionItem {
   location?: string | null
   assignedMemberName?: string | null
   assignedMemberId?: string | null
-  badgeLabel?: string // e.g. "PREP TASK", "CALENDAR EVENT", "QUICK LINK"
+  sourceOrigin?: 'email_body' | 'attachment' | 'compound'
+  badgeLabel?: string // e.g. "PREP TASK", "CALENDAR EVENT", "QUICK LINK", "FORM / WAIVER"
   url?: string
   defaultSelected: boolean
 }
@@ -242,17 +243,64 @@ export function extractSmartActionTitle(
  * Detects compound multi-action bundles from email communications, decomposing
  * messages into distinct preparation tasks, calendar events, and portal links.
  */
-export function detectSuggestedActionBundle(item: PrepItem | null): SuggestedActionBundle | null {
+export function detectSuggestedActionBundle(
+  item: PrepItem | null,
+  detailedItem?: PrepItemDetails | null,
+  siblingItems?: PrepItem[],
+): SuggestedActionBundle | null {
   if (!item || isDeliveryTransitItem(item)) return null
   const desc = (item.description || item.event_title || '').trim()
   const title = (item.event_title || '').trim()
-  const combined = `${title} ${desc}`
+  const documentSummary = detailedItem?.gmailContext?.extracted_document_summary || ''
+  const combined = `${title} ${desc} ${documentSummary}`
 
   if (/\b(inhome delivery|delivery window|grocery delivery|package delivery|courier delivery)\b/i.test(combined)) {
     return null
   }
 
-  // ── CASE 0: i-Ready Math & Reading Diagnostic Assessments ──
+  // ── CASE 0: Dynamic Sibling Action Bundle (Multiple discrete items from same email / cluster) ──
+  if (siblingItems && siblingItems.length > 0) {
+    const allItems = [item, ...siblingItems.filter((s) => s.id !== item.id)]
+    const actions: SuggestedActionItem[] = allItems.map((actItem, idx) => {
+      const parsed = parseDateSafe(actItem.event_date || actItem.due_by)
+      const smart = extractSmartActionTitle(actItem)
+      const actionTitle = smart || (!isGenericNewsletterOrFragment(actItem.event_title) ? actItem.event_title : null) || actItem.description || 'Action Item'
+      const origin: 'email_body' | 'attachment' | 'compound' =
+        (actItem.source_origin as any) ||
+        (actItem.description.toLowerCase().includes('attached') || actItem.description.toLowerCase().includes('pdf') || actItem.description.toLowerCase().includes('flyer') ? 'attachment' : 'email_body')
+      const isEvt = actItem.type === 'event' || actItem.type === 'event_suggestion' || actItem.source_pattern_key === 'event_suggestion'
+      const isPay = actItem.type === 'payment'
+      const isForm = actItem.type === 'forms' || /waiver|form|permission|slip|registration/i.test(actItem.description)
+      const type: SuggestedActionType = isEvt ? 'event' : isPay ? 'payment' : 'reminder'
+      const badgeLabel = isEvt ? 'CALENDAR EVENT' : isPay ? 'PAYMENT' : isForm ? 'FORM / WAIVER' : 'PREP TASK'
+
+      return {
+        id: actItem.id || `act_cluster_${idx}`,
+        type,
+        title: actionTitle,
+        subtitle: actItem.description,
+        date: parsed?.dateStr,
+        displayDate: parsed?.displayDate || 'Upcoming',
+        startTime: parsed?.startIso,
+        endTime: parsed?.endIso,
+        allDay: parsed?.isAllDay ?? true,
+        location: actItem.attention_vendor || null,
+        assignedMemberName: actItem.assigned_to || null,
+        sourceOrigin: origin,
+        badgeLabel,
+        defaultSelected: true,
+      }
+    })
+
+    return {
+      bundleId: `bundle_cluster_${item.cluster_id || item.id}`,
+      title: `${item.event_title || 'Email'} Action Plan (${actions.length} Actions)`,
+      summary: `Discrete actions and milestones extracted from email communication and attachments.`,
+      actions,
+    }
+  }
+
+  // ── CASE 0A: i-Ready Math & Reading Diagnostic Assessments ──
   if (/\b(?:i[-_ ]ready|iready)\b/i.test(combined) && /\b(?:math|reading|diagnostic|assessment|testing|test)\b/i.test(combined)) {
     const isMath = /\bmath(?:ematics)?\b/i.test(combined)
     const isReading = /\b(?:reading|ela|literacy)\b/i.test(combined)
@@ -572,9 +620,13 @@ export function detectSuggestedActionBundle(item: PrepItem | null): SuggestedAct
 /**
  * Backward-compatible helper to detect a primary suggested calendar event.
  */
-export function detectSuggestedEvent(item: PrepItem | null): SuggestedEventPlan | null {
+export function detectSuggestedEvent(
+  item: PrepItem | null,
+  detailedItem?: PrepItemDetails | null,
+  siblingItems?: PrepItem[],
+): SuggestedEventPlan | null {
   if (!item || isDeliveryTransitItem(item)) return null
-  const bundle = detectSuggestedActionBundle(item)
+  const bundle = detectSuggestedActionBundle(item, detailedItem, siblingItems)
   if (bundle) {
     const eventAction = bundle.actions.find((a) => a.type === 'event') || bundle.actions[0]
     if (eventAction) {
@@ -617,21 +669,22 @@ export function detectSuggestedEvent(item: PrepItem | null): SuggestedEventPlan 
 
 export function synthesizeActionAnalysis(
   item: PrepItem | null,
-  detailedItem?: PrepItemDetails | null
+  detailedItem?: PrepItemDetails | null,
+  siblingItems?: PrepItem[],
 ): ActionAnalysis {
   const desc = (item?.description || item?.event_title || '').trim()
   const amount = extractAmount(desc) || (item ? extractAmount(item.event_title) : null)
   const accountEnding = extractAccountNumber(desc)
-  const suggestedEvent = detectSuggestedEvent(item)
-  const suggestedActionBundle = detectSuggestedActionBundle(item)
+  const suggestedEvent = detectSuggestedEvent(item, detailedItem, siblingItems)
+  const suggestedActionBundle = detectSuggestedActionBundle(item, detailedItem, siblingItems)
 
   // 1. If real Gmail context was fetched from database
   if (detailedItem?.gmailContext && detailedItem.gmailContext.subject) {
-    const { subject, from_email, received_at, email_body } = detailedItem.gmailContext
+    const { subject, from_email, received_at, email_body, extracted_document_summary } = detailedItem.gmailContext
     const fromName = from_email ? from_email.split('<')[0].replace(/"/g, '').trim() : 'Email Notification'
     const smartSubject = extractSmartActionTitle(item)
     const cleanSubject = smartSubject || (!isGenericNewsletterOrFragment(subject) ? subject : null) || (!isGenericNewsletterOrFragment(item?.event_title) ? item?.event_title : null) || desc || 'Email Action Item'
-    const combinedEmailText = `${subject} ${email_body || ''} ${desc}`
+    const combinedEmailText = `${subject} ${email_body || ''} ${desc} ${extracted_document_summary || ''}`
     
     // Extract real attachments if present
     const rawAttachments = (detailedItem.gmailContext as any).attachments || []
@@ -650,8 +703,36 @@ export function synthesizeActionAnalysis(
       }))
     }
 
+    // If real Gemini multimodal document extraction exists in database
+    if (extracted_document_summary) {
+      const summaryText = extracted_document_summary
+      const rawPoints = summaryText
+        .split('\n')
+        .map((l: string) => l.trim())
+        .filter((l: string) => (l.startsWith('-') || l.startsWith('*')) && l.length > 4)
+        .map((l: string) => l.replace(/^[-*]\s*/, ''))
+
+      const keyPoints = rawPoints.length > 0
+        ? rawPoints.slice(0, 8)
+        : [
+            'Directives extracted from attached document/flyer',
+            'Parsed and structured by Gemini Multimodal OCR',
+          ]
+
+      const firstDoc = extractedDocs[0]
+      docPreview = {
+        id: `preview-att-${item?.id || '0'}`,
+        title: firstDoc?.title || 'Attached Document Directives',
+        subtitle: `${firstDoc?.subtitle || 'Official Attachment'} · Gemini Multimodal Extracted`,
+        filename: firstDoc?.filename || 'Document.pdf',
+        mimeType: firstDoc?.mimeType || 'application/pdf',
+        keyPoints,
+        excerpt: summaryText,
+        fullContent: email_body || summaryText,
+      }
+    }
     // Check if this is a School Testing Parent Letter / Testing Schedule
-    if (
+    else if (
       /(?=.*(?:testing|assessment|parent letter|fall[- ]?winter))(?=.*(?:3rd|4th|5th|fast|star|diagnostic|letter|grades?))/i.test(combinedEmailText) ||
       /testing for 3rd[-–]5th/i.test(combinedEmailText) ||
       /fall[- ]?winter testing/i.test(combinedEmailText)
