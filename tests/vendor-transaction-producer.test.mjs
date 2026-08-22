@@ -351,4 +351,99 @@ test('future-tense delivery strings never trigger delivered stage', async () => 
   assert.equal(transactionStage(delivered), 'delivered')
 })
 
+test('Jiffy order shipment with claims policy disclaimer consolidates into delivery transit and creates 0 actionable items and 0 calendar suggestions', async () => {
+  const { splitActionableAndTransitItems } = await import('../src/utils/needsYouFeed.ts')
+  const { isDeliveryTransitItem, buildDeliveryTransitItem, consolidateTransitItems } = await import('../src/utils/vendorTransactions.ts')
+  const { detectSuggestedActionBundle, detectSuggestedEvent } = await import('../src/utils/actionInspectionSynthesis.ts')
+
+  // Real items produced from Jiffy order #2541442349 email
+  const shipmentItem = {
+    id: 'jiffy-shipment-item-1',
+    type: 'delivery',
+    event_title: "Shipment for Jacob's Cart #50 (Order #2541442349)",
+    description: 'Your Jiffy order #2541442349 has shipped and is expected to arrive on Monday, Aug 24. Claims for missing, wrong, or damaged items must be made within 3 days of final delivery (by Thursday, Aug 27).',
+    event_date: '2026-08-24T18:00:00+00:00',
+    due_by: '2026-08-24T18:00:00+00:00',
+    created_at: '2026-08-22T15:33:00+00:00',
+    source_type: 'gmail',
+    source_ref: 'gmail:household:191a8e9929f12345',
+    attention_thread_key: 'transaction:jiffy-com:2541442349',
+    attention_vendor: 'Jiffy.com',
+    attention_stage: 'shipped',
+    dismissed: false,
+    priority: 1,
+  }
+
+  const claimPolicyItem = {
+    id: 'jiffy-claim-item-2',
+    type: 'deadline',
+    event_title: "Claims for missing, wrong, or damaged items from order #2541442349 must be made within 3 days of final delivery (by Thursday, Aug 27).",
+    description: 'Claims for missing, wrong, or damaged items from order #2541442349 must be made within 3 days of final delivery (by Thursday, Aug 27).',
+    event_date: '2026-08-27T18:00:00+00:00',
+    due_by: '2026-08-27T18:00:00+00:00',
+    created_at: '2026-08-22T15:33:00+00:00',
+    source_type: 'gmail',
+    source_ref: 'gmail:household:191a8e9929f12345',
+    attention_thread_key: 'transaction:jiffy-com:2541442349',
+    attention_vendor: 'Jiffy.com',
+    attention_stage: 'shipped',
+    dismissed: false,
+    priority: 1,
+  }
+
+  // 1. Both items must be recognized as delivery transit items
+  assert.equal(isDeliveryTransitItem(shipmentItem), true)
+  assert.equal(isDeliveryTransitItem(claimPolicyItem), true)
+
+  // 2. Feed splitting must yield 0 Action Queue tasks and 1 consolidated delivery transit item
+  const { actionableItems, deliveryTransitItems } = splitActionableAndTransitItems([shipmentItem, claimPolicyItem])
+  assert.equal(actionableItems.length, 0, 'No order policy items should leak into Executive Action Queue')
+  assert.equal(deliveryTransitItems.length, 1, 'Both items must consolidate into 1 delivery entity')
+
+  const delivery = deliveryTransitItems[0]
+  assert.equal(delivery.vendor, 'Jiffy.com')
+  assert.equal(delivery.stage, 'shipped')
+  assert.equal(delivery.threadKey, 'transaction:jiffy-com:2541442349')
+  assert.match(delivery.etaDisplay, /Mon(?:day)?, Aug 24/i)
+  assert.equal(delivery.updateHistory?.length, 2)
+  assert.match(delivery.policyDisclaimer || '', /claims for missing/i)
+
+  // 3. Neither item should generate false calendar events or suggested action plans
+  assert.equal(detectSuggestedEvent(shipmentItem), null)
+  assert.equal(detectSuggestedEvent(claimPolicyItem), null)
+  assert.equal(detectSuggestedActionBundle(shipmentItem), null)
+  assert.equal(detectSuggestedActionBundle(claimPolicyItem), null)
+})
+
+test('compound school spirit order cleanly splits into 1 delivery in Inbound Manifest and 1 calendar event with 0 Action Queue leakage', async () => {
+  const { splitActionableAndTransitItems } = await import('../src/utils/needsYouFeed.ts')
+  const { isDeliveryTransitItem } = await import('../src/utils/vendorTransactions.ts')
+
+  const spiritShirtPackage = {
+    id: 'school-spirit-pkg-1',
+    type: 'delivery',
+    event_title: "Bak MSOA Spirit Wear Order #9912",
+    description: 'Emerald Green Spirit Shirt has shipped and is arriving Thursday, Aug 27. Return window is 14 days.',
+    event_date: '2026-08-27T18:00:00+00:00',
+    due_by: '2026-08-27T18:00:00+00:00',
+    created_at: '2026-08-22T12:00:00+00:00',
+    source_type: 'gmail',
+    source_ref: 'gmail:household:spirit1234',
+    attention_thread_key: 'transaction:bak-msoa:9912',
+    attention_vendor: 'Bak MSOA Spirit Wear',
+    attention_stage: 'shipped',
+    agency_level: 0,
+    policy_disclaimer: 'Return window is 14 days.',
+    dismissed: false,
+    priority: 1,
+  }
+
+  assert.equal(isDeliveryTransitItem(spiritShirtPackage), true)
+
+  const { actionableItems, deliveryTransitItems } = splitActionableAndTransitItems([spiritShirtPackage])
+  assert.equal(actionableItems.length, 0)
+  assert.equal(deliveryTransitItems.length, 1)
+  assert.equal(deliveryTransitItems[0].policyDisclaimer, 'Return window is 14 days.')
+})
+
 

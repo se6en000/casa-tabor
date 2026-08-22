@@ -254,7 +254,7 @@ export function detectSuggestedActionBundle(
   const documentSummary = detailedItem?.gmailContext?.extracted_document_summary || ''
   const combined = `${title} ${desc} ${documentSummary}`
 
-  if (/\b(inhome delivery|delivery window|grocery delivery|package delivery|courier delivery)\b/i.test(combined)) {
+  if (/\b(inhome delivery|delivery window|grocery delivery|package delivery|courier delivery|claims? for (?:missing|wrong|damaged|lost)|claims? must be made within|return window|return (?:by|eligible)|final delivery|shipment for)\b/i.test(combined)) {
     return null
   }
 
@@ -735,6 +735,11 @@ export function detectSuggestedEvent(
 
   // Fallback to explicit due date if present
   if (item?.due_by) {
+    const combined = `${item.event_title || ''} ${item.description || ''}`
+    if (/\b(?:claims? for (?:missing|wrong|damaged|lost)|claims? must be made within|return window|return (?:by|eligible)|final delivery|shipment for)\b/i.test(combined)) {
+      return null
+    }
+
     const parsed = parseDateSafe(item.due_by)
     if (parsed) {
       const smartTitle = extractSmartActionTitle(item)

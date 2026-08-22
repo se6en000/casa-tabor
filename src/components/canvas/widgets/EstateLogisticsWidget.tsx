@@ -11,6 +11,7 @@ import {
   X,
   Sparkles,
   ChevronRight,
+  ShieldAlert,
 } from 'lucide-react'
 import { Button, IconButton } from '../../ui'
 import { cn } from '../../../utils/cn'
@@ -381,6 +382,13 @@ export default function EstateLogisticsWidget({
                         </div>
                       )}
                     </div>
+
+                    {heroItem.policyDisclaimer && (
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-casa-surface border border-casa-border/80 text-3xs font-medium text-casa-muted max-w-full">
+                        <ShieldAlert size={11} className="text-casa-gold shrink-0" />
+                        <span className="truncate">{heroItem.policyDisclaimer}</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* 4-Stage Stepper Rail */}

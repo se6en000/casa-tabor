@@ -703,6 +703,12 @@ export default function ActionInspectionSidecar({
                     <span>Estimated Arrival: <strong className="text-casa-navy">{deliveryTransit.etaDisplay}</strong></span>
                   </div>
                 )}
+                {deliveryTransit.policyDisclaimer && (
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-100/70 border border-sky-200/90 text-2xs font-medium text-sky-950 max-w-full">
+                    <ShieldAlert size={12} className="text-sky-700 shrink-0" />
+                    <span>{deliveryTransit.policyDisclaimer}</span>
+                  </div>
+                )}
               </div>
 
               {/* 4-Stage Stepper Rail */}

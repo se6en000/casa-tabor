@@ -383,9 +383,11 @@ export interface InboxActionItem {
   due_datetime?: string // ISO8601 or empty
   assigned_member?: string
   priority?: 1 | 2 | 3
+  agency_level?: number // 0 = passive tracking/logistics, 1 = low, 2 = standard, 3 = urgent
   vendor?: string
   transaction_id?: string
   transaction_status?: string
+  policy_disclaimer?: string
   source_origin?: 'email_body' | 'attachment' | 'compound'
 }
 
@@ -520,6 +522,7 @@ CRITICAL DATE ANCHORING:
 - If an email mentions an order confirmation or delivery arriving on a FUTURE date (such as "arriving Monday, Aug 24"), set due_datetime to that future date (e.g. 2026-08-24T18:00:00Z) and set transaction_status to "confirmed" or "shipped". NEVER set transaction_status to "delivered" when the arrival is scheduled for a future date.
 - Set transaction_status to "delivered" ONLY when the email explicitly confirms past drop-off (e.g. "Your package has been delivered", "Delivered on front porch").
 - When an email or attachment is a school newsletter, testing letter, permission packet, or sports announcement, extract each distinct form, fee, testing milestone, or required equipment item as its own separate action item.
+- Set agency_level = 0 for passive package tracking, merchant delivery updates, and standard return/claim policy disclaimers. Set agency_level = 1, 2, or 3 for active tasks requiring human signature, payment, or decision.
 
 EMAIL:
 Subject: ${subject}
@@ -537,9 +540,11 @@ Respond ONLY JSON:
       "due_datetime": "ISO8601 with timezone offset or empty",
       "assigned_member": "family member name or empty",
       "priority": 1,
+      "agency_level": 0,
       "vendor": "merchant or service name, or empty",
       "transaction_id": "exact transaction identifier, or empty",
       "transaction_status": "confirmed|payment|shipped|out_for_delivery|delivered|problem, or empty",
+      "policy_disclaimer": "standard return/claim policy footnote if present, or empty",
       "source_origin": "email_body|attachment|compound"
     }
   ]
@@ -569,9 +574,31 @@ function transactionDescriptor(action: InboxActionItem): string | null {
 }
 
 function transactionIdentity(action: InboxActionItem, sourceRef: string) {
-  const vendor = action.vendor?.trim()
+  let vendor = action.vendor?.trim() || null
+  let transactionId = action.transaction_id?.trim() || null
+  const combined = `${action.title ?? ''} ${action.description}`
+
+  if (!vendor) {
+    if (/jiffy/i.test(combined)) vendor = 'Jiffy.com'
+    else if (/walmart/i.test(combined)) vendor = 'Walmart'
+    else if (/amazon/i.test(combined)) vendor = 'Amazon'
+    else if (/hello\s*fresh/i.test(combined)) vendor = 'HelloFresh'
+    else if (/target/i.test(combined)) vendor = 'Target'
+    else if (/instacart/i.test(combined)) vendor = 'Instacart'
+    else if (/fedex/i.test(combined)) vendor = 'FedEx'
+    else if (/ups/i.test(combined)) vendor = 'UPS'
+    else if (/usps/i.test(combined)) vendor = 'USPS'
+  }
+
+  if (!transactionId) {
+    const orderMatch = combined.match(/\b(?:order|cart)\s*(?:number|no\.?|id|#)\s*[:#]?\s*#?([a-z0-9-]*\d{4,}[a-z0-9-]*)\b/i)
+      || combined.match(/#(\d{6,})\b/)
+    if (orderMatch) {
+      transactionId = orderMatch[1]
+    }
+  }
+
   if (!vendor) return { threadKey: null, vendor: null, stage: null }
-  const transactionId = action.transaction_id?.trim()
   const descriptor = transactionDescriptor(action)
   const vendorKey = normalizeTransactionKeyPart(vendor)
   const transactionKey = transactionId
@@ -663,6 +690,8 @@ async function persistInboxActions(
       attention_stage: transaction.stage,
       is_user_labeled: isUserLabeled,
       cluster_id: clusterId,
+      agency_level: a.type === 'delivery' || transaction.threadKey ? (a.agency_level ?? 0) : (a.agency_level ?? 1),
+      policy_disclaimer: a.policy_disclaimer || null,
     }
 
     // Idempotent state progression: If transaction thread already exists in active prep items, update it
@@ -708,7 +737,7 @@ async function persistInboxActions(
     } catch {}
 
     // Fallback without newly added schema columns if migration pending
-    const { is_user_labeled: _u, cluster_id: _c, ...fallbackRow } = rowData
+    const { is_user_labeled: _u, cluster_id: _c, agency_level: _al, policy_disclaimer: _pd, ...fallbackRow } = rowData
     const { data: fbData, error: fbErr } = await sb.from('prep_items').insert([fallbackRow]).select('id')
     if (!fbErr && fbData) {
       persistedCount += fbData.length

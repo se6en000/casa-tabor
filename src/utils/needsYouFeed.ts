@@ -80,7 +80,7 @@ export function splitActionableAndTransitItems(items: PrepItem[]): {
   const rawTransitItems: DeliveryTransitItem[] = []
 
   for (const item of items) {
-    if (isDeliveryTransitItem(item)) {
+    if (item.agency_level === 0 || isDeliveryTransitItem(item)) {
       rawTransitItems.push(buildDeliveryTransitItem(item))
     } else {
       actionableItems.push(item)

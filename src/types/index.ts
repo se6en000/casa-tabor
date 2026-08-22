@@ -310,6 +310,8 @@ export interface PrepItem {
   is_user_labeled?: boolean | null
   cluster_id?: string | null
   source_origin?: 'email_body' | 'attachment' | 'compound' | null
+  agency_level?: number | null // 0 = passive/logistics, 1 = low-priority review, 2 = standard action, 3 = urgent action
+  policy_disclaimer?: string | null
 }
 
 /**
@@ -361,6 +363,7 @@ export interface DeliveryTransitItem {
   isPerishable?: boolean
   occurredAt: string
   rawItem: PrepItem
+  policyDisclaimer?: string | null
   updateHistory?: DeliveryUpdateEvent[]
 }
 

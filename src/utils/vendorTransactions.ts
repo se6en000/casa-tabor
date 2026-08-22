@@ -74,14 +74,18 @@ export function transactionStage(item: PrepItem): DeliveryTransitStage | null {
   const title = (item.event_title ?? '').toLowerCase()
   const combined = `${title} ${desc}`.toLowerCase()
 
-  // 1. Problem / Cancellation exceptions
+  // Policy disclaimer check: e.g. "Claims for missing, wrong, or damaged items must be made within 3 days..."
+  const isClaimPolicyDisclaimer = /\b(?:claims? for (?:missing|wrong|damaged|lost)|claims? must be made within|return (?:window|policy)|in case of missing)\b/i.test(combined)
+
+  // 1. Problem / Cancellation exceptions (ignoring standard policy disclaimers unless an actual exception occurred)
   if (item.type === 'cancellation') return 'problem'
-  if (/\b(cancelled|canceled|failed|problem|issue|missing|damaged|exception)\b/.test(combined)) return 'problem'
+  if (!isClaimPolicyDisclaimer && /\b(cancelled|canceled|failed|problem|issue|missing|damaged|exception)\b/.test(combined)) return 'problem'
+  if (isClaimPolicyDisclaimer && /\b(package was (?:damaged|lost)|item is damaged|reported damaged|delivery failed)\b/.test(combined)) return 'problem'
 
   // 2. Pure Payment notifications (where type === 'payment' or description is purely about payment/charge)
   const isPurePayment = item.type === 'payment' || (
     /\b(payment method|temporary hold|charged for|final charge|receipt for payment|order amount)\b/.test(desc) &&
-    !/\b(has been delivered|was delivered|out for delivery)\b/.test(desc)
+    !/\b(has been delivered|was delivered|out for delivery|shipped)\b/.test(desc)
   )
   if (isPurePayment) return 'payment'
 
@@ -98,7 +102,7 @@ export function transactionStage(item: PrepItem): DeliveryTransitStage | null {
   if (item.attention_stage === 'out_for_delivery') return 'out_for_delivery'
 
   // 5. Shipped / In transit
-  if (/\bshipped\b|\bpackage on the way\b|\btransit\b|\bdispatched\b|\bcarrier tracking\b/.test(combined)) return 'shipped'
+  if (/\bshipped\b|\bpackage on the way\b|\btransit\b|\bdispatched\b|\bcarrier tracking\b|\bshipment for\b/.test(combined)) return 'shipped'
   if (item.attention_stage === 'shipped') return 'shipped'
 
   // 6. Confirmed / Order Placed / Future Delivery notice
@@ -260,6 +264,7 @@ export function mergeDeliveryTransitItem(
   const mergedCost = incoming.cost || existing.cost || null
   const mergedSummary = mergeItemSummary(existing.itemSummary, incoming.itemSummary)
   const mergedEta = mergeEtaDisplay(existing.etaDisplay, incoming.etaDisplay)
+  const mergedPolicy = incoming.policyDisclaimer || existing.policyDisclaimer || null
 
   const newerDate =
     new Date(incoming.occurredAt).getTime() >= new Date(existing.occurredAt).getTime()
@@ -309,6 +314,7 @@ export function mergeDeliveryTransitItem(
     etaDisplay: mergedEta,
     isPerishable: existing.isPerishable || incoming.isPerishable,
     occurredAt: newerDate,
+    policyDisclaimer: mergedPolicy,
     updateHistory: uniqueHistory,
   }
 }
@@ -389,10 +395,19 @@ export function isDeliveryTransitItem(item: PrepItem): boolean {
   if (item.type === 'delivery') return true
   if (isPerishableDelivery(item)) return true
   const text = `${item.event_title ?? ''} ${item.description}`.toLowerCase()
-  if (/\b(inhome delivery|delivery window|grocery delivery|package delivery|courier delivery|out for delivery|shipped|en route)\b/.test(text)) {
+  if (/\b(inhome delivery|delivery window|grocery delivery|package delivery|courier delivery|out for delivery|shipped|en route|shipment for)\b/.test(text)) {
     return true
   }
+
   const vendor = resolveVendorName(item)
+  const hasOrderNumber = Boolean(orderId(item))
+
+  // Return/claim policy disclaimers & shipping notices on orders
+  const isOrderPolicyOrClaimNotice = /\b(?:claims? for (?:missing|wrong|damaged|lost)|claims? must be made within|return window|return (?:by|eligible)|final delivery|shipment for)\b/i.test(text)
+  if (isOrderPolicyOrClaimNotice && (vendor !== 'Parcel' || hasOrderNumber)) {
+    return true
+  }
+
   // Vendor payment/pricing/charge notifications (e.g. "final charge for your Walmart order", "temporary hold is $138.65")
   if (vendor !== 'Parcel' && (
     item.type === 'payment' ||
@@ -400,9 +415,20 @@ export function isDeliveryTransitItem(item: PrepItem): boolean {
   )) {
     return true
   }
+
   const stage = transactionStage(item)
   if (stage === 'shipped' || stage === 'out_for_delivery' || stage === 'delivered') return true
-  if (vendor !== 'Parcel' && (item.type === 'delivery' || item.attention_stage === 'confirmed' || item.attention_stage === 'shipped')) return true
+  if ((vendor !== 'Parcel' || hasOrderNumber) && (
+    item.type === 'delivery' ||
+    item.attention_stage === 'confirmed' ||
+    item.attention_stage === 'shipped' ||
+    item.attention_stage === 'out_for_delivery' ||
+    item.attention_stage === 'delivered' ||
+    stage === 'confirmed' ||
+    stage === 'problem'
+  )) {
+    return true
+  }
   return false
 }
 
@@ -585,9 +611,13 @@ export function buildDeliveryTransitItem(item: PrepItem, now?: Date): DeliveryTr
   const cost = extractAmount(fullText)
 
   // Extract ETA or time window
-  const etaMatch = fullText.match(/(?:(?:arrive|expected|arriving|delivery)\s+(?:today\s+)?by\s+[\d:apm\s–-]+|today\s+by\s+[\d:apm]+|(?:delivery\s+)?window\s+(?:is\s+)?[\d:apm\s–-]+|between\s+[\d:apm\s–-]+|today\s+between\s+[\d:apm\s–-]+|expected\s+today)/i)
-  const rawEta = etaMatch ? etaMatch[0].trim() : (item.due_by ? new Date(item.due_by).toLocaleDateString() : null)
-  const etaDisplay = now ? formatDeliveryEta(rawEta, targetDate, effectiveStage, now) : rawEta
+  const etaMatch = fullText.match(/(?:(?:arrive|expected|arriving|delivery)\s+(?:today\s+)?by\s+[\d:apm\s–-]+|today\s+by\s+[\d:apm]+|(?:delivery\s+)?window\s+(?:is\s+)?[\d:apm\s–-]+|between\s+[\d:apm\s–-]+|today\s+between\s+[\d:apm\s–-]+|expected\s+today|(?:expected\s+to\s+arrive|arriving|expected|arrive)\s+(?:on\s+)?[A-Za-z]+,?\s+[A-Za-z]+\s+\d+)/i)
+  const rawEta = etaMatch ? etaMatch[0].trim() : (targetDate ? format(targetDate, 'EEE, MMM d') : (item.due_by ? new Date(item.due_by).toLocaleDateString() : null))
+  const etaDisplay = now ? formatDeliveryEta(rawEta, targetDate, effectiveStage, now) : (rawEta || (targetDate ? format(targetDate, 'EEE, MMM d') : null))
+
+  // Extract return/claim policy disclaimer if present
+  const policyMatch = fullText.match(/(?:claims? for (?:missing|wrong|damaged|lost)[^.]*|claims? must be made within[^.]*|return window[^.]*|return eligible[^.]*)/i)
+  const policyDisclaimer = item.policy_disclaimer || (policyMatch ? policyMatch[0].trim() : null)
 
   const initialHistory = [
     {
@@ -613,6 +643,7 @@ export function buildDeliveryTransitItem(item: PrepItem, now?: Date): DeliveryTr
     etaDisplay,
     occurredAt: item.created_at,
     rawItem: item,
+    policyDisclaimer,
     updateHistory: initialHistory,
   }
 }
