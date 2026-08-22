@@ -523,7 +523,7 @@ export default function MiddayLogisticsWidget({
                 size="sm"
                 onClick={() => isTomorrowActive && onToggleTomorrowView()}
                 className={cn(
-                  'px-3.5 py-1.5 rounded-full text-caption font-bold transition-all min-h-[36px] flex items-center gap-1.5',
+                  'px-3.5 py-1.5 rounded-full text-caption font-bold transition-all min-h-[44px] flex items-center gap-1.5',
                   !isTomorrowActive
                     ? isNavy
                       ? 'bg-casa-gold text-casa-navy shadow-2xs'
@@ -541,7 +541,7 @@ export default function MiddayLogisticsWidget({
                 size="sm"
                 onClick={() => !isTomorrowActive && onToggleTomorrowView()}
                 className={cn(
-                  'px-3.5 py-1.5 rounded-full text-caption font-bold transition-all min-h-[36px] flex items-center gap-1.5',
+                  'px-3.5 py-1.5 rounded-full text-caption font-bold transition-all min-h-[44px] flex items-center gap-1.5',
                   isTomorrowActive
                     ? isNavy
                       ? 'bg-casa-gold text-casa-navy shadow-2xs'

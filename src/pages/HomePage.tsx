@@ -20,8 +20,8 @@ import SwipeableReminderPill from '../components/shared/SwipeableReminderPill'
 import { usePullToRefresh } from '../hooks/usePullToRefresh'
 import { WeatherIcon } from '../components/shared/WeatherIcon'
 import { LeaveByCard } from '../components/shared/LeaveByCard'
-import TomorrowPrepCard from '../components/home/TomorrowPrepCard'
-import MorningLaunchpadCard from '../components/home/MorningLaunchpadCard'
+import TomorrowPrepWidget from '../components/canvas/widgets/TomorrowPrepWidget'
+import MorningLaunchpadWidget from '../components/canvas/widgets/MorningLaunchpadWidget'
 import { BirthdayCardDecoration } from '../components/shared/BirthdayCardDecoration'
 import { useTravelEta, type TravelEtaResult } from '../hooks/useTravelEta'
 import { useReminderNeedsYouActions } from '../hooks/useReminderNeedsYouActions'
@@ -450,11 +450,11 @@ export default function HomePage() {
           travelEta={heroTravelEta.data}
         />
 
-        {/* ── Active Morning Launchpad (Morning Action 6:00 AM – 9:30 AM, desktop/tablet only) ── */}
-        <MorningLaunchpadCard now={now} className="mt-3 mb-3 hidden lg:block" />
+        {/* ── Active Morning Launchpad (Morning Action 6:00 AM – 8:30 AM, desktop/tablet only) ── */}
+        <MorningLaunchpadWidget now={now} className="mt-3 mb-3 hidden lg:block" />
 
         {/* ── Tomorrow Morning Prep (Contextual evening card 5:30 PM – 11:00 PM, desktop/tablet only) ── */}
-        <TomorrowPrepCard now={now} className="mt-3 mb-3 hidden lg:block" />
+        <TomorrowPrepWidget now={now} className="mt-3 mb-3 hidden lg:block" />
 
         {/* ── Today's timeline — first, front and center ──── */}
         <section className="mt-2">

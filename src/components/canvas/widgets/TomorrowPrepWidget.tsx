@@ -166,7 +166,7 @@ export default function TomorrowPrepWidget({
                 size="sm"
                 onClick={onToggleTodayView}
                 className={cn(
-                  'px-3.5 py-1.5 rounded-full text-caption font-bold transition-all min-h-[36px] flex items-center gap-1.5',
+                  'px-3.5 py-1.5 rounded-full text-caption font-bold transition-all min-h-[44px] flex items-center gap-1.5',
                   isNavy
                     ? 'text-white/60 hover:text-white'
                     : 'text-casa-muted hover:text-casa-navy',
@@ -179,7 +179,7 @@ export default function TomorrowPrepWidget({
                 variant="primary"
                 size="sm"
                 className={cn(
-                  'px-3.5 py-1.5 rounded-full text-caption font-bold transition-all min-h-[36px] flex items-center gap-1.5',
+                  'px-3.5 py-1.5 rounded-full text-caption font-bold transition-all min-h-[44px] flex items-center gap-1.5',
                   isNavy
                     ? 'bg-casa-gold text-casa-navy shadow-2xs'
                     : 'bg-casa-navy text-white shadow-2xs',
