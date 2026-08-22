@@ -233,3 +233,122 @@ test('past out-for-delivery records automatically transition to delivered when e
   assert.equal(isItemInTransit(todayTransit, evaluationDate), true)
 })
 
+test('Jiffy order confirmation with future arrival date (Monday Aug 24) stays In Transit / Scheduled Later and NOT delivered on Saturday Aug 22', async () => {
+  const {
+    buildDeliveryTransitItem,
+    isItemArrivingToday,
+    isItemScheduledLater,
+    isItemDelivered,
+    isItemInTransit,
+    transactionStage,
+    consolidateTransitItems,
+  } = await import('../src/utils/vendorTransactions.ts')
+
+  // Real data structure from the user's screenshot
+  const jiffyConfirmation = {
+    id: 'jiffy-order-confirmation-1',
+    type: 'delivery',
+    event_title: "Jiffy Transfers order confirmation: Jacob's Cart #50 (Order #2541442349)",
+    description: 'Your Jiffy.com order #2541442349 is arriving on Monday, Aug 24. Total charged: $13.71.',
+    event_date: '2026-08-24T18:00:00+00:00',
+    due_by: '2026-08-24T18:00:00+00:00',
+    created_at: '2026-08-22T15:33:00+00:00',
+    source_type: 'gmail',
+    attention_thread_key: 'transaction:jiffy-com:2541442349',
+    attention_vendor: 'Jiffy.com',
+    attention_stage: 'confirmed',
+    dismissed: false,
+    priority: 1,
+  }
+
+  // Evaluated on Saturday, Aug 22, 2026
+  const saturdayNow = new Date('2026-08-22T11:33:00-04:00')
+
+  const stage = transactionStage(jiffyConfirmation)
+  assert.equal(stage, 'confirmed')
+
+  const transitItem = buildDeliveryTransitItem(jiffyConfirmation, saturdayNow)
+
+  assert.equal(transitItem.vendor, 'Jiffy.com')
+  assert.equal(transitItem.cost, '$13.71')
+  assert.equal(transitItem.stage, 'confirmed')
+  assert.equal(isItemDelivered(transitItem, saturdayNow), false)
+  assert.equal(isItemInTransit(transitItem, saturdayNow), true)
+  assert.equal(isItemArrivingToday(transitItem, saturdayNow), false)
+  assert.equal(isItemScheduledLater(transitItem, saturdayNow), true)
+  assert.match(transitItem.etaDisplay, /Mon, Aug 24/i)
+  assert.equal(transitItem.threadKey, 'transaction:jiffy-com:2541442349')
+
+  // Test multi-email progression: Shipping update arrives on Sunday Aug 23
+  const jiffyShipped = {
+    id: 'jiffy-shipped-2',
+    type: 'delivery',
+    event_title: 'Your Jiffy.com order #2541442349 has shipped!',
+    description: 'UPS tracking # 1Z9999999999999999. Estimated delivery: Monday, Aug 24.',
+    event_date: '2026-08-24T18:00:00+00:00',
+    due_by: '2026-08-24T18:00:00+00:00',
+    created_at: '2026-08-23T10:00:00+00:00',
+    source_type: 'gmail',
+    attention_thread_key: 'transaction:jiffy-com:2541442349',
+    attention_vendor: 'Jiffy.com',
+    attention_stage: 'shipped',
+    dismissed: false,
+    priority: 1,
+  }
+
+  const sundayNow = new Date('2026-08-23T10:30:00-04:00')
+  const merged = consolidateTransitItems([
+    buildDeliveryTransitItem(jiffyConfirmation, sundayNow),
+    buildDeliveryTransitItem(jiffyShipped, sundayNow),
+  ])
+
+  assert.equal(merged.length, 1)
+  assert.equal(merged[0].stage, 'shipped')
+  assert.equal(isItemDelivered(merged[0], sundayNow), false)
+  assert.equal(isItemInTransit(merged[0], sundayNow), true)
+  assert.equal(isItemScheduledLater(merged[0], sundayNow), true)
+  assert.equal(merged[0].updateHistory?.length, 2)
+})
+
+test('future-tense delivery strings never trigger delivered stage', async () => {
+  const { transactionStage } = await import('../src/utils/vendorTransactions.ts')
+
+  const future1 = {
+    id: 'f1',
+    event_title: 'Order Status',
+    description: 'Your package will be delivered on Monday, Aug 24.',
+    source_type: 'gmail',
+    created_at: '2026-08-22T10:00:00Z',
+    dismissed: false,
+    priority: 1,
+    type: 'delivery',
+  }
+
+  const future2 = {
+    id: 'f2',
+    event_title: 'Order Update',
+    description: 'Scheduled to be delivered on Wednesday, Aug 26.',
+    source_type: 'gmail',
+    created_at: '2026-08-22T10:00:00Z',
+    dismissed: false,
+    priority: 1,
+    type: 'delivery',
+  }
+
+  const delivered = {
+    id: 'd1',
+    event_title: 'Delivery Confirmation',
+    description: 'Your package has been delivered to front door.',
+    source_type: 'gmail',
+    created_at: '2026-08-22T10:00:00Z',
+    dismissed: false,
+    priority: 1,
+    type: 'delivery',
+  }
+
+  assert.notEqual(transactionStage(future1), 'delivered')
+  assert.notEqual(transactionStage(future2), 'delivered')
+  assert.equal(transactionStage(delivered), 'delivered')
+})
+
+

@@ -93,6 +93,51 @@ export default function CalendarPage() {
     return () => el.removeEventListener('casa:swipe', handler)
   }, [goNext, goPrev, isStacked])
 
+  // Keyboard shortcuts (desktop / kiosk)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+      ) {
+        return
+      }
+
+      if (e.key === 'ArrowLeft' || e.key === 'j') {
+        e.preventDefault()
+        goPrev()
+      } else if (e.key === 'ArrowRight' || e.key === 'k') {
+        e.preventDefault()
+        goNext()
+      } else if (e.key === 't') {
+        e.preventDefault()
+        goToToday()
+      } else if (e.key === '1' || e.key === 'd') {
+        e.preventDefault()
+        setActiveView('today')
+      } else if (e.key === '2' || e.key === 's') {
+        e.preventDefault()
+        setActiveView('stacked')
+      } else if (e.key === '3' || e.key === 'w') {
+        e.preventDefault()
+        setActiveView('week')
+      } else if (e.key === '4' || e.key === 'm') {
+        e.preventDefault()
+        setActiveView('month')
+      } else if (e.key === 'c') {
+        e.preventDefault()
+        setFolioOpen(true)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [goPrev, goNext, setActiveView])
+
   // Slide animation variants
   const variants = {
     enter: (d: number) => ({ x: d === 0 ? 0 : d > 0 ? '100%' : '-100%', opacity: d === 0 ? 0 : 1 }),
@@ -100,32 +145,46 @@ export default function CalendarPage() {
     exit:  (d: number) => ({ x: d === 0 ? 0 : d > 0 ? '-100%' : '100%', opacity: d === 0 ? 0 : 1 }),
   }
 
-  const animKey = `${activeView}-${format(selectedDate, 'yyyy-MM-dd')}`
+  // Keep month view stable during continuous scroll to avoid sliding on every scroll boundary
+  const animKey = isMonth ? 'view-month' : `${activeView}-${format(selectedDate, 'yyyy-MM-dd')}`
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
       {/* Top toolbar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between px-4 sm:px-6 py-2.5 sm:py-3 gap-2 bg-casa-bg border-b border-casa-border/40 shrink-0">
-        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+        <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
           <Button
             onClick={goToToday}
             variant="secondary"
             size="sm"
+            className="shrink-0 font-medium"
           >
             Today
           </Button>
-          {!isStacked && (
-            <>
-              <IconButton onClick={goPrev} aria-label="Previous calendar period" icon={<ChevronLeft size={18} />} />
-              <IconButton onClick={goNext} aria-label="Next calendar period" icon={<ChevronRight size={18} />} />
-            </>
-          )}
-          <h2 className="font-display text-body-lg sm:text-heading text-casa-text ml-1 truncate">
-            {headerLabel}
-          </h2>
+
+          {/* Unified < Period Label > Navigation Capsule */}
+          <div className="flex items-center gap-0.5 sm:gap-1 min-w-0">
+            <IconButton
+              onClick={goPrev}
+              aria-label="Previous calendar period"
+              icon={<ChevronLeft size={18} />}
+              size="sm"
+              className="shrink-0 hover:bg-casa-surface text-casa-text hover:text-casa-gold"
+            />
+            <h2 className="font-display text-body sm:text-heading text-casa-text px-1 sm:px-2 truncate select-none">
+              {headerLabel}
+            </h2>
+            <IconButton
+              onClick={goNext}
+              aria-label="Next calendar period"
+              icon={<ChevronRight size={18} />}
+              size="sm"
+              className="shrink-0 hover:bg-casa-surface text-casa-text hover:text-casa-gold"
+            />
+          </div>
         </div>
 
-        <div className="relative flex items-center gap-2 w-full sm:w-auto shrink-0">
+        <div className="relative flex items-center gap-2 w-full sm:w-auto shrink-0 justify-end sm:justify-start">
           {/* Circle '+' button styled like the switches on the LEFT side */}
           <IconButton
             icon={<Plus size={18} strokeWidth={2.4} />}

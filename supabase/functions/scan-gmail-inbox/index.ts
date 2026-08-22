@@ -447,8 +447,10 @@ Return ALL tasks that require family follow-up:
 - general (school dismissal adjustments, teacher notes requiring parent action)
 
 CRITICAL DATE ANCHORING:
-- All relative dates/times in the email body (such as "today", "tonight", "this morning", "this afternoon", "tomorrow", "due today", "arriving today between 2pm-6pm") MUST be resolved relative to the EMAIL SENT DATE (${emailDateFormatted}), NEVER relative to the current scan date.
+- All relative dates/times in the email body (such as "today", "tonight", "this morning", "this afternoon", "tomorrow", "due today", "arriving today between 2pm-6pm", "arriving Monday") MUST be resolved relative to the EMAIL SENT DATE (${emailDateFormatted}), NEVER relative to the current scan date.
 - If an email sent on ${emailDateFormatted} mentions a delivery "today by 3:44pm", its due_datetime must be on ${emailDateFormatted} (e.g. ${emailDateFormatted}T15:44:00), NOT today's date.
+- If an email mentions an order confirmation or delivery arriving on a FUTURE date (such as "arriving Monday, Aug 24"), set due_datetime to that future date (e.g. 2026-08-24T18:00:00Z) and set transaction_status to "confirmed" or "shipped". NEVER set transaction_status to "delivered" when the arrival is scheduled for a future date.
+- Set transaction_status to "delivered" ONLY when the email explicitly confirms past drop-off (e.g. "Your package has been delivered", "Delivered on front porch").
 - When an email is a school newsletter or sports league announcement, extract each distinct form, fee, registration, or required supply item.
 
 EMAIL:

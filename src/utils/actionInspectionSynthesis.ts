@@ -715,12 +715,29 @@ export function synthesizeActionAnalysis(
       }
     }
 
+    let dynamicUrgency = 'Information received — review at your convenience.'
+    if (item && isDeliveryTransitItem(item)) {
+      dynamicUrgency = item?.due_by
+        ? `Delivery tracking update · Expected ${parseDateSafe(item.due_by)?.displayDate || 'in transit'}.`
+        : 'In-transit shipment tracking update.'
+    } else if (item?.due_by) {
+      const parsedDue = parseDateSafe(item.due_by)
+      const nowStr = new Date().toISOString().slice(0, 10)
+      if (parsedDue?.dateStr === nowStr) {
+        dynamicUrgency = 'Scheduled for today — immediate review recommended.'
+      } else if (parsedDue && parsedDue.dateStr > nowStr) {
+        dynamicUrgency = `Scheduled for ${parsedDue.displayDate} — upcoming.`
+      } else if (parsedDue) {
+        dynamicUrgency = `Past matter (${parsedDue.displayDate}).`
+      }
+    }
+
     return {
       senderLabel: fromName || 'Email Notification',
       senderEmail: from_email || 'notifications@service.com',
       receivedTime: received_at ? new Date(received_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : 'Today',
       subject: cleanSubject,
-      urgency: item?.due_by ? 'Scheduled for today — immediate review recommended.' : 'Information received — review at your convenience.',
+      urgency: dynamicUrgency,
       requiredAction: desc ? `Review: "${desc.length > 90 ? desc.slice(0, 87) + '…' : desc}"` : `Review matter regarding "${cleanSubject}".`,
       householdImpact: amount ? `Transaction amount: ${amount}` : 'Keeps family communications and actions organized.',
       documents: extractedDocs,
@@ -892,12 +909,29 @@ export function synthesizeActionAnalysis(
   const senderName = isGmail ? 'Email Notification' : 'Casa Household Assistant'
   const senderEmail = isGmail ? 'notifications@household.local' : 'assistant@casatabor.local'
 
+  let fallbackUrgency = 'Action queued for household review.'
+  if (item && isDeliveryTransitItem(item)) {
+    fallbackUrgency = item?.due_by
+      ? `Delivery tracking update · Expected ${parseDateSafe(item.due_by)?.displayDate || 'in transit'}.`
+      : 'In-transit shipment tracking update.'
+  } else if (item?.due_by) {
+    const parsedDue = parseDateSafe(item.due_by)
+    const nowStr = new Date().toISOString().slice(0, 10)
+    if (parsedDue?.dateStr === nowStr) {
+      fallbackUrgency = 'Action item due today — immediate review recommended.'
+    } else if (parsedDue && parsedDue.dateStr > nowStr) {
+      fallbackUrgency = `Action scheduled for ${parsedDue.displayDate} — upcoming.`
+    } else if (parsedDue) {
+      fallbackUrgency = `Past matter (${parsedDue.displayDate}).`
+    }
+  }
+
   return {
     senderLabel: senderName,
     senderEmail,
     receivedTime: 'Today',
     subject: derivedSubject,
-    urgency: item?.due_by ? 'Action item due today — immediate review recommended.' : 'Action queued for household review.',
+    urgency: fallbackUrgency,
     requiredAction: desc ? (desc.length > 90 ? desc.slice(0, 87) + '…' : desc) : 'Review and complete household action.',
     householdImpact: amount ? `Transaction amount: ${amount}` : 'Keeps family tasks and household schedule up to date.',
     documents: amount

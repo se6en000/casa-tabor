@@ -1,7 +1,7 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
-  addDays, isSameMonth, isToday,
+  addDays, addMonths, subMonths, isSameMonth, isToday,
 } from 'date-fns'
 import { AnimatePresence, motion } from 'framer-motion'
 import { X, Clock, MapPin, Navigation, Plus } from 'lucide-react'
@@ -14,7 +14,6 @@ import { isHoliday, holidayLabel, HOLIDAY_COLOR, isReminder, isAllDayReminder, R
 import { cleanEventTitle } from '../../utils/eventTitle'
 import { eventOverlapsDay, getEventStartDate } from '../../utils/eventTime'
 import { useCalendarQuickCreateGesture } from '../../hooks/useCalendarQuickCreateGesture'
-import EventDetailPanel from './EventDetailPanel'
 import PalmBeachFolioCard from './PalmBeachFolioCard'
 import { Button, CalendarPill, IconButton } from '../ui'
 import { MemberJewelStack } from '../ui/MemberJewelPill'
@@ -388,16 +387,154 @@ function DayCell({
   )
 }
 
-// ── Main MonthView ────────────────────────────────────────────────────────────
+// ── Single Month Section Component ──────────────────────────────────────────
+
+interface MonthSectionProps {
+  monthDate: Date
+  visibleMembers: string[]
+  activeEventId: string | null
+  openPopoverKey: string | null
+  expandedDayKeys: Set<string>
+  onToggleExpand: (dayKey: string) => void
+  onOpenPopover: (dayKey: string) => void
+  onClosePopover: () => void
+  onDrillIn: (day: Date) => void
+  onQuickAdd: (day: Date) => void
+  onSelectEvent: (event: EventWithDetails) => void
+  quickCreateGesture: {
+    onDoubleClick: (e: React.MouseEvent, day: Date) => void
+  }
+  handleCellTouchStart: (e: React.TouchEvent, day: Date) => void
+  handleCellTouchMove: (e: React.TouchEvent) => void
+  cancelLongPress: () => void
+  handleCellMouseDown: (e: React.MouseEvent, day: Date) => void
+  handleCellContextMenu: (e: React.MouseEvent) => void
+}
+
+function MonthSection({
+  monthDate,
+  visibleMembers,
+  activeEventId,
+  openPopoverKey,
+  expandedDayKeys,
+  onToggleExpand,
+  onOpenPopover,
+  onClosePopover,
+  onDrillIn,
+  onQuickAdd,
+  onSelectEvent,
+  quickCreateGesture,
+  handleCellTouchStart,
+  handleCellTouchMove,
+  cancelLongPress,
+  handleCellMouseDown,
+  handleCellContextMenu,
+}: MonthSectionProps) {
+  const { data: allEvents } = useMonthEvents(monthDate)
+  const monthKey = format(monthDate, 'yyyy-MM')
+
+  const grid = useMemo(() => buildMonthGrid(monthDate), [monthDate])
+
+  const events = useMemo(() => {
+    return (allEvents ?? []).filter(e =>
+      isHoliday(e) ||
+      isReminder(e) ||
+      visibleMembers.length === 0 ||
+      e.members.length === 0 ||
+      e.members.some(m => visibleMembers.includes(m.family_member?.id ?? '')) ||
+      (Boolean(e.source_member_id) && visibleMembers.includes(e.source_member_id!))
+    )
+  }, [allEvents, visibleMembers])
+
+  function eventsForDay(day: Date): EventWithDetails[] {
+    return events.filter(e => eventOverlapsDay(e, day))
+      .sort((a, b) => {
+        const aAllDay = Boolean(a.all_day || isAllDayReminder(a))
+        const bAllDay = Boolean(b.all_day || isAllDayReminder(b))
+        if (aAllDay && !bAllDay) return -1
+        if (!aAllDay && bAllDay) return 1
+        if (aAllDay && bAllDay) {
+          const aIsRem = isReminder(a)
+          const bIsRem = isReminder(b)
+          if (!aIsRem && bIsRem) return -1 // All-Day Events FIRST
+          if (aIsRem && !bIsRem) return 1  // All-Day Reminders SECOND
+          return a.title.localeCompare(b.title)
+        }
+        return getEventStartDate(a).getTime() - getEventStartDate(b).getTime()
+      })
+  }
+
+  return (
+    <div id={`month-${monthKey}`} data-month-key={monthKey} className="month-section border-b-2 border-casa-divider/60">
+      {/* Sticky Month Section Divider */}
+      <div className="sticky top-0 z-20 px-4 sm:px-6 py-2 bg-casa-surface/95 backdrop-blur-xs border-y border-casa-border flex items-center justify-between shadow-2xs">
+        <span className="font-display text-body-lg sm:text-heading text-casa-navy font-bold tracking-tight">
+          {format(monthDate, 'MMMM yyyy')}
+        </span>
+        <span className="text-caption font-semibold text-casa-muted uppercase tracking-wider">
+          {format(monthDate, 'yyyy')}
+        </span>
+      </div>
+
+      {/* Month Days Grid */}
+      <div className="grid grid-cols-7 border-l border-t border-casa-divider">
+        {grid.map(day => {
+          const key = `${monthKey}-${format(day, 'yyyy-MM-dd')}`
+          const dayEvents = eventsForDay(day)
+          return (
+            <DayCell
+              key={key}
+              day={day}
+              events={dayEvents}
+              isCurrentMonth={isSameMonth(day, monthDate)}
+              isPopoverOpen={openPopoverKey === key}
+              isExpanded={expandedDayKeys.has(key)}
+              activeEventId={activeEventId}
+              onToggleExpand={() => onToggleExpand(key)}
+              onOpen={() => onOpenPopover(key)}
+              onClose={onClosePopover}
+              onDrillIn={onDrillIn}
+              onQuickAdd={onQuickAdd}
+              onSelectEvent={onSelectEvent}
+              onTouchStart={e => handleCellTouchStart(e, day)}
+              onTouchMove={handleCellTouchMove}
+              onTouchEnd={cancelLongPress}
+              onMouseDown={e => handleCellMouseDown(e, day)}
+              onMouseUp={cancelLongPress}
+              onContextMenu={handleCellContextMenu}
+              onDoubleClick={(event) => quickCreateGesture.onDoubleClick(event, day)}
+            />
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ── Main Continuous Auto-Scrolling MonthView ──────────────────────────────────
 
 export default function MonthView() {
   const { selectedDate, setSelectedDate, setActiveView, visibleMembers } = useCalendarStore()
   const { selectedSidecarEventId, aiDrawerOpen, sidecarTab, openEventInSidecar } = useAppStore()
-  const { data: allEvents } = useMonthEvents(selectedDate)
+
+  // Manage rolling list of loaded months
+  const [months, setMonths] = useState<Date[]>(() => {
+    const current = startOfMonth(selectedDate)
+    return [
+      subMonths(current, 1),
+      current,
+      addMonths(current, 1),
+      addMonths(current, 2),
+    ]
+  })
+
   const [openPopoverKey, setOpenPopoverKey] = useState<string | null>(null)
-  const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [expandedDayKeys, setExpandedDayKeys] = useState<Set<string>>(new Set())
   const [folioPopover, setFolioPopover] = useState<{ open: boolean; start: Date } | null>(null)
+
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const isProgrammaticScroll = useRef(false)
+  const lastObservedMonth = useRef<string>(format(selectedDate, 'yyyy-MM'))
 
   const toggleDayExpanded = useCallback((dayKey: string) => {
     setExpandedDayKeys(prev => {
@@ -431,7 +568,6 @@ export default function MonthView() {
       lpTimer.current = null
       lpOrigin.current = null
       navigator.vibrate?.(30)
-      // Default to 9 AM for month-view creates (no time slot info available)
       const start = new Date(day)
       start.setHours(9, 0, 0, 0)
       setOpenPopoverKey(null)
@@ -467,50 +603,105 @@ export default function MonthView() {
     e.preventDefault()
   }, [])
 
-  const grid = buildMonthGrid(selectedDate)
-
-  const events = (allEvents ?? []).filter(e =>
-    isHoliday(e) ||
-    isReminder(e) ||
-    visibleMembers.length === 0 ||
-    e.members.length === 0 ||
-    e.members.some(m => visibleMembers.includes(m.family_member?.id ?? '')) ||
-    (Boolean(e.source_member_id) && visibleMembers.includes(e.source_member_id!))
-  )
-
   const activeEventId = aiDrawerOpen && sidecarTab === 'event' ? selectedSidecarEventId : null
-  const selectedEvent = selectedEventId ? (events.find(e => e.id === selectedEventId) ?? null) : null
-
-  function eventsForDay(day: Date): EventWithDetails[] {
-    return events.filter(e => eventOverlapsDay(e, day))
-      .sort((a, b) => {
-        const aAllDay = Boolean(a.all_day || isAllDayReminder(a))
-        const bAllDay = Boolean(b.all_day || isAllDayReminder(b))
-        if (aAllDay && !bAllDay) return -1
-        if (!aAllDay && bAllDay) return 1
-        if (aAllDay && bAllDay) {
-          const aIsRem = isReminder(a)
-          const bIsRem = isReminder(b)
-          if (!aIsRem && bIsRem) return -1 // All-Day Events FIRST
-          if (aIsRem && !bIsRem) return 1  // All-Day Reminders SECOND
-          return a.title.localeCompare(b.title)
-        }
-        return getEventStartDate(a).getTime() - getEventStartDate(b).getTime()
-      })
-  }
 
   function drillIntoDay(day: Date) {
     setSelectedDate(day)
     setActiveView('today')
   }
 
+  // Scroll to a specific month section
+  const scrollToMonth = useCallback((targetDate: Date, behavior: ScrollBehavior = 'smooth') => {
+    const key = format(targetDate, 'yyyy-MM')
+    const el = document.getElementById(`month-${key}`)
+    if (el && scrollContainerRef.current) {
+      isProgrammaticScroll.current = true
+      el.scrollIntoView({ behavior, block: 'start' })
+      setTimeout(() => {
+        isProgrammaticScroll.current = false
+      }, 500)
+    }
+  }, [])
+
+  // Initial scroll into current month on mount
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      scrollToMonth(selectedDate, 'auto')
+    }, 50)
+    return () => clearTimeout(timer)
+  }, [])
+
+  // Handle external selectedDate changes (e.g. user clicked < > in toolbar or Today)
+  useEffect(() => {
+    const currentMonthKey = format(selectedDate, 'yyyy-MM')
+    if (currentMonthKey === lastObservedMonth.current) return
+
+    lastObservedMonth.current = currentMonthKey
+
+    // Ensure selected month is in loaded list
+    const monthExists = months.some(m => format(m, 'yyyy-MM') === currentMonthKey)
+    if (!monthExists) {
+      const cur = startOfMonth(selectedDate)
+      setMonths([
+        subMonths(cur, 1),
+        cur,
+        addMonths(cur, 1),
+        addMonths(cur, 2),
+      ])
+      setTimeout(() => {
+        scrollToMonth(selectedDate, 'smooth')
+      }, 50)
+    } else {
+      scrollToMonth(selectedDate, 'smooth')
+    }
+  }, [selectedDate, months, scrollToMonth])
+
+  // Continuous infinite scroll: auto-load future/past months on scroll
+  const handleScroll = useCallback(() => {
+    const container = scrollContainerRef.current
+    if (!container) return
+
+    const { scrollTop, scrollHeight, clientHeight } = container
+
+    // Load next months when user is within 600px of bottom
+    if (scrollTop + clientHeight >= scrollHeight - 600) {
+      setMonths(prev => {
+        const lastMonth = prev[prev.length - 1]
+        const next1 = addMonths(lastMonth, 1)
+        const next2 = addMonths(lastMonth, 2)
+        return [...prev, next1, next2]
+      })
+    }
+
+    // Top-bar synchronization: detect which month is currently visible near the top
+    if (!isProgrammaticScroll.current) {
+      const monthSections = container.querySelectorAll<HTMLElement>('.month-section')
+      const containerRect = container.getBoundingClientRect()
+      
+      for (const section of monthSections) {
+        const rect = section.getBoundingClientRect()
+        // If the top of the month section is within the upper viewport area
+        if (rect.top <= containerRect.top + 120 && rect.bottom >= containerRect.top + 80) {
+          const key = section.getAttribute('data-month-key')
+          if (key && key !== lastObservedMonth.current) {
+            lastObservedMonth.current = key
+            const [yearStr, monthStr] = key.split('-')
+            const newDate = new Date(parseInt(yearStr, 10), parseInt(monthStr, 10) - 1, 1)
+            setSelectedDate(newDate)
+          }
+          break
+        }
+      }
+    }
+  }, [setSelectedDate])
+
   return (
     <div
-      className="h-full flex flex-col overflow-hidden"
-      onClick={() => { setOpenPopoverKey(null); setSelectedEventId(null) }}
+      className="h-full flex flex-col overflow-hidden bg-casa-bg"
+      onClick={() => setOpenPopoverKey(null)}
     >
-      {/* Day-of-week header */}
-      <div className="grid grid-cols-7 border-b border-casa-border shrink-0">
+      {/* Persistent Day-of-week header */}
+      <div className="grid grid-cols-7 border-b border-casa-border bg-casa-bg/95 backdrop-blur-xs z-30 shrink-0 shadow-2xs">
         {DOW_LABELS.map(label => (
           <div
             key={label}
@@ -521,53 +712,40 @@ export default function MonthView() {
         ))}
       </div>
 
-      {/* Calendar grid */}
-      <div className="flex-1 overflow-y-auto pb-36 md:pb-0">
-        <div className="grid grid-cols-7 border-l border-t border-casa-divider">
-          {grid.map(day => {
-            const key = format(day, 'yyyy-MM-dd')
-            const dayEvents = eventsForDay(day)
-            return (
-              <DayCell
-                key={key}
-                day={day}
-                events={dayEvents}
-                isCurrentMonth={isSameMonth(day, selectedDate)}
-                isPopoverOpen={openPopoverKey === key}
-                isExpanded={expandedDayKeys.has(key)}
-                activeEventId={activeEventId}
-                onToggleExpand={() => toggleDayExpanded(key)}
-                onOpen={() => setOpenPopoverKey(key)}
-                onClose={() => setOpenPopoverKey(null)}
-                onDrillIn={drillIntoDay}
-                onQuickAdd={(targetDay) => {
-                  setOpenPopoverKey(null)
-                  setFolioPopover({ open: true, start: targetDay })
-                }}
-                onSelectEvent={ev => {
-                  openEventInSidecar(ev.id)
-                  setSelectedEventId(ev.id)
-                  setOpenPopoverKey(null)
-                }}
-                onTouchStart={e => handleCellTouchStart(e, day)}
-                onTouchMove={handleCellTouchMove}
-                onTouchEnd={cancelLongPress}
-                onMouseDown={e => handleCellMouseDown(e, day)}
-                onMouseUp={cancelLongPress}
-                onContextMenu={handleCellContextMenu}
-                onDoubleClick={(event) => quickCreateGesture.onDoubleClick(event, day)}
-              />
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Detail panel fallback gateway */}
-      <div onClick={e => e.stopPropagation()}>
-        <EventDetailPanel
-          event={selectedEvent}
-          onClose={() => setSelectedEventId(null)}
-        />
+      {/* Continuous multi-month scroll container */}
+      <div
+        ref={scrollContainerRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto pb-36 md:pb-8 overscroll-y-contain scroll-smooth"
+      >
+        {months.map(monthDate => (
+          <MonthSection
+            key={format(monthDate, 'yyyy-MM')}
+            monthDate={monthDate}
+            visibleMembers={visibleMembers}
+            activeEventId={activeEventId}
+            openPopoverKey={openPopoverKey}
+            expandedDayKeys={expandedDayKeys}
+            onToggleExpand={toggleDayExpanded}
+            onOpenPopover={setOpenPopoverKey}
+            onClosePopover={() => setOpenPopoverKey(null)}
+            onDrillIn={drillIntoDay}
+            onQuickAdd={(targetDay) => {
+              setOpenPopoverKey(null)
+              setFolioPopover({ open: true, start: targetDay })
+            }}
+            onSelectEvent={ev => {
+              openEventInSidecar(ev.id)
+              setOpenPopoverKey(null)
+            }}
+            quickCreateGesture={quickCreateGesture}
+            handleCellTouchStart={handleCellTouchStart}
+            handleCellTouchMove={handleCellTouchMove}
+            cancelLongPress={cancelLongPress}
+            handleCellMouseDown={handleCellMouseDown}
+            handleCellContextMenu={handleCellContextMenu}
+          />
+        ))}
       </div>
 
       {/* Palm Beach Folio Popover for Month View */}

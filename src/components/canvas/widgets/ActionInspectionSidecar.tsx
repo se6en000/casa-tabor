@@ -32,6 +32,7 @@ import {
   ShieldAlert,
   Truck,
   CheckCircle2,
+  Package,
   FileSignature,
   Eye,
   Pencil,
@@ -58,6 +59,14 @@ import {
   type SuggestedEventPlan,
 } from '../../../utils/actionInspectionSynthesis'
 import { buildGmailWebUrl } from '../../../utils/prepItemClusters'
+import {
+  isDeliveryTransitItem,
+  buildDeliveryTransitItem,
+  stageStepIndex,
+  isItemArrivingToday,
+  isItemScheduledLater,
+  isItemDelivered,
+} from '../../../utils/vendorTransactions.ts'
 import { useCreateSuggestedEvent } from '../../../hooks/useCreateSuggestedEvent'
 import { useQueryClient } from '@tanstack/react-query'
 import { useFamilyMembers } from '../../../hooks/useFamilyMembers'
@@ -66,6 +75,17 @@ import { useRollingEvents } from '../../../hooks/useCalendarEvents'
 import { useLiveClock } from '../../../hooks/useLiveClock'
 import { findMatchingCalendarEvent, computeDueDateBadge } from '../../../utils/calendarEventMatcher.ts'
 import { supabase } from '../../../lib/supabase'
+
+function resolveVendorIcon(vendor: string) {
+  const v = vendor.toLowerCase()
+  if (v.includes('whole foods') || v.includes('instacart') || v.includes('hellofresh') || v.includes('grocery')) {
+    return ShoppingCart
+  }
+  if (v.includes('fedex') || v.includes('ups') || v.includes('usps') || v.includes('courier')) {
+    return Truck
+  }
+  return Package
+}
 
 import type { ActionAiContext } from '../../../hooks/useAIAssistant'
 
@@ -155,6 +175,15 @@ export default function ActionInspectionSidecar({
       (activeItem.source_ref && p.source_ref === activeItem.source_ref)
     ))
   }, [activeItem, allPrep])
+
+  const isDeliveryItem = useMemo(() => {
+    return Boolean(activeItem && isDeliveryTransitItem(activeItem))
+  }, [activeItem])
+
+  const deliveryTransit = useMemo(() => {
+    if (!activeItem || !isDeliveryItem) return null
+    return buildDeliveryTransitItem(activeItem, now)
+  }, [activeItem, isDeliveryItem, now])
 
   // Dynamic Synthesis Engine
   const analysis = useMemo(() => {
@@ -603,6 +632,156 @@ export default function ActionInspectionSidecar({
             )}
           </div>
         </div>
+
+        {/* ══════ 0. LUXURY COURIER & INBOUND DELIVERY MANIFEST ══════ */}
+        {isDeliveryItem && deliveryTransit && (() => {
+          const DeliveryIcon = resolveVendorIcon(deliveryTransit.vendor)
+          const step = stageStepIndex(deliveryTransit.stage)
+          const isDelivered = isItemDelivered(deliveryTransit, now)
+          const isOutForDelivery = deliveryTransit.stage === 'out_for_delivery'
+          const isArrivingToday = isItemArrivingToday(deliveryTransit, now)
+          const isScheduledLater = isItemScheduledLater(deliveryTransit, now)
+
+          return (
+            <div className="p-4 sm:p-5 rounded-2xl bg-sky-50/70 border border-sky-200/90 shadow-xs space-y-4">
+              {/* Top line: Vendor, Stage Badge, Price */}
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2 flex-wrap min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-casa-gold/20 text-casa-navy flex items-center justify-center shrink-0">
+                    <DeliveryIcon size={16} className="text-casa-gold" />
+                  </div>
+
+                  <span className="text-body-sm font-bold text-casa-navy">
+                    {deliveryTransit.vendor}
+                  </span>
+
+                  {isDelivered ? (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-2xs font-bold bg-emerald-100 text-emerald-950 border border-emerald-300">
+                      <CheckCircle2 size={11} className="text-emerald-700" />
+                      <span>Delivered</span>
+                    </span>
+                  ) : isOutForDelivery && isArrivingToday ? (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-2xs font-bold bg-amber-100 text-amber-950 border border-amber-300">
+                      <Clock size={11} className="text-amber-700 animate-pulse" />
+                      <span>Out for Delivery Today</span>
+                    </span>
+                  ) : isScheduledLater ? (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-2xs font-bold bg-sky-100 text-sky-950 border border-sky-300">
+                      <Truck size={11} className="text-sky-700" />
+                      <span>In Transit · Arriving {deliveryTransit.etaDisplay}</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-2xs font-bold bg-sky-100 text-sky-950 border border-sky-300">
+                      <Package size={11} className="text-sky-700" />
+                      <span>{deliveryTransit.stage === 'confirmed' ? 'Order Confirmed' : 'In Transit'}</span>
+                    </span>
+                  )}
+
+                  {deliveryTransit.isPerishable && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-3xs font-bold bg-emerald-100 text-emerald-950 border border-emerald-300">
+                      <ShoppingCart size={10} className="text-emerald-700" />
+                      <span>Perishable Grocery</span>
+                    </span>
+                  )}
+                </div>
+
+                {deliveryTransit.cost && (
+                  <span className="font-mono text-body-sm font-bold text-casa-navy px-2.5 py-0.5 rounded-lg bg-white border border-casa-border/80 shadow-2xs">
+                    {deliveryTransit.cost}
+                  </span>
+                )}
+              </div>
+
+              {/* Item Summary & ETA */}
+              <div className="space-y-1">
+                <p className="text-body sm:text-body-lg font-bold text-casa-navy leading-snug">
+                  {deliveryTransit.itemSummary || deliveryTransit.title}
+                </p>
+                {deliveryTransit.etaDisplay && (
+                  <div className="flex items-center gap-1.5 text-caption font-semibold text-casa-muted">
+                    <Clock size={13} className="text-casa-gold shrink-0" />
+                    <span>Estimated Arrival: <strong className="text-casa-navy">{deliveryTransit.etaDisplay}</strong></span>
+                  </div>
+                )}
+              </div>
+
+              {/* 4-Stage Stepper Rail */}
+              <div className="pt-2 border-t border-sky-200/70">
+                <div className="grid grid-cols-4 gap-1 text-center items-center">
+                  {[
+                    { label: 'Confirmed', index: 0 },
+                    { label: 'Shipped', index: 1 },
+                    { label: 'En Route', index: 2 },
+                    { label: 'Arrived', index: 3 },
+                  ].map((st, idx) => {
+                    const isPast = step >= st.index || (isDelivered && st.index <= 3)
+                    const isCurrent = (step === st.index && !isDelivered) || (isDelivered && st.index === 3)
+                    return (
+                      <div key={st.label} className="flex flex-col items-center gap-1 relative">
+                        {idx > 0 && (
+                          <div
+                            className={cn(
+                              'absolute -left-1/2 top-1.5 w-full h-[2px] -translate-y-1/2 -z-0 transition-colors',
+                              (step >= st.index || isDelivered) ? (isDelivered ? 'bg-emerald-600' : 'bg-casa-gold') : 'bg-casa-border/70'
+                            )}
+                          />
+                        )}
+
+                        <div
+                          className={cn(
+                            'w-4 h-4 rounded-full flex items-center justify-center transition-all z-10',
+                            isCurrent
+                              ? (isDelivered ? 'bg-emerald-700 text-white ring-4 ring-emerald-700/20 scale-110 shadow-xs' : 'bg-casa-gold text-white ring-4 ring-casa-gold/20 scale-110 shadow-xs')
+                              : isPast
+                              ? (isDelivered ? 'bg-emerald-700 text-white' : 'bg-casa-navy text-white')
+                              : 'bg-white border-2 border-casa-border text-transparent'
+                          )}
+                        >
+                          {isPast && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                        </div>
+
+                        <span
+                          className={cn(
+                            'text-3xs font-bold uppercase tracking-wider',
+                            isCurrent
+                              ? (isDelivered ? 'text-emerald-700' : 'text-casa-gold')
+                              : isPast
+                              ? (isDelivered ? 'text-emerald-900' : 'text-casa-navy')
+                              : 'text-casa-muted/70'
+                          )}
+                        >
+                          {st.label}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Multi-Email Lineage / Update History */}
+              {deliveryTransit.updateHistory && deliveryTransit.updateHistory.length > 1 && (
+                <div className="pt-3 border-t border-sky-200/70 space-y-2">
+                  <div className="text-3xs font-bold uppercase tracking-widest text-casa-muted">
+                    Order Update Trail ({deliveryTransit.updateHistory.length} updates)
+                  </div>
+                  <div className="space-y-1.5">
+                    {deliveryTransit.updateHistory.map((h, i) => (
+                      <div key={h.id || i} className="p-2 rounded-xl bg-white/80 border border-sky-200/60 text-2xs flex items-center justify-between gap-2">
+                        <div className="min-w-0 flex-1 flex items-center gap-1.5">
+                          <span className="font-bold text-casa-navy capitalize">{h.stage.replace('_', ' ')}:</span>
+                          <span className="text-casa-muted truncate">{h.title || h.description}</span>
+                        </div>
+                        <span className="text-3xs font-mono text-casa-muted shrink-0">
+                          {new Date(h.occurredAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })()}
 
         {/* ══════ 1. AI EXECUTIVE BRIEF (First Thing Glanceable in 3 Seconds) ══════ */}
         <div className="p-4 sm:p-5 rounded-2xl bg-amber-50/70 border border-amber-300/80 shadow-xs space-y-3.5">

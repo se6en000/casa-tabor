@@ -16,6 +16,7 @@ export interface VendorTransactionIdentity {
 const VENDOR_ALIASES = [
   { vendor: 'Walmart', aliases: ['walmart.com', 'walmart+', 'walmart', 'inhome'] },
   { vendor: 'Amazon', aliases: ['amazon.com', 'amazon', 'prime'] },
+  { vendor: 'Jiffy.com', aliases: ['jiffy.com', 'jiffy transfers', 'jiffy shirts', 'jiffy'] },
   { vendor: 'HelloFresh', aliases: ['hellofresh', 'hello fresh'] },
   { vendor: 'Target', aliases: ['target.com', 'target'] },
   { vendor: 'Instacart', aliases: ['instacart'] },
@@ -24,6 +25,14 @@ const VENDOR_ALIASES = [
   { vendor: 'FedEx', aliases: ['fedex'] },
   { vendor: 'UPS', aliases: ['ups'] },
   { vendor: 'USPS', aliases: ['usps', 'postal service'] },
+  { vendor: 'Nike', aliases: ['nike.com', 'nike'] },
+  { vendor: 'Apple', aliases: ['apple.com', 'apple store'] },
+  { vendor: 'Etsy', aliases: ['etsy.com', 'etsy'] },
+  { vendor: 'Sephora', aliases: ['sephora.com', 'sephora'] },
+  { vendor: 'Nordstrom', aliases: ['nordstrom.com', 'nordstrom'] },
+  { vendor: 'Pottery Barn', aliases: ['potterybarn.com', 'pottery barn'] },
+  { vendor: 'Williams Sonoma', aliases: ['williams-sonoma.com', 'williams sonoma'] },
+  { vendor: 'Chewy', aliases: ['chewy.com', 'chewy'] },
 ] as const
 
 function normalizeKeyPart(value: string) {
@@ -42,9 +51,13 @@ function orderId(item: PrepItem): string | null {
   const amazonMatch = text.match(/\b\d{3}-\d{7}-\d{7}\b/)
   if (amazonMatch) return amazonMatch[0]
 
-  // Explicit numeric Order Number: e.g. "Order #20001519169311", "Order number: 987654321", "#2000151-91693117"
-  const explicitOrderMatch = text.match(/\border\s*(?:number|no\.?|id|#)\s*[:#]?\s*#?([a-z0-9-]*\d{6,}[a-z0-9-]*)\b/i)
+  // Explicit numeric Order Number: e.g. "Order #2541442349", "Order #20001519169311", "Order number: 987654321", "#2000151-91693117", "(Order #2541442349)"
+  const explicitOrderMatch = text.match(/\b(?:order|cart)\s*(?:number|no\.?|id|#)\s*[:#]?\s*#?([a-z0-9-]*\d{4,}[a-z0-9-]*)\b/i)
   if (explicitOrderMatch) return explicitOrderMatch[1]
+
+  // Direct standalone order hashtag e.g. "#2541442349"
+  const directHashMatch = text.match(/#(\d{6,})\b/)
+  if (directHashMatch) return directHashMatch[1]
 
   // Tracking numbers (UPS, FedEx, USPS)
   const upsMatch = text.match(/\b1Z[0-9A-Z]{16}\b/i)
@@ -57,19 +70,47 @@ function orderId(item: PrepItem): string | null {
 }
 
 export function transactionStage(item: PrepItem): DeliveryTransitStage | null {
-  if (item.attention_stage && isDeliveryTransitStage(item.attention_stage)) {
-    return item.attention_stage as DeliveryTransitStage
-  }
-  if (item.type === 'payment') return 'payment'
+  const desc = (item.description ?? '').toLowerCase()
+  const title = (item.event_title ?? '').toLowerCase()
+  const combined = `${title} ${desc}`.toLowerCase()
+
+  // 1. Problem / Cancellation exceptions
   if (item.type === 'cancellation') return 'problem'
-  const text = `${item.event_title ?? ''} ${item.description}`.toLowerCase()
-  if (/\b(cancelled|canceled|failed|problem|issue|missing|damaged)\b/.test(text)) return 'problem'
-  if (/\bdelivered\b/.test(text)) return 'delivered'
-  if (/\bout for delivery\b|\barriving today\b|\ben route\b|\bdelivery window\b|\binhome delivery\b/.test(text)) return 'out_for_delivery'
-  if (/\bshipped\b|\bpackage on the way\b|\btransit\b/.test(text)) return 'shipped'
-  if (/\b(payment|charged|temporary hold)\b/.test(text)) return 'payment'
-  if (/\b(confirmed|scheduled|placed|order received|delivery of)\b/.test(text)) return 'confirmed'
-  return null
+  if (/\b(cancelled|canceled|failed|problem|issue|missing|damaged|exception)\b/.test(combined)) return 'problem'
+
+  // 2. Pure Payment notifications (where type === 'payment' or description is purely about payment/charge)
+  const isPurePayment = item.type === 'payment' || (
+    /\b(payment method|temporary hold|charged for|final charge|receipt for payment|order amount)\b/.test(desc) &&
+    !/\b(has been delivered|was delivered|out for delivery)\b/.test(desc)
+  )
+  if (isPurePayment) return 'payment'
+
+  // 3. Tense-Aware Delivery Detection:
+  // Distinguish between actual completed deliveries vs future delivery notices (e.g. "will be delivered on Monday", "is arriving on Monday")
+  const isFutureDeliveryNotice = /\b(?:will be delivered|scheduled (?:to be|for) deliver(?:y|ed)|estimated (?:to be )?delivered|expected (?:to be )?delivered|to be delivered|arriving on|arriving monday|arriving tuesday|arriving wednesday|arriving thursday|arriving friday|arriving saturday|arriving sunday)\b/i.test(combined)
+  const isExplicitDelivered = !isFutureDeliveryNotice && /\b(?:has been delivered|was delivered|package delivered|delivered at|delivered to (?:front|porch|door|garage|mailbox|reception)|proof of delivery|delivered on \w+, \w+ \d+ at \d+:\d+)\b/i.test(combined)
+
+  if (isExplicitDelivered) return 'delivered'
+  if (item.attention_stage === 'delivered' && !isFutureDeliveryNotice) return 'delivered'
+
+  // 4. Out for delivery (Day of delivery)
+  if (/\bout for delivery\b|\barriving today\b|\ben route\b|\bdelivery window\b|\binhome delivery\b/.test(combined)) return 'out_for_delivery'
+  if (item.attention_stage === 'out_for_delivery') return 'out_for_delivery'
+
+  // 5. Shipped / In transit
+  if (/\bshipped\b|\bpackage on the way\b|\btransit\b|\bdispatched\b|\bcarrier tracking\b/.test(combined)) return 'shipped'
+  if (item.attention_stage === 'shipped') return 'shipped'
+
+  // 6. Confirmed / Order Placed / Future Delivery notice
+  if (isFutureDeliveryNotice) return 'confirmed'
+  if (item.attention_stage === 'confirmed') return 'confirmed'
+  if (/\b(confirmed|scheduled|placed|order received|order confirmation|thank you for your order|delivery of)\b/.test(combined)) return 'confirmed'
+
+  // 7. General payment fallback
+  if (/\b(payment|charged|temporary hold)\b/.test(combined)) return 'payment'
+  if (item.attention_stage === 'payment') return 'payment'
+
+  return item.attention_stage && isDeliveryTransitStage(item.attention_stage) ? (item.attention_stage as DeliveryTransitStage) : null
 }
 
 function isDeliveryTransitStage(stage: string): stage is DeliveryTransitStage {
@@ -92,12 +133,15 @@ function resolveVendorName(item: PrepItem): string {
     const raw = item.attention_vendor.trim()
     if (/walmart/i.test(raw)) return 'Walmart'
     if (/amazon/i.test(raw)) return 'Amazon'
+    if (/jiffy/i.test(raw)) return 'Jiffy.com'
     if (/target/i.test(raw)) return 'Target'
     if (/hello\s*fresh/i.test(raw)) return 'HelloFresh'
     if (/instacart/i.test(raw)) return 'Instacart'
     if (/fedex/i.test(raw)) return 'FedEx'
     if (/ups/i.test(raw)) return 'UPS'
     if (/usps/i.test(raw)) return 'USPS'
+    if (/nike/i.test(raw)) return 'Nike'
+    if (/apple/i.test(raw)) return 'Apple'
     return raw
   }
   return 'Parcel'
@@ -118,7 +162,7 @@ function deliveryDateKey(item: PrepItem): string {
 
 function extractOrderIdFromExplicitKey(explicitKey?: string | null): string | null {
   if (!explicitKey) return null
-  const match = explicitKey.match(/^transaction:[a-z0-9-]+:([a-z0-9-]*\d{6,}[a-z0-9-]*)$/i)
+  const match = explicitKey.match(/^transaction:[a-z0-9.-]+:([a-z0-9.-]*\d{4,}[a-z0-9.-]*)$/i)
   return match ? match[1] : null
 }
 
@@ -222,6 +266,41 @@ export function mergeDeliveryTransitItem(
       ? incoming.occurredAt
       : existing.occurredAt
 
+  // Aggregate and deduplicate update history
+  const combinedHistory = [
+    ...(existing.updateHistory || [
+      {
+        id: existing.id,
+        title: existing.title,
+        description: existing.rawItem?.description,
+        stage: existing.stage,
+        occurredAt: existing.occurredAt,
+        sourceRef: existing.rawItem?.source_ref,
+        rawItem: existing.rawItem,
+      },
+    ]),
+    ...(incoming.updateHistory || [
+      {
+        id: incoming.id,
+        title: incoming.title,
+        description: incoming.rawItem?.description,
+        stage: incoming.stage,
+        occurredAt: incoming.occurredAt,
+        sourceRef: incoming.rawItem?.source_ref,
+        rawItem: incoming.rawItem,
+      },
+    ]),
+  ]
+
+  const seenIds = new Set<string>()
+  const uniqueHistory = combinedHistory
+    .filter((h) => {
+      if (seenIds.has(h.id)) return false
+      seenIds.add(h.id)
+      return true
+    })
+    .sort((a, b) => new Date(a.occurredAt).getTime() - new Date(b.occurredAt).getTime())
+
   return {
     ...existing,
     stage: higherStage,
@@ -230,6 +309,7 @@ export function mergeDeliveryTransitItem(
     etaDisplay: mergedEta,
     isPerishable: existing.isPerishable || incoming.isPerishable,
     occurredAt: newerDate,
+    updateHistory: uniqueHistory,
   }
 }
 
@@ -379,18 +459,31 @@ export function resolveEffectiveStage(
   deliveryDate: Date | null,
   now?: Date
 ): DeliveryTransitStage {
-  if (rawStage === 'delivered' || rawStage === 'problem') {
+  if (rawStage === 'problem') {
     return rawStage
   }
   if (!deliveryDate || !now) {
     return rawStage
   }
 
+  const todayStart = startOfDay(now)
+  const deliveryStart = startOfDay(deliveryDate)
+
+  // 1. Future Date Guardrail:
+  // If the delivery target date is strictly in the future (e.g. Monday Aug 24 when today is Saturday Aug 22),
+  // this order is still in progress and CANNOT be marked as 'delivered'.
+  if (isBefore(todayStart, deliveryStart)) {
+    if (rawStage === 'delivered') {
+      return 'confirmed'
+    }
+    return rawStage
+  }
+
+  // 2. Past Courier / Same-Day Auto-Resolution:
   // If the delivery target date is strictly in the past (before today's start-of-day in local time)
   // and it was marked out for delivery, shipped, or confirmed without issues,
   // same-day and courier deliveries have completed.
-  const todayStart = startOfDay(now)
-  if (isBefore(deliveryDate, todayStart)) {
+  if (isBefore(deliveryStart, todayStart)) {
     if (rawStage === 'out_for_delivery' || rawStage === 'shipped' || rawStage === 'confirmed' || rawStage === 'payment') {
       return 'delivered'
     }
@@ -405,18 +498,19 @@ export function formatDeliveryEta(
   stage: DeliveryTransitStage,
   now?: Date
 ): string | null {
+  if (stage === 'problem') {
+    return 'Delivery exception'
+  }
+
   if (stage === 'delivered') {
     if (!deliveryDate) return 'Delivered'
     if (now) {
       const diff = differenceInCalendarDays(deliveryDate, now)
       if (diff === 0) return 'Delivered today'
       if (diff === -1) return 'Delivered yesterday'
+      if (diff < -1) return `Delivered ${format(deliveryDate, 'MMM d')}`
     }
     return `Delivered ${format(deliveryDate, 'MMM d')}`
-  }
-
-  if (stage === 'problem') {
-    return 'Delivery exception'
   }
 
   if (!deliveryDate) {
@@ -428,11 +522,11 @@ export function formatDeliveryEta(
     if (diff === 0) {
       return rawEta || 'Today'
     }
-    if (diff === -1) {
-      return rawEta ? `Yesterday (${rawEta})` : 'Yesterday'
-    }
     if (diff === 1) {
       return rawEta ? `Tomorrow (${rawEta})` : 'Tomorrow'
+    }
+    if (diff > 1) {
+      return format(deliveryDate, 'EEE, MMM d')
     }
     if (isBefore(deliveryDate, startOfDay(now))) {
       return `Delivered ${format(deliveryDate, 'MMM d')}`
@@ -448,6 +542,14 @@ export function isItemArrivingToday(item: DeliveryTransitItem, now: Date): boole
   if (effectiveStage === 'delivered' || effectiveStage === 'problem') return false
   if (!targetDate) return false
   return isSameDay(targetDate, now)
+}
+
+export function isItemScheduledLater(item: DeliveryTransitItem, now: Date): boolean {
+  const targetDate = resolveDeliveryDate(item.rawItem)
+  const effectiveStage = resolveEffectiveStage(item.stage, targetDate, now)
+  if (effectiveStage === 'delivered' || effectiveStage === 'problem') return false
+  if (!targetDate) return false
+  return isBefore(startOfDay(now), startOfDay(targetDate))
 }
 
 export function isItemInTransit(item: DeliveryTransitItem, now?: Date): boolean {
@@ -487,6 +589,18 @@ export function buildDeliveryTransitItem(item: PrepItem, now?: Date): DeliveryTr
   const rawEta = etaMatch ? etaMatch[0].trim() : (item.due_by ? new Date(item.due_by).toLocaleDateString() : null)
   const etaDisplay = now ? formatDeliveryEta(rawEta, targetDate, effectiveStage, now) : rawEta
 
+  const initialHistory = [
+    {
+      id: item.id,
+      title: item.event_title || `${vendor} Delivery`,
+      description: item.description,
+      stage: effectiveStage,
+      occurredAt: item.created_at,
+      sourceRef: item.source_ref,
+      rawItem: item,
+    },
+  ]
+
   return {
     id: item.id,
     threadKey: transaction?.key || `delivery:${normalizeKeyPart(vendor)}:${deliveryDateKey(item)}`,
@@ -499,5 +613,6 @@ export function buildDeliveryTransitItem(item: PrepItem, now?: Date): DeliveryTr
     etaDisplay,
     occurredAt: item.created_at,
     rawItem: item,
+    updateHistory: initialHistory,
   }
 }

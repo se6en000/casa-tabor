@@ -336,6 +336,16 @@ export type DeliveryTransitStage =
   | 'delivered'
   | 'problem'
 
+export interface DeliveryUpdateEvent {
+  id: string
+  title: string
+  description?: string | null
+  stage: DeliveryTransitStage
+  occurredAt: string
+  sourceRef?: string | null
+  rawItem?: PrepItem
+}
+
 export interface DeliveryTransitItem {
   id: string
   threadKey: string
@@ -350,6 +360,7 @@ export interface DeliveryTransitItem {
   isPerishable?: boolean
   occurredAt: string
   rawItem: PrepItem
+  updateHistory?: DeliveryUpdateEvent[]
 }
 
 export type CategoryRoutingDirective =
