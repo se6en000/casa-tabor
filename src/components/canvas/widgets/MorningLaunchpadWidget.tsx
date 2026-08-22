@@ -1,6 +1,5 @@
 import {
   Sun,
-  Moon,
   Car,
   Check,
 } from 'lucide-react'
@@ -8,7 +7,6 @@ import { cn } from '../../../utils/cn'
 import { useFamilyRoutineIntelligence, type DepartureItem } from '../../../hooks/useFamilyRoutineIntelligence'
 import { useHeroTheme } from '../../../hooks/useHeroTheme'
 import { openEventDetails } from '../../../utils/openEventDetails'
-import { Button } from '../../ui'
 
 interface MorningLaunchpadWidgetProps {
   now?: Date
@@ -33,7 +31,7 @@ export default function MorningLaunchpadWidget({
     isMorning,
   } = useFamilyRoutineIntelligence(now)
 
-  const { heroTheme, toggleHeroTheme } = useHeroTheme(now)
+  const { heroTheme } = useHeroTheme(now)
   const isNavy = heroTheme === 'navy'
 
   const handleOpenDeparture = (dep: DepartureItem) => {
@@ -145,32 +143,7 @@ export default function MorningLaunchpadWidget({
             </div>
           )}
 
-          {/* 1-Tap Theme Quick Switcher Capsule */}
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={toggleHeroTheme}
-            aria-label={`Switch hero finish to ${isNavy ? 'Belgian Linen' : 'Obsidian Navy'}`}
-            title={`Switch hero finish to ${isNavy ? 'Belgian Linen' : 'Obsidian Navy'}`}
-            className={cn(
-              'rounded-full text-caption font-semibold flex items-center gap-1.5 transition-all px-3 py-1 min-h-[32px] sm:min-h-[36px]',
-              isNavy
-                ? 'bg-white/10 hover:bg-white/15 border-white/15 text-slate-200 hover:text-white'
-                : 'bg-casa-navy/5 hover:bg-casa-navy/10 border-casa-border text-casa-muted hover:text-casa-navy',
-            )}
-          >
-            {isNavy ? (
-              <>
-                <Moon size={13} strokeWidth={2} className="text-amber-400" />
-                <span className="text-3xs uppercase tracking-wider font-bold">Navy</span>
-              </>
-            ) : (
-              <>
-                <Sun size={13} strokeWidth={2} className="text-casa-gold" />
-                <span className="text-3xs uppercase tracking-wider font-bold">Linen</span>
-              </>
-            )}
-          </Button>
+
         </div>
       </div>
 

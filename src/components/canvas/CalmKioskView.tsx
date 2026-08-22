@@ -511,31 +511,59 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
           'lg:col-span-7 flex-col justify-start space-y-4',
           mobileSubTab === 'triage' ? 'hidden lg:flex' : 'flex'
         )}>
-          {heroManualView === 'tomorrow' ? (
-            <TomorrowPrepWidget
-              now={now}
-              showViewToggle={true}
-              onToggleTodayView={() => setHeroManualView('today')}
-              onOpenEvent={onOpenEvent}
-            />
-          ) : showMorningLaunchpad ? (
-            <MorningLaunchpadWidget now={now} onOpenEvent={onOpenEvent} />
-          ) : routineIntel.isDaytime && (!nextEvent || (minutesUntilNext !== null && minutesUntilNext > 30) || nextEvent.all_day) ? (
-            <MiddayLogisticsWidget
-              now={now}
-              todayEvents={upcomingAppointments}
-              openReminders={openReminders}
-              todayReminders={todayReminders}
-              completedReminders={completedReminders}
-              onToggleReminder={handleToggleReminder}
-              tomorrowEvents={tomorrowEvents}
-              familyMembers={familyMembers}
-              nextEvent={nextEvent}
-              onOpenEvent={onOpenEvent}
-              onToggleTomorrowView={() => setHeroManualView('tomorrow')}
-              isTomorrowActive={false}
-            />
-          ) : nextEvent ? (
+          <AnimatePresence mode="wait" initial={false}>
+            {heroManualView === 'tomorrow' ? (
+              <motion.div
+                key="tomorrow-hero"
+                initial={{ opacity: 0, y: 3 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -3 }}
+                transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
+                className="w-full"
+              >
+                <TomorrowPrepWidget
+                  now={now}
+                  showViewToggle={true}
+                  onToggleTodayView={() => setHeroManualView('today')}
+                  onOpenEvent={onOpenEvent}
+                />
+              </motion.div>
+            ) : showMorningLaunchpad ? (
+              <motion.div
+                key="launchpad-hero"
+                initial={{ opacity: 0, y: 3 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -3 }}
+                transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
+                className="w-full"
+              >
+                <MorningLaunchpadWidget now={now} onOpenEvent={onOpenEvent} />
+              </motion.div>
+            ) : routineIntel.isDaytime && (!nextEvent || (minutesUntilNext !== null && minutesUntilNext > 30) || nextEvent.all_day) ? (
+              <motion.div
+                key="today-hero"
+                initial={{ opacity: 0, y: 3 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -3 }}
+                transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
+                className="w-full"
+              >
+                <MiddayLogisticsWidget
+                  now={now}
+                  todayEvents={upcomingAppointments}
+                  openReminders={openReminders}
+                  todayReminders={todayReminders}
+                  completedReminders={completedReminders}
+                  onToggleReminder={handleToggleReminder}
+                  tomorrowEvents={tomorrowEvents}
+                  familyMembers={familyMembers}
+                  nextEvent={nextEvent}
+                  onOpenEvent={onOpenEvent}
+                  onToggleTomorrowView={() => setHeroManualView('tomorrow')}
+                  isTomorrowActive={false}
+                />
+              </motion.div>
+            ) : nextEvent ? (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -1166,6 +1194,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
               onToggleTodayView={() => setHeroManualView('today')}
             />
           )}
+          </AnimatePresence>
 
           {/* Stylized Ambient Daily Briefing Prose */}
           {dailyBriefing && (

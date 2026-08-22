@@ -40,7 +40,7 @@ export default function TomorrowPrepWidget({
     allPrepCompleted,
   } = useFamilyRoutineIntelligence(now)
 
-  const { heroTheme, toggleHeroTheme } = useHeroTheme(now)
+  const { heroTheme } = useHeroTheme(now)
   const isNavy = heroTheme === 'navy'
 
   const handleOpenDeparture = (dep: DepartureItem) => {
@@ -129,34 +129,14 @@ export default function TomorrowPrepWidget({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {showViewToggle && onToggleTodayView && (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={onToggleTodayView}
-              className={cn(
-                'rounded-full text-caption font-semibold transition-all px-3 py-1 min-h-[32px] sm:min-h-[36px]',
-                isNavy
-                  ? 'bg-white/10 hover:bg-white/15 border-white/15 text-slate-200 hover:text-white'
-                  : 'bg-casa-navy/5 hover:bg-casa-navy/10 border-casa-border text-casa-muted hover:text-casa-navy',
-              )}
-            >
-              Return to Today
-            </Button>
-          )}
-
+        <div className="flex flex-wrap items-center gap-2.5">
           {totalPrepCount > 0 && (
-            <div
+            <span
               className={cn(
-                'px-3 py-1 rounded-full text-caption font-bold tracking-wide border flex items-center gap-1.5 transition-colors',
-                allPrepCompleted
-                  ? isNavy
-                    ? 'bg-emerald-500/20 border-emerald-400/50 text-emerald-300'
-                    : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700'
-                  : isNavy
-                  ? 'bg-white/10 border-white/15 text-white/80'
-                  : 'bg-casa-navy/5 border-casa-border text-casa-muted',
+                'hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-caption font-semibold shadow-2xs border',
+                isNavy
+                  ? 'bg-white/10 border-white/10 text-white/80'
+                  : 'bg-casa-surface-subtle border-casa-border/60 text-casa-text-secondary',
               )}
             >
               {allPrepCompleted ? (
@@ -165,37 +145,53 @@ export default function TomorrowPrepWidget({
                   <span>ALL SET</span>
                 </>
               ) : (
-                <span>{completedCount}/{totalPrepCount} READY</span>
+                <>
+                  <Sparkles size={13} className={isNavy ? 'text-amber-400' : 'text-casa-gold'} />
+                  <span>{completedCount}/{totalPrepCount} Ready</span>
+                </>
               )}
-            </div>
+            </span>
           )}
 
-          {/* 1-Tap Theme Quick Switcher Capsule (Linen vs Navy) */}
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={toggleHeroTheme}
-            aria-label={`Switch hero finish to ${isNavy ? 'Belgian Linen' : 'Obsidian Navy'}`}
-            title={`Switch hero finish to ${isNavy ? 'Belgian Linen' : 'Obsidian Navy'}`}
-            className={cn(
-              'rounded-full text-caption font-semibold flex items-center gap-1.5 transition-all px-3 py-1 min-h-[32px] sm:min-h-[36px]',
-              isNavy
-                ? 'bg-white/10 hover:bg-white/15 border-white/15 text-slate-200 hover:text-white'
-                : 'bg-casa-navy/5 hover:bg-casa-navy/10 border-casa-border text-casa-muted hover:text-casa-navy',
-            )}
-          >
-            {isNavy ? (
-              <>
-                <Moon size={13} strokeWidth={2} className="text-amber-400" />
-                <span className="text-3xs uppercase tracking-wider font-bold">Navy</span>
-              </>
-            ) : (
-              <>
-                <Sun size={13} strokeWidth={2} className="text-casa-gold" />
-                <span className="text-3xs uppercase tracking-wider font-bold">Linen</span>
-              </>
-            )}
-          </Button>
+          {/* 1-Tap Mode Toggle (Today vs Tomorrow) */}
+          {showViewToggle && onToggleTodayView && (
+            <div
+              className={cn(
+                'inline-flex items-center p-1 rounded-full border shadow-2xs',
+                isNavy ? 'bg-white/5 border-white/10' : 'bg-casa-surface-subtle border-casa-border',
+              )}
+            >
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onToggleTodayView}
+                className={cn(
+                  'px-3.5 py-1.5 rounded-full text-caption font-bold transition-all min-h-[36px] flex items-center gap-1.5',
+                  isNavy
+                    ? 'text-white/60 hover:text-white'
+                    : 'text-casa-muted hover:text-casa-navy',
+                )}
+              >
+                <Sun size={13} />
+                <span>Today's Flow</span>
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                className={cn(
+                  'px-3.5 py-1.5 rounded-full text-caption font-bold transition-all min-h-[36px] flex items-center gap-1.5',
+                  isNavy
+                    ? 'bg-casa-gold text-casa-navy shadow-2xs'
+                    : 'bg-casa-navy text-white shadow-2xs',
+                )}
+              >
+                <Moon size={13} />
+                <span>
+                  Tomorrow ({completedCount}/{totalPrepCount || (isTomorrowWeekend ? 2 : 3)} Ready)
+                </span>
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 

@@ -83,7 +83,7 @@ export default function MiddayLogisticsWidget({
   const [resolvingActionId, setResolvingActionId] = useState<string | null>(null)
   const [dismissedConflictIds, setDismissedConflictIds] = useState<Set<string>>(new Set())
   const routineIntel = useFamilyRoutineIntelligence(now)
-  const { heroTheme, toggleHeroTheme } = useHeroTheme(now)
+  const { heroTheme } = useHeroTheme(now)
   const isNavy = heroTheme === 'navy'
 
   // Driver conflict calculation
@@ -559,32 +559,7 @@ export default function MiddayLogisticsWidget({
             </div>
           )}
 
-          {/* 1-Tap Theme Quick Switcher Capsule */}
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={toggleHeroTheme}
-            aria-label={`Switch hero finish to ${isNavy ? 'Belgian Linen' : 'Obsidian Navy'}`}
-            title={`Switch hero finish to ${isNavy ? 'Belgian Linen' : 'Obsidian Navy'}`}
-            className={cn(
-              'rounded-full text-caption font-semibold flex items-center gap-1.5 transition-all px-3 py-1.5 min-h-[36px]',
-              isNavy
-                ? 'bg-white/10 hover:bg-white/20 border-white/15 text-white shadow-2xs'
-                : 'bg-casa-surface-subtle hover:bg-casa-surface border-casa-border text-casa-muted hover:text-casa-navy shadow-2xs',
-            )}
-          >
-            {isNavy ? (
-              <>
-                <Moon size={13} strokeWidth={2} className="text-amber-400" />
-                <span className="text-3xs uppercase tracking-wider font-bold">Navy</span>
-              </>
-            ) : (
-              <>
-                <Sun size={13} strokeWidth={2} className="text-casa-gold" />
-                <span className="text-3xs uppercase tracking-wider font-bold">Linen</span>
-              </>
-            )}
-          </Button>
+
         </div>
       </div>
 
