@@ -60,4 +60,14 @@ test("MiddayLogisticsWidget code integrity: no hardcoded school dismissal fallba
 
   // Must only render school dismissals section when schoolDismissals.length > 0
   assert.ok(widgetCode.includes("schoolDismissals.length > 0"), "Widget must conditionally render school dismissals only when length > 0")
+
+  // Must integrate openReminders to show active household focus & tasks
+  assert.ok(widgetCode.includes("openReminders.length > 0"), "Widget must support openReminders display")
+  assert.ok(widgetCode.includes("Today's Active Focus & Tasks"), "Widget must render active tasks section")
+
+  // Must integrate tomorrow's weekend schedule preview
+  assert.ok(widgetCode.includes("Tomorrow's Weekend Schedule"), "Widget must render tomorrow weekend schedule preview")
+
+  // Must gate the all-clear state behind zero open reminders
+  assert.ok(widgetCode.includes("openReminders.length === 0"), "Widget must ensure zero open reminders before claiming clear")
 })

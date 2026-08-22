@@ -13,6 +13,9 @@ import {
   RefreshCw,
   ExternalLink,
   Sparkles,
+  Calendar,
+  ArrowRight,
+  ListTodo,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useQueryClient } from '@tanstack/react-query'
@@ -23,7 +26,6 @@ import { useFamilyRoutineIntelligence } from '../../../hooks/useFamilyRoutineInt
 import { useHeroTheme } from '../../../hooks/useHeroTheme'
 import { analyzeDriverSchedule, resolveEventDriver, isEventAtHome, type DriverConflictItem } from '../../../lib/driverConflictEngine'
 import { resolveCanonicalDeparture } from '../../../lib/canonicalEventDeparture'
-import { getDisplayMemberColor } from '../../../design-system/memberColors'
 import { supabase } from '../../../lib/supabase'
 import {
   updateEventVenue,
@@ -33,11 +35,16 @@ import {
 import { saveEventTransportationOverride } from '../../../lib/eventPlanOverrides'
 import { applyEventAggregatePatch } from '../../../lib/eventAggregateCache'
 
-import { Button } from '../../ui'
+import { Button, IconButton } from '../../ui'
 
 interface MiddayLogisticsWidgetProps {
   now?: Date
   todayEvents?: EventWithDetails[]
+  openReminders?: EventWithDetails[]
+  todayReminders?: EventWithDetails[]
+  completedReminders?: EventWithDetails[]
+  onToggleReminder?: (id: string) => void
+  tomorrowEvents?: EventWithDetails[]
   familyMembers?: FamilyMember[]
   nextEvent?: EventWithDetails | null
   onOpenEvent?: (event: EventWithDetails) => void
@@ -60,8 +67,13 @@ interface SchoolDismissalGroup {
 export default function MiddayLogisticsWidget({
   now = new Date(),
   todayEvents = [],
+  openReminders = [],
+  todayReminders = [],
+  completedReminders = [],
+  onToggleReminder,
+  tomorrowEvents = [],
   familyMembers = [],
-  nextEvent = null,
+  nextEvent: _nextEvent = null,
   onOpenEvent,
   onToggleTomorrowView,
   isTomorrowActive = false,
@@ -187,6 +199,11 @@ export default function MiddayLogisticsWidget({
       invalidateAllCalendarQueries(queryClient, targetEvent.id)
     } catch (err) {
       console.warn('[MiddayLogisticsWidget] Failed to mark event at home:', err)
+      setDismissedConflictIds((prev) => {
+        const next = new Set(prev)
+        next.delete(targetEvent.id)
+        return next
+      })
     } finally {
       setResolvingActionId(null)
     }
@@ -259,42 +276,92 @@ export default function MiddayLogisticsWidget({
       invalidateAllCalendarQueries(queryClient, targetEvent.id)
     } catch (err) {
       console.warn('[MiddayLogisticsWidget] Failed to reassign driver:', err)
+      setDismissedConflictIds((prev) => {
+        const next = new Set(prev)
+        next.delete(targetEvent.id)
+        return next
+      })
     } finally {
       setResolvingActionId(null)
     }
   }
 
-  // Find all upcoming midday commitments today (excluding pure routine items)
-  const middayCommitments = useMemo<EventWithDetails[]>(() => {
-    const candidates = todayEvents
-      .filter((e) => {
-        if (e.all_day) return false
-        if (e.id?.startsWith('routine-')) return false
+  // Filter midday/afternoon commitments today
+  const middayCommitments = useMemo(() => {
+    return todayEvents
+      .filter((evt) => {
+        if (evt.all_day) return false
+        const title = (evt.title || '').toLowerCase()
+        if (title.startsWith('cook:') || title.startsWith("tonight's kitchen:") || title.startsWith('recipe:')) {
+          return false
+        }
         try {
-          const end = parseISO(e.end_time)
-          return end.getTime() > now.getTime()
-        } catch {
+          const end = parseISO(evt.end_time)
+          if (end.getTime() < now.getTime() - 30 * 60 * 1000) return false
           return true
+        } catch {
+          return false
         }
       })
-      .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+      .sort((a, b) => {
+        try {
+          return parseISO(a.start_time).getTime() - parseISO(b.start_time).getTime()
+        } catch {
+          return 0
+        }
+      })
+      .slice(0, 2)
+  }, [todayEvents, now])
 
-    if (candidates.length > 0) return candidates.slice(0, 2)
-    if (nextEvent && !nextEvent.all_day) return [nextEvent]
-    return []
-  }, [todayEvents, nextEvent, now])
+  // Split open reminders into overdue vs upcoming today
+  const overdueReminders = useMemo(() => {
+    const startOfTodayMs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+    const nowMs = now.getTime()
+    return openReminders.filter((evt) => {
+      try {
+        const startMs = parseISO(evt.start_time).getTime()
+        const isPastDay = startMs < startOfTodayMs
+        const isEarlierToday = !evt.all_day && startMs < nowMs
+        return isPastDay || isEarlierToday
+      } catch {
+        return false
+      }
+    })
+  }, [openReminders, now])
 
-  // Helper to parse minutes from midnight for strict chronological sorting
+  // Tomorrow's highlighted events for weekend radar
+  const tomorrowHighlightEvents = useMemo(() => {
+    return (tomorrowEvents || [])
+      .filter((e) => {
+        const title = (e.title || '').toLowerCase()
+        if (title.startsWith('cook:') || title.startsWith("tonight's kitchen:") || title.startsWith('recipe:')) {
+          return false
+        }
+        return true
+      })
+      .sort((a, b) => {
+        if (a.all_day && !b.all_day) return -1
+        if (!a.all_day && b.all_day) return 1
+        try {
+          return parseISO(a.start_time).getTime() - parseISO(b.start_time).getTime()
+        } catch {
+          return 0
+        }
+      })
+      .slice(0, 2)
+  }, [tomorrowEvents])
+
+  // Helper to parse time string into minutes from midnight
   const parseMinutes = (timeStr: string): number => {
     try {
-      const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i)
+      const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)?/i)
       if (!match) return 0
-      let hours = parseInt(match[1], 10)
-      const mins = parseInt(match[2], 10)
-      const period = match[3].toUpperCase()
-      if (period === 'PM' && hours !== 12) hours += 12
-      if (period === 'AM' && hours === 12) hours = 0
-      return hours * 60 + mins
+      let h = parseInt(match[1], 10)
+      const m = parseInt(match[2], 10)
+      const meridian = match[3]?.toUpperCase()
+      if (meridian === 'PM' && h < 12) h += 12
+      if (meridian === 'AM' && h === 12) h = 0
+      return h * 60 + m
     } catch {
       return 0
     }
@@ -302,7 +369,6 @@ export default function MiddayLogisticsWidget({
 
   // Group active school routines by venue & dismissal time, sorted chronologically ascending
   const schoolDismissals = useMemo<SchoolDismissalGroup[]>(() => {
-    // Only derive school dismissals on active school days (never on weekends or breaks)
     if (routineIntel.isTodayWeekend || !routineIntel.isTodaySchoolDay) {
       return []
     }
@@ -329,8 +395,6 @@ export default function MiddayLogisticsWidget({
       const isBak = status.venueName.toLowerCase().includes('bak')
       const fallbackDriver = isBak ? 'Jake' : 'Giselle'
       const driver = status.pickupDriverName || fallbackDriver
-      const driverMember = familyMembers.find((m) => m.name.toLowerCase() === driver.toLowerCase())
-      const driverColor = getDisplayMemberColor(driverMember?.color_hex)
 
       const key = `${status.venueName}-${status.endsAtFormatted}`
       const existing = map.get(key)
@@ -346,14 +410,13 @@ export default function MiddayLogisticsWidget({
           minutesFromMidnight: parseMinutes(status.endsAtFormatted),
           childrenNames: [status.childName],
           driverName: driver,
-          driverColor,
           leaveByFormatted: calculateLeaveBy(status.endsAtFormatted, isBak),
         })
       }
     }
 
     return Array.from(map.values()).sort((a, b) => a.minutesFromMidnight - b.minutesFromMidnight)
-  }, [routineIntel.isTodayWeekend, routineIntel.isTodaySchoolDay, routineIntel.ambientStatuses, familyMembers])
+  }, [routineIntel.isTodayWeekend, routineIntel.isTodaySchoolDay, routineIntel.ambientStatuses])
 
   return (
     <div
@@ -370,7 +433,7 @@ export default function MiddayLogisticsWidget({
         <div className="absolute top-0 right-0 w-96 h-96 bg-casa-gold/10 rounded-full blur-3xl pointer-events-none" />
       )}
 
-      {/* ── Top Header Row with Quiet Logistics Badge & 1-Tap View Switcher ── */}
+      {/* ── Top Header Row with Status Badge & 1-Tap View Switcher ── */}
       <div
         className={cn(
           'flex flex-wrap items-center justify-between gap-3 pb-3 relative z-10 border-b',
@@ -399,7 +462,7 @@ export default function MiddayLogisticsWidget({
                 isNavy ? 'text-amber-400' : 'text-amber-800',
               )}
             >
-              <span>{routineIntel.isTodayWeekend ? 'Weekend Flow & Logistics' : 'Midday & Afternoon Logistics'}</span>
+              <span>{routineIntel.isTodayWeekend ? 'Weekend Flow & Household Focus' : 'Midday & Afternoon Logistics'}</span>
             </div>
             <div
               className={cn(
@@ -413,7 +476,7 @@ export default function MiddayLogisticsWidget({
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
-          {/* Quiet Luxury Logistics Status (No giant billboard) */}
+          {/* Dynamic Status Capsule (Real State Awareness) */}
           {!primaryConflict && (
             <span
               className={cn(
@@ -423,8 +486,27 @@ export default function MiddayLogisticsWidget({
                   : 'bg-casa-surface-subtle border-casa-border/60 text-casa-text-secondary',
               )}
             >
-              <ShieldCheck size={14} className={isNavy ? 'text-amber-400' : 'text-casa-gold'} />
-              <span>{routineIntel.isTodayWeekend ? 'Weekend Flow Clear' : 'Logistics Clear'}</span>
+              {overdueReminders.length > 0 ? (
+                <>
+                  <AlertTriangle size={13} className="text-amber-500" />
+                  <span>{overdueReminders.length} Overdue · {openReminders.length} Open</span>
+                </>
+              ) : openReminders.length > 0 ? (
+                <>
+                  <Clock size={13} className={isNavy ? 'text-amber-400' : 'text-casa-gold'} />
+                  <span>{openReminders.length} Open Task{openReminders.length > 1 ? 's' : ''}</span>
+                </>
+              ) : middayCommitments.length > 0 ? (
+                <>
+                  <Car size={13} className={isNavy ? 'text-amber-400' : 'text-casa-gold'} />
+                  <span>{middayCommitments.length} Staged</span>
+                </>
+              ) : (
+                <>
+                  <ShieldCheck size={14} className="text-emerald-500" />
+                  <span>{routineIntel.isTodayWeekend ? 'Weekend Flow Clear' : 'Logistics Clear'}</span>
+                </>
+              )}
             </span>
           )}
 
@@ -506,7 +588,260 @@ export default function MiddayLogisticsWidget({
         </div>
       </div>
 
-      {/* ── Midday Commitments Section (Editorial Cards) ── */}
+      {/* ── Driver Collision Alert (Prominent only when a real collision occurs) ── */}
+      {primaryConflict && (
+        <div
+          className={cn(
+            'p-3.5 sm:p-4 rounded-2xl border flex flex-col gap-3',
+            isNavy
+              ? 'bg-amber-500/15 border-amber-400/40 text-amber-100'
+              : 'bg-amber-500/10 border-amber-400/50 text-amber-950',
+          )}
+        >
+          <div className="flex items-start gap-3">
+            <AlertTriangle size={18} className={isNavy ? 'text-amber-400 shrink-0 mt-0.5' : 'text-amber-700 shrink-0 mt-0.5'} />
+            <div className="min-w-0 flex-1">
+              <div
+                className={cn(
+                  'text-caption font-bold uppercase tracking-wide flex items-center justify-between',
+                  isNavy ? 'text-amber-300' : 'text-amber-900',
+                )}
+              >
+                <span>Driver Transit Buffer Crunch · {primaryConflict.driverName}</span>
+                <span
+                  className={cn(
+                    'text-caption font-bold px-2 py-0.5 rounded-md border',
+                    isNavy
+                      ? 'text-amber-200 bg-amber-950/80 border-amber-400/40'
+                      : 'text-amber-800 bg-amber-100/80 border-amber-300/60',
+                  )}
+                >
+                  Direct Conflict
+                </span>
+              </div>
+              <p className={cn('text-body-sm mt-0.5 leading-snug', isNavy ? 'text-amber-100/90' : 'text-amber-950/90')}>
+                {primaryConflict.message}
+              </p>
+            </div>
+          </div>
+
+          {/* 1-Tap Quick Action Resolution Chips */}
+          <div
+            className={cn(
+              'pt-2 border-t flex flex-wrap items-center gap-2',
+              isNavy ? 'border-amber-400/20' : 'border-amber-400/30',
+            )}
+          >
+            <span
+              className={cn(
+                'text-caption font-bold uppercase tracking-wider text-2xs mr-1',
+                isNavy ? 'text-amber-300/90' : 'text-amber-900/80',
+              )}
+            >
+              1-Tap Fix:
+            </span>
+
+            {primaryConflict.eventB?.rawEvent && (
+              <Button
+                variant="secondary"
+                size="sm"
+                loading={resolvingActionId === `home-${primaryConflict.eventB.rawEvent.id}`}
+                disabled={Boolean(resolvingActionId)}
+                leadingIcon={<House size={13} className={isNavy ? 'text-amber-300' : 'text-amber-700'} />}
+                onClick={() => handleQuickMarkAtHome(primaryConflict.eventB.rawEvent)}
+                className={cn(
+                  'rounded-xl text-caption font-bold shadow-2xs',
+                  isNavy
+                    ? 'bg-slate-900 hover:bg-slate-800 border-amber-400/30 text-amber-100'
+                    : 'bg-white hover:bg-amber-50 border-amber-300 text-amber-950',
+                )}
+              >
+                "{primaryConflict.eventB.title}" is At Home (No Drive)
+              </Button>
+            )}
+
+            {alternativeDriver && primaryConflict.eventB?.rawEvent && (
+              <Button
+                variant="secondary"
+                size="sm"
+                loading={resolvingActionId === `driver-${primaryConflict.eventB.rawEvent.id}`}
+                disabled={Boolean(resolvingActionId)}
+                leadingIcon={<RefreshCw size={13} className={isNavy ? 'text-amber-300' : 'text-amber-700'} />}
+                onClick={() =>
+                  handleQuickReassignDriver(
+                    primaryConflict.eventB.rawEvent,
+                    alternativeDriver,
+                  )
+                }
+                className={cn(
+                  'rounded-xl text-caption font-bold shadow-2xs',
+                  isNavy
+                    ? 'bg-slate-900 hover:bg-slate-800 border-amber-400/30 text-amber-100'
+                    : 'bg-white hover:bg-amber-50 border-amber-300 text-amber-950',
+                )}
+              >
+                Assign {alternativeDriver.name} to Drive
+              </Button>
+            )}
+
+            {onOpenEvent && primaryConflict.eventB?.rawEvent && (
+              <Button
+                variant="ghost"
+                size="sm"
+                leadingIcon={<ExternalLink size={13} className={isNavy ? 'text-amber-300' : 'text-amber-800'} />}
+                onClick={() => onOpenEvent(primaryConflict.eventB.rawEvent)}
+                className={cn(
+                  'rounded-xl text-caption font-bold',
+                  isNavy
+                    ? 'bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/30 text-amber-200'
+                    : 'bg-amber-500/10 hover:bg-amber-500/20 border border-amber-400/40 text-amber-950',
+                )}
+              >
+                Open Details
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Section B: Today's Active Focus & Tasks (When to-dos are pending) ── */}
+      {openReminders.length > 0 && (
+        <div className="space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span
+              className={cn(
+                'text-caption font-bold uppercase tracking-wider flex items-center gap-1.5',
+                isNavy ? 'text-amber-400' : 'text-amber-800',
+              )}
+            >
+              <ListTodo size={14} className={isNavy ? 'text-amber-400' : 'text-casa-gold'} />
+              <span>Today's Active Focus & Tasks</span>
+            </span>
+            <span
+              className={cn(
+                'text-caption font-semibold',
+                isNavy ? 'text-white/60' : 'text-casa-muted',
+              )}
+            >
+              {openReminders.length} Open · {completedReminders.length} Done
+            </span>
+          </div>
+
+          <div
+            className={cn(
+              'grid gap-3',
+              openReminders.length > 1 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1',
+            )}
+          >
+            {openReminders.slice(0, 4).map((task) => {
+              const assignedName = task.members?.[0]?.family_member?.name || 'Family'
+              const isOverdue = overdueReminders.some((r) => r.id === task.id)
+              const formattedTime = task.all_day
+                ? 'All Day'
+                : (() => {
+                    try {
+                      return format(parseISO(task.start_time), 'h:mm a')
+                    } catch {
+                      return 'Today'
+                    }
+                  })()
+
+              return (
+                <motion.div
+                  key={task.id}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  onClick={() => onOpenEvent && onOpenEvent(task)}
+                  className={cn(
+                    'p-4 rounded-2xl border shadow-2xs cursor-pointer transition-all flex flex-col justify-between space-y-3 group',
+                    isNavy
+                      ? 'bg-white/5 border-white/10 hover:border-amber-400/40 text-white'
+                      : isOverdue
+                      ? 'bg-gradient-to-br from-amber-500/5 via-casa-surface to-casa-surface border-amber-400/50 text-casa-navy hover:border-amber-500/80'
+                      : 'bg-casa-surface-subtle/80 border-casa-border/80 hover:border-casa-gold/60 text-casa-navy',
+                  )}
+                >
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span
+                        className={cn(
+                          'inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-caption font-mono font-bold border shadow-2xs',
+                          isOverdue
+                            ? isNavy
+                              ? 'bg-amber-950/80 border-amber-400/40 text-amber-300'
+                              : 'bg-amber-100/90 border-amber-300 text-amber-900'
+                            : isNavy
+                            ? 'bg-slate-900 border-white/15 text-white/90'
+                            : 'bg-white border-casa-border/60 text-casa-navy',
+                        )}
+                      >
+                        {isOverdue && <AlertTriangle size={11} className="text-amber-500 shrink-0" />}
+                        <span>{formattedTime}</span>
+                        {isOverdue && <span className="text-3xs uppercase font-extrabold ml-0.5">OVERDUE</span>}
+                      </span>
+
+                      <span
+                        className={cn(
+                          'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-caption font-bold border shadow-2xs',
+                          isNavy
+                            ? 'bg-slate-900 border-white/15 text-white'
+                            : 'bg-white border-casa-border/60 text-casa-navy',
+                        )}
+                      >
+                        <span className={cn('w-2 h-2 rounded-full shrink-0', isNavy ? 'bg-amber-400' : 'bg-casa-gold')} />
+                        <span>{assignedName}</span>
+                      </span>
+                    </div>
+
+                    <div className={cn('font-display text-body font-bold leading-snug truncate pt-0.5', isNavy ? 'text-white' : 'text-casa-navy')}>
+                      {task.title}
+                    </div>
+                  </div>
+
+                  <div
+                    className={cn(
+                      'flex items-center justify-between pt-2 border-t text-caption',
+                      isNavy ? 'border-white/10' : 'border-casa-border/40',
+                    )}
+                  >
+                    <span className={cn('text-caption font-medium', isNavy ? 'text-white/60' : 'text-casa-muted')}>
+                      1-Tap to Complete
+                    </span>
+
+                    <IconButton
+                      size="sm"
+                      variant="ghost"
+                      onClick={async (e) => {
+                        e.stopPropagation()
+                        if (onToggleReminder) {
+                          try {
+                            navigator.vibrate?.(10)
+                          } catch {}
+                          await onToggleReminder(task.id)
+                        }
+                      }}
+                      className={cn(
+                        'rounded-full shrink-0 transition-all min-h-[32px] min-w-[32px] p-0 flex items-center justify-center',
+                        isNavy
+                          ? 'hover:bg-amber-400/20 text-amber-300'
+                          : 'hover:bg-emerald-100 text-slate-500 hover:text-emerald-700',
+                      )}
+                      aria-label={`Mark ${task.title} complete`}
+                      icon={
+                        <div className="w-5 h-5 rounded-full border-2 border-slate-400/80 hover:border-emerald-600 bg-white/10 flex items-center justify-center transition-colors">
+                          <div className="w-2.5 h-2.5 rounded-full bg-current opacity-40 hover:opacity-100 transition-opacity" />
+                        </div>
+                      }
+                    />
+                  </div>
+                </motion.div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Midday Commitments Section (Editorial Schedule Cards) ── */}
       {middayCommitments.length > 0 && (
         <div className="space-y-2.5">
           <div className="flex items-center justify-between">
@@ -516,7 +851,7 @@ export default function MiddayLogisticsWidget({
                 isNavy ? 'text-amber-400' : 'text-casa-text-secondary',
               )}
             >
-              {routineIntel.isTodayWeekend ? "Today's Activities & Schedule" : "Today's Midday Commitments"}
+              {routineIntel.isTodayWeekend ? "Today's Schedule & Activities" : "Today's Midday Commitments"}
             </span>
             <span
               className={cn(
@@ -541,8 +876,6 @@ export default function MiddayLogisticsWidget({
                 driverResolution.name ||
                 evt.members?.[0]?.family_member?.name ||
                 'Family'
-              const memberObj = familyMembers.find((m) => m.name.toLowerCase() === assignedName.toLowerCase())
-              const memberDotColor = getDisplayMemberColor(memberObj?.color_hex)
 
               return (
                 <motion.div
@@ -578,10 +911,7 @@ export default function MiddayLogisticsWidget({
                             : 'bg-white border-casa-border/60 text-casa-navy',
                         )}
                       >
-                        <span
-                          className="w-2 h-2 rounded-full shrink-0"
-                          style={{ backgroundColor: memberDotColor }}
-                        />
+                        <span className={cn('w-2 h-2 rounded-full shrink-0', isNavy ? 'bg-amber-400' : 'bg-casa-gold')} />
                         <span>{assignedName}</span>
                       </span>
                     </div>
@@ -663,127 +993,96 @@ export default function MiddayLogisticsWidget({
         </div>
       )}
 
-      {/* ── Driver Collision Alert (Prominent only when a real collision occurs) ── */}
-      {primaryConflict && (
+      {/* ── Tomorrow's Weekend Horizon Radar (Preview of Sunday / Weekend Schedule) ── */}
+      {routineIntel.isTodayWeekend && tomorrowHighlightEvents.length > 0 && (
         <div
           className={cn(
-            'p-3.5 sm:p-4 rounded-2xl border flex flex-col gap-3',
-            isNavy
-              ? 'bg-amber-500/15 border-amber-400/40 text-amber-100'
-              : 'bg-amber-500/10 border-amber-400/50 text-amber-950',
+            'pt-3 space-y-2.5 border-t',
+            isNavy ? 'border-white/10' : 'border-casa-border/60',
           )}
         >
-          <div className="flex items-start gap-3">
-            <AlertTriangle size={18} className={isNavy ? 'text-amber-400 shrink-0 mt-0.5' : 'text-amber-700 shrink-0 mt-0.5'} />
-            <div className="min-w-0 flex-1">
-              <div
-                className={cn(
-                  'text-caption font-bold uppercase tracking-wide flex items-center justify-between',
-                  isNavy ? 'text-amber-300' : 'text-amber-900',
-                )}
-              >
-                <span>Driver Transit Buffer Crunch · {primaryConflict.driverName}</span>
-                <span
+          <div className="flex items-center justify-between text-caption font-bold uppercase tracking-wider">
+            <span className={cn('flex items-center gap-1.5', isNavy ? 'text-amber-400' : 'text-casa-text-secondary')}>
+              <Calendar size={14} className={isNavy ? 'text-amber-400' : 'text-casa-gold'} />
+              <span>Tomorrow's Weekend Schedule</span>
+            </span>
+            <span className={cn('font-semibold', isNavy ? 'text-white/60' : 'text-casa-muted')}>
+              {tomorrowEvents?.length || 2} Scheduled
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {tomorrowHighlightEvents.map((evt) => {
+              const formattedTime = evt.all_day
+                ? 'All Day'
+                : (() => {
+                    try {
+                      return format(parseISO(evt.start_time), 'h:mm a')
+                    } catch {
+                      return 'Tomorrow'
+                    }
+                  })()
+
+              return (
+                <div
+                  key={evt.id}
+                  onClick={() => onOpenEvent && onOpenEvent(evt)}
                   className={cn(
-                    'text-caption font-bold px-2 py-0.5 rounded-md border',
+                    'p-3.5 rounded-2xl border flex flex-col justify-between space-y-2 cursor-pointer transition-all shadow-2xs group',
                     isNavy
-                      ? 'text-amber-200 bg-amber-950/80 border-amber-400/40'
-                      : 'text-amber-800 bg-amber-100/80 border-amber-300/60',
+                      ? 'bg-white/5 border-white/10 hover:border-amber-400/40 text-white'
+                      : 'bg-casa-surface-subtle/80 border-casa-border/80 hover:border-casa-gold/60 text-casa-navy',
                   )}
                 >
-                  Direct Conflict
-                </span>
-              </div>
-              <p className={cn('text-body-sm mt-0.5 leading-snug', isNavy ? 'text-amber-100/90' : 'text-amber-950/90')}>
-                {primaryConflict.message}
-              </p>
+                  <div className="flex items-center justify-between gap-2">
+                    <span
+                      className={cn(
+                        'text-caption font-mono font-bold px-2.5 py-0.5 rounded-lg border shadow-2xs',
+                        isNavy
+                          ? 'bg-slate-900 border-white/15 text-white'
+                          : 'bg-white border-casa-border/60 text-casa-navy',
+                      )}
+                    >
+                      {formattedTime}
+                    </span>
+                    {evt.location_name && (
+                      <span className={cn('text-caption truncate text-2xs max-w-[140px]', isNavy ? 'text-white/60' : 'text-casa-muted')}>
+                        {evt.location_name}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className={cn('font-display font-bold text-body-sm truncate', isNavy ? 'text-white' : 'text-casa-navy')}>
+                    {evt.title}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {onToggleTomorrowView && (
+            <div className="pt-1">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={onToggleTomorrowView}
+                trailingIcon={<ArrowRight size={13} />}
+                className={cn(
+                  'w-full rounded-xl text-caption font-bold shadow-2xs py-2 min-h-[38px] justify-between',
+                  isNavy
+                    ? 'bg-white/10 hover:bg-white/15 border-white/15 text-white'
+                    : 'bg-casa-surface-subtle hover:bg-casa-surface border-casa-border text-casa-navy',
+                )}
+              >
+                <span>View Tomorrow's Readiness & Prep Checklist ({routineIntel.completedCount}/{routineIntel.totalPrepCount || (routineIntel.isTomorrowWeekend ? 2 : 3)} Ready)</span>
+              </Button>
             </div>
-          </div>
-
-          {/* 1-Tap Quick Action Resolution Chips */}
-          <div
-            className={cn(
-              'pt-2 border-t flex flex-wrap items-center gap-2',
-              isNavy ? 'border-amber-400/20' : 'border-amber-400/30',
-            )}
-          >
-            <span
-              className={cn(
-                'text-caption font-bold uppercase tracking-wider text-2xs mr-1',
-                isNavy ? 'text-amber-300/90' : 'text-amber-900/80',
-              )}
-            >
-              1-Tap Fix:
-            </span>
-
-            {/* Quick Action: Mark Event B as At Home if appropriate */}
-            {primaryConflict.eventB?.rawEvent && (
-              <Button
-                variant="secondary"
-                size="sm"
-                loading={resolvingActionId === `home-${primaryConflict.eventB.rawEvent.id}`}
-                disabled={Boolean(resolvingActionId)}
-                leadingIcon={<House size={13} className={isNavy ? 'text-amber-300' : 'text-amber-700'} />}
-                onClick={() => handleQuickMarkAtHome(primaryConflict.eventB.rawEvent)}
-                className={cn(
-                  'rounded-xl text-caption font-bold shadow-2xs',
-                  isNavy
-                    ? 'bg-slate-900 hover:bg-slate-800 border-amber-400/30 text-amber-100'
-                    : 'bg-white hover:bg-amber-50 border-amber-300 text-amber-950',
-                )}
-              >
-                "{primaryConflict.eventB.title}" is At Home (No Drive)
-              </Button>
-            )}
-
-            {/* Quick Action: Reassign Driver to alternative parent/caregiver */}
-            {alternativeDriver && primaryConflict.eventB?.rawEvent && (
-              <Button
-                variant="secondary"
-                size="sm"
-                loading={resolvingActionId === `driver-${primaryConflict.eventB.rawEvent.id}`}
-                disabled={Boolean(resolvingActionId)}
-                leadingIcon={<RefreshCw size={13} className={isNavy ? 'text-amber-300' : 'text-amber-700'} />}
-                onClick={() =>
-                  handleQuickReassignDriver(
-                    primaryConflict.eventB.rawEvent,
-                    alternativeDriver,
-                  )
-                }
-                className={cn(
-                  'rounded-xl text-caption font-bold shadow-2xs',
-                  isNavy
-                    ? 'bg-slate-900 hover:bg-slate-800 border-amber-400/30 text-amber-100'
-                    : 'bg-white hover:bg-amber-50 border-amber-300 text-amber-950',
-                )}
-              >
-                Assign {alternativeDriver.name} to Drive
-              </Button>
-            )}
-
-            {/* Open Details Button */}
-            {onOpenEvent && primaryConflict.eventB?.rawEvent && (
-              <Button
-                variant="ghost"
-                size="sm"
-                leadingIcon={<ExternalLink size={13} className={isNavy ? 'text-amber-300' : 'text-amber-800'} />}
-                onClick={() => onOpenEvent(primaryConflict.eventB.rawEvent)}
-                className={cn(
-                  'rounded-xl text-caption font-bold',
-                  isNavy
-                    ? 'bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/30 text-amber-200'
-                    : 'bg-amber-500/10 hover:bg-amber-500/20 border border-amber-400/40 text-amber-950',
-                )}
-              >
-                Open Details
-              </Button>
-            )}
-          </div>
+          )}
         </div>
       )}
 
-      {/* ── Reassuring Open / Clear Logistics State (When no midday transit or dismissals are staged) ── */}
-      {middayCommitments.length === 0 && schoolDismissals.length === 0 && !primaryConflict && (
+      {/* ── Reassuring Open / Clear Logistics State (ONLY when truly NO tasks, NO schedule, NO dismissals) ── */}
+      {openReminders.length === 0 && middayCommitments.length === 0 && schoolDismissals.length === 0 && !primaryConflict && (
         <div
           className={cn(
             'p-4 sm:p-5 rounded-2xl border flex items-center gap-3.5 shadow-2xs transition-all',
@@ -804,11 +1103,11 @@ export default function MiddayLogisticsWidget({
           </div>
           <div className="space-y-0.5">
             <div className={cn('text-body-sm font-bold', isNavy ? 'text-white' : 'text-casa-navy')}>
-              {routineIntel.isTodayWeekend ? 'Weekend schedule is open & clear' : 'Afternoon logistics are clear'}
+              {routineIntel.isTodayWeekend ? 'Weekend schedule is open & all daily tasks complete' : 'Afternoon logistics are clear'}
             </div>
             <div className={cn('text-caption leading-relaxed', isNavy ? 'text-white/70' : 'text-casa-text-secondary')}>
               {routineIntel.isTodayWeekend
-                ? 'No school routines active today. Enjoy family time and weekend activities.'
+                ? `All ${todayReminders.length || 0} to-dos completed. Enjoy family time and weekend flow.`
                 : 'No additional school dismissals or transit pickups staged for today.'}
             </div>
           </div>
@@ -863,10 +1162,7 @@ export default function MiddayLogisticsWidget({
                         : 'bg-white border-casa-border/60 text-casa-navy',
                     )}
                   >
-                    <span
-                      className="w-2 h-2 rounded-full shrink-0"
-                      style={{ backgroundColor: dismissal.driverColor || (isNavy ? 'var(--color-casa-gold)' : 'var(--color-casa-navy)') }}
-                    />
+                    <span className={cn('w-2 h-2 rounded-full shrink-0', isNavy ? 'bg-amber-400' : 'bg-casa-navy')} />
                     <span>{dismissal.driverName} drives</span>
                   </span>
                 </div>

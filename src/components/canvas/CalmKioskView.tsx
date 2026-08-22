@@ -524,6 +524,11 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
             <MiddayLogisticsWidget
               now={now}
               todayEvents={upcomingAppointments}
+              openReminders={openReminders}
+              todayReminders={todayReminders}
+              completedReminders={completedReminders}
+              onToggleReminder={handleToggleReminder}
+              tomorrowEvents={tomorrowEvents}
               familyMembers={familyMembers}
               nextEvent={nextEvent}
               onOpenEvent={onOpenEvent}
