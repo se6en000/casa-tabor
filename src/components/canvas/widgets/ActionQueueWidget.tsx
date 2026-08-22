@@ -10,8 +10,6 @@ import {
   ChevronDown,
   Calendar,
   CalendarPlus,
-  CheckSquare,
-  Square,
   Moon,
   Sun,
   ExternalLink,
@@ -25,6 +23,8 @@ import {
   RefreshCw,
   CloudOff,
   ShieldAlert,
+  Eye,
+  ChevronRight,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button, IconButton, StatusDot } from '../../ui'
@@ -45,6 +45,7 @@ import { computeDueDateBadge } from '../../../utils/calendarEventMatcher'
 import { useCreateSuggestedEvent } from '../../../hooks/useCreateSuggestedEvent'
 import { useAppStore } from '../../../stores/appStore'
 import { useGoogleSyncTriage, formatSyncError } from '../../../hooks/useGoogleSyncTriage'
+import { DaySchedulePeekTray } from './DaySchedulePeekTray'
 
 interface ActionQueueWidgetProps {
   activeConflicts: Conflict[]
@@ -130,23 +131,12 @@ export default function ActionQueueWidget({
   const [spotlightItemId, setSpotlightItemId] = useState<string | null>(null)
   const [eventAddedItemIds, setEventAddedItemIds] = useState<Set<string>>(new Set())
 
-  const [selectedBundleActionIds, setSelectedBundleActionIds] = useState<Record<string, string[]>>({})
+  const [activePeekActionId, setActivePeekActionId] = useState<string | null>(null)
 
   const { createSuggestedEvent, createSuggestedActionBundle, isCreating } = useCreateSuggestedEvent()
 
   const getSelectedActionIds = (bundle: SuggestedActionBundle) => {
-    if (selectedBundleActionIds[bundle.bundleId]) {
-      return selectedBundleActionIds[bundle.bundleId]
-    }
     return bundle.actions.filter((a) => a.defaultSelected).map((a) => a.id)
-  }
-
-  const toggleBundleAction = (bundle: SuggestedActionBundle, actionId: string) => {
-    const current = getSelectedActionIds(bundle)
-    const next = current.includes(actionId)
-      ? current.filter((id) => id !== actionId)
-      : [...current, actionId]
-    setSelectedBundleActionIds((prev) => ({ ...prev, [bundle.bundleId]: next }))
   }
 
   const handle1TapAddBundle = async (item: PrepItem, bundle: SuggestedActionBundle) => {
@@ -756,118 +746,61 @@ export default function ActionQueueWidget({
 
                     {/* ── Compound Multi-Action Bundle / Proactive Suggestions ── */}
                     {heroActionBundle && heroActionBundle.actions.length > 0 ? (
-                      <div className="p-3 sm:p-3.5 rounded-xl bg-amber-50/75 border border-amber-200/90 flex flex-col gap-2.5 shadow-2xs">
-                        <div className="flex items-center justify-between gap-2 border-b border-amber-200/60 pb-1.5">
+                      <div className="p-3 sm:p-3.5 rounded-xl bg-amber-50/80 border border-amber-200/90 flex flex-col gap-2.5 shadow-2xs">
+                        <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-2 min-w-0">
                             <div className="w-5 h-5 rounded-md bg-amber-500/15 text-amber-900 flex items-center justify-center font-bold shrink-0">
                               <Sparkles size={12} className="text-amber-700" />
                             </div>
                             <span className="text-caption font-bold text-amber-950 uppercase tracking-wider block leading-none">
-                              Suggested Plan ({heroActionBundle.actions.length})
+                              Suggested Plan ({heroActionBundle.actions.length} Milestones)
                             </span>
                           </div>
 
                           <span className="text-3xs font-semibold px-2 py-0.5 rounded-full bg-amber-200/70 text-amber-900 shrink-0">
-                            {selectedHeroActionIds.length} of {heroActionBundle.actions.length} Selected
+                            {selectedHeroActionIds.length} of {heroActionBundle.actions.length} Ready
                           </span>
                         </div>
 
-                        {/* List of Actions */}
-                        <div className="space-y-1.5">
-                          {heroActionBundle.actions.map((act) => {
-                            const isSelected = selectedHeroActionIds.includes(act.id)
-                            const isReminder = act.type === 'reminder'
-                            const isLink = act.type === 'link'
-
-                            return (
-                              <div
-                                key={act.id}
-                                onClick={() => {
-                                  if (!isLink) toggleBundleAction(heroActionBundle, act.id)
-                                }}
-                                className={cn(
-                                  'p-2.5 rounded-lg border transition-all flex items-start justify-between gap-2 text-left',
-                                  isLink
-                                    ? 'bg-casa-surface border-casa-border/70 shadow-2xs'
-                                    : (isSelected
-                                      ? 'bg-casa-surface border-amber-400 shadow-2xs cursor-pointer'
-                                      : 'bg-casa-surface/60 border-casa-border/60 opacity-65 hover:opacity-90 cursor-pointer')
-                                )}
-                              >
-                                <div className="flex items-start gap-2 min-w-0 flex-1">
-                                  {!isLink ? (
-                                    <button
-                                      type="button"
-                                      aria-label={`Toggle ${act.title}`}
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        toggleBundleAction(heroActionBundle, act.id)
-                                      }}
-                                      className={cn(
-                                        'min-w-[32px] min-h-[32px] -m-1 flex items-center justify-center rounded transition-colors shrink-0',
-                                        isSelected ? 'text-amber-600' : 'text-casa-muted hover:text-casa-navy'
-                                      )}
-                                    >
-                                      {isSelected ? (
-                                        <CheckSquare size={16} className="text-amber-600 shrink-0" />
-                                      ) : (
-                                        <Square size={16} className="text-casa-muted/60 shrink-0" />
-                                      )}
-                                    </button>
-                                  ) : (
-                                    <div className="w-4 h-4 flex items-center justify-center text-purple-700 shrink-0 mt-0.5">
-                                      <ExternalLink size={13} />
-                                    </div>
-                                  )}
-
-                                  <div className="min-w-0 flex-1">
-                                    <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
-                                      <span
-                                        className={cn(
-                                          'text-3xs font-bold uppercase tracking-wider px-1.5 py-0.2 rounded border',
-                                          isReminder
-                                            ? 'bg-sky-100 text-sky-900 border-sky-200'
-                                            : isLink
-                                            ? 'bg-purple-100 text-purple-900 border-purple-200'
-                                            : 'bg-amber-100 text-amber-950 border-amber-300'
-                                        )}
-                                      >
-                                        {act.badgeLabel || (isReminder ? 'PREP TASK' : 'CALENDAR EVENT')}
-                                      </span>
-
-                                      <span className="text-caption font-bold text-casa-navy">
-                                        {act.displayDate}
-                                      </span>
-                                    </div>
-
-                                    <h5 className="text-body-sm font-bold text-casa-navy leading-snug">
-                                      {act.title}
-                                    </h5>
-                                  </div>
-                                </div>
-
-                                {isLink && act.url && (
-                                  <a
-                                    href={act.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    onClick={(e) => e.stopPropagation()}
-                                    className="px-2 py-1 rounded bg-casa-surface border border-casa-border hover:border-casa-navy text-casa-navy text-caption font-bold shadow-2xs inline-flex items-center gap-1 shrink-0 no-underline min-h-[32px]"
-                                  >
-                                    <span>Portal</span>
-                                    <ExternalLink size={10} className="text-casa-muted" />
-                                  </a>
-                                )}
-                              </div>
-                            )
-                          })}
+                        {/* High-Level Editorial Summary Ribbon */}
+                        <div className="p-2.5 rounded-lg bg-casa-surface border border-amber-300/80 space-y-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap text-caption font-semibold text-casa-navy">
+                            {heroActionBundle.actions
+                              .filter((a) => a.type === 'event')
+                              .map((a) => (a.displayDate ? a.displayDate.split('·')[0].trim() : a.title))
+                              .slice(0, 3)
+                              .map((dateStr, idx) => (
+                                <span
+                                  key={idx}
+                                  className="px-2 py-0.5 rounded-md bg-amber-100/80 border border-amber-200 text-amber-950 text-2xs font-bold font-mono"
+                                >
+                                  {dateStr}
+                                </span>
+                              ))}
+                            <span className="text-2xs text-casa-muted font-medium">
+                              + {heroActionBundle.actions.filter((a) => a.type === 'reminder').length} Prep Tasks
+                            </span>
+                          </div>
+                          <p className="text-caption text-casa-muted leading-snug">
+                            {heroActionBundle.summary ||
+                              'Decomposed testing dates, readiness supplies & calendar appointments.'}
+                          </p>
                         </div>
 
-                        {/* Multi-Action Execution Bar */}
-                        <div className="pt-1 border-t border-amber-200/60 flex items-center justify-between gap-2 flex-wrap">
-                          <span className="text-3xs text-amber-900/80 font-medium">
-                            Adds synchronized schedule blocks
-                          </span>
+                        {/* Multi-Action Execution & Inspection Bar */}
+                        <div className="pt-1 flex items-center justify-between gap-2 flex-wrap">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              openActionInSidecar(heroItem.id)
+                            }}
+                            className="text-caption font-bold text-amber-900 hover:text-amber-700 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg hover:bg-amber-100/60 transition-all cursor-pointer min-h-[38px] h-auto"
+                          >
+                            <span>Inspect &amp; Peek Dates</span>
+                            <ChevronRight size={13} className="text-amber-700" />
+                          </Button>
 
                           {isEventAdded ? (
                             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-100 text-emerald-900 text-caption font-bold border border-emerald-300 shadow-2xs">
@@ -879,50 +812,88 @@ export default function ActionQueueWidget({
                               size="sm"
                               variant="primary"
                               disabled={isCreating || selectedHeroActionIds.length === 0}
-                              onClick={() => handle1TapAddBundle(heroItem, heroActionBundle)}
-                              className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-caption font-bold shadow-xs transition-all min-h-[40px] flex items-center gap-1.5 shrink-0"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handle1TapAddBundle(heroItem, heroActionBundle)
+                              }}
+                              className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-caption font-bold shadow-xs transition-all min-h-[40px] flex items-center gap-1.5 shrink-0 cursor-pointer"
                             >
                               {isCreating ? (
                                 <Loader2 size={12} className="animate-spin" />
                               ) : (
                                 <CalendarPlus size={13} />
                               )}
-                              <span>
-                                {selectedHeroActionIds.length === heroActionBundle.actions.length
-                                  ? `+ Add Both (${selectedHeroActionIds.length})`
-                                  : selectedHeroActionIds.length > 0
-                                  ? `+ Add Selected (${selectedHeroActionIds.length})`
-                                  : 'Select an Action'}
-                              </span>
+                              <span>+ Add All ({selectedHeroActionIds.length}) to Schedule</span>
                             </Button>
                           )}
                         </div>
                       </div>
                     ) : heroSuggestedEvent ? (
-                      <div className="p-3 rounded-xl bg-amber-50/90 border border-amber-200 flex items-center justify-between gap-3 flex-wrap">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <Calendar size={15} className="text-amber-700 shrink-0" />
-                          <span className="text-caption font-bold text-amber-950 truncate">
-                            Suggests: {heroSuggestedEvent.title} ({heroSuggestedEvent.displayDate})
-                          </span>
+                      <div className="p-3 rounded-xl bg-amber-50/90 border border-amber-200 flex flex-col gap-2.5 shadow-2xs">
+                        <div className="flex items-center justify-between gap-3 flex-wrap">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Calendar size={15} className="text-amber-700 shrink-0" />
+                            <span className="text-caption font-bold text-amber-950 truncate">
+                              Suggests: {heroSuggestedEvent.title} ({heroSuggestedEvent.displayDate})
+                            </span>
+                          </div>
+
+                          {isEventAdded ? (
+                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-xl bg-emerald-100 text-emerald-900 text-caption font-bold border border-emerald-200">
+                              <Check size={13} className="text-emerald-700" />
+                              <span>Added</span>
+                            </span>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              disabled={isCreating}
+                              onClick={() => handle1TapAddCalendar(heroItem, heroSuggestedEvent)}
+                              className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-caption font-bold shadow-xs transition-all min-h-[40px] flex items-center gap-1.5 shrink-0"
+                            >
+                              {isCreating ? <Loader2 size={12} className="animate-spin" /> : <CalendarPlus size={13} />}
+                              <span>+ Add to Calendar ({heroSuggestedEvent.displayDate})</span>
+                            </Button>
+                          )}
                         </div>
 
-                        {isEventAdded ? (
-                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-xl bg-emerald-100 text-emerald-900 text-caption font-bold border border-emerald-200">
-                            <Check size={13} className="text-emerald-700" />
-                            <span>Added</span>
-                          </span>
-                        ) : (
+                        <div className="pt-0.5">
                           <Button
+                            variant="ghost"
                             size="sm"
-                            variant="secondary"
-                            disabled={isCreating}
-                            onClick={() => handle1TapAddCalendar(heroItem, heroSuggestedEvent)}
-                            className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-caption font-bold shadow-xs transition-all min-h-[40px] flex items-center gap-1.5 shrink-0"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setActivePeekActionId((prev) => (prev === 'hero-single-event' ? null : 'hero-single-event'))
+                            }}
+                            className="text-2xs font-bold text-amber-950 hover:text-amber-800 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-all cursor-pointer min-h-[28px] h-auto"
                           >
-                            {isCreating ? <Loader2 size={12} className="animate-spin" /> : <CalendarPlus size={13} />}
-                            <span>+ Add to Calendar ({heroSuggestedEvent.displayDate})</span>
+                            <Eye size={11} className="text-amber-700 shrink-0" />
+                            <span>
+                              {activePeekActionId === 'hero-single-event'
+                                ? 'Hide Day Schedule ▲'
+                                : `Peek at ${heroSuggestedEvent.displayDate ? heroSuggestedEvent.displayDate.split('·')[0].trim() : 'Day'} Schedule →`}
+                            </span>
                           </Button>
+                        </div>
+
+                        {activePeekActionId === 'hero-single-event' && (
+                          <div className="mt-1 w-full" onClick={(e) => e.stopPropagation()}>
+                            <DaySchedulePeekTray
+                              action={{
+                                id: 'hero-single-event',
+                                title: heroSuggestedEvent.title,
+                                subtitle: heroSuggestedEvent.description || undefined,
+                                date: heroSuggestedEvent.date,
+                                displayDate: heroSuggestedEvent.displayDate,
+                                startTime: heroSuggestedEvent.startTime,
+                                endTime: heroSuggestedEvent.endTime,
+                                allDay: heroSuggestedEvent.allDay,
+                                location: heroSuggestedEvent.location,
+                                assignedMemberName: heroSuggestedEvent.assignedMemberName,
+                              }}
+                              onClose={() => setActivePeekActionId(null)}
+                            />
+                          </div>
                         )}
                       </div>
                     ) : null}

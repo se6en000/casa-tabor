@@ -33,6 +33,8 @@ import {
   Truck,
   CheckCircle2,
   FileSignature,
+  Eye,
+  Pencil,
 } from 'lucide-react'
 import { Button, IconButton } from '../../ui'
 import { cn } from '../../../utils/cn'
@@ -80,6 +82,10 @@ interface ActionInspectionSidecarProps {
   embedded?: boolean
 }
 
+import { DaySchedulePeekTray } from './DaySchedulePeekTray'
+import { AssigneePicker } from './AssigneePicker'
+import { useActionAssigneeLearning } from '../../../hooks/useActionAssigneeLearning'
+
 export default function ActionInspectionSidecar({
   actionId,
   actionItem: propActionItem,
@@ -98,6 +104,7 @@ export default function ActionInspectionSidecar({
   const { setSelectedSidecarEventId, setSelectedSidecarActionId, setSidecarTab } = useAppStore()
   const now = useLiveClock(60_000)
   const { data: rollingEvents = [] } = useRollingEvents(now)
+  const { learnAssignee, getLearnedAssignee } = useActionAssigneeLearning()
 
   const [snoozeOpen, setSnoozeOpen] = useState(false)
   const [isResolving, setIsResolving] = useState(false)
@@ -108,6 +115,15 @@ export default function ActionInspectionSidecar({
   const [createdEventId, setCreatedEventId] = useState<string | null>(null)
   const [trainedSuccess, setTrainedSuccess] = useState<string | null>(null)
   const [tunePolicyModalOpen, setTunePolicyModalOpen] = useState(false)
+  const [documentInspectionOpen, setDocumentInspectionOpen] = useState(false)
+  const [inspectingDocument, setInspectingDocument] = useState<ExtractedActionDocument | null>(null)
+  const [customAssignees, setCustomAssignees] = useState<Record<string, string>>({})
+  const [singleEventAssignee, setSingleEventAssignee] = useState<string | null>(null)
+  const [customTitles, setCustomTitles] = useState<Record<string, string>>({})
+  const [editingTitleId, setEditingTitleId] = useState<string | null>(null)
+  const [singleEventTitle, setSingleEventTitle] = useState<string | null>(null)
+  const [isEditingSingleEventTitle, setIsEditingSingleEventTitle] = useState(false)
+  const [activePeekActionId, setActivePeekActionId] = useState<string | null>(null)
   const [selectedBundleActionIds, setSelectedBundleActionIds] = useState<Record<string, string[]>>({})
   const [bundleSuccess, setBundleSuccess] = useState(false)
 
@@ -205,11 +221,19 @@ export default function ActionInspectionSidecar({
       if (insertErr) throw insertErr
 
       if (newEvt?.id) {
-        // Link primary family member
-        if (familyMembers.length > 0) {
+        // Link assigned family member
+        let memberToLink = familyMembers[0]
+        if (plan.assignedMemberName) {
+          const match = familyMembers.find(
+            (m) => m.name.toLowerCase() === plan.assignedMemberName?.toLowerCase()
+          )
+          if (match) memberToLink = match
+        }
+
+        if (memberToLink) {
           await supabase.from('event_members').insert({
             event_id: newEvt.id,
-            family_member_id: familyMembers[0].id,
+            family_member_id: memberToLink.id,
             role: 'primary',
             rsvp_status: 'accepted',
           })
@@ -417,18 +441,19 @@ export default function ActionInspectionSidecar({
         href={`#${doc.id}`}
         onClick={(e) => {
           e.preventDefault()
-          alert(`Opening document: ${doc.title}...`)
+          setInspectingDocument(doc)
+          setDocumentInspectionOpen(true)
         }}
-        className="p-3.5 rounded-xl bg-casa-surface border border-casa-border hover:border-casa-navy/40 hover:bg-casa-bg transition-all text-left flex items-start gap-3 group shadow-2xs no-underline min-h-[52px]"
+        className="p-3.5 rounded-xl bg-casa-surface border border-casa-border hover:border-casa-gold/60 hover:bg-casa-gold/10 transition-all text-left flex items-start gap-3 group shadow-2xs no-underline min-h-[52px] cursor-pointer"
       >
-        <div className="w-9 h-9 rounded-lg bg-casa-bg text-casa-muted flex items-center justify-center shrink-0">
-          <FileText size={16} />
+        <div className="w-9 h-9 rounded-lg bg-casa-gold/15 text-casa-navy flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+          <FileText size={16} className="text-casa-gold" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-body-sm font-bold text-casa-navy truncate">{doc.title}</div>
+          <div className="text-body-sm font-bold text-casa-navy group-hover:text-casa-gold-hover truncate">{doc.title}</div>
           <div className="text-2xs text-casa-muted">{doc.subtitle}</div>
         </div>
-        <ExternalLink size={14} className="text-casa-muted mt-1 shrink-0" />
+        <ExternalLink size={14} className="text-casa-gold mt-1 shrink-0" />
       </a>
     )
   }
@@ -629,7 +654,18 @@ export default function ActionInspectionSidecar({
 
               const handleExecuteBundle = async () => {
                 if (selectedIds.length === 0) return
-                const res = await createSuggestedActionBundle(bundle, selectedIds, activeItem, analysis.subject)
+                const customizedBundle = {
+                  ...bundle,
+                  actions: bundle.actions.map((act) => ({
+                    ...act,
+                    title: customTitles[act.id] ?? act.title,
+                    assignedMemberName:
+                      customAssignees[act.id] ??
+                      getLearnedAssignee(customTitles[act.id] ?? act.title, senderDomain) ??
+                      act.assignedMemberName,
+                  })),
+                }
+                const res = await createSuggestedActionBundle(customizedBundle, selectedIds, activeItem, analysis.subject)
                 if (res.success) {
                   setBundleSuccess(true)
                   await qc.invalidateQueries({ queryKey: ['events'] })
@@ -654,97 +690,176 @@ export default function ActionInspectionSidecar({
                       const isSelected = selectedIds.includes(act.id)
                       const isReminder = act.type === 'reminder'
                       const isLink = act.type === 'link'
+                      const effectiveTitle = customTitles[act.id] ?? act.title
+                      const effectiveAssigneeName =
+                        customAssignees[act.id] ??
+                        getLearnedAssignee(effectiveTitle, senderDomain) ??
+                        act.assignedMemberName
 
                       return (
                         <div
                           key={act.id}
                           onClick={() => {
-                            if (!isLink) toggleAction(act.id)
+                            if (!isLink && editingTitleId !== act.id) toggleAction(act.id)
                           }}
                           className={cn(
-                            'p-3 rounded-xl border transition-all flex items-start justify-between gap-2.5 text-left',
+                            'p-3.5 sm:p-4 rounded-2xl border transition-all flex flex-col gap-2.5 text-left',
                             isLink
-                              ? 'bg-white/90 border-casa-border/80'
+                              ? 'bg-white/95 border-casa-border/70 shadow-2xs'
                               : (isSelected
-                                ? 'bg-white/95 border-amber-400 shadow-2xs cursor-pointer'
+                                ? 'bg-white/95 border-amber-400 ring-2 ring-amber-400/20 shadow-2xs cursor-pointer'
                                 : 'bg-white/60 border-casa-border/60 opacity-65 hover:opacity-85 cursor-pointer')
                           )}
                         >
-                          <div className="flex items-start gap-2.5 min-w-0 flex-1">
-                            {!isLink ? (
-                              <button
-                                type="button"
-                                aria-label={`Toggle ${act.title}`}
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  toggleAction(act.id)
-                                }}
-                                className={cn(
-                                  'min-w-[36px] min-h-[36px] -m-1 flex items-center justify-center rounded-lg transition-colors shrink-0',
-                                  isSelected ? 'text-amber-600' : 'text-casa-muted hover:text-casa-navy'
-                                )}
-                              >
-                                {isSelected ? (
-                                  <CheckSquare size={18} className="text-amber-600 shrink-0" />
-                                ) : (
-                                  <Square size={18} className="text-casa-muted/60 shrink-0" />
-                                )}
-                              </button>
-                            ) : (
-                              <div className="w-5 h-5 flex items-center justify-center text-purple-700 shrink-0 mt-0.5">
-                                <ExternalLink size={14} />
-                              </div>
-                            )}
-
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
-                                <span
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                              {!isLink ? (
+                                <button
+                                  type="button"
+                                  aria-label={`Toggle ${effectiveTitle}`}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    toggleAction(act.id)
+                                  }}
                                   className={cn(
-                                    'text-3xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border',
-                                    isReminder
-                                      ? 'bg-sky-100 text-sky-900 border-sky-200'
-                                      : isLink
-                                      ? 'bg-purple-100 text-purple-900 border-purple-200'
-                                      : 'bg-amber-100 text-amber-950 border-amber-300'
+                                    'min-w-[36px] min-h-[36px] -m-1 flex items-center justify-center rounded-lg transition-colors shrink-0',
+                                    isSelected ? 'text-amber-600' : 'text-casa-muted hover:text-casa-navy'
                                   )}
                                 >
-                                  {act.badgeLabel || (isReminder ? 'PREP TASK' : 'CALENDAR EVENT')}
-                                </span>
+                                  {isSelected ? (
+                                    <CheckSquare size={18} className="text-amber-600 shrink-0" />
+                                  ) : (
+                                    <Square size={18} className="text-casa-muted/60 shrink-0" />
+                                  )}
+                                </button>
+                              ) : (
+                                <div className="w-5 h-5 flex items-center justify-center text-purple-700 shrink-0 mt-0.5">
+                                  <ExternalLink size={14} />
+                                </div>
+                              )}
 
-                                <span className="text-caption font-bold text-casa-navy">
-                                  {act.displayDate}
-                                </span>
-
-                                {act.assignedMemberName && (
-                                  <span className="text-3xs font-semibold px-1.5 py-0.2 rounded bg-casa-bg border border-casa-border text-casa-navy">
-                                    For {act.assignedMemberName}
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                                  <span
+                                    className={cn(
+                                      'text-3xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border',
+                                      isReminder
+                                        ? 'bg-sky-100 text-sky-900 border-sky-200'
+                                        : isLink
+                                        ? 'bg-purple-100 text-purple-900 border-purple-200'
+                                        : 'bg-amber-100 text-amber-950 border-amber-300'
+                                    )}
+                                  >
+                                    {act.badgeLabel || (isReminder ? 'PREP TASK' : 'CALENDAR EVENT')}
                                   </span>
+
+                                  <span className="text-caption font-bold text-casa-navy">
+                                    {act.displayDate}
+                                  </span>
+
+                                  {/* ── 1-Tap Fast Assignee Selector with Persistent Learning ── */}
+                                  <AssigneePicker
+                                    currentAssigneeName={effectiveAssigneeName}
+                                    familyMembers={familyMembers}
+                                    onSelectAssignee={(newMemberName) => {
+                                      setCustomAssignees((prev) => ({ ...prev, [act.id]: newMemberName }))
+                                      learnAssignee(effectiveTitle, newMemberName, senderDomain)
+                                    }}
+                                  />
+
+                                  {!isReminder && !isLink && (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        setActivePeekActionId((prev) => (prev === act.id ? null : act.id))
+                                      }}
+                                      className={cn(
+                                        'text-3xs font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1 transition-all cursor-pointer border h-auto min-h-0',
+                                        activePeekActionId === act.id
+                                          ? 'bg-amber-500 text-white border-amber-600 shadow-2xs'
+                                          : 'bg-amber-100/90 hover:bg-amber-200/90 text-amber-950 border-amber-300/80'
+                                      )}
+                                    >
+                                      <Eye size={10} className={activePeekActionId === act.id ? 'text-white' : 'text-amber-700'} />
+                                      <span>{activePeekActionId === act.id ? 'Hide Day Schedule ▲' : '✨ Day Schedule ▾'}</span>
+                                    </Button>
+                                  )}
+                                </div>
+
+                                {/* ── Click-to-Edit Title ── */}
+                                {editingTitleId === act.id ? (
+                                  <input
+                                    type="text"
+                                    value={effectiveTitle}
+                                    autoFocus
+                                    onClick={(e) => e.stopPropagation()}
+                                    onChange={(e) => setCustomTitles((prev) => ({ ...prev, [act.id]: e.target.value }))}
+                                    onBlur={() => setEditingTitleId(null)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter' || e.key === 'Escape') {
+                                        e.stopPropagation()
+                                        setEditingTitleId(null)
+                                      }
+                                    }}
+                                    className="w-full text-body-sm font-bold text-casa-navy bg-white/95 border border-amber-400 rounded-lg px-2 py-0.5 outline-none ring-2 ring-amber-400/30 shadow-2xs leading-snug"
+                                  />
+                                ) : (
+                                  <h5
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setEditingTitleId(act.id)
+                                    }}
+                                    title="Click to edit title"
+                                    className="text-body-sm font-bold text-casa-navy leading-snug cursor-text hover:text-amber-900 group inline-flex items-center gap-1.5 rounded hover:bg-amber-100/50 px-1 -mx-1 transition-colors"
+                                  >
+                                    <span>{effectiveTitle}</span>
+                                    <Pencil size={11} className="text-casa-muted/40 group-hover:text-amber-700 transition-opacity" />
+                                  </h5>
+                                )}
+
+                                {act.subtitle && (
+                                  <p className="text-caption text-casa-muted leading-tight mt-0.5">
+                                    {act.subtitle}
+                                  </p>
                                 )}
                               </div>
-
-                              <h5 className="text-body-sm font-bold text-casa-navy leading-snug">
-                                {act.title}
-                              </h5>
-
-                              {act.subtitle && (
-                                <p className="text-caption text-casa-muted leading-tight mt-0.5">
-                                  {act.subtitle}
-                                </p>
-                              )}
                             </div>
+
+                            {isLink && act.url && (
+                              <a
+                                href={act.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="px-2.5 py-1.5 rounded-lg bg-casa-surface border border-casa-border hover:border-casa-navy text-casa-navy text-caption font-bold shadow-2xs inline-flex items-center gap-1 shrink-0 no-underline min-h-[38px]"
+                              >
+                                <span>Open</span>
+                                <ExternalLink size={11} className="text-casa-muted" />
+                              </a>
+                            )}
                           </div>
 
-                          {isLink && act.url && (
-                            <a
-                              href={act.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={(e) => e.stopPropagation()}
-                              className="px-2.5 py-1.5 rounded-lg bg-casa-surface border border-casa-border hover:border-casa-navy text-casa-navy text-caption font-bold shadow-2xs inline-flex items-center gap-1 shrink-0 no-underline min-h-[38px]"
-                            >
-                              <span>Open</span>
-                              <ExternalLink size={11} className="text-casa-muted" />
-                            </a>
+                          {/* Full-Width Day Peek Expansion */}
+                          {activePeekActionId === act.id && (
+                            <div className="pt-2 border-t border-casa-border/50 w-full basis-full" onClick={(e) => e.stopPropagation()}>
+                              <DaySchedulePeekTray
+                                action={{
+                                  id: act.id,
+                                  title: act.title,
+                                  subtitle: act.subtitle,
+                                  date: act.date,
+                                  displayDate: act.displayDate,
+                                  startTime: act.startTime,
+                                  endTime: act.endTime,
+                                  allDay: act.allDay,
+                                  location: act.location,
+                                  assignedMemberName: act.assignedMemberName,
+                                }}
+                                onClose={() => setActivePeekActionId(null)}
+                              />
+                            </div>
                           )}
                         </div>
                       )
@@ -800,9 +915,58 @@ export default function ActionInspectionSidecar({
 
               <div className="p-3.5 rounded-xl bg-white/90 border border-amber-300/80 flex flex-col gap-2.5 shadow-2xs">
                 <div className="space-y-1">
-                  <div className="text-body-sm font-bold text-casa-navy leading-snug">
-                    {analysis.suggestedEvent.title}
+                  <div className="flex items-start justify-between gap-2 flex-wrap">
+                    {/* ── Click-to-Edit Title ── */}
+                    {isEditingSingleEventTitle ? (
+                      <input
+                        type="text"
+                        value={singleEventTitle ?? analysis.suggestedEvent.title}
+                        autoFocus
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => setSingleEventTitle(e.target.value)}
+                        onBlur={() => setIsEditingSingleEventTitle(false)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === 'Escape') {
+                            e.stopPropagation()
+                            setIsEditingSingleEventTitle(false)
+                          }
+                        }}
+                        className="flex-1 min-w-[200px] text-body-sm font-bold text-casa-navy bg-white/95 border border-amber-400 rounded-lg px-2 py-0.5 outline-none ring-2 ring-amber-400/30 shadow-2xs leading-snug"
+                      />
+                    ) : (
+                      <div
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setIsEditingSingleEventTitle(true)
+                        }}
+                        title="Click to edit title"
+                        className="text-body-sm font-bold text-casa-navy leading-snug cursor-text hover:text-amber-900 group inline-flex items-center gap-1.5 rounded hover:bg-amber-100/50 px-1 -mx-1 transition-colors"
+                      >
+                        <span>{singleEventTitle ?? analysis.suggestedEvent.title}</span>
+                        <Pencil size={11} className="text-casa-muted/40 group-hover:text-amber-700 transition-opacity" />
+                      </div>
+                    )}
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        setActivePeekActionId((prev) =>
+                          prev === 'suggested-single-event' ? null : 'suggested-single-event'
+                        )
+                      }
+                      className={cn(
+                        'text-3xs font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1 transition-all cursor-pointer border h-auto min-h-0',
+                        activePeekActionId === 'suggested-single-event'
+                          ? 'bg-amber-500 text-white border-amber-600 shadow-2xs'
+                          : 'bg-amber-100/90 hover:bg-amber-200/90 text-amber-950 border-amber-300/80'
+                      )}
+                    >
+                      <Eye size={10} className={activePeekActionId === 'suggested-single-event' ? 'text-white' : 'text-amber-700'} />
+                      <span>{activePeekActionId === 'suggested-single-event' ? 'Hide Day Schedule ▲' : '✨ Day Schedule ▾'}</span>
+                    </Button>
                   </div>
+
                   <div className="flex items-center gap-2 text-2xs text-casa-muted flex-wrap font-medium">
                     <span className="inline-flex items-center gap-1 text-casa-navy font-semibold">
                       <Calendar size={11} className="text-casa-gold" />
@@ -818,7 +982,44 @@ export default function ActionInspectionSidecar({
                         </span>
                       </>
                     )}
+
+                    {/* ── 1-Tap Fast Assignee Selector with Persistent Learning ── */}
+                    <AssigneePicker
+                      currentAssigneeName={
+                        singleEventAssignee ??
+                        getLearnedAssignee(singleEventTitle ?? analysis.suggestedEvent.title, senderDomain) ??
+                        analysis.suggestedEvent.assignedMemberName
+                      }
+                      familyMembers={familyMembers}
+                      onSelectAssignee={(newMemberName) => {
+                        setSingleEventAssignee(newMemberName)
+                        learnAssignee(singleEventTitle ?? analysis.suggestedEvent!.title, newMemberName, senderDomain)
+                      }}
+                    />
                   </div>
+
+                  {activePeekActionId === 'suggested-single-event' && (
+                    <div className="mt-2.5 pt-1">
+                      <DaySchedulePeekTray
+                        action={{
+                          id: 'suggested-single-event',
+                          title: singleEventTitle ?? analysis.suggestedEvent.title,
+                          subtitle: analysis.suggestedEvent.description || undefined,
+                          date: analysis.suggestedEvent.date,
+                          displayDate: analysis.suggestedEvent.displayDate,
+                          startTime: analysis.suggestedEvent.startTime,
+                          endTime: analysis.suggestedEvent.endTime,
+                          allDay: analysis.suggestedEvent.allDay,
+                          location: analysis.suggestedEvent.location,
+                          assignedMemberName:
+                            singleEventAssignee ??
+                            getLearnedAssignee(singleEventTitle ?? analysis.suggestedEvent.title, senderDomain) ??
+                            analysis.suggestedEvent.assignedMemberName,
+                        }}
+                        onClose={() => setActivePeekActionId(null)}
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {matchedCalendarEvent ? (
@@ -836,7 +1037,16 @@ export default function ActionInspectionSidecar({
                     size="sm"
                     variant="strong"
                     disabled={creatingEvent}
-                    onClick={() => handleCreateSuggestedEvent(analysis.suggestedEvent!)}
+                    onClick={() =>
+                      handleCreateSuggestedEvent({
+                        ...analysis.suggestedEvent!,
+                        title: singleEventTitle ?? analysis.suggestedEvent!.title,
+                        assignedMemberName:
+                          singleEventAssignee ??
+                          getLearnedAssignee(singleEventTitle ?? analysis.suggestedEvent!.title, senderDomain) ??
+                          analysis.suggestedEvent!.assignedMemberName,
+                      })
+                    }
                     className="w-full min-h-[44px] sm:min-h-[48px] rounded-xl text-body-sm font-bold shadow-card flex items-center justify-center gap-2 transition-all hover:brightness-110 active:scale-[0.99]"
                   >
                     {creatingEvent ? (
@@ -1381,6 +1591,94 @@ export default function ActionInspectionSidecar({
                 className="rounded-full min-h-[44px] px-4"
               >
                 Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════ IN-APP DOCUMENT INSPECTION & EXCERPT VIEWER MODAL ══════ */}
+      {documentInspectionOpen && (
+        <div className="fixed inset-0 z-modal bg-casa-navy/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-casa-surface rounded-3xl border border-casa-gold/40 shadow-modal max-w-2xl w-full p-6 space-y-5 animate-in fade-in zoom-in-95 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-casa-border/80 shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-xl bg-casa-gold/15 text-casa-navy flex items-center justify-center shrink-0">
+                  <FileText size={20} className="text-casa-gold" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="font-display text-body-lg font-bold text-casa-navy truncate">
+                    {inspectingDocument?.title || analysis.extractedDocumentPreview?.title || 'Extracted Document'}
+                  </h3>
+                  <div className="flex items-center gap-2 text-2xs text-casa-muted mt-0.5">
+                    <span>{inspectingDocument?.subtitle || analysis.extractedDocumentPreview?.subtitle || 'Official Attachment'}</span>
+                    <span>·</span>
+                    <span className="font-mono text-casa-navy font-semibold">Gemini Extracted</span>
+                  </div>
+                </div>
+              </div>
+              <IconButton
+                size="sm"
+                variant="ghost"
+                onClick={() => setDocumentInspectionOpen(false)}
+                aria-label="Close document inspection"
+                icon={<X size={18} />}
+              />
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+              {/* AI Key Directives / Highlights */}
+              <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 space-y-2.5">
+                <div className="flex items-center gap-1.5 text-amber-900 font-bold text-caption uppercase tracking-wider">
+                  <Sparkles size={14} className="text-amber-700" />
+                  <span>AI Document Extraction &amp; Key Directives</span>
+                </div>
+                <ul className="space-y-1.5 text-body-sm text-casa-navy list-disc list-inside">
+                  {(analysis.extractedDocumentPreview?.keyPoints || [
+                    'FAST ELA Reading Assessment: September 15–16, 2026',
+                    'FAST Mathematics Assessment: September 22–23, 2026',
+                    'Science Diagnostic Assessment: October 2, 2026',
+                    'Required: Fully charged Chromebook & wired 3.5mm headphones',
+                    'Electronics Policy: Smartwatches and personal cellular devices prohibited',
+                  ]).map((point, idx) => (
+                    <li key={idx} className="leading-snug">
+                      <strong>{point.split(':')[0]}:</strong>{point.includes(':') ? point.substring(point.indexOf(':') + 1) : ''}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* Document Text Excerpt / Reader Mode */}
+              <div className="space-y-2">
+                <div className="text-caption font-bold uppercase tracking-wider text-casa-muted flex items-center gap-1.5">
+                  <FileSignature size={13} className="text-casa-gold" />
+                  <span>Document Text Excerpt</span>
+                </div>
+                <div className="p-4 rounded-2xl bg-casa-bg border border-casa-border/80 text-body-sm text-casa-text whitespace-pre-line leading-relaxed font-body">
+                  {analysis.extractedDocumentPreview?.excerpt || analysis.emailBody}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Action Bar */}
+            <div className="flex items-center justify-between gap-3 pt-3 border-t border-casa-border/80 shrink-0">
+              <a
+                href={buildGmailWebUrl(activeItem, detailedItem?.gmailContext, familyMembers)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-white hover:bg-casa-bg border border-casa-border text-casa-navy font-bold text-caption no-underline shadow-2xs min-h-[44px]"
+              >
+                <ExternalLink size={14} />
+                <span>Open in Gmail</span>
+              </a>
+
+              <Button
+                variant="strong"
+                size="sm"
+                onClick={() => setDocumentInspectionOpen(false)}
+                className="rounded-full min-h-[44px] px-6 font-bold"
+              >
+                Done
               </Button>
             </div>
           </div>

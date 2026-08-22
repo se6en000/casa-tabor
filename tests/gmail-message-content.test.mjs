@@ -52,6 +52,7 @@ test('collects attachment metadata without exposing attachment content', () => {
     filename: 'Back-to-school.pdf',
     mimeType: 'application/pdf',
     size: 18273,
+    attachmentId: 'attachment-id',
   }])
 })
 

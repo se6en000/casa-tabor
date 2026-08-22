@@ -421,6 +421,7 @@ async function extractInboxActions(
   llmConfig: { provider?: string; model?: string; api_key: string },
   matchingRules: HouseholdCaptureRule[] = [],
   usage?: UsageAccumulator,
+  attachments: { filename: string; mimeType: string; size: number }[] = [],
 ): Promise<InboxActionItem[]> {
   const emailDate = date ? new Date(date) : new Date()
   const emailDateIso = !isNaN(emailDate.getTime()) ? emailDate.toISOString() : new Date().toISOString()
@@ -428,11 +429,14 @@ async function extractInboxActions(
   const rulesBlock = matchingRules.length > 0
     ? `\nHOUSEHOLD LEARNED RULES FOR THIS SENDER:\n${matchingRules.map(r => `- [${r.pattern_type}: ${r.pattern_value}] ${r.rule_directive}`).join('\n')}\n`
     : ''
+  const attachmentsBlock = attachments.length > 0
+    ? `\nATTACHED DOCUMENTS & FLYERS:\n${attachments.map(a => `- ${a.filename} (${a.mimeType}, ${Math.round(a.size / 1024)} KB)`).join('\n')}\n`
+    : ''
 
-  const prompt = `You extract actionable family inbox tasks.
+  const prompt = `You extract actionable family inbox tasks and decompose attached school/event directives into discrete milestones.
 EMAIL SENT DATE: ${emailDateFormatted} (Header: ${date || emailDateIso})
 Family members: ${familyMembers.map(m => `${m.name} (${m.role})`).join(', ')}
-${rulesBlock}
+${rulesBlock}${attachmentsBlock}
 Return ALL tasks that require family follow-up:
 - forms (permission slips, waivers, bus transportation registrations like 'Register Your Ride', Student ID pickup, PTO forms, Adopt-A-Class)
 - payment (bill, statement, tuition, dues, membership fees, school donations/supplies)
@@ -1121,7 +1125,7 @@ async function handleGmailScan(req: Request): Promise<Response> {
             llmUsage,
           ),
           (isActionCandidate || isUserLabeled) && !backfillFamilyEvidenceOnly
-            ? extractInboxActions(details.subject, details.from, details.date, details.body, familyMembers, llm, matchingRules, llmUsage)
+            ? extractInboxActions(details.subject, details.from, details.date, details.body, familyMembers, llm, matchingRules, llmUsage, details.attachments || [])
             : Promise.resolve([] as InboxActionItem[]),
         ])
 

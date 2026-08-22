@@ -49,6 +49,7 @@ export function extractGmailMessageContent(payload) {
         filename: String(part.filename || 'Unnamed attachment'),
         mimeType: String(part.mimeType || 'application/octet-stream'),
         size: Number.isFinite(part.body?.size) ? part.body.size : 0,
+        attachmentId: part.body?.attachmentId || null,
       })
     }
 
