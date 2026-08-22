@@ -20,6 +20,16 @@ export function AssigneePicker({
 }: AssigneePickerProps) {
   const [isOpen, setIsOpen] = useState(false)
 
+  // Only include family members who have the homepage sidebar setting turned on in their profile
+  const visibleMembers = React.useMemo(() => {
+    return familyMembers.filter((m) => {
+      if (m.show_on_home_sidebar === false) {
+        return m.name.toLowerCase() === currentAssigneeName?.toLowerCase()
+      }
+      return true
+    })
+  }, [familyMembers, currentAssigneeName])
+
   const currentMember = familyMembers.find(
     (m) => m.name.toLowerCase() === currentAssigneeName?.toLowerCase()
   )
@@ -84,7 +94,7 @@ export function AssigneePicker({
             </div>
 
             <div className="grid grid-cols-2 gap-1">
-              {familyMembers.map((member) => {
+              {visibleMembers.map((member) => {
                 const isSelected = member.name.toLowerCase() === currentAssigneeName?.toLowerCase()
                 const isBroadFamily = member.name.toLowerCase().includes('family')
                 return (
