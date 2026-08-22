@@ -27,6 +27,8 @@ export { resolveDayTypeForDate, type RoutineDayType }
 
 export interface DepartureItem {
   id: string
+  eventId?: string
+  rawEvent?: EventWithDetails
   title?: string
   venueName: string
   venueAddress: string
@@ -187,6 +189,8 @@ function deriveDeparturesForDate(
 
         departures.push({
           id: `dep-event-${evt.id}-${dateKey}`,
+          eventId: evt.id,
+          rawEvent: evt,
           title: evt.title,
           venueName: evt.location_name || evt.address || evt.title,
           venueAddress: evt.address || '',
@@ -256,6 +260,8 @@ function deriveDeparturesForDate(
     customDepartureTime?: string
     customWindowStartTime?: Date
     customSchoolStartTime?: Date
+    eventId?: string
+    rawEvent?: EventWithDetails
   }>()
 
   for (const routine of activeRoutines) {
@@ -292,6 +298,8 @@ function deriveDeparturesForDate(
     let customDepartureTime: string | undefined
     let customWindowStartTime: Date | undefined
     let customSchoolStartTime: Date | undefined
+    let effEventId: string | undefined
+    let effRawEvent: EventWithDetails | undefined
 
     if (childMorningEvents.length > 0) {
       const earlyEvt = childMorningEvents[0]
@@ -299,6 +307,8 @@ function deriveDeparturesForDate(
       effStartLocal = format(evtStart, 'HH:mm')
       effVenueName = earlyEvt.location_name || earlyEvt.address || routine.venueName
       effVenueAddress = earlyEvt.address || routine.venueAddress
+      effEventId = earlyEvt.id
+      effRawEvent = earlyEvt
 
       const { id: resolvedDriverId, name: resolvedDriverName } = resolveEventDriver(earlyEvt, familyMembers)
       effDropDriverName = resolvedDriverName || routine.dropoffDriverName || 'Jake'
@@ -346,6 +356,8 @@ function deriveDeparturesForDate(
         customDepartureTime,
         customWindowStartTime,
         customSchoolStartTime,
+        eventId: effEventId,
+        rawEvent: effRawEvent,
       })
     } else {
       const g = groups.get(groupKey)!
@@ -355,6 +367,10 @@ function deriveDeparturesForDate(
       if (isException) {
         g.isException = true
         if (overrideLabel) g.label = overrideLabel
+      }
+      if (effEventId && !g.eventId) {
+        g.eventId = effEventId
+        g.rawEvent = effRawEvent
       }
     }
   }
@@ -389,9 +405,82 @@ function deriveDeparturesForDate(
         ? childNames[0]
         : childNames.slice(0, -1).join(', ') + ' & ' + childNames[childNames.length - 1]
 
+    const eventId = grp.eventId || `routine-drop-${grp.children.map((c) => c.id).sort().join('-')}-${dateKey}`
+
+    const rawEvent: EventWithDetails = grp.rawEvent || {
+      id: eventId,
+      title: grp.label ? `${grp.label} · Drop off ${childNamesFormatted}` : `Drop off ${childNamesFormatted} @ ${grp.venueName}`,
+      description: `Morning drop-off for ${childNamesFormatted}.${grp.label ? ` Note: ${grp.label}.` : ''}`,
+      start_time: windowStart.toISOString(),
+      end_time: new Date(windowStart.getTime() + 15 * 60000).toISOString(),
+      all_day: false,
+      event_type: 'event',
+      location_name: grp.venueName,
+      address: grp.venueAddress,
+      lat: null,
+      lng: null,
+      google_event_id: null,
+      google_calendar_id: null,
+      source_member_id: driverMember?.id || grp.driverId || null,
+      status: 'confirmed',
+      is_enriched: true,
+      rrule: null,
+      recurrence_master_id: null,
+      record_kind: 'single',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      trip_id: null,
+      leg_type: null,
+      flight_number: null,
+      confirmation_number: null,
+      members: [
+        ...(driverMember ? [{
+          id: `mem-${eventId}-driver`,
+          role: 'driver',
+          family_member: driverMember,
+        }] : []),
+        ...grp.children.map((child, idx) => ({
+          id: `mem-${eventId}-child-${idx}`,
+          role: 'passenger',
+          family_member: child,
+        })),
+      ],
+      enrichment: {
+        id: `enr-${eventId}`,
+        event_id: eventId,
+        drive_time_mins: driveMins,
+        departure_time: departureDate.toISOString(),
+        route_summary: `Direct drive to ${grp.venueName}`,
+        weather_at_event: null,
+        weather_summary: null,
+        what_to_bring: [],
+        prep_notes: null,
+        outfit_suggestion: null,
+        parking_notes: null,
+        dietary_notes: null,
+        cost_estimate: null,
+        contact_name: null,
+        contact_phone: null,
+        meal_impact: null,
+        category: 'school',
+        category_locked: true,
+        confidence: 'high',
+        enriched_by: 'family_routines',
+        enriched_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      plan_override: null,
+      logistics: [],
+      checklist: [],
+      actions: [],
+    }
+
     departures.push({
       id: `dep-${key}-${dateKey}`,
-      title: 'School Drop-off',
+      eventId,
+      rawEvent,
+      title: grp.label || 'School Drop-off',
       venueName: grp.venueName,
       venueAddress: grp.venueAddress,
       shortVenueName: formatDisplayVenueName(grp.venueName),

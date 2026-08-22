@@ -6,3 +6,5 @@ export function openEventDetails(eventId: string) {
   document.dispatchEvent(new CustomEvent('casa:open-event-details', { detail: { eventId } }))
 }
 
+
+

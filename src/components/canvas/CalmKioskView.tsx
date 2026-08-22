@@ -516,9 +516,10 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
               now={now}
               showViewToggle={true}
               onToggleTodayView={() => setHeroManualView('today')}
+              onOpenEvent={onOpenEvent}
             />
           ) : showMorningLaunchpad ? (
-            <MorningLaunchpadWidget now={now} />
+            <MorningLaunchpadWidget now={now} onOpenEvent={onOpenEvent} />
           ) : routineIntel.isDaytime && (!nextEvent || (minutesUntilNext !== null && minutesUntilNext > 30) || nextEvent.all_day) ? (
             <MiddayLogisticsWidget
               now={now}

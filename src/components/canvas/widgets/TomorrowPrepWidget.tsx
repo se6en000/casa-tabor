@@ -6,13 +6,15 @@ import {
   Sparkles,
 } from 'lucide-react'
 import { cn } from '../../../utils/cn'
-import { useFamilyRoutineIntelligence } from '../../../hooks/useFamilyRoutineIntelligence'
+import { useFamilyRoutineIntelligence, type DepartureItem } from '../../../hooks/useFamilyRoutineIntelligence'
 import { useHeroTheme } from '../../../hooks/useHeroTheme'
+import { openEventDetails } from '../../../utils/openEventDetails'
 import { Button } from '../../ui'
 
 interface TomorrowPrepWidgetProps {
   now?: Date
   onToggleTodayView?: () => void
+  onOpenEvent?: (event: any) => void
   showViewToggle?: boolean
   className?: string
 }
@@ -20,6 +22,7 @@ interface TomorrowPrepWidgetProps {
 export default function TomorrowPrepWidget({
   now = new Date(),
   onToggleTodayView,
+  onOpenEvent,
   showViewToggle = false,
   className,
 }: TomorrowPrepWidgetProps) {
@@ -39,6 +42,14 @@ export default function TomorrowPrepWidget({
 
   const { heroTheme, toggleHeroTheme } = useHeroTheme(now)
   const isNavy = heroTheme === 'navy'
+
+  const handleOpenDeparture = (dep: DepartureItem) => {
+    if (onOpenEvent && dep.rawEvent) {
+      onOpenEvent(dep.rawEvent)
+    }
+    const targetId = dep.eventId || dep.id
+    openEventDetails(targetId)
+  }
 
   return (
     <div
@@ -100,7 +111,7 @@ export default function TomorrowPrepWidget({
                       ? 'bg-amber-400/10 border-amber-400/25 text-amber-300'
                       : 'bg-amber-500/10 border-amber-500/25 text-amber-800'
                     : isNavy
-                    ? 'bg-white/10 border-white/15 text-slate-300'
+                    ? 'bg-white/10 border-white/15 text-white/70'
                     : 'bg-casa-navy/5 border-casa-border text-casa-navy',
                 )}
               >
@@ -119,44 +130,20 @@ export default function TomorrowPrepWidget({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* 1-Tap Toggle to jump back to today */}
           {showViewToggle && onToggleTodayView && (
-            <div
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={onToggleTodayView}
               className={cn(
-                'inline-flex items-center p-1 rounded-full border shadow-2xs',
+                'rounded-full text-caption font-semibold transition-all px-3 py-1 min-h-[32px] sm:min-h-[36px]',
                 isNavy
-                  ? 'bg-white/10 border-white/15'
-                  : 'bg-casa-surface-subtle border-casa-border',
+                  ? 'bg-white/10 hover:bg-white/15 border-white/15 text-slate-200 hover:text-white'
+                  : 'bg-casa-navy/5 hover:bg-casa-navy/10 border-casa-border text-casa-muted hover:text-casa-navy',
               )}
             >
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onToggleTodayView}
-                className={cn(
-                  'px-3 py-1 rounded-full text-caption font-bold transition-all min-h-[32px] sm:min-h-[36px] flex items-center gap-1.5',
-                  isNavy
-                    ? 'text-white/80 hover:text-white'
-                    : 'text-casa-muted hover:text-casa-navy',
-                )}
-              >
-                <Sun size={12} className={isNavy ? 'text-white/80' : 'text-casa-muted'} />
-                <span>Today's Flow</span>
-              </Button>
-              <Button
-                variant={isNavy ? 'secondary' : 'primary'}
-                size="sm"
-                className={cn(
-                  'px-3 py-1 rounded-full text-caption font-bold shadow-2xs min-h-[32px] sm:min-h-[36px] flex items-center gap-1.5',
-                  isNavy
-                    ? 'bg-casa-gold text-casa-navy'
-                    : 'bg-casa-navy text-white',
-                )}
-              >
-                <Moon size={12} />
-                <span>Tomorrow</span>
-              </Button>
-            </div>
+              Return to Today
+            </Button>
           )}
 
           {totalPrepCount > 0 && (
@@ -215,11 +202,22 @@ export default function TomorrowPrepWidget({
       {/* ── Exception Highlight Card ── */}
       {primaryTomorrowException && (
         <div
+          role="button"
+          tabIndex={0}
+          onClick={() => handleOpenDeparture(primaryTomorrowException)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              handleOpenDeparture(primaryTomorrowException)
+            }
+          }}
+          title="Tap to view departure route and details in sidecar"
+          aria-label={`View details for ${primaryTomorrowException.childNamesFormatted} departure to ${primaryTomorrowException.venueName}`}
           className={cn(
-            'p-4 rounded-2xl border relative z-10 space-y-1.5 transition-colors',
+            'p-4 rounded-2xl border relative z-10 space-y-1.5 transition-all cursor-pointer select-none active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-casa-gold',
             isNavy
-              ? 'bg-amber-500/15 border-amber-400/40 text-white'
-              : 'bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border-amber-500/30 text-casa-navy',
+              ? 'bg-amber-500/15 border-amber-400/40 text-white hover:bg-amber-500/25 hover:border-amber-400/60 hover:shadow-lg'
+              : 'bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border-amber-500/30 text-casa-navy hover:bg-white hover:border-casa-gold/60 hover:shadow-md',
           )}
         >
           <div className="flex items-center justify-between gap-2">
@@ -294,15 +292,26 @@ export default function TomorrowPrepWidget({
             {tomorrowDepartures.map((dep) => (
               <div
                 key={dep.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => handleOpenDeparture(dep)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    handleOpenDeparture(dep)
+                  }
+                }}
+                title="Tap to view departure route and details in sidecar"
+                aria-label={`View details for ${dep.childNamesFormatted} departure to ${dep.venueName}`}
                 className={cn(
-                  'p-3.5 rounded-2xl border flex items-center justify-between gap-2.5 transition-colors',
+                  'p-3.5 rounded-2xl border flex items-center justify-between gap-2.5 transition-all cursor-pointer select-none active:scale-[0.98] min-h-[48px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-casa-gold',
                   isNavy
                     ? dep.isException
-                      ? 'border-amber-400/40 bg-amber-500/10 text-white'
-                      : 'border-white/10 bg-white/5 text-white'
+                      ? 'border-amber-400/40 bg-amber-500/10 text-white hover:bg-amber-500/20 hover:border-amber-400/60'
+                      : 'border-white/10 bg-white/5 text-white hover:bg-white/10 hover:border-white/25'
                     : dep.isException
-                    ? 'border-amber-400/40 bg-amber-50/50 text-casa-navy'
-                    : 'border-casa-border bg-casa-surface-subtle/80 text-casa-navy',
+                    ? 'border-amber-400/40 bg-amber-50/50 text-casa-navy hover:bg-white hover:border-casa-gold/60 hover:shadow-sm'
+                    : 'border-casa-border bg-casa-surface-subtle/80 text-casa-navy hover:bg-white hover:border-casa-gold/50 hover:shadow-sm',
                 )}
               >
                 <div className="min-w-0">

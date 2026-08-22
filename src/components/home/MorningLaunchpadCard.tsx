@@ -5,8 +5,9 @@ import {
   Check,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
-import { useFamilyRoutineIntelligence } from '../../hooks/useFamilyRoutineIntelligence'
+import { useFamilyRoutineIntelligence, type DepartureItem } from '../../hooks/useFamilyRoutineIntelligence'
 import { useHeroTheme } from '../../hooks/useHeroTheme'
+import { openEventDetails } from '../../utils/openEventDetails'
 import { Card, Button } from '../ui'
 
 interface MorningLaunchpadCardProps {
@@ -32,6 +33,11 @@ export default function MorningLaunchpadCard({
 
   const { heroTheme, toggleHeroTheme } = useHeroTheme(now)
   const isNavy = heroTheme === 'navy'
+
+  const handleOpenDeparture = (dep: DepartureItem) => {
+    const targetId = dep.eventId || dep.id
+    openEventDetails(targetId)
+  }
 
   if (!hasTodayDepartures || allTodayDeparturesCompleted || !isMorning) {
     return null
@@ -158,11 +164,22 @@ export default function MorningLaunchpadCard({
         {/* ── Primary Spotlight (First Departure) ── */}
         {nextTodayDeparture && (
           <div
+            role="button"
+            tabIndex={0}
+            onClick={() => handleOpenDeparture(nextTodayDeparture)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                handleOpenDeparture(nextTodayDeparture)
+              }
+            }}
+            title="Tap to view departure route and details in sidecar"
+            aria-label={`View details for ${nextTodayDeparture.childNamesFormatted} departure to ${nextTodayDeparture.venueName}`}
             className={cn(
-              'p-3.5 rounded-xl border space-y-1.5 transition-colors',
+              'p-3.5 rounded-xl border space-y-1.5 transition-all cursor-pointer select-none active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-casa-gold',
               isNavy
-                ? 'bg-slate-800/80 border-white/10 text-white'
-                : 'bg-casa-surface-subtle/80 border-casa-border text-casa-navy',
+                ? 'bg-slate-800/80 border-white/10 text-white hover:bg-slate-700/80 hover:border-white/30 hover:shadow-md'
+                : 'bg-casa-surface-subtle/80 border-casa-border text-casa-navy hover:bg-white hover:border-casa-gold/60 hover:shadow-sm',
             )}
           >
             <div className="flex items-center justify-between gap-2">
@@ -190,7 +207,7 @@ export default function MorningLaunchpadCard({
               </div>
               <span
                 className={cn(
-                  'text-caption font-mono font-bold px-2 py-0.5 rounded border',
+                  'text-caption font-mono font-bold px-2 py-0.5 rounded border transition-colors',
                   isNavy
                     ? 'bg-slate-700 border-white/10 text-slate-100'
                     : 'bg-white border-casa-border text-casa-navy',
@@ -231,7 +248,7 @@ export default function MorningLaunchpadCard({
                 </div>
                 <span
                   className={cn(
-                    'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-caption font-bold',
+                    'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-caption font-bold transition-transform',
                     isNavy
                       ? 'bg-white/10 border-white/15 text-amber-300'
                       : 'bg-casa-gold/15 border-casa-gold/30 text-casa-gold',
@@ -259,13 +276,26 @@ export default function MorningLaunchpadCard({
             {todayDepartures.map((dep) => (
               <div
                 key={dep.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => handleOpenDeparture(dep)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    handleOpenDeparture(dep)
+                  }
+                }}
+                title="Tap to view departure route and details in sidecar"
+                aria-label={`View details for ${dep.childNamesFormatted} departure to ${dep.venueName}`}
                 className={cn(
-                  'p-3 rounded-xl border flex items-center justify-between gap-2.5 transition-colors',
+                  'p-3 rounded-xl border flex items-center justify-between gap-2.5 transition-all cursor-pointer select-none active:scale-[0.98] min-h-[48px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-casa-gold',
                   isNavy
-                    ? 'bg-slate-800/80 border-white/10 text-white hover:bg-slate-700/80'
+                    ? dep.id === nextTodayDeparture?.id
+                      ? 'bg-slate-800/90 border-white/20 ring-1 ring-casa-gold/30 text-white hover:bg-slate-700/90'
+                      : 'bg-slate-800/80 border-white/10 text-white hover:bg-slate-700/80 hover:border-white/25'
                     : dep.id === nextTodayDeparture?.id
-                    ? 'border-casa-gold/40 bg-casa-gold/5 text-casa-navy'
-                    : 'border-casa-border bg-casa-surface/60 text-casa-navy',
+                    ? 'border-casa-gold/40 bg-casa-gold/5 text-casa-navy hover:bg-white hover:border-casa-gold/60 hover:shadow-sm'
+                    : 'border-casa-border bg-casa-surface/60 text-casa-navy hover:bg-white hover:border-casa-gold/50 hover:shadow-sm',
                 )}
               >
                 <div className="min-w-0">
