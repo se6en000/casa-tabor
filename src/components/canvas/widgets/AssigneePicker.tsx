@@ -63,40 +63,57 @@ export function AssigneePicker({
         <ChevronDown size={10} className={cn('transition-transform duration-150', isOpen && 'rotate-180 text-casa-gold')} />
       </Button>
 
-      {/* ── 1-Tap Fast Member Selection Strip ── */}
+      {/* ── 1-Tap Fast Member Selection Dropdown (Bounded within 3rd Rail) ── */}
       {isOpen && (
-        <div className="absolute left-0 top-full mt-1 z-30 p-1.5 rounded-xl bg-white/95 backdrop-blur-md border border-casa-gold/60 shadow-lg flex items-center gap-1 flex-wrap animate-in fade-in-0 zoom-in-95 duration-150 min-w-max max-w-[280px]">
-          <span className="text-3xs font-mono font-bold text-casa-muted uppercase tracking-wider px-1.5 py-0.5 block w-full border-b border-casa-border/50 mb-0.5 flex items-center gap-1">
-            <UserCheck size={10} className="text-casa-gold" />
-            <span>Select Assignee</span>
-          </span>
+        <>
+          {/* Invisible dismissal backdrop */}
+          <div
+            className="fixed inset-0 z-20 cursor-default"
+            onClick={(e) => {
+              e.stopPropagation()
+              setIsOpen(false)
+            }}
+          />
 
-          {familyMembers.map((member) => {
-            const isSelected = member.name.toLowerCase() === currentAssigneeName?.toLowerCase()
-            return (
-              <Button
-                key={member.id}
-                variant="ghost"
-                size="sm"
-                onClick={(e) => handleSelect(e, member.name)}
-                className={cn(
-                  'px-2 py-1 rounded-lg text-2xs font-bold inline-flex items-center gap-1.5 transition-all cursor-pointer border min-h-[30px] h-auto',
-                  isSelected
-                    ? 'bg-casa-navy text-casa-gold border-casa-navy shadow-2xs ring-1 ring-casa-gold/40'
-                    : 'bg-casa-surface hover:bg-casa-surface-subtle border-casa-border hover:border-casa-gold text-casa-navy'
-                )}
-              >
-                <MemberJewelPill
-                  member={member}
-                  size="sm"
-                  showName={false}
-                  className="border-0 bg-transparent p-0 shadow-none min-h-0"
-                />
-                <span>{member.name}</span>
-              </Button>
-            )
-          })}
-        </div>
+          <div className="absolute left-0 top-full mt-1.5 z-30 p-2 rounded-2xl bg-white/98 backdrop-blur-md border border-amber-300 shadow-xl flex flex-col gap-1.5 w-[220px] max-w-[calc(100vw-2rem)] animate-in fade-in-0 zoom-in-95 duration-150">
+            <div className="text-3xs font-mono font-bold text-casa-muted uppercase tracking-wider px-1 pb-1 border-b border-casa-border/50 flex items-center justify-between">
+              <span className="flex items-center gap-1">
+                <UserCheck size={10} className="text-amber-700" />
+                <span>Select Assignee</span>
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-1">
+              {familyMembers.map((member) => {
+                const isSelected = member.name.toLowerCase() === currentAssigneeName?.toLowerCase()
+                const isBroadFamily = member.name.toLowerCase().includes('family')
+                return (
+                  <Button
+                    key={member.id}
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => handleSelect(e, member.name)}
+                    className={cn(
+                      'px-2 py-1.5 rounded-xl text-2xs font-bold inline-flex items-center gap-1.5 transition-all cursor-pointer border min-h-[34px] h-auto justify-start truncate',
+                      isBroadFamily && 'col-span-2',
+                      isSelected
+                        ? 'bg-casa-navy text-casa-gold border-casa-navy shadow-2xs ring-1 ring-casa-gold/40'
+                        : 'bg-casa-surface/90 hover:bg-casa-surface-subtle border-casa-border/70 hover:border-amber-400 text-casa-navy'
+                    )}
+                  >
+                    <MemberJewelPill
+                      member={member}
+                      size="sm"
+                      showName={false}
+                      className="border-0 bg-transparent p-0 shadow-none min-h-0 shrink-0"
+                    />
+                    <span className="truncate">{member.name}</span>
+                  </Button>
+                )
+              })}
+            </div>
+          </div>
+        </>
       )}
     </div>
   )
