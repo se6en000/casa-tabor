@@ -207,6 +207,7 @@ export default function DesignSystemGalleryPage() {
   const [disclosureOpen, setDisclosureOpen] = useState(false)
   const [highlightedStreamId, setHighlightedStreamId] = useState<string | null>('gymnastics')
   const [heroJourneyPhase, setHeroJourneyPhase] = useState<'prep' | 'leave-now' | 'en-route' | 'in-session'>('prep')
+  const [heroPreviewTheme, setHeroPreviewTheme] = useState<'navy' | 'linen'>('linen')
 
   // ── Overlays & Dialogs ───────────────────────────────────────────────────
   const [modalOpen, setModalOpen] = useState(false)
@@ -1121,7 +1122,16 @@ export default function DesignSystemGalleryPage() {
                   Option A: Dual-Phase Journey & Departure Bar with At-Home Buffer and Transit Gate
                 </p>
               </div>
-              <div className="w-full sm:w-auto">
+              <div className="flex flex-wrap items-center gap-2">
+                <SegmentedControl
+                  aria-label="Hero finish selector"
+                  value={heroPreviewTheme}
+                  onChange={(val) => setHeroPreviewTheme(val as typeof heroPreviewTheme)}
+                  options={[
+                    { value: 'linen', label: 'Belgian Linen' },
+                    { value: 'navy', label: 'Obsidian Navy' },
+                  ]}
+                />
                 <SegmentedControl
                   aria-label="Journey phase selector"
                   value={heroJourneyPhase}
@@ -1153,7 +1163,7 @@ export default function DesignSystemGalleryPage() {
                 statusVar = 'warning'
               } else if (heroJourneyPhase === 'leave-now') {
                 mockNow = new Date(mockLeaveTime.getTime() + 1 * 60 * 1000)
-                statusLabel = '🚗 TIME TO LEAVE NOW'
+                statusLabel = 'TIME TO LEAVE NOW'
                 statusVar = 'gold'
               } else if (heroJourneyPhase === 'en-route') {
                 mockNow = new Date(mockLeaveTime.getTime() + 15 * 60 * 1000)
@@ -1165,8 +1175,11 @@ export default function DesignSystemGalleryPage() {
                 statusVar = 'active'
               }
 
+              const isLinen = heroPreviewTheme === 'linen'
+
               return (
                 <HeroCard
+                  theme={heroPreviewTheme}
                   statusText={statusLabel}
                   statusVariant={statusVar}
                   timeBadge="3:30 PM – 4:30 PM"
@@ -1178,14 +1191,24 @@ export default function DesignSystemGalleryPage() {
                     </>
                   }
                   prepSummary={
-                    <div className="flex items-center gap-2 text-slate-300/90 text-caption">
+                    <div
+                      className={cn(
+                        'flex items-center gap-2 text-caption',
+                        isLinen ? 'text-casa-muted' : 'text-slate-300/90',
+                      )}
+                    >
                       <Gift size={15} className="text-casa-gold shrink-0" />
-                      <span className="font-semibold text-white/90 shrink-0">Bring:</span>
-                      <span className="text-white/75 truncate">New patient forms · Dental retainer case</span>
+                      <span className={cn('font-semibold shrink-0', isLinen ? 'text-casa-navy' : 'text-white/90')}>
+                        Bring:
+                      </span>
+                      <span className={cn('truncate', isLinen ? 'text-casa-navy/80' : 'text-white/75')}>
+                        New patient forms · Dental retainer case
+                      </span>
                     </div>
                   }
                   timeline={
                     <JourneyProgressBar
+                      theme={heroPreviewTheme}
                       now={mockNow}
                       leaveAt={mockLeaveTime}
                       startTime={mockStartTime}
@@ -1200,19 +1223,36 @@ export default function DesignSystemGalleryPage() {
                   avatars={
                     <div className="flex items-center gap-2">
                       <span
-                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-caption font-semibold bg-white/10 text-white"
+                        className={cn(
+                          'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-caption font-semibold border',
+                          isLinen
+                            ? 'bg-casa-surface-subtle text-casa-navy border-casa-border'
+                            : 'bg-white/10 text-white border-white/10',
+                        )}
                         style={{ borderLeft: '3px solid var(--color-family-owen)' }}
                       >
                         Owen
                       </span>
                       <span
-                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-caption font-semibold bg-casa-gold/25 text-casa-gold border border-casa-gold/50 shadow-sm ring-1 ring-casa-gold/30"
+                        className={cn(
+                          'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-caption font-semibold border shadow-sm ring-1',
+                          isLinen
+                            ? 'bg-amber-500/15 text-amber-900 border-amber-500/40 ring-amber-500/20'
+                            : 'bg-casa-gold/25 text-casa-gold border border-casa-gold/50 ring-casa-gold/30',
+                        )}
                       >
                         <Car size={12} className="text-casa-gold shrink-0 animate-pulse" />
                         <span>Kelly</span>
                         <span className="text-2xs uppercase tracking-wider font-bold opacity-80">(Driver)</span>
                       </span>
-                      <span className="inline-flex items-center gap-1.5 text-caption text-white/80 bg-white/10 px-3 py-1 rounded-full border border-white/10">
+                      <span
+                        className={cn(
+                          'inline-flex items-center gap-1.5 text-caption px-3 py-1 rounded-full border',
+                          isLinen
+                            ? 'text-casa-text-secondary bg-casa-surface-subtle border-casa-border'
+                            : 'text-white/80 bg-white/10 border-white/10',
+                        )}
+                      >
                         <Car size={13} className="text-casa-gold shrink-0" />
                         <span>Kelly driving · </span>
                         {heroJourneyPhase === 'in-session' ? (
@@ -1220,7 +1260,9 @@ export default function DesignSystemGalleryPage() {
                         ) : (
                           <>
                             <span>25m drive</span>
-                            <span className="text-casa-gold font-bold">· Leave 3:05 PM</span>
+                            <span className={isLinen ? 'text-amber-800 font-bold' : 'text-casa-gold font-bold'}>
+                              · Leave 3:05 PM
+                            </span>
                           </>
                         )}
                       </span>
@@ -1242,7 +1284,12 @@ export default function DesignSystemGalleryPage() {
                       <Button
                         size="sm"
                         variant="secondary"
-                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/20 text-caption font-semibold transition-all min-h-control"
+                        className={cn(
+                          'flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-caption font-semibold transition-all min-h-control border',
+                          isLinen
+                            ? 'bg-casa-navy/5 hover:bg-casa-navy/10 text-casa-navy border-casa-border'
+                            : 'bg-white/10 hover:bg-white/20 text-white border-white/20',
+                        )}
                         onClick={() => {
                           setToastMessage('Event inspection modal opened');
                           setToastOpen(true);

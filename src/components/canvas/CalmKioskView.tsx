@@ -769,6 +769,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                           originName={originName}
                           destinationName={destinationName}
                           returnDestinationName={returnDestinationName}
+                          theme={isHeroNavy ? 'navy' : 'linen'}
                         />
                       )
                     }
