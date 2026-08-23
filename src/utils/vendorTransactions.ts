@@ -39,32 +39,89 @@ function normalizeKeyPart(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 }
 
+export function canonicalizeOrderId(vendor: string, rawId: string): string {
+  const clean = rawId.trim().replace(/^[#:\s]+/, '')
+  const v = vendor.toLowerCase()
+  if (v.includes('walmart')) {
+    const digitsOnly = clean.replace(/[^0-9]/g, '')
+    if (digitsOnly.length === 15 || digitsOnly.length === 16) {
+      return `${digitsOnly.slice(0, 7)}-${digitsOnly.slice(7)}`
+    }
+    return normalizeKeyPart(clean)
+  }
+  if (v.includes('amazon')) {
+    const digitsOnly = clean.replace(/[^0-9]/g, '')
+    if (digitsOnly.length === 17) {
+      return `${digitsOnly.slice(0, 3)}-${digitsOnly.slice(3, 10)}-${digitsOnly.slice(10)}`
+    }
+    return normalizeKeyPart(clean)
+  }
+  if (v.includes('apple') || clean.startsWith('W')) {
+    return clean.toUpperCase()
+  }
+  if (v.includes('nike') || clean.startsWith('C0') || clean.startsWith('C-')) {
+    return clean.toUpperCase()
+  }
+  return normalizeKeyPart(clean)
+}
+
 function legacyVendor(item: PrepItem) {
   const text = `${item.event_title ?? ''} ${item.description}`.toLowerCase()
   return VENDOR_ALIASES.find(({ aliases }) => aliases.some((alias) => text.includes(alias)))?.vendor ?? null
 }
 
-function orderId(item: PrepItem): string | null {
-  const text = `${item.event_title ?? ''} ${item.description}`
+export function orderId(item: PrepItem): string | null {
+  const text = `${item.event_title ?? ''} ${item.description ?? ''} ${item.source_ref ?? ''}`
 
-  // Amazon order format: 123-1234567-1234567
+  // 1. Amazon order format: 123-1234567-1234567
   const amazonMatch = text.match(/\b\d{3}-\d{7}-\d{7}\b/)
   if (amazonMatch) return amazonMatch[0]
 
-  // Explicit numeric Order Number: e.g. "Order #2541442349", "Order #20001519169311", "Order number: 987654321", "#2000151-91693117", "(Order #2541442349)"
-  const explicitOrderMatch = text.match(/\b(?:order|cart)\s*(?:number|no\.?|id|#)\s*[:#]?\s*#?([a-z0-9-]*\d{4,}[a-z0-9-]*)\b/i)
+  // 2. Walmart formatted order numbers: e.g. "2000154-80824348", "1000154-80824348"
+  const walmartMatch = text.match(/\b(?:2000|1000)\d{3}-\d{8}\b/)
+  if (walmartMatch) return walmartMatch[0]
+
+  // 3. Walmart long unhyphenated numeric order ID e.g. "200015480824348"
+  const walmartLongMatch = text.match(/\b(?:2000|1000)\d{11,13}\b/)
+  if (walmartLongMatch) return walmartLongMatch[0]
+
+  // 4. Explicit numeric or alphanumeric Order / Cart / Confirmation / Reference number
+  // e.g. "Order #2541442349", "Order # 2000154-80824348", "Order number: 987654321", "Cart #50 (Order #2541442349)", "Confirmation # 2000154-80824348", "orderId=200015480824348"
+  const explicitOrderMatch = text.match(/\b(?:order|cart|confirmation|reference|invoice|receipt|wm)\s*(?:number|no\.?|id|#|:)\s*[:#]?\s*#?([a-z0-9-]*\d{4,}[a-z0-9-]*)\b/i)
   if (explicitOrderMatch) return explicitOrderMatch[1]
 
-  // Direct standalone order hashtag e.g. "#2541442349"
-  const directHashMatch = text.match(/#(\d{6,})\b/)
+  const orderParamMatch = text.match(/\b(?:orderId|order_id|orderNumber|order_number)=([a-z0-9-]+)\b/i)
+  if (orderParamMatch) return orderParamMatch[1]
+
+  // 5. Apple Web Order Number e.g. "W123456789"
+  const appleMatch = text.match(/\bW\d{9,10}\b/)
+  if (appleMatch) return appleMatch[0]
+
+  // 6. Nike Order Number e.g. "C0123456789"
+  const nikeMatch = text.match(/\bC0\d{9,11}\b/)
+  if (nikeMatch) return nikeMatch[0]
+
+  // 7. HelloFresh / Meal Kit Order Number e.g. "HF-12345678", "GC-12345678"
+  const mealKitMatch = text.match(/\b(?:HF|GC|BA|FACT)-\d{6,10}\b/i)
+  if (mealKitMatch) return mealKitMatch[0].toUpperCase()
+
+  // 8. Direct standalone order hashtag e.g. "#2541442349", "#2000154-80824348"
+  const directHashMatch = text.match(/#([a-z0-9-]*\d{6,}[a-z0-9-]*)\b/i)
   if (directHashMatch) return directHashMatch[1]
 
-  // Tracking numbers (UPS, FedEx, USPS)
+  // 9. Tracking numbers (UPS, FedEx, USPS, DHL)
   const upsMatch = text.match(/\b1Z[0-9A-Z]{16}\b/i)
   if (upsMatch) return upsMatch[0].toUpperCase()
 
   const uspsMatch = text.match(/\b9[2345]\d{20,24}\b/)
   if (uspsMatch) return uspsMatch[0]
+
+  const fedexMatch = text.match(/\b(?:fedex|tracking)\b[^\d]*(\d{12}|\d{15}|\d{20,22})\b/i)
+  if (fedexMatch) return fedexMatch[1]
+
+  // 10. Generic Target / 10-14 digit standalone order numbers when vendor is Target
+  const targetMatch = text.match(/\btarget\b[^\d]*(\d{10,14})\b/i)
+  if (targetMatch) return targetMatch[1]
 
   return null
 }
@@ -82,10 +139,13 @@ export function transactionStage(item: PrepItem): DeliveryTransitStage | null {
   if (!isClaimPolicyDisclaimer && /\b(cancelled|canceled|failed|problem|issue|missing|damaged|exception)\b/.test(combined)) return 'problem'
   if (isClaimPolicyDisclaimer && /\b(package was (?:damaged|lost)|item is damaged|reported damaged|delivery failed)\b/.test(combined)) return 'problem'
 
-  // 2. Pure Payment notifications (where type === 'payment' or description is purely about payment/charge)
-  const isPurePayment = item.type === 'payment' || (
-    /\b(payment method|temporary hold|charged for|final charge|receipt for payment|order amount)\b/.test(desc) &&
-    !/\b(has been delivered|was delivered|out for delivery|shipped)\b/.test(desc)
+  // 2. Pure Payment notifications (where type === 'payment' or description is purely about payment/charge without delivery scheduling/confirmation)
+  const isDeliveryOrOrderNotice = /\b(?:thanks for your|order confirmation|scheduled for delivery|delivery scheduled|will be delivered|arriving|being prepared|preparing|add more to|edit your order)\b/i.test(combined)
+
+  const isPurePayment = (item.type === 'payment' && !isDeliveryOrOrderNotice) || (
+    /\b(payment method|temporary hold|charged for|receipt for payment|order amount)\b/.test(desc) &&
+    !/\b(has been delivered|was delivered|out for delivery|shipped|scheduled for delivery|delivery scheduled|will be delivered|arriving)\b/.test(combined) &&
+    !isDeliveryOrOrderNotice
   )
   if (isPurePayment) return 'payment'
 
@@ -97,20 +157,26 @@ export function transactionStage(item: PrepItem): DeliveryTransitStage | null {
   if (isExplicitDelivered) return 'delivered'
   if (item.attention_stage === 'delivered' && !isFutureDeliveryNotice) return 'delivered'
 
-  // 4. Out for delivery (Day of delivery)
-  if (/\bout for delivery\b|\barriving today\b|\ben route\b|\bdelivery window\b|\binhome delivery\b/.test(combined)) return 'out_for_delivery'
-  if (item.attention_stage === 'out_for_delivery') return 'out_for_delivery'
+  // 4. Being Prepared / Order In Preparation / Add More Items / Editing Window:
+  const isBeingPreparedOrEdited = /\b(?:being prepared|is being prepared|preparing your order|preparing your items|we're preparing|last minute to add|last call to edit|add more to (?:your )?order|add items to (?:your )?order|edit your order|need to add anything|time to add items)\b/i.test(combined)
+  if (isBeingPreparedOrEdited) return 'confirmed'
 
-  // 5. Shipped / In transit
-  if (/\bshipped\b|\bpackage on the way\b|\btransit\b|\bdispatched\b|\bcarrier tracking\b|\bshipment for\b/.test(combined)) return 'shipped'
+  // 5. Out for delivery (Active driver dispatch on day of delivery)
+  // NOTE: "inhome delivery" alone is the service name, NOT out for delivery!
+  const isExplicitOutForDelivery = /\b(?:out for delivery|driver is on the way|driver on the way|driver heading your way|driver is heading|heading your way|arriving soon|should arrive by \d+:\d+|en route to your)\b/i.test(combined)
+  if (isExplicitOutForDelivery) return 'out_for_delivery'
+  if (item.attention_stage === 'out_for_delivery' && !isBeingPreparedOrEdited && !isFutureDeliveryNotice) return 'out_for_delivery'
+
+  // 6. Shipped / In transit
+  if (/\b(?:shipped|package on the way|in transit|dispatched|carrier tracking|shipment for)\b/i.test(combined)) return 'shipped'
   if (item.attention_stage === 'shipped') return 'shipped'
 
-  // 6. Confirmed / Order Placed / Future Delivery notice
+  // 7. Confirmed / Order Placed / Future Delivery notice / InHome Order Confirmation
   if (isFutureDeliveryNotice) return 'confirmed'
   if (item.attention_stage === 'confirmed') return 'confirmed'
-  if (/\b(confirmed|scheduled|placed|order received|order confirmation|thank you for your order|delivery of)\b/.test(combined)) return 'confirmed'
+  if (/\b(confirmed|scheduled|placed|order received|order confirmation|thank you for your order|thanks for your|delivery of inhome order|delivery of)\b/i.test(combined)) return 'confirmed'
 
-  // 7. General payment fallback
+  // 8. General payment fallback
   if (/\b(payment|charged|temporary hold)\b/.test(combined)) return 'payment'
   if (item.attention_stage === 'payment') return 'payment'
 
@@ -171,7 +237,7 @@ function extractOrderIdFromExplicitKey(explicitKey?: string | null): string | nu
 }
 
 export function vendorTransactionIdentity(item: PrepItem): VendorTransactionIdentity | null {
-  if (item.source_type !== 'gmail') return null
+  if (item.source_type !== 'gmail' && !item.source_ref?.startsWith('gmail:')) return null
 
   const vendor = resolveVendorName(item)
   if (vendor === 'Parcel') return null
@@ -180,9 +246,9 @@ export function vendorTransactionIdentity(item: PrepItem): VendorTransactionIden
   const explicitKey = item.attention_thread_key?.trim()
   const explicitOrderNumber = extractOrderIdFromExplicitKey(explicitKey)
   const extractedOrderId = orderId(item)
+  const rawOrderNumber = explicitOrderNumber || extractedOrderId
+  const finalOrderNumber = rawOrderNumber ? canonicalizeOrderId(vendor, rawOrderNumber) : null
   const dateKey = deliveryDateKey(item)
-
-  const finalOrderNumber = explicitOrderNumber || extractedOrderId
 
   const key = finalOrderNumber
     ? `transaction:${vendorKey}:${normalizeKeyPart(finalOrderNumber)}`
@@ -256,10 +322,59 @@ export function mergeDeliveryTransitItem(
   existing: DeliveryTransitItem,
   incoming: DeliveryTransitItem
 ): DeliveryTransitItem {
-  const stageRank: DeliveryTransitStage[] = ['confirmed', 'payment', 'shipped', 'out_for_delivery', 'delivered', 'problem']
-  const existingRank = stageRank.indexOf(existing.stage)
-  const incomingRank = stageRank.indexOf(incoming.stage)
-  const higherStage = incomingRank > existingRank ? incoming.stage : existing.stage
+  // Aggregate and deduplicate update history
+  const existingHistory = existing.updateHistory || [
+    {
+      id: existing.id,
+      title: existing.title,
+      description: existing.rawItem?.description,
+      stage: existing.stage,
+      occurredAt: existing.occurredAt,
+      sourceRef: existing.rawItem?.source_ref,
+      rawItem: existing.rawItem,
+    },
+  ]
+  const incomingHistory = incoming.updateHistory || [
+    {
+      id: incoming.id,
+      title: incoming.title,
+      description: incoming.rawItem?.description,
+      stage: incoming.stage,
+      occurredAt: incoming.occurredAt,
+      sourceRef: incoming.rawItem?.source_ref,
+      rawItem: incoming.rawItem,
+    },
+  ]
+
+  const combinedHistory = [...existingHistory, ...incomingHistory]
+  const seenIds = new Set<string>()
+  const uniqueHistory = combinedHistory
+    .filter((h) => {
+      if (seenIds.has(h.id)) return false
+      seenIds.add(h.id)
+      return true
+    })
+    .sort((a, b) => new Date(a.occurredAt).getTime() - new Date(b.occurredAt).getTime())
+
+  // Chronological lifecycle stage resolution:
+  let mergedStage: DeliveryTransitStage
+  if (existing.stage === 'problem' || incoming.stage === 'problem') {
+    mergedStage = 'problem'
+  } else {
+    const isLatestIncoming = new Date(incoming.occurredAt).getTime() >= new Date(existing.occurredAt).getTime()
+    const latestItem = isLatestIncoming ? incoming : existing
+    const latestText = `${latestItem.rawItem?.event_title ?? ''} ${latestItem.rawItem?.description ?? ''}`.toLowerCase()
+    const isLatestBeingPrepared = /\b(?:being prepared|is being prepared|preparing your order|preparing your items|we're preparing|last minute to add|last call to edit|add more to (?:your )?order|add items to (?:your )?order|edit your order)\b/i.test(latestText)
+
+    if (isLatestBeingPrepared) {
+      mergedStage = 'confirmed'
+    } else {
+      const stageRank: DeliveryTransitStage[] = ['confirmed', 'payment', 'shipped', 'out_for_delivery', 'delivered', 'problem']
+      const existingRank = stageRank.indexOf(existing.stage)
+      const incomingRank = stageRank.indexOf(incoming.stage)
+      mergedStage = incomingRank > existingRank ? incoming.stage : existing.stage
+    }
+  }
 
   const mergedCost = incoming.cost || existing.cost || null
   const mergedSummary = mergeItemSummary(existing.itemSummary, incoming.itemSummary)
@@ -271,49 +386,20 @@ export function mergeDeliveryTransitItem(
       ? incoming.occurredAt
       : existing.occurredAt
 
-  // Aggregate and deduplicate update history
-  const combinedHistory = [
-    ...(existing.updateHistory || [
-      {
-        id: existing.id,
-        title: existing.title,
-        description: existing.rawItem?.description,
-        stage: existing.stage,
-        occurredAt: existing.occurredAt,
-        sourceRef: existing.rawItem?.source_ref,
-        rawItem: existing.rawItem,
-      },
-    ]),
-    ...(incoming.updateHistory || [
-      {
-        id: incoming.id,
-        title: incoming.title,
-        description: incoming.rawItem?.description,
-        stage: incoming.stage,
-        occurredAt: incoming.occurredAt,
-        sourceRef: incoming.rawItem?.source_ref,
-        rawItem: incoming.rawItem,
-      },
-    ]),
-  ]
-
-  const seenIds = new Set<string>()
-  const uniqueHistory = combinedHistory
-    .filter((h) => {
-      if (seenIds.has(h.id)) return false
-      seenIds.add(h.id)
-      return true
-    })
-    .sort((a, b) => new Date(a.occurredAt).getTime() - new Date(b.occurredAt).getTime())
+  const latestRawItem =
+    new Date(incoming.occurredAt).getTime() >= new Date(existing.occurredAt).getTime()
+      ? incoming.rawItem
+      : existing.rawItem
 
   return {
     ...existing,
-    stage: higherStage,
+    stage: mergedStage,
     cost: mergedCost,
     itemSummary: mergedSummary,
     etaDisplay: mergedEta,
     isPerishable: existing.isPerishable || incoming.isPerishable,
     occurredAt: newerDate,
+    rawItem: latestRawItem,
     policyDisclaimer: mergedPolicy,
     updateHistory: uniqueHistory,
   }
@@ -331,7 +417,7 @@ export function consolidateTransitItems(items: DeliveryTransitItem[]): DeliveryT
     }
   }
 
-  // Second pass: Merge generic delivery:${vendor}:${date} items into specific transaction:${vendor}:${orderId} on that same date
+  // Second pass: Merge generic delivery:${vendor}:${date} items into specific transaction:${vendor}:${orderId} on that same date or active delivery
   const consolidated = Array.from(transitMap.values())
   const finalMap = new Map<string, DeliveryTransitItem>()
 
@@ -339,15 +425,20 @@ export function consolidateTransitItems(items: DeliveryTransitItem[]): DeliveryT
     const isGenericDateKey = /^delivery:[a-z0-9-]+:\d{4}-\d{2}-\d{2}$/.test(item.threadKey)
     if (isGenericDateKey) {
       const vendorKey = normalizeKeyPart(item.vendor)
-      const dateKey = deliveryDateKey(item.rawItem)
-      // Check if there is an explicit order transaction for this vendor on this date
-      const matchingExplicit = consolidated.find(
-        (other) =>
-          other !== item &&
-          normalizeKeyPart(other.vendor) === vendorKey &&
-          deliveryDateKey(other.rawItem) === dateKey &&
-          !/^delivery:[a-z0-9-]+:\d{4}-\d{2}-\d{2}$/.test(other.threadKey)
-      )
+      const itemDateKey = deliveryDateKey(item.rawItem)
+
+      // Find if there is an explicit order transaction for this vendor on this date (or within 36 hours)
+      const matchingExplicit = consolidated.find((other) => {
+        if (other === item) return false
+        if (normalizeKeyPart(other.vendor) !== vendorKey) return false
+        if (/^delivery:[a-z0-9-]+:\d{4}-\d{2}-\d{2}$/.test(other.threadKey)) return false
+        const otherDateKey = deliveryDateKey(other.rawItem)
+        if (otherDateKey === itemDateKey) return true
+
+        const itemTime = new Date(item.occurredAt).getTime()
+        const otherTime = new Date(other.occurredAt).getTime()
+        return Math.abs(itemTime - otherTime) <= 36 * 3600 * 1000
+      })
 
       if (matchingExplicit) {
         const existingInFinal = finalMap.get(matchingExplicit.threadKey) || matchingExplicit
@@ -506,11 +597,11 @@ export function resolveEffectiveStage(
   }
 
   // 2. Past Courier / Same-Day Auto-Resolution:
-  // If the delivery target date is strictly in the past (before today's start-of-day in local time)
-  // and it was marked out for delivery, shipped, or confirmed without issues,
-  // same-day and courier deliveries have completed.
+  // ONLY auto-resolve if:
+  // - rawStage was explicitly 'out_for_delivery' (same-day courier dispatch that completed on a past day)
+  // - NEVER auto-resolve 'confirmed', 'payment', or 'shipped' (which may be active orders placed yesterday or in preparation)
   if (isBefore(deliveryStart, todayStart)) {
-    if (rawStage === 'out_for_delivery' || rawStage === 'shipped' || rawStage === 'confirmed' || rawStage === 'payment') {
+    if (rawStage === 'out_for_delivery') {
       return 'delivered'
     }
   }

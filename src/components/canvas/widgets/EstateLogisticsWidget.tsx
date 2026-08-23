@@ -315,6 +315,11 @@ export default function EstateLogisticsWidget({
                           <Clock size={10} className="text-amber-700 animate-pulse" />
                           <span>Out for Delivery</span>
                         </span>
+                      ) : heroItem.stage === 'confirmed' ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-3xs font-bold bg-sky-100 text-sky-950 border border-sky-300">
+                          <Package size={10} className="text-sky-700" />
+                          <span>{/\b(?:being prepared|preparing|add more|last minute|edit your order)\b/i.test(`${heroItem.title} ${heroItem.rawItem?.description ?? ''}`) ? 'Being Prepared' : 'Confirmed'}</span>
+                        </span>
                       ) : null}
 
                       {isImminent && (

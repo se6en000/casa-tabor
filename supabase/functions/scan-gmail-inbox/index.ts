@@ -573,43 +573,98 @@ function transactionDescriptor(action: InboxActionItem): string | null {
   return descriptor ? normalizeTransactionKeyPart(descriptor) : null
 }
 
+function canonicalizeTransactionOrderId(vendor: string, rawId: string): string {
+  const clean = rawId.trim().replace(/^[#:\s]+/, '')
+  const v = vendor.toLowerCase()
+  if (v.includes('walmart')) {
+    const digitsOnly = clean.replace(/[^0-9]/g, '')
+    if (digitsOnly.length === 15 || digitsOnly.length === 16) {
+      return `${digitsOnly.slice(0, 7)}-${digitsOnly.slice(7)}`
+    }
+    return normalizeTransactionKeyPart(clean)
+  }
+  if (v.includes('amazon')) {
+    const digitsOnly = clean.replace(/[^0-9]/g, '')
+    if (digitsOnly.length === 17) {
+      return `${digitsOnly.slice(0, 3)}-${digitsOnly.slice(3, 10)}-${digitsOnly.slice(10)}`
+    }
+    return normalizeTransactionKeyPart(clean)
+  }
+  if (v.includes('apple') || clean.startsWith('W')) {
+    return clean.toUpperCase()
+  }
+  if (v.includes('nike') || clean.startsWith('C0') || clean.startsWith('C-')) {
+    return clean.toUpperCase()
+  }
+  return normalizeTransactionKeyPart(clean)
+}
+
 function transactionIdentity(action: InboxActionItem, sourceRef: string) {
   let vendor = action.vendor?.trim() || null
   let transactionId = action.transaction_id?.trim() || null
   const combined = `${action.title ?? ''} ${action.description}`
 
-  if (!vendor) {
-    if (/jiffy/i.test(combined)) vendor = 'Jiffy.com'
-    else if (/walmart/i.test(combined)) vendor = 'Walmart'
-    else if (/amazon/i.test(combined)) vendor = 'Amazon'
-    else if (/hello\s*fresh/i.test(combined)) vendor = 'HelloFresh'
-    else if (/target/i.test(combined)) vendor = 'Target'
-    else if (/instacart/i.test(combined)) vendor = 'Instacart'
-    else if (/fedex/i.test(combined)) vendor = 'FedEx'
-    else if (/ups/i.test(combined)) vendor = 'UPS'
-    else if (/usps/i.test(combined)) vendor = 'USPS'
+  if (!vendor || /walmart/i.test(vendor)) {
+    if (/walmart/i.test(vendor || '') || /walmart/i.test(combined)) vendor = 'Walmart'
+    else if (/amazon/i.test(vendor || '') || /amazon/i.test(combined)) vendor = 'Amazon'
+    else if (/jiffy/i.test(vendor || '') || /jiffy/i.test(combined)) vendor = 'Jiffy.com'
+    else if (/hello\s*fresh/i.test(vendor || '') || /hello\s*fresh/i.test(combined)) vendor = 'HelloFresh'
+    else if (/target/i.test(vendor || '') || /target/i.test(combined)) vendor = 'Target'
+    else if (/instacart/i.test(vendor || '') || /instacart/i.test(combined)) vendor = 'Instacart'
+    else if (/fedex/i.test(vendor || '') || /fedex/i.test(combined)) vendor = 'FedEx'
+    else if (/ups/i.test(vendor || '') || /ups/i.test(combined)) vendor = 'UPS'
+    else if (/usps/i.test(vendor || '') || /usps/i.test(combined)) vendor = 'USPS'
+    else if (/apple/i.test(vendor || '') || /apple/i.test(combined)) vendor = 'Apple'
+    else if (/nike/i.test(vendor || '') || /nike/i.test(combined)) vendor = 'Nike'
   }
 
   if (!transactionId) {
-    const orderMatch = combined.match(/\b(?:order|cart)\s*(?:number|no\.?|id|#)\s*[:#]?\s*#?([a-z0-9-]*\d{4,}[a-z0-9-]*)\b/i)
-      || combined.match(/#(\d{6,})\b/)
-    if (orderMatch) {
-      transactionId = orderMatch[1]
+    const amazonMatch = combined.match(/\b\d{3}-\d{7}-\d{7}\b/)
+    if (amazonMatch) {
+      transactionId = amazonMatch[0]
+    } else {
+      const walmartMatch = combined.match(/\b(?:2000|1000)\d{3}-\d{8}\b/) || combined.match(/\b(?:2000|1000)\d{11,13}\b/)
+      if (walmartMatch) {
+        transactionId = walmartMatch[0]
+      } else {
+        const orderMatch = combined.match(/\b(?:order|cart|confirmation|reference|invoice|receipt|wm)\s*(?:number|no\.?|id|#|:)\s*[:#]?\s*#?([a-z0-9-]*\d{4,}[a-z0-9-]*)\b/i)
+          || combined.match(/\b(?:orderId|order_id|orderNumber|order_number)=([a-z0-9-]+)\b/i)
+          || combined.match(/#([a-z0-9-]*\d{6,}[a-z0-9-]*)\b/i)
+        if (orderMatch) {
+          transactionId = orderMatch[1]
+        } else {
+          const upsMatch = combined.match(/\b1Z[0-9A-Z]{16}\b/i)
+          if (upsMatch) {
+            transactionId = upsMatch[0].toUpperCase()
+          } else {
+            const uspsMatch = combined.match(/\b9[2345]\d{20,24}\b/)
+            if (uspsMatch) transactionId = uspsMatch[0]
+          }
+        }
+      }
     }
   }
 
   if (!vendor) return { threadKey: null, vendor: null, stage: null }
   const descriptor = transactionDescriptor(action)
   const vendorKey = normalizeTransactionKeyPart(vendor)
-  const transactionKey = transactionId
-    ? normalizeTransactionKeyPart(transactionId)
+  const finalTransactionId = transactionId ? canonicalizeTransactionOrderId(vendor, transactionId) : null
+  const transactionKey = finalTransactionId
+    ? normalizeTransactionKeyPart(finalTransactionId)
     : descriptor
       ? `items:${descriptor}`
       : `message:${sourceRef}`
+
+  let stage = action.transaction_status?.trim() || null
+  const isBeingPreparedOrEdited = /\b(?:being prepared|is being prepared|preparing your order|preparing your items|we're preparing|last minute to add|last call to edit|add more to (?:your )?order|add items to (?:your )?order|edit your order)\b/i.test(combined)
+  if (isBeingPreparedOrEdited) {
+    stage = 'confirmed'
+  }
+
   return {
     threadKey: `transaction:${vendorKey}:${transactionKey}`,
     vendor,
-    stage: action.transaction_status?.trim() || null,
+    stage,
   }
 }
 

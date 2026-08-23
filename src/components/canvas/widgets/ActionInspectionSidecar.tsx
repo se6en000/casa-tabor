@@ -673,7 +673,13 @@ export default function ActionInspectionSidecar({
                   ) : (
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-2xs font-bold bg-sky-100 text-sky-950 border border-sky-300">
                       <Package size={11} className="text-sky-700" />
-                      <span>{deliveryTransit.stage === 'confirmed' ? 'Order Confirmed' : 'In Transit'}</span>
+                      <span>
+                        {deliveryTransit.stage === 'confirmed'
+                          ? (/\b(?:being prepared|preparing|add more|last minute|edit your order)\b/i.test(`${deliveryTransit.title} ${deliveryTransit.itemSummary ?? ''} ${deliveryTransit.rawItem?.description ?? ''}`)
+                              ? 'Being Prepared'
+                              : 'Order Confirmed')
+                          : 'In Transit'}
+                      </span>
                     </span>
                   )}
 

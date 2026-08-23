@@ -446,4 +446,140 @@ test('compound school spirit order cleanly splits into 1 delivery in Inbound Man
   assert.equal(deliveryTransitItems[0].policyDisclaimer, 'Return window is 14 days.')
 })
 
+test('Walmart InHome: Thanks for order + Last minute to add items merge into 1 order, stage confirmed (Being Prepared), and arriving today', async () => {
+  const {
+    buildDeliveryTransitItem,
+    consolidateTransitItems,
+    isItemArrivingToday,
+    isItemDelivered,
+    isItemInTransit,
+    stageStepIndex,
+    transactionStage,
+  } = await import('../src/utils/vendorTransactions.ts')
+
+  // Sunday morning evaluation
+  const sundayMorning = new Date('2026-08-23T07:15:00-04:00')
+
+  // Email 1: Order confirmation from Walmart placed yesterday evening for delivery today
+  const confirmationEmail = {
+    id: 'walmart-inhome-order-1',
+    type: 'delivery',
+    event_title: 'Thanks for your InHome delivery order, Jacob',
+    description: 'The final charge for your Walmart order will be updated on your bank statement. Total: $124.49. Order #2000154-80824348. Delivery scheduled for today between 2pm – 6pm.',
+    event_date: '2026-08-23T18:00:00+00:00',
+    due_by: '2026-08-23T18:00:00+00:00',
+    created_at: '2026-08-22T22:30:00+00:00',
+    source_type: 'gmail',
+    source_ref: 'gmail:household:msg-walmart-1',
+    attention_thread_key: 'transaction:walmart:2000154-80824348',
+    attention_vendor: 'Walmart',
+    attention_stage: 'confirmed',
+    dismissed: false,
+    priority: 1,
+  }
+
+  // Email 2: Follow-up email on Sunday morning: Last minute to add items / Order is being prepared
+  const addMoreEmail = {
+    id: 'walmart-inhome-order-2',
+    type: 'delivery',
+    event_title: 'Last minute to add more to your order',
+    description: 'You have until 1:00 PM to add items to your Walmart InHome order #2000154-80824348. Your order is being prepared and will be delivered today between 2pm – 6pm.',
+    event_date: '2026-08-23T18:00:00+00:00',
+    due_by: '2026-08-23T18:00:00+00:00',
+    created_at: '2026-08-23T07:00:00+00:00',
+    source_type: 'gmail',
+    source_ref: 'gmail:household:msg-walmart-2',
+    attention_thread_key: 'transaction:walmart:2000154-80824348',
+    attention_vendor: 'Walmart',
+    attention_stage: 'confirmed',
+    dismissed: false,
+    priority: 1,
+  }
+
+  assert.equal(transactionStage(confirmationEmail), 'confirmed')
+  assert.equal(transactionStage(addMoreEmail), 'confirmed')
+
+  const t1 = buildDeliveryTransitItem(confirmationEmail, sundayMorning)
+  const t2 = buildDeliveryTransitItem(addMoreEmail, sundayMorning)
+
+  assert.equal(t1.threadKey, 'transaction:walmart:2000154-80824348')
+  assert.equal(t2.threadKey, 'transaction:walmart:2000154-80824348')
+
+  const consolidated = consolidateTransitItems([t1, t2])
+  assert.equal(consolidated.length, 1)
+
+  const order = consolidated[0]
+  assert.equal(order.vendor, 'Walmart')
+  assert.equal(order.stage, 'confirmed', 'Must be confirmed (Being Prepared), NOT delivered')
+  assert.equal(stageStepIndex(order.stage), 0, 'Stepper must be on Step 0: Confirmed')
+  assert.equal(isItemDelivered(order, sundayMorning), false)
+  assert.equal(isItemArrivingToday(order, sundayMorning), true)
+  assert.equal(isItemInTransit(order, sundayMorning), true)
+  assert.equal(order.cost, '$124.49')
+  assert.equal(order.updateHistory?.length, 2)
+})
+
+test('multi-vendor order number canonicalization accurately normalizes Walmart, Amazon, Target, Apple, Nike, Jiffy, and HelloFresh', async () => {
+  const {
+    canonicalizeOrderId,
+    orderId,
+    vendorTransactionIdentity,
+  } = await import('../src/utils/vendorTransactions.ts')
+
+  // 1. Walmart with and without hyphens
+  assert.equal(canonicalizeOrderId('Walmart', '2000154-80824348'), '2000154-80824348')
+  assert.equal(canonicalizeOrderId('Walmart', '200015480824348'), '2000154-80824348')
+
+  // 2. Amazon 17-digit format
+  assert.equal(canonicalizeOrderId('Amazon', '112-8472910-4829103'), '112-8472910-4829103')
+  assert.equal(canonicalizeOrderId('Amazon', '11284729104829103'), '112-8472910-4829103')
+
+  // 3. Apple format
+  assert.equal(canonicalizeOrderId('Apple', 'w123456789'), 'W123456789')
+
+  // 4. Nike format
+  assert.equal(canonicalizeOrderId('Nike', 'c0123456789'), 'C0123456789')
+
+  // 5. Jiffy format
+  assert.equal(canonicalizeOrderId('Jiffy.com', '2541442349'), '2541442349')
+
+  // 6. Extraction from various email text structures
+  const testWalmartUnhyphenated = {
+    source_type: 'gmail',
+    event_title: 'Order confirmation #200015480824348',
+    description: 'Your Walmart order is being prepared',
+    attention_vendor: 'Walmart',
+  }
+  const identity1 = vendorTransactionIdentity(testWalmartUnhyphenated)
+  assert.equal(identity1.key, 'transaction:walmart:2000154-80824348')
+
+  const testWalmartHyphenated = {
+    source_type: 'gmail',
+    event_title: 'Thanks for your InHome delivery order, Jacob',
+    description: 'Order: #2000154-80824348 will be delivered today',
+    attention_vendor: 'Walmart+ InHome',
+  }
+  const identity2 = vendorTransactionIdentity(testWalmartHyphenated)
+  assert.equal(identity2.key, 'transaction:walmart:2000154-80824348')
+  assert.equal(identity1.key, identity2.key, 'Both hyphenated and unhyphenated Walmart emails must produce identical threadKey')
+
+  const testAmazon = {
+    source_type: 'gmail',
+    event_title: 'Shipped: Your Amazon package',
+    description: 'Amazon.com order number: 114-1234567-7654321',
+    attention_vendor: 'Amazon.com',
+  }
+  const identityAmazon = vendorTransactionIdentity(testAmazon)
+  assert.equal(identityAmazon.key, 'transaction:amazon:114-1234567-7654321')
+
+  const testApple = {
+    source_type: 'gmail',
+    event_title: 'We are processing your Apple order',
+    description: 'Order Number: W987654321',
+    attention_vendor: 'Apple',
+  }
+  const identityApple = vendorTransactionIdentity(testApple)
+  assert.equal(identityApple.key, 'transaction:apple:w987654321')
+})
+
 
