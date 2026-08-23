@@ -56,21 +56,26 @@ function BrandZone({ isWarm }: { isWarm: boolean }) {
       className="inline-flex items-center gap-3.5 group flex-shrink-0"
     >
       <MaisonCrest
-        size={58}
+        size={48}
         isWarm={isWarm}
-        className="group-hover:scale-[1.04] transition-transform duration-200 ease-out drop-shadow-sm flex-shrink-0"
+        className="group-hover:scale-[1.04] transition-transform duration-200 ease-out drop-shadow-xs flex-shrink-0"
       />
-      <div className="flex flex-col justify-center gap-0.5 select-none">
+      <div className="flex flex-col justify-center select-none">
         <span
           className={cn(
-            'maison-brand-title text-title sm:text-display-sm inline-block font-display font-bold tracking-[0.07em] leading-none',
+            'maison-brand-title text-heading sm:text-title inline-block font-display font-bold tracking-[0.06em] leading-tight',
             isWarm ? 'text-casa-navy' : 'text-white',
           )}
         >
           Maison <span className="text-casa-gold font-normal">Tabor</span>
         </span>
-        <span className="text-2xs tracking-[0.22em] uppercase font-bold text-casa-gold/90 font-sans leading-none mt-0.5 hidden xl:block">
-          Estate &amp; Family OS
+        <span
+          className={cn(
+            'text-3xs tracking-[0.24em] uppercase font-semibold font-sans leading-none mt-1 hidden xl:block',
+            isWarm ? 'text-casa-muted/75' : 'text-white/45'
+          )}
+        >
+          Family Logistics
         </span>
       </div>
     </NavLink>
@@ -90,7 +95,7 @@ function NavRail({
 
   return (
     <nav
-      className="hidden md:inline-flex items-center gap-0.5 relative font-sans"
+      className="hidden md:inline-flex items-center gap-0.5 relative font-sans h-full self-stretch"
       aria-label="Main navigation"
     >
       {NAV_TABS.map((tab) => {
@@ -111,7 +116,7 @@ function NavRail({
               }
             }}
             className={cn(
-              'relative px-3.5 min-h-[44px] inline-flex items-center justify-center text-body-sm font-medium transition-colors leading-none tracking-[0.01em]',
+              'relative px-3.5 h-full inline-flex items-center justify-center text-body-sm font-medium transition-colors leading-none tracking-[0.01em]',
               isActive
                 ? isWarm
                   ? 'text-casa-navy font-semibold'
@@ -499,7 +504,7 @@ export default function LuxuryTopBar() {
   return (
     <header
       className={cn(
-        'app-topbar hidden lg:flex w-full items-center justify-between flex-shrink-0 z-sticky transition-all duration-300 py-1.5',
+        'app-topbar hidden lg:flex w-full items-center justify-between flex-shrink-0 z-sticky transition-all duration-300 h-16',
         'luxury-topbar',
         isWarm && 'luxury-topbar--warm',
       )}
@@ -507,7 +512,7 @@ export default function LuxuryTopBar() {
       aria-label="Casa Tabor main navigation"
     >
       {/* ── Left cluster: Brand + Nav + Mode ────────────── */}
-      <div className="flex items-center gap-3 min-w-0">
+      <div className="flex items-center gap-3.5 min-w-0 h-full">
         <BrandZone isWarm={isWarm} />
 
         {/* Gold divider between brand and nav */}

@@ -38,12 +38,12 @@ export function TopBarC() {
 
   return (
     <header
-      className="app-topbar w-full flex items-center flex-shrink-0 z-sticky bg-casa-navy"
+      className="app-topbar w-full h-16 flex items-center flex-shrink-0 z-sticky bg-casa-navy"
     >
       {/* ── Left: brand + greeting ──────────────────────── */}
-      <div className="flex items-center gap-3.5 flex-shrink-0">
-        <MaisonCrest size={54} isWarm={false} className="drop-shadow-sm flex-shrink-0" />
-        <span className="maison-brand-title text-title text-white hidden sm:block font-display font-bold tracking-[0.07em]">
+      <div className="flex items-center gap-3.5 flex-shrink-0 h-full">
+        <MaisonCrest size={48} isWarm={false} className="drop-shadow-xs flex-shrink-0" />
+        <span className="maison-brand-title text-heading sm:text-title text-white hidden sm:block font-display font-bold tracking-[0.06em]">
           Maison <span className="text-casa-gold font-normal">Tabor</span>
         </span>
         {/* Greeting + date — shown when there's enough width */}

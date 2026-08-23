@@ -239,7 +239,6 @@ html.midnight-gallery .floating-dock-glass {
   gap: clamp(0.5rem, 2vw, 1rem);
   padding-left: max(var(--ds-page-gutter), env(safe-area-inset-left));
   padding-right: max(var(--ds-page-gutter), env(safe-area-inset-right));
-  padding-top: env(safe-area-inset-top);
 }
 
 /* ── Luxury Top Bar Material System ─────────────────────────── */

@@ -105,8 +105,8 @@ export default function TabletSidebar({ aiDrawerOpen = false }: TabletSidebarPro
               <span className="maison-brand-title font-bold text-title text-casa-navy tracking-[0.06em] truncate leading-none">
                 Maison <span className="text-casa-gold font-normal">Tabor</span>
               </span>
-              <span className="text-3xs tracking-[0.18em] uppercase font-bold text-casa-gold/90 font-sans leading-none">
-                Estate OS
+              <span className="text-3xs tracking-[0.20em] uppercase font-semibold text-casa-muted/75 font-sans leading-none mt-0.5">
+                Family Logistics
               </span>
             </div>
           </div>

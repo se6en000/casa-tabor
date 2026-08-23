@@ -68,23 +68,23 @@ export default function CanvasTopBar() {
   return (
     <header
       className={cn(
-        'app-topbar w-full min-h-[4.25rem] py-1.5 flex items-center justify-between flex-shrink-0 z-sticky backdrop-blur-md px-4 sm:px-6 transition-colors duration-300 font-sans',
+        'app-topbar w-full h-16 flex items-center justify-between flex-shrink-0 z-sticky backdrop-blur-md px-4 sm:px-6 transition-colors duration-300 font-sans',
         isCalm
           ? 'bg-casa-bg/90 border-b border-casa-border/40 text-casa-navy'
           : 'bg-casa-navy/95 border-b border-white/10 text-white'
       )}
     >
       {/* ── Left: Refined Luxury Brand Monogram ── */}
-      <div className="flex items-center gap-3 flex-shrink-0">
+      <div className="flex items-center gap-3 flex-shrink-0 h-full">
         <NavLink
           to="/"
           onClick={() => setCanvasSubmode('calm')}
           className="inline-flex items-center gap-3.5 group"
         >
-          <MaisonCrest size={54} isWarm={isCalm} className="group-hover:scale-[1.04] transition-transform duration-200 ease-out drop-shadow-sm flex-shrink-0" />
+          <MaisonCrest size={48} isWarm={isCalm} className="group-hover:scale-[1.04] transition-transform duration-200 ease-out drop-shadow-xs flex-shrink-0" />
           <span
             className={cn(
-              'maison-brand-title text-title sm:text-display-sm hidden sm:inline-block font-display font-bold tracking-[0.07em] leading-none select-none',
+              'maison-brand-title text-heading sm:text-title hidden sm:inline-block font-display font-bold tracking-[0.06em] leading-none select-none',
               isCalm ? 'text-casa-navy' : 'text-white'
             )}
           >
