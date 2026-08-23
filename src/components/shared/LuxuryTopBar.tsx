@@ -53,19 +53,19 @@ function BrandZone({ isWarm }: { isWarm: boolean }) {
     <NavLink
       to="/"
       onClick={() => setCanvasSubmode('calm')}
-      className="inline-flex items-center gap-3 group h-11 flex-shrink-0"
+      className="inline-flex items-center gap-3.5 group flex-shrink-0 py-1"
     >
-      <MaisonCrest size={44} isWarm={isWarm} className="group-hover:scale-[1.04]" />
+      <MaisonCrest size={70} isWarm={isWarm} className="group-hover:scale-[1.03] transition-transform drop-shadow-md flex-shrink-0" />
       <div className="flex flex-col justify-center leading-none">
         <span
           className={cn(
-            'maison-brand-title text-heading sm:text-title inline-block font-display font-bold tracking-[0.05em]',
+            'maison-brand-title text-title sm:text-display-sm inline-block font-display font-bold tracking-[0.06em]',
             isWarm ? 'text-casa-navy' : 'text-white',
           )}
         >
           Maison <span className="text-casa-gold font-normal">Tabor</span>
         </span>
-        <span className="text-2xs tracking-[0.18em] uppercase font-semibold text-casa-muted/80 font-sans mt-0.5 hidden xl:block">
+        <span className="text-2xs tracking-[0.22em] uppercase font-bold text-casa-gold/90 font-sans mt-1 hidden xl:block">
           Estate &amp; Family OS
         </span>
       </div>
@@ -495,7 +495,7 @@ export default function LuxuryTopBar() {
   return (
     <header
       className={cn(
-        'app-topbar hidden lg:flex w-full items-center justify-between flex-shrink-0 z-sticky transition-all duration-300',
+        'app-topbar hidden lg:flex w-full items-center justify-between flex-shrink-0 z-sticky transition-all duration-300 py-1.5',
         'luxury-topbar',
         isWarm && 'luxury-topbar--warm',
       )}

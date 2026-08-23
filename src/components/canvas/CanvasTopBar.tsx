@@ -68,7 +68,7 @@ export default function CanvasTopBar() {
   return (
     <header
       className={cn(
-        'app-topbar w-full h-14 flex items-center justify-between flex-shrink-0 z-sticky backdrop-blur-md px-4 sm:px-6 transition-colors duration-300 font-sans',
+        'app-topbar w-full min-h-[4.25rem] py-1.5 flex items-center justify-between flex-shrink-0 z-sticky backdrop-blur-md px-4 sm:px-6 transition-colors duration-300 font-sans',
         isCalm
           ? 'bg-casa-bg/90 border-b border-casa-border/40 text-casa-navy'
           : 'bg-casa-navy/95 border-b border-white/10 text-white'
@@ -79,12 +79,12 @@ export default function CanvasTopBar() {
         <NavLink
           to="/"
           onClick={() => setCanvasSubmode('calm')}
-          className="inline-flex items-center gap-3 group h-10"
+          className="inline-flex items-center gap-3.5 group py-1"
         >
-          <MaisonCrest size={42} isWarm={isCalm} className="group-hover:scale-105" />
+          <MaisonCrest size={64} isWarm={isCalm} className="group-hover:scale-105 transition-transform drop-shadow-md" />
           <span
             className={cn(
-              'maison-brand-title text-heading hidden sm:inline-block font-display font-bold tracking-[0.05em] leading-none',
+              'maison-brand-title text-title sm:text-display-sm hidden sm:inline-block font-display font-bold tracking-[0.06em] leading-none',
               isCalm ? 'text-casa-navy' : 'text-white'
             )}
           >

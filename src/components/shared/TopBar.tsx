@@ -41,9 +41,9 @@ export function TopBarC() {
       className="app-topbar w-full flex items-center flex-shrink-0 z-sticky bg-casa-navy"
     >
       {/* ── Left: brand + greeting ──────────────────────── */}
-      <div className="flex items-center gap-2.5 flex-shrink-0">
-        <MaisonCrest size={34} isWarm={false} />
-        <span className="maison-brand-title text-heading text-white hidden sm:block font-display font-bold tracking-[0.06em]">
+      <div className="flex items-center gap-3.5 flex-shrink-0">
+        <MaisonCrest size={60} isWarm={false} className="drop-shadow-md" />
+        <span className="maison-brand-title text-title text-white hidden sm:block font-display font-bold tracking-[0.06em]">
           Maison <span className="text-casa-gold font-normal">Tabor</span>
         </span>
         {/* Greeting + date — shown when there's enough width */}
