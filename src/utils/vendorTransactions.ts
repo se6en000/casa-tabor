@@ -228,6 +228,17 @@ function legacyVendor(item: PrepItem) {
 }
 
 export function orderId(item: PrepItem): string | null {
+  // 0. Extract from attention_thread_key if present e.g. "transaction:walmart-com:2000151-66891710"
+  if (item.attention_thread_key && item.attention_thread_key.startsWith('transaction:')) {
+    const parts = item.attention_thread_key.split(':')
+    if (parts.length >= 3) {
+      const orderPart = parts.slice(2).join(':')
+      if (!orderPart.startsWith('message:') && !orderPart.startsWith('items:')) {
+        return orderPart
+      }
+    }
+  }
+
   const text = `${item.event_title ?? ''} ${item.description ?? ''} ${item.source_ref ?? ''}`
 
   // 1. Amazon order format: 123-1234567-1234567
@@ -318,7 +329,7 @@ export function transactionStage(item: PrepItem): DeliveryTransitStage | null {
   if (item.attention_stage === 'delivered' && !isFutureDeliveryNotice) return 'delivered'
 
   // 4. Being Prepared / Order In Preparation / Add More Items / Editing Window:
-  const isBeingPreparedOrEdited = /\b(?:being prepared|is being prepared|preparing your order|preparing your items|we're preparing|last minute to add|last call to edit|add more to (?:your )?order|add items to (?:your )?order|edit your order|need to add anything|time to add items)\b/i.test(combined)
+  const isBeingPreparedOrEdited = /\b(?:being prepared|is being prepared|preparing your order|preparing your items|we're preparing|last (?:chance|minute|call) to (?:add|edit)|add more to (?:your )?order|add items to (?:your )?order|edit your order|changes can be made until|need to add anything|time to add items)\b/i.test(combined)
   if (isBeingPreparedOrEdited) return 'confirmed'
 
   // 5. Out for delivery (Active driver dispatch on day of delivery)
@@ -879,9 +890,16 @@ export function isDeliveryTransitItem(item: PrepItem): boolean {
   if (/\b(flight|airline|airlines|e-ticket|ticket receipt|boarding pass|hotel reservation|cabin getaway|airbnb|vrbo|hotel stay|reservation confirmation|maintenance visit|inspection visit|service visit|checkup|cleaning scheduled|teeth cleaning|lesson|rehearsal|recital|orientation|showcase|arborist|tennis court|annual general meeting|ptsa meeting)\b/i.test(text)) {
     return false
   }
+
+  // If already tagged as a transaction thread
+  if (item.attention_thread_key && item.attention_thread_key.startsWith('transaction:')) {
+    const isProblem = item.attention_stage === 'problem' || item.type === 'cancellation' || /\b(cancelled|canceled|dispute|failed)\b/.test(text)
+    if (!isProblem) return true
+  }
+
   if (item.type === 'delivery') return true
   if (isPerishableDelivery(item)) return true
-  if (/\b(inhome delivery|delivery window|grocery delivery|package delivery|courier delivery|out for delivery|shipped|en route|shipment for)\b/.test(text)) {
+  if (/\b(inhome delivery|delivery window|grocery delivery|package delivery|courier delivery|out for delivery|shipped|en route|shipment for|walmart order|amazon order|target order|grocery order|add items to (?:your )?order|changes can be made until|last (?:chance|minute|call) to (?:add|edit))\b/i.test(text)) {
     return true
   }
 
