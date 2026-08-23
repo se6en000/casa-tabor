@@ -96,9 +96,20 @@ export default function TabletSidebar({ aiDrawerOpen = false }: TabletSidebarPro
       isEffectivelyCollapsed ? 'w-20' : 'w-64 xl:w-72'
     )}>
       {/* Top Header */}
-      <div className="flex items-center justify-between px-4 py-4 border-b border-casa-border/50">
-        {!isEffectivelyCollapsed && (
-          <span className="font-display font-bold text-body-lg text-casa-navy">Casa Tabor</span>
+      <div className="flex items-center justify-between px-3.5 py-3.5 border-b border-casa-border/50">
+        {!isEffectivelyCollapsed ? (
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="maison-seal w-7 h-7 rounded-full inline-flex items-center justify-center font-display text-xs font-bold text-casa-gold flex-shrink-0 shadow-2xs leading-none">
+              <span className="maison-seal-letter text-xs font-serif">T</span>
+            </span>
+            <span className="maison-brand-title font-bold text-body-lg text-casa-navy tracking-[0.05em] truncate leading-none">
+              Maison <span className="text-casa-gold font-normal">Tabor</span>
+            </span>
+          </div>
+        ) : (
+          <span className="maison-seal w-7 h-7 rounded-full inline-flex items-center justify-center font-display text-xs font-bold text-casa-gold flex-shrink-0 shadow-2xs leading-none mx-auto">
+            <span className="maison-seal-letter text-xs font-serif">T</span>
+          </span>
         )}
         <IconButton
           icon={isEffectivelyCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
@@ -106,7 +117,7 @@ export default function TabletSidebar({ aiDrawerOpen = false }: TabletSidebarPro
           onClick={() => setCollapsed(!collapsed)}
           variant="ghost"
           size="sm"
-          className="text-casa-muted hover:text-casa-navy mx-auto"
+          className={cn("text-casa-muted hover:text-casa-navy", isEffectivelyCollapsed ? "mt-2" : "")}
         />
       </div>
 

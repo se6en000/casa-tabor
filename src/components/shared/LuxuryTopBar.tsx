@@ -55,18 +55,23 @@ function BrandZone({ isWarm }: { isWarm: boolean }) {
       className="inline-flex items-center gap-2.5 group h-9 flex-shrink-0"
     >
       <span
-        className="topbar-monogram w-9 h-9 rounded-[10px] inline-flex items-center justify-center font-sans text-caption font-bold text-casa-gold flex-shrink-0 transition-transform duration-200 ease-[var(--transition-ease-emphasized)] group-hover:scale-[1.04] leading-none"
+        className="maison-seal w-9 h-9 rounded-full inline-flex items-center justify-center font-display text-base font-bold text-casa-gold flex-shrink-0 transition-transform duration-200 ease-[var(--transition-ease-emphasized)] group-hover:scale-[1.05] leading-none"
       >
-        CT
+        <span className="maison-seal-letter text-base font-serif">T</span>
       </span>
-      <span
-        className={cn(
-          'font-display text-heading inline-block tracking-[0.03em] font-semibold leading-none',
-          isWarm ? 'text-casa-navy' : 'text-white',
-        )}
-      >
-        Casa Tabor
-      </span>
+      <div className="flex flex-col justify-center leading-none">
+        <span
+          className={cn(
+            'maison-brand-title text-body sm:text-heading inline-block font-display font-bold tracking-[0.06em]',
+            isWarm ? 'text-casa-navy' : 'text-white',
+          )}
+        >
+          Maison <span className="text-casa-gold font-normal">Tabor</span>
+        </span>
+        <span className="text-3xs tracking-[0.16em] uppercase font-semibold text-casa-muted/75 font-sans mt-0.5 hidden xl:block">
+          Estate &amp; Family OS
+        </span>
+      </div>
     </NavLink>
   )
 }

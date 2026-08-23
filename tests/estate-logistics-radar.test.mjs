@@ -26,14 +26,14 @@ test('TurboCanvasView mounts EstateLogisticsWidget on the left pane and updates 
   assert.doesNotMatch(turboCanvasView, /<NowAndNextWidget/)
 })
 
-test('EstateLogisticsWidget renders All, Arriving Today, In Transit, and Delivered filter tabs', () => {
+test('EstateLogisticsWidget renders All, Parcels, Pre-Orders, and Delivered filter tabs', () => {
   assert.match(estateLogisticsWidget, /setActiveTab\('all'\)/)
-  assert.match(estateLogisticsWidget, /setActiveTab\('today'\)/)
-  assert.match(estateLogisticsWidget, /setActiveTab\('in_transit'\)/)
+  assert.match(estateLogisticsWidget, /setActiveTab\('physical'\)/)
+  assert.match(estateLogisticsWidget, /setActiveTab\('preorder'\)/)
   assert.match(estateLogisticsWidget, /setActiveTab\('delivered'\)/)
   assert.match(estateLogisticsWidget, /All \(\{allTransitItems\.length\}\)/)
-  assert.match(estateLogisticsWidget, /Arriving Today \(\{todayItems\.length\}\)/)
-  assert.match(estateLogisticsWidget, /In Transit \(\{inTransitItems\.length\}\)/)
+  assert.match(estateLogisticsWidget, /Parcels \(\{physicalItems\.length\}\)/)
+  assert.match(estateLogisticsWidget, /Pre-Orders \(\{preorderItems\.length\}\)/)
   assert.match(estateLogisticsWidget, /Delivered \(\{deliveredItems\.length\}\)/)
 })
 
@@ -41,6 +41,7 @@ test('EstateLogisticsWidget contains zero raw unicode emojis and uses clean Luci
   assert.doesNotMatch(estateLogisticsWidget, /[\u{1F300}-\u{1FAFF}]/u)
   assert.match(estateLogisticsWidget, /Truck/)
   assert.match(estateLogisticsWidget, /Package/)
+  assert.match(estateLogisticsWidget, /GraduationCap/)
   assert.match(estateLogisticsWidget, /ShoppingCart/)
 })
 

@@ -36,12 +36,17 @@ import {
   FileSignature,
   Eye,
   Pencil,
+  Mic,
+  MicOff,
+  Send,
+  Wand2,
 } from 'lucide-react'
-import { Button, IconButton } from '../../ui'
+import { Button, IconButton, Chip } from '../../ui'
 import { cn } from '../../../utils/cn'
 import type { PrepItem, Conflict } from '../../../types'
 import { sourceBadge } from '../../../utils/prepSourceBadge'
 import { type SnoozeDuration } from '../../../utils/snoozeDuration'
+import { useFieldDictation } from '../../../hooks/useFieldDictation'
 import {
   usePrepItems,
   usePrepItemDetails,
@@ -135,6 +140,12 @@ export default function ActionInspectionSidecar({
   const [createdEventId, setCreatedEventId] = useState<string | null>(null)
   const [trainedSuccess, setTrainedSuccess] = useState<string | null>(null)
   const [tunePolicyModalOpen, setTunePolicyModalOpen] = useState(false)
+  const [customPolicyText, setCustomPolicyText] = useState('')
+  const { listening: isDictatingPolicy, toggle: togglePolicyDictation } = useFieldDictation({
+    onText: (text) => {
+      setCustomPolicyText(text)
+    },
+  })
   const [documentInspectionOpen, setDocumentInspectionOpen] = useState(false)
   const [inspectingDocument, setInspectingDocument] = useState<ExtractedActionDocument | null>(null)
   const [customAssignees, setCustomAssignees] = useState<Record<string, string>>({})
@@ -1644,10 +1655,104 @@ export default function ActionInspectionSidecar({
             </div>
 
             <p className="text-caption text-casa-muted leading-relaxed">
-              Customize how Casa handles emails from this sender. You can silence routine newsletters without missing vital school waivers, payments, or calendar events.
+              Customize how Casa handles emails from this sender. You can speak or type your custom instruction, or choose a recommended policy preset below.
             </p>
 
-            <div className="space-y-2.5 pt-1">
+            {/* ── Custom Voice & Natural Language Directive Box ── */}
+            <div className="p-4 rounded-2xl bg-casa-gold/10 border border-casa-gold/40 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Wand2 size={16} className="text-casa-gold" />
+                  <span className="text-body-sm font-bold text-casa-navy">
+                    Custom Voice / Text Directive
+                  </span>
+                </div>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => togglePolicyDictation(customPolicyText)}
+                  className={cn(
+                    'rounded-full px-3 py-1 text-3xs font-bold flex items-center gap-1.5 min-h-[36px] transition-all cursor-pointer',
+                    isDictatingPolicy
+                      ? 'bg-rose-600 text-white animate-pulse'
+                      : 'bg-white text-casa-navy hover:bg-casa-gold/20 border border-casa-gold/40'
+                  )}
+                  title="Speak to dictate custom learning rule"
+                >
+                  {isDictatingPolicy ? <MicOff size={13} /> : <Mic size={13} />}
+                  <span>{isDictatingPolicy ? 'Listening... (Tap to stop)' : 'Dictate Rule'}</span>
+                </Button>
+              </div>
+
+              <textarea
+                value={customPolicyText}
+                onChange={(e) => setCustomPolicyText(e.target.value)}
+                placeholder="e.g. Mute routine newsletters from Bak, but always extract field trip permission slips, doctor forms, and sports dates."
+                className="w-full text-body-sm p-3 rounded-xl bg-white border border-casa-border/80 text-casa-navy placeholder:text-casa-muted/70 focus:outline-none focus:ring-2 focus:ring-casa-gold/40 min-h-[64px] resize-none leading-snug"
+              />
+
+              {/* Quick suggestion prompt chips */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {[
+                  'Mute newsletters, keep waivers & events',
+                  'Track deliveries quietly in manifest',
+                  'Only alert on required signatures & fees',
+                ].map((chip) => (
+                  <Chip
+                    key={chip}
+                    tone="neutral"
+                    size="sm"
+                    onClick={() => setCustomPolicyText(chip)}
+                    className="cursor-pointer"
+                  >
+                    + {chip}
+                  </Chip>
+                ))}
+              </div>
+
+              <div className="flex justify-end pt-1">
+                <Button
+                  size="sm"
+                  variant="primary"
+                  disabled={!customPolicyText.trim() || isSavingRule}
+                  onClick={async () => {
+                    const directive = customPolicyText.trim()
+                    if (!directive) return
+                    if (senderDomain) {
+                      await saveCaptureRule({
+                        pattern_type: 'domain',
+                        pattern_value: senderDomain,
+                        rule_directive: directive,
+                        origin: 'voice_directive',
+                        confidence: 1.0,
+                      })
+                    } else if (analysis.senderEmail) {
+                      await saveCaptureRule({
+                        pattern_type: 'sender',
+                        pattern_value: analysis.senderEmail.toLowerCase().trim(),
+                        rule_directive: directive,
+                        origin: 'voice_directive',
+                        confidence: 1.0,
+                      })
+                    }
+                    setCustomPolicyText('')
+                    setTunePolicyModalOpen(false)
+                    setTrainedSuccess(`Custom Rule Saved: "${directive.slice(0, 50)}..."`)
+                    setTimeout(() => setTrainedSuccess(null), 5000)
+                  }}
+                  className="rounded-full px-4 min-h-[40px] text-caption font-bold bg-casa-navy text-white hover:bg-casa-navy-hover flex items-center gap-1.5 shadow-sm"
+                >
+                  <Send size={13} />
+                  <span>Save Custom Policy</span>
+                </Button>
+              </div>
+            </div>
+
+            <div className="text-3xs font-bold uppercase tracking-wider text-casa-muted pt-1 px-1">
+              Or Choose a Preset Policy:
+            </div>
+
+            <div className="space-y-2.5 pt-0.5">
               {/* Option 1: Keep Waivers & Events Only (Recommended) */}
               <button
                 type="button"

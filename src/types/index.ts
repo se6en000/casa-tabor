@@ -351,6 +351,8 @@ export interface DeliveryUpdateEvent {
   policyDisclaimer?: string | null
 }
 
+export type InboundCategory = 'physical' | 'preorder' | 'digital' | 'pickup'
+
 export interface DeliveryTransitItem {
   id: string
   threadKey: string
@@ -358,6 +360,7 @@ export interface DeliveryTransitItem {
   title: string
   itemSummary: string | null
   stage: DeliveryTransitStage
+  inboundCategory?: InboundCategory
   cost?: string | null
   trackingUrl?: string | null
   carrier?: string | null
@@ -379,6 +382,7 @@ export interface CanonicalEntityResult {
   compositeThreadKey: string
   effectiveStage: DeliveryTransitStage
   rawStage: DeliveryTransitStage
+  inboundCategory?: InboundCategory
   isPerishable: boolean
   cost: string | null
   itemSummary: string | null

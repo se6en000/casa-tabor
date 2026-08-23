@@ -80,16 +80,16 @@ export default function CanvasTopBar() {
           onClick={() => setCanvasSubmode('calm')}
           className="inline-flex items-center gap-2.5 group h-9"
         >
-          <span className="w-8 h-8 rounded-full bg-casa-gold/15 text-casa-gold border border-casa-gold/30 inline-flex items-center justify-center font-sans text-caption font-bold flex-shrink-0 shadow-2xs group-hover:scale-105 transition-transform leading-none">
-            CT
+          <span className="maison-seal w-8 h-8 rounded-full inline-flex items-center justify-center font-display text-sm font-bold text-casa-gold flex-shrink-0 shadow-2xs group-hover:scale-105 transition-transform leading-none">
+            <span className="maison-seal-letter text-sm font-serif">T</span>
           </span>
           <span
             className={cn(
-              'font-display text-heading hidden sm:inline-block tracking-[0.03em] font-semibold leading-none',
+              'maison-brand-title text-base hidden sm:inline-block font-display font-bold tracking-[0.06em] leading-none',
               isCalm ? 'text-casa-navy' : 'text-white'
             )}
           >
-            Casa Tabor
+            Maison <span className="text-casa-gold font-normal">Tabor</span>
           </span>
         </NavLink>
       </div>

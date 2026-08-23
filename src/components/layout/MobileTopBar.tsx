@@ -15,15 +15,18 @@ export default function MobileTopBar() {
     <>
       <header
         role="banner"
-        aria-label="Casa Tabor mobile header"
+        aria-label="Maison Tabor mobile header"
         className="lg:hidden w-full flex-shrink-0 z-sticky floating-dock-glass border-b border-casa-gold/20 shadow-[0_4px_20px_rgba(27,42,74,0.04)] px-4 pt-[calc(0.5rem+env(safe-area-inset-top))] pb-2.5 flex items-center justify-between gap-3 select-none"
       >
         {/* Left: Brand + Realtime Pulse + Date */}
         <div className="flex items-center gap-2.5 min-w-0">
+          <span className="maison-seal w-7 h-7 rounded-full inline-flex items-center justify-center font-display text-xs font-bold text-casa-gold flex-shrink-0 shadow-2xs leading-none">
+            <span className="maison-seal-letter text-xs font-serif">T</span>
+          </span>
           <div className="flex flex-col min-w-0">
             <div className="flex items-center gap-1.5">
-              <span className="font-serif text-lg font-bold text-casa-navy tracking-tight leading-none">
-                Casa Tabor
+              <span className="maison-brand-title text-base font-bold text-casa-navy tracking-[0.05em] leading-none">
+                Maison <span className="text-casa-gold font-normal">Tabor</span>
               </span>
               <span
                 className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0"

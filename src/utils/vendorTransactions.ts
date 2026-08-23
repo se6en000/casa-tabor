@@ -1,4 +1,4 @@
-import type { PrepItem, DeliveryTransitItem, DeliveryTransitStage, CanonicalEntityResult } from '../types'
+import type { PrepItem, DeliveryTransitItem, DeliveryTransitStage, CanonicalEntityResult, InboundCategory } from '../types'
 import {
   format,
   isBefore,
@@ -791,6 +791,7 @@ export function mergeDeliveryTransitItem(
   return {
     ...existing,
     stage: mergedStage,
+    inboundCategory: incoming.inboundCategory || existing.inboundCategory || 'physical',
     cost: latestCost,
     itemSummary: mergedSummary,
     etaDisplay: mergedEta,
@@ -1114,9 +1115,50 @@ export function isItemInTransit(item: DeliveryTransitItem, now?: Date): boolean 
 }
 
 export function isItemDelivered(item: DeliveryTransitItem, now?: Date): boolean {
+  if (item.stage === 'delivered' || (item.rawItem && (item.rawItem as any).transaction_status === 'delivered')) return true
   const targetDate = resolveDeliveryDate(item.rawItem)
   const effectiveStage = resolveEffectiveStage(item.stage, targetDate, now)
   return effectiveStage === 'delivered'
+}
+
+export function detectInboundCategory(
+  item: PrepItem | DeliveryTransitItem | Partial<PrepItem> | null | undefined
+): InboundCategory {
+  if (!item) return 'physical'
+  const text = `${('event_title' in item ? item.event_title : '') ?? ''} ${('description' in item ? item.description : '') ?? ''} ${('title' in item ? item.title : '') ?? ''} ${('vendor' in item ? item.vendor : '') ?? ''} ${('attention_vendor' in item ? item.attention_vendor : '') ?? ''}`.toLowerCase()
+
+  // 1. Pickups (Store / School Pickups)
+  if (/\b(?:in-store pickup|store pickup|curbside pickup|drive-up|pick up in (?:cafeteria|office|store)|will-call|ready for pickup)\b/i.test(text)) {
+    return 'pickup'
+  }
+
+  // 2. Pre-orders & School Services (Yearbooks, Photo packages, Spirit wear, Uniforms, Cap & Gown)
+  if (
+    /\b(?:walsworth|jostens|strawbridge|balfour|customink|yearbook|school pictures?|picture day|ad space|yearbook ad|graduating class|cap and gown|spirit wear|uniform pre-?order|spirit pack|agenda book)\b/i.test(text)
+  ) {
+    return 'preorder'
+  }
+
+  // 3. Digital & Subscriptions (Software, Streaming, Tickets, Passes, Memberships)
+  if (
+    /\b(?:arlo|google play|playstation|xbox|nintendo|roblox|steam|spotify|netflix|disney\+|disney plus|ticketmaster|eventbrite|stubhub|seatgeek|subscription|membership renewal|digital ticket|e-ticket|software license|cloud storage|digital access)\b/i.test(text)
+  ) {
+    return 'digital'
+  }
+
+  // 4. Default: Physical Deliveries & Couriers
+  return 'physical'
+}
+
+export function cleanInboundTitle(title?: string | null, vendor?: string | null): string {
+  if (!title) return vendor ? `${vendor} Order` : 'Inbound Order'
+  let clean = title.trim()
+  if (/^[a-z]\s+delay\s+purchase\s+/i.test(clean)) {
+    clean = clean.replace(/^[a-z]\s+delay\s+purchase\s+/i, 'Purchase ')
+  } else if (/^don['’]?t\s+delay\s+purchase\s+/i.test(clean)) {
+    clean = clean.replace(/^don['’]?t\s+delay\s+purchase\s+/i, 'Purchase ')
+  }
+  return clean
 }
 
 export function buildDeliveryTransitItem(item: PrepItem, now?: Date): DeliveryTransitItem {
@@ -1126,6 +1168,7 @@ export function buildDeliveryTransitItem(item: PrepItem, now?: Date): DeliveryTr
   const isPerish = isPerishableDelivery(item)
   const targetDate = resolveDeliveryDate(item)
   const effectiveStage = resolveEffectiveStage(rawStage, targetDate, now)
+  const inboundCat = detectInboundCategory(item)
 
   // Extract clean summary from combined title & description
   const fullText = `${item.event_title ?? ''} ${item.description ?? ''}`.trim()
@@ -1134,7 +1177,13 @@ export function buildDeliveryTransitItem(item: PrepItem, now?: Date): DeliveryTr
     || fullText.match(/(Delivery of InHome order)/i)
     || fullText.match(/(\d+\s+items?|[A-Za-z0-9\s™+'-]{3,40}(?:Book|Tools|Kit|Packs?|Order|Box))/i)
 
-  const itemSummary = itemMatch ? itemMatch[1] || itemMatch[0].trim() : (isPerish ? 'Grocery Delivery' : 'Package')
+  const itemSummary = itemMatch
+    ? itemMatch[1] || itemMatch[0].trim()
+    : inboundCat === 'preorder'
+      ? 'School Pre-Order'
+      : inboundCat === 'digital'
+        ? 'Digital Service'
+        : (isPerish ? 'Grocery Delivery' : 'Package')
 
   // Extract cost / amount
   const cost = extractAmount(fullText)
@@ -1157,10 +1206,12 @@ export function buildDeliveryTransitItem(item: PrepItem, now?: Date): DeliveryTr
   const policyMatch = fullText.match(/(?:claims? for (?:missing|wrong|damaged|lost)[^.]*|claims? must be made within[^.]*|return window[^.]*|return eligible[^.]*)/i)
   const policyDisclaimer = item.policy_disclaimer || (policyMatch ? policyMatch[0].trim() : null)
 
+  const rawTitle = cleanInboundTitle(item.event_title || `${vendor} Order`, vendor)
+
   const initialHistory = [
     {
       id: item.id,
-      title: item.event_title || `${vendor} Delivery`,
+      title: rawTitle,
       description: item.description,
       stage: effectiveStage,
       occurredAt: item.created_at,
@@ -1175,9 +1226,10 @@ export function buildDeliveryTransitItem(item: PrepItem, now?: Date): DeliveryTr
     id: item.id,
     threadKey: transaction?.key || `delivery:${normalizeKeyPart(vendor)}:${deliveryDateKey(item)}`,
     vendor,
-    title: item.event_title || `${vendor} Delivery`,
+    title: rawTitle,
     itemSummary,
     stage: effectiveStage,
+    inboundCategory: inboundCat,
     cost,
     isPerishable: isPerish,
     etaDisplay,

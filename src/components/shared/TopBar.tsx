@@ -41,11 +41,11 @@ export function TopBarC() {
     >
       {/* ── Left: brand + greeting ──────────────────────── */}
       <div className="flex items-center gap-2.5 flex-shrink-0">
-        <span className="w-8 h-8 rounded-lg bg-casa-gold flex items-center justify-center text-caption font-bold text-white flex-shrink-0">
-          CT
+        <span className="maison-seal w-8 h-8 rounded-full flex items-center justify-center font-display text-sm font-bold text-casa-gold flex-shrink-0">
+          <span className="maison-seal-letter text-sm font-serif">T</span>
         </span>
-        <span className="font-display text-heading text-white hidden sm:block tracking-wide">
-          Casa Tabor
+        <span className="maison-brand-title text-heading text-white hidden sm:block font-display font-bold tracking-[0.06em]">
+          Maison <span className="text-casa-gold font-normal">Tabor</span>
         </span>
         {/* Greeting + date — shown when there's enough width */}
         <div className="hidden md:flex flex-col justify-center ml-1 border-l border-white/15 pl-3">

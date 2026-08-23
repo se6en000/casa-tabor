@@ -688,6 +688,29 @@ function extractSummary(text, isPerishable) {
   return match ? (match[1] || match[0]).trim() : (isPerishable ? 'Grocery Delivery' : 'Package')
 }
 
+export function detectInboundCategory(item) {
+  if (!item) return 'physical'
+  const text = `${item.title || item.event_title || ''} ${item.description || ''} ${item.text || ''} ${item.vendor || item.attention_vendor || ''}`.toLowerCase()
+
+  if (/\b(?:in-store pickup|store pickup|curbside pickup|drive-up|pick up in (?:cafeteria|office|store)|will-call|ready for pickup)\b/i.test(text)) {
+    return 'pickup'
+  }
+
+  if (
+    /\b(?:walsworth|jostens|strawbridge|balfour|customink|yearbook|school pictures?|picture day|ad space|yearbook ad|graduating class|cap and gown|spirit wear|uniform pre-?order|spirit pack|agenda book)\b/i.test(text)
+  ) {
+    return 'preorder'
+  }
+
+  if (
+    /\b(?:arlo|google play|playstation|xbox|nintendo|roblox|steam|spotify|netflix|disney\+|disney plus|ticketmaster|eventbrite|stubhub|seatgeek|subscription|membership renewal|digital ticket|e-ticket|software license|cloud storage|digital access)\b/i.test(text)
+  ) {
+    return 'digital'
+  }
+
+  return 'physical'
+}
+
 /**
  * Full deterministic entity resolver conforming to CanonicalEntityResult.
  *
@@ -730,6 +753,7 @@ export function resolveCanonicalEntity(input, options) {
   const deliveryDateObj = item.deliveryDate ? new Date(item.deliveryDate) : (item.due_by ? new Date(item.due_by) : item.event_date ? new Date(item.event_date) : null)
   const deliveryDateIso = (deliveryDateObj && !isNaN(deliveryDateObj.getTime())) ? deliveryDateObj.toISOString().slice(0, 10) : null
   const effectiveStage = resolveEffectiveStage(rawStage, deliveryDateObj, now)
+  const inboundCategory = detectInboundCategory(item)
 
   // 4. Perishable & Policy Disclaimer
   const isPerishable = isPerishableDelivery(item) || isPerishableDelivery(combined)
@@ -754,6 +778,7 @@ export function resolveCanonicalEntity(input, options) {
     compositeThreadKey,
     effectiveStage,
     rawStage,
+    inboundCategory,
     isPerishable,
     cost,
     itemSummary,
