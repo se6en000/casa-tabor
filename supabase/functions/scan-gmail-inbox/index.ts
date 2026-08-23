@@ -29,6 +29,7 @@ import {
   detectCarrierAndTracking,
   buildCompositeThreadKey,
   resolveTransactionStage,
+  resolveCanonicalEntity,
   normalizeKeyPart,
 } from '../_shared/canonical-order-resolver.mjs'
 
@@ -1253,7 +1254,74 @@ async function handleGmailScan(req: Request): Promise<Response> {
           continue
         }
 
-        // ── AI Compound Decomposer Execution ────────────────────────
+        // ── Stage 2: Deterministic Order & Delivery Lifecycle Gate ──
+        // If email matches a known retail order or courier tracking number, process as a unified delivery entity
+        // and strictly BYPASS the generic task LLM to eliminate loose todo rows & phantom calendar events.
+        const canonicalOrder = resolveCanonicalEntity({
+          vendor: null,
+          title: details.subject,
+          description: searchText,
+          sourceRef: `gmail:${memberId}:${msgId}`,
+          eventDate: details.date,
+        })
+
+        if (canonicalOrder.compositeThreadKey && (canonicalOrder.canonicalOrderId || canonicalOrder.trackingNumber)) {
+          const resolvedTargetMember = resolveImmediateFamilyMember({
+            members: familyMembers,
+            fallbackMemberId: tokenBelongsToImmediateFamily ? memberId : null,
+          })
+          const sourceOwnerMemberId = resolvedTargetMember?.id ?? null
+          const emailReceivedAt = details.date ? new Date(details.date).toISOString() : new Date().toISOString()
+
+          const deliveryAction: InboxActionItem = {
+            type: 'delivery',
+            title: canonicalOrder.vendor ? `${canonicalOrder.vendor} Order` : details.subject.slice(0, 80),
+            description: details.subject,
+            vendor: canonicalOrder.vendor,
+            transaction_id: canonicalOrder.canonicalOrderId || canonicalOrder.trackingNumber,
+            transaction_status: canonicalOrder.effectiveStage || 'confirmed',
+            due_datetime: canonicalOrder.deliveryDate || emailReceivedAt,
+            agency_level: 0,
+            priority: 1,
+            policy_disclaimer: canonicalOrder.policyDisclaimer || undefined,
+          }
+
+          const savedCount = await persistInboxActions(
+            sb,
+            sourceOwnerMemberId,
+            msgId,
+            details.subject,
+            null,
+            null,
+            null,
+            emailReceivedAt,
+            [deliveryAction],
+            familyMembers,
+            isUserLabeled,
+            null,
+          )
+
+          await sb.from('gmail_processed_messages').upsert({
+            family_member_id: memberId,
+            gmail_message_id: msgId,
+            canonical_email_id: canonicalEmail.id,
+            subject: details.subject,
+            email_subject: details.subject,
+            from_email: details.from,
+            received_at: emailReceivedAt,
+            intent: 'delivery',
+            parsed_actions: [deliveryAction],
+            attachments: details.attachments || [],
+            extracted_document_summary: extractedDocumentSummary,
+            is_user_labeled: isUserLabeled,
+          }, { onConflict: 'family_member_id,gmail_message_id' })
+
+          if (savedCount > 0) processed++
+          else skipped++
+          continue
+        }
+
+        // ── Stage 3: AI Compound Decomposer Execution (Non-Order Emails) ──
         const [classified, extractedActions] = await Promise.all([
           classifyEmail(
             details.subject,
