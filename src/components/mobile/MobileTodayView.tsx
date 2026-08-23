@@ -67,7 +67,7 @@ export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate 
   const now = useLiveClock(30_000)
   const isPageVisible = usePageVisibility()
   const { data: rollingEvents = [] } = useRollingEvents(now)
-  const [showCompletedTodos, setShowCompletedTodos] = useState(true)
+  const [showCompletedTodos, setShowCompletedTodos] = useState(false)
 
   const { data: serverCompletions } = useQuery({
     queryKey: ['household-todo-completions'],

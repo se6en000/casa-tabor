@@ -75,10 +75,10 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
   })
   const [completedSectionCollapsed, setCompletedSectionCollapsed] = useState<boolean>(() => {
     try {
-      // Expanded by default as requested!
-      return localStorage.getItem('casa:calm:completed-todos-collapsed') === 'true'
+      // Collapsed by default so completed items don't clutter the screen before midnight reset
+      return localStorage.getItem('casa:calm:completed-todos-collapsed') !== 'false'
     } catch {
-      return false
+      return true
     }
   })
 
