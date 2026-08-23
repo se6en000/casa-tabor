@@ -87,7 +87,7 @@ test('few-shot store: scoreExemplar evaluates domain, sender, archetype, and sni
 
 test('few-shot store: scoreAndRankExemplars ranks candidates and enforces subject diversity', () => {
   const exemplars = getDefaultGoldenExemplars()
-  assert.equal(exemplars.length, 14, 'Must have 14 golden seeds')
+  assert.equal(exemplars.length, 15, 'Must have 15 golden seeds')
 
   // Querying for Walmart grocery
   const rankedWalmart = scoreAndRankExemplars(exemplars, {
