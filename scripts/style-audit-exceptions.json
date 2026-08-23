@@ -42,6 +42,10 @@
       {
         "path": "src/pages/CookPrototypeMediumPage.tsx",
         "reason": "Exploratory kitchen kiosk prototype."
+      },
+      {
+        "path": "src/components/shared/MaisonCrest.tsx",
+        "reason": "Official Maison Tabor luxury gold crest and enamel medallion SVG artwork."
       }
     ],
     "inlineStyleBlocks": [

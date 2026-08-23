@@ -18,6 +18,7 @@ import { getPersistedDriverOverrideMemberIds } from '../../lib/eventPlanOverride
 import { useState, useMemo, useEffect } from 'react'
 import BounceScroll from '../shared/BounceScroll'
 import { Button, IconButton } from '../ui'
+import MaisonCrest from '../shared/MaisonCrest'
 
 const NAV = [
   { to: '/',         icon: Home,         label: 'Home' },
@@ -99,17 +100,13 @@ export default function TabletSidebar({ aiDrawerOpen = false }: TabletSidebarPro
       <div className="flex items-center justify-between px-3.5 py-3.5 border-b border-casa-border/50">
         {!isEffectivelyCollapsed ? (
           <div className="flex items-center gap-2.5 min-w-0">
-            <span className="maison-seal w-7 h-7 rounded-full inline-flex items-center justify-center font-display text-xs font-bold text-casa-gold flex-shrink-0 shadow-2xs leading-none">
-              <span className="maison-seal-letter text-xs font-serif">T</span>
-            </span>
+            <MaisonCrest size={30} isWarm={true} />
             <span className="maison-brand-title font-bold text-body-lg text-casa-navy tracking-[0.05em] truncate leading-none">
               Maison <span className="text-casa-gold font-normal">Tabor</span>
             </span>
           </div>
         ) : (
-          <span className="maison-seal w-7 h-7 rounded-full inline-flex items-center justify-center font-display text-xs font-bold text-casa-gold flex-shrink-0 shadow-2xs leading-none mx-auto">
-            <span className="maison-seal-letter text-xs font-serif">T</span>
-          </span>
+          <MaisonCrest size={30} isWarm={true} className="mx-auto" />
         )}
         <IconButton
           icon={isEffectivelyCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}

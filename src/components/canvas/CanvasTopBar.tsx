@@ -14,6 +14,7 @@ import { isItemAlreadyScheduled, isExpiredEventSuggestion } from '../../utils/ca
 import { cn } from '../../utils/cn'
 import { IconButton, JewelCapsuleCopilot } from '../ui'
 import { useAppStore } from '../../stores/appStore'
+import MaisonCrest from '../shared/MaisonCrest'
 
 export default function CanvasTopBar() {
   const navigate = useNavigate()
@@ -80,9 +81,7 @@ export default function CanvasTopBar() {
           onClick={() => setCanvasSubmode('calm')}
           className="inline-flex items-center gap-2.5 group h-9"
         >
-          <span className="maison-seal w-8 h-8 rounded-full inline-flex items-center justify-center font-display text-sm font-bold text-casa-gold flex-shrink-0 shadow-2xs group-hover:scale-105 transition-transform leading-none">
-            <span className="maison-seal-letter text-sm font-serif">T</span>
-          </span>
+          <MaisonCrest size={34} isWarm={isCalm} className="group-hover:scale-105" />
           <span
             className={cn(
               'maison-brand-title text-base hidden sm:inline-block font-display font-bold tracking-[0.06em] leading-none',

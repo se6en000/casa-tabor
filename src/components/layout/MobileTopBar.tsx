@@ -5,6 +5,7 @@ import { useLiveClock } from '../../hooks/useLiveClock'
 import { useAppStore } from '../../stores/appStore'
 import { IconButton, Button } from '../ui'
 import MobileDocumentScanSheet from '../mobile/MobileDocumentScanSheet'
+import MaisonCrest from '../shared/MaisonCrest'
 
 export default function MobileTopBar() {
   const now = useLiveClock(30_000)
@@ -20,9 +21,7 @@ export default function MobileTopBar() {
       >
         {/* Left: Brand + Realtime Pulse + Date */}
         <div className="flex items-center gap-2.5 min-w-0">
-          <span className="maison-seal w-7 h-7 rounded-full inline-flex items-center justify-center font-display text-xs font-bold text-casa-gold flex-shrink-0 shadow-2xs leading-none">
-            <span className="maison-seal-letter text-xs font-serif">T</span>
-          </span>
+          <MaisonCrest size={30} isWarm={true} />
           <div className="flex flex-col min-w-0">
             <div className="flex items-center gap-1.5">
               <span className="maison-brand-title text-base font-bold text-casa-navy tracking-[0.05em] leading-none">

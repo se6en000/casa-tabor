@@ -9,6 +9,7 @@ import { cn } from '../../utils/cn'
 import { IconButton } from '../ui'
 import { useProfileSession } from '../../contexts/ProfileSessionContext'
 import { useAppStore } from '../../stores/appStore'
+import MaisonCrest from './MaisonCrest'
 
 /** Full-width Command Bar — CT logo · current events center · weather + clock + AI right */
 export function TopBarC() {
@@ -41,9 +42,7 @@ export function TopBarC() {
     >
       {/* ── Left: brand + greeting ──────────────────────── */}
       <div className="flex items-center gap-2.5 flex-shrink-0">
-        <span className="maison-seal w-8 h-8 rounded-full flex items-center justify-center font-display text-sm font-bold text-casa-gold flex-shrink-0">
-          <span className="maison-seal-letter text-sm font-serif">T</span>
-        </span>
+        <MaisonCrest size={34} isWarm={false} />
         <span className="maison-brand-title text-heading text-white hidden sm:block font-display font-bold tracking-[0.06em]">
           Maison <span className="text-casa-gold font-normal">Tabor</span>
         </span>

@@ -25,6 +25,7 @@ import { cn } from '../../utils/cn'
 import { IconButton, JewelCapsuleCopilot } from '../ui'
 import { useAppStore } from '../../stores/appStore'
 import { WeatherIcon } from './WeatherIcon'
+import MaisonCrest from './MaisonCrest'
 
 /* ════════════════════════════════════════════════════════════════
    LuxuryTopBar — Unified premium navigation bar (Architectural Atelier)
@@ -54,11 +55,7 @@ function BrandZone({ isWarm }: { isWarm: boolean }) {
       onClick={() => setCanvasSubmode('calm')}
       className="inline-flex items-center gap-2.5 group h-9 flex-shrink-0"
     >
-      <span
-        className="maison-seal w-9 h-9 rounded-full inline-flex items-center justify-center font-display text-base font-bold text-casa-gold flex-shrink-0 transition-transform duration-200 ease-[var(--transition-ease-emphasized)] group-hover:scale-[1.05] leading-none"
-      >
-        <span className="maison-seal-letter text-base font-serif">T</span>
-      </span>
+      <MaisonCrest size={36} isWarm={isWarm} className="group-hover:scale-105" />
       <div className="flex flex-col justify-center leading-none">
         <span
           className={cn(
