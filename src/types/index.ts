@@ -347,6 +347,8 @@ export interface DeliveryUpdateEvent {
   occurredAt: string
   sourceRef?: string | null
   rawItem?: PrepItem
+  cost?: string | null
+  policyDisclaimer?: string | null
 }
 
 export interface DeliveryTransitItem {
@@ -365,6 +367,25 @@ export interface DeliveryTransitItem {
   rawItem: PrepItem
   policyDisclaimer?: string | null
   updateHistory?: DeliveryUpdateEvent[]
+}
+
+export interface CanonicalEntityResult {
+  vendor: string
+  vendorKey: string
+  orderId: string | null
+  canonicalOrderId: string | null
+  trackingNumber: string | null
+  carrier: 'ups' | 'fedex' | 'usps' | 'dhl' | null
+  compositeThreadKey: string
+  effectiveStage: DeliveryTransitStage
+  rawStage: DeliveryTransitStage
+  isPerishable: boolean
+  cost: string | null
+  itemSummary: string | null
+  etaDisplay: string | null
+  deliveryDate: string | null
+  policyDisclaimer: string | null
+  agencyLevel: number
 }
 
 export type CategoryRoutingDirective =

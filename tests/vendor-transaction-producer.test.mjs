@@ -580,6 +580,64 @@ test('multi-vendor order number canonicalization accurately normalizes Walmart, 
   }
   const identityApple = vendorTransactionIdentity(testApple)
   assert.equal(identityApple.key, 'transaction:apple:w987654321')
+
+  const testNike = {
+    source_type: 'gmail',
+    event_title: 'Your Nike Order is on the way',
+    description: 'Nike Order: C-0123456789 has shipped',
+    attention_vendor: 'Nike',
+  }
+  const identityNike = vendorTransactionIdentity(testNike)
+  assert.equal(identityNike.key, 'transaction:nike:c-0123456789')
+
+  const testHelloFresh = {
+    source_type: 'gmail',
+    event_title: 'Your HelloFresh box is on the way',
+    description: 'Order # HF-12345678',
+    attention_vendor: 'HelloFresh',
+  }
+  const identityHF = vendorTransactionIdentity(testHelloFresh)
+  assert.equal(identityHF.key, 'transaction:hellofresh:hf-12345678')
+})
+
+test('multi-carrier courier tracking produces standardized composite keys including DHL', async () => {
+  const {
+    buildCompositeThreadKey,
+    canonicalizeTrackingNumber,
+    detectCarrierAndTracking,
+    vendorTransactionIdentity,
+  } = await import('../src/utils/vendorTransactions.ts')
+
+  // 1. DHL Express tracking
+  const dhlDetect = detectCarrierAndTracking('DHL Express tracking # 1234567890')
+  assert.equal(dhlDetect.carrier, 'dhl')
+  assert.equal(dhlDetect.trackingNumber, '1234567890')
+  assert.equal(dhlDetect.trackingUrl, 'https://www.dhl.com/en/express/tracking.html?AWB=1234567890')
+
+  const dhlKey = buildCompositeThreadKey({ carrier: dhlDetect.carrier, trackingNumber: dhlDetect.trackingNumber })
+  assert.equal(dhlKey, 'courier:dhl:1234567890')
+
+  // 2. Direct courier item without merchant order number
+  const dhlItem = {
+    source_type: 'gmail',
+    event_title: 'DHL Express Shipment',
+    description: 'DHL tracking 1234567890 is out for delivery',
+    attention_vendor: 'DHL',
+  }
+  const dhlIdentity = vendorTransactionIdentity(dhlItem)
+  assert.equal(dhlIdentity.key, 'courier:dhl:1234567890')
+
+  // 3. UPS tracking key
+  const upsKey = buildCompositeThreadKey({ carrier: 'ups', trackingNumber: '1Z9999999999999999' })
+  assert.equal(upsKey, 'courier:ups:1z9999999999999999')
+
+  // 4. USPS tracking key
+  const uspsKey = buildCompositeThreadKey({ carrier: 'usps', trackingNumber: '9400100000000000000000' })
+  assert.equal(uspsKey, 'courier:usps:9400100000000000000000')
+
+  // 5. FedEx tracking key
+  const fedexKey = buildCompositeThreadKey({ carrier: 'fedex', trackingNumber: '987654321012' })
+  assert.equal(fedexKey, 'courier:fedex:987654321012')
 })
 
 

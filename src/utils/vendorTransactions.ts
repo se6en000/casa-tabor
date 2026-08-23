@@ -1,4 +1,4 @@
-import type { PrepItem, DeliveryTransitItem, DeliveryTransitStage } from '../types'
+import type { PrepItem, DeliveryTransitItem, DeliveryTransitStage, CanonicalEntityResult } from '../types'
 import {
   format,
   isBefore,
@@ -13,20 +13,21 @@ export interface VendorTransactionIdentity {
   stage: DeliveryTransitStage | null
 }
 
-const VENDOR_ALIASES = [
-  { vendor: 'Walmart', aliases: ['walmart.com', 'walmart+', 'walmart', 'inhome'] },
-  { vendor: 'Amazon', aliases: ['amazon.com', 'amazon', 'prime'] },
+export const VENDOR_ALIASES = [
+  { vendor: 'Walmart', aliases: ['walmart.com', 'walmart+', 'walmart', 'inhome', 'walmart grocery', 'walmart inhome'] },
+  { vendor: 'Amazon', aliases: ['amazon.com', 'amazon', 'prime', 'amazon fresh', 'whole foods'] },
   { vendor: 'Jiffy.com', aliases: ['jiffy.com', 'jiffy transfers', 'jiffy shirts', 'jiffy'] },
-  { vendor: 'HelloFresh', aliases: ['hellofresh', 'hello fresh'] },
-  { vendor: 'Target', aliases: ['target.com', 'target'] },
-  { vendor: 'Instacart', aliases: ['instacart'] },
-  { vendor: 'DoorDash', aliases: ['doordash'] },
-  { vendor: 'Uber Eats', aliases: ['uber eats', 'ubereats'] },
-  { vendor: 'FedEx', aliases: ['fedex'] },
-  { vendor: 'UPS', aliases: ['ups'] },
-  { vendor: 'USPS', aliases: ['usps', 'postal service'] },
+  { vendor: 'HelloFresh', aliases: ['hellofresh', 'hello fresh', 'greenchef', 'green chef', 'factor75', 'factor', 'blue apron'] },
+  { vendor: 'Target', aliases: ['target.com', 'target', 'shipt', 'target circle'] },
+  { vendor: 'Instacart', aliases: ['instacart.com', 'instacart'] },
+  { vendor: 'DoorDash', aliases: ['doordash.com', 'doordash'] },
+  { vendor: 'Uber Eats', aliases: ['uber eats', 'ubereats.com', 'ubereats'] },
+  { vendor: 'FedEx', aliases: ['fedex.com', 'fedex'] },
+  { vendor: 'UPS', aliases: ['ups.com', 'ups'] },
+  { vendor: 'USPS', aliases: ['usps.com', 'usps', 'postal service'] },
+  { vendor: 'DHL', aliases: ['dhl.com', 'dhl express', 'dhl ecommerce', 'dhl'] },
   { vendor: 'Nike', aliases: ['nike.com', 'nike'] },
-  { vendor: 'Apple', aliases: ['apple.com', 'apple store'] },
+  { vendor: 'Apple', aliases: ['apple.com', 'apple store', 'apple'] },
   { vendor: 'Etsy', aliases: ['etsy.com', 'etsy'] },
   { vendor: 'Sephora', aliases: ['sephora.com', 'sephora'] },
   { vendor: 'Nordstrom', aliases: ['nordstrom.com', 'nordstrom'] },
@@ -35,34 +36,190 @@ const VENDOR_ALIASES = [
   { vendor: 'Chewy', aliases: ['chewy.com', 'chewy'] },
 ] as const
 
-function normalizeKeyPart(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+export function normalizeKeyPart(value: string | null | undefined) {
+  return String(value ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
 }
 
 export function canonicalizeOrderId(vendor: string, rawId: string): string {
-  const clean = rawId.trim().replace(/^[#:\s]+/, '')
+  if (!rawId) return ''
+  let clean = rawId.trim().replace(/^[#:\s]+/, '')
+  clean = clean.replace(/^(?:order|confirmation|reference|invoice|receipt|wm)\s*(?:number|no\.?|id|#|:)\s*[:#]?\s*/i, '')
   const v = vendor.toLowerCase()
+
   if (v.includes('walmart')) {
+    clean = clean.replace(/^WM-?/i, '')
     const digitsOnly = clean.replace(/[^0-9]/g, '')
     if (digitsOnly.length === 15 || digitsOnly.length === 16) {
       return `${digitsOnly.slice(0, 7)}-${digitsOnly.slice(7)}`
     }
     return normalizeKeyPart(clean)
   }
+
   if (v.includes('amazon')) {
+    if (/^D01-/i.test(clean)) {
+      return clean.toUpperCase()
+    }
     const digitsOnly = clean.replace(/[^0-9]/g, '')
     if (digitsOnly.length === 17) {
       return `${digitsOnly.slice(0, 3)}-${digitsOnly.slice(3, 10)}-${digitsOnly.slice(10)}`
     }
     return normalizeKeyPart(clean)
   }
-  if (v.includes('apple') || clean.startsWith('W')) {
+
+  const appleSanitized = clean.replace(/[\s.-]+/g, '')
+  const appleMatch = appleSanitized.match(/W\d{9,10}/i)
+  if (v.includes('apple') || appleMatch) {
+    return appleMatch ? appleMatch[0].toUpperCase() : appleSanitized.toUpperCase()
+  }
+
+  const nikeSanitized = clean.replace(/[\s.]+/g, '')
+  const nikeMatch = nikeSanitized.match(/C[0-]\d{9,11}/i)
+  if (v.includes('nike') || nikeMatch) {
+    const matched = nikeMatch ? nikeMatch[0] : nikeSanitized
+    return matched.toUpperCase()
+  }
+
+  const mealKitMatch = clean.match(/(?:HF|GC|BA|FACT)-\d{6,10}/i)
+  if (mealKitMatch) {
+    return mealKitMatch[0].toUpperCase()
+  }
+  if (v.includes('hellofresh')) {
+    if (/^\d{6,10}$/.test(clean)) return `HF-${clean}`
     return clean.toUpperCase()
   }
-  if (v.includes('nike') || clean.startsWith('C0') || clean.startsWith('C-')) {
-    return clean.toUpperCase()
+
+  if (v.includes('target')) {
+    const digits = clean.replace(/[^0-9]/g, '')
+    if (digits.length >= 9 && digits.length <= 14) {
+      return digits
+    }
   }
+
+  if (v.includes('jiffy')) {
+    const digits = clean.replace(/[^0-9]/g, '')
+    if (digits.length >= 8 && digits.length <= 12) {
+      return digits
+    }
+  }
+
   return normalizeKeyPart(clean)
+}
+
+export function canonicalizeTrackingNumber(carrier: string | null, rawTracking: string): string {
+  if (!rawTracking) return ''
+  const clean = String(rawTracking).trim().replace(/[\s-]+/g, '')
+  const c = String(carrier || '').toLowerCase()
+
+  if (c === 'ups') {
+    return clean.toUpperCase()
+  }
+  if (c === 'fedex') {
+    return clean.replace(/[^0-9]/g, '')
+  }
+  if (c === 'usps') {
+    if (/^[A-Za-z]{2}\d{9}[A-Za-z]{2}$/.test(clean)) {
+      return clean.toUpperCase()
+    }
+    return clean.replace(/[^0-9]/g, '')
+  }
+  if (c === 'dhl') {
+    if (/^(?:GM|LX|RX|JD)/i.test(clean)) {
+      return clean.toUpperCase()
+    }
+    return clean.replace(/[^0-9]/g, '')
+  }
+
+  return clean.toUpperCase()
+}
+
+export function detectCarrierAndTracking(text?: string | null): {
+  carrier: 'ups' | 'fedex' | 'usps' | 'dhl' | null
+  trackingNumber: string | null
+  trackingUrl: string | null
+} {
+  if (!text) {
+    return { carrier: null, trackingNumber: null, trackingUrl: null }
+  }
+
+  const str = String(text)
+
+  // 1. UPS (1Z format)
+  const upsMatch = str.match(/\b(1Z[0-9A-Za-z]{16})\b/i)
+  if (upsMatch) {
+    const trackingNumber = canonicalizeTrackingNumber('ups', upsMatch[1])
+    return {
+      carrier: 'ups',
+      trackingNumber,
+      trackingUrl: `https://www.ups.com/track?tracknum=${encodeURIComponent(trackingNumber)}`,
+    }
+  }
+
+  // 2. USPS Domestic routing barcode (20-24 digits starting with 92/93/94/95)
+  const uspsMatch = str.match(/\b(9[2345]\d{20,24})\b/)
+  if (uspsMatch) {
+    const trackingNumber = canonicalizeTrackingNumber('usps', uspsMatch[1])
+    return {
+      carrier: 'usps',
+      trackingNumber,
+      trackingUrl: `https://tools.usps.com/go/TrackConfirmAction?tLabels=${encodeURIComponent(trackingNumber)}`,
+    }
+  }
+
+  // 3. USPS International UPU S10 (13 chars)
+  const uspsIntlMatch = str.match(/\b([A-Za-z]{2}\d{9}[A-Za-z]{2})\b/)
+  if (uspsIntlMatch) {
+    const trackingNumber = canonicalizeTrackingNumber('usps', uspsIntlMatch[1])
+    return {
+      carrier: 'usps',
+      trackingNumber,
+      trackingUrl: `https://tools.usps.com/go/TrackConfirmAction?tLabels=${encodeURIComponent(trackingNumber)}`,
+    }
+  }
+
+  // 4. UPS Mail Innovations
+  const upsMiMatch = str.match(/\bups\b[^\d]*(92\d{20,32})\b/i)
+  if (upsMiMatch) {
+    const trackingNumber = canonicalizeTrackingNumber('ups', upsMiMatch[1])
+    return {
+      carrier: 'ups',
+      trackingNumber,
+      trackingUrl: `https://www.ups.com/track?tracknum=${encodeURIComponent(trackingNumber)}`,
+    }
+  }
+
+  // 5. DHL
+  const dhlMatch = str.match(/\b(?:dhl|dhl express)\b[^\d]*(\d{10,11})\b/i)
+  if (dhlMatch) {
+    const trackingNumber = canonicalizeTrackingNumber('dhl', dhlMatch[1])
+    return {
+      carrier: 'dhl',
+      trackingNumber,
+      trackingUrl: `https://www.dhl.com/en/express/tracking.html?AWB=${encodeURIComponent(trackingNumber)}`,
+    }
+  }
+
+  const dhlEcommerceMatch = str.match(/\b((?:GM|LX|RX|JD)\d{10,20})\b/i)
+  if (dhlEcommerceMatch) {
+    const trackingNumber = canonicalizeTrackingNumber('dhl', dhlEcommerceMatch[1])
+    return {
+      carrier: 'dhl',
+      trackingNumber,
+      trackingUrl: `https://www.dhl.com/en/express/tracking.html?AWB=${encodeURIComponent(trackingNumber)}`,
+    }
+  }
+
+  // 6. FedEx
+  const fedexMatch = str.match(/\bfedex\b[^\d]*(\d{12}|\d{14}|\d{15}|\d{20,22})\b/i) || str.match(/\btracking\b[^\d]*(\d{12}|\d{15})\b/i)
+  if (fedexMatch) {
+    const trackingNumber = canonicalizeTrackingNumber('fedex', fedexMatch[1])
+    return {
+      carrier: 'fedex',
+      trackingNumber,
+      trackingUrl: `https://www.fedex.com/fedextrack/?trknbr=${encodeURIComponent(trackingNumber)}`,
+    }
+  }
+
+  return { carrier: null, trackingNumber: null, trackingUrl: null }
 }
 
 function legacyVendor(item: PrepItem) {
@@ -94,11 +251,11 @@ export function orderId(item: PrepItem): string | null {
   if (orderParamMatch) return orderParamMatch[1]
 
   // 5. Apple Web Order Number e.g. "W123456789"
-  const appleMatch = text.match(/\bW\d{9,10}\b/)
+  const appleMatch = text.match(/\bW\d{9,10}\b/i)
   if (appleMatch) return appleMatch[0]
 
   // 6. Nike Order Number e.g. "C0123456789"
-  const nikeMatch = text.match(/\bC0\d{9,11}\b/)
+  const nikeMatch = text.match(/\bC[0-]\d{9,11}\b/i)
   if (nikeMatch) return nikeMatch[0]
 
   // 7. HelloFresh / Meal Kit Order Number e.g. "HF-12345678", "GC-12345678"
@@ -118,6 +275,9 @@ export function orderId(item: PrepItem): string | null {
 
   const fedexMatch = text.match(/\b(?:fedex|tracking)\b[^\d]*(\d{12}|\d{15}|\d{20,22})\b/i)
   if (fedexMatch) return fedexMatch[1]
+
+  const dhlMatch = text.match(/\b(?:dhl|dhl express)\b[^\d]*(\d{10,11})\b/i) || text.match(/\b(?:GM|LX|RX|JD)\d{10,20}\b/i)
+  if (dhlMatch) return dhlMatch[1] || dhlMatch[0]
 
   // 10. Generic Target / 10-14 digit standalone order numbers when vendor is Target
   const targetMatch = text.match(/\btarget\b[^\d]*(\d{10,14})\b/i)
@@ -210,11 +370,197 @@ function resolveVendorName(item: PrepItem): string {
     if (/fedex/i.test(raw)) return 'FedEx'
     if (/ups/i.test(raw)) return 'UPS'
     if (/usps/i.test(raw)) return 'USPS'
+    if (/dhl/i.test(raw)) return 'DHL'
     if (/nike/i.test(raw)) return 'Nike'
     if (/apple/i.test(raw)) return 'Apple'
     return raw
   }
   return 'Parcel'
+}
+
+export function detectVendorAndOrder(text?: string | null, vendorHint?: string | null): {
+  vendor: string | null
+  vendorKey: string | null
+  orderId: string | null
+  canonicalOrderId: string | null
+} {
+  const combined = String(text || '')
+  let vendor: string | null = null
+
+  if (vendorHint && !isAddressLike(vendorHint)) {
+    const raw = String(vendorHint).trim()
+    for (const { vendor: v, aliases } of VENDOR_ALIASES) {
+      if (aliases.some((alias) => raw.toLowerCase().includes(alias))) {
+        vendor = v
+        break
+      }
+    }
+    if (!vendor) vendor = raw
+  }
+
+  if (!vendor && combined) {
+    const lower = combined.toLowerCase()
+    for (const { vendor: v, aliases } of VENDOR_ALIASES) {
+      if (aliases.some((alias) => lower.includes(alias))) {
+        vendor = v
+        break
+      }
+    }
+  }
+
+  const vendorKey = vendor ? normalizeKeyPart(vendor) : null
+  let rawOrderId: string | null = null
+
+  // 1. Amazon 17-digit format
+  const amazonMatch = combined.match(/\b\d{3}-\d{7}-\d{7}\b/)
+  if (amazonMatch) {
+    rawOrderId = amazonMatch[0]
+  } else if (vendor === 'Amazon') {
+    const amazonDigitsMatch = combined.match(/\b\d{17}\b/)
+    if (amazonDigitsMatch) rawOrderId = amazonDigitsMatch[0]
+    const amazonDigitalMatch = combined.match(/\bD01-\d{7}-\d{7}\b/i)
+    if (amazonDigitalMatch) rawOrderId = amazonDigitalMatch[0]
+  }
+
+  // 2. Walmart formatted order numbers
+  if (!rawOrderId) {
+    const walmartMatch = combined.match(/\b(?:2000|1000)\d{3}-\d{8}\b/)
+    if (walmartMatch) {
+      rawOrderId = walmartMatch[0]
+    } else {
+      const walmartLongMatch = combined.match(/\b(?:2000|1000)\d{11,13}\b/)
+      if (walmartLongMatch) {
+        rawOrderId = walmartLongMatch[0]
+      } else if (vendor === 'Walmart') {
+        const wmDigitsMatch = combined.match(/\b\d{15,16}\b/)
+        if (wmDigitsMatch) rawOrderId = wmDigitsMatch[0]
+      }
+    }
+  }
+
+  // 3. Apple Web Order Number
+  if (!rawOrderId) {
+    const appleMatch = combined.match(/\bW\d{9,10}\b/i)
+    if (appleMatch) {
+      rawOrderId = appleMatch[0]
+    }
+  }
+
+  // 4. Nike Order Number
+  if (!rawOrderId) {
+    const nikeMatch = combined.match(/\bC[0-]\d{9,11}\b/i)
+    if (nikeMatch) {
+      rawOrderId = nikeMatch[0]
+    }
+  }
+
+  // 5. HelloFresh / Meal Kit Order Number
+  if (!rawOrderId) {
+    const mealKitMatch = combined.match(/\b(?:HF|GC|BA|FACT)-\d{6,10}\b/i)
+    if (mealKitMatch) {
+      rawOrderId = mealKitMatch[0]
+    }
+  }
+
+  // 6. Explicit numeric or alphanumeric Order / Cart / Confirmation / Reference number
+  if (!rawOrderId) {
+    const explicitOrderMatch = combined.match(/\b(?:order|cart|confirmation|reference|invoice|receipt|wm)\s*(?:number|no\.?|id|#|:)\s*[:#]?\s*#?([a-z0-9-]*\d{4,}[a-z0-9-]*)\b/i)
+    if (explicitOrderMatch) {
+      rawOrderId = explicitOrderMatch[1]
+    }
+  }
+
+  // 7. URL query param
+  if (!rawOrderId) {
+    const orderParamMatch = combined.match(/\b(?:orderId|order_id|orderNumber|order_number)=([a-z0-9-]+)\b/i)
+    if (orderParamMatch) {
+      rawOrderId = orderParamMatch[1]
+    }
+  }
+
+  // 8. Direct standalone order hashtag
+  if (!rawOrderId) {
+    const directHashMatch = combined.match(/#([a-z0-9-]*\d{6,}[a-z0-9-]*)\b/i)
+    if (directHashMatch) {
+      rawOrderId = directHashMatch[1]
+    }
+  }
+
+  // 9. Target 10-14 digit standalone order numbers when vendor is Target
+  if (!rawOrderId && vendor === 'Target') {
+    const targetMatch = combined.match(/\btarget\b[^\d]*(\d{10,14})\b/i) || combined.match(/\b(\d{10,14})\b/)
+    if (targetMatch) {
+      rawOrderId = targetMatch[1]
+    }
+  }
+
+  const canonical = (vendor && rawOrderId) ? canonicalizeOrderId(vendor, rawOrderId) : (rawOrderId ? normalizeKeyPart(rawOrderId) : null)
+
+  return {
+    vendor,
+    vendorKey,
+    orderId: rawOrderId,
+    canonicalOrderId: canonical,
+  }
+}
+
+export function buildCompositeThreadKey(params: {
+  vendor?: string | null
+  vendorKey?: string | null
+  orderId?: string | null
+  canonicalOrderId?: string | null
+  carrier?: string | null
+  trackingNumber?: string | null
+  dateKey?: string | null
+  sourceRef?: string | null
+  descriptor?: string | null
+}): string {
+  const {
+    vendor,
+    vendorKey: rawVendorKey,
+    orderId,
+    canonicalOrderId,
+    carrier,
+    trackingNumber,
+    dateKey,
+    sourceRef,
+    descriptor,
+  } = params || {}
+
+  const vKey = rawVendorKey || (vendor ? normalizeKeyPart(vendor) : null)
+  const canonicalId = canonicalOrderId || (orderId && vendor ? canonicalizeOrderId(vendor, orderId) : orderId ? normalizeKeyPart(orderId) : null)
+
+  if (vKey && canonicalId) {
+    return `transaction:${vKey}:${normalizeKeyPart(canonicalId)}`
+  }
+
+  if (carrier && trackingNumber) {
+    const cKey = String(carrier).toLowerCase()
+    const tNum = canonicalizeTrackingNumber(cKey, trackingNumber).toLowerCase()
+    return `courier:${cKey}:${tNum}`
+  }
+
+  if (vKey && descriptor) {
+    return `transaction:${vKey}:items:${normalizeKeyPart(descriptor)}`
+  }
+
+  if (vKey && dateKey) {
+    return `delivery:${vKey}:${dateKey}`
+  }
+
+  if (vKey && sourceRef) {
+    return `transaction:${vKey}:message:${sourceRef}`
+  }
+
+  if (vKey) {
+    return `transaction:${vKey}:unknown`
+  }
+
+  if (carrier) {
+    return `courier:${String(carrier).toLowerCase()}:unknown`
+  }
+
+  return 'transaction:parcel:unknown'
 }
 
 function deliveryDateKey(item: PrepItem): string {
@@ -239,19 +585,39 @@ function extractOrderIdFromExplicitKey(explicitKey?: string | null): string | nu
 export function vendorTransactionIdentity(item: PrepItem): VendorTransactionIdentity | null {
   if (item.source_type !== 'gmail' && !item.source_ref?.startsWith('gmail:')) return null
 
-  const vendor = resolveVendorName(item)
-  if (vendor === 'Parcel') return null
-
-  const vendorKey = normalizeKeyPart(vendor)
   const explicitKey = item.attention_thread_key?.trim()
+  if (explicitKey?.startsWith('courier:')) {
+    const carrier = explicitKey.split(':')[1]?.toUpperCase() || 'Parcel'
+    return { key: explicitKey, vendor: carrier, stage: transactionStage(item) }
+  }
+
+  const vendor = resolveVendorName(item)
+  if (vendor === 'Parcel') {
+    const carrierDetect = detectCarrierAndTracking(`${item.event_title ?? ''} ${item.description ?? ''} ${item.source_ref ?? ''}`)
+    if (carrierDetect.carrier && carrierDetect.trackingNumber) {
+      const cKey = carrierDetect.carrier.toLowerCase()
+      const tKey = canonicalizeTrackingNumber(cKey, carrierDetect.trackingNumber).toLowerCase()
+      return {
+        key: `courier:${cKey}:${tKey}`,
+        vendor: carrierDetect.carrier.toUpperCase(),
+        stage: transactionStage(item),
+      }
+    }
+    return null
+  }
+
+  const isCourier = ['UPS', 'FedEx', 'USPS', 'DHL'].includes(vendor)
+  const vendorKey = normalizeKeyPart(vendor)
   const explicitOrderNumber = extractOrderIdFromExplicitKey(explicitKey)
   const extractedOrderId = orderId(item)
   const rawOrderNumber = explicitOrderNumber || extractedOrderId
-  const finalOrderNumber = rawOrderNumber ? canonicalizeOrderId(vendor, rawOrderNumber) : null
+  const finalOrderNumber = rawOrderNumber ? (isCourier ? canonicalizeTrackingNumber(vendorKey, rawOrderNumber) : canonicalizeOrderId(vendor, rawOrderNumber)) : null
   const dateKey = deliveryDateKey(item)
 
   const key = finalOrderNumber
-    ? `transaction:${vendorKey}:${normalizeKeyPart(finalOrderNumber)}`
+    ? (isCourier
+        ? `courier:${vendorKey}:${normalizeKeyPart(finalOrderNumber)}`
+        : `transaction:${vendorKey}:${normalizeKeyPart(finalOrderNumber)}`)
     : `delivery:${vendorKey}:${dateKey}`
 
   return { key, vendor, stage: transactionStage(item) }
@@ -332,6 +698,8 @@ export function mergeDeliveryTransitItem(
       occurredAt: existing.occurredAt,
       sourceRef: existing.rawItem?.source_ref,
       rawItem: existing.rawItem,
+      cost: existing.cost,
+      policyDisclaimer: existing.policyDisclaimer,
     },
   ]
   const incomingHistory = incoming.updateHistory || [
@@ -343,6 +711,8 @@ export function mergeDeliveryTransitItem(
       occurredAt: incoming.occurredAt,
       sourceRef: incoming.rawItem?.source_ref,
       rawItem: incoming.rawItem,
+      cost: incoming.cost,
+      policyDisclaimer: incoming.policyDisclaimer,
     },
   ]
 
@@ -354,14 +724,21 @@ export function mergeDeliveryTransitItem(
       seenIds.add(h.id)
       return true
     })
-    .sort((a, b) => new Date(a.occurredAt).getTime() - new Date(b.occurredAt).getTime())
+    .sort((a, b) => {
+      const timeA = a.occurredAt ? new Date(a.occurredAt).getTime() : 0
+      const timeB = b.occurredAt ? new Date(b.occurredAt).getTime() : 0
+      return (isNaN(timeA) ? 0 : timeA) - (isNaN(timeB) ? 0 : timeB)
+    })
+
+  const incomingTime = incoming.occurredAt ? new Date(incoming.occurredAt).getTime() : 0
+  const existingTime = existing.occurredAt ? new Date(existing.occurredAt).getTime() : 0
+  const isLatestIncoming = (isNaN(incomingTime) ? 0 : incomingTime) >= (isNaN(existingTime) ? 0 : existingTime)
 
   // Chronological lifecycle stage resolution:
   let mergedStage: DeliveryTransitStage
   if (existing.stage === 'problem' || incoming.stage === 'problem') {
     mergedStage = 'problem'
   } else {
-    const isLatestIncoming = new Date(incoming.occurredAt).getTime() >= new Date(existing.occurredAt).getTime()
     const latestItem = isLatestIncoming ? incoming : existing
     const latestText = `${latestItem.rawItem?.event_title ?? ''} ${latestItem.rawItem?.description ?? ''}`.toLowerCase()
     const isLatestBeingPrepared = /\b(?:being prepared|is being prepared|preparing your order|preparing your items|we're preparing|last minute to add|last call to edit|add more to (?:your )?order|add items to (?:your )?order|edit your order)\b/i.test(latestText)
@@ -376,39 +753,54 @@ export function mergeDeliveryTransitItem(
     }
   }
 
-  const mergedCost = incoming.cost || existing.cost || null
+  const reversedHistory = [...uniqueHistory].reverse()
+  const historyCostItem = reversedHistory.find(
+    (h) => (h as any).cost || (h as any).rawItem?.cost
+  )
+  const latestCost =
+    (historyCostItem as any)?.cost ||
+    (historyCostItem as any)?.rawItem?.cost ||
+    (isLatestIncoming ? (incoming.cost || existing.cost || null) : (existing.cost || incoming.cost || null))
+
   const mergedSummary = mergeItemSummary(existing.itemSummary, incoming.itemSummary)
   const mergedEta = mergeEtaDisplay(existing.etaDisplay, incoming.etaDisplay)
-  const mergedPolicy = incoming.policyDisclaimer || existing.policyDisclaimer || null
 
-  const newerDate =
-    new Date(incoming.occurredAt).getTime() >= new Date(existing.occurredAt).getTime()
-      ? incoming.occurredAt
-      : existing.occurredAt
+  const historyPolicyItem = reversedHistory.find(
+    (h) => (h as any).policyDisclaimer || (h as any).rawItem?.policy_disclaimer || (h as any).rawItem?.policyDisclaimer
+  )
+  const latestPolicy =
+    (historyPolicyItem as any)?.policyDisclaimer ||
+    (historyPolicyItem as any)?.rawItem?.policy_disclaimer ||
+    (historyPolicyItem as any)?.rawItem?.policyDisclaimer ||
+    (isLatestIncoming ? (incoming.policyDisclaimer || existing.policyDisclaimer || null) : (existing.policyDisclaimer || incoming.policyDisclaimer || null))
 
-  const latestRawItem =
-    new Date(incoming.occurredAt).getTime() >= new Date(existing.occurredAt).getTime()
-      ? incoming.rawItem
-      : existing.rawItem
+  const newerDate = isLatestIncoming ? incoming.occurredAt : existing.occurredAt
+  const latestRawItem = isLatestIncoming ? incoming.rawItem : existing.rawItem
 
   return {
     ...existing,
     stage: mergedStage,
-    cost: mergedCost,
+    cost: latestCost,
     itemSummary: mergedSummary,
     etaDisplay: mergedEta,
     isPerishable: existing.isPerishable || incoming.isPerishable,
     occurredAt: newerDate,
     rawItem: latestRawItem,
-    policyDisclaimer: mergedPolicy,
+    policyDisclaimer: latestPolicy,
     updateHistory: uniqueHistory,
   }
 }
 
 export function consolidateTransitItems(items: DeliveryTransitItem[]): DeliveryTransitItem[] {
+  const sorted = [...items].sort((a, b) => {
+    const timeA = a.occurredAt ? new Date(a.occurredAt).getTime() : 0
+    const timeB = b.occurredAt ? new Date(b.occurredAt).getTime() : 0
+    return (isNaN(timeA) ? 0 : timeA) - (isNaN(timeB) ? 0 : timeB)
+  })
+
   const transitMap = new Map<string, DeliveryTransitItem>()
 
-  for (const item of items) {
+  for (const item of sorted) {
     const existing = transitMap.get(item.threadKey)
     if (!existing) {
       transitMap.set(item.threadKey, item)
@@ -483,9 +875,12 @@ function extractAmount(text?: string | null): string | null {
 }
 
 export function isDeliveryTransitItem(item: PrepItem): boolean {
+  const text = `${item.event_title ?? ''} ${item.description}`.toLowerCase()
+  if (/\b(flight|airline|airlines|e-ticket|ticket receipt|boarding pass|hotel reservation|cabin getaway|airbnb|vrbo|hotel stay|reservation confirmation|maintenance visit|inspection visit|service visit|checkup|cleaning scheduled|teeth cleaning|lesson|rehearsal|recital|orientation|showcase|arborist|tennis court|annual general meeting|ptsa meeting)\b/i.test(text)) {
+    return false
+  }
   if (item.type === 'delivery') return true
   if (isPerishableDelivery(item)) return true
-  const text = `${item.event_title ?? ''} ${item.description}`.toLowerCase()
   if (/\b(inhome delivery|delivery window|grocery delivery|package delivery|courier delivery|out for delivery|shipped|en route|shipment for)\b/.test(text)) {
     return true
   }
@@ -523,17 +918,37 @@ export function isDeliveryTransitItem(item: PrepItem): boolean {
   return false
 }
 
-export function isPerishableDelivery(item: PrepItem): boolean {
-  const text = `${item.event_title ?? ''} ${item.description}`.toLowerCase()
+export function isPerishableDelivery(
+  item: PrepItem | Partial<PrepItem> | { title?: string; vendor?: string; description?: string; event_title?: string; attention_vendor?: string } | string | null | undefined
+): boolean {
+  if (!item) return false
+  let combined = ''
+  if (typeof item === 'string') {
+    combined = item.toLowerCase()
+  } else if (typeof item === 'object') {
+    const desc = (item as any).description || ''
+    const title = (item as any).event_title || (item as any).title || ''
+    const vendor = (item as any).vendor || (item as any).attention_vendor || ''
+    combined = `${vendor} ${title} ${desc}`.toLowerCase()
+  }
+
   return (
-    text.includes('inhome') ||
-    text.includes('hellofresh') ||
-    text.includes('instacart') ||
-    text.includes('perishable') ||
-    text.includes('refrigerat') ||
-    text.includes('fresh') ||
-    text.includes('grocer') ||
-    text.includes('produce')
+    combined.includes('inhome') ||
+    combined.includes('hellofresh') ||
+    combined.includes('hello fresh') ||
+    combined.includes('greenchef') ||
+    combined.includes('green chef') ||
+    combined.includes('factor75') ||
+    combined.includes('factor 75') ||
+    combined.includes('blue apron') ||
+    combined.includes('blueapron') ||
+    combined.includes('meal kit') ||
+    combined.includes('instacart') ||
+    combined.includes('perishable') ||
+    combined.includes('refrigerat') ||
+    combined.includes('fresh') ||
+    combined.includes('grocer') ||
+    combined.includes('produce')
   )
 }
 
@@ -579,7 +994,9 @@ export function resolveEffectiveStage(
   if (rawStage === 'problem') {
     return rawStage
   }
-  if (!deliveryDate || !now) {
+  const isValidDeliveryDate = deliveryDate instanceof Date && !isNaN(deliveryDate.getTime())
+  const isValidNow = now instanceof Date && !isNaN(now.getTime())
+  if (!isValidDeliveryDate || !isValidNow) {
     return rawStage
   }
 
@@ -619,9 +1036,12 @@ export function formatDeliveryEta(
     return 'Delivery exception'
   }
 
+  const isValidDeliveryDate = deliveryDate instanceof Date && !isNaN(deliveryDate.getTime())
+  const isValidNow = now instanceof Date && !isNaN(now.getTime())
+
   if (stage === 'delivered') {
-    if (!deliveryDate) return 'Delivered'
-    if (now) {
+    if (!isValidDeliveryDate) return 'Delivered'
+    if (isValidNow) {
       const diff = differenceInCalendarDays(deliveryDate, now)
       if (diff === 0) return 'Delivered today'
       if (diff === -1) return 'Delivered yesterday'
@@ -630,11 +1050,11 @@ export function formatDeliveryEta(
     return `Delivered ${format(deliveryDate, 'MMM d')}`
   }
 
-  if (!deliveryDate) {
+  if (!isValidDeliveryDate) {
     return rawEta || null
   }
 
-  if (now) {
+  if (isValidNow) {
     const diff = differenceInCalendarDays(deliveryDate, now)
     if (diff === 0) {
       return rawEta || 'Today'
@@ -657,7 +1077,7 @@ export function isItemArrivingToday(item: DeliveryTransitItem, now: Date): boole
   const targetDate = resolveDeliveryDate(item.rawItem)
   const effectiveStage = resolveEffectiveStage(item.stage, targetDate, now)
   if (effectiveStage === 'delivered' || effectiveStage === 'problem') return false
-  if (!targetDate) return false
+  if (!targetDate || isNaN(targetDate.getTime()) || !now || isNaN(now.getTime())) return false
   return isSameDay(targetDate, now)
 }
 
@@ -665,7 +1085,7 @@ export function isItemScheduledLater(item: DeliveryTransitItem, now: Date): bool
   const targetDate = resolveDeliveryDate(item.rawItem)
   const effectiveStage = resolveEffectiveStage(item.stage, targetDate, now)
   if (effectiveStage === 'delivered' || effectiveStage === 'problem') return false
-  if (!targetDate) return false
+  if (!targetDate || isNaN(targetDate.getTime()) || !now || isNaN(now.getTime())) return false
   return isBefore(startOfDay(now), startOfDay(targetDate))
 }
 
@@ -703,8 +1123,17 @@ export function buildDeliveryTransitItem(item: PrepItem, now?: Date): DeliveryTr
 
   // Extract ETA or time window
   const etaMatch = fullText.match(/(?:(?:arrive|expected|arriving|delivery)\s+(?:today\s+)?by\s+[\d:apm\s–-]+|today\s+by\s+[\d:apm]+|(?:delivery\s+)?window\s+(?:is\s+)?[\d:apm\s–-]+|between\s+[\d:apm\s–-]+|today\s+between\s+[\d:apm\s–-]+|expected\s+today|(?:expected\s+to\s+arrive|arriving|expected|arrive)\s+(?:on\s+)?[A-Za-z]+,?\s+[A-Za-z]+\s+\d+)/i)
-  const rawEta = etaMatch ? etaMatch[0].trim() : (targetDate ? format(targetDate, 'EEE, MMM d') : (item.due_by ? new Date(item.due_by).toLocaleDateString() : null))
-  const etaDisplay = now ? formatDeliveryEta(rawEta, targetDate, effectiveStage, now) : (rawEta || (targetDate ? format(targetDate, 'EEE, MMM d') : null))
+  const isValidTargetDate = targetDate instanceof Date && !isNaN(targetDate.getTime())
+  const rawEta = etaMatch
+    ? etaMatch[0].trim()
+    : isValidTargetDate
+      ? format(targetDate, 'EEE, MMM d')
+      : item.due_by && !isNaN(new Date(item.due_by).getTime())
+        ? new Date(item.due_by).toLocaleDateString()
+        : null
+  const etaDisplay = now
+    ? formatDeliveryEta(rawEta, targetDate, effectiveStage, now)
+    : rawEta || (isValidTargetDate ? format(targetDate, 'EEE, MMM d') : null)
 
   // Extract return/claim policy disclaimer if present
   const policyMatch = fullText.match(/(?:claims? for (?:missing|wrong|damaged|lost)[^.]*|claims? must be made within[^.]*|return window[^.]*|return eligible[^.]*)/i)
@@ -719,6 +1148,8 @@ export function buildDeliveryTransitItem(item: PrepItem, now?: Date): DeliveryTr
       occurredAt: item.created_at,
       sourceRef: item.source_ref,
       rawItem: item,
+      cost,
+      policyDisclaimer,
     },
   ]
 
@@ -736,5 +1167,105 @@ export function buildDeliveryTransitItem(item: PrepItem, now?: Date): DeliveryTr
     rawItem: item,
     policyDisclaimer,
     updateHistory: initialHistory,
+  }
+}
+
+export function extractPolicyDisclaimer(text?: string | null): string | null {
+  if (!text) return null
+  const match = String(text).match(/(?:claims? for (?:missing|wrong|damaged|lost)[^.]*|claims? must be made within[^.]*|return window[^.]*|return (?:by|eligible)[^.]*)/i)
+  return match ? match[0].trim() : null
+}
+
+export function resolveCanonicalEntity(
+  input: Partial<PrepItem> & {
+    vendor?: string
+    text?: string
+    title?: string
+    orderId?: string
+    trackingNumber?: string
+    carrier?: 'ups' | 'fedex' | 'usps' | 'dhl' | null
+    receivedAt?: string
+    deliveryDate?: string | null
+    cost?: string | null
+    itemSummary?: string | null
+    rawEta?: string | null
+    etaDisplay?: string | null
+    now?: Date
+  },
+  options?: { now?: Date }
+): CanonicalEntityResult {
+  const item = input || {}
+  const now = options?.now || (item.now instanceof Date ? item.now : new Date())
+  const combined = `${item.event_title || item.title || ''} ${item.description || ''} ${item.text || ''} ${item.source_ref || ''}`.trim()
+
+  // 1. Vendor & Order Resolution
+  const vendorDetection = detectVendorAndOrder(combined, item.vendor || item.attention_vendor)
+  const carrierDetection = detectCarrierAndTracking(combined)
+
+  const vendor = vendorDetection.vendor || (carrierDetection.carrier ? carrierDetection.carrier.toUpperCase() : 'Parcel')
+  const vendorKey = vendorDetection.vendorKey || (carrierDetection.carrier ? carrierDetection.carrier : 'parcel')
+  const rawOrderId = vendorDetection.orderId
+  const canonicalOrderId = vendorDetection.canonicalOrderId
+
+  const trackingNumber = carrierDetection.trackingNumber || item.trackingNumber || null
+  const carrier = carrierDetection.carrier || (item.carrier ? (String(item.carrier).toLowerCase() as 'ups' | 'fedex' | 'usps' | 'dhl') : null)
+
+  // 2. Composite Thread Key
+  const dateKey = item.deliveryDate || (item.due_by ? String(item.due_by).slice(0, 10) : item.event_date ? String(item.event_date).slice(0, 10) : item.created_at ? String(item.created_at).slice(0, 10) : null)
+  const compositeThreadKey = item.attention_thread_key?.trim() || buildCompositeThreadKey({
+    vendor,
+    vendorKey,
+    orderId: rawOrderId,
+    canonicalOrderId,
+    carrier,
+    trackingNumber,
+    dateKey,
+    sourceRef: item.source_ref,
+  })
+
+  // 3. Stage & Date Resolution
+  const rawStage = (transactionStage(item as PrepItem) || 'confirmed') as DeliveryTransitStage
+  const deliveryDateObj = item.deliveryDate ? new Date(item.deliveryDate) : (item.due_by ? new Date(item.due_by) : item.event_date ? new Date(item.event_date) : null)
+  const isValidDateObj = deliveryDateObj instanceof Date && !isNaN(deliveryDateObj.getTime())
+  const deliveryDateIso = isValidDateObj ? deliveryDateObj.toISOString().slice(0, 10) : null
+  const effectiveStage = resolveEffectiveStage(rawStage, isValidDateObj ? deliveryDateObj : null, now)
+
+  // 4. Perishable & Policy Disclaimer
+  const isPerish = isPerishableDelivery(item as PrepItem)
+  const policyDisclaimer = item.policy_disclaimer || extractPolicyDisclaimer(combined)
+  const cost = item.cost || extractAmount(combined)
+
+  // Extract Summary
+  const itemMatch = combined.match(/(?:delivered:\s*|delivery of\s+)([A-Za-z0-9\s™+'-]{2,60}?\+\s*\d+\s*items?)/i)
+    || combined.match(/(\d+\s+items?\s+including\s+[A-Za-z0-9\s™+'-]{3,40})/i)
+    || combined.match(/(Delivery of InHome order)/i)
+    || combined.match(/(\d+\s+items?|[A-Za-z0-9\s™+'-]{3,40}(?:Book|Tools|Kit|Packs?|Order|Box))/i)
+  const itemSummary = item.itemSummary || (itemMatch ? (itemMatch[1] || itemMatch[0]).trim() : (isPerish ? 'Grocery Delivery' : 'Package'))
+
+  // 5. ETA Display
+  const etaMatch = combined.match(/(?:(?:arrive|expected|arriving|delivery)\s+(?:today\s+)?by\s+[\d:apm\s–-]+|today\s+by\s+[\d:apm]+|(?:delivery\s+)?window\s+(?:is\s+)?[\d:apm\s–-]+|between\s+[\d:apm\s–-]+|today\s+between\s+[\d:apm\s–-]+|expected\s+today|(?:expected\s+to\s+arrive|arriving|expected|arrive)\s+(?:on\s+)?[A-Za-z]+,?\s+[A-Za-z]+\s+\d+)/i)
+  const rawEta = item.etaDisplay || item.rawEta || (etaMatch ? etaMatch[0].trim() : (isValidDateObj ? format(deliveryDateObj, 'EEE, MMM d') : null))
+  const etaDisplay = formatDeliveryEta(rawEta, isValidDateObj ? deliveryDateObj : null, effectiveStage, now)
+
+  // 6. Agency Level (0 for passive logistics radar)
+  const agencyLevel = typeof item.agency_level === 'number' ? item.agency_level : 0
+
+  return {
+    vendor,
+    vendorKey,
+    orderId: rawOrderId,
+    canonicalOrderId,
+    trackingNumber,
+    carrier,
+    compositeThreadKey,
+    effectiveStage,
+    rawStage,
+    isPerishable: isPerish,
+    cost,
+    itemSummary,
+    etaDisplay,
+    deliveryDate: deliveryDateIso,
+    policyDisclaimer,
+    agencyLevel,
   }
 }
