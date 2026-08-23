@@ -299,18 +299,18 @@ html[data-density="kiosk"] .floating-dock-glass {
 
 .topbar-gold-divider {
   width: 1px;
-  height: 60%;
+  height: 30px;
   align-self: center;
   flex-shrink: 0;
-  background: rgba(201, 169, 110, 0.18);
+  background: rgba(201, 169, 110, 0.20);
 }
 
 .luxury-topbar--warm .topbar-gold-divider {
-  background: rgba(201, 169, 110, 0.25);
+  background: rgba(201, 169, 110, 0.28);
 }
 
 html.midnight-gallery .topbar-gold-divider {
-  background: rgba(159, 134, 88, 0.25);
+  background: rgba(159, 134, 88, 0.28);
 }
 
 .topbar-nav-indicator {

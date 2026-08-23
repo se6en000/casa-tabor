@@ -79,12 +79,12 @@ export default function CanvasTopBar() {
         <NavLink
           to="/"
           onClick={() => setCanvasSubmode('calm')}
-          className="inline-flex items-center gap-3.5 group py-1"
+          className="inline-flex items-center gap-3.5 group"
         >
-          <MaisonCrest size={64} isWarm={isCalm} className="group-hover:scale-105 transition-transform drop-shadow-md" />
+          <MaisonCrest size={54} isWarm={isCalm} className="group-hover:scale-[1.04] transition-transform duration-200 ease-out drop-shadow-sm flex-shrink-0" />
           <span
             className={cn(
-              'maison-brand-title text-title sm:text-display-sm hidden sm:inline-block font-display font-bold tracking-[0.06em] leading-none',
+              'maison-brand-title text-title sm:text-display-sm hidden sm:inline-block font-display font-bold tracking-[0.07em] leading-none select-none',
               isCalm ? 'text-casa-navy' : 'text-white'
             )}
           >

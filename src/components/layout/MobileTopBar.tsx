@@ -20,11 +20,11 @@ export default function MobileTopBar() {
         className="lg:hidden w-full flex-shrink-0 z-sticky floating-dock-glass border-b border-casa-gold/20 shadow-[0_4px_20px_rgba(27,42,74,0.04)] px-4 pt-[calc(0.5rem+env(safe-area-inset-top))] pb-2.5 flex items-center justify-between gap-3 select-none"
       >
         {/* Left: Brand + Realtime Pulse + Date */}
-        <div className="flex items-center gap-3.5 min-w-0">
-          <MaisonCrest size={48} isWarm={true} className="drop-shadow-xs flex-shrink-0" />
-          <div className="flex flex-col min-w-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <MaisonCrest size={44} isWarm={true} className="drop-shadow-xs flex-shrink-0" />
+          <div className="flex flex-col justify-center gap-0.5 min-w-0">
             <div className="flex items-center gap-1.5">
-              <span className="maison-brand-title text-title font-bold text-casa-navy tracking-[0.05em] leading-none">
+              <span className="maison-brand-title text-body sm:text-title font-bold text-casa-navy tracking-[0.06em] leading-none">
                 Maison <span className="text-casa-gold font-normal">Tabor</span>
               </span>
               <span
@@ -32,7 +32,7 @@ export default function MobileTopBar() {
                 title="Connected & Synced"
               />
             </div>
-            <span className="text-3xs font-mono font-medium text-casa-muted/90 truncate mt-0.5">
+            <span className="text-3xs font-mono font-medium text-casa-muted/90 truncate">
               {format(now, 'EEEE, MMM d')}
             </span>
           </div>

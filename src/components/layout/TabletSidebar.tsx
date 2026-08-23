@@ -99,19 +99,19 @@ export default function TabletSidebar({ aiDrawerOpen = false }: TabletSidebarPro
       {/* Top Header */}
       <div className="flex items-center justify-between px-3.5 py-3.5 border-b border-casa-border/50">
         {!isEffectivelyCollapsed ? (
-          <div className="flex items-center gap-3.5 min-w-0">
-            <MaisonCrest size={54} isWarm={true} className="drop-shadow-xs flex-shrink-0" />
-            <div className="flex flex-col min-w-0">
-              <span className="maison-brand-title font-bold text-title text-casa-navy tracking-[0.05em] truncate leading-none">
+          <div className="flex items-center gap-3 min-w-0">
+            <MaisonCrest size={48} isWarm={true} className="drop-shadow-xs flex-shrink-0" />
+            <div className="flex flex-col justify-center gap-0.5 min-w-0">
+              <span className="maison-brand-title font-bold text-title text-casa-navy tracking-[0.06em] truncate leading-none">
                 Maison <span className="text-casa-gold font-normal">Tabor</span>
               </span>
-              <span className="text-3xs tracking-[0.16em] uppercase font-bold text-casa-gold/90 font-sans mt-0.5">
+              <span className="text-3xs tracking-[0.18em] uppercase font-bold text-casa-gold/90 font-sans leading-none">
                 Estate OS
               </span>
             </div>
           </div>
         ) : (
-          <MaisonCrest size={46} isWarm={true} className="mx-auto drop-shadow-xs" />
+          <MaisonCrest size={40} isWarm={true} className="mx-auto drop-shadow-xs" />
         )}
         <IconButton
           icon={isEffectivelyCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
