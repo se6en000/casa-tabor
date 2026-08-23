@@ -972,8 +972,12 @@ export default function MiddayLogisticsWidget({
               </div>
               <p className={cn('text-caption mt-0.5 truncate', isNavy ? 'text-white/70' : 'text-casa-muted')}>
                 {openReminders.length === 1
-                  ? '1 task active for today'
-                  : `${openReminders.length} tasks active · ${completedReminders.length} completed`}
+                  ? completedReminders.length > 0
+                    ? `1 task active · ${completedReminders.length} completed`
+                    : '1 task active for today'
+                  : completedReminders.length > 0
+                    ? `${openReminders.length} tasks active · ${completedReminders.length} completed`
+                    : `${openReminders.length} tasks active for today`}
               </p>
             </div>
           </div>

@@ -25,6 +25,7 @@ import {
   saveTodoToggle,
   subscribeToTodoSync,
   getStoredTodoCompletions,
+  isTodoCompletedToday,
 } from '../../utils/todoCompletionsSync.ts'
 import { inferEventMode, inferEventPlanKind } from '../../lib/eventCommandCenter'
 import { isReminderOrChore } from '../../lib/heroFocus.mjs'
@@ -113,18 +114,22 @@ export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate 
     })
   }
 
-  // To-Do items: Filtered strictly to Due Today and Missed/Overdue uncompleted items
+  // To-Do items: Filtered strictly to Due Today and Missed/Overdue uncompleted items, plus items completed today
   const todoItems = useMemo(() => {
     const todayEnd = endOfDay(now)
     return rollingEvents
       .filter((ev) => {
         if (!isReminderOrChore(ev) && ev.event_type !== 'reminder') return false
         const startDate = getEventStartDate(ev)
+        const isCompleted = Boolean(completedItems[ev.id])
+        if (isCompleted) {
+          return isTodoCompletedToday(ev.id, startDate, now)
+        }
         // Only include if due today or in the past (missed/overdue)
         return isBefore(startDate, todayEnd) || isSameDay(startDate, now)
       })
       .sort((a, b) => getEventStartDate(a).getTime() - getEventStartDate(b).getTime())
-  }, [rollingEvents, now])
+  }, [rollingEvents, completedItems, now])
 
   const pendingTodos = useMemo(() => {
     return todoItems.filter((t) => !completedItems[t.id])

@@ -27,6 +27,7 @@ import {
   saveTodoToggle,
   subscribeToTodoSync,
   getStoredTodoCompletions,
+  isTodoCompletedToday,
 } from '../utils/todoCompletionsSync.ts'
 import { useAppStore } from '../stores/appStore'
 import { fetchTonightDinnerPlan, isValidDinnerPlan } from '../utils/dinnerPlanSync'
@@ -467,7 +468,7 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
       })
   }, [effectiveTodayEvents, now])
 
-  // Rolling chores & reminders (past 7 days through end of today, never hero)
+  // Rolling chores & reminders (past 7 days missed/overdue through end of today, plus items completed today)
   const todayReminders = useMemo(() => {
     const todayEnd = endOfDay(now)
     return rollingEvents
@@ -475,11 +476,15 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
         if (isMealEvent(e)) return false
         if (!isReminderOrChore(e) && e.event_type !== 'reminder') return false
         const startDate = getEventStartDate(e)
+        const isCompleted = Boolean(completedItems[e.id])
+        if (isCompleted) {
+          return isTodoCompletedToday(e.id, startDate, now)
+        }
         // Rolling: includes past 7 days (missed/overdue) up through end of today
         return isBefore(startDate, todayEnd) || isSameDay(startDate, now)
       })
       .sort((a, b) => getEventStartDate(a).getTime() - getEventStartDate(b).getTime())
-  }, [rollingEvents, now])
+  }, [rollingEvents, completedItems, now])
 
   // Reminders breakdown (reactive to completedItems)
   const openReminders = useMemo(() => {

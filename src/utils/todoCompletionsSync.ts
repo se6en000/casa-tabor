@@ -1,7 +1,10 @@
 import { supabase } from '../lib/supabase.ts'
+import { isSameDay, parseISO } from 'date-fns'
 
 export const TODO_COMPLETIONS_SETTINGS_KEY = 'household_todo_completions'
+export const TODO_COMPLETIONS_TIMESTAMPS_SETTINGS_KEY = 'household_todo_completion_timestamps'
 export const TODO_COMPLETIONS_STORAGE_KEY = 'casa_household_todo_completions'
+export const TODO_COMPLETIONS_TIMESTAMPS_STORAGE_KEY = 'casa_household_todo_completion_timestamps'
 export const TODO_COMPLETIONS_REALTIME_CHANNEL = 'casa-todos-sync'
 export const TODO_COMPLETIONS_BROADCAST_EVENT = 'todo-toggled'
 export const TODO_COMPLETIONS_DOM_EVENT = 'casa:todo-toggled'
@@ -20,7 +23,7 @@ export interface TodoTogglePayload {
 
 // ── In-Memory & Local Storage Cache ──────────────────────────────────────────
 export function getStoredTodoCompletions(): Record<string, boolean> {
-  if (typeof window === 'undefined') return {}
+  if (typeof window === 'undefined' && typeof localStorage === 'undefined') return {}
   try {
     const raw = localStorage.getItem(TODO_COMPLETIONS_STORAGE_KEY)
     const legacy = localStorage.getItem('casa_routine_checklist_completions')
@@ -33,10 +36,61 @@ export function getStoredTodoCompletions(): Record<string, boolean> {
 }
 
 export function saveStoredTodoCompletions(map: Record<string, boolean>): void {
-  if (typeof window === 'undefined') return
+  if (typeof window === 'undefined' && typeof localStorage === 'undefined') return
   try {
     localStorage.setItem(TODO_COMPLETIONS_STORAGE_KEY, JSON.stringify(map))
   } catch {}
+}
+
+export function getStoredTodoCompletionTimestamps(): Record<string, number> {
+  if (typeof window === 'undefined' && typeof localStorage === 'undefined') return {}
+  try {
+    const raw = localStorage.getItem(TODO_COMPLETIONS_TIMESTAMPS_STORAGE_KEY)
+    return raw ? JSON.parse(raw) : {}
+  } catch {
+    return {}
+  }
+}
+
+export function saveStoredTodoCompletionTimestamps(map: Record<string, number>): void {
+  if (typeof window === 'undefined' && typeof localStorage === 'undefined') return
+  try {
+    localStorage.setItem(TODO_COMPLETIONS_TIMESTAMPS_STORAGE_KEY, JSON.stringify(map))
+  } catch {}
+}
+
+/**
+ * Checks whether a to-do item was completed TODAY (on the calendar day of `now`).
+ * - If a recorded completion timestamp exists: checks if the timestamp is on the same calendar day as `now`.
+ * - Fallback for items without timestamps: checks if the event itself was scheduled for today (`isSameDay(eventStartDate, now)`).
+ * - Items completed on previous days (Thursday, Friday, Saturday) will return `false` on subsequent days (clean midnight reset).
+ */
+export function isTodoCompletedToday(
+  id: string,
+  eventStartDate?: Date | string | null,
+  now: Date = new Date(),
+  completionsOverride?: Record<string, boolean>,
+  timestampsOverride?: Record<string, number>
+): boolean {
+  const completions = completionsOverride || getStoredTodoCompletions()
+  if (!completions[id]) return false
+
+  const timestamps = timestampsOverride || getStoredTodoCompletionTimestamps()
+  const ts = timestamps[id]
+  if (ts && typeof ts === 'number' && ts > 0) {
+    return isSameDay(new Date(ts), now)
+  }
+
+  if (eventStartDate) {
+    try {
+      const parsedStart = typeof eventStartDate === 'string' ? parseISO(eventStartDate) : eventStartDate
+      return isSameDay(parsedStart, now)
+    } catch {
+      return false
+    }
+  }
+
+  return false
 }
 
 // ── Realtime Broadcast Channel Singleton ─────────────────────────────────────
@@ -67,6 +121,16 @@ function getOrCreateTodoRealtimeChannel() {
         const currentMap = getStoredTodoCompletions()
         const nextMap = { ...currentMap, [payload.id]: Boolean(payload.completed) }
         saveStoredTodoCompletions(nextMap)
+
+        if (payload.timestamp && payload.completed) {
+          const currentTimestamps = getStoredTodoCompletionTimestamps()
+          saveStoredTodoCompletionTimestamps({ ...currentTimestamps, [payload.id]: payload.timestamp })
+        } else if (!payload.completed) {
+          const currentTimestamps = getStoredTodoCompletionTimestamps()
+          const nextTimestamps = { ...currentTimestamps }
+          delete nextTimestamps[payload.id]
+          saveStoredTodoCompletionTimestamps(nextTimestamps)
+        }
 
         broadcastListeners.forEach((listener) => {
           try {
@@ -102,14 +166,18 @@ function getOrCreateTodoRealtimeChannel() {
 }
 
 /**
- * Loads the current todo completions from Supabase `settings` table.
+ * Loads the current todo completions and completion timestamps from Supabase `settings` table.
  */
 export async function fetchTodoCompletions(): Promise<Record<string, boolean>> {
   try {
     const { data, error } = await supabase
       .from('settings')
-      .select('value')
-      .in('key', [TODO_COMPLETIONS_SETTINGS_KEY, 'routine_checklist_completions'])
+      .select('key, value')
+      .in('key', [
+        TODO_COMPLETIONS_SETTINGS_KEY,
+        TODO_COMPLETIONS_TIMESTAMPS_SETTINGS_KEY,
+        'routine_checklist_completions',
+      ])
 
     if (error) {
       console.warn('[TodoCompletionsSync] Failed to fetch todo completions from Supabase:', error.message)
@@ -119,13 +187,21 @@ export async function fetchTodoCompletions(): Promise<Record<string, boolean>> {
     const localMap = getStoredTodoCompletions()
     let merged = { ...localMap }
 
+    const localTimestamps = getStoredTodoCompletionTimestamps()
+    let mergedTimestamps = { ...localTimestamps }
+
     if (data && Array.isArray(data)) {
       data.forEach((row) => {
         if (row && row.value && typeof row.value === 'object') {
-          merged = { ...merged, ...(row.value as Record<string, boolean>) }
+          if (row.key === TODO_COMPLETIONS_TIMESTAMPS_SETTINGS_KEY) {
+            mergedTimestamps = { ...mergedTimestamps, ...(row.value as Record<string, number>) }
+          } else {
+            merged = { ...merged, ...(row.value as Record<string, boolean>) }
+          }
         }
       })
       saveStoredTodoCompletions(merged)
+      saveStoredTodoCompletionTimestamps(mergedTimestamps)
       return merged
     }
 
@@ -138,14 +214,20 @@ export async function fetchTodoCompletions(): Promise<Record<string, boolean>> {
 
 let pendingSaveTimer: ReturnType<typeof setTimeout> | null = null
 let pendingMergedMap: Record<string, boolean> | null = null
+let pendingTimestampsMap: Record<string, number> | null = null
 
-async function flushPersistToSupabase(mapToSave: Record<string, boolean>) {
+async function flushPersistToSupabase(
+  mapToSave: Record<string, boolean>,
+  timestampsToSave?: Record<string, number>
+) {
   try {
     // Keep map bounded to prevent unbounded growth: prune entries older than 14 days
     const pruned: Record<string, boolean> = {}
+    const prunedTimestamps: Record<string, number> = {}
     const cutoffDate = new Date()
     cutoffDate.setDate(cutoffDate.getDate() - 14)
     const cutoffStr = cutoffDate.toISOString().slice(0, 10)
+    const cutoffMs = cutoffDate.getTime()
 
     for (const [key, val] of Object.entries(mapToSave)) {
       const dateMatch = key.match(/\d{4}-\d{2}-\d{2}/)
@@ -158,14 +240,31 @@ async function flushPersistToSupabase(mapToSave: Record<string, boolean>) {
       }
     }
 
-    await supabase.from('settings').upsert(
-      {
-        key: TODO_COMPLETIONS_SETTINGS_KEY,
-        value: pruned,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'key' }
-    )
+    const currentTimestamps = timestampsToSave || getStoredTodoCompletionTimestamps()
+    for (const [key, ts] of Object.entries(currentTimestamps)) {
+      if (ts >= cutoffMs) {
+        prunedTimestamps[key] = ts
+      }
+    }
+
+    await Promise.allSettled([
+      supabase.from('settings').upsert(
+        {
+          key: TODO_COMPLETIONS_SETTINGS_KEY,
+          value: pruned,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'key' }
+      ),
+      supabase.from('settings').upsert(
+        {
+          key: TODO_COMPLETIONS_TIMESTAMPS_SETTINGS_KEY,
+          value: prunedTimestamps,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'key' }
+      ),
+    ])
   } catch (err) {
     console.warn('[TodoCompletionsSync] Exception upserting to Supabase settings:', err)
   }
@@ -183,8 +282,18 @@ export async function saveTodoToggle(
   const currentMap = getStoredTodoCompletions()
   const nextMap = { ...currentMap, [id]: completed }
 
+  const nowMs = Date.now()
+  const currentTimestamps = getStoredTodoCompletionTimestamps()
+  const nextTimestamps = { ...currentTimestamps }
+  if (completed) {
+    nextTimestamps[id] = nowMs
+  } else {
+    delete nextTimestamps[id]
+  }
+
   // 1. Local storage cache (0ms)
   saveStoredTodoCompletions(nextMap)
+  saveStoredTodoCompletionTimestamps(nextTimestamps)
 
   // 2. Dispatch local DOM event for same-window / multi-component sync (0ms)
   if (typeof document !== 'undefined') {
@@ -201,7 +310,7 @@ export async function saveTodoToggle(
       id,
       completed,
       senderId: CLIENT_INSTANCE_ID,
-      timestamp: Date.now(),
+      timestamp: nowMs,
     }
 
     try {
@@ -227,11 +336,13 @@ export async function saveTodoToggle(
   // 4. Debounced persist to Supabase `settings` table (low egress, durable cloud storage)
   if (!options?.skipCloud) {
     pendingMergedMap = nextMap
+    pendingTimestampsMap = nextTimestamps
     if (pendingSaveTimer) clearTimeout(pendingSaveTimer)
     pendingSaveTimer = setTimeout(() => {
       if (pendingMergedMap) {
-        void flushPersistToSupabase(pendingMergedMap)
+        void flushPersistToSupabase(pendingMergedMap, pendingTimestampsMap || undefined)
         pendingMergedMap = null
+        pendingTimestampsMap = null
       }
     }, 150)
   }
