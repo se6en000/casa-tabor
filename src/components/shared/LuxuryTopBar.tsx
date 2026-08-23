@@ -53,19 +53,19 @@ function BrandZone({ isWarm }: { isWarm: boolean }) {
     <NavLink
       to="/"
       onClick={() => setCanvasSubmode('calm')}
-      className="inline-flex items-center gap-2.5 group h-9 flex-shrink-0"
+      className="inline-flex items-center gap-3 group h-11 flex-shrink-0"
     >
-      <MaisonCrest size={36} isWarm={isWarm} className="group-hover:scale-105" />
+      <MaisonCrest size={44} isWarm={isWarm} className="group-hover:scale-[1.04]" />
       <div className="flex flex-col justify-center leading-none">
         <span
           className={cn(
-            'maison-brand-title text-body sm:text-heading inline-block font-display font-bold tracking-[0.06em]',
+            'maison-brand-title text-heading sm:text-title inline-block font-display font-bold tracking-[0.05em]',
             isWarm ? 'text-casa-navy' : 'text-white',
           )}
         >
           Maison <span className="text-casa-gold font-normal">Tabor</span>
         </span>
-        <span className="text-3xs tracking-[0.16em] uppercase font-semibold text-casa-muted/75 font-sans mt-0.5 hidden xl:block">
+        <span className="text-2xs tracking-[0.18em] uppercase font-semibold text-casa-muted/80 font-sans mt-0.5 hidden xl:block">
           Estate &amp; Family OS
         </span>
       </div>

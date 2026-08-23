@@ -99,14 +99,14 @@ export default function TabletSidebar({ aiDrawerOpen = false }: TabletSidebarPro
       {/* Top Header */}
       <div className="flex items-center justify-between px-3.5 py-3.5 border-b border-casa-border/50">
         {!isEffectivelyCollapsed ? (
-          <div className="flex items-center gap-2.5 min-w-0">
-            <MaisonCrest size={30} isWarm={true} />
+          <div className="flex items-center gap-3 min-w-0">
+            <MaisonCrest size={38} isWarm={true} />
             <span className="maison-brand-title font-bold text-body-lg text-casa-navy tracking-[0.05em] truncate leading-none">
               Maison <span className="text-casa-gold font-normal">Tabor</span>
             </span>
           </div>
         ) : (
-          <MaisonCrest size={30} isWarm={true} className="mx-auto" />
+          <MaisonCrest size={38} isWarm={true} className="mx-auto" />
         )}
         <IconButton
           icon={isEffectivelyCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}

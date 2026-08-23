@@ -20,8 +20,8 @@ export default function MobileTopBar() {
         className="lg:hidden w-full flex-shrink-0 z-sticky floating-dock-glass border-b border-casa-gold/20 shadow-[0_4px_20px_rgba(27,42,74,0.04)] px-4 pt-[calc(0.5rem+env(safe-area-inset-top))] pb-2.5 flex items-center justify-between gap-3 select-none"
       >
         {/* Left: Brand + Realtime Pulse + Date */}
-        <div className="flex items-center gap-2.5 min-w-0">
-          <MaisonCrest size={30} isWarm={true} />
+        <div className="flex items-center gap-3 min-w-0">
+          <MaisonCrest size={36} isWarm={true} />
           <div className="flex flex-col min-w-0">
             <div className="flex items-center gap-1.5">
               <span className="maison-brand-title text-base font-bold text-casa-navy tracking-[0.05em] leading-none">

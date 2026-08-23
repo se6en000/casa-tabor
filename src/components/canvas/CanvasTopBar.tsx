@@ -79,12 +79,12 @@ export default function CanvasTopBar() {
         <NavLink
           to="/"
           onClick={() => setCanvasSubmode('calm')}
-          className="inline-flex items-center gap-2.5 group h-9"
+          className="inline-flex items-center gap-3 group h-10"
         >
-          <MaisonCrest size={34} isWarm={isCalm} className="group-hover:scale-105" />
+          <MaisonCrest size={42} isWarm={isCalm} className="group-hover:scale-105" />
           <span
             className={cn(
-              'maison-brand-title text-base hidden sm:inline-block font-display font-bold tracking-[0.06em] leading-none',
+              'maison-brand-title text-heading hidden sm:inline-block font-display font-bold tracking-[0.05em] leading-none',
               isCalm ? 'text-casa-navy' : 'text-white'
             )}
           >
