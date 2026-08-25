@@ -24,6 +24,7 @@ import {
 import { SettingsPageHeader } from '../components/settings'
 import { formatDistanceToNow } from 'date-fns'
 import { supabase } from '../lib/supabase'
+import { extractFunctionErrorMessage, humanizeFunctionError } from '../lib/formatSupabaseError'
 import { cn } from '../utils/cn'
 import type { FamilyMember } from '../types'
 import { FALLBACK_PROFILE_COLOR } from '../design-system/memberColors'
@@ -170,7 +171,86 @@ export default function GoogleServicesPage() {
     },
   })
 
-  // Universal Sync All Services
+  // Individual Member Sync Mutation
+  const syncMember = useMutation({
+    mutationFn: async (member: MemberWithStatus) => {
+      const errors: string[] = []
+      let emailsScanned = 0
+      let eventsCreated = 0
+
+      // 1. Calendar sync
+      try {
+        const calRes = await supabase.functions.invoke('sync-calendars', {
+          body: { family_member_id: member.id },
+        })
+        if (calRes.error) {
+          const msg = await extractFunctionErrorMessage(calRes.error, 'Calendar sync failed')
+          errors.push(`${member.name} Calendar: ${msg}`)
+        } else if (calRes.data?.results?.[member.id]?.error) {
+          errors.push(`${member.name} Calendar: ${humanizeFunctionError(calRes.data.results[member.id].error)}`)
+        }
+      } catch (err) {
+        errors.push(`${member.name} Calendar: ${await extractFunctionErrorMessage(err, 'Calendar sync failed')}`)
+      }
+
+      // 2. Gmail scan if enabled
+      if (member.status?.gmail_scan_enabled) {
+        try {
+          const gmailRes = await supabase.functions.invoke('scan-gmail-inbox', {
+            body: { family_member_id: member.id },
+          })
+          if (gmailRes.error) {
+            const msg = await extractFunctionErrorMessage(gmailRes.error, 'Gmail scan failed')
+            errors.push(`${member.name} Gmail: ${msg}`)
+          } else if (gmailRes.data?.error) {
+            errors.push(`${member.name} Gmail: ${humanizeFunctionError(gmailRes.data.error)}`)
+          } else {
+            const results = gmailRes.data?.results ?? []
+            for (const r of results) {
+              if (r.error) {
+                errors.push(`${member.name} Gmail: ${humanizeFunctionError(r.error)}`)
+              } else {
+                eventsCreated += r.created ?? 0
+                emailsScanned += r.scanned ?? 0
+              }
+            }
+          }
+        } catch (err) {
+          errors.push(`${member.name} Gmail: ${await extractFunctionErrorMessage(err, 'Gmail scan failed')}`)
+        }
+      }
+
+      if (errors.length > 0) {
+        throw new Error(errors.join(' · '))
+      }
+
+      return { emailsScanned, eventsCreated }
+    },
+    onSuccess: (data, member) => {
+      qc.invalidateQueries({ queryKey: ['google-services'] })
+      qc.invalidateQueries({ queryKey: ['events'] })
+      qc.invalidateQueries({ queryKey: ['gmail-health-summary'] })
+      refetch()
+      setSyncResult({
+        tone: 'success',
+        title: `${member.name}'s Google services synchronized`,
+        message: data.emailsScanned > 0
+          ? `${data.emailsScanned} emails scanned · ${data.eventsCreated} event${data.eventsCreated === 1 ? '' : 's'} added`
+          : 'Calendar and inbox monitoring are up to date.',
+      })
+    },
+    onError: (err) => {
+      qc.invalidateQueries({ queryKey: ['google-services'] })
+      refetch()
+      setSyncResult({
+        tone: 'danger',
+        title: 'Sync completed with warnings',
+        message: err instanceof Error ? err.message : String(err),
+      })
+    },
+  })
+
+  // Universal Sync All Services (Sequenced with deep error unboxing)
   async function handleSyncAll() {
     setIsSyncingAll(true)
     setSyncResult(null)
@@ -187,45 +267,56 @@ export default function GoogleServicesPage() {
     let totalEmailsScanned = 0
     let totalEventsCreated = 0
     const errors: string[] = []
-    const tasks: Promise<unknown>[] = []
 
+    // Sequence account syncs safely to avoid token refresh collisions and API rate limits
     for (const m of activeMembers) {
       // 1. Calendar sync
-      tasks.push(
-        supabase.functions
-          .invoke('sync-calendars', { body: { family_member_id: m.id } })
-          .then((res) => {
-            if (res.error) throw new Error(`${m.name} Calendar: ${res.error.message ?? 'Sync failed'}`)
-          })
-          .catch((err) => {
-            errors.push(err instanceof Error ? err.message : String(err))
-          }),
-      )
+      try {
+        const calRes = await supabase.functions.invoke('sync-calendars', {
+          body: { family_member_id: m.id },
+        })
+        if (calRes.error) {
+          const msg = await extractFunctionErrorMessage(calRes.error, 'Calendar sync failed')
+          errors.push(`${m.name} Calendar: ${msg}`)
+        } else if (calRes.data?.results?.[m.id]?.error) {
+          errors.push(`${m.name} Calendar: ${humanizeFunctionError(calRes.data.results[m.id].error)}`)
+        }
+      } catch (calErr) {
+        errors.push(`${m.name} Calendar: ${await extractFunctionErrorMessage(calErr, 'Calendar sync failed')}`)
+      }
 
       // 2. Gmail scan if enabled
       if (m.status?.gmail_scan_enabled) {
-        tasks.push(
-          supabase.functions
-            .invoke('scan-gmail-inbox', { body: { family_member_id: m.id } })
-            .then((res) => {
-              if (res.error) throw new Error(`${m.name} Gmail: ${res.error.message ?? 'Scan failed'}`)
-              const results = res.data?.results ?? []
-              for (const r of results) {
+        try {
+          const gmailRes = await supabase.functions.invoke('scan-gmail-inbox', {
+            body: { family_member_id: m.id },
+          })
+          if (gmailRes.error) {
+            const msg = await extractFunctionErrorMessage(gmailRes.error, 'Gmail scan failed')
+            errors.push(`${m.name} Gmail: ${msg}`)
+          } else if (gmailRes.data?.error) {
+            errors.push(`${m.name} Gmail: ${humanizeFunctionError(gmailRes.data.error)}`)
+          } else {
+            const results = gmailRes.data?.results ?? []
+            for (const r of results) {
+              if (r.error) {
+                errors.push(`${m.name} Gmail: ${humanizeFunctionError(r.error)}`)
+              } else {
                 totalEventsCreated += r.created ?? 0
                 totalEmailsScanned += r.scanned ?? 0
               }
-            })
-            .catch((err) => {
-              errors.push(err instanceof Error ? err.message : String(err))
-            }),
-        )
+            }
+          }
+        } catch (gmailErr) {
+          errors.push(`${m.name} Gmail: ${await extractFunctionErrorMessage(gmailErr, 'Gmail scan failed')}`)
+        }
       }
     }
 
-    await Promise.allSettled(tasks)
     await Promise.all([
       qc.invalidateQueries({ queryKey: ['google-services'] }),
       qc.invalidateQueries({ queryKey: ['events'] }),
+      qc.invalidateQueries({ queryKey: ['gmail-health-summary'] }),
     ])
     await refetch()
     setIsSyncingAll(false)
@@ -372,10 +463,13 @@ export default function GoogleServicesPage() {
                     onReconnect={() => connectGoogle.mutate({ memberId: member.id, includeGmail: Boolean(member.status?.gmail_scan_enabled) })}
                     onRequestDisconnect={() => setMemberToDisconnect(member)}
                     onOpenCalendarPicker={() => setMemberForCalendarPicker(member)}
+                    onSyncMember={() => syncMember.mutate(member)}
+                    isSyncingMember={syncMember.isPending && syncMember.variables?.id === member.id}
                     isBusy={
                       (disconnect.isPending && disconnect.variables === member.id) ||
                       (toggleGmail.isPending && (toggleGmail.variables as { memberId: string })?.memberId === member.id) ||
                       (connectGoogle.isPending && (connectGoogle.variables as { memberId: string })?.memberId === member.id) ||
+                      (syncMember.isPending && syncMember.variables?.id === member.id) ||
                       isSyncingAll
                     }
                   />
@@ -528,6 +622,8 @@ function ConnectedMemberCard({
   onReconnect,
   onRequestDisconnect,
   onOpenCalendarPicker,
+  onSyncMember,
+  isSyncingMember,
   isBusy,
 }: {
   member: MemberWithStatus
@@ -535,6 +631,8 @@ function ConnectedMemberCard({
   onReconnect: () => void
   onRequestDisconnect: () => void
   onOpenCalendarPicker: () => void
+  onSyncMember: () => void
+  isSyncingMember: boolean
   isBusy: boolean
 }) {
   const s = member.status!
@@ -574,7 +672,7 @@ function ConnectedMemberCard({
           </div>
         </div>
 
-        {/* Action / Disconnect */}
+        {/* Action / Sync / Disconnect */}
         <div className="flex shrink-0 items-center gap-2">
           {reauthRequired ? (
             <Button
@@ -588,17 +686,30 @@ function ConnectedMemberCard({
               Reconnect
             </Button>
           ) : (
-            <Button
-              variant="ghost"
-              size="md"
-              onClick={onRequestDisconnect}
-              disabled={isBusy}
-              className="min-h-[44px] sm:min-h-[48px] text-casa-error hover:bg-casa-error/10 text-body-sm px-3"
-              title="Disconnect Google account"
-              leadingIcon={<Unlink size={15} />}
-            >
-              Disconnect
-            </Button>
+            <>
+              <Button
+                variant="subtle"
+                size="md"
+                onClick={onSyncMember}
+                disabled={isBusy}
+                className="min-h-[44px] sm:min-h-[48px] text-body-sm px-3.5 font-semibold"
+                title={`Sync ${member.name}'s Google calendar & Gmail`}
+                leadingIcon={<RefreshCw size={14} className={isSyncingMember ? 'animate-spin' : ''} />}
+              >
+                {isSyncingMember ? 'Syncing…' : 'Sync'}
+              </Button>
+              <Button
+                variant="ghost"
+                size="md"
+                onClick={onRequestDisconnect}
+                disabled={isBusy}
+                className="min-h-[44px] sm:min-h-[48px] text-casa-error hover:bg-casa-error/10 text-body-sm px-3"
+                title="Disconnect Google account"
+                leadingIcon={<Unlink size={15} />}
+              >
+                Disconnect
+              </Button>
+            </>
           )}
         </div>
       </div>

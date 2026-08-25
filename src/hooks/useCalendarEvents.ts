@@ -257,40 +257,6 @@ export function useEventDetails(event: EventWithDetails | null, enabled = true) 
   })
 }
 
-interface EventTransportationPlanRow {
-  event_id: string
-  transportation_plan: EventTransportationPlan | null
-}
-
-function useEventTransportationPlans(anchor: Date) {
-  const isPageVisible = usePageVisibility()
-  const rangeStart = startOfMonth(anchor)
-  const rangeEnd = addDays(rangeStart, 46)
-
-  return useQuery({
-    queryKey: ['event-transportation-plans', rangeStart.toISOString()],
-    queryFn: async (): Promise<EventTransportationPlanRow[]> => {
-      const { data, error } = await supabase
-        .from('event_plan_overrides')
-        .select('event_id, transportation_plan, events!inner(id)')
-        .not('transportation_plan', 'is', null)
-        .lt('events.start_time', rangeEnd.toISOString())
-        .gt('events.end_time', rangeStart.toISOString())
-        .is('events.deleted_at', null)
-        .neq('events.status', 'cancelled')
-
-      if (error) throw error
-      return (data ?? []).map((row: any) => ({
-        event_id: row.event_id,
-        transportation_plan: row.transportation_plan,
-      }))
-    },
-    staleTime: 5 * 60_000,
-    refetchInterval: isPageVisible ? 10 * 60_000 : false,
-    refetchIntervalInBackground: false,
-  })
-}
-
 function useEventsForRange(queryKey: readonly unknown[], start: Date, end: Date) {
   useRealtimeEventInvalidation()
   const isPageVisible = usePageVisibility()
@@ -301,7 +267,6 @@ function useEventsForRange(queryKey: readonly unknown[], start: Date, end: Date)
     refetchInterval: isPageVisible ? 10 * 60_000 : false,
     refetchIntervalInBackground: false,
   })
-  const transportationQuery = useEventTransportationPlans(start)
   const { data: familyMembers = [] } = useFamilyMembers()
   const memberIds = useMemo(() => familyMembers.map((m) => m.id), [familyMembers])
   const { rules: availabilityRules = [] } = useMemberAvailability(memberIds)
@@ -344,9 +309,6 @@ function useEventsForRange(queryKey: readonly unknown[], start: Date, end: Date)
     if (!eventsQuery.data) return undefined
     const baseEvents = eventsQuery.data.active
     const cancelledEvents = eventsQuery.data.cancelled
-    const plansByEventId = new Map(
-      (transportationQuery.data ?? []).map((row) => [row.event_id, row.transportation_plan]),
-    )
     const deriveEventSourceType = (event: any): 'routine' | 'google' | 'gmail' | 'casa' => {
       if (event.source_type) return event.source_type
       const title = (event.title || '').toLowerCase()
@@ -388,25 +350,10 @@ function useEventsForRange(queryKey: readonly unknown[], start: Date, end: Date)
     }
 
     const enrichedBaseEvents = baseEvents.map((event) => {
-      const transportationPlan = plansByEventId.get(event.id)
       const sourceType = event.source_type || deriveEventSourceType(event)
-      if (!transportationPlan) return { ...event, source_type: sourceType }
       return {
         ...event,
         source_type: sourceType,
-        plan_override: {
-          event_id: event.id,
-          verified: null,
-          waits: null,
-          driver_overrides: null,
-          mode_override: null,
-          two_driver_confirmed: false,
-          location_signature: null,
-          location_projection_blocked: false,
-          updated_at: event.updated_at,
-          ...event.plan_override,
-          transportation_plan: transportationPlan,
-        },
       }
     })
 
@@ -483,14 +430,13 @@ function useEventsForRange(queryKey: readonly unknown[], start: Date, end: Date)
     return [...deduplicatedBaseEvents, ...newRoutineEvents].sort(
       (a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime(),
     )
-  }, [eventsQuery.data, transportationQuery.data, routineEventsInRange])
+  }, [eventsQuery.data, routineEventsInRange])
 
-  const error = eventsQuery.error ?? transportationQuery.error
   return {
     ...eventsQuery,
     data: events,
-    error,
-    isError: Boolean(error),
+    error: eventsQuery.error,
+    isError: Boolean(eventsQuery.error),
   }
 }
 

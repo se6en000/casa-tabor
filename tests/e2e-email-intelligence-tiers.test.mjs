@@ -38,6 +38,7 @@ import {
   buildDeliveryTransitItem,
   consolidateTransitItems,
   isDeliveryTransitItem,
+  isBillOrUtilityOrHouseholdService,
   isPerishableDelivery,
   isItemArrivingToday,
   isItemDelivered,
@@ -755,7 +756,7 @@ describe('Tier 1: Feature Coverage', () => {
     })
 
     it('T1.7.5: Re-classification after user edit changes agency_level and cleanly shifts partition boundary', () => {
-      const item = { id: 'dyn-1', agency_level: 0, description: 'School activity informational announcement' }
+      const item = { id: 'dyn-1', agency_level: 0, attention_vendor: 'Amazon', type: 'delivery', description: 'Amazon parcel delivery tracking update' }
       const round1 = splitActionableAndTransitItems([item])
       assert.equal(round1.actionableItems.length, 0)
       assert.equal(round1.deliveryTransitItems.length, 1)
@@ -764,6 +765,51 @@ describe('Tier 1: Feature Coverage', () => {
       const round2 = splitActionableAndTransitItems([elevatedItem])
       assert.equal(round2.actionableItems.length, 1)
       assert.equal(round2.deliveryTransitItems.length, 0)
+    })
+
+    it('T1.7.6: School sports, Aktivate clearance, Bus notifications, and Lake Lytal Softball route 100% to actionableItems (0% Inbound Manifest leakage)', () => {
+      const schoolAndSportsItems = [
+        {
+          id: 'bak-tryouts',
+          event_title: 'Bak - Boys/Girls Basketball Tryouts',
+          description: 'Students trying out for basketball must attend all three days: August 31st, September 1st, and September 2nd, from 3:30pm-5:00pm. They should report to the gym after being dismissed and wear athletic attire.',
+          attention_vendor: 'Bak MSOA',
+          attention_thread_key: 'transaction:bak-msoa:message:gmail:household:1a0355bfa77bd8ec',
+          agency_level: 2,
+          type: 'general',
+        },
+        {
+          id: 'aktivate-forms',
+          event_title: 'Bak - Boys/Girls Basketball Tryouts',
+          description: 'Students trying out for basketball must have all required documents submitted and approved in Aktivate. Visit the Bak website for more info on how to register your child for tryouts and participation.',
+          attention_vendor: 'Aktivate',
+          attention_thread_key: 'transaction:aktivate:message:gmail:household:1a0355bfa77bd8ec',
+          agency_level: 2,
+          type: 'forms',
+        },
+        {
+          id: 'pbsd-bus-change',
+          event_title: 'URGENT: Reverted Changes for Buses R28 & R7 Effective Immediately',
+          description: 'The AM/PM Publix bus stop for R28 & R7 has been reverted to its original location behind the Publix of Ibis shopping plaza. Address questions to the Transportation Dept.',
+          attention_vendor: 'Palm Beach Schools',
+          attention_thread_key: 'transaction:palm-beach-schools:message:gmail:household:1a034ce1f1aecca9',
+          agency_level: 2,
+          type: 'general',
+        },
+        {
+          id: 'lytal-evals',
+          event_title: 'Lake Lytal Lassie League - Fall Evaluations',
+          description: 'Attend fall softball evaluations to be placed on a team. The flyer with evaluation dates is attached.',
+          attention_vendor: 'Lake Lytal Lassie League',
+          attention_thread_key: 'transaction:lake-lytal-lassie-league:message:gmail:household:1a0347ef87f5e98c',
+          agency_level: 2,
+          type: 'general',
+        },
+      ]
+
+      const { actionableItems, deliveryTransitItems } = splitActionableAndTransitItems(schoolAndSportsItems)
+      assert.equal(actionableItems.length, 4, 'All 4 school/sports items must stay in Executive Action Queue')
+      assert.equal(deliveryTransitItems.length, 0, 'Zero leakage into Estate Inbound Manifest')
     })
   })
 })
@@ -1574,6 +1620,91 @@ describe('Tier 5: Automated Benchmark Suite', () => {
         assert.equal(classified.archetype, 'promotional_noise')
         assert.equal(actionableItems.length, 0)
       }
+    })
+  }
+})
+
+describe('TIER 6: Bills, Utilities & Household Services Executive Routing', () => {
+  const billTestCases = [
+    {
+      name: 'FPL Electric Bill ($292.61 due Sep 14)',
+      item: {
+        id: 'bill-fpl-1',
+        event_title: 'FPL Account: Your bill is ready to be viewed online',
+        description: 'Your FPL bill of $292.61 is due. Please pay to avoid service interruption.',
+        attention_vendor: 'FPL',
+        due_by: '2026-09-14T05:00:00Z',
+        type: 'payment',
+        agency_level: 2,
+        priority: 1,
+        dismissed: false,
+      },
+      expectedVendor: 'FPL',
+      expectedAmount: '$292.61',
+    },
+    {
+      name: 'Palm Beach Water Utilities ($84.20)',
+      item: {
+        id: 'bill-water-1',
+        event_title: 'Palm Beach County Water Utilities Bill',
+        description: 'Your water utilities billing statement of $84.20 is now available. Due Sep 20.',
+        attention_vendor: 'PBC Water Utilities',
+        due_by: '2026-09-20T05:00:00Z',
+        type: 'payment',
+        agency_level: 2,
+        priority: 1,
+        dismissed: false,
+      },
+      expectedVendor: 'PBC Water Utilities',
+      expectedAmount: '$84.20',
+    },
+    {
+      name: 'Xfinity Internet Auto-pay Scheduled ($120.00)',
+      item: {
+        id: 'bill-xfinity-1',
+        event_title: 'Xfinity: Your monthly billing statement is ready',
+        description: 'Your automatic payment of $120.00 will be processed on Sep 10.',
+        attention_vendor: 'Xfinity',
+        due_by: '2026-09-10T05:00:00Z',
+        type: 'payment',
+        agency_level: 2,
+        priority: 1,
+        dismissed: false,
+      },
+      expectedVendor: 'Xfinity',
+      expectedAmount: '$120.00',
+    },
+    {
+      name: 'GreenThumb Lawn & Tree Service Invoice ($175.00)',
+      item: {
+        id: 'service-lawn-1',
+        event_title: 'GreenThumb Landscaping Service Invoice',
+        description: 'Monthly lawn maintenance and tree trimming service invoice $175.00 due Sep 5.',
+        attention_vendor: 'GreenThumb Landscaping',
+        due_by: '2026-09-05T05:00:00Z',
+        type: 'payment',
+        agency_level: 2,
+        priority: 1,
+        dismissed: false,
+      },
+      expectedVendor: 'GreenThumb Landscaping',
+      expectedAmount: '$175.00',
+    },
+  ]
+
+  for (const bCase of billTestCases) {
+    it(`T6: ${bCase.name} routes 100% to Action Queue and 0% to Inbound Deliveries`, () => {
+      assert.equal(isBillOrUtilityOrHouseholdService(bCase.item), true)
+      assert.equal(isDeliveryTransitItem(bCase.item), false)
+
+      const { actionableItems, deliveryTransitItems } = splitActionableAndTransitItems([bCase.item])
+      assert.equal(actionableItems.length, 1)
+      assert.equal(deliveryTransitItems.length, 0)
+      assert.equal(actionableItems[0].id, bCase.item.id)
+
+      const analysis = synthesizeActionAnalysis(bCase.item)
+      assert.ok(analysis.urgency.includes('Payment') || analysis.urgency.includes('Statement'))
+      assert.match(analysis.householdImpact, /billing statement|utility/i)
     })
   }
 })

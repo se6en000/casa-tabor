@@ -788,3 +788,32 @@ export function resolveCanonicalEntity(input, options) {
     agencyLevel,
   }
 }
+
+export function isBillOrUtilityOrHouseholdService(item) {
+  if (!item) return false
+  const text = typeof item === 'string'
+    ? item.toLowerCase()
+    : `${item.event_title ?? item.title ?? ''} ${item.description ?? ''} ${item.attention_vendor ?? item.vendor ?? ''}`.toLowerCase()
+
+  // 1. Utilities (Electric, Power, Water, Sewer, Gas, Trash/Waste, Internet, Telecom)
+  if (/\b(?:fpl|florida\s*power|power\s*bill|electric\s*bill|electricity|duke\s*energy|nextera|coned|pg&e|teco|peoples\s*gas|natural\s*gas|water\s*utilities|water\s*bill|sewer\s*bill|wastewater|waste\s*management|republic\s*services|solid\s*waste|xfinity|comcast|at&t|spectrum|verizon|t-mobile|centurylink|google\s*fiber|internet\s*bill|cable\s*bill|utility\s*bill|utilities\s*bill|utility\s*account)\b/i.test(text)) {
+    return true
+  }
+
+  // 2. Financial Statements, Invoices, Loans & Mortgages
+  if (/\b(?:your\s*bill\s*is\s*ready|bill\s*is\s*ready|bill\s*due|payment\s*due|billing\s*statement|statement\s*ready|minimum\s*payment|amount\s*due|balance\s*due|pay\s*to\s*avoid\s*service\s*interruption|service\s*interruption|auto-pay\s*scheduled|autopay\s*scheduled|auto-debit|scheduled\s*automatic\s*payment|vehicle\s*loan|auto\s*loan|mortgage\s*statement|mortgage\s*payment|credit\s*card\s*statement|monthly\s*statement|property\s*tax|tax\s*bill|tax\s*collector|tuition\s*due|tuition\s*statement|daycare\s*tuition|preschool\s*tuition|medical\s*bill|dental\s*bill|insurance\s*premium|premium\s*due|policy\s*renewal|e-?bill)\b/i.test(text)) {
+    return true
+  }
+
+  // 3. Household Services, Maintenance & Contractors
+  if (/\b(?:landscaping\s*service|lawn\s*care|lawn\s*maintenance|pool\s*service|pool\s*cleaning|pinch\s*a\s*penny|pest\s*control|termite\s*inspection|truly\s*nolen|orkin|terminix|hvac\s*service|ac\s*maintenance|plumbing\s*service|plumber\s*invoice|roof\s*inspection|house\s*cleaning|cleaning\s*service|pressure\s*washing|tree\s*trimming|arborist\s*service|handyman\s*service|contractor\s*invoice|contractor\s*quote)\b/i.test(text)) {
+    return true
+  }
+
+  return false
+}
+
+export function isNonCommercialOrganization(text) {
+  if (!text) return false
+  return /\b(school|schools|district|msoa|academy|elementary|middle|high|pto|pta|athletic|athletics|softball|baseball|basketball|soccer|football|volleyball|tryouts?|evaluations?|league|lassie|aktivate|finalforms|dragonfly|sportsengine|bus stop|bus route|bus schedule|transportation dept|afterschool|after\s*school|daycare|preschool|childcare|camp|rec center|community center|ymca)\b/i.test(String(text))
+}

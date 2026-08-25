@@ -50,8 +50,7 @@ test('full event graphs are fetched through a dedicated detail query', () => {
   assert.match(editSheet, /Event details could not be loaded/)
 })
 
-test('large transportation plans use one shared range cache', () => {
-  assert.match(calendarHook, /queryKey: \['event-transportation-plans', rangeStart\.toISOString\(\)\]/)
-  assert.match(calendarHook, /\.select\('event_id, transportation_plan, events!inner\(id\)'\)/)
+test('transportation plans are invalidated through realtime listeners', () => {
+  assert.match(calendarHook, /queryKey: \['event-transportation-plans'\]/)
   assert.match(calendarHook, /_firePlanInvalidation/)
 })

@@ -80,12 +80,13 @@ test('ActionQueueWidget triggers openActionInSidecar on card/row inspection', ()
   assert.match(content, /openActionInSidecar\(item(\.id)?\)/, 'ActionQueueWidget must pass micro item to openActionInSidecar')
 })
 
-test('synthesizeActionAnalysis: dynamic synthesis accurately extracts context per matter', async () => {
+test('synthesizeActionAnalysis: dynamic synthesis accurately extracts context per matter without fake personas', async () => {
   const { synthesizeActionAnalysis } = await import('../src/utils/actionInspectionSynthesis.ts')
 
   // 1. Bank of America Vehicle Loan Auto-Pay
   const bofaItem = {
     id: 'prep-bofa',
+    event_title: 'Bank of America Auto-Pay Scheduled',
     description: 'Your automatic payment of $317.00 to BANK OF AMERICA - VEHICLE LOAN has been scheduled. The payment will be made from account *******9451.',
     source_type: 'gmail',
     due_by: '2026-08-15',
@@ -94,17 +95,17 @@ test('synthesizeActionAnalysis: dynamic synthesis accurately extracts context pe
     status: 'pending',
   }
   const bofaAnalysis = synthesizeActionAnalysis(bofaItem)
-  assert.equal(bofaAnalysis.senderLabel, 'Bank of America Auto Loans')
-  assert.match(bofaAnalysis.urgency, /Auto-debit scheduled for today|drafted from account/i)
+  assert.match(bofaAnalysis.subject, /Bank of America/i)
   assert.match(bofaAnalysis.requiredAction, /\$317\.00/i)
-  assert.match(bofaAnalysis.householdImpact, /vehicle financing/i)
+  assert.match(bofaAnalysis.householdImpact, /\$317\.00/i)
   assert.equal(bofaAnalysis.documents.some((d) => d.type === 'payment' && d.amount === '$317.00'), true)
   assert.match(bofaAnalysis.emailBody, /Bank of America|Vehicle Loan|\$317\.00/i)
-  assert.doesNotMatch(bofaAnalysis.emailBody, /Principal Adams|Science Camp/i)
+  assert.doesNotMatch(bofaAnalysis.emailBody, /Principal Adams|Science Camp|Dear Tabor Household/i)
 
   // 2. Walmart Grocery Order
   const walmartItem = {
     id: 'prep-walmart',
+    event_title: 'Walmart Grocery Order Confirmation',
     description: 'Walmart Grocery Order: Weekly household staples and fresh produce',
     source_type: 'gmail',
     due_by: '2026-08-15',
@@ -113,36 +114,43 @@ test('synthesizeActionAnalysis: dynamic synthesis accurately extracts context pe
     status: 'pending',
   }
   const walmartAnalysis = synthesizeActionAnalysis(walmartItem)
-  assert.equal(walmartAnalysis.senderLabel, 'Walmart Grocery & Delivery')
-  assert.match(walmartAnalysis.urgency, /Order cutoff/i)
-  assert.match(walmartAnalysis.requiredAction, /cart items|substitutions/i)
-  assert.equal(walmartAnalysis.documents.some((d) => d.type === 'cart'), true)
+  assert.match(walmartAnalysis.subject, /Walmart/i)
   assert.match(walmartAnalysis.emailBody, /Walmart/i)
-  assert.doesNotMatch(walmartAnalysis.emailBody, /Principal Adams/i)
+  assert.doesNotMatch(walmartAnalysis.emailBody, /Principal Adams|Dear 5th Grade/i)
 
-  // 3. Science Camp Waiver
+  // 3. Science Camp Item with Real Gmail Context
   const campItem = {
     id: 'prep-camp',
+    event_title: 'Science Camp Emergency Medical Release',
     description: '5th Grade Science Camp Emergency Medical Waiver & Medication Form',
     source_type: 'gmail',
-    due_by: '2026-08-15',
+    due_by: '2026-08-17',
     household_id: 'tabor',
     created_at: '2026-08-15T07:14:00Z',
     status: 'pending',
   }
-  const campAnalysis = synthesizeActionAnalysis(campItem)
-  assert.match(campAnalysis.senderLabel, /Principal Adams/i)
-  assert.match(campAnalysis.urgency, /deadline/i)
-  assert.match(campAnalysis.requiredAction, /signature/i)
-  assert.equal(campAnalysis.documents.some((d) => d.type === 'waiver'), true)
-  assert.ok(campAnalysis.suggestedEvent, 'Science camp waiver should have a suggested calendar event')
+  const campDetails = {
+    ...campItem,
+    gmailContext: {
+      subject: 'Science Camp Emergency Medical Release Form',
+      from_email: 'office@oakridgeschool.edu',
+      received_at: '2026-08-15T07:14:00Z',
+      email_body: 'Guardian signature required on emergency medical waiver for the Lake Alpine camp trip.',
+      attachments: [{ filename: 'Science_Camp_Medical_Waiver.pdf', mimeType: 'application/pdf', size: 124000 }],
+    },
+  }
+  const campAnalysis = synthesizeActionAnalysis(campItem, campDetails)
+  assert.match(campAnalysis.senderLabel, /office@oakridgeschool\.edu|office/i)
+  assert.match(campAnalysis.subject, /Science Camp/i)
+  assert.equal(campAnalysis.documents.some((d) => d.title.includes('Medical Waiver')), true)
+  assert.ok(campAnalysis.suggestedEvent, 'Dated camp item should have a suggested calendar event')
   assert.equal(campAnalysis.suggestedEvent.date, '2026-08-17')
-  assert.match(campAnalysis.suggestedEvent.title, /Science Camp/i)
 
-  // 4. School PTO Spirit Day (Lynita Butler)
+  // 4. School PTO Spirit Day
   const ptoItem = {
     id: 'prep-pto',
-    description: 'PTO Spirit Day 8/28/26 - Dear Parents & Guardians',
+    event_title: 'PTO Spirit Day on August 28',
+    description: 'PTO Spirit Day 8/28/26 - Students wear school colors',
     source_type: 'gmail',
     due_by: '2026-08-28',
     household_id: 'tabor',
@@ -150,11 +158,13 @@ test('synthesizeActionAnalysis: dynamic synthesis accurately extracts context pe
     status: 'pending',
   }
   const ptoAnalysis = synthesizeActionAnalysis(ptoItem)
-  assert.match(ptoAnalysis.senderLabel, /Lynita Butler|PTO/i)
-  assert.match(ptoAnalysis.urgency, /Spirit Day|August 28/i)
-  // 5. Lake Lytal Lassie League Community Email (Contains word "school" - Must NOT match Principal Adams or Science Camp)
+  assert.match(ptoAnalysis.subject, /Spirit Day/i)
+  assert.match(ptoAnalysis.urgency, /Aug(?:ust)?\s*28/i)
+
+  // 5. Lake Lytal Lassie League Community Email (Must NOT match fake Principal Adams or fake Science Camp)
   const lytalItem = {
     id: 'prep-lytal',
+    event_title: 'Lake Lytal Lassie League Enrollment',
     description: 'The Lake Lytal Lassie League is trying to increase enrollment. Please help spread the word by sharing the attached flyers on social media or within your school community.',
     source_type: 'gmail',
     household_id: 'tabor',
@@ -174,6 +184,7 @@ test('detectSuggestedEvent: returns accurate plan for quick queue badge detectio
 
   const pto = detectSuggestedEvent({
     id: 'pto-1',
+    event_title: 'PTO Spirit Day',
     description: 'PTO Spirit Day 8/28/26 - Wear Emerald Green & Gold',
     source_type: 'gmail',
     due_by: '2026-08-28',
@@ -183,14 +194,16 @@ test('detectSuggestedEvent: returns accurate plan for quick queue badge detectio
   assert.equal(pto.displayDate, 'Fri, Aug 28 · All Day')
   assert.equal(pto.allDay, true)
 
-  const camp = detectSuggestedEvent({
-    id: 'camp-1',
-    description: 'Lake Alpine Science Camp Waiver Due',
+  const datedEvent = detectSuggestedEvent({
+    id: 'event-1',
+    event_title: 'Science Camp Bus Departure',
+    description: 'Lake Alpine Science Camp Departure',
     source_type: 'gmail',
+    event_date: '2026-08-17',
   })
-  assert.ok(camp)
-  assert.equal(camp.date, '2026-08-17')
-  assert.equal(camp.displayDate, 'Mon, Aug 17 · 7:30 AM – 8:30 AM')
+  assert.ok(datedEvent)
+  assert.equal(datedEvent.date, '2026-08-17')
+  assert.equal(datedEvent.displayDate, 'Mon, Aug 17 · All Day')
 
   const nonDated = detectSuggestedEvent({
     id: 'misc-1',
@@ -389,3 +402,75 @@ test('ActionInspectionSidecar and usePrepItems resolve sibling actions and advan
   assert.match(sidecarContent, /queueItems\.find\(\(q\) => !allRelatedIds\.has\(q\.id\)\)/)
   assert.doesNotMatch(sidecarContent, /handleSelectAction\(siblingItems\[0\]\.id\)/)
 })
+
+test('synthesizeActionAnalysis: dynamic extraction produces truthful softball, basketball, and bus directives with zero FAST assessment hallucinations', async () => {
+  const { synthesizeActionAnalysis } = await import('../src/utils/actionInspectionSynthesis.ts')
+
+  // 1. Lake Lytal Softball Item
+  const lytalItem = {
+    id: 'lytal-softball-1',
+    event_title: 'Lake Lytal Lassie League - Fall Evaluations',
+    description: 'Attend fall softball evaluations to be placed on a team. The flyer with evaluation dates is attached.',
+    source_type: 'gmail',
+    source_ref: 'gmail:household:1a0347ef87f5e98c',
+    agency_level: 2,
+    created_at: '2026-08-23T14:00:00Z',
+  }
+  const lytalDetails = {
+    ...lytalItem,
+    gmailContext: {
+      subject: 'Lake Lytal Lassie League - Fall Evaluations',
+      from_email: 'Lake Lytal Lassie League <info@lakelytalsoftball.org>',
+      received_at: '2026-08-23T14:00:00Z',
+      email_body: 'Hello Families,\nSign ups for the Fall Softball Season are open until September 1st. Please attend the fall softball evaluations so we can place every player on the right team. Attached is the official flyer with evaluation dates and field numbers.',
+      attachments: [{ filename: 'Fall_Softball_Evaluations_Flyer.pdf', mimeType: 'application/pdf', size: 145000 }],
+      extracted_document_summary: '• Fall Softball Season sign ups open until September 1st\n• Mandatory player evaluations on fields 3 & 4\n• All players will be placed on a team\n• Wear cleats, softball pants, and bring personal glove/helmet',
+    },
+  }
+  const lytalAnalysis = synthesizeActionAnalysis(lytalItem, lytalDetails)
+  assert.equal(lytalAnalysis.senderLabel, 'Lake Lytal Lassie League')
+  assert.ok(lytalAnalysis.extractedDocumentPreview, 'Must have document preview')
+  assert.match(lytalAnalysis.extractedDocumentPreview.title, /Directives|Flyer/i)
+
+  // Verify anti-hallucination: MUST NOT contain FAST assessment or standardized testing strings!
+  const previewJson = JSON.stringify(lytalAnalysis.extractedDocumentPreview)
+  assert.doesNotMatch(previewJson, /FAST ELA/i, 'Must NEVER hallucinate FAST ELA testing')
+  assert.doesNotMatch(previewJson, /FAST Math/i, 'Must NEVER hallucinate FAST Mathematics testing')
+  assert.doesNotMatch(previewJson, /Science Diagnostic/i, 'Must NEVER hallucinate Science Diagnostic assessment')
+  assert.doesNotMatch(previewJson, /Chromebook/i, 'Must NEVER hallucinate school Chromebooks')
+
+  // Verify truthful directives
+  assert.match(previewJson, /Softball|evaluations|September 1st/i)
+
+  // 2. Bak MSOA Basketball Tryouts
+  const bakItem = {
+    id: 'bak-tryouts-1',
+    event_title: 'Bak - Boys/Girls Basketball Tryouts',
+    description: 'Students trying out for basketball must attend all three days: August 31st, September 1st, and September 2nd, from 3:30pm-5:00pm. They should report to the gym after being dismissed and wear athletic attire.',
+    source_type: 'gmail',
+    agency_level: 2,
+    created_at: '2026-08-23T15:00:00Z',
+  }
+  const bakAnalysis = synthesizeActionAnalysis(bakItem)
+  assert.match(bakAnalysis.subject, /Basketball Tryouts/i)
+  assert.ok(bakAnalysis.extractedDocumentPreview, 'Must generate dynamic directives for basketball tryouts')
+  const bakDirectives = JSON.stringify(bakAnalysis.extractedDocumentPreview.keyPoints)
+  assert.match(bakDirectives, /August 31st|September 1st|gym|athletic/i)
+  assert.doesNotMatch(bakDirectives, /FAST ELA|FAST Math/i)
+
+  // 3. Palm Beach Schools Urgent Bus Route Change
+  const busItem = {
+    id: 'pbsd-bus-1',
+    event_title: 'URGENT: Reverted Changes for Buses R28 & R7 Effective Immediately',
+    description: 'The AM/PM Publix bus stop for R28 & R7 has been reverted to its original location behind the Publix of Ibis shopping plaza. Address questions to the Transportation Dept.',
+    source_type: 'gmail',
+    agency_level: 2,
+    created_at: '2026-08-23T16:00:00Z',
+  }
+  const busAnalysis = synthesizeActionAnalysis(busItem)
+  assert.match(busAnalysis.subject, /Buses R28 & R7/i)
+  const busDirectives = JSON.stringify(busAnalysis.extractedDocumentPreview?.keyPoints || [])
+  assert.match(busDirectives, /Publix|bus stop|Transportation/i)
+  assert.doesNotMatch(busDirectives, /FAST ELA/i)
+})
+

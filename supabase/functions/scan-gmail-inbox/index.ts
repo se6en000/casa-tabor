@@ -31,6 +31,8 @@ import {
   resolveTransactionStage,
   resolveCanonicalEntity,
   normalizeKeyPart,
+  isBillOrUtilityOrHouseholdService,
+  isNonCommercialOrganization,
 } from '../_shared/canonical-order-resolver.mjs'
 
 const CORS = {
@@ -517,21 +519,25 @@ EMAIL SENT DATE: ${emailDateFormatted} (Header: ${date || emailDateIso})
 Family members: ${familyMembers.map(m => `${m.name} (${m.role})`).join(', ')}
 ${rulesBlock}${attachmentsBlock}${documentDirectivesBlock}
 Return ALL tasks that require family follow-up:
-- forms (permission slips, waivers, bus transportation registrations like 'Register Your Ride', Student ID pickup, PTO forms, Adopt-A-Class)
-- payment (bill, statement, tuition, dues, membership fees, school donations/supplies)
-- rsvp (sports league registrations, fall registration, tryouts, confirmations)
+- forms (permission slips, waivers, athletic clearance document submissions such as Aktivate, bus transportation registrations like 'Register Your Ride', Student ID pickup, PTO forms, Adopt-A-Class)
+- payment (utility bills like FPL, electric, water, gas, internet/cable, auto loans, mortgages, credit card bills, insurance premiums, tuition, dues, membership fees, medical/dental bills, contractor invoices)
+- rsvp (sports league registrations, tryouts attendance, fall registration, event confirmations)
 - deadline (order deadlines, picture orders, submit/apply by date)
 - delivery (package/order shipped, tracking, grocery arrival window)
 - renewal (subscriptions, memberships)
-- general (school dismissal adjustments, teacher notes requiring parent action)
+- general (school dismissal adjustments, bus schedule/route changes, teacher notes requiring parent action/awareness)
 
-CRITICAL DATE ANCHORING:
+CRITICAL DATE ANCHORING & AGENCY GUIDELINES:
 - All relative dates/times in the email body or attachments (such as "today", "tonight", "this morning", "this afternoon", "tomorrow", "due today", "arriving today between 2pm-6pm", "arriving Monday") MUST be resolved relative to the EMAIL SENT DATE (${emailDateFormatted}), NEVER relative to the current scan date.
-- If an email sent on ${emailDateFormatted} mentions a delivery "today by 3:44pm", its due_datetime must be on ${emailDateFormatted} (e.g. ${emailDateFormatted}T15:44:00), NOT today's date.
 - If an email mentions an order confirmation or delivery arriving on a FUTURE date (such as "arriving Monday, Aug 24"), set due_datetime to that future date (e.g. 2026-08-24T18:00:00Z) and set transaction_status to "confirmed" or "shipped". NEVER set transaction_status to "delivered" when the arrival is scheduled for a future date.
 - Set transaction_status to "delivered" ONLY when the email explicitly confirms past drop-off (e.g. "Your package has been delivered", "Delivered on front porch").
 - When an email or attachment is a school newsletter, testing letter, permission packet, or sports announcement, extract each distinct form, fee, testing milestone, or required equipment item as its own separate action item.
-- Set agency_level = 0 for passive package tracking, merchant delivery updates, and standard return/claim policy disclaimers. Set agency_level = 1, 2, or 3 for active tasks requiring human signature, payment, or decision.
+- agency_level:
+  - 0: Passive delivery/package tracking, shipping updates, and return policy disclaimers ONLY.
+  - 1: Informational notices / school bus schedule adjustments / parent awareness items.
+  - 2: Standard actionable tasks requiring parent action, registration, signature, waiver, form, or payment (e.g. FPL and utility bills, loan/insurance payments, Aktivate registration, basketball tryouts, softball signups).
+  - 3: Urgent matters with immediate deadlines or critical service interruptions.
+- vendor: Retail merchant or parcel courier ONLY if physical parcel/order delivery (e.g., "Walmart", "Amazon", "Target", "HelloFresh", "UPS", "FedEx", "USPS"). For utilities (FPL, electric, water, internet), bills, loans, schools, sports leagues, bus transportation, or contractors, leave vendor EMPTY ("").
 
 EMAIL:
 Subject: ${subject}
@@ -549,8 +555,8 @@ Respond ONLY JSON:
       "due_datetime": "ISO8601 with timezone offset or empty",
       "assigned_member": "family member name or empty",
       "priority": 1,
-      "agency_level": 0,
-      "vendor": "merchant or service name, or empty",
+      "agency_level": 2,
+      "vendor": "merchant or courier name only if delivery/purchase, or empty",
       "transaction_id": "exact transaction identifier, or empty",
       "transaction_status": "confirmed|payment|shipped|out_for_delivery|delivered|problem, or empty",
       "policy_disclaimer": "standard return/claim policy footnote if present, or empty",
@@ -586,28 +592,60 @@ function canonicalizeTransactionOrderId(vendor: string, rawId: string): string {
   return canonicalizeOrderId(vendor, rawId)
 }
 
+function isKnownCommercialMerchantOrCarrier(vendor?: string | null): boolean {
+  if (!vendor) return false
+  const v = vendor.trim().toLowerCase()
+  // Reject schools, non-commercial organizations, utilities, and bills
+  if (isNonCommercialOrganization(v) || isBillOrUtilityOrHouseholdService(v)) {
+    return false
+  }
+  return VENDOR_ALIASES.some(({ vendor: aliasVendor, aliases }) =>
+    aliasVendor.toLowerCase() === v || aliases.some((a) => v.includes(a))
+  )
+}
+
 function transactionIdentity(action: InboxActionItem, sourceRef: string) {
   const combined = `${action.title ?? ''} ${action.description}`
+
+  // Bills, utilities, tuition, and home services NEVER generate parcel transaction threads
+  if (isBillOrUtilityOrHouseholdService(combined) || isBillOrUtilityOrHouseholdService(action.vendor) || action.type === 'payment' || action.type === 'forms' || action.type === 'rsvp') {
+    return { threadKey: null, vendor: null, stage: null }
+  }
+  if (isNonCommercialOrganization(action.vendor) || isNonCommercialOrganization(combined)) {
+    return { threadKey: null, vendor: null, stage: null }
+  }
+
   const vendorDetection = detectVendorAndOrder(combined, action.vendor)
   const carrierDetection = detectCarrierAndTracking(combined)
 
-  const vendor = vendorDetection.vendor || (carrierDetection.carrier ? carrierDetection.carrier.toUpperCase() : action.vendor?.trim() || null)
-  if (!vendor) return { threadKey: null, vendor: null, stage: null }
+  const detectedVendor = vendorDetection.vendor || (carrierDetection.carrier ? carrierDetection.carrier.toUpperCase() : null)
+  const isDelivery = action.type === 'delivery'
+  const isMerchant = isKnownCommercialMerchantOrCarrier(detectedVendor || action.vendor)
 
-  const vendorKey = vendorDetection.vendorKey || (carrierDetection.carrier ? carrierDetection.carrier : normalizeTransactionKeyPart(vendor))
+  // Non-commercial senders (schools, sports leagues, bus transportation) MUST NOT generate commercial transaction threads
+  if (!isDelivery && !isMerchant && !carrierDetection.trackingNumber && !vendorDetection.canonicalOrderId) {
+    return { threadKey: null, vendor: null, stage: null }
+  }
+
+  const vendor = detectedVendor || (isMerchant ? action.vendor?.trim() || null : null)
+  if (!vendor && !carrierDetection.carrier) return { threadKey: null, vendor: null, stage: null }
+
+  const vendorKey = vendorDetection.vendorKey || (carrierDetection.carrier ? carrierDetection.carrier : (vendor ? normalizeTransactionKeyPart(vendor) : 'parcel'))
   const rawId = action.transaction_id?.trim() || vendorDetection.orderId || carrierDetection.trackingNumber
   const finalTransactionId = (rawId && vendor) ? canonicalizeTransactionOrderId(vendor, rawId) : rawId
 
   const descriptor = transactionDescriptor(action)
   let threadKey: string
   if (finalTransactionId) {
-    threadKey = buildCompositeThreadKey({ vendor, vendorKey, canonicalOrderId: finalTransactionId })
+    threadKey = buildCompositeThreadKey({ vendor: vendor || 'Parcel', vendorKey, canonicalOrderId: finalTransactionId })
   } else if (descriptor) {
     threadKey = `transaction:${vendorKey}:items:${descriptor}`
   } else if (carrierDetection.carrier && carrierDetection.trackingNumber) {
     threadKey = buildCompositeThreadKey({ carrier: carrierDetection.carrier, trackingNumber: carrierDetection.trackingNumber })
-  } else {
+  } else if (isMerchant || isDelivery) {
     threadKey = `transaction:${vendorKey}:message:${sourceRef}`
+  } else {
+    return { threadKey: null, vendor: null, stage: null }
   }
 
   const stage = resolveTransactionStage({
@@ -618,7 +656,7 @@ function transactionIdentity(action: InboxActionItem, sourceRef: string) {
 
   return {
     threadKey,
-    vendor,
+    vendor: vendor || (carrierDetection.carrier ? carrierDetection.carrier.toUpperCase() : 'Parcel'),
     stage,
   }
 }
@@ -700,8 +738,9 @@ async function persistInboxActions(
       attention_stage: transaction.stage,
       is_user_labeled: isUserLabeled,
       cluster_id: clusterId,
-      agency_level: a.type === 'delivery' || transaction.threadKey ? (a.agency_level ?? 0) : (a.agency_level ?? 1),
+      agency_level: typeof a.agency_level === 'number' ? a.agency_level : (a.type === 'delivery' ? 0 : 2),
       policy_disclaimer: a.policy_disclaimer || null,
+      source_origin: a.source_origin || 'email_body',
     }
 
     // Idempotent state progression: If transaction thread already exists in active prep items, update it

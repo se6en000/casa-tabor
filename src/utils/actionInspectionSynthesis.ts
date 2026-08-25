@@ -1,6 +1,6 @@
 import type { PrepItem } from '../types'
 import type { PrepItemDetails } from '../hooks/usePrepItems'
-import { isDeliveryTransitItem } from './vendorTransactions.ts'
+import { isDeliveryTransitItem, isBillOrUtilityOrHouseholdService } from './vendorTransactions.ts'
 
 export type SuggestedActionType = 'reminder' | 'event' | 'link' | 'payment'
 
@@ -90,11 +90,23 @@ export function extractAmount(text?: string | null): string | null {
   return match ? match[0] : null
 }
 
-function extractAccountNumber(text?: string | null): string | null {
-  if (!text) return null
-  const match = text.match(/(?:\*{3,}|ending in\s*|account\s*#?)\s*(\d{4})/i)
-  return match ? match[1] : null
+export function extractDynamicKeyDirectives(text?: string | null): string[] {
+  if (!text) return []
+  const lines = text
+    .split(/(?:\r?\n|(?<=[.!?])\s+)/)
+    .map((l) => l.trim().replace(/^[-*•]\s*/, ''))
+    .filter((l) => l.length >= 15 && l.length <= 220 && !l.toLowerCase().includes('unsubscribe') && !l.toLowerCase().includes('all rights reserved'))
+
+  const directiveKeywords = /\b(deadline|due|required|must|attend|register|registration|sign[- ]?up|approved in|submit|submitted|bring|wear|schedule|dates?|times?|location|session|fee|cost|waiver|forms?|tryouts?|evaluations?|bus stop|effective immediately|assessment|guidelines)\b/i
+
+  const matched = lines.filter((l) => directiveKeywords.test(l))
+  if (matched.length > 0) {
+    return Array.from(new Set(matched)).slice(0, 6)
+  }
+
+  return lines.slice(0, 4)
 }
+
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -196,24 +208,7 @@ export function extractSmartActionTitle(
     return `i-Ready ${type}`
   }
 
-  // 2. School Pictures / Photo Day
-  if (/(?:school\s*pictures|picture\s*day|photo\s*day|fall\s*portraits)/i.test(combined)) {
-    const isBak = /bak|msoa/i.test(combined)
-    return isBak ? 'School Pictures (Bak MSOA)' : 'School Picture Day'
-  }
-
-  // 3. Science Camp / Lake Alpine Trip
-  if (/(?:science\s*camp|lake\s*alpine)/i.test(combined)) {
-    if (/(?:waiver|release|medical|form)/i.test(combined)) return 'Science Camp Medical Waiver'
-    return '5th Grade Science Camp Departure'
-  }
-
-  // 4. School Spirit Day / PTO Day
-  if (/(?:spirit\s*day|pto\s*spirit)/i.test(combined)) {
-    return 'PTO Spirit Day - Palm Beach School'
-  }
-
-  // 5. Volunteer Roles (e.g. "Volunteer to manage the treasure box and birthday gift bags...")
+  // 2. Volunteer Roles (e.g. "Volunteer to manage the treasure box and birthday gift bags...")
   if (/^volunteer\s+to\s+/i.test(desc)) {
     const cleaned = desc.replace(/^volunteer\s+to\s+/i, '').split(/[,;—.]|which involves/i)[0].trim()
     if (cleaned) {
@@ -222,7 +217,7 @@ export function extractSmartActionTitle(
     }
   }
 
-  // 6. Specific structured sentences: "Your child's [first] X is scheduled for [Date]..."
+  // 3. Specific structured sentences: "Your child's [first] X is scheduled for [Date]..."
   const scheduledMatch = desc.match(/(?:your child's\s+(?:first\s+)?|upcoming\s+|annual\s+)([a-z0-9\s-]{4,40}?)\s+is\s+scheduled\s+for/i)
   if (scheduledMatch && scheduledMatch[1]) {
     const extracted = scheduledMatch[1].trim()
@@ -301,7 +296,7 @@ export function detectSuggestedActionBundle(
   }
 
   // ── CASE 0A: i-Ready Math & Reading Diagnostic Assessments ──
-  if (/\b(?:i[-_ ]ready|iready)\b/i.test(combined) && /\b(?:math|reading|diagnostic|assessment|testing|test)\b/i.test(combined)) {
+  if (/\b(?:i[-_ ]ready|iready)\b/i.test(combined) && /\b(?:math|reading)\b/i.test(combined) && /\bdiagnostic\b/i.test(combined)) {
     const isMath = /\bmath(?:ematics)?\b/i.test(combined)
     const isReading = /\b(?:reading|ela|literacy)\b/i.test(combined)
     const subject = isMath && isReading ? 'Math & Reading' : isMath ? 'Math' : isReading ? 'Reading' : 'Diagnostic'
@@ -352,11 +347,10 @@ export function detectSuggestedActionBundle(
     }
   }
 
-  // ── CASE 0B: School Testing Parent Letter / Fall-Winter Testing (FAST / STAR / Diagnostic) ──
+  // ── CASE 0B: School Testing Parent Letter (Strictly FAST / STAR / State testing with grade levels) ──
   if (
-    /(?=.*(?:testing|assessment|parent letter|testing schedule))(?=.*(?:fall[- ]?winter|3rd|4th|5th|fast|star|diagnostic|grades?))/i.test(combined) ||
-    /fall[- ]?winter testing/i.test(combined) ||
-    /testing for 3rd[-–]5th/i.test(combined)
+    /\b(?:fast\s*(?:reading|math|ela)|testing\s*for\s*3rd[-–]5th|fall[- ]winter\s*testing\s*parent\s*letter)\b/i.test(combined) &&
+    /\b(?:3rd[-–]5th|grades?\s*[3-5]|palm\s*beach\s*schools?)\b/i.test(combined)
   ) {
     return {
       bundleId: `bundle_fall_winter_testing_${item.id || 'current'}`,
@@ -394,22 +388,7 @@ export function detectSuggestedActionBundle(
           defaultSelected: true,
         },
         {
-          id: `act_test_science_${item.id || '2'}`,
-          type: 'event',
-          title: 'Science Diagnostic Assessment (Liv · 4th Grade)',
-          subtitle: 'Diagnostic testing window · 9:00 AM – 10:30 AM',
-          date: '2026-10-02',
-          displayDate: 'Fri, Oct 2 · 9:00 AM – 10:30 AM',
-          startTime: '2026-10-02T09:00:00-04:00',
-          endTime: '2026-10-02T10:30:00-04:00',
-          allDay: false,
-          location: 'Bak Middle School of the Arts',
-          badgeLabel: 'CALENDAR EVENT',
-          assignedMemberName: 'Liv',
-          defaultSelected: true,
-        },
-        {
-          id: `act_test_prep_chromebook_${item.id || '3'}`,
+          id: `act_test_prep_chromebook_${item.id || '2'}`,
           type: 'reminder',
           title: 'Charge Chromebook & Pack 3.5mm Wired Headphones',
           subtitle: 'Required testing equipment (Bluetooth headphones not permitted)',
@@ -422,38 +401,14 @@ export function detectSuggestedActionBundle(
           assignedMemberName: 'Liv',
           defaultSelected: true,
         },
-        {
-          id: `act_test_prep_readiness_${item.id || '4'}`,
-          type: 'reminder',
-          title: 'Testing Day Readiness (No Smartwatches / Phones)',
-          subtitle: 'Ensure early bedtime, protein breakfast, and leave smartwatches at home',
-          date: '2026-09-15',
-          displayDate: 'Tue, Sep 15 · 7:00 AM',
-          startTime: '2026-09-15T07:00:00-04:00',
-          endTime: '2026-09-15T07:30:00-04:00',
-          allDay: false,
-          badgeLabel: 'PREP TASK',
-          assignedMemberName: 'Liv',
-          defaultSelected: true,
-        },
-        {
-          id: `act_test_portal_${item.id || '5'}`,
-          type: 'link',
-          title: 'Palm Beach Schools Parent Portal (Testing Info)',
-          subtitle: 'View state assessment reports and student scores online',
-          displayDate: 'Online Portal',
-          url: 'https://palmbeachschools.org/students_parents/testing',
-          badgeLabel: 'QUICK LINK',
-          defaultSelected: false,
-        },
       ],
     }
   }
 
-  // ── CASE 0C: Curriculum Night / Open House (Bak MSOA / School Orientation) ──
+  // ── CASE 0C: Curriculum Night & Open House (Strictly Curriculum Night with Bak / Orientation context) ──
   if (
-    /(?=.*(?:curricul(?:um|em)|back\s*to\s*school\s*night))(?=.*(?:bak|night|schedule|map|classroom|grades?|teacher|6th|7th|8th))/i.test(combined) ||
-    /\bcurricul(?:um|em)\s*night\b/i.test(combined)
+    /\bcurriculum\s*night\b/i.test(combined) &&
+    /\b(?:bak|open\s*house|classroom\s*walkthrough)\b/i.test(combined)
   ) {
     const targetDateIso = item.event_date || item.due_by || '2026-08-27'
     const parsed = parseDateSafe(targetDateIso)
@@ -537,135 +492,7 @@ export function detectSuggestedActionBundle(
     }
   }
 
-  // ── CASE 1: School Pictures (Bak MSOA / School Photo Day) ──
-  if (
-    /(?=.*school\s*pictures)(?=.*(?:bak|wednesday|flyers|8\/19|rozanski|photo|order))/i.test(combined) ||
-    item.attention_thread_key?.includes('school-pictures') ||
-    title.toLowerCase().includes('school pictures')
-  ) {
-    return {
-      bundleId: `bundle_school_pictures_${item.id || 'current'}`,
-      title: 'School Pictures Action Bundle',
-      summary: 'Bak MSOA Fall Photo Day with night-before wardrobe preparation.',
-      actions: [
-        {
-          id: `act_prep_clothes_${item.id || '0'}`,
-          type: 'reminder',
-          title: 'Prep School Clothes & Photo Order Form',
-          subtitle: 'Set out Bak uniform/polo and prepare student picture order slip',
-          date: '2026-08-18',
-          displayDate: 'Tue, Aug 18 · 8:00 PM',
-          startTime: '2026-08-18T20:00:00-04:00',
-          endTime: '2026-08-18T20:30:00-04:00',
-          allDay: false,
-          badgeLabel: 'PREP TASK',
-          assignedMemberName: 'Liv',
-          defaultSelected: true,
-        },
-        {
-          id: `act_school_pic_event_${item.id || '1'}`,
-          type: 'event',
-          title: 'School Pictures (Bak MSOA)',
-          subtitle: 'Fall Student Photo Day · Bak Middle School of the Arts',
-          date: '2026-08-19',
-          displayDate: 'Wed, Aug 19 · All Day',
-          allDay: true,
-          location: 'Bak Middle School of the Arts',
-          badgeLabel: 'CALENDAR EVENT',
-          assignedMemberName: 'Liv',
-          defaultSelected: true,
-        },
-        {
-          id: `act_order_portal_${item.id || '2'}`,
-          type: 'link',
-          title: 'Bak Student & Parent Portal (Photo Orders)',
-          subtitle: 'Order photo packages online at bak.palmbeachschools.org',
-          displayDate: 'Online Portal',
-          url: 'https://bak.palmbeachschools.org/students_parents',
-          badgeLabel: 'QUICK LINK',
-          defaultSelected: false,
-        },
-      ],
-    }
-  }
-
-  // ── CASE 2: Science Camp Trip & Medical Waivers ──
-  if (/(?=.*(?:science\s*camp|lake\s*alpine))(?=.*(?:waiver|release|medication|departure|camp))/i.test(combined)) {
-    return {
-      bundleId: `bundle_science_camp_${item.id || 'current'}`,
-      title: '5th Grade Science Camp Bundle',
-      summary: 'Camp waiver verification and bus departure milestone.',
-      actions: [
-        {
-          id: `act_camp_waiver_${item.id || '0'}`,
-          type: 'reminder',
-          title: 'Submit Science Camp Medical Waiver & Packing Slip',
-          subtitle: 'Signed release and prescription medication paperwork for Owen',
-          date: '2026-08-16',
-          displayDate: 'Sun, Aug 16 · 7:00 PM',
-          startTime: '2026-08-16T19:00:00-04:00',
-          endTime: '2026-08-16T19:30:00-04:00',
-          allDay: false,
-          badgeLabel: 'PREP TASK',
-          assignedMemberName: 'Owen',
-          defaultSelected: true,
-        },
-        {
-          id: `act_camp_depart_${item.id || '1'}`,
-          type: 'event',
-          title: '5th Grade Science Camp Departure',
-          subtitle: 'Oakridge Elementary Bus Loading Bay',
-          date: '2026-08-17',
-          displayDate: 'Mon, Aug 17 · 7:30 AM – 8:30 AM',
-          startTime: '2026-08-17T07:30:00-04:00',
-          endTime: '2026-08-17T08:30:00-04:00',
-          allDay: false,
-          location: 'Oakridge Elementary Bus Loading Bay',
-          badgeLabel: 'CALENDAR EVENT',
-          assignedMemberName: 'Owen',
-          defaultSelected: true,
-        },
-      ],
-    }
-  }
-
-  // ── CASE 3: School Spirit / PTO Day ──
-  if (/(?=.*(?:pto|pta))(?=.*spirit\s*day)/i.test(combined)) {
-    return {
-      bundleId: `bundle_spirit_day_${item.id || 'current'}`,
-      title: 'PTO Spirit Day Bundle',
-      summary: 'Wardrobe setup and school spirit milestone.',
-      actions: [
-        {
-          id: `act_spirit_prep_${item.id || '0'}`,
-          type: 'reminder',
-          title: 'Set Out Green & Gold Spirit Shirt',
-          subtitle: 'Emerald green & gold spirit tee with school uniform bottoms',
-          date: '2026-08-27',
-          displayDate: 'Thu, Aug 27 · 8:00 PM',
-          startTime: '2026-08-27T20:00:00-04:00',
-          endTime: '2026-08-27T20:30:00-04:00',
-          allDay: false,
-          badgeLabel: 'PREP TASK',
-          defaultSelected: true,
-        },
-        {
-          id: `act_spirit_event_${item.id || '1'}`,
-          type: 'event',
-          title: 'PTO Spirit Day - Palm Beach School',
-          subtitle: 'School-wide spirit day at Palm Beach School',
-          date: '2026-08-28',
-          displayDate: 'Fri, Aug 28 · All Day',
-          allDay: true,
-          location: 'Palm Beach School',
-          badgeLabel: 'CALENDAR EVENT',
-          defaultSelected: true,
-        },
-      ],
-    }
-  }
-
-  // ── CASE 4: Generic Appointment / Event Fallback ──
+  // ── CASE 1: Generic Appointment / Event Fallback ──
   if (item.source_pattern_key === 'event_suggestion' || item.type === 'appointment' || item.type === 'event_suggestion') {
     const smart = extractSmartActionTitle(item)
     const rawTitle = smart || (!isGenericNewsletterOrFragment(item.event_title) ? item.event_title : null) || desc.replace(/^Suggested Appointment:\s*/i, '').split(' at ')[0].split(' — ')[0].trim() || 'Appointment'
@@ -717,9 +544,10 @@ export function detectSuggestedEvent(
   if (bundle) {
     const eventAction = bundle.actions.find((a) => a.type === 'event') || bundle.actions[0]
     if (eventAction) {
+      const derivedDate = eventAction.date || eventAction.startTime?.slice(0, 10) || item.event_date || item.due_by?.slice(0, 10) || ''
       return {
         title: eventAction.title,
-        date: eventAction.date || '2026-08-19',
+        date: derivedDate,
         displayDate: eventAction.displayDate,
         startTime: eventAction.startTime || null,
         endTime: eventAction.endTime || null,
@@ -733,14 +561,14 @@ export function detectSuggestedEvent(
     }
   }
 
-  // Fallback to explicit due date if present
-  if (item?.due_by) {
+  // Fallback to explicit event date or due date if present
+  if (item?.event_date || item?.due_by) {
     const combined = `${item.event_title || ''} ${item.description || ''}`
     if (/\b(?:claims? for (?:missing|wrong|damaged|lost)|claims? must be made within|return window|return (?:by|eligible)|final delivery|shipment for)\b/i.test(combined)) {
       return null
     }
 
-    const parsed = parseDateSafe(item.due_by)
+    const parsed = parseDateSafe(item.event_date || item.due_by)
     if (parsed) {
       const smartTitle = extractSmartActionTitle(item)
       const title = smartTitle || (!isGenericNewsletterOrFragment(item.event_title) ? item.event_title : null) || item.description || 'Household Action Reminder'
@@ -748,6 +576,8 @@ export function detectSuggestedEvent(
         title,
         date: parsed.dateStr,
         displayDate: parsed.displayDate,
+        startTime: parsed.startIso,
+        endTime: parsed.endIso,
         allDay: parsed.isAllDay,
         description: item.description || null,
         category: item.type || 'general',
@@ -766,7 +596,6 @@ export function synthesizeActionAnalysis(
 ): ActionAnalysis {
   const desc = (item?.description || item?.event_title || '').trim()
   const amount = extractAmount(desc) || (item ? extractAmount(item.event_title) : null)
-  const accountEnding = extractAccountNumber(desc)
   const suggestedEvent = detectSuggestedEvent(item, detailedItem, siblingItems)
   const suggestedActionBundle = detectSuggestedActionBundle(item, detailedItem, siblingItems)
 
@@ -776,7 +605,6 @@ export function synthesizeActionAnalysis(
     const fromName = from_email ? from_email.split('<')[0].replace(/"/g, '').trim() : 'Email Notification'
     const smartSubject = extractSmartActionTitle(item)
     const cleanSubject = smartSubject || (!isGenericNewsletterOrFragment(subject) ? subject : null) || (!isGenericNewsletterOrFragment(item?.event_title) ? item?.event_title : null) || desc || 'Email Action Item'
-    const combinedEmailText = `${subject} ${email_body || ''} ${desc} ${extracted_document_summary || ''}`
     
     // Extract real attachments if present
     const rawAttachments = (detailedItem.gmailContext as any).attachments || []
@@ -784,15 +612,18 @@ export function synthesizeActionAnalysis(
     let docPreview: ExtractedDocumentPreview | null = null
 
     if (rawAttachments.length > 0) {
-      extractedDocs = rawAttachments.map((att: any, idx: number) => ({
-        id: `doc-att-${idx}`,
-        title: att.filename || 'Attached Document.pdf',
-        subtitle: `${att.size ? Math.round(att.size / 1024) + ' KB' : 'PDF Document'} · Extracted by Gemini`,
-        type: (att.mimeType?.includes('pdf') || att.filename?.endsWith('.pdf')) ? 'document' : 'document',
-        filename: att.filename,
-        mimeType: att.mimeType,
-        size: att.size,
-      }))
+      extractedDocs = rawAttachments.map((att: any, idx: number) => {
+        const cleanTitle = att.filename ? att.filename.replace(/[_-]+/g, ' ').replace(/\.[^/.]+$/, '') : 'Attached Document'
+        return {
+          id: `doc-att-${idx}`,
+          title: cleanTitle,
+          subtitle: `${att.size ? Math.round(att.size / 1024) + ' KB' : 'PDF Document'} · Extracted by Gemini`,
+          type: (att.mimeType?.includes('pdf') || att.filename?.endsWith('.pdf')) ? 'document' : 'document',
+          filename: att.filename,
+          mimeType: att.mimeType,
+          size: att.size,
+        }
+      })
     }
 
     // If real Gemini multimodal document extraction exists in database
@@ -801,15 +632,12 @@ export function synthesizeActionAnalysis(
       const rawPoints = summaryText
         .split('\n')
         .map((l: string) => l.trim())
-        .filter((l: string) => (l.startsWith('-') || l.startsWith('*')) && l.length > 4)
-        .map((l: string) => l.replace(/^[-*]\s*/, ''))
+        .filter((l: string) => (l.startsWith('-') || l.startsWith('*') || l.startsWith('•')) && l.length > 4)
+        .map((l: string) => l.replace(/^[-*•]\s*/, ''))
 
       const keyPoints = rawPoints.length > 0
         ? rawPoints.slice(0, 8)
-        : [
-            'Directives extracted from attached document/flyer',
-            'Parsed and structured by Gemini Multimodal OCR',
-          ]
+        : extractDynamicKeyDirectives(summaryText)
 
       const firstDoc = extractedDocs[0]
       docPreview = {
@@ -822,79 +650,28 @@ export function synthesizeActionAnalysis(
         excerpt: summaryText,
         fullContent: email_body || summaryText,
       }
-    }
-    // Check if this is Curriculum Night / Open House Schedule & Map
-    else if (
-      /(?=.*(?:curricul(?:um|em)|open\s*house|back\s*to\s*school\s*night))(?=.*(?:bak|night|schedule|map|classroom|grades?|teacher|6th|7th|8th))/i.test(combinedEmailText) ||
-      /curricul(?:um|em)\s*night/i.test(combinedEmailText)
-    ) {
-      if (extractedDocs.length === 0) {
-        extractedDocs = [
-          {
-            id: 'doc-curriculum-night-pdf',
-            title: 'Bak_MSOA_Curriculum_Night_Schedule_and_Map.pdf',
-            subtitle: '2 Pages · 280 KB · Official Bak Middle School of the Arts',
-            type: 'document',
-            filename: 'Bak_MSOA_Curriculum_Night_Schedule_and_Map.pdf',
-            mimeType: 'application/pdf',
-            size: 286720,
-          },
-        ]
+    } else if (rawAttachments.length > 0) {
+      const firstDoc = extractedDocs[0]
+      let dynamicPoints = extractDynamicKeyDirectives(email_body || desc)
+      if (suggestedActionBundle?.actions?.length) {
+        const bundlePoints = suggestedActionBundle.actions.map((a) => {
+          const timing = a.displayDate && a.displayDate !== 'Online Portal' ? ` (${a.displayDate})` : ''
+          return `${a.title}${timing}`
+        })
+        dynamicPoints = Array.from(new Set([...bundlePoints, ...dynamicPoints])).slice(0, 8)
       }
       docPreview = {
-        id: 'preview-curriculum-night',
-        title: 'Bak MSOA Curriculum Night Schedule & Campus Map.pdf',
-        subtitle: '2 Pages · Official Bak Middle School of the Arts Guide',
-        filename: 'Bak_MSOA_Curriculum_Night_Schedule_and_Map.pdf',
-        mimeType: 'application/pdf',
-        pageCount: 2,
-        fileSizeFormatted: '280 KB',
-        keyPoints: [
-          '6th Grade Session: 5:30 PM – 6:30 PM (Gymnasium welcome & classroom walkthrough)',
-          '7th & 8th Grade Session: 6:45 PM – 7:45 PM (Auditorium & department presentations)',
-          'Parking & Access: West lot visitor parking; please carpool if possible',
-          'Parent Prep: Download student period schedule from SIS Gateway before arrival',
-          'PTSA & Spirit Wear: Tables open in Main Courtyard 5:00 PM – 7:30 PM',
+        id: `preview-att-${item?.id || '0'}`,
+        title: firstDoc?.title || cleanSubject || 'Attached Document',
+        subtitle: `${firstDoc?.subtitle || 'Official Attachment'} · Document Intelligence`,
+        filename: firstDoc?.filename || 'Document.pdf',
+        mimeType: firstDoc?.mimeType || 'application/pdf',
+        keyPoints: dynamicPoints.length > 0 ? dynamicPoints : [
+          `Sender: ${fromName}`,
+          `Subject: ${cleanSubject}`,
+          'Attached document registered for household reference',
         ],
-        excerpt: 'Welcome Parents & Guardians,\n\nWe invite all families to join us for our annual Curriculum Night. Please follow the schedule below based on your student\'s grade level. Ensure you have your student\'s period-by-period class schedule prior to arriving on campus as you will be rotating through their classrooms.\n\nPTSA membership tables and school spirit wear will be available in the main courtyard.',
-        fullContent: email_body || desc,
-      }
-    }
-    // Check if this is a School Testing Parent Letter / Testing Schedule
-    else if (
-      /(?=.*(?:testing|assessment|parent letter|fall[- ]?winter))(?=.*(?:3rd|4th|5th|fast|star|diagnostic|letter|grades?))/i.test(combinedEmailText) ||
-      /testing for 3rd[-–]5th/i.test(combinedEmailText) ||
-      /fall[- ]?winter testing/i.test(combinedEmailText)
-    ) {
-      if (extractedDocs.length === 0) {
-        extractedDocs = [
-          {
-            id: 'doc-testing-letter-pdf',
-            title: '3rd-5th_Grades_Testing_Parent_Letter.pdf',
-            subtitle: '2 Pages · 345 KB · Official Palm Beach Schools Testing Directives',
-            type: 'document',
-            filename: '3rd-5th_Grades_Testing_Parent_Letter.pdf',
-            mimeType: 'application/pdf',
-            size: 353280,
-          },
-        ]
-      }
-      docPreview = {
-        id: 'preview-testing-letter',
-        title: '3rd–5th Grades Fall-Winter Testing Parent Letter.pdf',
-        subtitle: '2 Pages · Official Palm Beach Schools Testing Directive',
-        filename: '3rd-5th_Grades_Testing_Parent_Letter.pdf',
-        mimeType: 'application/pdf',
-        pageCount: 2,
-        fileSizeFormatted: '345 KB',
-        keyPoints: [
-          'FAST ELA Reading Assessment: September 15–16, 2026 (8:30 AM – 10:30 AM)',
-          'FAST Mathematics Assessment: September 22–23, 2026 (8:30 AM – 10:30 AM)',
-          'Science Diagnostic Assessment: October 2, 2026 (9:00 AM – 10:30 AM)',
-          'Equipment: Fully charged school-issued Chromebook & wired 3.5mm headphones required',
-          'Electronics Policy: Smartwatches and personal cellular devices prohibited during testing',
-        ],
-        excerpt: 'Dear Parents & Guardians,\n\nPlease review the attached parent letter detailing the Fall-Winter testing windows for grades 3 through 5. Testing will commence promptly at 8:30 AM.\n\nStudents must arrive on time with fully charged school-issued Chromebooks and wired headphones. Electronic watches and cellular devices are not permitted in testing rooms.',
+        excerpt: email_body ? (email_body.length > 500 ? email_body.slice(0, 497) + '…' : email_body) : desc,
         fullContent: email_body || desc,
       }
     } else if (amount) {
@@ -903,33 +680,40 @@ export function synthesizeActionAnalysis(
       ]
     } else if (extractedDocs.length === 0) {
       extractedDocs = [
-        { id: 'doc-1', title: 'Message Attachment', subtitle: 'View Full Reference', type: 'document' }
+        { id: 'doc-1', title: 'Message Record', subtitle: 'View Full Reference', type: 'document' }
       ]
     }
 
     if (!docPreview && extractedDocs.length > 0) {
       const firstDoc = extractedDocs[0]
+      const dynamicPoints = extractDynamicKeyDirectives(email_body || desc)
       docPreview = {
         id: `preview-${firstDoc.id}`,
         title: firstDoc.title,
         subtitle: firstDoc.subtitle,
         filename: firstDoc.filename || firstDoc.title,
         mimeType: firstDoc.mimeType || 'application/pdf',
-        keyPoints: [
+        keyPoints: dynamicPoints.length > 0 ? dynamicPoints : [
           `Sender: ${fromName}`,
           `Subject: ${cleanSubject}`,
-          'Parsed and structured by Casa Document Intelligence',
+          'Parsed and structured by Casa Intelligence',
         ],
-        excerpt: email_body ? email_body.slice(0, 400) + '...' : desc,
+        excerpt: email_body ? (email_body.length > 500 ? email_body.slice(0, 497) + '…' : email_body) : desc,
         fullContent: email_body || desc,
       }
     }
 
     let dynamicUrgency = 'Information received — review at your convenience.'
+    const isBill = Boolean(item && (isBillOrUtilityOrHouseholdService(item) || item.type === 'payment'))
     if (item && isDeliveryTransitItem(item)) {
       dynamicUrgency = item?.due_by
         ? `Delivery tracking update · Expected ${parseDateSafe(item.due_by)?.displayDate || 'in transit'}.`
         : 'In-transit shipment tracking update.'
+    } else if (isBill && item?.due_by) {
+      const parsedDue = parseDateSafe(item.due_by)
+      dynamicUrgency = amount
+        ? `Payment of ${amount} due ${parsedDue?.displayDate || 'soon'} — review to maintain active service.`
+        : `Statement due ${parsedDue?.displayDate || 'soon'} — review and complete payment.`
     } else if (item?.due_by) {
       const parsedDue = parseDateSafe(item.due_by)
       const nowStr = new Date().toISOString().slice(0, 10)
@@ -942,6 +726,10 @@ export function synthesizeActionAnalysis(
       }
     }
 
+    const calculatedImpact = isBill
+      ? (amount ? `Monthly utility / household billing statement (${amount}).` : 'Keeps family utilities and household billing current.')
+      : (amount ? `Transaction amount: ${amount}` : 'Keeps family communications and actions organized.')
+
     return {
       senderLabel: fromName || 'Email Notification',
       senderEmail: from_email || 'notifications@service.com',
@@ -949,7 +737,7 @@ export function synthesizeActionAnalysis(
       subject: cleanSubject,
       urgency: dynamicUrgency,
       requiredAction: desc ? `Review: "${desc.length > 90 ? desc.slice(0, 87) + '…' : desc}"` : `Review matter regarding "${cleanSubject}".`,
-      householdImpact: amount ? `Transaction amount: ${amount}` : 'Keeps family communications and actions organized.',
+      householdImpact: calculatedImpact,
       documents: extractedDocs,
       emailBody: email_body || desc,
       suggestedEvent,
@@ -958,165 +746,12 @@ export function synthesizeActionAnalysis(
     }
   }
 
-  // 2. Pattern Matching by specific matter types (for demo / offline mock items only when explicitly matching exact matter)
-
-  // 2a. Bank of America / Vehicle Loan Auto-Pay (when explicitly bank of america / vehicle loan)
-  if (/bank of america/i.test(desc) || (/(?=.*vehicle\s*loan)(?=.*automatic\s*payment)/i.test(desc))) {
-    const isBofa = /bank of america/i.test(desc)
-    const senderName = isBofa ? 'Bank of America Auto Loans' : 'Financial Services Auto-Pay'
-    const senderEmail = isBofa ? 'customer.service@bankofamerica.com' : 'billing-alerts@service.com'
-    const accountStr = accountEnding ? `••••${accountEnding}` : 'primary checking'
-    const formattedAmount = amount || '$317.00'
-
-    return {
-      senderLabel: senderName,
-      senderEmail,
-      receivedTime: 'Today, 6:45 AM',
-      subject: isBofa 
-        ? `Bank of America Vehicle Loan Automatic Payment Scheduled: ${formattedAmount}`
-        : `Scheduled Automatic Payment Confirmation (${formattedAmount})`,
-      urgency: `Auto-debit scheduled for today. Funds will be drafted from account ${accountStr}.`,
-      requiredAction: `Verify balance of at least ${formattedAmount} is available in account ${accountStr} to avoid overdraft fees.`,
-      householdImpact: `${formattedAmount} monthly vehicle financing instalment. Remaining balance will update upon settlement.`,
-      documents: [
-        {
-          id: 'doc-payment-portal',
-          title: isBofa ? 'Bank of America Loan Portal' : 'Payment Portal',
-          subtitle: `${formattedAmount} · Scheduled Auto-Draft`,
-          type: 'payment',
-          amount: formattedAmount,
-        },
-        {
-          id: 'doc-statement',
-          title: 'Loan_Statement_August.pdf',
-          subtitle: '142 KB · Official monthly statement',
-          type: 'document',
-        },
-      ],
-      emailBody: `Dear Tabor Household,\n\nThis is confirmation that your scheduled automatic payment of ${formattedAmount} for your Vehicle Loan has been initiated.\n\nPayment Details:\n• Account Debited: ${accountStr}\n• Payment Amount: ${formattedAmount}\n• Scheduled Date: Today\n• Reference ID: BOA-LN-${Math.floor(100000 + Math.random() * 900000)}\n\nNo further manual action is required if your account is funded.\n\nSincerely,\n${senderName}\nCustomer Accounts Department`,
-      suggestedEvent,
-    }
-  }
-
-  // 2b. Grocery / Retail / Order / Delivery (when explicitly Walmart grocery or retail order)
-  if (/(?=.*walmart)(?=.*grocery)/i.test(desc) || (/walmart\s*grocery\s*order/i.test(desc))) {
-    const senderName = 'Walmart Grocery & Delivery'
-    const senderEmail = 'orders@walmart.com'
-
-    return {
-      senderLabel: senderName,
-      senderEmail,
-      receivedTime: 'Today, 8:15 AM',
-      subject: 'Walmart Order: Weekly Household Groceries & Household Essentials',
-      urgency: 'Order cutoff approaching. Modifications lock 2 hours before scheduled fulfillment.',
-      requiredAction: 'Confirm cart items, review recommended substitutions, and verify delivery address.',
-      householdImpact: 'Provisions the household with weekly pantry staples, fresh produce, and school snacks.',
-      documents: [
-        {
-          id: 'doc-cart',
-          title: 'Walmart Cart (Order 9451)',
-          subtitle: 'Review 18 items · Delivery reservation',
-          type: 'cart',
-        },
-        {
-          id: 'doc-list',
-          title: 'Weekly_Household_Groceries.pdf',
-          subtitle: 'Shared grocery list & pantry staples',
-          type: 'document',
-        },
-      ],
-      emailBody: `Hello Jake & Kelly,\n\nYour Walmart order is being assembled. Please review your cart items before the fulfillment cutoff window closes.\n\nOrder Overview:\n• Household Delivery Window: Today, 4:00 PM – 6:00 PM\n• Delivery Address: Tabor Residence\n• Reserved Items: Milk, bread, eggs, organic fruit, school snacks, household supplies.\n\nTrack your order status or add last-minute essentials anytime in your account portal.`,
-      suggestedEvent,
-    }
-  }
-
-  // 2c. School PTO / Spirit Day / School Events (when explicitly PTO Spirit Day)
-  if (/(?=.*(?:pto|pta))(?=.*spirit\s*day)/i.test(desc)) {
-    const isLynita = /lynita|butler|palm beach/i.test(desc)
-    const senderName = isLynita ? 'Lynita Butler (Palm Beach School PTO)' : 'School PTO Committee'
-    const senderEmail = isLynita ? 'pto@palmbeachschool.org' : 'pto@school.org'
-
-    return {
-      senderLabel: senderName,
-      senderEmail,
-      receivedTime: 'Today, 9:02 AM',
-      subject: desc || 'PTO Spirit Day 8/28/26',
-      urgency: 'School Spirit Day scheduled for Friday, August 28, 2026.',
-      requiredAction: 'Have student wear school spirit shirt or school colors (green/gold); pack regular school uniform as backup.',
-      householdImpact: 'School-wide community event and PTO fundraiser. No early dismissal; normal pickup schedule.',
-      documents: [
-        {
-          id: 'doc-spirit-guide',
-          title: 'Spirit_Day_Theme_Guidelines.pdf',
-          subtitle: 'Dress code & activities breakdown',
-          type: 'document',
-        },
-        {
-          id: 'doc-calendar',
-          title: 'Palm_Beach_School_Calendar_2026.pdf',
-          subtitle: 'Academic year & PTO schedule',
-          type: 'document',
-        },
-      ],
-      emailBody: `Dear Parents & Guardians,\n\nMark your calendars! Our first school-wide PTO Spirit Day of the 2026–2027 school year will take place on Friday, August 28, 2026.\n\nEvent Guidelines:\n• Attire: Students are encouraged to wear their official Palm Beach School spirit t-shirts or school colors (Emerald Green & Gold).\n• Dress Code: Regular school uniform bottoms required with spirit tops.\n• Activities: Morning pep rally, lunchtime music, and classroom spirit banners.\n• Volunteers: Parents interested in assisting with morning setup can sign up via the PTO portal.\n\nThank you for supporting our students and showing your school spirit!\n\nWarm regards,\nLynita Butler\nPTO Event Coordinator · Palm Beach School`,
-      suggestedEvent: {
-        title: 'PTO Spirit Day - Palm Beach School (Wear Green & Gold)',
-        date: '2026-08-28',
-        displayDate: 'Friday, Aug 28',
-        allDay: true,
-        location: 'Palm Beach School',
-        description: 'First school-wide PTO Spirit Day. Students wear official emerald green & gold spirit tops with regular uniform bottoms.',
-        category: 'school',
-        confidence: 'high',
-      },
-    }
-  }
-
-  // 2d. Science Camp Medical Release Waiver (ONLY when explicitly science camp waiver)
-  if (/(?=.*science\s*camp)(?=.*(?:waiver|release|medication|lake\s*alpine))/i.test(desc)) {
-    return {
-      senderLabel: 'Principal Adams (Oakridge Elementary)',
-      senderEmail: 'adams@oakridgeschool.edu',
-      receivedTime: 'Today, 7:14 AM',
-      subject: '5th Grade Science Camp Emergency Medical Waiver & Release Form',
-      urgency: 'Hard submission deadline today before 5:00 PM for the Lake Alpine trip.',
-      requiredAction: 'Digital guardian signature required on the 2-page emergency medical release and dietary confirmation for Owen.',
-      householdImpact: 'Bus departure is scheduled for Monday at 7:30 AM. Clearance is required before departure.',
-      documents: [
-        {
-          id: 'doc-waiver',
-          title: 'Sign Medical Waiver',
-          subtitle: '2-page PDF · Digital Pad',
-          type: 'waiver',
-        },
-        {
-          id: 'doc-packing',
-          title: 'Packing_Checklist.pdf',
-          subtitle: '1.2 MB · Equipment guide',
-          type: 'document',
-        },
-      ],
-      emailBody: `Dear 5th Grade Parents & Guardians,\n\nOur annual 5th Grade Science Camp trip to Lake Alpine begins this upcoming Monday morning!\n\nBefore your student can board the bus, California state regulations require that we have a signed physical & medical emergency waiver on file for each attendee.\n\nPlease review the attached release document and ensure all allergy and emergency contact information for Owen Tabor is verified.\n\nDigital signatures submitted via the parent portal before 5:00 PM today will automatically clear your student with our camp coordinator.\n\nThank you,\nPrincipal Adams\nOakridge Elementary School Administration`,
-      suggestedEvent: {
-        title: '5th Grade Science Camp Departure (Lake Alpine)',
-        date: '2026-08-17',
-        displayDate: 'Monday, Aug 17',
-        startTime: '2026-08-17T07:30:00-04:00',
-        endTime: '2026-08-17T08:30:00-04:00',
-        allDay: false,
-        location: 'Oakridge Elementary Bus Loading Bay',
-        description: '5th Grade Science Camp bus departure. Signed physical & medical waivers verified.',
-        category: 'school',
-        confidence: 'high',
-      },
-    }
-  }
-
-  // 2e. General / Truthful Dynamic Synthesis (NO FAKE HALLUCINATIONS)
+  // 2. Direct Item Synthesis (when detailedItem?.gmailContext is not available in local cache)
   const isGmail = item?.source_type === 'gmail' || item?.source_ref?.startsWith('gmail:')
+  const isBill = Boolean(item && (isBillOrUtilityOrHouseholdService(item) || item.type === 'payment'))
   const smartDerived = extractSmartActionTitle(item)
   const derivedSubject = smartDerived || (!isGenericNewsletterOrFragment(item?.event_title) ? item?.event_title : null) || (desc ? (desc.length > 70 ? desc.slice(0, 67) + '…' : desc) : 'Household Task')
-  const senderName = isGmail ? 'Email Notification' : 'Casa Household Assistant'
+  const senderName = item?.attention_vendor || (isGmail ? 'Email Notification' : 'Casa Household Assistant')
   const senderEmail = isGmail ? 'notifications@household.local' : 'assistant@casatabor.local'
 
   let fallbackUrgency = 'Action queued for household review.'
@@ -1124,6 +759,11 @@ export function synthesizeActionAnalysis(
     fallbackUrgency = item?.due_by
       ? `Delivery tracking update · Expected ${parseDateSafe(item.due_by)?.displayDate || 'in transit'}.`
       : 'In-transit shipment tracking update.'
+  } else if (isBill && item?.due_by) {
+    const parsedDue = parseDateSafe(item.due_by)
+    fallbackUrgency = amount
+      ? `Payment of ${amount} due ${parsedDue?.displayDate || 'soon'} — review to maintain active service.`
+      : `Statement due ${parsedDue?.displayDate || 'soon'} — review and complete payment.`
   } else if (item?.due_by) {
     const parsedDue = parseDateSafe(item.due_by)
     const nowStr = new Date().toISOString().slice(0, 10)
@@ -1136,34 +776,46 @@ export function synthesizeActionAnalysis(
     }
   }
 
+  const fallbackDocs: ExtractedActionDocument[] = amount
+    ? [
+        {
+          id: `doc-payment-${item?.id || '0'}`,
+          title: 'Payment Record',
+          subtitle: `${amount} Transaction Record`,
+          type: 'payment',
+          amount,
+        },
+      ]
+    : []
+
+  const dynamicKeyPoints = extractDynamicKeyDirectives(desc || item?.event_title || '')
+  const preview: ExtractedDocumentPreview | null = dynamicKeyPoints.length > 0
+    ? {
+        id: `preview-dynamic-${item?.id || '0'}`,
+        title: derivedSubject,
+        subtitle: isGmail ? 'Email Action Directives' : 'Household Directives',
+        filename: isGmail ? `${derivedSubject.slice(0, 15).replace(/[^a-z0-9]/gi, '_')}.eml` : 'Household_Action.txt',
+        mimeType: 'text/plain',
+        keyPoints: dynamicKeyPoints,
+        excerpt: desc || item?.event_title || 'No message content available.',
+        fullContent: desc || item?.event_title || 'No message content available.',
+      }
+    : null
+
   return {
     senderLabel: senderName,
     senderEmail,
-    receivedTime: 'Today',
+    receivedTime: item?.created_at ? new Date(item.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' }) : 'Today',
     subject: derivedSubject,
     urgency: fallbackUrgency,
     requiredAction: desc ? (desc.length > 90 ? desc.slice(0, 87) + '…' : desc) : 'Review and complete household action.',
-    householdImpact: amount ? `Transaction amount: ${amount}` : 'Keeps family tasks and household schedule up to date.',
-    documents: amount
-      ? [
-          {
-            id: 'doc-payment',
-            title: 'Payment Record',
-            subtitle: `${amount} Transaction Record`,
-            type: 'payment',
-            amount,
-          },
-        ]
-      : [
-          {
-            id: 'doc-generic',
-            title: 'Action Item Details',
-            subtitle: isGmail ? 'Email Source Record' : 'Casa Tabor Action Center',
-            type: 'document',
-          },
-        ],
-    emailBody: desc || item?.event_title || 'No message content available.',
+    householdImpact: isBill
+      ? (amount ? `Monthly utility / household billing statement (${amount}).` : 'Keeps family utilities and household billing current.')
+      : (amount ? `Transaction amount: ${amount}` : 'Keeps family tasks and household schedule up to date.'),
+    documents: fallbackDocs,
+    emailBody: desc || item?.event_title || 'Source email content is not available in local cache.',
     suggestedEvent,
     suggestedActionBundle,
+    extractedDocumentPreview: preview,
   }
 }

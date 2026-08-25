@@ -640,4 +640,104 @@ test('multi-carrier courier tracking produces standardized composite keys includ
   assert.equal(fedexKey, 'courier:fedex:987654321012')
 })
 
+test('bills, utilities, and household services are never classified as delivery transit items and route to Action Queue', async () => {
+  const { isDeliveryTransitItem, isBillOrUtilityOrHouseholdService } = await import('../src/utils/vendorTransactions.ts')
+  const { splitActionableAndTransitItems } = await import('../src/utils/needsYouFeed.ts')
+
+  const fplBill = {
+    id: 'fpl-1',
+    event_title: 'FPL Account: Your bill is ready to be viewed online',
+    description: 'Your FPL bill of $292.61 is due. Please pay to avoid service interruption.',
+    attention_vendor: 'FPL',
+    attention_thread_key: null,
+    source_type: 'gmail',
+    due_by: '2026-09-14T05:00:00Z',
+    type: 'payment',
+    agency_level: 2,
+    priority: 1,
+    dismissed: false,
+  }
+
+  const waterBill = {
+    id: 'water-1',
+    event_title: 'Palm Beach County Water Utilities Statement',
+    description: 'Your monthly water utilities bill of $84.20 is due on Sep 20.',
+    attention_vendor: 'PBC Water Utilities',
+    source_type: 'gmail',
+    due_by: '2026-09-20T05:00:00Z',
+    type: 'payment',
+    agency_level: 2,
+    priority: 1,
+    dismissed: false,
+  }
+
+  const xfinityBill = {
+    id: 'xfinity-1',
+    event_title: 'Xfinity Billing Statement Ready',
+    description: 'Your automatic payment of $120.00 is scheduled for Sep 10.',
+    attention_vendor: 'Xfinity',
+    source_type: 'gmail',
+    due_by: '2026-09-10T05:00:00Z',
+    type: 'payment',
+    agency_level: 2,
+    priority: 1,
+    dismissed: false,
+  }
+
+  const landscapingInvoice = {
+    id: 'lawn-1',
+    event_title: 'GreenThumb Landscaping Service Invoice',
+    description: 'Monthly lawn maintenance and tree trimming service invoice $175.00 due Sep 5.',
+    attention_vendor: 'GreenThumb Landscaping',
+    source_type: 'gmail',
+    due_by: '2026-09-05T05:00:00Z',
+    type: 'payment',
+    agency_level: 2,
+    priority: 1,
+    dismissed: false,
+  }
+
+  const realDelivery = {
+    id: 'walmart-del-1',
+    event_title: 'Your Walmart delivery is on the way',
+    description: 'Arriving today between 2pm – 6pm',
+    attention_vendor: 'Walmart.com',
+    attention_thread_key: 'transaction:walmart:order-1234567',
+    source_type: 'gmail',
+    due_by: '2026-08-25T18:00:00Z',
+    type: 'delivery',
+    agency_level: 1,
+    priority: 1,
+    dismissed: false,
+  }
+
+  assert.equal(isBillOrUtilityOrHouseholdService(fplBill), true)
+  assert.equal(isBillOrUtilityOrHouseholdService(waterBill), true)
+  assert.equal(isBillOrUtilityOrHouseholdService(xfinityBill), true)
+  assert.equal(isBillOrUtilityOrHouseholdService(landscapingInvoice), true)
+  assert.equal(isBillOrUtilityOrHouseholdService(realDelivery), false)
+
+  assert.equal(isDeliveryTransitItem(fplBill), false)
+  assert.equal(isDeliveryTransitItem(waterBill), false)
+  assert.equal(isDeliveryTransitItem(xfinityBill), false)
+  assert.equal(isDeliveryTransitItem(landscapingInvoice), false)
+  assert.equal(isDeliveryTransitItem(realDelivery), true)
+
+  const { actionableItems, deliveryTransitItems } = splitActionableAndTransitItems([
+    fplBill,
+    waterBill,
+    xfinityBill,
+    landscapingInvoice,
+    realDelivery,
+  ])
+
+  assert.equal(actionableItems.length, 4)
+  assert.equal(deliveryTransitItems.length, 1)
+  assert.equal(actionableItems.some(i => i.id === 'fpl-1'), true)
+  assert.equal(actionableItems.some(i => i.id === 'water-1'), true)
+  assert.equal(actionableItems.some(i => i.id === 'xfinity-1'), true)
+  assert.equal(actionableItems.some(i => i.id === 'lawn-1'), true)
+  assert.equal(deliveryTransitItems[0].vendor, 'Walmart')
+})
+
 

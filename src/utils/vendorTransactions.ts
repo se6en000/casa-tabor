@@ -886,44 +886,113 @@ function extractAmount(text?: string | null): string | null {
   return match ? match[0] : null
 }
 
+export function isBillOrUtilityOrHouseholdService(
+  item: PrepItem | Partial<PrepItem> | { title?: string; vendor?: string; description?: string; event_title?: string; attention_vendor?: string } | string | null | undefined
+): boolean {
+  if (!item) return false
+  const text = typeof item === 'string'
+    ? item.toLowerCase()
+    : `${(item as any).event_title ?? (item as any).title ?? ''} ${(item as any).description ?? ''} ${(item as any).attention_vendor ?? (item as any).vendor ?? ''}`.toLowerCase()
+
+  // 1. Utilities (Electric, Power, Water, Sewer, Gas, Trash/Waste, Internet, Telecom)
+  if (/\b(?:fpl|florida\s*power|power\s*bill|electric\s*bill|electricity|duke\s*energy|nextera|coned|pg&e|teco|peoples\s*gas|natural\s*gas|water\s*utilities|water\s*bill|sewer\s*bill|wastewater|waste\s*management|republic\s*services|solid\s*waste|xfinity|comcast|at&t|spectrum|verizon|t-mobile|centurylink|google\s*fiber|internet\s*bill|cable\s*bill|utility\s*bill|utilities\s*bill|utility\s*account)\b/i.test(text)) {
+    return true
+  }
+
+  // 2. Financial Statements, Invoices, Loans & Mortgages
+  if (/\b(?:your\s*bill\s*is\s*ready|bill\s*is\s*ready|bill\s*due|payment\s*due|billing\s*statement|statement\s*ready|minimum\s*payment|amount\s*due|balance\s*due|pay\s*to\s*avoid\s*service\s*interruption|service\s*interruption|auto-pay\s*scheduled|autopay\s*scheduled|auto-debit|scheduled\s*automatic\s*payment|vehicle\s*loan|auto\s*loan|mortgage\s*statement|mortgage\s*payment|credit\s*card\s*statement|monthly\s*statement|property\s*tax|tax\s*bill|tax\s*collector|tuition\s*due|tuition\s*statement|daycare\s*tuition|preschool\s*tuition|medical\s*bill|dental\s*bill|insurance\s*premium|premium\s*due|policy\s*renewal|e-?bill)\b/i.test(text)) {
+    return true
+  }
+
+  // 3. Household Services, Maintenance & Contractors
+  if (/\b(?:landscaping\s*service|lawn\s*care|lawn\s*maintenance|pool\s*service|pool\s*cleaning|pinch\s*a\s*penny|pest\s*control|termite\s*inspection|truly\s*nolen|orkin|terminix|hvac\s*service|ac\s*maintenance|plumbing\s*service|plumber\s*invoice|roof\s*inspection|house\s*cleaning|cleaning\s*service|pressure\s*washing|tree\s*trimming|arborist\s*service|handyman\s*service|contractor\s*invoice|contractor\s*quote)\b/i.test(text)) {
+    return true
+  }
+
+  return false
+}
+
+export function isNonCommercialOrganization(text?: string | null): boolean {
+  if (!text) return false
+  return /\b(school|schools|district|msoa|academy|elementary|middle|high|pto|pta|athletic|athletics|softball|baseball|basketball|soccer|football|volleyball|tryouts?|evaluations?|league|lassie|aktivate|finalforms|dragonfly|sportsengine|bus stop|bus route|bus schedule|transportation dept|afterschool|after\s*school|daycare|preschool|childcare|camp|rec center|community center|ymca)\b/i.test(text)
+}
+
 export function isDeliveryTransitItem(item: PrepItem): boolean {
   const text = `${item.event_title ?? ''} ${item.description}`.toLowerCase()
+  const vendor = (item.attention_vendor || '').toLowerCase()
+  const threadKey = (item.attention_thread_key || '').toLowerCase()
+
+  // 1. Explicit delivery types / perishable groceries
+  if (item.type === 'delivery') return true
+  if (isPerishableDelivery(item)) return true
+
+  // 2. Passive items (agency_level === 0) are non-actionable logistics/updates
+  if (item.agency_level === 0) {
+    if (isNonCommercialOrganization(vendor) || isNonCommercialOrganization(threadKey)) {
+      return false
+    }
+    return true
+  }
+
+  // 3. Hard Negative Gate: Bills, Utilities, Invoices, Financial Statements & Household Services MUST NEVER BE DELIVERIES
+  if (isBillOrUtilityOrHouseholdService(item)) {
+    return false
+  }
+
+  // 4. High-agency exclusions: school tryouts, registrations, permission slips, waivers, athletic clearance
+  if (/\b(basketball tryout|softball evaluation|softball season|bus stop|bus route|buses r\d+|activity bus|aktivate registration|field trip permission|permission slip|parent letter|curriculum night)\b/i.test(text)) {
+    return false
+  }
+
+  if (isNonCommercialOrganization(vendor) || isNonCommercialOrganization(threadKey)) {
+    return false
+  }
+
+  // 5. Exclude other non-delivery domains (travel, appointments, meetings) for active items
   if (/\b(flight|airline|airlines|e-ticket|ticket receipt|boarding pass|hotel reservation|cabin getaway|airbnb|vrbo|hotel stay|reservation confirmation|maintenance visit|inspection visit|service visit|checkup|cleaning scheduled|teeth cleaning|lesson|rehearsal|recital|orientation|showcase|arborist|tennis court|annual general meeting|ptsa meeting)\b/i.test(text)) {
     return false
   }
 
-  // If already tagged as a transaction thread
-  if (item.attention_thread_key && item.attention_thread_key.startsWith('transaction:')) {
-    const isProblem = item.attention_stage === 'problem' || item.type === 'cancellation' || /\b(cancelled|canceled|dispute|failed)\b/.test(text)
-    if (!isProblem) return true
-  }
-
-  if (item.type === 'delivery') return true
-  if (isPerishableDelivery(item)) return true
-  if (/\b(inhome delivery|delivery window|grocery delivery|package delivery|courier delivery|out for delivery|shipped|en route|shipment for|walmart order|amazon order|target order|grocery order|add items to (?:your )?order|changes can be made until|last (?:chance|minute|call) to (?:add|edit))\b/i.test(text)) {
+  // 6. Check for valid courier tracking or verified commercial order
+  const hasOrderNumber = Boolean(orderId(item))
+  const carrierDetect = detectCarrierAndTracking(`${item.event_title ?? ''} ${item.description ?? ''} ${item.source_ref ?? ''}`)
+  if (carrierDetect.carrier && carrierDetect.trackingNumber) {
     return true
   }
 
-  const vendor = resolveVendorName(item)
-  const hasOrderNumber = Boolean(orderId(item))
+  // 7. Commercial merchant transactions
+  const resolvedVendor = resolveVendorName(item)
+  const isMerchant = resolvedVendor !== 'Parcel' && !isNonCommercialOrganization(resolvedVendor)
+
+  if (item.attention_thread_key && item.attention_thread_key.startsWith('transaction:')) {
+    if (isMerchant || hasOrderNumber) {
+      const isProblem = item.attention_stage === 'problem' || item.type === 'cancellation' || /\b(cancelled|canceled|dispute|failed)\b/.test(text)
+      if (!isProblem) return true
+    }
+  }
 
   // Return/claim policy disclaimers & shipping notices on orders
   const isOrderPolicyOrClaimNotice = /\b(?:claims? for (?:missing|wrong|damaged|lost)|claims? must be made within|return window|return (?:by|eligible)|final delivery|shipment for)\b/i.test(text)
-  if (isOrderPolicyOrClaimNotice && (vendor !== 'Parcel' || hasOrderNumber)) {
+  if (isOrderPolicyOrClaimNotice && (isMerchant || hasOrderNumber)) {
     return true
   }
 
-  // Vendor payment/pricing/charge notifications (e.g. "final charge for your Walmart order", "temporary hold is $138.65")
-  if (vendor !== 'Parcel' && (
+  // Retail order payment/pricing/charge notifications (e.g. "final charge for your Walmart order", "temporary hold is $138.65")
+  if (isMerchant && (
     item.type === 'payment' ||
     /\b(charge|hold|total|receipt|order amount|temporary hold|final charge|order total|charged)\b/i.test(text)
   )) {
-    return true
+    if (/\b(order|delivery|arriving|items?|shipment|package|inhome)\b/i.test(text)) {
+      return true
+    }
   }
 
   const stage = transactionStage(item)
-  if (stage === 'shipped' || stage === 'out_for_delivery' || stage === 'delivered') return true
-  if ((vendor !== 'Parcel' || hasOrderNumber) && (
+  if (stage === 'shipped' || stage === 'out_for_delivery' || stage === 'delivered') {
+    if (isMerchant || hasOrderNumber || carrierDetect.carrier) return true
+  }
+
+  if ((isMerchant || hasOrderNumber) && (
     item.type === 'delivery' ||
     item.attention_stage === 'confirmed' ||
     item.attention_stage === 'shipped' ||
@@ -934,6 +1003,7 @@ export function isDeliveryTransitItem(item: PrepItem): boolean {
   )) {
     return true
   }
+
   return false
 }
 

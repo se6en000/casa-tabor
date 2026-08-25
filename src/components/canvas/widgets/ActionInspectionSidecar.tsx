@@ -40,6 +40,11 @@ import {
   MicOff,
   Send,
   Wand2,
+  Zap,
+  Droplet,
+  Flame,
+  Wifi,
+  Receipt,
 } from 'lucide-react'
 import { Button, IconButton, Chip } from '../../ui'
 import { cn } from '../../../utils/cn'
@@ -66,6 +71,7 @@ import {
 import { buildGmailWebUrl } from '../../../utils/prepItemClusters'
 import {
   isDeliveryTransitItem,
+  isBillOrUtilityOrHouseholdService,
   buildDeliveryTransitItem,
   stageStepIndex,
   isItemArrivingToday,
@@ -90,6 +96,23 @@ function resolveVendorIcon(vendor: string) {
     return Truck
   }
   return Package
+}
+
+function resolveBillIcon(text: string) {
+  const t = text.toLowerCase()
+  if (t.includes('fpl') || t.includes('electric') || t.includes('power') || t.includes('duke') || t.includes('energy') || t.includes('nextera')) {
+    return Zap
+  }
+  if (t.includes('water') || t.includes('sewer') || t.includes('irrigation')) {
+    return Droplet
+  }
+  if (t.includes('gas') || t.includes('propane') || t.includes('teco') || t.includes('peoples gas')) {
+    return Flame
+  }
+  if (t.includes('xfinity') || t.includes('comcast') || t.includes('at&t') || t.includes('spectrum') || t.includes('verizon') || t.includes('internet') || t.includes('wifi') || t.includes('cable') || t.includes('t-mobile')) {
+    return Wifi
+  }
+  return Receipt
 }
 
 import type { ActionAiContext } from '../../../hooks/useAIAssistant'
@@ -189,6 +212,10 @@ export default function ActionInspectionSidecar({
 
   const isDeliveryItem = useMemo(() => {
     return Boolean(activeItem && isDeliveryTransitItem(activeItem))
+  }, [activeItem])
+
+  const isBillOrUtility = useMemo(() => {
+    return Boolean(activeItem && (isBillOrUtilityOrHouseholdService(activeItem) || activeItem.type === 'payment'))
   }, [activeItem])
 
   const deliveryTransit = useMemo(() => {
@@ -429,12 +456,17 @@ export default function ActionInspectionSidecar({
       return (
         <a
           key={doc.id}
-          href="#payment-portal"
+          href={doc.url || `#${doc.id}`}
+          target={doc.url ? '_blank' : undefined}
+          rel={doc.url ? 'noopener noreferrer' : undefined}
           onClick={(e) => {
-            e.preventDefault()
-            alert(`Opening secure payment portal for ${doc.title}...`)
+            if (!doc.url) {
+              e.preventDefault()
+              setInspectingDocument(doc)
+              setDocumentInspectionOpen(true)
+            }
           }}
-          className="p-3.5 rounded-xl bg-casa-surface border border-casa-gold/60 hover:border-casa-gold hover:bg-casa-gold/10 transition-all text-left flex items-start gap-3 group shadow-2xs no-underline min-h-[52px]"
+          className="p-3.5 rounded-xl bg-casa-surface border border-casa-gold/60 hover:border-casa-gold hover:bg-casa-gold/10 transition-all text-left flex items-start gap-3 group shadow-2xs no-underline min-h-[52px] cursor-pointer"
         >
           <div className="w-9 h-9 rounded-lg bg-casa-gold/15 text-casa-navy flex items-center justify-center shrink-0">
             <CreditCard size={16} className="text-casa-gold" />
@@ -454,12 +486,17 @@ export default function ActionInspectionSidecar({
       return (
         <a
           key={doc.id}
-          href="#cart-portal"
+          href={doc.url || `#${doc.id}`}
+          target={doc.url ? '_blank' : undefined}
+          rel={doc.url ? 'noopener noreferrer' : undefined}
           onClick={(e) => {
-            e.preventDefault()
-            alert(`Opening shopping cart for ${doc.title}...`)
+            if (!doc.url) {
+              e.preventDefault()
+              setInspectingDocument(doc)
+              setDocumentInspectionOpen(true)
+            }
           }}
-          className="p-3.5 rounded-xl bg-casa-surface border border-casa-gold/60 hover:border-casa-gold hover:bg-casa-gold/10 transition-all text-left flex items-start gap-3 group shadow-2xs no-underline min-h-[52px]"
+          className="p-3.5 rounded-xl bg-casa-surface border border-casa-gold/60 hover:border-casa-gold hover:bg-casa-gold/10 transition-all text-left flex items-start gap-3 group shadow-2xs no-underline min-h-[52px] cursor-pointer"
         >
           <div className="w-9 h-9 rounded-lg bg-casa-gold/15 text-casa-navy flex items-center justify-center shrink-0">
             <ShoppingCart size={16} className="text-casa-gold" />
@@ -643,6 +680,46 @@ export default function ActionInspectionSidecar({
             )}
           </div>
         </div>
+
+        {/* ══════ 0. BILL, UTILITY & HOUSEHOLD SERVICE STATEMENT HERO ══════ */}
+        {isBillOrUtility && (() => {
+          const BillIcon = resolveBillIcon(`${analysis.subject} ${activeItem?.event_title ?? ''} ${activeItem?.description ?? ''} ${analysis.senderLabel}`)
+          const amount = extractAmount(`${analysis.subject} ${activeItem?.description ?? ''} ${analysis.householdImpact}`)
+          const dueDateBadge = computeDueDateBadge(activeItem?.due_by || activeItem?.event_date)
+
+          return (
+            <div className="p-4 sm:p-5 rounded-2xl bg-amber-50/70 border border-amber-200/90 shadow-xs space-y-3">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2 flex-wrap min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-900 flex items-center justify-center shrink-0">
+                    <BillIcon size={16} className="text-amber-700" />
+                  </div>
+                  <span className="text-body-sm font-bold text-casa-navy">
+                    {analysis.senderLabel || activeItem?.attention_vendor || 'Household Statement'}
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-2xs font-bold bg-amber-100 text-amber-950 border border-amber-300">
+                    <Receipt size={11} className="text-amber-700" />
+                    <span>{dueDateBadge ? `Due ${dueDateBadge.label}` : 'Action / Payment Required'}</span>
+                  </span>
+                </div>
+                {amount && (
+                  <span className="font-mono text-body-sm sm:text-body font-bold text-amber-950 px-2.5 py-0.5 rounded-lg bg-white border border-amber-200 shadow-2xs">
+                    {amount}
+                  </span>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <p className="text-body sm:text-body-lg font-bold text-casa-navy leading-snug">
+                  {analysis.subject}
+                </p>
+                <p className="text-body-sm text-casa-text leading-relaxed">
+                  {activeItem?.description || analysis.requiredAction}
+                </p>
+              </div>
+            </div>
+          )
+        })()}
 
         {/* ══════ 0. LUXURY COURIER & INBOUND DELIVERY MANIFEST ══════ */}
         {isDeliveryItem && deliveryTransit && (() => {
@@ -1417,16 +1494,18 @@ export default function ActionInspectionSidecar({
         </div>
 
         {/* ══════ EXTRACTED ATTACHMENTS & ACTIONABLE PORTALS ══════ */}
-        <div className="space-y-2.5">
-          <div className="text-caption font-bold uppercase tracking-wider text-casa-muted flex items-center gap-1.5">
-            <FileText size={13} className="text-casa-gold" />
-            <span>Extracted Documents &amp; Portals</span>
-          </div>
+        {analysis.documents.length > 0 && (
+          <div className="space-y-2.5">
+            <div className="text-caption font-bold uppercase tracking-wider text-casa-muted flex items-center gap-1.5">
+              <FileText size={13} className="text-casa-gold" />
+              <span>Extracted Documents &amp; Portals ({analysis.documents.length})</span>
+            </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            {analysis.documents.map(renderDocumentCard)}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {analysis.documents.map(renderDocumentCard)}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* ══════ CLEAN READER-MODE SOURCE EMAIL / EVIDENCE ══════ */}
         <div className="space-y-2.5">
@@ -1449,7 +1528,7 @@ export default function ActionInspectionSidecar({
             <div className="border-b border-casa-border/60 pb-3 text-caption text-casa-muted space-y-1">
               <div><strong>Subject:</strong> {analysis.subject}</div>
               <div><strong>From:</strong> {analysis.senderLabel} &lt;{analysis.senderEmail}&gt;</div>
-              <div><strong>To:</strong> Jake &amp; Kelly Tabor &lt;taborfamily@gmail.com&gt;</div>
+              <div><strong>To:</strong> Tabor Household</div>
             </div>
 
             {showRawSource ? (
@@ -1939,25 +2018,21 @@ export default function ActionInspectionSidecar({
 
             <div className="flex-1 overflow-y-auto space-y-4 pr-1">
               {/* AI Key Directives / Highlights */}
-              <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 space-y-2.5">
-                <div className="flex items-center gap-1.5 text-amber-900 font-bold text-caption uppercase tracking-wider">
-                  <Sparkles size={14} className="text-amber-700" />
-                  <span>AI Document Extraction &amp; Key Directives</span>
+              {analysis.extractedDocumentPreview?.keyPoints && analysis.extractedDocumentPreview.keyPoints.length > 0 && (
+                <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 space-y-2.5">
+                  <div className="flex items-center gap-1.5 text-amber-900 font-bold text-caption uppercase tracking-wider">
+                    <Sparkles size={14} className="text-amber-700" />
+                    <span>AI Document Extraction &amp; Key Directives</span>
+                  </div>
+                  <ul className="space-y-1.5 text-body-sm text-casa-navy list-disc list-inside">
+                    {analysis.extractedDocumentPreview.keyPoints.map((point, idx) => (
+                      <li key={idx} className="leading-snug">
+                        <strong>{point.split(':')[0]}:</strong>{point.includes(':') ? point.substring(point.indexOf(':') + 1) : ''}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-                <ul className="space-y-1.5 text-body-sm text-casa-navy list-disc list-inside">
-                  {(analysis.extractedDocumentPreview?.keyPoints || [
-                    'FAST ELA Reading Assessment: September 15–16, 2026',
-                    'FAST Mathematics Assessment: September 22–23, 2026',
-                    'Science Diagnostic Assessment: October 2, 2026',
-                    'Required: Fully charged Chromebook & wired 3.5mm headphones',
-                    'Electronics Policy: Smartwatches and personal cellular devices prohibited',
-                  ]).map((point, idx) => (
-                    <li key={idx} className="leading-snug">
-                      <strong>{point.split(':')[0]}:</strong>{point.includes(':') ? point.substring(point.indexOf(':') + 1) : ''}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              )}
 
               {/* Document Text Excerpt / Reader Mode */}
               <div className="space-y-2">

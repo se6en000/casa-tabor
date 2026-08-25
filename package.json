@@ -14,6 +14,8 @@
     "deploy": "bash scripts/deploy.sh",
     "supabase:check": "node scripts/verify-supabase.mjs",
     "supabase:query": "node scripts/supabase-query.mjs",
+    "db:health": "node scripts/db-health-check.mjs",
+    "guardrails:check": "npx vitest run tests/guardrails/",
     "tokens:generate": "node scripts/generate-design-tokens.mjs",
     "tokens:check": "node scripts/generate-design-tokens.mjs --check",
     "test:ai:semantic": "node scripts/test-ai-conversational-semantics.mjs",

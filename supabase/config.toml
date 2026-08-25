@@ -10,7 +10,40 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.sync-calendars]
-verify_jwt = true
+verify_jwt = false
+
+[functions.scan-gmail-inbox]
+verify_jwt = false
+
+[functions.disconnect-calendar]
+verify_jwt = false
+
+[functions.sync-event-to-google]
+verify_jwt = false
+
+[functions.create-google-event]
+verify_jwt = false
+
+[functions.delete-google-event]
+verify_jwt = false
+
+[functions.update-recurring-google]
+verify_jwt = false
+
+[functions.scan-travel-emails]
+verify_jwt = false
+
+[functions.scan-document-events]
+verify_jwt = false
+
+[functions.import-google-recurrence]
+verify_jwt = false
+
+[functions.fetch-event-weather]
+verify_jwt = false
+
+[functions.route-eta]
+verify_jwt = false
 
 [functions.google-calendar-webhook]
 verify_jwt = false
