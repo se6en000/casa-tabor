@@ -747,7 +747,9 @@ export function mergeDeliveryTransitItem(
 
   // Chronological lifecycle stage resolution:
   let mergedStage: DeliveryTransitStage
-  if (existing.stage === 'problem' || incoming.stage === 'problem') {
+  if (existing.stage === 'delivered' || incoming.stage === 'delivered') {
+    mergedStage = 'delivered'
+  } else if (existing.stage === 'problem' || incoming.stage === 'problem') {
     mergedStage = 'problem'
   } else {
     const latestItem = isLatestIncoming ? incoming : existing
@@ -757,7 +759,7 @@ export function mergeDeliveryTransitItem(
     if (isLatestBeingPrepared) {
       mergedStage = 'confirmed'
     } else {
-      const stageRank: DeliveryTransitStage[] = ['confirmed', 'payment', 'shipped', 'out_for_delivery', 'delivered', 'problem']
+      const stageRank: DeliveryTransitStage[] = ['confirmed', 'payment', 'shipped', 'out_for_delivery', 'problem', 'delivered']
       const existingRank = stageRank.indexOf(existing.stage)
       const incomingRank = stageRank.indexOf(incoming.stage)
       mergedStage = incomingRank > existingRank ? incoming.stage : existing.stage
@@ -914,7 +916,7 @@ export function isBillOrUtilityOrHouseholdService(
 
 export function isNonCommercialOrganization(text?: string | null): boolean {
   if (!text) return false
-  return /\b(school|schools|district|msoa|academy|elementary|middle|high|pto|pta|athletic|athletics|softball|baseball|basketball|soccer|football|volleyball|tryouts?|evaluations?|league|lassie|aktivate|finalforms|dragonfly|sportsengine|bus stop|bus route|bus schedule|transportation dept|afterschool|after\s*school|daycare|preschool|childcare|camp|rec center|community center|ymca)\b/i.test(text)
+  return /\b(school|schools|district|msoa|academy|elementary|middle|high|pto|pta|athletic|athletics|softball|baseball|basketball|soccer|football|volleyball|tryouts?|evaluations?|league|lassie|aktivate|finalforms|dragonfly|sportsengine|bus stop|bus route|bus schedule|transportation dept|afterschool|after\s*school|raptor\b|volunteers?|chaperone|visitor\s*management|daycare|preschool|childcare|camp|rec center|community center|ymca)\b/i.test(text)
 }
 
 export function isDeliveryTransitItem(item: PrepItem): boolean {
@@ -922,11 +924,16 @@ export function isDeliveryTransitItem(item: PrepItem): boolean {
   const vendor = (item.attention_vendor || '').toLowerCase()
   const threadKey = (item.attention_thread_key || '').toLowerCase()
 
-  // 1. Explicit delivery types / perishable groceries
+  // 1. Explicit delivery types / perishable groceries (e.g. Walmart InHome grocery delivery windows)
   if (item.type === 'delivery') return true
   if (isPerishableDelivery(item)) return true
 
-  // 2. Passive items (agency_level === 0) are non-actionable logistics/updates
+  // 2. Explicit non-delivery types (forms, rsvps, general parent notices) MUST NEVER BE DELIVERIES
+  if (item.type === 'forms' || item.type === 'rsvp' || item.type === 'general') {
+    return false
+  }
+
+  // 3. Passive items (agency_level === 0) are non-actionable logistics/updates
   if (item.agency_level === 0) {
     if (isNonCommercialOrganization(vendor) || isNonCommercialOrganization(threadKey)) {
       return false
@@ -934,12 +941,12 @@ export function isDeliveryTransitItem(item: PrepItem): boolean {
     return true
   }
 
-  // 3. Hard Negative Gate: Bills, Utilities, Invoices, Financial Statements & Household Services MUST NEVER BE DELIVERIES
+  // 4. Hard Negative Gate: Bills, Utilities, Invoices, Financial Statements & Household Services MUST NEVER BE DELIVERIES
   if (isBillOrUtilityOrHouseholdService(item)) {
     return false
   }
 
-  // 4. High-agency exclusions: school tryouts, registrations, permission slips, waivers, athletic clearance
+  // 5. High-agency exclusions: school tryouts, registrations, permission slips, waivers, athletic clearance
   if (/\b(basketball tryout|softball evaluation|softball season|bus stop|bus route|buses r\d+|activity bus|aktivate registration|field trip permission|permission slip|parent letter|curriculum night)\b/i.test(text)) {
     return false
   }
@@ -1186,6 +1193,7 @@ export function isItemInTransit(item: DeliveryTransitItem, now?: Date): boolean 
 
 export function isItemDelivered(item: DeliveryTransitItem, now?: Date): boolean {
   if (item.stage === 'delivered' || (item.rawItem && (item.rawItem as any).transaction_status === 'delivered')) return true
+  if (item.etaDisplay && /^delivered\b/i.test(item.etaDisplay)) return true
   const targetDate = resolveDeliveryDate(item.rawItem)
   const effectiveStage = resolveEffectiveStage(item.stage, targetDate, now)
   return effectiveStage === 'delivered'

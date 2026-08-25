@@ -73,10 +73,10 @@ type PrepItemOutcome = 'done' | 'dismissed'
 function useResolvePrepItem(outcome: PrepItemOutcome) {
   const qc = useQueryClient()
   return async (id: string) => {
-    // 1. Discover item and any sibling items sharing source_ref, cluster_id, or action_key
+    // 1. Discover item and any sibling items sharing source_ref, cluster_id, action_key, or attention_thread_key
     const { data: item } = await supabase
       .from('prep_items')
-      .select('id, source_ref, cluster_id, action_key')
+      .select('id, source_ref, cluster_id, action_key, attention_thread_key')
       .eq('id', id)
       .maybeSingle()
 
@@ -88,13 +88,14 @@ function useResolvePrepItem(outcome: PrepItemOutcome) {
     if (error) throw error
     if (!data?.ok) throw new Error(`Casa could not mark this action ${outcome}.`)
 
-    // 3. Guarantee direct dismissal of all sibling rows sharing source_ref, cluster_id, or action_key
+    // 3. Guarantee direct dismissal of all sibling rows sharing source_ref, cluster_id, action_key, or attention_thread_key
     const nowIso = new Date().toISOString()
     if (item) {
       const orConditions: string[] = [`id.eq.${item.id}`]
       if (item.source_ref) orConditions.push(`source_ref.eq.${item.source_ref}`)
       if (item.cluster_id) orConditions.push(`cluster_id.eq.${item.cluster_id}`)
       if (item.action_key) orConditions.push(`action_key.eq.${item.action_key}`)
+      if (item.attention_thread_key) orConditions.push(`attention_thread_key.eq.${item.attention_thread_key}`)
 
       await supabase
         .from('prep_items')

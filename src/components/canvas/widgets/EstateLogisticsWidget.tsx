@@ -79,10 +79,24 @@ export default function EstateLogisticsWidget({
       const next = new Set(prev)
       next.add(item.threadKey)
       next.add(item.id)
+      if (item.updateHistory) {
+        for (const h of item.updateHistory) {
+          if (h?.id) next.add(h.id)
+        }
+      }
       return next
     })
-    if (onDismissDelivery && item.rawItem) {
-      onDismissDelivery(item.rawItem)
+    if (onDismissDelivery) {
+      if (item.rawItem) {
+        onDismissDelivery(item.rawItem)
+      }
+      if (item.updateHistory && item.updateHistory.length > 0) {
+        for (const hist of item.updateHistory) {
+          if (hist?.rawItem && hist.rawItem.id !== item.rawItem?.id) {
+            onDismissDelivery(hist.rawItem)
+          }
+        }
+      }
     }
   }
 
@@ -197,17 +211,36 @@ export default function EstateLogisticsWidget({
 
   const handleSweepDelivered = (e: React.MouseEvent) => {
     e.stopPropagation()
+    const targetDelivered = [...deliveredItems]
+
     setOptimisticallyDismissedKeys((prev) => {
       const next = new Set(prev)
-      for (const item of deliveredItems) {
+      for (const item of targetDelivered) {
         next.add(item.threadKey)
         next.add(item.id)
-        if (onDismissDelivery && item.rawItem) {
-          onDismissDelivery(item.rawItem)
+        if (item.updateHistory) {
+          for (const h of item.updateHistory) {
+            if (h?.id) next.add(h.id)
+          }
         }
       }
       return next
     })
+
+    if (onDismissDelivery) {
+      for (const item of targetDelivered) {
+        if (item.rawItem) {
+          onDismissDelivery(item.rawItem)
+        }
+        if (item.updateHistory && item.updateHistory.length > 0) {
+          for (const hist of item.updateHistory) {
+            if (hist?.rawItem && hist.rawItem.id !== item.rawItem?.id) {
+              onDismissDelivery(hist.rawItem)
+            }
+          }
+        }
+      }
+    }
   }
 
   return (

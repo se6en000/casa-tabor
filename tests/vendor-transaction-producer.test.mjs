@@ -740,4 +740,56 @@ test('bills, utilities, and household services are never classified as delivery 
   assert.equal(deliveryTransitItems[0].vendor, 'Walmart')
 })
 
+test('delivered yesterday items are recognized as delivered and swept by Clean Up Delivered', async () => {
+  const {
+    isItemDelivered,
+    consolidateTransitItems,
+    buildDeliveryTransitItem,
+  } = await import('../src/utils/vendorTransactions.ts')
+
+  const now = new Date('2026-08-25T14:00:00Z')
+
+  // Past substitution notice followed by delivered notice
+  const substitutionItem = {
+    id: 'sub-1',
+    event_title: 'Take action: Review your order updates',
+    description: 'Your Walmart order has substitutions and unavailable items.',
+    type: 'delivery',
+    attention_vendor: 'Walmart.com',
+    attention_thread_key: 'transaction:walmart:2000151-61647109',
+    attention_stage: 'problem',
+    due_by: '2026-08-24T16:18:42Z',
+    created_at: '2026-08-24T16:32:05Z',
+    dismissed: false,
+  }
+
+  const deliveredNotice = {
+    id: 'del-1',
+    event_title: 'Delivered: Sprayway Glass Cleaner... +29 items',
+    description: 'Your Walmart order has been delivered. Please chill perishable items.',
+    type: 'delivery',
+    attention_vendor: 'Walmart.com',
+    attention_thread_key: 'transaction:walmart:2000151-61647109',
+    attention_stage: 'delivered',
+    due_by: null,
+    created_at: '2026-08-24T19:17:06Z',
+    dismissed: false,
+  }
+
+  const t1 = buildDeliveryTransitItem(substitutionItem, now)
+  const t2 = buildDeliveryTransitItem(deliveredNotice, now)
+
+  const consolidated = consolidateTransitItems([t1, t2])
+  assert.equal(consolidated.length, 1)
+
+  const finalItem = consolidated[0]
+  assert.equal(finalItem.stage, 'delivered')
+  assert.equal(isItemDelivered(finalItem, now), true)
+  assert.match(finalItem.etaDisplay, /Delivered (?:yesterday|Aug 24)/)
+  assert.equal(finalItem.updateHistory.length, 2)
+  assert.ok(finalItem.updateHistory.some(h => h.id === 'sub-1'))
+  assert.ok(finalItem.updateHistory.some(h => h.id === 'del-1'))
+})
+
+
 
