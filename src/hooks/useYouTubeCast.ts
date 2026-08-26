@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   getStoredCastState,
   saveStoredCastState,
@@ -13,6 +13,7 @@ import {
   castSeek,
   castSetVolume,
   castSelectDevice,
+  castToggleSpeaker,
   castAddToQueue,
   castPlayNext,
   castClearQueue,
@@ -29,8 +30,9 @@ export function useYouTubeCast() {
   const [state, setState] = useState<YouTubeCastState>(getStoredCastState)
   const [searchResults, setSearchResults] = useState<YouTubeTrack[]>(POPULAR_CURATED_TRACKS)
   const [searching, setSearching] = useState(false)
+  const hasAutoDiscovered = useRef(false)
 
-  // Sync state from events & realtime
+  // Sync state from events & realtime + auto-discover on mount
   useEffect(() => {
     initCastRealtimeChannel()
 
@@ -46,6 +48,14 @@ export function useYouTubeCast() {
     }
 
     window.addEventListener(YOUTUBE_CAST_DOM_EVENT, handleDomEvent)
+
+    // Auto-discover speakers in background on mount
+    if (!hasAutoDiscovered.current) {
+      hasAutoDiscovered.current = true
+      void discoverCastDevices().then(devices => {
+        setState(prev => ({ ...prev, devices }))
+      })
+    }
 
     return () => {
       unbindListener()
@@ -129,6 +139,11 @@ export function useYouTubeCast() {
     setState(updated)
   }, [])
 
+  const toggleSpeaker = useCallback(async (deviceId: string) => {
+    const updated = await castToggleSpeaker(deviceId)
+    setState(updated)
+  }, [])
+
   const addToQueue = useCallback(async (track: YouTubeTrack) => {
     const updated = await castAddToQueue(track)
     setState(updated)
@@ -193,11 +208,13 @@ export function useYouTubeCast() {
   }, [])
 
   const activeDevice = state.devices.find(d => d.id === state.activeDeviceId) || state.devices[0]
+  const activeDeviceIds = state.activeDeviceIds || (state.activeDeviceId ? [state.activeDeviceId] : ['nest-office-point'])
 
   return {
     state,
     devices: state.devices,
     activeDevice,
+    activeDeviceIds,
     queue: state.queue,
     ready: true,
     searching,
@@ -212,6 +229,7 @@ export function useYouTubeCast() {
     seek,
     setVolume,
     selectDevice,
+    toggleSpeaker,
     addToQueue,
     playNext,
     clearQueue,

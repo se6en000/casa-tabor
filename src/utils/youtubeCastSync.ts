@@ -39,6 +39,7 @@ export interface YouTubeCastState {
   volumePct: number
   activeDeviceId: string | null
   activeDeviceName: string | null
+  activeDeviceIds: string[]
   devices: CastDevice[]
   queue: YouTubeTrack[]
   shuffle: boolean
@@ -109,6 +110,7 @@ const DEFAULT_STATE: YouTubeCastState = {
   volumePct: 50,
   activeDeviceId: 'nest-office-point',
   activeDeviceName: 'Office Point (Nest Wifi)',
+  activeDeviceIds: ['nest-office-point'],
   devices: KNOWN_HOUSEHOLD_DEVICES,
   queue: [],
   shuffle: false,
@@ -127,6 +129,7 @@ export function getStoredCastState(): YouTubeCastState {
     return {
       ...DEFAULT_STATE,
       ...parsed,
+      activeDeviceIds: parsed.activeDeviceIds || (parsed.activeDeviceId ? [parsed.activeDeviceId] : ['nest-office-point']),
       devices: parsed.devices && parsed.devices.length > 0 ? parsed.devices : KNOWN_HOUSEHOLD_DEVICES,
     }
   } catch {
@@ -274,14 +277,16 @@ export async function addCustomCastDevice(device: Omit<CastDevice, 'isActive'>):
 
 export async function castPlay(track: YouTubeTrack, deviceId?: string): Promise<YouTubeCastState> {
   const current = getStoredCastState()
+  const targetDeviceId = deviceId || current.activeDeviceId || 'nest-office-point'
   const updated = saveStoredCastState({
     isPlaying: true,
     track,
     progressMs: 0,
     durationMs: track.durationMs,
-    activeDeviceId: deviceId || current.activeDeviceId || 'nest-office-point',
+    activeDeviceId: targetDeviceId,
+    activeDeviceIds: [targetDeviceId],
   })
-  await dispatchCastCommand('cast:play', { track, videoId: track.videoId, deviceId })
+  await dispatchCastCommand('cast:play', { track, videoId: track.videoId, deviceId: targetDeviceId })
   return updated
 }
 
@@ -326,9 +331,45 @@ export async function castSelectDevice(deviceId: string): Promise<YouTubeCastSta
   const updated = saveStoredCastState({
     activeDeviceId: deviceId,
     activeDeviceName: activeDevice?.name || 'Google Cast Speaker',
+    activeDeviceIds: [deviceId],
     devices: updatedDevices,
   })
   await dispatchCastCommand('cast:select_device', { deviceId })
+  return updated
+}
+
+export async function castToggleSpeaker(deviceId: string): Promise<YouTubeCastState> {
+  const current = getStoredCastState()
+  const currentActiveIds = new Set(current.activeDeviceIds || [current.activeDeviceId || 'nest-office-point'])
+  
+  if (currentActiveIds.has(deviceId)) {
+    if (currentActiveIds.size > 1) {
+      currentActiveIds.delete(deviceId)
+    }
+  } else {
+    currentActiveIds.add(deviceId)
+  }
+
+  const nextActiveIds = Array.from(currentActiveIds)
+  const primaryId = nextActiveIds[0]
+  const updatedDevices = current.devices.map(d => ({
+    ...d,
+    isActive: nextActiveIds.includes(d.id),
+  }))
+  const primaryDevice = updatedDevices.find(d => d.id === primaryId)
+
+  const displayName = nextActiveIds.length > 1
+    ? `${primaryDevice?.name || 'Speaker'} + ${nextActiveIds.length - 1} more`
+    : primaryDevice?.name || 'Google Cast Speaker'
+
+  const updated = saveStoredCastState({
+    activeDeviceId: primaryId,
+    activeDeviceName: displayName,
+    activeDeviceIds: nextActiveIds,
+    devices: updatedDevices,
+  })
+
+  await dispatchCastCommand('cast:toggle_speakers', { activeDeviceIds: nextActiveIds })
   return updated
 }
 

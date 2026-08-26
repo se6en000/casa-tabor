@@ -5,7 +5,7 @@
  *  2. Spotify Connect Engine (OAuth PKCE)
  *
  * Optimized for full-viewport touch scrolling, auto-discovery of speakers
- * & multi-room groups, and 3-click kiosk navigation.
+ * & multi-room groups on mount, and 3-click kiosk navigation.
  */
 
 import { useState, useEffect, useRef } from 'react'
@@ -140,6 +140,7 @@ function YouTubeCastPlayerScreen() {
     state,
     devices,
     activeDevice,
+    activeDeviceIds,
     queue,
     searching,
     searchResults,
@@ -151,6 +152,7 @@ function YouTubeCastPlayerScreen() {
     seek,
     setVolume,
     selectDevice,
+    toggleSpeaker,
     addToQueue,
     clearQueue,
     setShuffle,
@@ -207,6 +209,8 @@ function YouTubeCastPlayerScreen() {
   const speakerGroups = devices.filter(d => d.type === 'group')
   const roomSpeakers = devices.filter(d => d.type !== 'group')
 
+  const activeDisplayName = state.activeDeviceName || activeDevice?.name || 'Office Point (Nest Wifi)'
+
   return (
     <div className="space-y-6 flex-1">
       {/* ── Active Cast Speaker Banner with Auto-Discovery Drawer ─────────── */}
@@ -220,7 +224,7 @@ function YouTubeCastPlayerScreen() {
               <div className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
                 <p className="text-body font-semibold text-casa-navy truncate leading-tight">
-                  {activeDevice?.name || 'Office Point (Nest Wifi)'}
+                  {activeDisplayName}
                 </p>
               </div>
               <p className="text-caption text-casa-muted truncate mt-0.5">
@@ -239,7 +243,7 @@ function YouTubeCastPlayerScreen() {
             className="shrink-0 text-caption font-semibold px-3 py-1.5 flex items-center gap-1.5"
             leadingIcon={isDiscovering ? <RefreshCw size={13} className="animate-spin text-casa-gold" /> : undefined}
           >
-            {showDevices ? 'Close' : 'Switch'}
+            {showDevices ? 'Close' : 'Add Speakers'}
           </Button>
         </div>
 
@@ -257,7 +261,7 @@ function YouTubeCastPlayerScreen() {
                 <div className="flex items-center gap-2">
                   <RefreshCw size={14} className={cn('text-casa-gold shrink-0', isDiscovering && 'animate-spin')} />
                   <span className="text-caption font-medium text-casa-navy">
-                    {isDiscovering ? 'Scanning Wi-Fi for Google Nest, Chromecasts & Groups…' : 'Cast Devices & Speaker Groups'}
+                    {isDiscovering ? 'Scanning Wi-Fi for Google Nest, Chromecasts & Groups…' : 'Cast Devices & Multi-Room Groups'}
                   </span>
                 </div>
                 <Button
@@ -337,20 +341,19 @@ function YouTubeCastPlayerScreen() {
 
                 <div className="space-y-1.5">
                   {roomSpeakers.map(device => {
-                    const isCurrent = device.id === activeDevice?.id
+                    const isActive = activeDeviceIds.includes(device.id) || device.id === activeDevice?.id
                     const DevIcon = deviceIcon(device)
                     return (
                       <Button
                         key={device.id}
                         type="button"
-                        variant={isCurrent ? 'secondary' : 'ghost'}
+                        variant={isActive ? 'secondary' : 'ghost'}
                         onClick={() => {
-                          void selectDevice(device.id)
-                          setShowDevices(false)
+                          void toggleSpeaker(device.id)
                         }}
                         className={cn(
                           'w-full flex items-center justify-between p-3 rounded-xl border text-left transition-all min-h-[3rem]',
-                          isCurrent
+                          isActive
                             ? 'border-casa-gold bg-casa-gold/15 text-casa-navy font-semibold shadow-xs'
                             : 'border-casa-border bg-casa-surface hover:border-casa-navy/30 text-casa-navy'
                         )}
@@ -358,7 +361,7 @@ function YouTubeCastPlayerScreen() {
                         <div className="flex items-center gap-3 min-w-0">
                           <div className={cn(
                             'w-8 h-8 rounded-lg flex items-center justify-center shrink-0',
-                            isCurrent ? 'bg-casa-gold/20 text-casa-gold' : 'bg-casa-bg text-casa-muted'
+                            isActive ? 'bg-casa-gold/20 text-casa-gold' : 'bg-casa-bg text-casa-muted'
                           )}>
                             <DevIcon size={16} />
                           </div>
@@ -369,14 +372,16 @@ function YouTubeCastPlayerScreen() {
                             </p>
                           </div>
                         </div>
-                        {isCurrent ? (
-                          <div className="flex items-center gap-1.5 shrink-0 bg-emerald-500/15 text-emerald-700 px-2 py-0.5 rounded-full text-caption font-semibold">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                            <span>Active</span>
-                          </div>
-                        ) : (
-                          <Check size={16} className="text-transparent shrink-0" />
-                        )}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {isActive ? (
+                            <div className="flex items-center gap-1.5 bg-emerald-500/15 text-emerald-700 px-2 py-0.5 rounded-full text-caption font-semibold">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                              <span>Playing</span>
+                            </div>
+                          ) : (
+                            <span className="text-caption font-semibold text-casa-gold hover:text-casa-navy">+ Add</span>
+                          )}
+                        </div>
                       </Button>
                     )
                   })}

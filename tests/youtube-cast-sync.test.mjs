@@ -89,3 +89,33 @@ test('YouTube Cast Sync - device selection logic', () => {
   assert.equal(updated.find(d => d.id === 'nest-living-room').isActive, true);
   assert.equal(updated.find(d => d.id === 'nest-office-point').isActive, false);
 });
+
+test('YouTube Cast Sync - multi-speaker toggling and group routing', () => {
+  let activeDeviceIds = ['nest-office-point'];
+  
+  function toggleSpeaker(deviceId) {
+    const current = new Set(activeDeviceIds);
+    if (current.has(deviceId)) {
+      if (current.size > 1) current.delete(deviceId);
+    } else {
+      current.add(deviceId);
+    }
+    return Array.from(current);
+  }
+
+  // Add Living Room Speaker
+  activeDeviceIds = toggleSpeaker('nest-living-room');
+  assert.equal(activeDeviceIds.length, 2);
+  assert.ok(activeDeviceIds.includes('nest-office-point'));
+  assert.ok(activeDeviceIds.includes('nest-living-room'));
+
+  // Remove Living Room Speaker
+  activeDeviceIds = toggleSpeaker('nest-living-room');
+  assert.equal(activeDeviceIds.length, 1);
+  assert.equal(activeDeviceIds[0], 'nest-office-point');
+
+  // Prevent removing last active speaker
+  activeDeviceIds = toggleSpeaker('nest-office-point');
+  assert.equal(activeDeviceIds.length, 1);
+  assert.equal(activeDeviceIds[0], 'nest-office-point');
+});
