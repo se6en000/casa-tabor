@@ -122,6 +122,16 @@ function sensorDataToZone(cct: number, lux: number): RoomToneZone {
   return 'day'
 }
 
+export interface SensorReadout {
+  cct: number
+  lux: number
+  zone: string
+  brightness: number | null
+  rgb: [number, number, number] | null
+  source: 'local_bridge' | 'supabase'
+  updated_at: string
+}
+
 const SENSOR_POLL_MS    = 3_000
 const SENSOR_ROW_ID     = '00000000-0000-0000-0000-000000000001'
 
@@ -145,13 +155,38 @@ export function useRoomTone() {
     [data]
   )
 
-  // Read sensor data from Supabase (Pi bridge pushes here every ~3s)
-  const { data: sensorData } = useQuery<{
-    cct: number; lux: number; zone: string
-    brightness: number | null; rgb: [number, number, number] | null
-  } | null>({
+  // Read sensor data: tries Direct Localhost Bridge first, then falls back to Supabase
+  const { data: sensorData } = useQuery<SensorReadout | null>({
     queryKey: ['sensor', 'room-tone'],
     queryFn: async () => {
+      // 1. If on Kiosk / localhost, attempt direct local bridge
+      try {
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), 800)
+        const localRes = await fetch('http://127.0.0.1:8765/room-tone', {
+          signal: controller.signal,
+          cache: 'no-store',
+        })
+        clearTimeout(timeout)
+        if (localRes.ok) {
+          const d = await localRes.json()
+          if (d?.cct && Number(d.cct) > 1000) {
+            return {
+              cct: Number(d.cct),
+              lux: Number(d.lux || 0),
+              zone: String(d.zone || 'day'),
+              brightness: d.brightness != null ? Number(d.brightness) : null,
+              rgb: d.rgb || null,
+              source: 'local_bridge' as const,
+              updated_at: new Date().toISOString(),
+            }
+          }
+        }
+      } catch {
+        // Direct local bridge not reachable (e.g. on mobile/remote client)
+      }
+
+      // 2. Query Supabase sensor_readings
       try {
         const { data: row, error } = await supabase
           .from('sensor_readings')
@@ -159,16 +194,24 @@ export function useRoomTone() {
           .eq('id', SENSOR_ROW_ID)
           .single()
         if (error || !row?.cct) return null
-        // Stale if not updated in last 45s
+        // Stale if not updated in last 60s
         const age = Date.now() - new Date(row.updated_at).getTime()
-        if (age > 45_000) return null
-        return row as { cct: number; lux: number; zone: string; brightness: number | null; rgb: [number, number, number] | null }
+        if (age > 60_000) return null
+        return {
+          cct: Number(row.cct),
+          lux: Number(row.lux || 0),
+          zone: String(row.zone || 'day'),
+          brightness: row.brightness != null ? Number(row.brightness) : null,
+          rgb: row.rgb || null,
+          source: 'supabase' as const,
+          updated_at: row.updated_at,
+        }
       } catch {
         return null
       }
     },
     refetchInterval: isPageVisible && cfg.sensor_push_enabled ? SENSOR_POLL_MS : false,
-    staleTime: SENSOR_POLL_MS,
+    staleTime: 1_500,
   })
 
   const tick = useCallback(() => {

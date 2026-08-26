@@ -772,9 +772,11 @@ export default function DisplaySettingsPage() {
                   </div>
                 ))}
               </div>
-              <p className="text-caption text-casa-muted">
-                Sensor active — real-time readings overriding time-of-day schedule.
-              </p>
+
+              <div className="flex items-center justify-between text-caption text-casa-muted pt-1">
+                <span>{sensorData.source === 'local_bridge' ? 'Direct hardware I²C bridge (0ms latency)' : 'Supabase cloud bridge'}</span>
+                <span className="text-caption text-casa-gold font-medium capitalize">{sensorData.zone} zone</span>
+              </div>
             </div>
           ) : config.sensor_push_enabled ? (
             <div className="mt-3 pt-3 border-t border-casa-divider">
