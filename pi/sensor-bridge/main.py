@@ -130,7 +130,7 @@ def _is_push_enabled() -> bool:
     """Return True if sensor_push_enabled is set in display_config. Caches for 3s.
     Also refreshes brightness_min/brightness_max and auto-sleep config."""
     global _push_enabled, _push_checked_at
-    global _brightness_min, _brightness_max
+    global _brightness_min, _brightness_max, _user_brightness_min, _user_brightness_max
     global _auto_sleep_enabled, _sleep_lux_threshold, _wake_lux_threshold, _sleep_delay_s
     now = time.time()
     if now - _push_checked_at < PUSH_CHECK_INTERVAL:
@@ -154,8 +154,13 @@ def _is_push_enabled() -> bool:
                 # User disabled — clear the row
                 threading.Thread(target=_disable_push_remotely, daemon=True).start()
             _push_enabled        = new_push_enabled
-            _brightness_min      = int(cfg.get("brightness_min", BRIGHTNESS_MIN_DEFAULT))
-            _brightness_max      = int(cfg.get("brightness_max", BRIGHTNESS_MAX_DEFAULT))
+            _user_brightness_min = int(cfg.get("brightness_min", BRIGHTNESS_MIN_DEFAULT))
+            _user_brightness_max = int(cfg.get("brightness_max", BRIGHTNESS_MAX_DEFAULT))
+            _brightness_min      = _user_brightness_min
+            if _art_mode_active:
+                _brightness_max  = max(_brightness_min, int(_user_brightness_max * (1.0 - _art_dim_offset)))
+            else:
+                _brightness_max  = _user_brightness_max
             _auto_sleep_enabled  = bool(cfg.get("auto_sleep_enabled", True))
             _sleep_lux_threshold = float(cfg.get("sleep_lux_threshold", 0.5))
             _wake_lux_threshold  = float(cfg.get("wake_lux_threshold", 3.0))
@@ -254,11 +259,14 @@ LUX_EXPONENT = 0.35    # power-law exponent (0.35 ≈ human eye response)
 BRIGHTNESS_MIN_DEFAULT = 1    # DDC level 1 (darkest stable setting)
 BRIGHTNESS_MAX_DEFAULT = 90
 
+_user_brightness_min = BRIGHTNESS_MIN_DEFAULT
+_user_brightness_max = BRIGHTNESS_MAX_DEFAULT
 _brightness_min = BRIGHTNESS_MIN_DEFAULT
 _brightness_max = BRIGHTNESS_MAX_DEFAULT
 _panel_brightness_min = BRIGHTNESS_MIN_DEFAULT
 _panel_brightness_max = BRIGHTNESS_MAX_DEFAULT
 _art_mode_active = False
+_art_dim_offset = 0.0
 
 PANEL_CALIBRATION_PATH = "/home/jake/sensor-bridge/panel-calibration.json"
 
@@ -462,10 +470,13 @@ def _display_wake(target_brightness: int):
 
 
 def lux_to_brightness(lux: float) -> int:
-    """Map lux → DDC brightness % using power-law curve."""
+    """Map lux → DDC brightness % using power-law curve and art mode scaling."""
     lo, hi = _effective_brightness_bounds()
     ratio = min(max(lux, 0.0) / LUX_REF, 1.0)
     mapped = lo + (hi - lo) * (ratio ** LUX_EXPONENT)
+    if _art_mode_active and _art_dim_offset > 0.0:
+        dimmed = lo + (mapped - lo) * (1.0 - _art_dim_offset)
+        return max(lo, min(hi, round(dimmed)))
     return max(lo, min(hi, round(mapped)))
 
 
@@ -1054,43 +1065,53 @@ def windowed():
 async def art_mode(request: Request):
     """Enter art mode: dim monitor based on ambient light.
     
-    Expects JSON: { "dim_offset": 0.0-0.8 }
-    dim_offset is multiplier: 0.3 = dim to 70% of auto-brightness
+    Expects JSON: { "dim_offset": 0.0-0.95 }
+    dim_offset is multiplier: 0.8 = dim by 80%
     """
     try:
-       try:
-           data = await request.json()
-       except Exception:
-           data = {}
-       dim_offset = float(data.get("dim_offset", 0.3))
-       dim_offset = max(0.0, min(0.8, dim_offset))  # clamp 0-80%
+        try:
+            data = await request.json()
+        except Exception:
+            data = {}
+        global _art_mode_active, _art_dim_offset, _brightness_max
+        dim_offset = float(data.get("dim_offset", 0.3))
+        _art_dim_offset = max(0.0, min(0.95, dim_offset))
+        _art_mode_active = True
         
-       # Set new brightness max to account for art mode dimming
-       # E.g., if calibrated panel max is 94 and dim_offset=0.3, art max becomes 65
-       global _brightness_max, _art_mode_active
-       original_max = _panel_brightness_max
-       _brightness_max = max(_brightness_min, int(original_max * (1.0 - dim_offset)))
-       _art_mode_active = True
+        orig_max = _user_brightness_max if '_user_brightness_max' in globals() else _panel_brightness_max
+        _brightness_max = max(_brightness_min, int(orig_max * (1.0 - _art_dim_offset)))
         
-       log.info("Art mode enabled: dim_offset=%.1f, brightness_max=%d", dim_offset, _brightness_max)
-       return {"ok": True, "msg": f"Art mode: max brightness now {_brightness_max}"}
+        with _lock:
+            lux_now = _latest.get("lux", 50.0)
+        set_brightness_target(lux_now if lux_now is not None else 50.0)
+        
+        log.info("Art mode enabled: dim_offset=%.2f, brightness_max=%d, target=%d",
+                 _art_dim_offset, _brightness_max, _target_brightness)
+        return {"ok": True, "msg": f"Art mode: max brightness now {_brightness_max}, target {_target_brightness}"}
     except Exception as e:
-       log.error("Art mode error: %s", e)
-       return {"ok": False, "error": str(e)}
+        log.error("Art mode error: %s", e)
+        return {"ok": False, "error": str(e)}
 
 
 @app.post("/display/art-mode-off")
 def art_mode_off():
     """Exit art mode: restore auto-brightness scaling."""
     try:
-       global _brightness_max, _art_mode_active
-       _brightness_max = min(BRIGHTNESS_MAX_DEFAULT, _panel_brightness_max)
-       _art_mode_active = False
-       log.info("Art mode disabled: brightness_max restored to %d", _brightness_max)
-       return {"ok": True, "msg": "Auto-brightness restored"}
+        global _art_mode_active, _art_dim_offset, _brightness_max
+        _art_mode_active = False
+        _art_dim_offset = 0.0
+        _brightness_max = _user_brightness_max if '_user_brightness_max' in globals() else min(BRIGHTNESS_MAX_DEFAULT, _panel_brightness_max)
+        
+        with _lock:
+            lux_now = _latest.get("lux", 50.0)
+        set_brightness_target(lux_now if lux_now is not None else 50.0)
+        
+        log.info("Art mode disabled: brightness_max restored to %d, target=%d",
+                 _brightness_max, _target_brightness)
+        return {"ok": True, "msg": f"Auto-brightness restored to {_brightness_max}"}
     except Exception as e:
-       log.error("Art mode off error: %s", e)
-       return {"ok": False, "error": str(e)}
+        log.error("Art mode off error: %s", e)
+        return {"ok": False, "error": str(e)}
 
 
 @app.post("/display/art-brightness-min")
