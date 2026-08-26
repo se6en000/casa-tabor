@@ -477,20 +477,10 @@ def set_brightness_target(lux: float):
 
 
 def set_color_target(cct: float):
-    """Called by sensor poll — converts CCT to RGB gains and updates target."""
+    """Called by sensor poll — converts true spectral CCT to RGB gains and updates target."""
     global _target_rgb
     if cct is not None:
-        adjusted_cct = cct
-        if _art_mode_active:
-            with _lock:
-                lux_now = _latest.get("lux")
-            # In art mode, keep warmth slightly below ambient CCT at night
-            # so the panel feels reflected, not self-emissive.
-            lux_for_warmth = lux_now if isinstance(lux_now, (int, float)) else 30.0
-            night_factor = 1.0 - min(max(lux_for_warmth, 0.0), 80.0) / 80.0  # 0..1
-            warm_shift_k = 250 + (night_factor * 850)  # 250K day, ~1100K at very low lux
-            adjusted_cct = max(2400.0, min(6500.0, cct - warm_shift_k))
-        _target_rgb = cct_to_rgb_gains(adjusted_cct)
+        _target_rgb = cct_to_rgb_gains(cct)
 
 
 def _touch_wake_loop():
@@ -818,7 +808,7 @@ def channels_to_cct_lux(ch: dict) -> tuple[float, float]:
         # blue-to-green ratio: ~0.01 = 2700K, ~0.3+ = 6500K
         cct = 2700 + 3800 * (1 - 1 / (1 + ratio * 10))
 
-    cct = max(2700, min(6500, cct))
+    cct = max(2700, min(7500, cct))
 
     # Lux: FY is the best single photopic proxy; scale factor needs calibration
     visible = fy - 0.2 * max(nir, 0)
