@@ -207,17 +207,15 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
           backgroundPosition: textureStyle.backgroundPosition,
           backgroundAttachment: textureStyle.backgroundAttachment,
           backgroundBlendMode: matBlendMode,
-          boxShadow: [
-            'inset 0 36px 48px -12px rgba(0,0,0,0.50)',
-            'inset 18px 0 24px -12px rgba(0,0,0,0.10)',
-            'inset -36px 0 48px -12px rgba(0,0,0,0.32)',
-            'inset 0 -18px 24px -12px rgba(0,0,0,0.10)',
-          ].join(', '),
+          // Subtle frame lip shadow (eliminates muddy black edge smudges)
+          boxShadow: darkThemeActive
+            ? 'inset 0 2px 5px rgba(0,0,0,0.7), inset 0 0 1px rgba(0,0,0,0.9)'
+            : 'inset 0 2px 6px rgba(0,0,0,0.12), inset 0 1px 2px rgba(0,0,0,0.06), inset 0 0 1px rgba(0,0,0,0.10)',
           padding: '3.5vw 3.5vw 4.8vw 3.5vw',
           transition: matTransition ? 'background-color 0.5s ease-out' : 'none',
         }}
       >
-        {/* Passe-Partout Aperture Frame with 45-Degree Mitered Bevel Core */}
+        {/* Passe-Partout Aperture Frame with 6px 45-Degree Mitered Bevel Core */}
         <div
           style={{
             position: 'relative',
@@ -227,15 +225,15 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
             maxHeight: '100%',
             boxSizing: 'content-box',
             backgroundColor: paperBaseColor,
-            // 4px thick 45-degree mitered core bevel facet
-            borderTop: darkThemeActive ? '4px solid #363D4A' : '4px solid #FFFFFF',
-            borderLeft: darkThemeActive ? '4px solid #2A303A' : '4px solid #F5F1E7',
-            borderRight: darkThemeActive ? '4px solid #14181F' : '4px solid #D2C8B8',
-            borderBottom: darkThemeActive ? '4px solid #0E1116' : '4px solid #C0B5A3',
-            // Razor blade incision groove where bevel meets the mat board
+            // 6px thick 45-degree mitered core bevel facet (prominent 8-ply luxury mat)
+            borderTop: darkThemeActive ? '6px solid #363D4A' : '6px solid #FFFFFF',
+            borderLeft: darkThemeActive ? '6px solid #2A303A' : '6px solid #F6F2E8',
+            borderRight: darkThemeActive ? '6px solid #14181F' : '6px solid #D6CCBD',
+            borderBottom: darkThemeActive ? '6px solid #0E1116' : '6px solid #C4B9A7',
+            // Clean razor blade incision groove where bevel meets the mat board
             boxShadow: darkThemeActive
-              ? '0 0 0 1px rgba(0,0,0,0.9), 0 4px 20px rgba(0,0,0,0.6)'
-              : '0 0 0 1px rgba(50,40,30,0.22), 0 2px 16px rgba(0,0,0,0.14)',
+              ? '0 0 0 1px rgba(0,0,0,0.9), 0 2px 12px rgba(0,0,0,0.5)'
+              : '0 0 0 1px rgba(50,40,30,0.16), 0 2px 10px rgba(0,0,0,0.06)',
             transform: ['translate3d(0px,0px,0)', 'translate3d(1px,0px,0)', 'translate3d(0px,1px,0)', 'translate3d(-1px,0px,0)'][driftIndex],
             transition: swiping ? 'transform 260ms cubic-bezier(0.4, 0, 0.2, 1)' : 'transform 16s linear',
             overflow: 'hidden',
@@ -298,7 +296,7 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
             }}
           />
 
-          {/* Directional Downward Cast Shadow from Bevel Lip onto Painting */}
+          {/* Subtle, Realistic Directional Downward Cast Shadow from Bevel Lip */}
           <div
             style={{
               position: 'absolute',
@@ -306,8 +304,8 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
               pointerEvents: 'none',
               zIndex: 10,
               boxShadow: darkThemeActive
-                ? 'inset 0 12px 20px -2px rgba(0,0,0,0.75), inset 5px 0 12px -2px rgba(0,0,0,0.45), inset -5px 0 12px -2px rgba(0,0,0,0.35), inset 0 -4px 8px -2px rgba(0,0,0,0.30)'
-                : 'inset 0 10px 18px -2px rgba(30,20,10,0.38), inset 5px 0 12px -2px rgba(30,20,10,0.20), inset -5px 0 12px -2px rgba(30,20,10,0.14), inset 0 -3px 6px -2px rgba(30,20,10,0.10)',
+                ? 'inset 0 5px 8px -1px rgba(0,0,0,0.60), inset 2px 0 4px -1px rgba(0,0,0,0.35)'
+                : 'inset 0 4px 7px -1px rgba(50,35,20,0.15), inset 2px 0 4px -1px rgba(50,35,20,0.08)',
             }}
           />
         </div>

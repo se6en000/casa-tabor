@@ -40,21 +40,21 @@ export function generateCanvasTexture(opacity: number = 0.015): string {
  * Generate a subtle vignette gradient (darkens edges).
  * Returns CSS radial-gradient string.
  */
-export function generateVignetteGradient(strength: number = 0.08): string {
-  return `radial-gradient(ellipse at center, transparent 40%, rgba(0, 0, 0, ${strength}) 100%)`
+export function generateVignetteGradient(strength: number = 0.03): string {
+  return `radial-gradient(ellipse at center, transparent 60%, rgba(0, 0, 0, ${strength}) 100%)`
 }
 
 /**
  * Generate realistic lighting simulation overlay.
  * Simulates gentle directional ambient lighting from top-left.
  */
-export function generateLightingOverlay(strength: number = 0.05): string {
+export function generateLightingOverlay(strength: number = 0.03): string {
   return `
     linear-gradient(145deg, 
       rgba(255, 255, 255, ${strength * 0.7}) 0%, 
-      transparent 35%,
-      transparent 65%,
-      rgba(0, 0, 0, ${strength * 0.5}) 100%)
+      transparent 40%,
+      transparent 70%,
+      rgba(0, 0, 0, ${strength * 0.4}) 100%)
   `
 }
 
@@ -63,14 +63,14 @@ export function generateLightingOverlay(strength: number = 0.05): string {
  * Combines multiple layers for physical archival board depth.
  */
 export function getTextureStyle() {
-  const vignette = generateVignetteGradient(0.06)
-  const lighting = generateLightingOverlay(0.04)
+  const vignette = generateVignetteGradient(0.02)
+  const lighting = generateLightingOverlay(0.02)
   
   // Archival mat board fiber grain
   const fiberGrain = `
-    repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(0,0,0,.012) 3px, rgba(0,0,0,.012) 6px),
-    repeating-linear-gradient(-45deg, transparent, transparent 3px, rgba(0,0,0,.008) 3px, rgba(0,0,0,.008) 6px),
-    repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(0,0,0,.006) 2px, rgba(0,0,0,.006) 4px)
+    repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(0,0,0,.008) 3px, rgba(0,0,0,.008) 6px),
+    repeating-linear-gradient(-45deg, transparent, transparent 3px, rgba(0,0,0,.005) 3px, rgba(0,0,0,.005) 6px),
+    repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(0,0,0,.004) 2px, rgba(0,0,0,.004) 4px)
   `
   
   return {
