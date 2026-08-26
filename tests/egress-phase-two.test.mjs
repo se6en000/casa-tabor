@@ -30,12 +30,10 @@ test('Home week counts use a minimal event index without detail joins', () => {
   assert.match(homeRightPanel, /weekEventIndex\.filter\(event => \(/)
 })
 
-test('grocery uses Realtime with a bounded foreground recovery poll', () => {
-  assert.match(groceryHook, /const GROCERY_RECOVERY_POLL_MS = 10 \* 60_000/)
+test('grocery uses Realtime singleton without active background polling', () => {
   assert.match(groceryHook, /channel\('grocery-realtime-singleton'\)/)
-  assert.match(groceryHook, /refetchInterval: GROCERY_RECOVERY_POLL_MS/)
+  assert.match(groceryHook, /refetchInterval: false/)
   assert.match(groceryHook, /refetchIntervalInBackground: false/)
-  assert.match(groceryHook, /refetchOnReconnect: true/)
   assert.doesNotMatch(groceryHook, /refetchInterval: 45_000/)
   assert.doesNotMatch(groceryHook, /\.select\('\*'\)\.is\('deleted_at', null\)/)
 })

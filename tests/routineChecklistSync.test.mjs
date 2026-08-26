@@ -31,7 +31,7 @@ test('code integrity: useFamilyRoutineIntelligence integrates todo sync and boun
   assert.ok(file.includes('subscribeToTodoSync'), 'Subscribes to realtime sync')
   assert.ok(file.includes('saveTodoToggle'), 'Saves toggle to sync pipeline')
   assert.ok(file.includes('queryKey: [\'household-todo-completions\']'), 'Queries server completions')
-  assert.ok(file.includes('refetchInterval: isPageVisible ? 120_000 : false'), 'Uses 120s page-visibility bounded polling')
+  assert.ok(file.includes('refetchInterval: false'), 'Uses zero polling with pure sync pipeline')
 })
 
 test('code integrity: CalmKioskView and useCalmKioskPresenter wire Option B Completed Today fold and toggle sync', () => {

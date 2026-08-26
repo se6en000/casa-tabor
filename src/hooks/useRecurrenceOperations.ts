@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
-import { usePageVisibility } from './usePageVisibility'
 
 export interface RecurrenceOperation {
   id: string
@@ -41,10 +40,13 @@ export interface RecurrenceOperationsSummary {
 }
 
 export function useRecurrenceOperations() {
-  const isPageVisible = usePageVisibility()
   return useQuery({
     queryKey: ['recurrence-operations'],
-    refetchInterval: isPageVisible ? 30_000 : false,
+    staleTime: 5 * 60_000,
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
     queryFn: async () => {
       const [summaryResult, operationsResult] = await Promise.all([
         supabase.from('recurrence_operations_summary').select('*').single(),

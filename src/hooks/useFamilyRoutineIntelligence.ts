@@ -21,7 +21,6 @@ import {
   saveTodoToggle,
   subscribeToTodoSync,
 } from '../utils/todoCompletionsSync'
-import { usePageVisibility } from './usePageVisibility'
 
 export { resolveDayTypeForDate, type RoutineDayType }
 
@@ -810,12 +809,14 @@ export function useFamilyRoutineIntelligence(now: Date = new Date()): FamilyRout
     return tomorrowDepartures.find((d) => d.isException) || null
   }, [tomorrowDepartures])
 
-  const isPageVisible = usePageVisibility()
   const { data: serverCompletions } = useQuery({
     queryKey: ['household-todo-completions'],
     queryFn: fetchTodoCompletions,
-    staleTime: 60_000,
-    refetchInterval: isPageVisible ? 120_000 : false,
+    staleTime: 5 * 60_000,
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
   })
 
   // Bedtime & Morning Prep Checklist state management

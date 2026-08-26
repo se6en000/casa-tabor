@@ -57,11 +57,13 @@ export function useGoogleSyncTriage() {
   const qc = useQueryClient()
   const [selectedTriageEvent, setSelectedTriageEvent] = useState<CalendarEvent | null>(null)
 
-  // Query failed sync jobs
   const { data: failedJobs = [], isLoading, refetch } = useQuery<FailedSyncJob[]>({
     queryKey: ['google-sync-triage'],
-    staleTime: 60_000,
-    refetchInterval: 5 * 60_000,
+    staleTime: 5 * 60_000,
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
     queryFn: async () => {
       const { data: jobs, error } = await supabase
         .from('google_sync_jobs')

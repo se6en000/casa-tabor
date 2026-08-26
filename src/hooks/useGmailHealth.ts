@@ -1,7 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { summarizeGmailHealth, type GmailConnectionHealthRow, type GmailHealthSummary } from '../utils/gmailHealth'
-import { usePageVisibility } from './usePageVisibility'
 
 export interface GmailAccountHealth extends GmailConnectionHealthRow {
   family_member_id: string
@@ -10,7 +9,6 @@ export interface GmailAccountHealth extends GmailConnectionHealthRow {
 
 export function useGmailHealth() {
   const qc = useQueryClient()
-  const isPageVisible = usePageVisibility()
 
   const {
     data,
@@ -35,8 +33,11 @@ export function useGmailHealth() {
         accounts: typedRows,
       }
     },
-    staleTime: 30_000,
-    refetchInterval: isPageVisible ? 60_000 : false,
+    staleTime: 5 * 60_000,
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
   })
 
   const syncMutation = useMutation({

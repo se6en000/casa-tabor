@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { usePageVisibility } from './usePageVisibility'
@@ -32,9 +32,55 @@ export interface Notification {
   event: { start_time: string; title: string } | null
 }
 
+let _notificationsRealtimeChannel: ReturnType<typeof supabase.channel> | null = null
+let _notificationsSubscribers = 0
+let _notificationsDebounceTimer: ReturnType<typeof setTimeout> | null = null
+const _notificationsInvalidateCallbacks = new Set<() => void>()
+
+function fireNotificationsInvalidation() {
+  if (_notificationsDebounceTimer) clearTimeout(_notificationsDebounceTimer)
+  _notificationsDebounceTimer = setTimeout(() => {
+    _notificationsDebounceTimer = null
+    _notificationsInvalidateCallbacks.forEach((cb) => {
+      try {
+        cb()
+      } catch (err) {
+        console.warn('[NotificationsRealtime] Invalidation error:', err)
+      }
+    })
+  }, 800)
+}
+
 export function useNotifications() {
   const qc = useQueryClient()
   const isPageVisible = usePageVisibility()
+
+  useEffect(() => {
+    if (!isPageVisible) return
+    const invalidate = () => qc.invalidateQueries({ queryKey: ['notifications'] })
+    _notificationsInvalidateCallbacks.add(invalidate)
+    _notificationsSubscribers++
+
+    if (_notificationsSubscribers === 1 && !_notificationsRealtimeChannel) {
+      _notificationsRealtimeChannel = supabase
+        .channel('notifications-realtime-singleton')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, fireNotificationsInvalidation)
+        .subscribe()
+    }
+
+    return () => {
+      _notificationsInvalidateCallbacks.delete(invalidate)
+      _notificationsSubscribers--
+      if (_notificationsSubscribers === 0 && _notificationsRealtimeChannel) {
+        supabase.removeChannel(_notificationsRealtimeChannel)
+        _notificationsRealtimeChannel = null
+        if (_notificationsDebounceTimer) {
+          clearTimeout(_notificationsDebounceTimer)
+          _notificationsDebounceTimer = null
+        }
+      }
+    }
+  }, [isPageVisible, qc])
 
   const { data: notifications = [], isLoading } = useQuery<Notification[]>({
     queryKey: ['notifications'],
@@ -47,8 +93,11 @@ export function useNotifications() {
       if (error) throw error
       return data as unknown as Notification[]
     },
-    refetchInterval: isPageVisible ? 60_000 : false, // stop background polling when the page is hidden
-    staleTime: 60_000,
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+    staleTime: 5 * 60_000,
   })
 
   const unreadCount = notifications.filter(n => !n.read).length

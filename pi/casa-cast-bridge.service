@@ -1,0 +1,16 @@
+[Unit]
+Description=Casa Tabor YouTube Music Google Cast Bridge
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/casa-tabor
+ExecStart=/home/pi/casa-tabor/pi/casa-cast-bridge.py
+Restart=always
+RestartSec=5s
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

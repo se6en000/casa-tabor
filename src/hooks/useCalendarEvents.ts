@@ -17,7 +17,6 @@ import {
   generateConsolidatedRoutineActionEvents,
   type FamilyRoutine,
 } from '../lib/familyRoutines'
-import { usePageVisibility } from './usePageVisibility'
 
 export interface EventWithDetails extends Omit<CalendarEvent, 'members' | 'enrichment'> {
   members: {
@@ -259,13 +258,15 @@ export function useEventDetails(event: EventWithDetails | null, enabled = true) 
 
 function useEventsForRange(queryKey: readonly unknown[], start: Date, end: Date) {
   useRealtimeEventInvalidation()
-  const isPageVisible = usePageVisibility()
   const eventsQuery = useQuery({
     queryKey,
     queryFn: () => fetchEventsForRange(start, end),
-    staleTime: 5 * 60_000,
-    refetchInterval: isPageVisible ? 10 * 60_000 : false,
+    staleTime: 10 * 60_000,
+    refetchInterval: false,
     refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
   })
   const { data: familyMembers = [] } = useFamilyMembers()
   const memberIds = useMemo(() => familyMembers.map((m) => m.id), [familyMembers])
@@ -465,7 +466,6 @@ export interface WeekEventIndexItem {
 
 /** Minimal seven-day index used only for Home's event-count buttons. */
 export function useWeekEventIndex(selectedDate: Date) {
-  const isPageVisible = usePageVisibility()
   const weekStart = startOfWeek(selectedDate, { weekStartsOn: 0 })
   const weekEnd = addDays(endOfWeek(selectedDate, { weekStartsOn: 0 }), 1)
   useRealtimeEventInvalidation()
@@ -486,9 +486,12 @@ export function useWeekEventIndex(selectedDate: Date) {
       if (error) throw error
       return data ?? []
     },
-    staleTime: 5 * 60_000,
-    refetchInterval: isPageVisible ? 10 * 60_000 : false,
+    staleTime: 10 * 60_000,
+    refetchInterval: false,
     refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
   })
 }
 
@@ -527,18 +530,21 @@ function _evictDeletedEventFromCache(deletedId: string) {
 
 function _fireInvalidation() {
   if (_debounceTimer) clearTimeout(_debounceTimer)
+  // Jittered debounce (800ms - 1200ms) prevents concurrent multi-device thundering herds
+  const jitter = 800 + Math.floor(Math.random() * 400)
   _debounceTimer = setTimeout(() => {
     _debounceTimer = null
     _invalidateCallbacks.forEach(f => f())
-  }, 500)
+  }, jitter)
 }
 
 function _firePlanInvalidation() {
   if (_planDebounceTimer) clearTimeout(_planDebounceTimer)
+  const jitter = 800 + Math.floor(Math.random() * 400)
   _planDebounceTimer = setTimeout(() => {
     _planDebounceTimer = null
     _planInvalidateCallbacks.forEach(f => f())
-  }, 500)
+  }, jitter)
 }
 
 function _subscribeRealtimeChannel() {
@@ -559,11 +565,7 @@ function _subscribeRealtimeChannel() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'event_logistics' }, _fireInvalidation)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'event_checklist_items' }, _fireInvalidation)
     .subscribe((status, err) => {
-      if (status === 'SUBSCRIBED') {
-        // Connected / reconnected: catch up on any missed updates
-        _fireInvalidation()
-        _firePlanInvalidation()
-      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
         console.warn('[CalendarRealtime] Channel status:', status, err?.message ?? '')
         if (_realtimeSubscribers > 0 && !_reconnectTimer) {
           _reconnectTimer = setTimeout(() => {

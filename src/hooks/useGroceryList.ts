@@ -57,7 +57,6 @@ export const GROCERY_CATEGORIES = [
 const EMPTY_ITEMS: GroceryItem[] = []
 const NORMALIZATION_DEBOUNCE_MS = 1_500
 const NORMALIZATION_RETRY_MS = 15_000
-const GROCERY_RECOVERY_POLL_MS = 10 * 60_000
 
 let _groceryRealtimeSubscribers = 0
 let _groceryRealtimeChannel: ReturnType<typeof supabase.channel> | null = null
@@ -206,10 +205,11 @@ export function useGroceryList() {
     queryKey: ['grocery'],
     queryFn: fetchGroceryData,
     staleTime: 5 * 60_000,
-    refetchInterval: GROCERY_RECOVERY_POLL_MS,
+    refetchInterval: false,
     refetchIntervalInBackground: false,
-    refetchOnWindowFocus: true,
-    refetchOnReconnect: true,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
   })
 
   const addItem = useMutation({

@@ -36,6 +36,7 @@ export interface HouseholdCaptureRule {
 }
 
 export function useHouseholdCaptureRules() {
+  useHouseholdCaptureRulesRealtimeInvalidation()
   const qc = useQueryClient()
 
   // 1. Realtime query with stale-while-revalidate
@@ -64,26 +65,65 @@ export function useHouseholdCaptureRules() {
       }
       return []
     },
-    staleTime: 60_000,
+    staleTime: Infinity,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   })
 
-  // 2. Realtime Postgres Changes Subscription
+// ── Singleton Realtime Channel for Household Capture Rules ──────────────────
+let _captureRulesRealtimeChannel: ReturnType<typeof supabase.channel> | null = null
+let _captureRulesSubscribers = 0
+let _captureRulesDebounceTimer: ReturnType<typeof setTimeout> | null = null
+const _captureRulesInvalidateCallbacks = new Set<() => void>()
+
+function fireCaptureRulesInvalidation() {
+  if (_captureRulesDebounceTimer) clearTimeout(_captureRulesDebounceTimer)
+  _captureRulesDebounceTimer = setTimeout(() => {
+    _captureRulesDebounceTimer = null
+    _captureRulesInvalidateCallbacks.forEach((cb) => {
+      try {
+        cb()
+      } catch (err) {
+        console.warn('[CaptureRulesRealtime] Error executing invalidation callback:', err)
+      }
+    })
+  }, 800)
+}
+
+function useHouseholdCaptureRulesRealtimeInvalidation() {
+  const qc = useQueryClient()
+
   useEffect(() => {
-    const channel = supabase
-      .channel('realtime:household_capture_rules')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'household_capture_rules' },
-        () => {
-          qc.invalidateQueries({ queryKey: ['household-capture-rules'] })
-        }
-      )
-      .subscribe()
+    const invalidate = () => qc.invalidateQueries({ queryKey: ['household-capture-rules'] })
+    _captureRulesInvalidateCallbacks.add(invalidate)
+    _captureRulesSubscribers++
+
+    if (_captureRulesSubscribers === 1 && !_captureRulesRealtimeChannel) {
+      _captureRulesRealtimeChannel = supabase
+        .channel('household-capture-rules-singleton')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'household_capture_rules' },
+          fireCaptureRulesInvalidation
+        )
+        .subscribe()
+    }
 
     return () => {
-      supabase.removeChannel(channel)
+      _captureRulesInvalidateCallbacks.delete(invalidate)
+      _captureRulesSubscribers--
+      if (_captureRulesSubscribers === 0 && _captureRulesRealtimeChannel) {
+        supabase.removeChannel(_captureRulesRealtimeChannel)
+        _captureRulesRealtimeChannel = null
+        if (_captureRulesDebounceTimer) {
+          clearTimeout(_captureRulesDebounceTimer)
+          _captureRulesDebounceTimer = null
+        }
+      }
     }
   }, [qc])
+}
 
   // 3. Upsert Rule Mutation
   const saveRule = useMutation({

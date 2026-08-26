@@ -133,8 +133,11 @@ export function useRoomTone() {
       const { data } = await supabase.from('settings').select('value').eq('key', 'display_config').single()
       return data?.value as DisplayConfig | null
     },
-    refetchInterval: isPageVisible ? 60_000 : false,
-    staleTime: 5 * 60_000,
+    staleTime: Infinity,
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
   })
 
   const cfg: DisplayConfig = useMemo(

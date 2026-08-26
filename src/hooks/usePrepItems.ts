@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from 'react'
+import { useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import type { PrepItem } from '../types'
@@ -13,25 +13,60 @@ import { usePageVisibility } from './usePageVisibility'
  * simply vanished from every screen the moment its due date passed. That was the source of
  * the "task graveyard" bug: real unresolved items just disappeared with no overdue state.
  */
-export function usePrepItems() {
+// ── Singleton Realtime Channel for Prep Items ──────────────────────────────
+let _prepItemsRealtimeChannel: ReturnType<typeof supabase.channel> | null = null
+let _prepItemsSubscribers = 0
+let _prepItemsDebounceTimer: ReturnType<typeof setTimeout> | null = null
+const _prepItemsInvalidateCallbacks = new Set<() => void>()
+
+function firePrepItemsInvalidation() {
+  if (_prepItemsDebounceTimer) clearTimeout(_prepItemsDebounceTimer)
+  _prepItemsDebounceTimer = setTimeout(() => {
+    _prepItemsDebounceTimer = null
+    _prepItemsInvalidateCallbacks.forEach((cb) => {
+      try {
+        cb()
+      } catch (err) {
+        console.warn('[PrepItemsRealtime] Error executing invalidation callback:', err)
+      }
+    })
+  }, 800)
+}
+
+function usePrepItemsRealtimeInvalidation() {
   const qc = useQueryClient()
   const isPageVisible = usePageVisibility()
-  const channelId = useId()
-  // Use a unique channel name per hook instance to avoid "already subscribed" errors
-  // when multiple components using this hook are mounted simultaneously (e.g. during swipe)
-  const channelRef = useRef(`prep_items_realtime_${channelId.replace(/:/g, '')}`)
 
-  // Realtime subscription — any INSERT/UPDATE/DELETE on prep_items invalidates immediately
   useEffect(() => {
     if (!isPageVisible) return
-    const channel = supabase
-      .channel(channelRef.current)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'prep_items' }, () => {
-        qc.invalidateQueries({ queryKey: ['prep-items'] })
-      })
-      .subscribe()
-    return () => { supabase.removeChannel(channel) }
+    const invalidate = () => qc.invalidateQueries({ queryKey: ['prep-items'] })
+    _prepItemsInvalidateCallbacks.add(invalidate)
+    _prepItemsSubscribers++
+
+    if (_prepItemsSubscribers === 1 && !_prepItemsRealtimeChannel) {
+      _prepItemsRealtimeChannel = supabase
+        .channel('prep-items-realtime-singleton')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'prep_items' }, firePrepItemsInvalidation)
+        .subscribe()
+    }
+
+    return () => {
+      _prepItemsInvalidateCallbacks.delete(invalidate)
+      _prepItemsSubscribers--
+      if (_prepItemsSubscribers === 0 && _prepItemsRealtimeChannel) {
+        supabase.removeChannel(_prepItemsRealtimeChannel)
+        _prepItemsRealtimeChannel = null
+        if (_prepItemsDebounceTimer) {
+          clearTimeout(_prepItemsDebounceTimer)
+          _prepItemsDebounceTimer = null
+        }
+      }
+    }
   }, [isPageVisible, qc])
+}
+
+export function usePrepItems() {
+  usePrepItemsRealtimeInvalidation()
 
   return useQuery({
     queryKey: ['prep-items'],
@@ -62,9 +97,9 @@ export function usePrepItems() {
         return 0 // preserve the priority/due_by ordering from the query within each group
       })
     },
-    staleTime: 30_000,
+    staleTime: 5 * 60_000,
     refetchOnMount: false,
-    refetchInterval: isPageVisible ? 120_000 : false, // stop background polling when hidden
+    refetchInterval: false,
   })
 }
 

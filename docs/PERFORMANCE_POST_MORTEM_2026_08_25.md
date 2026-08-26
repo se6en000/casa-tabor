@@ -115,3 +115,41 @@ WHERE e.start_time < p_end AND e.end_time > p_start ...;
 * Cleared hung request queues in `net.http_request_queue` and terminated stale backends.
 * Clean container restart restored all services to `ACTIVE_HEALTHY`.
 
+---
+
+## 6. Realtime 24,003 Error Spike Root Cause & Fix
+
+### The Failure Chain (24,003 Realtime Errors):
+1. **Unpublished Table Subscriptions:** Multiple hooks (`usePrepItems`, `useConflicts`, `useMemberAvailability`, `useGroceryList`, `useCalendarEvents`) subscribed to tables not included in the `supabase_realtime` publication (`prep_items`, `conflicts`, `member_availability_rules`, `member_availability_exceptions`, `family_members`, `grocery_items`, `event_logistics`, `event_checklist_items`, `ai_provider_calls`).
+2. **Missing `REPLICA IDENTITY FULL`:** All published tables had default replica identity (`d`), preventing the Realtime WAL listener from decoding before/after row images and evaluating RLS filters on updates/deletes.
+3. **Dynamic Per-Component Channel Leaks:** Hooks like `usePrepItems` and `useConflicts` created unique channel names per component mount (`useId()`), multiplying idle WebSocket channels on every UI re-render.
+
+### Remediation Applied:
+* **Migration `20260825113000_realtime_publication_and_replica_identity.sql`:**
+  * Added all 9 missing tables to `supabase_realtime` publication.
+  * Executed `ALTER TABLE public.<table_name> REPLICA IDENTITY FULL` across all 19 realtime tables.
+* **Singleton Channel Architecture:**
+  * Converted `usePrepItems`, `useConflicts`, and `useHouseholdCaptureRules` to subscriber-counted singleton channels with 800ms debouncing.
+* **Automated Guardrail Test:**
+  * Added `tests/guardrails/realtime-singleton.test.ts` to statically reject dynamic per-component Realtime channels.
+
+---
+
+## 7. Permanent Multi-Device Zero-Thrashing Architecture
+
+### The Systemic Big-Picture Failure Mode:
+Casa runs continuously across **multiple active devices**: 24/7 ambient kitchen/hallway kiosks, wall-mounted tablets, iPhones, and developer tabs.
+Whenever any of these conditions occurred:
+1. **Multi-Device WebSocket Reconnect Storms:** On connect or network resume, every client fired unconditional query invalidations (`status === 'SUBSCRIBED'`), generating 40+ concurrent PostgREST requests simultaneously.
+2. **Short Stale Times & Polling on Static Data:** `staleTime: 60s` on `family_members`, `member_availability_rules`, and `household_capture_rules` generated 100k+ unnecessary daily queries.
+3. **Connection Pool Slot Starvation:** Supavisor pooler was unconstrained against Postgres `max_connections: 60`, leaving 0 direct slots for health checks and management operations.
+
+### The 5 Permanent Pillars Applied:
+1. **Eliminated Reconnect Refetch Storms:** Removed `_fireInvalidation()` on `status === 'SUBSCRIBED'`. Clients fetch once on mount; subsequent state is purely pushed via Realtime WAL changes.
+2. **Jittered Debouncing (800ms–1200ms):** When database updates occur, client invalidations are randomized to prevent lockstep thundering herds across devices.
+3. **Zero-Polling / `staleTime: Infinity`:** Static/low-churn tables (`family_members`, `member_availability_rules`, `household_capture_rules`) are cached permanently in memory and only invalidated when Realtime events arrive.
+4. **Disabled Background Polling Intervals:** Removed redundant 2-minute polling in `usePrepItems`, `useConflicts`, and `useGroceryList`.
+5. **Right-Sized Connection Topology:** Set Supavisor pool size to 15 and PostgREST pool size to 10, reserving 35 connection slots (58% headroom) on Postgres.
+
+
+

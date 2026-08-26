@@ -36,9 +36,7 @@ function _subscribeAvailabilityRealtimeChannel() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'member_availability_exceptions' }, _fireAvailabilityInvalidation)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'family_members' }, _fireAvailabilityInvalidation)
     .subscribe((status, err) => {
-      if (status === 'SUBSCRIBED') {
-        _fireAvailabilityInvalidation()
-      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
         console.warn('[AvailabilityRealtime] Channel status:', status, err?.message ?? '')
         if (_availabilitySubscribers > 0 && !_availabilityReconnectTimer) {
           _availabilityReconnectTimer = setTimeout(() => {
@@ -61,9 +59,6 @@ function useRealtimeAvailabilityInvalidation() {
       void qc.invalidateQueries({ queryKey: ['member-availability-rules'] })
       void qc.invalidateQueries({ queryKey: ['member-availability-exceptions'] })
       void qc.invalidateQueries({ queryKey: ['family-members'] })
-      void qc.invalidateQueries({ queryKey: ['events'] })
-      void qc.invalidateQueries({ queryKey: ['today-events'] })
-      void qc.invalidateQueries({ queryKey: ['tomorrow-events'] })
     }
     _availabilityInvalidateCallbacks.add(cb)
     _availabilityQueryClientInstances.add(qc)
@@ -115,7 +110,10 @@ export function useMemberAvailability(memberIds: string[]) {
       if (error) throw error
       return data ?? []
     },
-    staleTime: 60_000,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
   })
 
   const exceptionsQuery = useQuery({
@@ -129,7 +127,10 @@ export function useMemberAvailability(memberIds: string[]) {
       if (error) throw error
       return data ?? []
     },
-    staleTime: 60_000,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
   })
 
   return {

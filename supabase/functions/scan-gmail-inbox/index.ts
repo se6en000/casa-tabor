@@ -24,6 +24,7 @@ import {
   resolveImmediateFamilyMember,
 } from '../_shared/immediate-family-scope.mjs'
 import {
+  VENDOR_ALIASES,
   canonicalizeOrderId,
   detectVendorAndOrder,
   detectCarrierAndTracking,
@@ -1355,7 +1356,7 @@ async function handleGmailScan(req: Request): Promise<Response> {
             is_user_labeled: isUserLabeled,
           }, { onConflict: 'family_member_id,gmail_message_id' })
 
-          if (savedCount > 0) processed++
+          if (savedCount > 0) actions += savedCount
           else skipped++
           continue
         }

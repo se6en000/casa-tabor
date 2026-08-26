@@ -33,7 +33,6 @@ import type { PrepItem } from '../../types'
 import { eventOverlapsDay } from '../../utils/eventTime'
 import { summarizeGmailHealth, type GmailHealthSummary } from '../../utils/gmailHealth'
 import { priorityVisual } from '../../utils/prepPriority'
-import { usePageVisibility } from '../../hooks/usePageVisibility'
 import { useAttentionTopicLearning } from '../../hooks/useAttentionTopicLearning'
 import { buildAttentionTopics } from '../../utils/attentionTopics'
 import { sourceBadge } from '../../utils/prepSourceBadge'
@@ -193,7 +192,6 @@ function PrepAssignPicker({
 
 export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem, className }: Props) {
   const navigate = useNavigate()
-  const isPageVisible = usePageVisibility()
   const { data: rawPrepItems = [] } = usePrepItems()
   const { rules: attentionTopicRules, learnTopic, separateItem, isSaving: isSavingTopicRule } = useAttentionTopicLearning()
   const { data: familyMembers = [] } = useFamilyMembers()
@@ -326,8 +324,11 @@ export default function HomeRightPanel({ now, allTodayEvents, onSelectPrepItem, 
         gmailHealth: summarizeGmailHealth(statusRows),
       }
     },
-    refetchInterval: isPageVisible ? 5 * 60_000 : false,
-    staleTime: 2 * 60_000,
+    staleTime: 5 * 60_000,
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
   })
 
   const nextEvent = allTodayEvents.find(event => new Date(event.end_time) >= now) ?? null

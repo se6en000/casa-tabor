@@ -21,7 +21,6 @@ import { useFamilyMembers } from './useFamilyMembers'
 import { useHomeWeather } from './useHomeWeather'
 import { useReminderNeedsYouActions } from './useReminderNeedsYouActions'
 import { useMemberAvailability } from './useMemberAvailability'
-import { usePageVisibility } from './usePageVisibility'
 import {
   fetchTodoCompletions,
   saveTodoToggle,
@@ -110,7 +109,6 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
   const queryClient = useQueryClient()
   const { setCanvasSubmode } = useAppStore()
   const now = useLiveClock(10_000)
-  const isPageVisible = usePageVisibility()
   const [isRefreshing, setIsRefreshing] = useState(false)
   const { data: todayEvents = [] } = useTodayEvents(now)
   const { data: tomorrowEvents = [] } = useTomorrowEvents(now)
@@ -135,8 +133,11 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
   const { data: serverCompletions } = useQuery({
     queryKey: ['household-todo-completions'],
     queryFn: fetchTodoCompletions,
-    staleTime: 60_000,
-    refetchInterval: isPageVisible ? 120_000 : false,
+    staleTime: 5 * 60_000,
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
   })
 
   const [completedItems, setCompletedItems] = useState<Record<string, boolean>>(() => {

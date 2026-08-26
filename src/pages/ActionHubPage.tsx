@@ -12,7 +12,6 @@ import { sourceBadge } from '../utils/prepSourceBadge'
 import { summarizeGmailHealth } from '../utils/gmailHealth'
 import { humanizeNotificationSource } from '../utils/notificationSource'
 import { priorityVisual } from '../utils/prepPriority'
-import { usePageVisibility } from '../hooks/usePageVisibility'
 import { useLiveClock } from '../hooks/useLiveClock'
 import { useAppStore } from '../stores/appStore'
 import { useTurboCanvasPresenter } from '../hooks/useTurboCanvasPresenter'
@@ -37,7 +36,6 @@ function eventDateBadge(n: Notification, now: Date): { label: string; tone: stri
 }
 
 export default function ActionHubPage() {
-  const isPageVisible = usePageVisibility()
   const now = useLiveClock(30_000)
   const [activePanel, setActivePanel] = useState<'attention' | 'activity'>('attention')
   const [actionError] = useState<string | null>(null)
@@ -122,8 +120,11 @@ export default function ActionHubPage() {
         .select('gmail_scan_enabled, health_status, reauthorization_required, last_sync_error, last_sync_at')
       return summarizeGmailHealth(status ?? [])
     },
-    staleTime: 60_000,
-    refetchInterval: isPageVisible ? 5 * 60_000 : false,
+    staleTime: 5 * 60_000,
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
   })
 
   const activityLogNotifications = useMemo(

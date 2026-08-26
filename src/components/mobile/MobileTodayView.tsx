@@ -19,7 +19,6 @@ import { useQuery } from '@tanstack/react-query'
 import { useRollingEvents, type EventWithDetails } from '../../hooks/useCalendarEvents'
 import { getEventStartDate, getEventEndDate, eventOverlapsDay } from '../../utils/eventTime'
 import { useLiveClock } from '../../hooks/useLiveClock'
-import { usePageVisibility } from '../../hooks/usePageVisibility'
 import {
   fetchTodoCompletions,
   saveTodoToggle,
@@ -66,15 +65,17 @@ interface MobileTodayViewProps {
 
 export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate }: MobileTodayViewProps) {
   const now = useLiveClock(30_000)
-  const isPageVisible = usePageVisibility()
   const { data: rollingEvents = [] } = useRollingEvents(now)
   const [showCompletedTodos, setShowCompletedTodos] = useState(false)
 
   const { data: serverCompletions } = useQuery({
     queryKey: ['household-todo-completions'],
     queryFn: fetchTodoCompletions,
-    staleTime: 60_000,
-    refetchInterval: isPageVisible ? 120_000 : false,
+    staleTime: 5 * 60_000,
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
   })
 
   const [completedItems, setCompletedItems] = useState<Record<string, boolean>>(() => {

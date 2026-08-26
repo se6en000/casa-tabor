@@ -1,26 +1,64 @@
-import { useEffect, useId } from 'react'
+import { useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import type { Conflict } from '../types'
 import { type SnoozeDuration, computeSnoozeUntil } from '../utils/snoozeDuration'
 import { usePageVisibility } from './usePageVisibility'
 
-export function useWeekConflicts() {
+// ── Singleton Realtime Channel for Conflicts ───────────────────────────────
+let _conflictsRealtimeChannel: ReturnType<typeof supabase.channel> | null = null
+let _conflictsSubscribers = 0
+let _conflictsDebounceTimer: ReturnType<typeof setTimeout> | null = null
+const _conflictsInvalidateCallbacks = new Set<() => void>()
+
+function fireConflictsInvalidation() {
+  if (_conflictsDebounceTimer) clearTimeout(_conflictsDebounceTimer)
+  _conflictsDebounceTimer = setTimeout(() => {
+    _conflictsDebounceTimer = null
+    _conflictsInvalidateCallbacks.forEach((cb) => {
+      try {
+        cb()
+      } catch (err) {
+        console.warn('[ConflictsRealtime] Error executing invalidation callback:', err)
+      }
+    })
+  }, 800)
+}
+
+function useConflictsRealtimeInvalidation() {
   const qc = useQueryClient()
   const isPageVisible = usePageVisibility()
-  const channelId = useId()
 
-  // Realtime — any change to conflicts table pushes instantly to all views
   useEffect(() => {
     if (!isPageVisible) return
-    const channel = supabase
-      .channel(`conflicts_realtime_${channelId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'conflicts' }, () => {
-        qc.invalidateQueries({ queryKey: ['conflicts'] })
-      })
-      .subscribe()
-    return () => { supabase.removeChannel(channel) }
-  }, [channelId, isPageVisible, qc])
+    const invalidate = () => qc.invalidateQueries({ queryKey: ['conflicts'] })
+    _conflictsInvalidateCallbacks.add(invalidate)
+    _conflictsSubscribers++
+
+    if (_conflictsSubscribers === 1 && !_conflictsRealtimeChannel) {
+      _conflictsRealtimeChannel = supabase
+        .channel('conflicts-realtime-singleton')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'conflicts' }, fireConflictsInvalidation)
+        .subscribe()
+    }
+
+    return () => {
+      _conflictsInvalidateCallbacks.delete(invalidate)
+      _conflictsSubscribers--
+      if (_conflictsSubscribers === 0 && _conflictsRealtimeChannel) {
+        supabase.removeChannel(_conflictsRealtimeChannel)
+        _conflictsRealtimeChannel = null
+        if (_conflictsDebounceTimer) {
+          clearTimeout(_conflictsDebounceTimer)
+          _conflictsDebounceTimer = null
+        }
+      }
+    }
+  }, [isPageVisible, qc])
+}
+
+export function useWeekConflicts() {
+  useConflictsRealtimeInvalidation()
 
   return useQuery({
     queryKey: ['conflicts', 'week'],
@@ -43,9 +81,8 @@ export function useWeekConflicts() {
           c.event_b?.event_type !== 'reminder'
       })
     },
-    staleTime: 30_000,
-    refetchOnMount: true,
-    refetchInterval: isPageVisible ? 120_000 : false,
+    staleTime: 5 * 60_000,
+    refetchInterval: false,
   })
 }
 

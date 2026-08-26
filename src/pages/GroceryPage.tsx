@@ -36,7 +36,6 @@ import MobileGroceryView from '../components/mobile/MobileGroceryView'
 import { normalizeRecipeIngredientFields } from '../utils/recipeIngredientParsing'
 import { supabase } from '../lib/supabase'
 import { formatSupabaseError } from '../lib/formatSupabaseError'
-import { usePageVisibility } from '../hooks/usePageVisibility'
 import {
   Alert,
   Button,
@@ -383,7 +382,6 @@ function renumberDraftSteps(steps: RecipeDraftStep[]): RecipeDraftStep[] {
 }
 
 export default function GroceryPage() {
-  const isPageVisible = usePageVisibility()
   const location = useLocation()
   const navigate = useNavigate()
   const {
@@ -414,7 +412,10 @@ export default function GroceryPage() {
       return (data ?? []) as HistoricalGroceryEvent[]
     },
     staleTime: 5 * 60_000,
-    refetchInterval: isPageVisible ? 10 * 60_000 : false,
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
   })
 
   const { data: recipeLibrary = [], refetch: refetchRecipeLibrary } = useQuery({
@@ -528,8 +529,11 @@ export default function GroceryPage() {
         steps: stepsByRecipe.get(row.id) ?? [],
       }))
     },
-    staleTime: 60_000,
-    refetchInterval: isPageVisible ? 2 * 60_000 : false,
+    staleTime: 5 * 60_000,
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
   })
 
   const { data: recipeMealPlans = [], refetch: refetchMealPlans } = useQuery({
@@ -542,8 +546,11 @@ export default function GroceryPage() {
       if (error) throw error
       return (data ?? []) as RecipeMealPlan[]
     },
-    staleTime: 60_000,
-    refetchInterval: isPageVisible ? 2 * 60_000 : false,
+    staleTime: 5 * 60_000,
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
   })
 
   const [inputValue, setInputValue] = useState('')
