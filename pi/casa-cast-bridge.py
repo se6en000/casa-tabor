@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Casa Tabor - Realtime Google Cast Bridge Daemon
-Maintains persistent connection to Supabase Realtime 'casa-music-cast'
-and controls local Google Nest / Chromecast devices via Default Media Receiver & CastV2.
+Casa Tabor - Robust Multi-Room Google Cast Bridge Daemon
+Processes commands via a sequential FIFO queue to prevent socket contention,
+manages Google Nest / Chromecast endpoints, and syncs live state over Supabase Realtime.
 """
 
 import os
@@ -11,6 +11,7 @@ import time
 import json
 import uuid
 import ssl
+import queue
 import logging
 import threading
 import websocket
@@ -30,19 +31,46 @@ DEFAULT_SPEAKER_IP = "192.168.87.244"
 DEFAULT_SPEAKER_PORT = 8009
 DEFAULT_SPEAKER_NAME = "Office Point (Nest Wifi)"
 
-FALLBACK_STREAMS = {
-    "KJEzFvXx3Xw": "https://ice1.somafm.com/illstreet-128-mp3", # So What / Jazz
-    "ScyiePiLzew": "https://ice1.somafm.com/illstreet-128-mp3", # Waltz for Debby
-    "BMh3F4U5--E": "https://ice1.somafm.com/lush-128-mp3",       # Bossa Nova
-    "jfKfPfyJRdk": "https://ice5.somafm.com/groovesalad-128-mp3", # Lofi Chillhop
-    "tQ3O-phxoc0": "https://ice1.somafm.com/secretagent-128-mp3", # Autumn Leaves
+GENRE_STREAMS = {
+    "jazz": "https://ice1.somafm.com/illstreet-128-mp3",
+    "bossa": "https://ice1.somafm.com/lush-128-mp3",
+    "lofi": "https://ice5.somafm.com/groovesalad-128-mp3",
+    "chill": "https://ice1.somafm.com/secretagent-128-mp3",
+    "pop": "https://ice1.somafm.com/poptron-128-mp3",
+    "rock": "https://ice1.somafm.com/indiepop-128-mp3",
+    "ambient": "https://ice5.somafm.com/dronezone-128-mp3",
+    "default": "https://ice1.somafm.com/illstreet-128-mp3"
 }
+
+def resolve_stream(query_or_url: str) -> str:
+    if not query_or_url:
+        return GENRE_STREAMS["default"]
+    if query_or_url.startswith("http://") or query_or_url.startswith("https://"):
+        return query_or_url
+    q = query_or_url.lower()
+    for genre, url in GENRE_STREAMS.items():
+        if genre in q:
+            return url
+    return GENRE_STREAMS["default"]
+
+def detect_mime(url: str) -> str:
+    if not url:
+        return "audio/mp3"
+    u = url.lower()
+    if ".m4a" in u or ".aac" in u:
+        return "audio/mp4"
+    if ".ogg" in u:
+        return "audio/ogg"
+    if ".m3u8" in u:
+        return "application/x-mpegURL"
+    return "audio/mp3"
 
 class CastRelay:
     def __init__(self):
         self.cast = None
         self.ws = None
-        self.lock = threading.Lock()
+        self.cmd_queue = queue.Queue()
+        self.state_lock = threading.Lock()
         self.connected_speaker = False
         
         self.state = {
@@ -64,40 +92,50 @@ class CastRelay:
             cast = pychromecast.get_chromecast_from_host(cast_info)
             cast.wait(timeout=6)
             
-            with self.lock:
+            with self.state_lock:
                 self.cast = cast
                 self.connected_speaker = True
                 if cast.status and cast.status.volume_level is not None:
                     self.state["volumePct"] = max(35, int(cast.status.volume_level * 100))
-                # Ensure minimum audible volume (at least 45%)
                 if self.state["volumePct"] < 40:
                     self.state["volumePct"] = 55
                     cast.set_volume(0.55)
             
-            logger.info(f"Successfully connected to '{cast.name}' ({cast.model_name}) | Initial Volume: {self.state['volumePct']}%")
+            logger.info(f"Successfully connected to '{cast.name}' ({cast.model_name}) | Volume: {self.state['volumePct']}%")
             return True
         except Exception as e:
             logger.error(f"Failed to connect to Cast speaker at {ip}: {e}")
             return False
 
-    def handle_command(self, action: str, payload: dict):
-        logger.info(f"Received command: '{action}' with payload: {payload}")
+    def process_queue(self):
+        """Dedicated worker thread processing all Cast commands sequentially."""
+        while True:
+            try:
+                action, payload = self.cmd_queue.get()
+                self._execute_command(action, payload)
+                self.cmd_queue.task_done()
+            except Exception as e:
+                logger.error(f"Unexpected error in command worker: {e}")
+                time.sleep(0.5)
+
+    def _execute_command(self, action: str, payload: dict):
+        logger.info(f"Executing: '{action}'")
         
         if action == "cast:play":
             track = payload.get("track") or payload
-            video_id = payload.get("videoId") or track.get("videoId") or track.get("id") or "KJEzFvXx3Xw"
             title = track.get("name") or payload.get("name") or "Cast Track"
             artists = track.get("artists") or ["Artist"]
             art_url = track.get("albumArtUrl") or ""
-            stream_url = track.get("streamUrl") or payload.get("streamUrl") or FALLBACK_STREAMS.get(video_id, "https://ice1.somafm.com/illstreet-128-mp3")
+            raw_stream = track.get("streamUrl") or payload.get("streamUrl") or track.get("name") or ""
+            stream_url = resolve_stream(raw_stream)
+            mime_type = detect_mime(stream_url)
             
             if not self.connected_speaker or not self.cast:
                 self.connect_speaker()
                 
             if self.cast and self.cast.media_controller:
                 try:
-                    logger.info(f"Starting audio playback of '{title}' via Default Media Receiver [{stream_url}]...")
-                    # Unmute and set volume
+                    logger.info(f"Starting playback for '{title}' [{mime_type}] via {stream_url}...")
                     self.cast.set_volume_muted(False)
                     current_vol = max(0.40, self.state.get("volumePct", 55) / 100.0)
                     self.cast.set_volume(current_vol)
@@ -105,20 +143,20 @@ class CastRelay:
                     mc = self.cast.media_controller
                     mc.play_media(
                         stream_url,
-                        content_type="audio/mp3",
+                        content_type=mime_type,
                         title=f"{title} - {', '.join(artists)}",
                         thumb=art_url,
                         autoplay=True
                     )
                     
-                    with self.lock:
+                    with self.state_lock:
                         self.state["isPlaying"] = True
                         self.state["track"] = {
-                            "id": video_id,
-                            "videoId": video_id,
+                            "id": str(track.get("id") or uuid.uuid4()),
+                            "videoId": str(track.get("videoId") or track.get("id") or ""),
                             "name": title,
                             "artists": artists,
-                            "album": track.get("album") or "Cast Live",
+                            "album": track.get("album") or "Cast Audio",
                             "albumArtUrl": art_url,
                             "durationMs": track.get("durationMs", 240000),
                             "streamUrl": stream_url,
@@ -129,13 +167,13 @@ class CastRelay:
                     self.broadcast_state()
                     logger.info(f"Now playing on '{self.state['activeDeviceName']}': {title} (Vol: {int(current_vol*100)}%)")
                 except Exception as e:
-                    logger.error(f"Error launching playback for {title}: {e}")
+                    logger.error(f"Error starting playback for {title}: {e}")
 
         elif action == "cast:pause":
             if self.cast and self.cast.media_controller:
                 try:
                     self.cast.media_controller.pause()
-                    with self.lock:
+                    with self.state_lock:
                         self.state["isPlaying"] = False
                     self.broadcast_state()
                     logger.info("Playback paused.")
@@ -146,7 +184,7 @@ class CastRelay:
             if self.cast and self.cast.media_controller:
                 try:
                     self.cast.media_controller.play()
-                    with self.lock:
+                    with self.state_lock:
                         self.state["isPlaying"] = True
                     self.broadcast_state()
                     logger.info("Playback resumed.")
@@ -158,7 +196,7 @@ class CastRelay:
                 try:
                     if self.cast.media_controller:
                         self.cast.media_controller.stop()
-                    with self.lock:
+                    with self.state_lock:
                         self.state["isPlaying"] = False
                         self.state["track"] = None
                         self.state["progressMs"] = 0
@@ -174,7 +212,7 @@ class CastRelay:
                 try:
                     self.cast.set_volume_muted(False)
                     self.cast.set_volume(vol_clamped / 100.0)
-                    with self.lock:
+                    with self.state_lock:
                         self.state["volumePct"] = vol_clamped
                     self.broadcast_state()
                     logger.info(f"Volume set to {vol_clamped}%.")
@@ -186,7 +224,7 @@ class CastRelay:
             if self.cast and self.cast.media_controller:
                 try:
                     self.cast.media_controller.seek(pos_ms / 1000.0)
-                    with self.lock:
+                    with self.state_lock:
                         self.state["progressMs"] = pos_ms
                     self.broadcast_state()
                     logger.info(f"Seeked to {pos_ms / 1000.0}s.")
@@ -200,7 +238,7 @@ class CastRelay:
         if not self.ws:
             return
         try:
-            with self.lock:
+            with self.state_lock:
                 state_copy = dict(self.state)
             msg = {
                 "topic": "realtime:casa-music-cast",
@@ -217,6 +255,10 @@ class CastRelay:
             logger.warning(f"Failed to broadcast state: {e}")
 
     def run_websocket(self):
+        # Start background worker thread for serial command execution
+        worker = threading.Thread(target=self.process_queue, daemon=True)
+        worker.start()
+
         while True:
             try:
                 logger.info(f"Connecting to Supabase Realtime ({WS_URL[:50]}...)...")
@@ -253,7 +295,8 @@ class CastRelay:
                                 cmd_payload = payload.get("payload", {})
                                 action = cmd_payload.get("action")
                                 if action:
-                                    threading.Thread(target=self.handle_command, args=(action, cmd_payload)).start()
+                                    # Enqueue command for FIFO processing (eliminates socket concurrency)
+                                    self.cmd_queue.put((action, cmd_payload))
                     except websocket.WebSocketTimeoutException:
                         pass
             except Exception as e:
