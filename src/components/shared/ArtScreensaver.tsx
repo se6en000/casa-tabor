@@ -5,7 +5,9 @@ import { getTextureStyle } from '../../utils/textureUtils'
 import { useTheme } from '../../contexts/ThemeContext'
 
 const SENSOR = 'http://127.0.0.1:8765'
-const EDGE_MAT_PX = 100
+const EDGE_MAT_H_PX = 90
+const EDGE_MAT_TOP_PX = 76
+const EDGE_MAT_BOT_PX = 112
 const MIN_FRAME_PX = 320
 const MIDNIGHT_MAT_COLOR = '#07090D'
 const MIDNIGHT_MAT_TEXTURE = 'linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.22))'
@@ -78,8 +80,8 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
   const matTexture = darkThemeActive ? MIDNIGHT_MAT_TEXTURE : textureStyle.backgroundImage
   const matBlendMode = darkThemeActive ? 'normal' : textureStyle.backgroundBlendMode
   const frameSize = useMemo(() => {
-    const maxWidth = Math.max(viewport.width - EDGE_MAT_PX * 2, MIN_FRAME_PX)
-    const maxHeight = Math.max(viewport.height - EDGE_MAT_PX * 2, MIN_FRAME_PX)
+    const maxWidth = Math.max(viewport.width - EDGE_MAT_H_PX * 2, MIN_FRAME_PX)
+    const maxHeight = Math.max(viewport.height - (EDGE_MAT_TOP_PX + EDGE_MAT_BOT_PX), MIN_FRAME_PX)
     const minWidth = Math.min(maxWidth, (viewport.width * minArtWidthVw) / 100)
 
     let width = Math.max(maxWidth, minWidth)
@@ -206,7 +208,7 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
             'inset -36px 0 48px -12px rgba(0,0,0,0.32)',
             'inset 0 -18px 24px -12px rgba(0,0,0,0.10)',
           ].join(', '),
-          padding: '3.5vw',
+          padding: '3.5vw 3.5vw 4.8vw 3.5vw',
           transition: matTransition ? 'background-color 0.5s ease-out' : 'none',
         }}
       >
