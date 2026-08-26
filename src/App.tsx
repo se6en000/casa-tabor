@@ -281,6 +281,7 @@ function AppShell() {
           rotationMins={settings.rotationMins}
           minArtWidthVw={settings.minArtWidthVw}
           artDimOffset={settings.artDimOffset}
+          shuffle={settings.shuffle}
         />
       )}
     </div>

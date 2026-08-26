@@ -85,7 +85,7 @@ export function SegmentedControl<T extends string>({
 
   const handlePointerUp = (event: PointerEvent<HTMLDivElement>) => {
     const interaction = pointerInteraction.current
-    if (interaction?.pointerId === event.pointerId) {
+    if (interaction?.dragging) {
       selectNearestEnabled(pointerPosition(event))
     }
     releasePointer(event)
@@ -127,17 +127,20 @@ export function SegmentedControl<T extends string>({
       />
       {options.map((option) => {
         const selected = option.value === value
+        const optionDisabled = disabled || option.disabled
         return (
           <button
             key={option.value}
             type="button"
             role="radio"
             aria-checked={selected}
-            disabled={disabled || option.disabled}
+            disabled={optionDisabled}
             tabIndex={selected ? 0 : -1}
             data-segment-value={option.value}
-            onClick={(event) => {
-              if (event.detail === 0) onChange(option.value)
+            onClick={() => {
+              if (!optionDisabled && option.value !== value) {
+                onChange(option.value)
+              }
             }}
             onKeyDown={(event) => handleKeyDown(event, option.value)}
             className={segmentedControlItemClassName({ selected })}

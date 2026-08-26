@@ -1153,7 +1153,7 @@ async function handleGmailScan(req: Request): Promise<Response> {
         // Skip already-processed UNLESS this email was newly labeled 'Casa' by the user
         const { data: alreadyDone } = await sb.from('gmail_processed_messages')
           .select('id, is_user_labeled').eq('family_member_id', memberId).eq('gmail_message_id', msgId).maybeSingle()
-        if (!isUserLabeled) {
+        if (!isUserLabeled || alreadyDone?.is_user_labeled) {
           if (!backfillSince && alreadyDone) continue
         }
 

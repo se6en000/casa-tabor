@@ -53,6 +53,7 @@ interface Props {
   adaptiveMatColor?: boolean
   artDimOffset?: number
   minArtWidthVw?: number
+  shuffle?: boolean
 }
 
 export default function ArtScreensaver({
@@ -61,8 +62,9 @@ export default function ArtScreensaver({
   adaptiveMatColor = true,
   artDimOffset = 30,
   minArtWidthVw = 55,
+  shuffle = true,
 }: Props) {
-  const { artwork, loaded, onLoad, onError, next } = useArtwork(rotationMins * 60)
+  const { artwork, loaded, onLoad, onError, next } = useArtwork(rotationMins * 60, shuffle)
   const { isMidnightActive } = useTheme()
   const [visible, setVisible] = useState(false)
   const [dismissable, setDismissable] = useState(false)

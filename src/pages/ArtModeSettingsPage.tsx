@@ -365,6 +365,12 @@ export default function ArtModeSettingsPage() {
               />
             </Row>
             <Toggle
+              checked={settings.shuffle}
+              onChange={v => updateScreensaver({ shuffle: v })}
+              label="Shuffle artwork"
+              desc="Randomize playback order instead of sequential rotation."
+            />
+            <Toggle
               checked={settings.displaySleepEnabled}
               onChange={v => updateScreensaver({ displaySleepEnabled: v })}
               label="Monitor sleep in Art Mode"

@@ -190,7 +190,7 @@ async function fetchFromArtic(query: string): Promise<Artwork[]> {
   }
 }
 
-export function useArtwork(rotateSecs = 240) {
+export function useArtwork(rotateSecs = 240, shuffle = true) {
   const [artworks, setArtworks]   = useState<Artwork[]>([])
   const [casaArtworks, setCasaArtworks] = useState<Artwork[]>([])
   const [index, setIndex]         = useState(0)
@@ -236,20 +236,20 @@ export function useArtwork(rotateSecs = 240) {
         })
 
         if (!cancelled && all.length > 0) {
-          setCasaArtworks(shuffled(all))
+          setCasaArtworks(shuffle ? shuffled(all) : all)
         } else if (!cancelled) {
-          setCasaArtworks(FALLBACKS)
+          setCasaArtworks(shuffle ? shuffled(FALLBACKS) : FALLBACKS)
         }
       } catch (e) {
         console.error('Failed to load artwork:', e)
         if (!cancelled) {
-          setCasaArtworks(FALLBACKS)
+          setCasaArtworks(shuffle ? shuffled(FALLBACKS) : FALLBACKS)
         }
       }
     }
     load()
     return () => { cancelled = true }
-  }, [sourceMode])
+  }, [sourceMode, shuffle])
 
   useEffect(() => {
     if (personalArtworkLoading) return
@@ -260,21 +260,38 @@ export function useArtwork(rotateSecs = 240) {
       imageUrl: item.imageUrl,
       medium: 'Uploaded artwork',
     }))
-    setArtworks(buildArtworkFeed(sourceMode, casaArtworks, personal))
+    const baseCasa = shuffle ? shuffled(casaArtworks) : casaArtworks
+    const basePersonal = shuffle ? shuffled(personal) : personal
+    const feed = buildArtworkFeed(sourceMode, baseCasa, basePersonal)
+    setArtworks(shuffle ? shuffled(feed) : feed)
     setLoaded(false)
     setIndex(0)
-  }, [casaArtworks, personalArtwork, personalArtworkLoading, sourceMode])
+  }, [casaArtworks, personalArtwork, personalArtworkLoading, sourceMode, shuffle])
+
+  const advance = useCallback(() => {
+    setLoaded(false)
+    setIndex(prevIndex => {
+      if (artworks.length <= 1) return 0
+      const nextIndex = prevIndex + 1
+      if (nextIndex >= artworks.length) {
+        if (shuffle) {
+          setArtworks(prev => shuffled(prev))
+        }
+        return 0
+      }
+      return nextIndex
+    })
+  }, [artworks.length, shuffle])
 
   // Auto-rotate — only starts once artworks are loaded
   useEffect(() => {
     if (artworks.length === 0) return
     if (rotateRef.current) clearInterval(rotateRef.current)
     rotateRef.current = setInterval(() => {
-      setLoaded(false)
-      setIndex(i => (i + 1) % artworks.length)
+      advance()
     }, rotateSecs * 1000)
     return () => { if (rotateRef.current) clearInterval(rotateRef.current) }
-  }, [artworks.length, rotateSecs])
+  }, [artworks.length, rotateSecs, advance])
 
   const current = artworks.length > 0 ? artworks[index] : null
 
@@ -288,14 +305,12 @@ export function useArtwork(rotateSecs = 240) {
       if (failedId != null) failedIdsRef.current.add(failedId)
       return prev
     })
-    setLoaded(false)
-    setIndex(i => (i + 1) % Math.max(artworks.length, 1))
-  }, [artworks.length, index])
+    advance()
+  }, [advance, index])
 
   const next = useCallback(() => {
-    setLoaded(false)
-    setIndex(i => (i + 1) % Math.max(artworks.length, 1))
-  }, [artworks.length])
+    advance()
+  }, [advance])
 
   const setPreference = useCallback((artworkId: Artwork['id'], preference: ArtworkPreference) => {
     const nextPrefs: ArtworkPreferences = { ...prefsRef.current, [String(artworkId)]: preference }
