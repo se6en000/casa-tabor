@@ -275,8 +275,8 @@ export default function ArtScreensaver({
                 objectPosition: 'center center',
                 transform: 'scale(1.01)',
                 display: 'block',
-                filter: darkThemeActive ? 'contrast(0.98) brightness(0.92)' : 'sepia(0.05) contrast(0.97) brightness(0.95)',
-                mixBlendMode: darkThemeActive ? 'normal' : 'multiply',
+                filter: darkThemeActive ? 'contrast(0.98) brightness(0.92)' : 'none',
+                mixBlendMode: 'normal',
                 opacity: loaded ? 0 : 1,
                 transition: 'opacity 500ms ease-out',
                 pointerEvents: 'none',
@@ -300,8 +300,8 @@ export default function ArtScreensaver({
                 objectPosition: 'center center',
                 transform: 'scale(1.01)',
                 display: 'block',
-                filter: darkThemeActive ? 'contrast(0.98) brightness(0.92)' : 'sepia(0.05) contrast(0.97) brightness(0.95)',
-                mixBlendMode: darkThemeActive ? 'normal' : 'multiply',
+                filter: darkThemeActive ? 'contrast(0.98) brightness(0.92)' : 'none',
+                mixBlendMode: 'normal',
                 opacity: loaded ? 1 : 0,
                 transition: 'opacity 500ms ease-out',
               }}
@@ -318,7 +318,7 @@ export default function ArtScreensaver({
               backgroundSize: '256px 256px',
               backgroundRepeat: 'repeat',
               mixBlendMode: 'overlay',
-              opacity: darkThemeActive ? 0.35 : 0.85,
+              opacity: darkThemeActive ? 0.35 : 0.70,
             }}
           />
 
@@ -330,8 +330,8 @@ export default function ArtScreensaver({
               pointerEvents: 'none',
               zIndex: 5,
               background: darkThemeActive
-                ? 'radial-gradient(ellipse 80% 65% at 50% 12%, rgba(255, 248, 235, 0.07) 0%, rgba(255, 245, 225, 0.02) 55%, transparent 100%)'
-                : 'radial-gradient(ellipse 85% 70% at 50% 12%, rgba(255, 253, 248, 0.18) 0%, rgba(255, 250, 242, 0.06) 50%, rgba(40, 28, 16, 0.04) 100%)',
+                ? 'radial-gradient(ellipse 80% 65% at 50% 12%, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.01) 55%, transparent 100%)'
+                : 'radial-gradient(ellipse 85% 70% at 50% 12%, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.03) 50%, transparent 100%)',
             }}
           />
 
