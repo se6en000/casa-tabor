@@ -122,7 +122,7 @@ function sensorDataToZone(cct: number, lux: number): RoomToneZone {
   return 'day'
 }
 
-const SENSOR_POLL_MS    = 20_000
+const SENSOR_POLL_MS    = 3_000
 const SENSOR_ROW_ID     = '00000000-0000-0000-0000-000000000001'
 
 export function useRoomTone() {
@@ -159,15 +159,15 @@ export function useRoomTone() {
           .eq('id', SENSOR_ROW_ID)
           .single()
         if (error || !row?.cct) return null
-        // Stale if not updated in last 30s
+        // Stale if not updated in last 45s
         const age = Date.now() - new Date(row.updated_at).getTime()
-        if (age > 30_000) return null
+        if (age > 45_000) return null
         return row as { cct: number; lux: number; zone: string; brightness: number | null; rgb: [number, number, number] | null }
       } catch {
         return null
       }
     },
-    refetchInterval: isPageVisible ? SENSOR_POLL_MS : false,
+    refetchInterval: isPageVisible && cfg.sensor_push_enabled ? SENSOR_POLL_MS : false,
     staleTime: SENSOR_POLL_MS,
   })
 
