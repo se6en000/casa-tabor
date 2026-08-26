@@ -10,13 +10,17 @@ scp -q "$(dirname "$0")/start-casa.sh" "${PI_HOST}:${PI_START_SCRIPT}"
 echo "[refresh] Syncing watchdog script"
 scp -q "$(dirname "$0")/casa-watchdog.sh" "${PI_HOST}:/home/jake/casa-watchdog.sh"
 echo "[refresh] Syncing STT bridge modules to ${PI_HOST}:${PI_WHISPER_DIR}"
-ssh "$PI_HOST" "mkdir -p '${PI_WHISPER_DIR}'"
+ssh "$PI_HOST" "mkdir -p '${PI_WHISPER_DIR}' /home/jake/sensor-bridge"
 scp -q \
   "$(dirname "$0")/whisper-bridge-main.py" \
   "${PI_HOST}:${PI_WHISPER_DIR}/main.py"
 scp -q \
   "$(dirname "$0")/stt_flux_shadow.py" \
   "${PI_HOST}:${PI_WHISPER_DIR}/stt_flux_shadow.py"
+echo "[refresh] Syncing sensor bridge module to ${PI_HOST}:/home/jake/sensor-bridge"
+scp -q \
+  "$(dirname "$0")/sensor-bridge/main.py" \
+  "${PI_HOST}:/home/jake/sensor-bridge/main.py"
 echo "[refresh] Syncing service unit files"
 ssh "$PI_HOST" "mkdir -p /home/jake/.config/systemd/user"
 scp -q \

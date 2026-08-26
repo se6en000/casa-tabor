@@ -79,9 +79,7 @@ SUPABASE_SENSOR_ID  = "00000000-0000-0000-0000-000000000001"  # fixed row for la
 
 _push_enabled           = False
 _push_checked_at        = 0.0
-_push_enabled_since     = 0.0   # when push was last turned on (0 = not active)
-PUSH_CHECK_INTERVAL     = 60
-PUSH_AUTO_DISABLE_S     = 600   # auto-disable push after 10 minutes
+PUSH_CHECK_INTERVAL     = 3     # check Supabase display_config every 3s
 SUPABASE_SETTINGS_KEY   = "display_config"
 
 # Auto-sleep config (overridden from Supabase display_config)
@@ -124,25 +122,18 @@ def _disable_push_remotely():
             headers={"apikey": SUPABASE_SERVICE_KEY, "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}"},
             timeout=3,
         )
-        log.info("Push auto-disabled and sensor_readings row cleared")
+        log.info("Push disabled and sensor_readings row cleared")
     except Exception as exc:
-        log.warning("Auto-disable failed: %s", exc)
+        log.warning("Disable failed: %s", exc)
 
 def _is_push_enabled() -> bool:
-    """Return True if sensor_push_enabled is set in display_config. Caches for 15s.
-    Also refreshes brightness_min/brightness_max and auto-sleep config.
-    Auto-disables push after PUSH_AUTO_DISABLE_S to limit DB writes."""
-    global _push_enabled, _push_checked_at, _push_enabled_since
+    """Return True if sensor_push_enabled is set in display_config. Caches for 3s.
+    Also refreshes brightness_min/brightness_max and auto-sleep config."""
+    global _push_enabled, _push_checked_at
     global _brightness_min, _brightness_max
     global _auto_sleep_enabled, _sleep_lux_threshold, _wake_lux_threshold, _sleep_delay_s
     now = time.time()
     if now - _push_checked_at < PUSH_CHECK_INTERVAL:
-        # Still apply auto-disable timer between fetches
-        if _push_enabled and _push_enabled_since and (now - _push_enabled_since) > PUSH_AUTO_DISABLE_S:
-            log.info("Push auto-disabled after %ds — clearing DB", PUSH_AUTO_DISABLE_S)
-            _push_enabled = False
-            _push_enabled_since = 0.0
-            threading.Thread(target=_disable_push_remotely, daemon=True).start()
         return _push_enabled
     try:
         res = _requests.get(
@@ -153,18 +144,13 @@ def _is_push_enabled() -> bool:
         )
         if not res.ok:
             log.warning("Push config fetch returned HTTP %d: %s", res.status_code, res.text[:200])
-            _push_checked_at = now + 60  # back off for 60s on error
+            _push_checked_at = now + 15  # back off for 15s on error
             return _push_enabled
         rows = res.json()
         if rows and isinstance(rows, list):
             cfg = rows[0].get("value", {})
             new_push_enabled     = bool(cfg.get("sensor_push_enabled", False))
-            # Track when push was turned on (for auto-disable timer)
-            if new_push_enabled and not _push_enabled:
-                _push_enabled_since = now
-                log.info("Push enabled — will auto-disable in %ds", PUSH_AUTO_DISABLE_S)
-            elif not new_push_enabled and _push_enabled:
-                _push_enabled_since = 0.0
+            if not new_push_enabled and _push_enabled:
                 # User disabled — clear the row
                 threading.Thread(target=_disable_push_remotely, daemon=True).start()
             _push_enabled        = new_push_enabled
@@ -174,12 +160,6 @@ def _is_push_enabled() -> bool:
             _sleep_lux_threshold = float(cfg.get("sleep_lux_threshold", 0.5))
             _wake_lux_threshold  = float(cfg.get("wake_lux_threshold", 3.0))
             _sleep_delay_s       = int(cfg.get("sleep_delay_s", 30))
-        # Auto-disable check
-        if _push_enabled and _push_enabled_since and (now - _push_enabled_since) > PUSH_AUTO_DISABLE_S:
-            log.info("Push auto-disabled after %ds — clearing DB", PUSH_AUTO_DISABLE_S)
-            _push_enabled = False
-            _push_enabled_since = 0.0
-            threading.Thread(target=_disable_push_remotely, daemon=True).start()
         log.info("Push config refreshed — sensor_push_enabled=%s min=%d max=%d auto_sleep=%s",
                  _push_enabled, _brightness_min, _brightness_max, _auto_sleep_enabled)
     except Exception as exc:
@@ -978,6 +958,7 @@ class SimulatedReader:
 
 def _poll_loop(reader):
     consecutive_errors = 0
+    _last_supabase_push = 0.0
     while True:
         try:
             data = reader.read()
@@ -991,15 +972,18 @@ def _poll_loop(reader):
             # Layer 1: update DDC targets for brightness and color temperature
             set_brightness_target(data["lux"])
             set_color_target(data["cct"])
-            # Push to Supabase so any device (not just localhost) can read it
-            with _ddc_lock:
-                brightness_now = _current_brightness
-                rgb_now = list(_current_rgb) if _current_rgb else None
-            threading.Thread(
-                target=_push_to_supabase,
-                args=(data["cct"], data["lux"], data["zone"], brightness_now, rgb_now),
-                daemon=True,
-            ).start()
+            # Push to Supabase so any device (not just localhost) can read it (throttled to 3s)
+            now = time.time()
+            if now - _last_supabase_push >= 3.0:
+                _last_supabase_push = now
+                with _ddc_lock:
+                    brightness_now = _current_brightness
+                    rgb_now = list(_current_rgb) if _current_rgb else None
+                threading.Thread(
+                    target=_push_to_supabase,
+                    args=(data["cct"], data["lux"], data["zone"], brightness_now, rgb_now),
+                    daemon=True,
+                ).start()
         except Exception as exc:
             consecutive_errors += 1
             log.error("Sensor read error #%d: %s", consecutive_errors, exc)
