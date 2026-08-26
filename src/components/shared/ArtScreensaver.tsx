@@ -300,6 +300,19 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
             }}
           />
 
+          {/* Directional Gallery Spotlight & Ambient Falloff */}
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              pointerEvents: 'none',
+              zIndex: 5,
+              background: darkThemeActive
+                ? 'radial-gradient(ellipse 80% 65% at 50% 12%, rgba(255, 248, 235, 0.07) 0%, rgba(255, 245, 225, 0.02) 55%, transparent 100%)'
+                : 'radial-gradient(ellipse 85% 70% at 50% 12%, rgba(255, 253, 248, 0.18) 0%, rgba(255, 250, 242, 0.06) 50%, rgba(40, 28, 16, 0.04) 100%)',
+            }}
+          />
+
           {/* Subtle, Realistic Directional Downward Cast Shadow from Bevel Lip */}
           <div
             style={{
