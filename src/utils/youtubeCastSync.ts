@@ -15,6 +15,7 @@ export interface YouTubeTrack {
   albumArtUrl: string
   durationMs: number
   videoId: string
+  streamUrl?: string
 }
 
 export type CastDeviceType = 'speaker' | 'group' | 'display' | 'chromecast'

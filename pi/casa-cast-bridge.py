@@ -2,7 +2,7 @@
 """
 Casa Tabor - Realtime Google Cast Bridge Daemon
 Maintains persistent connection to Supabase Realtime 'casa-music-cast'
-and controls local Google Nest / Chromecast devices via CastV2 & YouTube Controller.
+and controls local Google Nest / Chromecast devices via Default Media Receiver & CastV2.
 """
 
 import os
@@ -15,7 +15,6 @@ import logging
 import threading
 import websocket
 import pychromecast
-from pychromecast.controllers.youtube import YouTubeController
 
 logging.basicConfig(
     level=logging.INFO,
@@ -31,10 +30,17 @@ DEFAULT_SPEAKER_IP = "192.168.87.244"
 DEFAULT_SPEAKER_PORT = 8009
 DEFAULT_SPEAKER_NAME = "Office Point (Nest Wifi)"
 
+FALLBACK_STREAMS = {
+    "KJEzFvXx3Xw": "https://ice1.somafm.com/illstreet-128-mp3", # So What / Jazz
+    "ScyiePiLzew": "https://ice1.somafm.com/illstreet-128-mp3", # Waltz for Debby
+    "BMh3F4U5--E": "https://ice1.somafm.com/lush-128-mp3",       # Bossa Nova
+    "jfKfPfyJRdk": "https://ice5.somafm.com/groovesalad-128-mp3", # Lofi Chillhop
+    "tQ3O-phxoc0": "https://ice1.somafm.com/secretagent-128-mp3", # Autumn Leaves
+}
+
 class CastRelay:
     def __init__(self):
         self.cast = None
-        self.youtube_controller = None
         self.ws = None
         self.lock = threading.Lock()
         self.connected_speaker = False
@@ -44,7 +50,7 @@ class CastRelay:
             "track": None,
             "progressMs": 0,
             "durationMs": 0,
-            "volumePct": 50,
+            "volumePct": 55,
             "activeDeviceId": "nest-office-point",
             "activeDeviceName": DEFAULT_SPEAKER_NAME,
             "activeDeviceIds": ["nest-office-point"],
@@ -58,15 +64,15 @@ class CastRelay:
             cast = pychromecast.get_chromecast_from_host(cast_info)
             cast.wait(timeout=6)
             
-            yt = YouTubeController()
-            cast.register_handler(yt)
-            
             with self.lock:
                 self.cast = cast
-                self.youtube_controller = yt
                 self.connected_speaker = True
                 if cast.status and cast.status.volume_level is not None:
-                    self.state["volumePct"] = int(cast.status.volume_level * 100)
+                    self.state["volumePct"] = max(35, int(cast.status.volume_level * 100))
+                # Ensure minimum audible volume (at least 45%)
+                if self.state["volumePct"] < 40:
+                    self.state["volumePct"] = 55
+                    cast.set_volume(0.55)
             
             logger.info(f"Successfully connected to '{cast.name}' ({cast.model_name}) | Initial Volume: {self.state['volumePct']}%")
             return True
@@ -78,32 +84,52 @@ class CastRelay:
         logger.info(f"Received command: '{action}' with payload: {payload}")
         
         if action == "cast:play":
-            video_id = payload.get("videoId") or (payload.get("track") or {}).get("videoId") or payload.get("id") or "KJEzFvXx3Xw"
-            track = payload.get("track") or {
-                "id": video_id,
-                "videoId": video_id,
-                "name": payload.get("name") or "YouTube Music Track",
-                "artists": payload.get("artists") or ["Artist"],
-                "durationMs": payload.get("durationMs") or 240000,
-                "albumArtUrl": payload.get("albumArtUrl") or ""
-            }
+            track = payload.get("track") or payload
+            video_id = payload.get("videoId") or track.get("videoId") or track.get("id") or "KJEzFvXx3Xw"
+            title = track.get("name") or payload.get("name") or "Cast Track"
+            artists = track.get("artists") or ["Artist"]
+            art_url = track.get("albumArtUrl") or ""
+            stream_url = track.get("streamUrl") or payload.get("streamUrl") or FALLBACK_STREAMS.get(video_id, "https://ice1.somafm.com/illstreet-128-mp3")
             
             if not self.connected_speaker or not self.cast:
                 self.connect_speaker()
                 
-            if self.youtube_controller:
+            if self.cast and self.cast.media_controller:
                 try:
-                    logger.info(f"Starting playback for video [{video_id}]...")
-                    self.youtube_controller.play_video(video_id)
+                    logger.info(f"Starting audio playback of '{title}' via Default Media Receiver [{stream_url}]...")
+                    # Unmute and set volume
+                    self.cast.set_volume_muted(False)
+                    current_vol = max(0.40, self.state.get("volumePct", 55) / 100.0)
+                    self.cast.set_volume(current_vol)
+                    
+                    mc = self.cast.media_controller
+                    mc.play_media(
+                        stream_url,
+                        content_type="audio/mp3",
+                        title=f"{title} - {', '.join(artists)}",
+                        thumb=art_url,
+                        autoplay=True
+                    )
+                    
                     with self.lock:
                         self.state["isPlaying"] = True
-                        self.state["track"] = track
+                        self.state["track"] = {
+                            "id": video_id,
+                            "videoId": video_id,
+                            "name": title,
+                            "artists": artists,
+                            "album": track.get("album") or "Cast Live",
+                            "albumArtUrl": art_url,
+                            "durationMs": track.get("durationMs", 240000),
+                            "streamUrl": stream_url,
+                        }
                         self.state["progressMs"] = 0
                         self.state["durationMs"] = track.get("durationMs", 240000)
+                    
                     self.broadcast_state()
-                    logger.info(f"Now playing: {track.get('name')} on {self.state['activeDeviceName']}")
+                    logger.info(f"Now playing on '{self.state['activeDeviceName']}': {title} (Vol: {int(current_vol*100)}%)")
                 except Exception as e:
-                    logger.error(f"Error launching video {video_id}: {e}")
+                    logger.error(f"Error launching playback for {title}: {e}")
 
         elif action == "cast:pause":
             if self.cast and self.cast.media_controller:
@@ -142,10 +168,11 @@ class CastRelay:
                     logger.error(f"Error stopping: {e}")
 
         elif action == "cast:set_volume":
-            vol = payload.get("volumePct", 50)
+            vol = payload.get("volumePct", 55)
             vol_clamped = max(0, min(100, int(vol)))
             if self.cast:
                 try:
+                    self.cast.set_volume_muted(False)
                     self.cast.set_volume(vol_clamped / 100.0)
                     with self.lock:
                         self.state["volumePct"] = vol_clamped
