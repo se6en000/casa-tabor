@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useArtwork } from '../../hooks/useArtwork'
 import { generateAdaptiveMatColor } from '../../utils/colorUtils'
-import { getTextureStyle } from '../../utils/textureUtils'
+import { getTextureStyle, PAPER_GRAIN_TEXTURE } from '../../utils/textureUtils'
 import { useTheme } from '../../contexts/ThemeContext'
 
 const SENSOR = 'http://127.0.0.1:8765'
@@ -297,6 +297,20 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
             />
           )}
           
+          {/* Cold-Press Watercolor Paper Grain & Canvas Tooth Overlay */}
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              pointerEvents: 'none',
+              backgroundImage: `url("${PAPER_GRAIN_TEXTURE}")`,
+              backgroundSize: '256px 256px',
+              backgroundRepeat: 'repeat',
+              mixBlendMode: 'overlay',
+              opacity: darkThemeActive ? 0.35 : 0.80,
+            }}
+          />
+
           {/* Directional 45-Degree Beveled Mat Cutout & Cast Shadow */}
           <div
             style={{
