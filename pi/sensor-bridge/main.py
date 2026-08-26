@@ -216,10 +216,9 @@ REG_CH0_LOW  = 0x95   # first of 18 channel bytes (9 × 16-bit LE pairs)
 
 GAIN_512X    = 0x0A
 
-# Channel layout returned starting at REG_CH0_LOW (AS7343 ROM Table 0):
-# CH0:FZ(450nm) CH1:FY(555nm) CH2:FXL(600nm) CH3:NIR(855nm) CH4:F2(425nm)
-# CH5:F1(405nm) CH6:F4(515nm) CH7:F6(640nm)  CH8:F7(690nm)
-CH_NAMES = ["FZ", "FY", "FXL", "NIR", "F2", "F1", "F4", "F6", "F7"]
+# Channel layout returned starting at REG_CH0_LOW (AS7343 ROM Table 0, 6 channels × 2 bytes):
+# CH0:FZ(450nm) CH1:FY(555nm) CH2:FXL(600nm) CH3:NIR(855nm) CH4:CLEAR CH5:FD
+CH_NAMES = ["FZ", "FY", "FXL", "NIR", "CLEAR", "FD"]
 
 # ── Global state ─────────────────────────────────────────────────────────────
 _lock        = threading.Lock()
@@ -776,49 +775,35 @@ def cct_to_rgb_gains(cct: float) -> tuple[int, int, int]:
 
 def channels_to_cct_lux(ch: dict) -> tuple[float, float]:
     """
-    Estimate true CCT (Kelvin) and Lux from AS7343 spectral channel counts.
-    AS7343 ROM Table 0 channels:
-      FZ  = 450nm (Blue)
-      FY  = 555nm (Photopic Green/Yellow)
-      FXL = 600nm (Amber/Orange)
-      NIR = 855nm (Infrared)
-      F2  = 425nm (Indigo)
-      F1  = 405nm (Violet)
-      F4  = 515nm (Cyan-Green)
-      F6  = 640nm (Red)
-      F7  = 690nm (Deep Red)
+    Estimate true CCT (Kelvin) and Lux from AS7343 ROM Table 0 channels:
+      FZ    = 450nm (Blue pump & skylight)
+      FY    = 555nm (Photopic Green/Yellow peak)
+      FXL   = 600nm (Amber/Red phosphor & thermal emission)
+      NIR   = 855nm (Near Infrared)
+      CLEAR = Broadband photopic clear
+      FD    = Flicker / Ambient reference
     """
-    fz  = float(max(ch.get("FZ",  0), 0))
-    fy  = float(max(ch.get("FY",  0), 0))
-    fxl = float(max(ch.get("FXL", 0), 0))
-    f6  = float(max(ch.get("F6",  0), 0))
-    f7  = float(max(ch.get("F7",  0), 0))
-    f4  = float(max(ch.get("F4",  0), 0))
-    f2  = float(max(ch.get("F2",  0), 0))
-    f1  = float(max(ch.get("F1",  0), 0))
-    nir = float(max(ch.get("NIR", 0), 0))
-
-    # Total Red/Warm energy: FXL (600nm) + F6 (640nm) + F7 (690nm)
-    warm = fxl + f6 * 1.2 + f7 * 0.5
-    # Total Blue/Cool energy: FZ (450nm) + F2 (425nm) + F1 (405nm)
-    cool = fz + f2 * 0.8 + f1 * 0.5
+    fz    = float(max(ch.get("FZ",    0), 0))
+    fy    = float(max(ch.get("FY",    0), 0))
+    fxl   = float(max(ch.get("FXL",   0), 0))
+    clear = float(max(ch.get("CLEAR", 0), 0))
+    nir   = float(max(ch.get("NIR",   0), 0))
 
     # 1. Lux calculation: FY (555nm photopic peak) with NIR subtraction
-    visible = max(0.0, fy - 0.15 * nir)
+    visible = max(0.0, fy - 0.05 * nir)
     # Gain 256x at 50ms integration time: ~3.5 counts per lux
-    lux = visible / 3.5
+    lux = max(0.0, visible / 3.5)
 
     # 2. Spectral Chromaticity CCT:
-    # Calibrated for phosphor LEDs, incandescent, and natural sky:
-    # Warm white LED (2700K): cool/warm ratio ~ 0.07-0.10 -> ~2700K-2900K
-    # Warm halogen (3000K): cool/warm ratio ~ 0.15 -> ~3200K
-    # Neutral white (4000K): cool/warm ratio ~ 0.45 -> ~4200K
-    # Daylight (5500K): cool/warm ratio ~ 0.85 -> ~5600K
-    # Twilight/Dusk (6500K-7500K): cool/warm ratio >= 1.5 -> ~7000K+
-    if warm > 5.0 and cool > 1.0:
-        ratio = cool / warm
-        cct = 2400.0 + 5600.0 * (1.0 - math.exp(-1.1 * ratio))
-    elif warm > cool:
+    # Ratio of Blue (FZ) to Warm Amber/Red (FXL)
+    # Warm white LED (2700K): FXL >> FZ (ratio ~ 0.25 - 0.50) -> 2700K - 3200K
+    # Neutral white (4000K): FXL > FZ (ratio ~ 0.75 - 0.85) -> ~4200K
+    # Daylight (5500K): FZ ~= FXL (ratio ~ 1.05 - 1.20) -> ~5600K
+    # Cool dusk / twilight (7000K+): FZ >> FXL (ratio >= 1.60) -> ~7200K+
+    if fxl > 5.0 and fz > 1.0:
+        ratio = fz / fxl
+        cct = 2200.0 + 5800.0 * (1.0 / (1.0 + math.exp(-3.2 * (ratio - 0.95))))
+    elif fxl > fz:
         cct = 2700.0
     else:
         cct = 6500.0
@@ -904,8 +889,8 @@ class AS7343Reader:
             self.bus.write_byte_data(AS7343_ADDR, REG_ENABLE, 0x03)  # PON + SP_EN
             self._wait_data_ready()
 
-            # Read 18 bytes = 9 × 16-bit channels (LE pairs)
-            raw = self.bus.read_i2c_block_data(AS7343_ADDR, REG_CH0_LOW, 18)
+            # Read 12 bytes = 6 × 16-bit channels (LE pairs)
+            raw = self.bus.read_i2c_block_data(AS7343_ADDR, REG_CH0_LOW, 12)
         except Exception as exc:
             # I2C bus hung (e.g. kernel timeout under CPU load) — close and
             # force a full reopen on the next poll cycle rather than spinning.
