@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useArtwork } from '../../hooks/useArtwork'
-import { generateAdaptiveMatColor } from '../../utils/colorUtils'
+import { generateAdaptiveMatColor, generateHarmonizedBevel } from '../../utils/colorUtils'
 import { getTextureStyle, PAPER_GRAIN_TEXTURE } from '../../utils/textureUtils'
 import { useTheme } from '../../contexts/ThemeContext'
 
@@ -48,20 +48,27 @@ function isDarkColor(color: string): boolean {
 }
 
 interface Props {
-  onDismiss: () => void
+  onDismiss?: () => void
   rotationMins?: number
-  minArtWidthVw?: number
-  artDimOffset?: number
   adaptiveMatColor?: boolean
+  artDimOffset?: number
+  minArtWidthVw?: number
 }
 
-export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidthVw = 55, artDimOffset = 30, adaptiveMatColor = true }: Props) {
+export default function ArtScreensaver({
+  onDismiss,
+  rotationMins = 4,
+  adaptiveMatColor = true,
+  artDimOffset = 30,
+  minArtWidthVw = 55,
+}: Props) {
   const { artwork, loaded, onLoad, onError, next } = useArtwork(rotationMins * 60)
   const { isMidnightActive } = useTheme()
   const [visible, setVisible] = useState(false)
   const [dismissable, setDismissable] = useState(false)
   const [imageRatio, setImageRatio] = useState(16 / 9)
   const [matColor, setMatColor] = useState('#F5F0E8')
+  const [dominantColor, setDominantColor] = useState('#808080')
   const [matTransition, setMatTransition] = useState(false)
   const [driftIndex, setDriftIndex] = useState(0)
   const [swiping, setSwiping] = useState(false)
@@ -83,6 +90,19 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
   const matTexture = darkThemeActive ? MIDNIGHT_MAT_TEXTURE : textureStyle.backgroundImage
   const matBlendMode = darkThemeActive ? 'normal' : textureStyle.backgroundBlendMode
   const paperBaseColor = darkThemeActive ? PAPER_BASE_DARK : PAPER_BASE_LIGHT
+
+  const bevelColors = useMemo(() => {
+    if (darkThemeActive) {
+      return {
+        top: '#2C323D',
+        left: '#222832',
+        right: '#12151B',
+        bottom: '#0A0D12',
+        radiosity: 'rgba(0,0,0,0.4)',
+      }
+    }
+    return generateHarmonizedBevel(matColor, dominantColor)
+  }, [darkThemeActive, matColor, dominantColor])
 
   const frameSize = useMemo(() => {
     const maxWidth = Math.max(viewport.width - EDGE_MAT_H_PX * 2, MIN_FRAME_PX)
@@ -149,9 +169,11 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
       try {
         const colorAnalysis = await generateAdaptiveMatColor(artwork.imageUrl)
         setMatColor(colorAnalysis.matColor)
+        setDominantColor(colorAnalysis.dominant)
         setTimeout(() => setMatTransition(true), 50)
       } catch {
         setMatColor('#F5F0E8')
+        setDominantColor('#808080')
       }
     }, 50)
     return () => clearTimeout(timeout)
@@ -168,7 +190,7 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
   function handleDismiss() {
     if (!dismissable) return
     setVisible(false)
-    setTimeout(onDismiss, 500)
+    setTimeout(() => onDismiss?.(), 500)
   }
 
   function handleNextPiece(e?: React.MouseEvent | React.TouchEvent) {
@@ -225,15 +247,15 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
             maxHeight: '100%',
             boxSizing: 'content-box',
             backgroundColor: paperBaseColor,
-            // 6px thick 45-degree mitered core bevel facet (prominent 8-ply luxury mat)
-            borderTop: darkThemeActive ? '6px solid #363D4A' : '6px solid #FFFFFF',
-            borderLeft: darkThemeActive ? '6px solid #2A303A' : '6px solid #F6F2E8',
-            borderRight: darkThemeActive ? '6px solid #14181F' : '6px solid #D6CCBD',
-            borderBottom: darkThemeActive ? '6px solid #0E1116' : '6px solid #C4B9A7',
+            // 5px thick 45-degree mitered core bevel facets (dimmed warm ivory harmonized with mat & artwork light bounce)
+            borderTop: `5px solid ${bevelColors.top}`,
+            borderLeft: `5px solid ${bevelColors.left}`,
+            borderRight: `5px solid ${bevelColors.right}`,
+            borderBottom: `5px solid ${bevelColors.bottom}`,
             // Clean razor blade incision groove where bevel meets the mat board
             boxShadow: darkThemeActive
-              ? '0 0 0 1px rgba(0,0,0,0.9), 0 2px 12px rgba(0,0,0,0.5)'
-              : '0 0 0 1px rgba(50,40,30,0.16), 0 2px 10px rgba(0,0,0,0.06)',
+              ? '0 0 0 1px rgba(0,0,0,0.9), 0 2px 10px rgba(0,0,0,0.45)'
+              : '0 0 0 1px rgba(50,40,30,0.12), 0 2px 8px rgba(0,0,0,0.05)',
             transform: ['translate3d(0px,0px,0)', 'translate3d(1px,0px,0)', 'translate3d(0px,1px,0)', 'translate3d(-1px,0px,0)'][driftIndex],
             transition: swiping ? 'transform 260ms cubic-bezier(0.4, 0, 0.2, 1)' : 'transform 16s linear',
             overflow: 'hidden',
@@ -313,7 +335,7 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
             }}
           />
 
-          {/* Subtle, Realistic Directional Downward Cast Shadow from Bevel Lip */}
+          {/* Subtle Directional Cast Shadow & Ambient Color Bounce Radiosity */}
           <div
             style={{
               position: 'absolute',
@@ -321,8 +343,8 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
               pointerEvents: 'none',
               zIndex: 10,
               boxShadow: darkThemeActive
-                ? 'inset 0 5px 8px -1px rgba(0,0,0,0.60), inset 2px 0 4px -1px rgba(0,0,0,0.35)'
-                : 'inset 0 4px 7px -1px rgba(50,35,20,0.15), inset 2px 0 4px -1px rgba(50,35,20,0.08)',
+                ? 'inset 0 4px 7px -1px rgba(0,0,0,0.60), inset 2px 0 4px -1px rgba(0,0,0,0.35)'
+                : `inset 0 4px 6px -1px rgba(50,35,20,0.12), inset 2px 0 3px -1px rgba(50,35,20,0.06), inset 0 0 16px -2px ${bevelColors.radiosity}`,
             }}
           />
         </div>

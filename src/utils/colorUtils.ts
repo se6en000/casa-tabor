@@ -281,3 +281,58 @@ function getComplementary(
     b: Math.round(hslToRgb(p, q, h - 1 / 3) * 255),
   }
 }
+
+export interface BevelPalette {
+  top: string
+  left: string
+  right: string
+  bottom: string
+  radiosity: string
+}
+
+/**
+ * Generate physical, dimmed 45-degree bevel facets that color-harmonize with
+ * both the mat board and the adjacent artwork pigments (ambient radiosity light bounce).
+ */
+export function generateHarmonizedBevel(matColorHex: string, dominantHex: string = '#808080'): BevelPalette {
+  const mat = hexToRgb(matColorHex)
+  const dom = hexToRgb(dominantHex)
+
+  // 1. Archival Core Base (Warm Matte Ivory, never digital #FFFFFF)
+  // Harmonized with 25% of the actual mat color
+  const coreR = Math.round(234 * 0.75 + mat.r * 0.25)
+  const coreG = Math.round(228 * 0.75 + mat.g * 0.25)
+  const coreB = Math.round(216 * 0.75 + mat.b * 0.25)
+
+  // 2. Top Bevel (Dimmed ambient highlight ~88% luminance, soft warm ivory)
+  const topR = Math.min(248, Math.round(coreR * 1.03))
+  const topG = Math.min(244, Math.round(coreG * 1.03))
+  const topB = Math.min(235, Math.round(coreB * 1.03))
+
+  // 3. Left Bevel (Receives ambient light + radiosity color bounce from adjacent artwork pigments)
+  // Blends warm ivory with 20% of the painting's dominant pigment color
+  const leftR = Math.min(245, Math.round(coreR * 0.80 + dom.r * 0.20))
+  const leftG = Math.min(242, Math.round(coreG * 0.80 + dom.g * 0.20))
+  const leftB = Math.min(233, Math.round(coreB * 0.80 + dom.b * 0.20))
+
+  // 4. Right Bevel (Shaded core facet)
+  const rightR = Math.round(coreR * 0.88)
+  const rightG = Math.round(coreG * 0.88)
+  const rightB = Math.round(coreB * 0.88)
+
+  // 5. Bottom Bevel (Deepest shaded core facet)
+  const botR = Math.round(coreR * 0.80)
+  const botG = Math.round(coreG * 0.80)
+  const botB = Math.round(coreB * 0.80)
+
+  // 6. Subtle edge radiosity color
+  const radiosity = `rgba(${dom.r}, ${dom.g}, ${dom.b}, 0.09)`
+
+  return {
+    top: rgbToHex(topR, topG, topB),
+    left: rgbToHex(leftR, leftG, leftB),
+    right: rgbToHex(rightR, rightG, rightB),
+    bottom: rgbToHex(botR, botG, botB),
+    radiosity,
+  }
+}
