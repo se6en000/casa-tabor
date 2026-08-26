@@ -5,6 +5,7 @@ export const YOUTUBE_CAST_BROADCAST_EVENT = 'cast-command'
 export const YOUTUBE_CAST_STATE_EVENT = 'cast-state'
 export const YOUTUBE_CAST_DOM_EVENT = 'casa:cast-state-updated'
 export const YOUTUBE_CAST_STORAGE_KEY = 'casa_youtube_cast_state'
+export const YOUTUBE_CAST_DEVICES_SETTINGS_KEY = 'household_cast_devices'
 
 export interface YouTubeTrack {
   id: string
@@ -16,13 +17,18 @@ export interface YouTubeTrack {
   videoId: string
 }
 
+export type CastDeviceType = 'speaker' | 'group' | 'display' | 'chromecast'
+
 export interface CastDevice {
   id: string
   name: string
   model: string
+  type: CastDeviceType
   ip?: string
   port?: number
   isActive: boolean
+  groupMembers?: string[]
+  isOnline?: boolean
 }
 
 export interface YouTubeCastState {
@@ -37,7 +43,63 @@ export interface YouTubeCastState {
   queue: YouTubeTrack[]
   shuffle: boolean
   repeatMode: 0 | 1 | 2
+  isDiscovering?: boolean
 }
+
+export const KNOWN_HOUSEHOLD_DEVICES: CastDevice[] = [
+  {
+    id: 'nest-office-point',
+    name: 'Office Point (Nest Wifi)',
+    model: 'Nest Wifi point',
+    type: 'speaker',
+    ip: '192.168.87.244',
+    port: 8009,
+    isActive: true,
+    isOnline: true,
+  },
+  {
+    id: 'group-whole-house',
+    name: 'Whole House Audio',
+    model: 'Google Home Speaker Group',
+    type: 'group',
+    isActive: false,
+    isOnline: true,
+    groupMembers: ['Office Point', 'Living Room', 'Kitchen', 'Master Bedroom'],
+  },
+  {
+    id: 'group-downstairs',
+    name: 'Downstairs Audio',
+    model: 'Google Home Speaker Group',
+    type: 'group',
+    isActive: false,
+    isOnline: true,
+    groupMembers: ['Living Room', 'Kitchen'],
+  },
+  {
+    id: 'nest-living-room',
+    name: 'Living Room Speaker',
+    model: 'Google Nest Audio',
+    type: 'speaker',
+    isActive: false,
+    isOnline: true,
+  },
+  {
+    id: 'nest-kitchen-hub',
+    name: 'Kitchen Display',
+    model: 'Google Nest Hub (2nd Gen)',
+    type: 'display',
+    isActive: false,
+    isOnline: true,
+  },
+  {
+    id: 'nest-bedroom-mini',
+    name: 'Master Bedroom',
+    model: 'Google Nest Mini',
+    type: 'speaker',
+    isActive: false,
+    isOnline: true,
+  },
+]
 
 const DEFAULT_STATE: YouTubeCastState = {
   isPlaying: false,
@@ -47,19 +109,11 @@ const DEFAULT_STATE: YouTubeCastState = {
   volumePct: 50,
   activeDeviceId: 'nest-office-point',
   activeDeviceName: 'Office Point (Nest Wifi)',
-  devices: [
-    {
-      id: 'nest-office-point',
-      name: 'Office Point (Nest Wifi)',
-      model: 'Nest Wifi point',
-      ip: '192.168.87.244',
-      port: 8009,
-      isActive: true,
-    }
-  ],
+  devices: KNOWN_HOUSEHOLD_DEVICES,
   queue: [],
   shuffle: false,
   repeatMode: 0,
+  isDiscovering: false,
 }
 
 // ── In-Memory & LocalStorage Cache ──────────────────────────────────────────
@@ -70,7 +124,11 @@ export function getStoredCastState(): YouTubeCastState {
     const raw = localStorage.getItem(YOUTUBE_CAST_STORAGE_KEY)
     if (!raw) return DEFAULT_STATE
     const parsed = JSON.parse(raw)
-    return { ...DEFAULT_STATE, ...parsed }
+    return {
+      ...DEFAULT_STATE,
+      ...parsed,
+      devices: parsed.devices && parsed.devices.length > 0 ? parsed.devices : KNOWN_HOUSEHOLD_DEVICES,
+    }
   } catch {
     return DEFAULT_STATE
   }
@@ -128,7 +186,7 @@ export function initCastRealtimeChannel(): () => void {
   }
 
   return () => {
-    // Channel cleanup handled by global teardown if needed
+    // Channel cleanup
   }
 }
 
@@ -164,11 +222,54 @@ async function dispatchCastCommand(action: string, payload: Record<string, unkno
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(message),
-      }).catch(() => {
-        // Dev bridge not running, ignore
-      })
+      }).catch(() => {})
     } catch {}
   }
+}
+
+export async function discoverCastDevices(): Promise<CastDevice[]> {
+  saveStoredCastState({ isDiscovering: true })
+  await dispatchCastCommand('cast:discover_devices')
+
+  // Try local bridge endpoint
+  try {
+    const res = await fetch('http://localhost:5891/api/cast/devices')
+    if (res.ok) {
+      const liveDevices: CastDevice[] = await res.json()
+      if (liveDevices && liveDevices.length > 0) {
+        const merged = mergeDevices(liveDevices, KNOWN_HOUSEHOLD_DEVICES)
+        saveStoredCastState({ devices: merged, isDiscovering: false })
+        return merged
+      }
+    }
+  } catch {}
+
+  // Merge known household devices & groups
+  const current = getStoredCastState()
+  const updated = mergeDevices(current.devices, KNOWN_HOUSEHOLD_DEVICES)
+  saveStoredCastState({ devices: updated, isDiscovering: false })
+  return updated
+}
+
+function mergeDevices(a: CastDevice[], b: CastDevice[]): CastDevice[] {
+  const map = new Map<string, CastDevice>()
+  for (const d of a) map.set(d.id, d)
+  for (const d of b) {
+    if (!map.has(d.id)) {
+      map.set(d.id, d)
+    } else {
+      map.set(d.id, { ...map.get(d.id)!, ...d })
+    }
+  }
+  return Array.from(map.values())
+}
+
+export async function addCustomCastDevice(device: Omit<CastDevice, 'isActive'>): Promise<YouTubeCastState> {
+  const current = getStoredCastState()
+  const newDevice: CastDevice = { ...device, isActive: false, isOnline: true }
+  const updatedDevices = [...current.devices.filter(d => d.id !== newDevice.id), newDevice]
+  const updated = saveStoredCastState({ devices: updatedDevices })
+  return updated
 }
 
 export async function castPlay(track: YouTubeTrack, deviceId?: string): Promise<YouTubeCastState> {

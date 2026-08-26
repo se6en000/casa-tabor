@@ -3,6 +3,9 @@
  * Unified Household Music Hub with dual-engine streaming:
  *  1. YouTube Music Cast Engine (Option A - Casa LAN Bridge & Supabase Realtime)
  *  2. Spotify Connect Engine (OAuth PKCE)
+ *
+ * Optimized for full-viewport touch scrolling, auto-discovery of speakers
+ * & multi-room groups, and 3-click kiosk navigation.
  */
 
 import { useState, useEffect, useRef } from 'react'
@@ -10,7 +13,8 @@ import { useNavigate } from 'react-router-dom'
 import {
   Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Repeat1,
   Volume2, VolumeX, Monitor, Speaker, Smartphone, Tv, Music,
-  ChevronLeft, RefreshCw, LogOut, Search, Plus, ListMusic, Cast, Check
+  ChevronLeft, RefreshCw, LogOut, Search, Plus, ListMusic, Cast, Check,
+  Layers, Coffee, ChefHat, Headphones, Flame, Sparkles
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button, Heading, IconButton, Progress, Input, Chip } from '../components/ui'
@@ -21,6 +25,7 @@ import {
   clearTokens, isAuthenticated
 } from '../lib/spotifyAuth'
 import { MOOD_PRESETS, type MoodPreset } from '../lib/youtubeMusicApi'
+import type { CastDevice } from '../utils/youtubeCastSync'
 import { cn } from '../utils/cn'
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -31,13 +36,25 @@ function fmtTime(ms: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
-function deviceIcon(type: string) {
-  const t = type.toLowerCase()
+function deviceIcon(device: CastDevice | { type: string; model?: string }) {
+  if ('type' in device && device.type === 'group') return Layers
+  const t = (('model' in device ? device.model : '') || device.type || '').toLowerCase()
   if (t.includes('computer')) return Monitor
   if (t.includes('speaker') || t.includes('nest') || t.includes('point') || t.includes('cast')) return Speaker
   if (t.includes('phone') || t.includes('mobile')) return Smartphone
-  if (t.includes('tv')) return Tv
+  if (t.includes('tv') || t.includes('hub') || t.includes('display')) return Tv
   return Speaker
+}
+
+function MoodIcon({ name }: { name: string }) {
+  switch (name) {
+    case 'Coffee': return <Coffee size={14} className="shrink-0 text-amber-600" />
+    case 'ChefHat': return <ChefHat size={14} className="shrink-0 text-amber-500" />
+    case 'Headphones': return <Headphones size={14} className="shrink-0 text-indigo-500" />
+    case 'Flame': return <Flame size={14} className="shrink-0 text-orange-500" />
+    case 'Sparkles': return <Sparkles size={14} className="shrink-0 text-casa-gold" />
+    default: return <Music size={14} className="shrink-0 text-casa-gold" />
+  }
 }
 
 // ── Page Component ────────────────────────────────────────────────
@@ -63,9 +80,9 @@ export default function MusicPage() {
   }, [])
 
   return (
-    <div className="min-h-screen bg-casa-bg pb-28 flex flex-col max-w-lg mx-auto px-4 sm:px-5">
+    <div className="h-full overflow-y-auto overscroll-contain bg-casa-bg px-4 sm:px-6 pt-4 pb-36 max-w-xl mx-auto w-full flex flex-col select-none">
       {/* Top Header */}
-      <header className="flex items-center justify-between pt-6 pb-3">
+      <header className="flex items-center justify-between pt-2 pb-3 shrink-0">
         <Button type="button" onClick={() => navigate(-1)} variant="ghost" leadingIcon={<ChevronLeft size={20} />}>
           Back
         </Button>
@@ -74,7 +91,7 @@ export default function MusicPage() {
       </header>
 
       {/* Engine Switcher */}
-      <div className="flex bg-casa-surface border border-casa-border rounded-xl p-1 mb-6 shadow-sm">
+      <div className="flex bg-casa-surface border border-casa-border rounded-xl p-1 mb-5 shadow-sm shrink-0">
         <Button
           type="button"
           variant={activeEngine === 'youtube' ? 'primary' : 'ghost'}
@@ -126,6 +143,8 @@ function YouTubeCastPlayerScreen() {
     queue,
     searching,
     searchResults,
+    isDiscovering,
+    discoverDevices,
     play,
     pause,
     resume,
@@ -153,6 +172,15 @@ function YouTubeCastPlayerScreen() {
   const duration = state.durationMs || track?.durationMs || 240000
   const progressPct = Math.min((progress / Math.max(1, duration)) * 100, 100)
 
+  // Trigger auto-discovery when user taps "Switch"
+  function handleToggleDeviceDrawer() {
+    const nextState = !showDevices
+    setShowDevices(nextState)
+    if (nextState) {
+      void discoverDevices()
+    }
+  }
+
   function handleSeekClick(e: React.MouseEvent<HTMLDivElement>) {
     if (!progressBarRef.current || !track) return
     const rect = progressBarRef.current.getBoundingClientRect()
@@ -175,86 +203,191 @@ function YouTubeCastPlayerScreen() {
     void search(mood.query)
   }
 
+  // Partition devices into Groups and Individual Speakers
+  const speakerGroups = devices.filter(d => d.type === 'group')
+  const roomSpeakers = devices.filter(d => d.type !== 'group')
+
   return (
-    <div className="space-y-6">
-      {/* Active Cast Speaker Banner */}
-      <div className="bg-casa-surface border border-casa-border rounded-xl p-3 shadow-card">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-lg bg-casa-gold/15 flex items-center justify-center text-casa-gold shrink-0">
-              <Speaker size={18} />
+    <div className="space-y-6 flex-1">
+      {/* ── Active Cast Speaker Banner with Auto-Discovery Drawer ─────────── */}
+      <div className="bg-casa-surface border border-casa-border rounded-xl p-3.5 shadow-card">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-casa-gold/15 flex items-center justify-center text-casa-gold shrink-0">
+              {activeDevice?.type === 'group' ? <Layers size={20} /> : <Speaker size={20} />}
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <p className="text-body-sm font-semibold text-casa-navy truncate">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                <p className="text-body font-semibold text-casa-navy truncate leading-tight">
                   {activeDevice?.name || 'Office Point (Nest Wifi)'}
                 </p>
               </div>
-              <p className="text-caption text-casa-muted truncate">
-                {activeDevice?.model || 'Google Cast Speaker'} · LAN Bridge Active
+              <p className="text-caption text-casa-muted truncate mt-0.5">
+                {activeDevice?.type === 'group'
+                  ? 'Multi-Room Group · Whole Home Audio'
+                  : `${activeDevice?.model || 'Google Cast Speaker'} · LAN Bridge Active`}
               </p>
             </div>
           </div>
 
           <Button
             type="button"
-            variant="secondary"
+            variant={showDevices ? 'secondary' : 'primary'}
             size="sm"
-            onClick={() => setShowDevices(v => !v)}
-            className="shrink-0 text-caption font-semibold"
+            onClick={handleToggleDeviceDrawer}
+            className="shrink-0 text-caption font-semibold px-3 py-1.5 flex items-center gap-1.5"
+            leadingIcon={isDiscovering ? <RefreshCw size={13} className="animate-spin text-casa-gold" /> : undefined}
           >
-            {showDevices ? 'Hide' : 'Switch'}
+            {showDevices ? 'Close' : 'Switch'}
           </Button>
         </div>
 
-        {/* Device Picker Sheet */}
+        {/* ── Google Cast & Multi-Room Groups Discovery Sheet ─────────────── */}
         <AnimatePresence>
           {showDevices && (
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
-              className="mt-3 pt-3 border-t border-casa-border space-y-2"
+              className="mt-3.5 pt-3.5 border-t border-casa-border space-y-4 overflow-hidden"
             >
-              <p className="text-caption font-semibold text-casa-muted uppercase tracking-wider">
-                Google Cast Speakers
-              </p>
-              {devices.map(device => {
-                const isCurrent = device.id === activeDevice?.id
-                return (
-                  <Button
-                    key={device.id}
-                    type="button"
-                    variant={isCurrent ? 'secondary' : 'ghost'}
-                    onClick={() => {
-                      void selectDevice(device.id)
-                      setShowDevices(false)
-                    }}
-                    className={cn(
-                      'w-full flex items-center justify-between p-2.5 rounded-lg border text-left transition-colors',
-                      isCurrent
-                        ? 'border-casa-gold bg-casa-gold/10 text-casa-navy font-semibold'
-                        : 'border-casa-border bg-casa-bg hover:border-casa-navy/30 text-casa-navy'
-                    )}
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <Speaker size={16} className={isCurrent ? 'text-casa-gold' : 'text-casa-muted'} />
-                      <div className="min-w-0">
-                        <p className="text-body-sm truncate">{device.name}</p>
-                        <p className="text-caption text-casa-muted">{device.model}</p>
-                      </div>
-                    </div>
-                    {isCurrent && <Check size={16} className="text-casa-gold shrink-0" />}
-                  </Button>
-                )
-              })}
+              {/* Auto-Discovery Status Bar */}
+              <div className="flex items-center justify-between bg-casa-bg border border-casa-border/80 rounded-lg px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <RefreshCw size={14} className={cn('text-casa-gold shrink-0', isDiscovering && 'animate-spin')} />
+                  <span className="text-caption font-medium text-casa-navy">
+                    {isDiscovering ? 'Scanning Wi-Fi for Google Nest, Chromecasts & Groups…' : 'Cast Devices & Speaker Groups'}
+                  </span>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => void discoverDevices()}
+                  className="text-caption text-casa-gold hover:text-casa-navy p-1 h-auto font-semibold"
+                >
+                  Rescan
+                </Button>
+              </div>
+
+              {/* 1. Multi-Room Speaker Groups */}
+              {speakerGroups.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1.5 px-1">
+                    <Layers size={14} className="text-casa-gold" />
+                    <span className="text-caption font-semibold text-casa-muted uppercase tracking-wider">
+                      Multi-Room Speaker Groups
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    {speakerGroups.map(group => {
+                      const isCurrent = group.id === activeDevice?.id
+                      return (
+                        <Button
+                          key={group.id}
+                          type="button"
+                          variant={isCurrent ? 'secondary' : 'ghost'}
+                          onClick={() => {
+                            void selectDevice(group.id)
+                            setShowDevices(false)
+                          }}
+                          className={cn(
+                            'w-full flex items-center justify-between p-3 rounded-xl border text-left transition-all min-h-[3rem]',
+                            isCurrent
+                              ? 'border-casa-gold bg-casa-gold/15 text-casa-navy font-semibold shadow-xs'
+                              : 'border-casa-border bg-casa-surface hover:border-casa-navy/30 text-casa-navy'
+                          )}
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-8 h-8 rounded-lg bg-casa-gold/20 flex items-center justify-center text-casa-gold shrink-0">
+                              <Layers size={16} />
+                            </div>
+                            <div className="min-w-0 text-left">
+                              <p className="text-body-sm font-semibold truncate">{group.name}</p>
+                              <p className="text-caption text-casa-muted truncate">
+                                {group.groupMembers ? group.groupMembers.join(' · ') : 'Google Home Audio Group'}
+                              </p>
+                            </div>
+                          </div>
+                          {isCurrent ? (
+                            <div className="flex items-center gap-1.5 shrink-0 bg-emerald-500/15 text-emerald-700 px-2 py-0.5 rounded-full text-caption font-semibold">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                              <span>Active</span>
+                            </div>
+                          ) : (
+                            <Check size={16} className="text-transparent shrink-0" />
+                          )}
+                        </Button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* 2. Individual Room Speakers */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5 px-1">
+                  <Speaker size={14} className="text-casa-gold" />
+                  <span className="text-caption font-semibold text-casa-muted uppercase tracking-wider">
+                    Room Speakers & Smart Displays
+                  </span>
+                </div>
+
+                <div className="space-y-1.5">
+                  {roomSpeakers.map(device => {
+                    const isCurrent = device.id === activeDevice?.id
+                    const DevIcon = deviceIcon(device)
+                    return (
+                      <Button
+                        key={device.id}
+                        type="button"
+                        variant={isCurrent ? 'secondary' : 'ghost'}
+                        onClick={() => {
+                          void selectDevice(device.id)
+                          setShowDevices(false)
+                        }}
+                        className={cn(
+                          'w-full flex items-center justify-between p-3 rounded-xl border text-left transition-all min-h-[3rem]',
+                          isCurrent
+                            ? 'border-casa-gold bg-casa-gold/15 text-casa-navy font-semibold shadow-xs'
+                            : 'border-casa-border bg-casa-surface hover:border-casa-navy/30 text-casa-navy'
+                        )}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className={cn(
+                            'w-8 h-8 rounded-lg flex items-center justify-center shrink-0',
+                            isCurrent ? 'bg-casa-gold/20 text-casa-gold' : 'bg-casa-bg text-casa-muted'
+                          )}>
+                            <DevIcon size={16} />
+                          </div>
+                          <div className="min-w-0 text-left">
+                            <p className="text-body-sm font-semibold truncate">{device.name}</p>
+                            <p className="text-caption text-casa-muted truncate">
+                              {device.model} {device.ip ? `· ${device.ip}` : ''}
+                            </p>
+                          </div>
+                        </div>
+                        {isCurrent ? (
+                          <div className="flex items-center gap-1.5 shrink-0 bg-emerald-500/15 text-emerald-700 px-2 py-0.5 rounded-full text-caption font-semibold">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            <span>Active</span>
+                          </div>
+                        ) : (
+                          <Check size={16} className="text-transparent shrink-0" />
+                        )}
+                      </Button>
+                    )
+                  })}
+                </div>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
 
-      {/* Album Artwork & Glowing Stage */}
+      {/* ── Album Artwork & Glowing Stage ───────────────────────────────── */}
       <motion.div
         className="relative mx-auto my-2"
         animate={{ scale: isPlaying ? 1 : 0.95 }}
@@ -262,22 +395,22 @@ function YouTubeCastPlayerScreen() {
       >
         {track?.albumArtUrl ? (
           <div className="relative group">
-            <div className="absolute -inset-1 bg-gradient-to-r from-casa-gold/30 to-amber-500/20 rounded-3xl blur-xl opacity-75 group-hover:opacity-100 transition duration-500" />
+            <div className="absolute -inset-2 bg-gradient-to-r from-casa-gold/30 to-amber-500/20 rounded-3xl blur-xl opacity-75 group-hover:opacity-100 transition duration-500" />
             <img
               src={track.albumArtUrl}
               alt={track.album}
-              className="relative w-60 h-60 sm:w-64 sm:h-64 rounded-2xl shadow-2xl object-cover mx-auto border border-white/20"
+              className="relative w-60 h-60 sm:w-68 sm:h-68 rounded-2xl shadow-2xl object-cover mx-auto border border-white/20"
             />
           </div>
         ) : (
-          <div className="w-60 h-60 sm:w-64 sm:h-64 rounded-2xl bg-casa-surface border border-casa-border flex flex-col items-center justify-center shadow-xl mx-auto">
+          <div className="w-60 h-60 sm:w-68 sm:h-68 rounded-2xl bg-casa-surface border border-casa-border flex flex-col items-center justify-center shadow-xl mx-auto">
             <Music size={56} className="text-casa-muted mb-2" />
             <p className="text-caption text-casa-muted font-medium">Select a song below to cast</p>
           </div>
         )}
       </motion.div>
 
-      {/* Track Metadata */}
+      {/* ── Track Metadata ─────────────────────────────────────────────── */}
       <div className="text-center px-2">
         <p className="font-display text-display-md text-casa-navy leading-tight truncate">
           {track?.name || 'Ready to Cast'}
@@ -290,7 +423,7 @@ function YouTubeCastPlayerScreen() {
         )}
       </div>
 
-      {/* Live Seekbar */}
+      {/* ── Live Seekbar ────────────────────────────────────────────────── */}
       <div className="px-1">
         <div
           ref={progressBarRef}
@@ -309,7 +442,7 @@ function YouTubeCastPlayerScreen() {
         </div>
       </div>
 
-      {/* Primary Transport Controls */}
+      {/* ── Primary Transport Controls ──────────────────────────────────── */}
       <div className="flex items-center justify-between px-3">
         <IconButton
           onClick={() => setShuffle(!state.shuffle)}
@@ -357,7 +490,7 @@ function YouTubeCastPlayerScreen() {
         />
       </div>
 
-      {/* Nest Speaker Hardware Volume */}
+      {/* ── Nest Speaker Hardware Volume ───────────────────────────────── */}
       <div className="bg-casa-surface border border-casa-border rounded-xl px-4 py-3 shadow-sm">
         <div className="flex items-center justify-between mb-2">
           <span className="text-caption font-semibold text-casa-muted uppercase tracking-wider">
@@ -389,7 +522,7 @@ function YouTubeCastPlayerScreen() {
         </div>
       </div>
 
-      {/* Search & Mood Stations */}
+      {/* ── Search & Mood Stations ─────────────────────────────────────── */}
       <div className="space-y-3 pt-2">
         <form onSubmit={handleSearchSubmit} className="relative">
           <Input
@@ -409,7 +542,7 @@ function YouTubeCastPlayerScreen() {
           </Button>
         </form>
 
-        {/* Quick Mood Chips */}
+        {/* Quick Mood Chips (Using Lucide SVG Icons, Zero Emojis) */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
           {MOOD_PRESETS.map(mood => {
             const isSelected = activeMood === mood.id
@@ -418,8 +551,8 @@ function YouTubeCastPlayerScreen() {
                 key={mood.id}
                 selected={isSelected}
                 onClick={() => handleMoodClick(mood)}
+                icon={<MoodIcon name={mood.iconName} />}
               >
-                <span>{mood.icon}</span>
                 <span>{mood.label}</span>
               </Chip>
             )
@@ -427,7 +560,7 @@ function YouTubeCastPlayerScreen() {
         </div>
       </div>
 
-      {/* Up Next / Queue Drawer Toggle */}
+      {/* ── Up Next / Queue Drawer Toggle ───────────────────────────────── */}
       {queue.length > 0 && (
         <div className="bg-casa-surface border border-casa-border rounded-xl p-3 shadow-sm">
           <div className="flex items-center justify-between">
@@ -476,7 +609,7 @@ function YouTubeCastPlayerScreen() {
         </div>
       )}
 
-      {/* Catalog & Search Results List */}
+      {/* ── Catalog & Search Results List ──────────────────────────────── */}
       <div className="space-y-2">
         <p className="text-caption font-semibold text-casa-muted uppercase tracking-wider px-1">
           {searchQuery ? 'Search Results' : 'Recommended Stations'}
@@ -572,7 +705,7 @@ function SpotifySetupScreen() {
   }
 
   return (
-    <div className="flex flex-col max-w-md mx-auto pt-4">
+    <div className="flex flex-col max-w-md mx-auto pt-4 flex-1">
       <div className="flex items-center gap-3 mb-6">
         <div className="w-12 h-12 rounded-2xl bg-emerald-500 flex items-center justify-center shadow-md">
           <Music size={24} className="text-white" />
@@ -668,7 +801,7 @@ function SpotifyPlayerScreen() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 flex-1">
       <div className="flex justify-end">
         <IconButton
           onClick={disconnect}
@@ -807,7 +940,7 @@ function SpotifyPlayerScreen() {
                 </p>
               ) : (
                 devices.map(device => {
-                  const DevIcon = deviceIcon(device.type)
+                  const DevIcon = deviceIcon(device)
                   return (
                     <Button
                       key={device.id}

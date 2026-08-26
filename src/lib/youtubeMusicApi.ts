@@ -3,7 +3,7 @@ import type { YouTubeTrack } from '../utils/youtubeCastSync'
 export interface MoodPreset {
   id: string
   label: string
-  icon: string
+  iconName: 'Coffee' | 'ChefHat' | 'Headphones' | 'Flame' | 'Sparkles'
   query: string
   description: string
 }
@@ -12,35 +12,35 @@ export const MOOD_PRESETS: MoodPreset[] = [
   {
     id: 'morning-jazz',
     label: 'Morning Jazz',
-    icon: '☕',
+    iconName: 'Coffee',
     query: 'Bill Evans Miles Davis Jazz Classics',
     description: 'Warm acoustic trio & morning coffee',
   },
   {
     id: 'dinner-prep',
     label: 'Dinner Prep',
-    icon: '🍳',
+    iconName: 'ChefHat',
     query: 'Bossa Nova Dinner Cooking Music',
     description: 'Upbeat bossa & kitchen groove',
   },
   {
     id: 'focus-flow',
     label: 'Focus & Flow',
-    icon: '🎧',
+    iconName: 'Headphones',
     query: 'Lofi hip hop beats to study relax',
     description: 'Mellow chillhop instrumentals',
   },
   {
     id: 'acoustic-chill',
     label: 'Acoustic Chill',
-    icon: '🕯️',
+    iconName: 'Flame',
     query: 'Acoustic Sunday Morning Guitar',
     description: 'Gentle fingerpicking & peaceful vibes',
   },
   {
     id: 'kids-energy',
     label: 'Family Energy',
-    icon: '✨',
+    iconName: 'Sparkles',
     query: 'Upbeat feel good pop clean family',
     description: 'Cheerful morning routine rhythms',
   },
@@ -101,7 +101,6 @@ export async function searchYouTubeMusic(query: string): Promise<YouTubeTrack[]>
   if (!query.trim()) return POPULAR_CURATED_TRACKS
 
   const q = query.toLowerCase().trim()
-  // Filter curated tracks first
   const matchedCurated = POPULAR_CURATED_TRACKS.filter(
     t =>
       t.name.toLowerCase().includes(q) ||
@@ -113,7 +112,6 @@ export async function searchYouTubeMusic(query: string): Promise<YouTubeTrack[]>
     return matchedCurated
   }
 
-  // Dynamic search simulation & public YouTube search endpoint
   try {
     const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&media=music&limit=10`)
     if (res.ok) {
@@ -134,7 +132,6 @@ export async function searchYouTubeMusic(query: string): Promise<YouTubeTrack[]>
     console.warn('[YouTubeMusicApi] Fallback search error:', err)
   }
 
-  // Fallback generation for any query
   return [
     {
       id: `yt-dyn-${encodeURIComponent(query)}`,

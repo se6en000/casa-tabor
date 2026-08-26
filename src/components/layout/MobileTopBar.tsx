@@ -1,6 +1,7 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
-import { Camera, Sparkles } from 'lucide-react'
+import { Camera, Sparkles, Music } from 'lucide-react'
 import { useLiveClock } from '../../hooks/useLiveClock'
 import { useAppStore } from '../../stores/appStore'
 import { IconButton, Button } from '../ui'
@@ -8,6 +9,7 @@ import MobileDocumentScanSheet from '../mobile/MobileDocumentScanSheet'
 import MaisonCrest from '../shared/MaisonCrest'
 
 export default function MobileTopBar() {
+  const navigate = useNavigate()
   const now = useLiveClock(30_000)
   const { openAiInSidecar } = useAppStore()
   const [scanSheetOpen, setScanSheetOpen] = useState(false)
@@ -38,8 +40,19 @@ export default function MobileTopBar() {
           </div>
         </div>
 
-        {/* Right Action Cluster: Document Scan + Copilot Launcher */}
-        <div className="flex items-center gap-2 shrink-0">
+        {/* Right Action Cluster: Music Hub + Document Scan + Copilot Launcher */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {/* Quick Music Icon Button */}
+          <IconButton
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate('/music')}
+            aria-label="Open Household Music & Cast"
+            title="Open Household Music & Cast"
+            icon={<Music size={18} strokeWidth={2} />}
+            className="w-9 h-9 rounded-xl border border-casa-border/60 bg-casa-surface/80 text-casa-navy hover:text-casa-gold hover:border-casa-gold/40 hover:bg-casa-surface active:scale-95 transition-all"
+          />
+
           {/* Quick Scan Icon Button */}
           <IconButton
             variant="ghost"

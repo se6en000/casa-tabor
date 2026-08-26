@@ -4,6 +4,8 @@ import {
   saveStoredCastState,
   addCastStateListener,
   initCastRealtimeChannel,
+  discoverCastDevices,
+  addCustomCastDevice,
   castPlay,
   castPause,
   castResume,
@@ -19,6 +21,7 @@ import {
   YOUTUBE_CAST_DOM_EVENT,
   type YouTubeCastState,
   type YouTubeTrack,
+  type CastDevice,
 } from '../utils/youtubeCastSync'
 import { searchYouTubeMusic, POPULAR_CURATED_TRACKS } from '../lib/youtubeMusicApi'
 
@@ -79,6 +82,17 @@ export function useYouTubeCast() {
 
     return () => clearInterval(interval)
   }, [state.isPlaying, state.track])
+
+  const discoverDevices = useCallback(async () => {
+    setState(prev => ({ ...prev, isDiscovering: true }))
+    const devices = await discoverCastDevices()
+    setState(prev => ({ ...prev, devices, isDiscovering: false }))
+  }, [])
+
+  const addCustomDevice = useCallback(async (device: Omit<CastDevice, 'isActive'>) => {
+    const updated = await addCustomCastDevice(device)
+    setState(updated)
+  }, [])
 
   const play = useCallback(async (track: YouTubeTrack, deviceId?: string) => {
     const updated = await castPlay(track, deviceId)
@@ -188,6 +202,9 @@ export function useYouTubeCast() {
     ready: true,
     searching,
     searchResults,
+    isDiscovering: state.isDiscovering ?? false,
+    discoverDevices,
+    addCustomDevice,
     play,
     pause,
     resume,

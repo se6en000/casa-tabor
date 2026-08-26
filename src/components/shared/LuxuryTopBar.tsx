@@ -43,6 +43,7 @@ const NAV_TABS = [
   { path: '/calendar', label: 'Calendar', classicLabel: 'Calendar' },
   { path: '/cook', label: 'Meals & Kitchen', classicLabel: 'Meals & Kitchen' },
   { path: '/grocery', label: 'Grocery List', classicLabel: 'Grocery List' },
+  { path: '/music', label: 'Music', classicLabel: 'Music' },
 ] as const
 
 // ── Zone A: Brand Monogram ───────────────────────────────────────
