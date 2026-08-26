@@ -12,6 +12,9 @@ const MIN_FRAME_PX = 320
 const MIDNIGHT_MAT_COLOR = '#07090D'
 const MIDNIGHT_MAT_TEXTURE = 'linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.22))'
 
+const PAPER_BASE_LIGHT = '#F8F5EE'
+const PAPER_BASE_DARK = '#12151B'
+
 function isDarkColor(color: string): boolean {
   const raw = color.trim()
   if (!raw) return false
@@ -79,6 +82,8 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
   }, [isMidnightActive])
   const matTexture = darkThemeActive ? MIDNIGHT_MAT_TEXTURE : textureStyle.backgroundImage
   const matBlendMode = darkThemeActive ? 'normal' : textureStyle.backgroundBlendMode
+  const paperBaseColor = darkThemeActive ? PAPER_BASE_DARK : PAPER_BASE_LIGHT
+
   const frameSize = useMemo(() => {
     const maxWidth = Math.max(viewport.width - EDGE_MAT_H_PX * 2, MIN_FRAME_PX)
     const maxHeight = Math.max(viewport.height - (EDGE_MAT_TOP_PX + EDGE_MAT_BOT_PX), MIN_FRAME_PX)
@@ -108,7 +113,7 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
       clearTimeout(t2)
       fetch(`${SENSOR}/display/art-mode-off`, { method: 'POST' }).catch(() => {})
     }
-  }, [])
+  }, [artDimOffset])
 
   useEffect(() => {
     function updateViewport() {
@@ -244,6 +249,7 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
             maxHeight: '100%',
             overflow: 'hidden',
             display: 'flex',
+            backgroundColor: paperBaseColor,
             transform: ['translate3d(0px,0px,0)', 'translate3d(1px,0px,0)', 'translate3d(0px,1px,0)', 'translate3d(-1px,0px,0)'][driftIndex],
             transition: swiping ? 'transform 260ms cubic-bezier(0.4, 0, 0.2, 1)' : 'transform 16s linear',
           }}
@@ -260,6 +266,8 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
                 height: '100%',
                 objectFit: 'contain',
                 display: 'block',
+                filter: darkThemeActive ? 'contrast(0.98) brightness(0.92)' : 'sepia(0.05) contrast(0.97) brightness(0.95)',
+                mixBlendMode: darkThemeActive ? 'normal' : 'multiply',
                 opacity: loaded ? 0 : 1,
                 transition: 'opacity 500ms ease-out',
                 pointerEvents: 'none',
@@ -276,10 +284,13 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
               onLoad={handleImgLoad}
               onError={onError}
               style={{
+                position: 'relative',
                 width: '100%',
                 height: '100%',
                 objectFit: 'contain',
                 display: 'block',
+                filter: darkThemeActive ? 'contrast(0.98) brightness(0.92)' : 'sepia(0.05) contrast(0.97) brightness(0.95)',
+                mixBlendMode: darkThemeActive ? 'normal' : 'multiply',
                 opacity: loaded ? 1 : 0,
                 transition: 'opacity 500ms ease-out',
               }}
