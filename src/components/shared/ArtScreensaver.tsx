@@ -249,7 +249,9 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
                 position: 'absolute',
                 width: '100%',
                 height: '100%',
-                objectFit: 'contain',
+                objectFit: 'cover',
+                objectPosition: 'center center',
+                transform: 'scale(1.01)',
                 display: 'block',
                 filter: darkThemeActive ? 'contrast(0.98) brightness(0.92)' : 'sepia(0.05) contrast(0.97) brightness(0.95)',
                 mixBlendMode: darkThemeActive ? 'normal' : 'multiply',
@@ -272,7 +274,9 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
                 position: 'relative',
                 width: '100%',
                 height: '100%',
-                objectFit: 'contain',
+                objectFit: 'cover',
+                objectPosition: 'center center',
+                transform: 'scale(1.01)',
                 display: 'block',
                 filter: darkThemeActive ? 'contrast(0.98) brightness(0.92)' : 'sepia(0.05) contrast(0.97) brightness(0.95)',
                 mixBlendMode: darkThemeActive ? 'normal' : 'multiply',
@@ -292,7 +296,7 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
               backgroundSize: '256px 256px',
               backgroundRepeat: 'repeat',
               mixBlendMode: 'overlay',
-              opacity: darkThemeActive ? 0.35 : 0.80,
+              opacity: darkThemeActive ? 0.35 : 0.85,
             }}
           />
 
