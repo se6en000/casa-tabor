@@ -157,29 +157,6 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
     return () => clearTimeout(timeout)
   }, [artwork?.id, artwork?.imageUrl, adaptiveMatColor, darkThemeActive])
 
-  const apertureShadow = useMemo(() => {
-    if (darkThemeActive) {
-      return [
-        'inset 1px 1px 0px rgba(255, 255, 255, 0.10)',
-        'inset -1.5px -1.5px 0px rgba(0, 0, 0, 0.70)',
-        'inset 0 12px 24px -2px rgba(0, 0, 0, 0.75)',
-        'inset 6px 0 16px -2px rgba(0, 0, 0, 0.45)',
-        'inset -6px 0 16px -2px rgba(0, 0, 0, 0.35)',
-        'inset 0 -6px 10px -2px rgba(0, 0, 0, 0.30)',
-        '0 0 30px rgba(0,0,0,0.35)',
-      ].join(', ')
-    }
-    return [
-      'inset 1.5px 1.5px 0px rgba(255, 255, 255, 0.88)',
-      'inset -1.5px -1.5px 0px rgba(70, 60, 50, 0.28)',
-      'inset 0 10px 22px -2px rgba(20, 15, 10, 0.42)',
-      'inset 6px 0 14px -2px rgba(20, 15, 10, 0.22)',
-      'inset -6px 0 14px -2px rgba(20, 15, 10, 0.16)',
-      'inset 0 -4px 8px -2px rgba(20, 15, 10, 0.10)',
-      '0 0 28px rgba(0,0,0,0.12)',
-    ].join(', ')
-  }, [darkThemeActive])
-
   function handleImgLoad(e: React.SyntheticEvent<HTMLImageElement>) {
     const img = e.currentTarget
     if (img.naturalWidth && img.naturalHeight) {
@@ -240,6 +217,7 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
           transition: matTransition ? 'background-color 0.5s ease-out' : 'none',
         }}
       >
+        {/* Passe-Partout Aperture Frame with 45-Degree Mitered Bevel Core */}
         <div
           style={{
             position: 'relative',
@@ -247,11 +225,20 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
             height: `${frameSize.height}px`,
             maxWidth: '100%',
             maxHeight: '100%',
-            overflow: 'hidden',
-            display: 'flex',
+            boxSizing: 'content-box',
             backgroundColor: paperBaseColor,
+            // 4px thick 45-degree mitered core bevel facet
+            borderTop: darkThemeActive ? '4px solid #363D4A' : '4px solid #FFFFFF',
+            borderLeft: darkThemeActive ? '4px solid #2A303A' : '4px solid #F5F1E7',
+            borderRight: darkThemeActive ? '4px solid #14181F' : '4px solid #D2C8B8',
+            borderBottom: darkThemeActive ? '4px solid #0E1116' : '4px solid #C0B5A3',
+            // Razor blade incision groove where bevel meets the mat board
+            boxShadow: darkThemeActive
+              ? '0 0 0 1px rgba(0,0,0,0.9), 0 4px 20px rgba(0,0,0,0.6)'
+              : '0 0 0 1px rgba(50,40,30,0.22), 0 2px 16px rgba(0,0,0,0.14)',
             transform: ['translate3d(0px,0px,0)', 'translate3d(1px,0px,0)', 'translate3d(0px,1px,0)', 'translate3d(-1px,0px,0)'][driftIndex],
             transition: swiping ? 'transform 260ms cubic-bezier(0.4, 0, 0.2, 1)' : 'transform 16s linear',
+            overflow: 'hidden',
           }}
         >
           {/* Previous image fades out as new one fades in */}
@@ -311,13 +298,16 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
             }}
           />
 
-          {/* Directional 45-Degree Beveled Mat Cutout & Cast Shadow */}
+          {/* Directional Downward Cast Shadow from Bevel Lip onto Painting */}
           <div
             style={{
               position: 'absolute',
               inset: 0,
               pointerEvents: 'none',
-              boxShadow: apertureShadow,
+              zIndex: 10,
+              boxShadow: darkThemeActive
+                ? 'inset 0 12px 20px -2px rgba(0,0,0,0.75), inset 5px 0 12px -2px rgba(0,0,0,0.45), inset -5px 0 12px -2px rgba(0,0,0,0.35), inset 0 -4px 8px -2px rgba(0,0,0,0.30)'
+                : 'inset 0 10px 18px -2px rgba(30,20,10,0.38), inset 5px 0 12px -2px rgba(30,20,10,0.20), inset -5px 0 12px -2px rgba(30,20,10,0.14), inset 0 -3px 6px -2px rgba(30,20,10,0.10)',
             }}
           />
         </div>
