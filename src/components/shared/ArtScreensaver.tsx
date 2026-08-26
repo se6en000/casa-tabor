@@ -152,6 +152,29 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
     return () => clearTimeout(timeout)
   }, [artwork?.id, artwork?.imageUrl, adaptiveMatColor, darkThemeActive])
 
+  const apertureShadow = useMemo(() => {
+    if (darkThemeActive) {
+      return [
+        'inset 1px 1px 0px rgba(255, 255, 255, 0.10)',
+        'inset -1.5px -1.5px 0px rgba(0, 0, 0, 0.70)',
+        'inset 0 12px 24px -2px rgba(0, 0, 0, 0.75)',
+        'inset 6px 0 16px -2px rgba(0, 0, 0, 0.45)',
+        'inset -6px 0 16px -2px rgba(0, 0, 0, 0.35)',
+        'inset 0 -6px 10px -2px rgba(0, 0, 0, 0.30)',
+        '0 0 30px rgba(0,0,0,0.35)',
+      ].join(', ')
+    }
+    return [
+      'inset 1.5px 1.5px 0px rgba(255, 255, 255, 0.88)',
+      'inset -1.5px -1.5px 0px rgba(70, 60, 50, 0.28)',
+      'inset 0 10px 22px -2px rgba(20, 15, 10, 0.42)',
+      'inset 6px 0 14px -2px rgba(20, 15, 10, 0.22)',
+      'inset -6px 0 14px -2px rgba(20, 15, 10, 0.16)',
+      'inset 0 -4px 8px -2px rgba(20, 15, 10, 0.10)',
+      '0 0 28px rgba(0,0,0,0.12)',
+    ].join(', ')
+  }, [darkThemeActive])
+
   function handleImgLoad(e: React.SyntheticEvent<HTMLImageElement>) {
     const img = e.currentTarget
     if (img.naturalWidth && img.naturalHeight) {
@@ -263,19 +286,13 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
             />
           )}
           
+          {/* Directional 45-Degree Beveled Mat Cutout & Cast Shadow */}
           <div
             style={{
               position: 'absolute',
               inset: 0,
               pointerEvents: 'none',
-              boxShadow: `
-                inset 0 6px 10px rgba(0,0,0,0.55),
-                inset 5px 0 8px rgba(0,0,0,0.42),
-                inset -5px 0 8px rgba(0,0,0,0.35),
-                inset 0 -3px 5px rgba(0,0,0,0.10),
-                inset -3px -3px 6px rgba(255,255,255,0.20),
-                0 0 20px rgba(0,0,0,0.15)
-              `,
+              boxShadow: apertureShadow,
             }}
           />
         </div>
