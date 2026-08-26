@@ -13,6 +13,7 @@ export interface PersonalArtwork {
   id: string
   storagePath: string
   title: string
+  artist?: string
   imageUrl: string
   mimeType: string
   byteSize: number
@@ -23,6 +24,7 @@ interface PersonalArtworkRow {
   id: string
   storage_path: string
   title: string
+  artist?: string | null
   mime_type: string
   byte_size: number
   created_at: string
@@ -34,7 +36,7 @@ export const artSourceConfigQueryKey = ['settings', ART_SOURCE_SETTING_KEY] as c
 async function loadPersonalArtwork(): Promise<PersonalArtwork[]> {
   const { data, error } = await supabase
     .from('personal_artwork')
-    .select('id, storage_path, title, mime_type, byte_size, created_at')
+    .select('id, storage_path, title, artist, mime_type, byte_size, created_at')
     .order('sort_order')
     .order('created_at')
   if (error) throw error
@@ -43,6 +45,7 @@ async function loadPersonalArtwork(): Promise<PersonalArtwork[]> {
     id: row.id,
     storagePath: row.storage_path,
     title: row.title,
+    artist: row.artist?.trim() || undefined,
     imageUrl: supabase.storage.from(PERSONAL_ARTWORK_BUCKET).getPublicUrl(row.storage_path).data.publicUrl,
     mimeType: row.mime_type,
     byteSize: row.byte_size,
@@ -103,7 +106,7 @@ export function usePersonalArtMode() {
   })
 
   const uploadMutation = useMutation({
-    mutationFn: async (file: File) => {
+    mutationFn: async ({ file, title, artist }: { file: File; title?: string; artist?: string }) => {
       const validationError = getPersonalArtworkValidationError(file)
       if (validationError) throw new Error(validationError)
 
@@ -114,10 +117,12 @@ export function usePersonalArtMode() {
         .upload(storagePath, file, { contentType: file.type, upsert: false })
       if (uploadError) throw uploadError
 
-      const title = file.name.replace(/\.[^.]+$/, '').trim() || 'Personal artwork'
+      const cleanTitle = (title ?? file.name.replace(/\.[^.]+$/, '')).trim() || 'Personal artwork'
+      const cleanArtist = artist?.trim() || null
       const { error: insertError } = await supabase.from('personal_artwork').insert({
         storage_path: storagePath,
-        title,
+        title: cleanTitle,
+        artist: cleanArtist,
         mime_type: file.type,
         byte_size: file.size,
       })
@@ -128,6 +133,23 @@ export function usePersonalArtMode() {
         }
         throw insertError
       }
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: personalArtworkQueryKey }),
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, title, artist }: { id: string; title: string; artist?: string }) => {
+      const cleanTitle = title.trim() || 'Untitled'
+      const cleanArtist = artist?.trim() || null
+      const { error } = await supabase
+        .from('personal_artwork')
+        .update({
+          title: cleanTitle,
+          artist: cleanArtist,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+      if (error) throw error
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: personalArtworkQueryKey }),
   })
@@ -153,10 +175,12 @@ export function usePersonalArtMode() {
   return {
     ...data,
     setSourceMode: sourceMutation.mutateAsync,
-    uploadArtwork: uploadMutation.mutateAsync,
+    uploadArtwork: (file: File) => uploadMutation.mutateAsync({ file }),
+    updateArtwork: updateMutation.mutateAsync,
     deleteArtwork: deleteMutation.mutateAsync,
     changingSource: sourceMutation.isPending,
     uploading: uploadMutation.isPending,
+    updating: updateMutation.isPending,
     deleting: deleteMutation.isPending,
   }
 }

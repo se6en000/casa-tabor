@@ -256,7 +256,7 @@ export function useArtwork(rotateSecs = 240) {
     const personal: Artwork[] = personalArtwork.map(item => ({
       id: item.id,
       title: item.title,
-      artist: 'Personal collection',
+      artist: item.artist || 'Personal collection',
       imageUrl: item.imageUrl,
       medium: 'Uploaded artwork',
     }))

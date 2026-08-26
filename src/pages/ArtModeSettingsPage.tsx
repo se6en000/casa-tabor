@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Image, Clock, Sun, Palette, Monitor, Plus, Minus, X, ChevronDown, ChevronUp, Upload, Trash2 } from 'lucide-react'
+import { Image, Clock, Sun, Palette, Monitor, Plus, Minus, X, ChevronDown, ChevronUp, Upload, Trash2, Pencil } from 'lucide-react'
 import { useScreensaverSettings } from '../hooks/useScreensaverSettings'
 import { useArtFeedPrefs, MEDIA_OPTIONS } from '../hooks/useArtFeedPrefs'
 import { usePersonalArtMode, type PersonalArtwork } from '../hooks/usePersonalArtMode'
@@ -178,8 +178,10 @@ export default function ArtModeSettingsPage() {
     error: personalArtworkLoadError,
     setSourceMode,
     uploadArtwork,
+    updateArtwork,
     deleteArtwork,
     uploading,
+    updating,
     deleting,
   } = usePersonalArtMode()
   const [advancedOpen, setAdvancedOpen] = useState(false)
@@ -187,6 +189,9 @@ export default function ArtModeSettingsPage() {
   const [yearToInput, setYearToInput] = useState('')
   const [libraryMessage, setLibraryMessage] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null)
   const [artworkToDelete, setArtworkToDelete] = useState<PersonalArtwork | null>(null)
+  const [artworkToEdit, setArtworkToEdit] = useState<PersonalArtwork | null>(null)
+  const [editTitle, setEditTitle] = useState('')
+  const [editArtist, setEditArtist] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const curatedMode = prefs.feedMode === 'curated'
@@ -231,6 +236,31 @@ export default function ArtModeSettingsPage() {
       })
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  const handleOpenEdit = (item: PersonalArtwork) => {
+    setArtworkToEdit(item)
+    setEditTitle(item.title)
+    setEditArtist(item.artist || '')
+  }
+
+  const handleSaveEdit = async () => {
+    if (!artworkToEdit) return
+    setLibraryMessage(null)
+    try {
+      await updateArtwork({
+        id: artworkToEdit.id,
+        title: editTitle,
+        artist: editArtist,
+      })
+      setLibraryMessage({ tone: 'success', text: `Details updated for "${editTitle.trim() || 'Untitled'}".` })
+      setArtworkToEdit(null)
+    } catch (error) {
+      setLibraryMessage({
+        tone: 'danger',
+        text: error instanceof Error ? error.message : 'Artwork details could not be updated.',
+      })
     }
   }
 
@@ -431,21 +461,37 @@ export default function ArtModeSettingsPage() {
                 ) : (
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                     {personalArtwork.map(item => (
-                      <div key={item.id} className="relative overflow-hidden rounded-xl border border-casa-border bg-casa-bg">
+                      <div key={item.id} className="relative overflow-hidden rounded-xl border border-casa-border bg-casa-bg group">
                         <img
                           src={item.imageUrl}
                           alt={item.title}
                           className="aspect-[4/3] w-full object-cover"
                         />
-                        <div className="flex items-center justify-between gap-2 p-2">
-                          <p className="min-w-0 truncate text-caption font-medium text-casa-navy">{item.title}</p>
-                          <IconButton
-                            size="sm"
-                            variant="ghost"
-                            icon={<Trash2 size={16} />}
-                            aria-label={`Remove ${item.title}`}
-                            onClick={() => setArtworkToDelete(item)}
-                          />
+                        <div className="flex items-center justify-between gap-1 p-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="min-w-0 truncate text-caption font-medium text-casa-navy" title={item.title}>
+                              {item.title}
+                            </p>
+                            <p className="min-w-0 truncate text-caption text-casa-muted" title={item.artist || 'Personal collection'}>
+                              {item.artist || 'Personal collection'}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-0.5 shrink-0">
+                            <IconButton
+                              size="sm"
+                              variant="ghost"
+                              icon={<Pencil size={15} />}
+                              aria-label={`Edit ${item.title}`}
+                              onClick={() => handleOpenEdit(item)}
+                            />
+                            <IconButton
+                              size="sm"
+                              variant="ghost"
+                              icon={<Trash2 size={15} />}
+                              aria-label={`Remove ${item.title}`}
+                              onClick={() => setArtworkToDelete(item)}
+                            />
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -630,6 +676,65 @@ export default function ArtModeSettingsPage() {
           </div>
         )}
       </div>
+
+      {/* Edit Artwork Details Modal */}
+      <Modal
+        open={artworkToEdit !== null}
+        onClose={() => setArtworkToEdit(null)}
+        title="Edit Artwork Details"
+        size="sm"
+        closeDisabled={updating}
+      >
+        <div className="space-y-4 py-3">
+          {artworkToEdit && (
+            <div className="flex items-center gap-3 rounded-lg border border-casa-border bg-casa-bg p-2">
+              <img
+                src={artworkToEdit.imageUrl}
+                alt={artworkToEdit.title}
+                className="h-14 w-14 rounded-md object-cover shrink-0"
+              />
+              <div className="min-w-0 flex-1">
+                <p className="text-caption text-casa-muted">Artwork preview</p>
+                <p className="text-body-sm font-medium text-casa-navy truncate">{artworkToEdit.title}</p>
+              </div>
+            </div>
+          )}
+
+          <div>
+            <label className="text-caption font-medium text-casa-navy block mb-1">Artwork Title</label>
+            <Input
+              type="text"
+              value={editTitle}
+              onChange={e => setEditTitle(e.target.value)}
+              placeholder="e.g. Highland Cattle with Espresso"
+              className="w-full"
+              autoFocus
+            />
+          </div>
+
+          <div>
+            <label className="text-caption font-medium text-casa-navy block mb-1">Artist Name (Optional)</label>
+            <Input
+              type="text"
+              value={editArtist}
+              onChange={e => setEditArtist(e.target.value)}
+              placeholder="e.g. Dwight Smith"
+              className="w-full"
+            />
+            <p className="text-caption text-casa-muted mt-1">Leaves as &ldquo;Personal collection&rdquo; if left blank.</p>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button variant="secondary" onClick={() => setArtworkToEdit(null)} disabled={updating}>
+            Cancel
+          </Button>
+          <Button variant="strong" loading={updating} onClick={() => void handleSaveEdit()}>
+            Save Details
+          </Button>
+        </div>
+      </Modal>
+
+      {/* Delete Artwork Modal */}
       <Modal
         open={artworkToDelete !== null}
         onClose={() => setArtworkToDelete(null)}

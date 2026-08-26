@@ -343,11 +343,36 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
         )}
 
         {artwork && loaded && (
-          <div className="absolute bottom-4 right-5 text-right pointer-events-none" style={{ color: darkThemeActive ? '#D7D2C8' : '#5a4f4a' }}>
-            <p className="text-caption italic leading-tight" style={{ fontFamily: 'Georgia, serif', fontSize: '0.7rem', fontWeight: 500, letterSpacing: '0.3px' }}>
+          <div
+            className="absolute bottom-3.5 right-6 text-right pointer-events-none transition-opacity duration-700"
+            style={{
+              color: darkThemeActive ? 'rgba(215, 210, 200, 0.72)' : 'rgba(70, 55, 45, 0.75)',
+              textShadow: darkThemeActive
+                ? '0 1px 0px rgba(0, 0, 0, 0.85), 0 -1px 0.5px rgba(255, 255, 255, 0.08)'
+                : '0 1px 0px rgba(255, 255, 255, 0.90), 0 -1px 0.5px rgba(0, 0, 0, 0.20)',
+            }}
+          >
+            <p
+              className="italic leading-snug tracking-wide"
+              style={{
+                fontFamily: 'Georgia, "Cormorant Garamond", "Times New Roman", serif',
+                fontSize: '0.78rem',
+                fontWeight: 500,
+                letterSpacing: '0.4px',
+              }}
+            >
               {artwork.title}
             </p>
-            <p className="text-caption leading-tight mt-0.5" style={{ fontFamily: 'Georgia, serif', fontSize: '0.62rem', opacity: 0.7, letterSpacing: '0.2px' }}>
+            <p
+              className="leading-tight mt-0.5 uppercase tracking-wider"
+              style={{
+                fontFamily: 'Georgia, "Cormorant Garamond", "Times New Roman", serif',
+                fontSize: '0.62rem',
+                fontWeight: 400,
+                letterSpacing: '1px',
+                opacity: 0.85,
+              }}
+            >
               {artwork.artist}
             </p>
           </div>
