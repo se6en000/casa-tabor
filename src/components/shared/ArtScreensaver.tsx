@@ -67,7 +67,7 @@ export default function ArtScreensaver({
   const [visible, setVisible] = useState(false)
   const [dismissable, setDismissable] = useState(false)
   const [imageRatio, setImageRatio] = useState(16 / 9)
-  const [matColor, setMatColor] = useState('#F5F0E8')
+  const [matColor, setMatColor] = useState('#F6F3EA')
   const [dominantColor, setDominantColor] = useState('#808080')
   const [matTransition, setMatTransition] = useState(false)
   const [driftIndex, setDriftIndex] = useState(0)

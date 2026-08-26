@@ -12,22 +12,20 @@ export interface ColorAnalysis {
 }
 
 /**
- * Curated palette of mat colors that work beautifully with art.
- * Each color is a neutral that complements different artwork tones.
+/**
+ * Curated museum-grade palette of archival cotton rag mat boards.
+ * Luminous, airy neutrals (90%–95% brightness) used by world-class galleries & framers.
  */
 const MAT_PALETTE = [
-  '#F5F0E8', // Warm ivory (default)
-  '#EDE7DC', // Light taupe
-  '#E8DDD0', // Warm beige
-  '#E5DFD5', // Soft sand
-  '#DFD8CE', // Quiet greige
-  '#DCCCC1', // Warm gray-beige
-  '#D9CFBE', // Muted tan
-  '#D5CDBB', // Neutral linen
-  '#D4C5B9', // Cooler linen
-  '#D0C5BB', // Sophisticated gray
-  '#E1D7CA', // Cream
-  '#EBE0D5', // Off-white
+  '#F8F5EE', // Antique Cotton Rag (Warm off-white)
+  '#F6F3EA', // Spanish White (Classic museum warm white)
+  '#F5F2E9', // Warm Alabaster
+  '#F4F1E6', // Soft Ivory Linen
+  '#F3EFE7', // Pearl Rag
+  '#F1ECE2', // Natural Unbleached Cotton
+  '#EFF1F3', // Cool Gallery Chalk (For oceanic / cool art)
+  '#ECEFF2', // Coastal Alabaster
+  '#F7F4EB', // Pale Cream Silk
 ]
 
 /**
@@ -98,13 +96,10 @@ export async function extractDominantColor(imageUrl: string): Promise<string> {
  * This ensures variety even when color extraction fails.
  */
 function getPaletteColorForKey(key: string): string {
-  // Use randomness based on key hash for consistency per image,
-  // but with enough variance to cycle through palette
   let hash = 0
   for (let i = 0; i < key.length; i += 1) {
     hash = (hash * 31 + key.charCodeAt(i)) >>> 0
   }
-  // Use modulo to map to palette, ensuring good distribution
   const index = hash % MAT_PALETTE.length
   console.log(`[ColorUtils] Palette color selected: ${MAT_PALETTE[index]} (index ${index})`)
   return MAT_PALETTE[index]
@@ -131,13 +126,13 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } {
         g: parseInt(result[2], 16),
         b: parseInt(result[3], 16),
       }
-    : { r: 212, g: 197, b: 185 } // fallback
+    : { r: 246, g: 243, b: 234 } // fallback Spanish White
 }
 
 /**
  * Calculate luminance of a color (for brightness detection).
  */
-function getLuminance(r: number, g: number, b: number): number {
+export function getLuminance(r: number, g: number, b: number): number {
   const [rs, gs, bs] = [r, g, b].map(x => {
     x /= 255
     return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4)
@@ -146,14 +141,13 @@ function getLuminance(r: number, g: number, b: number): number {
 }
 
 /**
- * Generate a harmonious mat color based on the artwork's dominant color.
- * Uses color theory to create mats that complement without competing.
+ * Generate an archival, luminous museum cotton rag mat color based on the artwork's temperature.
+ * Strictly maintains 90%–95% luminance (never dark or drab) while harmonizing subtle undertones.
  */
 export async function generateAdaptiveMatColor(imageUrl: string): Promise<ColorAnalysis> {
   try {
     const dominantHex = await extractDominantColor(imageUrl)
     if (MAT_PALETTE.includes(dominantHex)) {
-      console.log(`[ColorUtils] Using palette color: ${dominantHex}`)
       return {
         dominant: dominantHex,
         complementary: dominantHex,
@@ -163,76 +157,42 @@ export async function generateAdaptiveMatColor(imageUrl: string): Promise<ColorA
     }
     const { r, g, b } = hexToRgb(dominantHex)
 
-    const luminance = getLuminance(r, g, b)
-    const isLight = luminance > 0.5
+    // Determine artwork temperature: warm (red/amber/earth) vs cool (ocean/sky/greens)
+    const warmth = (r - b) / 255 // >0 warm, <0 cool
 
-    // Desaturate the dominant color and push it toward neutral beige
-    // This creates a mat that harmonizes without competing with the art
-    const desaturated = desaturateColor(r, g, b, 0.4) // 60% desaturation
+    // Base museum archival cotton rag (luminance ~93-94%)
+    let baseRag = { r: 246, g: 243, b: 234 } // #F6F3EA Spanish White
+    if (warmth > 0.12) {
+      // Warm paintings (watercolors, sunsets, earth tones): Warm Alabaster
+      baseRag = { r: 248, g: 244, b: 235 }
+    } else if (warmth < -0.08) {
+      // Cool paintings (ocean, seascapes, blues): Cool Museum Rag
+      baseRag = { r: 239, g: 241, b: 244 }
+    }
 
-    // Shift toward warm neutrals (beige/linen family)
-    const matRgb = shiftTowardWarmNeutral(desaturated.r, desaturated.g, desaturated.b, isLight)
+    // Subtle 5% temperature tint from dominant color to harmonize without losing brightness
+    const matR = Math.min(250, Math.max(235, Math.round(baseRag.r * 0.95 + r * 0.05)))
+    const matG = Math.min(248, Math.max(232, Math.round(baseRag.g * 0.95 + g * 0.05)))
+    const matB = Math.min(245, Math.max(228, Math.round(baseRag.b * 0.95 + b * 0.05)))
 
-    // Complementary color for optional accent (not used yet, but useful for future)
     const complementaryRgb = getComplementary(r, g, b)
 
     const result = {
       dominant: dominantHex,
       complementary: rgbToHex(complementaryRgb.r, complementaryRgb.g, complementaryRgb.b),
-      matColor: rgbToHex(matRgb.r, matRgb.g, matRgb.b),
-      isLight,
+      matColor: rgbToHex(matR, matG, matB),
+      isLight: true,
     }
-    console.log(`[ColorUtils] Generated mat color: ${result.matColor}`)
+    console.log(`[ColorUtils] Generated luminous museum mat color: ${result.matColor}`)
     return result
   } catch (err) {
     console.error('[ColorUtils] Color generation failed:', err)
-    // Safe fallback
     return {
       dominant: '#808080',
       complementary: '#808080',
-      matColor: '#D4C5B9',
+      matColor: '#F6F3EA',
       isLight: true,
     }
-  }
-}
-
-/**
- * Desaturate a color by moving it toward gray.
- */
-function desaturateColor(
-  r: number,
-  g: number,
-  b: number,
-  factor: number // 0–1, where 1 = fully gray
-): { r: number; g: number; b: number } {
-  const gray = (r + g + b) / 3
-  return {
-    r: Math.round(r + (gray - r) * factor),
-    g: Math.round(g + (gray - g) * factor),
-    b: Math.round(b + (gray - b) * factor),
-  }
-}
-
-/**
- * Shift a color toward warm neutral (beige/linen) tones.
- * Light images get warmer (more yellow), dark images stay cooler.
- */
-function shiftTowardWarmNeutral(
-  r: number,
-  g: number,
-  b: number,
-  isLight: boolean
-): { r: number; g: number; b: number } {
-  // Light images: shift toward warm beige (#E8DDD0)
-  // Dark images: shift toward cooler linen (#D0CCBF)
-
-  const warmTarget = isLight ? { r: 232, g: 221, b: 208 } : { r: 208, g: 204, b: 191 }
-  const blendFactor = 0.65 // 65% toward warm neutral, 35% retain original
-
-  return {
-    r: Math.round(r * (1 - blendFactor) + warmTarget.r * blendFactor),
-    g: Math.round(g * (1 - blendFactor) + warmTarget.g * blendFactor),
-    b: Math.round(b * (1 - blendFactor) + warmTarget.b * blendFactor),
   }
 }
 
@@ -244,7 +204,6 @@ function getComplementary(
   g: number,
   b: number
 ): { r: number; g: number; b: number } {
-  // Convert RGB to HSL, rotate hue by 180°, convert back
   const max = Math.max(r, g, b) / 255
   const min = Math.min(r, g, b) / 255
   const l = (max + min) / 2
@@ -292,41 +251,39 @@ export interface BevelPalette {
 
 /**
  * Generate physical, dimmed 45-degree bevel facets that color-harmonize with
- * both the mat board and the adjacent artwork pigments (ambient radiosity light bounce).
+ * both the luminous museum mat board and the adjacent artwork pigments.
  */
 export function generateHarmonizedBevel(matColorHex: string, dominantHex: string = '#808080'): BevelPalette {
   const mat = hexToRgb(matColorHex)
   const dom = hexToRgb(dominantHex)
 
-  // 1. Archival Core Base (Warm Matte Ivory, never digital #FFFFFF)
-  // Harmonized with 25% of the actual mat color
-  const coreR = Math.round(234 * 0.75 + mat.r * 0.25)
-  const coreG = Math.round(228 * 0.75 + mat.g * 0.25)
-  const coreB = Math.round(216 * 0.75 + mat.b * 0.25)
+  // 1. Archival Core Base (Natural cotton rag core pulp, ~92% luminance)
+  const coreR = Math.round(238 * 0.70 + mat.r * 0.30)
+  const coreG = Math.round(232 * 0.70 + mat.g * 0.30)
+  const coreB = Math.round(222 * 0.70 + mat.b * 0.30)
 
-  // 2. Top Bevel (Dimmed ambient highlight ~88% luminance, soft warm ivory)
-  const topR = Math.min(248, Math.round(coreR * 1.03))
-  const topG = Math.min(244, Math.round(coreG * 1.03))
-  const topB = Math.min(235, Math.round(coreB * 1.03))
+  // 2. Top Bevel (Soft warm ivory highlight ~95% luminance, not harsh 100% white)
+  const topR = Math.min(250, Math.round(coreR * 1.03))
+  const topG = Math.min(247, Math.round(coreG * 1.03))
+  const topB = Math.min(239, Math.round(coreB * 1.03))
 
-  // 3. Left Bevel (Receives ambient light + radiosity color bounce from adjacent artwork pigments)
-  // Blends warm ivory with 20% of the painting's dominant pigment color
-  const leftR = Math.min(245, Math.round(coreR * 0.80 + dom.r * 0.20))
-  const leftG = Math.min(242, Math.round(coreG * 0.80 + dom.g * 0.20))
-  const leftB = Math.min(233, Math.round(coreB * 0.80 + dom.b * 0.20))
+  // 3. Left Bevel (Ambient light + subtle pigment color bounce from adjacent painting)
+  const leftR = Math.min(247, Math.round(coreR * 0.82 + dom.r * 0.18))
+  const leftG = Math.min(244, Math.round(coreG * 0.82 + dom.g * 0.18))
+  const leftB = Math.min(236, Math.round(coreB * 0.82 + dom.b * 0.18))
 
-  // 4. Right Bevel (Shaded core facet)
+  // 4. Right Bevel (Shaded core facet ~88%)
   const rightR = Math.round(coreR * 0.88)
   const rightG = Math.round(coreG * 0.88)
   const rightB = Math.round(coreB * 0.88)
 
-  // 5. Bottom Bevel (Deepest shaded core facet)
-  const botR = Math.round(coreR * 0.80)
-  const botG = Math.round(coreG * 0.80)
-  const botB = Math.round(coreB * 0.80)
+  // 5. Bottom Bevel (Deepest shaded core facet ~82%)
+  const botR = Math.round(coreR * 0.82)
+  const botG = Math.round(coreG * 0.82)
+  const botB = Math.round(coreB * 0.82)
 
   // 6. Subtle edge radiosity color
-  const radiosity = `rgba(${dom.r}, ${dom.g}, ${dom.b}, 0.09)`
+  const radiosity = `rgba(${dom.r}, ${dom.g}, ${dom.b}, 0.08)`
 
   return {
     top: rgbToHex(topR, topG, topB),
