@@ -303,16 +303,6 @@ export default function ArtScreensaver({ onDismiss, rotationMins = 4, minArtWidt
             </p>
           </div>
         )}
-
-        {artwork && loaded && (
-          <div className="absolute left-1/2 -translate-x-1/2 bottom-3 text-caption pointer-events-none" style={{ color: darkThemeActive ? '#A59C8F' : '#8f8678' }}>
-            swipe left for next piece
-          </div>
-        )}
-
-        <div className="absolute bottom-3 left-4 pointer-events-none" style={{ color: darkThemeActive ? '#A89E90' : '#9b9285', fontSize: '0.55rem', fontFamily: 'Georgia, serif' }}>
-          tap to wake · say alexa
-        </div>
       </div>
     </div>
   )
