@@ -285,7 +285,7 @@ export default function SettingsShell() {
           
           {/* Page content */}
           <BounceScroll className="flex-1">
-            <div className="settings-surface mx-auto w-full max-w-page-narrow px-page-gutter py-section-gap pb-36">
+            <div className="settings-surface mx-auto w-full max-w-page-wide px-page-gutter py-section-gap pb-36">
               <Outlet />
             </div>
           </BounceScroll>

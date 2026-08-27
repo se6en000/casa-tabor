@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Image, Clock, Sun, Palette, Monitor, Plus, Minus, X, ChevronDown, ChevronUp, Upload, Trash2, Pencil, Crop } from 'lucide-react'
+import { Image, Sun, Palette, Monitor, Plus, Minus, X, ChevronDown, ChevronUp, Upload, Trash2, Pencil, Crop } from 'lucide-react'
 import { useScreensaverSettings } from '../hooks/useScreensaverSettings'
 import { useArtFeedPrefs, MEDIA_OPTIONS } from '../hooks/useArtFeedPrefs'
 import { usePersonalArtMode, type PersonalArtwork } from '../hooks/usePersonalArtMode'
@@ -357,129 +357,142 @@ export default function ArtModeSettingsPage() {
         <SettingsPageHeader icon={Image} title="Art Mode" description="Simple gallery controls first, curation when you want it" />
       </div>
 
-      <div className="space-y-4">
-        <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
-          <SectionHeader icon={Monitor} label="Mode" />
-          <Toggle
-            checked={settings.enabled}
-            onChange={v => updateScreensaver({ enabled: v })}
-            label="Art Mode screensaver"
-            desc="Show artwork when the display is idle."
-          />
+      <div className="space-y-5">
+        {/* Top 2-Column Responsive Layout for Mode/Playback & Look/Feel */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          {/* Card 1: Mode & Playback */}
+          <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5 flex flex-col justify-between">
+            <div>
+              <SectionHeader icon={Monitor} label="Mode & Playback" />
+              <Toggle
+                checked={settings.enabled}
+                onChange={v => updateScreensaver({ enabled: v })}
+                label="Art Mode screensaver"
+                desc="Show artwork when the display is idle."
+              />
 
-          {settings.enabled && (
-            <SegmentedControl
-              aria-label="Art Mode source"
-              value={sourceMode}
-              options={ART_SOURCE_OPTIONS}
-              onChange={mode => void handleSourceChange(mode)}
-              fullWidth
-              className="mt-2"
-            />
+              {settings.enabled && (
+                <>
+                  <SegmentedControl
+                    aria-label="Art Mode source"
+                    value={sourceMode}
+                    options={ART_SOURCE_OPTIONS}
+                    onChange={mode => void handleSourceChange(mode)}
+                    fullWidth
+                    className="mt-2.5"
+                  />
+
+                  <Button
+                    type="button"
+                    onClick={() => document.dispatchEvent(new CustomEvent('screensaver-on'))}
+                    disabled={!settings.enabled || personalArtworkLoading || (sourceMode === 'personal' && personalArtwork.length === 0)}
+                    className={cn(
+                      'mt-3.5 w-full py-2.5 rounded-xl text-body-sm font-semibold transition-all',
+                      settings.enabled
+                        ? 'bg-casa-gold text-white hover:bg-casa-gold/90 active:scale-95'
+                        : 'bg-casa-border text-casa-muted cursor-not-allowed'
+                    )}
+                  >
+                    ▶ Preview Art Mode
+                  </Button>
+
+                  <div className="mt-4 pt-4 border-t border-casa-border space-y-1">
+                    <Row label="Start art mode after" desc="Idle delay before artwork appears">
+                      <StepPicker
+                        value={settings.screensaverMins}
+                        onChange={v => updateScreensaver({ screensaverMins: v })}
+                        min={1} max={60} unit="min"
+                      />
+                    </Row>
+                    <Row label="Rotate artwork every" desc="How long each artwork stays on screen">
+                      <StepPicker
+                        value={settings.rotationMins}
+                        onChange={v => updateScreensaver({ rotationMins: v })}
+                        min={1} max={60} unit="min"
+                      />
+                    </Row>
+                    <Toggle
+                      checked={settings.shuffle}
+                      onChange={v => updateScreensaver({ shuffle: v })}
+                      label="Shuffle artwork"
+                      desc="Randomize playback order instead of sequential rotation."
+                    />
+                    <Toggle
+                      checked={settings.displaySleepEnabled}
+                      onChange={v => updateScreensaver({ displaySleepEnabled: v })}
+                      label="Monitor sleep in Art Mode"
+                      desc="Turn the display off after prolonged idle."
+                    />
+                    {settings.displaySleepEnabled && (
+                      <Row label="Sleep display after" desc="Must stay longer than art mode delay">
+                        <StepPicker
+                          value={settings.displayOffMins}
+                          onChange={v => updateScreensaver({ displayOffMins: Math.max(settings.screensaverMins + 1, v) })}
+                          min={2} max={120} unit="min"
+                        />
+                      </Row>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Card 2: Look & Feel */}
+          {settings.enabled ? (
+            <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5 flex flex-col justify-between">
+              <div>
+                <SectionHeader icon={Sun} label="Look & Feel" />
+                <Row label="Dim below ambient" desc="Keeps artwork feeling like wall art, not a bright dashboard">
+                  <StepPicker
+                    value={settings.artDimOffset}
+                    onChange={v => updateScreensaver({ artDimOffset: v })}
+                    min={5} max={80} step={5} unit="%"
+                  />
+                </Row>
+                <Row label="Minimum art width" desc="Portrait works won’t render smaller than this">
+                  <StepPicker
+                    value={settings.minArtWidthVw}
+                    onChange={v => updateScreensaver({ minArtWidthVw: v })}
+                    min={30} max={90} step={5} unit="vw"
+                  />
+                </Row>
+                <div className="pt-4 border-t border-casa-border">
+                  <div className="mb-2.5">
+                    <p className="text-body-sm font-medium text-casa-navy">Matboard tone</p>
+                    <p className="text-caption text-casa-muted mt-0.5">Archival cotton rag mat color surrounding the artwork.</p>
+                  </div>
+                  <SegmentedControl
+                    aria-label="Matboard tone"
+                    value={settings.matPreset ?? 'auto'}
+                    options={MAT_PRESET_OPTIONS}
+                    onChange={v => updateScreensaver({ matPreset: v })}
+                    fullWidth
+                  />
+                </div>
+                <div className="pt-4 border-t border-casa-border">
+                  <div className="mb-2.5">
+                    <p className="text-body-sm font-medium text-casa-navy">Artwork details plaque</p>
+                    <p className="text-caption text-casa-muted mt-0.5">Show title and artist credit on screen.</p>
+                  </div>
+                  <SegmentedControl
+                    aria-label="Artwork details plaque"
+                    value={settings.plaqueMode ?? 'fade'}
+                    options={PLAQUE_OPTIONS}
+                    onChange={v => updateScreensaver({ plaqueMode: v })}
+                    fullWidth
+                  />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="hidden lg:flex bg-casa-surface-2 rounded-card border border-dashed border-casa-border p-5 text-center flex-col items-center justify-center">
+              <p className="text-body-sm text-casa-muted">Enable Art Mode screensaver to configure playback, matting, and display settings.</p>
+            </div>
           )}
-
-          <Button
-            type="button"
-            onClick={() => document.dispatchEvent(new CustomEvent('screensaver-on'))}
-            disabled={!settings.enabled || personalArtworkLoading || (sourceMode === 'personal' && personalArtwork.length === 0)}
-            className={cn(
-              'mt-4 w-full py-2.5 rounded-xl text-body-sm font-semibold transition-all',
-              settings.enabled
-                ? 'bg-casa-gold text-white hover:bg-casa-gold/90 active:scale-95'
-                : 'bg-casa-border text-casa-muted cursor-not-allowed'
-            )}
-          >
-            ▶ Preview Art Mode
-          </Button>
         </div>
 
-        {settings.enabled && (
-          <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
-            <SectionHeader icon={Clock} label="Playback" />
-            <Row label="Start art mode after" desc="Idle delay before artwork appears">
-              <StepPicker
-                value={settings.screensaverMins}
-                onChange={v => updateScreensaver({ screensaverMins: v })}
-                min={1} max={60} unit="min"
-              />
-            </Row>
-            <Row label="Rotate artwork every" desc="How long each artwork stays on screen">
-              <StepPicker
-                value={settings.rotationMins}
-                onChange={v => updateScreensaver({ rotationMins: v })}
-                min={1} max={60} unit="min"
-              />
-            </Row>
-            <Toggle
-              checked={settings.shuffle}
-              onChange={v => updateScreensaver({ shuffle: v })}
-              label="Shuffle artwork"
-              desc="Randomize playback order instead of sequential rotation."
-            />
-            <Toggle
-              checked={settings.displaySleepEnabled}
-              onChange={v => updateScreensaver({ displaySleepEnabled: v })}
-              label="Monitor sleep in Art Mode"
-              desc="Turn the display off after prolonged idle."
-            />
-            {settings.displaySleepEnabled && (
-              <Row label="Sleep display after" desc="Must stay longer than art mode delay">
-                <StepPicker
-                  value={settings.displayOffMins}
-                  onChange={v => updateScreensaver({ displayOffMins: Math.max(settings.screensaverMins + 1, v) })}
-                  min={2} max={120} unit="min"
-                />
-              </Row>
-            )}
-          </div>
-        )}
-
-        {settings.enabled && (
-          <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
-            <SectionHeader icon={Sun} label="Look & Feel" />
-            <Row label="Dim below ambient" desc="Keeps artwork feeling like wall art, not a bright dashboard">
-              <StepPicker
-                value={settings.artDimOffset}
-                onChange={v => updateScreensaver({ artDimOffset: v })}
-                min={5} max={80} step={5} unit="%"
-              />
-            </Row>
-            <Row label="Minimum art width" desc="Portrait works won’t render smaller than this">
-              <StepPicker
-                value={settings.minArtWidthVw}
-                onChange={v => updateScreensaver({ minArtWidthVw: v })}
-                min={30} max={90} step={5} unit="vw"
-              />
-            </Row>
-            <div className="pt-4 border-t border-casa-border">
-              <div className="mb-2.5">
-                <p className="text-body-sm font-medium text-casa-navy">Matboard tone</p>
-                <p className="text-caption text-casa-muted mt-0.5">Archival cotton rag mat color surrounding the artwork.</p>
-              </div>
-              <SegmentedControl
-                aria-label="Matboard tone"
-                value={settings.matPreset ?? 'auto'}
-                options={MAT_PRESET_OPTIONS}
-                onChange={v => updateScreensaver({ matPreset: v })}
-                fullWidth
-              />
-            </div>
-            <div className="pt-4 border-t border-casa-border">
-              <div className="mb-2.5">
-                <p className="text-body-sm font-medium text-casa-navy">Artwork details plaque</p>
-                <p className="text-caption text-casa-muted mt-0.5">Show title and artist credit on screen.</p>
-              </div>
-              <SegmentedControl
-                aria-label="Artwork details plaque"
-                value={settings.plaqueMode ?? 'fade'}
-                options={PLAQUE_OPTIONS}
-                onChange={v => updateScreensaver({ plaqueMode: v })}
-                fullWidth
-              />
-            </div>
-          </div>
-        )}
-
+        {/* Card 3: Collection & Gallery Studio (Full Width) */}
         {settings.enabled && (
           <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5">
             <SectionHeader icon={Palette} label="Collection" />
@@ -496,9 +509,16 @@ export default function ArtModeSettingsPage() {
 
             {includesPersonalArtwork && (
               <div className={cn(includesCasaGallery && 'mb-5 border-b border-casa-border pb-5')}>
-                <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="mb-3.5 flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-body-sm font-semibold text-casa-navy">Personal gallery</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-body-sm font-semibold text-casa-navy">Personal gallery</p>
+                      {personalArtwork.length > 0 && (
+                        <span className="text-2xs font-bold px-2 py-0.5 rounded-full bg-casa-gold/15 text-casa-navy">
+                          {personalArtwork.length} {personalArtwork.length === 1 ? 'artwork' : 'artworks'}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-caption text-casa-muted">Shared across the kiosk, mobile, and web.</p>
                   </div>
                   <Button
@@ -537,13 +557,13 @@ export default function ArtModeSettingsPage() {
                     )}
                   />
                 ) : (
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 2xl:grid-cols-6 gap-3.5">
                     {personalArtwork.map(item => (
-                      <div key={item.id} className="relative overflow-hidden rounded-xl border border-casa-border bg-casa-bg group">
+                      <div key={item.id} className="relative overflow-hidden rounded-xl border border-casa-border bg-casa-bg group shadow-xs hover:shadow-card transition-all">
                         <img
                           src={item.imageUrl}
                           alt={item.title}
-                          className="aspect-[4/3] w-full object-cover"
+                          className="aspect-[16/9] w-full object-cover"
                         />
                         <div className="flex items-center justify-between gap-1 p-2">
                           <div className="min-w-0 flex-1">
