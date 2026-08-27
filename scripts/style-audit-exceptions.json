@@ -50,6 +50,10 @@
     ],
     "inlineStyleBlocks": [
       {
+        "path": "src/components/settings/ArtworkCropModal.tsx",
+        "reason": "Interactive drag, pan offset, and zoom scale dynamic transforms for 16:9 crop viewport preview."
+      },
+      {
         "path": "src/components/ui/CopilotIcon.tsx",
         "reason": "Dynamic icon size and caller style passthrough."
       },

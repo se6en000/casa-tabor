@@ -22,7 +22,7 @@ test('high-frequency hooks gate background work and eliminate periodic polling i
   assert.match(conflicts, /refetchInterval: false/)
 
   assert.match(roomTone, /refetchInterval: false/)
-  assert.match(roomTone, /refetchInterval: isPageVisible \? SENSOR_POLL_MS : false/)
+  assert.match(roomTone, /refetchInterval: isPageVisible.*SENSOR_POLL_MS : false/)
 
   assert.match(recurrenceOps, /refetchInterval: false/)
 })

@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { Image, Clock, Sun, Palette, Monitor, Plus, Minus, X, ChevronDown, ChevronUp, Upload, Trash2, Pencil } from 'lucide-react'
+import { Image, Clock, Sun, Palette, Monitor, Plus, Minus, X, ChevronDown, ChevronUp, Upload, Trash2, Pencil, Crop } from 'lucide-react'
 import { useScreensaverSettings } from '../hooks/useScreensaverSettings'
 import { useArtFeedPrefs, MEDIA_OPTIONS } from '../hooks/useArtFeedPrefs'
 import { usePersonalArtMode, type PersonalArtwork } from '../hooks/usePersonalArtMode'
 import type { ArtSourceMode } from '../lib/artModeLibrary'
 import { cn } from '../utils/cn'
-import { SettingsPageHeader, SettingsToggle as Toggle } from '../components/settings'
+import { SettingsPageHeader, SettingsToggle as Toggle, ArtworkCropModal } from '../components/settings'
 import { Alert, Button, Checkbox, EmptyState, IconButton, Modal, SegmentedControl, SectionHeader as SharedSectionHeader, Input } from '../components/ui'
 
 const ART_FEED_MODE_OPTIONS = [
@@ -179,9 +179,11 @@ export default function ArtModeSettingsPage() {
     setSourceMode,
     uploadArtwork,
     updateArtwork,
+    cropArtwork,
     deleteArtwork,
     uploading,
     updating,
+    cropping,
     deleting,
   } = usePersonalArtMode()
   const [advancedOpen, setAdvancedOpen] = useState(false)
@@ -190,6 +192,7 @@ export default function ArtModeSettingsPage() {
   const [libraryMessage, setLibraryMessage] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null)
   const [artworkToDelete, setArtworkToDelete] = useState<PersonalArtwork | null>(null)
   const [artworkToEdit, setArtworkToEdit] = useState<PersonalArtwork | null>(null)
+  const [artworkToCrop, setArtworkToCrop] = useState<PersonalArtwork | null>(null)
   const [editTitle, setEditTitle] = useState('')
   const [editArtist, setEditArtist] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -260,6 +263,34 @@ export default function ArtModeSettingsPage() {
       setLibraryMessage({
         tone: 'danger',
         text: error instanceof Error ? error.message : 'Artwork details could not be updated.',
+      })
+    }
+  }
+
+  const handleOpenCrop = (item: PersonalArtwork) => {
+    setArtworkToCrop(item)
+  }
+
+  const handleSaveCrop = async (croppedFile: File) => {
+    if (!artworkToCrop) return
+    setLibraryMessage(null)
+    try {
+      await cropArtwork({
+        id: artworkToCrop.id,
+        file: croppedFile,
+        oldStoragePath: artworkToCrop.storagePath,
+        title: artworkToCrop.title,
+        artist: artworkToCrop.artist,
+      })
+      setLibraryMessage({
+        tone: 'success',
+        text: `"${artworkToCrop.title}" cropped to 16:9 widescreen format.`,
+      })
+      setArtworkToCrop(null)
+    } catch (error) {
+      setLibraryMessage({
+        tone: 'danger',
+        text: error instanceof Error ? error.message : 'Cropped artwork could not be saved.',
       })
     }
   }
@@ -486,6 +517,13 @@ export default function ArtModeSettingsPage() {
                             <IconButton
                               size="sm"
                               variant="ghost"
+                              icon={<Crop size={15} />}
+                              aria-label={`Crop ${item.title} to 16:9`}
+                              onClick={() => handleOpenCrop(item)}
+                            />
+                            <IconButton
+                              size="sm"
+                              variant="ghost"
                               icon={<Pencil size={15} />}
                               aria-label={`Edit ${item.title}`}
                               onClick={() => handleOpenEdit(item)}
@@ -693,16 +731,31 @@ export default function ArtModeSettingsPage() {
       >
         <div className="space-y-4 py-3">
           {artworkToEdit && (
-            <div className="flex items-center gap-3 rounded-lg border border-casa-border bg-casa-bg p-2">
-              <img
-                src={artworkToEdit.imageUrl}
-                alt={artworkToEdit.title}
-                className="h-14 w-14 rounded-md object-cover shrink-0"
-              />
-              <div className="min-w-0 flex-1">
-                <p className="text-caption text-casa-muted">Artwork preview</p>
-                <p className="text-body-sm font-medium text-casa-navy truncate">{artworkToEdit.title}</p>
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-casa-border bg-casa-bg p-2.5">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <img
+                  src={artworkToEdit.imageUrl}
+                  alt={artworkToEdit.title}
+                  className="h-14 w-14 rounded-md object-cover shrink-0"
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="text-caption text-casa-muted">Artwork preview</p>
+                  <p className="text-body-sm font-medium text-casa-navy truncate">{artworkToEdit.title}</p>
+                </div>
               </div>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                leadingIcon={<Crop size={14} />}
+                onClick={() => {
+                  const target = artworkToEdit
+                  setArtworkToEdit(null)
+                  handleOpenCrop(target)
+                }}
+              >
+                Crop to 16:9
+              </Button>
             </div>
           )}
 
@@ -760,6 +813,15 @@ export default function ArtModeSettingsPage() {
           </Button>
         </div>
       </Modal>
+
+      {/* 16:9 Crop Artwork Modal */}
+      <ArtworkCropModal
+        open={artworkToCrop !== null}
+        artwork={artworkToCrop}
+        onClose={() => setArtworkToCrop(null)}
+        onSaveCrop={handleSaveCrop}
+        saving={cropping}
+      />
     </>
   )
 }

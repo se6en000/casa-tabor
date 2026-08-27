@@ -154,6 +154,63 @@ export function usePersonalArtMode() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: personalArtworkQueryKey }),
   })
 
+  const cropMutation = useMutation({
+    mutationFn: async ({
+      id,
+      file,
+      oldStoragePath,
+      title,
+      artist,
+    }: {
+      id: string
+      file: File
+      oldStoragePath?: string
+      title?: string
+      artist?: string
+    }) => {
+      const validationError = getPersonalArtworkValidationError(file)
+      if (validationError) throw new Error(validationError)
+
+      const extension = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg'
+      const newStoragePath = `${crypto.randomUUID()}.${extension}`
+      const { error: uploadError } = await supabase.storage
+        .from(PERSONAL_ARTWORK_BUCKET)
+        .upload(newStoragePath, file, { contentType: file.type, upsert: false })
+      if (uploadError) throw uploadError
+
+      const updatePayload: {
+        storage_path: string
+        mime_type: string
+        byte_size: number
+        updated_at: string
+        title?: string
+        artist?: string | null
+      } = {
+        storage_path: newStoragePath,
+        mime_type: file.type,
+        byte_size: file.size,
+        updated_at: new Date().toISOString(),
+      }
+      if (title !== undefined) updatePayload.title = title.trim() || 'Personal artwork'
+      if (artist !== undefined) updatePayload.artist = artist.trim() || null
+
+      const { error: updateError } = await supabase
+        .from('personal_artwork')
+        .update(updatePayload)
+        .eq('id', id)
+
+      if (updateError) {
+        await supabase.storage.from(PERSONAL_ARTWORK_BUCKET).remove([newStoragePath])
+        throw updateError
+      }
+
+      if (oldStoragePath && oldStoragePath !== newStoragePath) {
+        await supabase.storage.from(PERSONAL_ARTWORK_BUCKET).remove([oldStoragePath]).catch(() => {})
+      }
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: personalArtworkQueryKey }),
+  })
+
   const deleteMutation = useMutation({
     mutationFn: async (artwork: PersonalArtwork) => {
       const { error: deleteRowError } = await supabase
@@ -177,10 +234,12 @@ export function usePersonalArtMode() {
     setSourceMode: sourceMutation.mutateAsync,
     uploadArtwork: (file: File) => uploadMutation.mutateAsync({ file }),
     updateArtwork: updateMutation.mutateAsync,
+    cropArtwork: cropMutation.mutateAsync,
     deleteArtwork: deleteMutation.mutateAsync,
     changingSource: sourceMutation.isPending,
     uploading: uploadMutation.isPending,
     updating: updateMutation.isPending,
+    cropping: cropMutation.isPending,
     deleting: deleteMutation.isPending,
   }
 }

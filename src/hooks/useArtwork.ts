@@ -260,9 +260,7 @@ export function useArtwork(rotateSecs = 240, shuffle = true) {
       imageUrl: item.imageUrl,
       medium: 'Uploaded artwork',
     }))
-    const baseCasa = shuffle ? shuffled(casaArtworks) : casaArtworks
-    const basePersonal = shuffle ? shuffled(personal) : personal
-    const feed = buildArtworkFeed(sourceMode, baseCasa, basePersonal)
+    const feed = buildArtworkFeed(sourceMode, casaArtworks, personal)
     setArtworks(shuffle ? shuffled(feed) : feed)
     setLoaded(false)
     setIndex(0)

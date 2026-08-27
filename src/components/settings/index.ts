@@ -2,3 +2,4 @@ export { SettingsPageHeader, type SettingsPageHeaderProps } from './SettingsPage
 export { SettingsSection, type SettingsSectionProps } from './SettingsSection'
 export { SettingsToggle, type SettingsToggleProps } from './SettingsToggle'
 export { RecurrenceOperationsCard } from './RecurrenceOperationsCard'
+export { ArtworkCropModal } from './ArtworkCropModal'

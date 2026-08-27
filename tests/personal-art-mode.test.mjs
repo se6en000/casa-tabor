@@ -77,3 +77,13 @@ test('the slideshow consumes the shared source mode and personal artwork query',
 test('failed metadata inserts clean up uploaded storage objects', () => {
   assert.match(personalHookSource, /if \(insertError\)[\s\S]*\.remove\(\[storagePath\]\)/)
 })
+
+test('personal Art Mode provides 16:9 image cropping with old storage cleanup and UI integration', () => {
+  assert.match(personalHookSource, /cropArtwork/)
+  assert.match(personalHookSource, /cropMutation/)
+  assert.match(personalHookSource, /if \(oldStoragePath && oldStoragePath !== newStoragePath\)[\s\S]*\.remove\(\[oldStoragePath\]\)/)
+  assert.match(settingsSource, /ArtworkCropModal/)
+  assert.match(settingsSource, /handleOpenCrop/)
+  assert.match(settingsSource, /handleSaveCrop/)
+  assert.match(settingsSource, /Crop to 16:9/)
+})
