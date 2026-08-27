@@ -287,15 +287,15 @@ export default function ArtScreensaver({
             maxHeight: '100%',
             boxSizing: 'content-box',
             backgroundColor: paperBaseColor,
-            // 2.5px thick 45-degree mitered core bevel facets (dimmed warm ivory harmonized with mat & artwork light bounce)
-            borderTop: `2.5px solid ${bevelColors.top}`,
-            borderLeft: `2.5px solid ${bevelColors.left}`,
-            borderRight: `2.5px solid ${bevelColors.right}`,
-            borderBottom: `2.5px solid ${bevelColors.bottom}`,
+            // 4.5px thick 45-degree mitered core bevel facets (thick 8-ply museum board depth)
+            borderTop: `4.5px solid ${bevelColors.top}`,
+            borderLeft: `4.5px solid ${bevelColors.left}`,
+            borderRight: `4.5px solid ${bevelColors.right}`,
+            borderBottom: `4.5px solid ${bevelColors.bottom}`,
             // Clean razor blade incision groove where bevel meets the mat board
             boxShadow: darkThemeActive
-              ? '0 0 0 1px rgba(0,0,0,0.9), 0 2px 10px rgba(0,0,0,0.45)'
-              : '0 0 0 1px rgba(50,40,30,0.10), 0 2px 8px rgba(0,0,0,0.05)',
+              ? '0 0 0 1px rgba(0,0,0,0.9), 0 3px 12px rgba(0,0,0,0.6)'
+              : '0 0 0 1px rgba(50,40,30,0.18), 0 3px 10px rgba(0,0,0,0.08)',
             transform: ['translate3d(0px,0px,0)', 'translate3d(1px,0px,0)', 'translate3d(0px,1px,0)', 'translate3d(-1px,0px,0)'][driftIndex],
             transition: swiping ? 'transform 260ms cubic-bezier(0.4, 0, 0.2, 1)' : 'transform 16s linear',
             overflow: 'hidden',

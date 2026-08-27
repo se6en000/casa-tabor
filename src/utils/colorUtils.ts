@@ -264,33 +264,33 @@ export function generateHarmonizedBevel(matColorHex: string, dominantHex: string
   const mat = hexToRgb(matColorHex)
   const dom = hexToRgb(dominantHex)
 
-  // 1. Archival Cotton Rag Core Base (Natural unbleached cotton core pulp, ~92% luminance)
-  const coreR = Math.round(242 * 0.75 + mat.r * 0.25)
-  const coreG = Math.round(238 * 0.75 + mat.g * 0.25)
-  const coreB = Math.round(230 * 0.75 + mat.b * 0.25)
+  // 1. Archival Cotton Rag Core Base (Natural unbleached cotton core pulp)
+  const coreR = Math.round(240 * 0.70 + mat.r * 0.30)
+  const coreG = Math.round(236 * 0.70 + mat.g * 0.30)
+  const coreB = Math.round(226 * 0.70 + mat.b * 0.30)
 
-  // 2. Top Bevel: Downward-facing facet in soft shadow of the mat overhang (~86% luminance)
-  const topR = Math.round(coreR * 0.88)
-  const topG = Math.round(coreG * 0.88)
-  const topB = Math.round(coreB * 0.88)
+  // 2. Top Bevel: Downward-facing facet in soft shadow of the mat overhang (~80% luminance)
+  const topR = Math.round(coreR * 0.82)
+  const topG = Math.round(coreG * 0.82)
+  const topB = Math.round(coreB * 0.82)
 
-  // 3. Left Bevel: Soft side shade + delicate pigment bounce from painting (~90% luminance)
-  const leftR = Math.min(245, Math.round(coreR * 0.88 + dom.r * 0.12))
-  const leftG = Math.min(242, Math.round(coreG * 0.88 + dom.g * 0.12))
-  const leftB = Math.min(235, Math.round(coreB * 0.88 + dom.b * 0.12))
+  // 3. Left Bevel: Soft side shade + delicate pigment bounce from painting (~86% luminance)
+  const leftR = Math.min(245, Math.round(coreR * 0.86 + dom.r * 0.14))
+  const leftG = Math.min(242, Math.round(coreG * 0.86 + dom.g * 0.14))
+  const leftB = Math.min(235, Math.round(coreB * 0.86 + dom.b * 0.14))
 
-  // 4. Right Bevel: Ambient illuminated facet (~94% luminance)
+  // 4. Right Bevel: Ambient illuminated facet (~95% luminance)
   const rightR = Math.min(248, Math.round(coreR * 0.95))
   const rightG = Math.min(245, Math.round(coreG * 0.95))
   const rightB = Math.min(238, Math.round(coreB * 0.95))
 
-  // 5. Bottom Bevel: Upward-facing facet catching ceiling/room illumination (~98% luminance / luminous ivory)
-  const botR = Math.min(253, Math.round(coreR * 1.04))
-  const botG = Math.min(250, Math.round(coreG * 1.04))
-  const botB = Math.min(244, Math.round(coreB * 1.04))
+  // 5. Bottom Bevel: Upward-facing facet catching ceiling/room illumination (Luminous Ivory highlight)
+  const botR = Math.min(254, Math.round(coreR * 1.06))
+  const botG = Math.min(252, Math.round(coreG * 1.06))
+  const botB = Math.min(246, Math.round(coreB * 1.06))
 
   // 6. Subtle edge radiosity color
-  const radiosity = `rgba(${dom.r}, ${dom.g}, ${dom.b}, 0.06)`
+  const radiosity = `rgba(${dom.r}, ${dom.g}, ${dom.b}, 0.08)`
 
   return {
     top: rgbToHex(topR, topG, topB),
