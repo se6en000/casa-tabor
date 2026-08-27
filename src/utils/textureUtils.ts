@@ -10,9 +10,13 @@
 export const PAPER_GRAIN_TEXTURE = `data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='paperTooth'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.18 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23paperTooth)'/%3E%3C/svg%3E`
 
 /**
- * Archival mat board micro-weave linen texture.
+ * Organic archival cotton rag paper pulp texture (data URI).
+ * High-octave multi-frequency turbulence with diffuse lighting,
+ * mimicking authentic, non-repeating unpressed cotton fibers and hot-press museum board tooth.
  */
-export const MAT_LINEN_TEXTURE = `data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='matWeave'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.08 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23matWeave)'/%3E%3C/svg%3E`
+export const COTTON_RAG_TEXTURE = `data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='cottonPulp'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.45' numOctaves='5' stitchTiles='stitch' result='noise'/%3E%3CfeDiffuseLighting in='noise' lighting-color='%23fff' surfaceScale='1.1' result='light'%3E%3CfeDistantLight azimuth='60' elevation='55'/%3E%3C/feDiffuseLighting%3E%3CfeColorMatrix type='matrix' values='1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.12 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23cottonPulp)'/%3E%3C/svg%3E`
+
+export const MAT_LINEN_TEXTURE = COTTON_RAG_TEXTURE
 
 /**
  * Generate an SVG-based canvas/linen texture.
@@ -41,7 +45,7 @@ export function generateCanvasTexture(opacity: number = 0.015): string {
  * Returns CSS radial-gradient string.
  */
 export function generateVignetteGradient(strength: number = 0.03): string {
-  return `radial-gradient(ellipse at center, transparent 60%, rgba(0, 0, 0, ${strength}) 100%)`
+  return `radial-gradient(ellipse at center, transparent 65%, rgba(0, 0, 0, ${strength}) 100%)`
 }
 
 /**
@@ -50,34 +54,27 @@ export function generateVignetteGradient(strength: number = 0.03): string {
  */
 export function generateLightingOverlay(strength: number = 0.03): string {
   return `
-    linear-gradient(145deg, 
-      rgba(255, 255, 255, ${strength * 0.7}) 0%, 
-      transparent 40%,
+    linear-gradient(180deg, 
+      rgba(255, 255, 255, ${strength * 0.8}) 0%, 
+      rgba(255, 255, 255, ${strength * 0.2}) 35%,
       transparent 70%,
-      rgba(0, 0, 0, ${strength * 0.4}) 100%)
+      rgba(0, 0, 0, ${strength * 0.5}) 100%)
   `
 }
 
 /**
- * Generate a paper-like texture using CSS background patterns for the outer mat board.
- * Combines multiple layers for physical archival board depth.
+ * Generate an organic paper-like texture for the outer mat board.
+ * Completely eliminates repeating grid lines in favor of natural cotton rag tooth.
  */
 export function getTextureStyle() {
-  const vignette = generateVignetteGradient(0.02)
-  const lighting = generateLightingOverlay(0.02)
-  
-  // Archival mat board fiber grain
-  const fiberGrain = `
-    repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(0,0,0,.008) 3px, rgba(0,0,0,.008) 6px),
-    repeating-linear-gradient(-45deg, transparent, transparent 3px, rgba(0,0,0,.005) 3px, rgba(0,0,0,.005) 6px),
-    repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(0,0,0,.004) 2px, rgba(0,0,0,.004) 4px)
-  `
+  const vignette = generateVignetteGradient(0.025)
+  const lighting = generateLightingOverlay(0.025)
   
   return {
-    backgroundImage: `url("${MAT_LINEN_TEXTURE}"), ${vignette}, ${lighting}, ${fiberGrain}`,
-    backgroundSize: '256px 256px, 100% 100%, 100% 100%, 256px 256px',
-    backgroundPosition: '0 0, 0 0, 0 0, 0 0',
-    backgroundAttachment: 'fixed, scroll, scroll, fixed',
-    backgroundBlendMode: 'multiply, normal, normal, normal',
+    backgroundImage: `url("${COTTON_RAG_TEXTURE}"), ${lighting}, ${vignette}`,
+    backgroundSize: '512px 512px, 100% 100%, 100% 100%',
+    backgroundPosition: '0 0, 0 0, 0 0',
+    backgroundAttachment: 'fixed, scroll, scroll',
+    backgroundBlendMode: 'multiply, normal, normal',
   }
 }
