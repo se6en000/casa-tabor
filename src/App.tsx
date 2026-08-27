@@ -283,6 +283,7 @@ function AppShell() {
           artDimOffset={settings.artDimOffset}
           shuffle={settings.shuffle}
           plaqueMode={settings.plaqueMode}
+          matPreset={settings.matPreset}
         />
       )}
     </div>

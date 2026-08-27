@@ -10,6 +10,7 @@ export interface ScreensaverSettings {
   artDimOffset: number      // how much dimmer than ambient lux in art mode (0–80, default 30%)
   shuffle: boolean          // randomize artwork playback order (default true)
   plaqueMode: 'fade' | 'always' | 'hidden' // museum plaque visibility (default 'fade' 5s)
+  matPreset: 'auto' | 'warm_linen' | 'travertine' | 'coastal_mist' | 'french_ivory' | 'charcoal' // mat color tone
   wakeWordSensitivity: number // 0.1 (very sensitive) – 0.6 (strict), default 0.3
   wakeWordEnabled: boolean  // master toggle for "Alexa" wake word listener
 }
@@ -24,6 +25,7 @@ const DEFAULTS: ScreensaverSettings = {
   artDimOffset: 30,
   shuffle: true,
   plaqueMode: 'fade',
+  matPreset: 'auto',
   wakeWordSensitivity: 0.3,
   wakeWordEnabled: true,
 }

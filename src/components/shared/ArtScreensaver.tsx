@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useArtwork } from '../../hooks/useArtwork'
-import { generateAdaptiveMatColor, generateHarmonizedBevel } from '../../utils/colorUtils'
+import { generateAdaptiveMatColor, generateHarmonizedBevel, MAT_PRESETS, type MatPresetKey } from '../../utils/colorUtils'
 import { getTextureStyle, PAPER_GRAIN_TEXTURE } from '../../utils/textureUtils'
 import { sanitizeArtworkMetadata } from '../../lib/artModeLibrary'
 import { useTheme } from '../../contexts/ThemeContext'
@@ -55,6 +55,7 @@ interface Props {
   minArtWidthVw?: number
   shuffle?: boolean
   plaqueMode?: 'fade' | 'always' | 'hidden'
+  matPreset?: MatPresetKey
 }
 
 export default function ArtScreensaver({
@@ -65,6 +66,7 @@ export default function ArtScreensaver({
   minArtWidthVw = 55,
   shuffle = true,
   plaqueMode = 'fade',
+  matPreset = 'auto',
 }: Props) {
   const { artwork, loaded, onLoad, onError, next } = useArtwork(rotationMins * 60, shuffle)
   const { isMidnightActive } = useTheme()
@@ -168,6 +170,14 @@ export default function ArtScreensaver({
       return
     }
 
+    if (matPreset && matPreset !== 'auto' && MAT_PRESETS[matPreset]) {
+      setMatTransition(false)
+      setMatColor(MAT_PRESETS[matPreset])
+      setDominantColor('#808080')
+      setTimeout(() => setMatTransition(true), 50)
+      return
+    }
+
     if (!artwork?.imageUrl || !adaptiveMatColor) return
     setMatTransition(false)
     const timeout = setTimeout(async () => {
@@ -177,12 +187,12 @@ export default function ArtScreensaver({
         setDominantColor(colorAnalysis.dominant)
         setTimeout(() => setMatTransition(true), 50)
       } catch {
-        setMatColor('#F5F0E8')
+        setMatColor('#E8E3D7')
         setDominantColor('#808080')
       }
     }, 50)
     return () => clearTimeout(timeout)
-  }, [artwork?.id, artwork?.imageUrl, adaptiveMatColor, darkThemeActive])
+  }, [artwork?.id, artwork?.imageUrl, adaptiveMatColor, darkThemeActive, matPreset])
 
   useEffect(() => {
     if (plaqueMode === 'hidden') {

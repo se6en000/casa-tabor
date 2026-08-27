@@ -10,22 +10,29 @@ export interface ColorAnalysis {
   matColor: string
   isLight: boolean
 }
+export const MAT_PRESETS = {
+  auto: 'auto',
+  warm_linen: '#E8E3D7',     // Soft warm linen / oatmeal (RH & Aman benchmark)
+  travertine: '#DCD5C6',     // Travertine sand / warm stone neutral
+  coastal_mist: '#DCE0DB',   // Soft coastal sea-salt / sage alabaster
+  french_ivory: '#F0ECE4',   // Luminous antique ivory without stark glare
+  charcoal: '#1C1E24',       // Dramatic museum slate obsidian
+} as const
+
+export type MatPresetKey = keyof typeof MAT_PRESETS
 
 /**
-/**
  * Curated museum-grade palette of archival cotton rag mat boards.
- * Luminous, airy neutrals (90%–95% brightness) used by world-class galleries & framers.
+ * Warm, glare-free neutrals (85%–89% brightness) used by world-class galleries & framers.
  */
 const MAT_PALETTE = [
-  '#F8F5EE', // Antique Cotton Rag (Warm off-white)
-  '#F6F3EA', // Spanish White (Classic museum warm white)
-  '#F5F2E9', // Warm Alabaster
-  '#F4F1E6', // Soft Ivory Linen
-  '#F3EFE7', // Pearl Rag
-  '#F1ECE2', // Natural Unbleached Cotton
-  '#EFF1F3', // Cool Gallery Chalk (For oceanic / cool art)
-  '#ECEFF2', // Coastal Alabaster
-  '#F7F4EB', // Pale Cream Silk
+  '#E8E3D7', // Warm Linen (The RH standard)
+  '#ECE7DC', // Antique French Rag
+  '#E5E0D4', // Warm Alabaster
+  '#DCD5C6', // Travertine Sand
+  '#DCE0DB', // Coastal Sage Mist
+  '#EAE5DA', // Unbleached Cotton
+  '#F0ECE4', // Classic French Ivory
 ]
 
 /**
@@ -141,8 +148,8 @@ export function getLuminance(r: number, g: number, b: number): number {
 }
 
 /**
- * Generate an archival, luminous museum cotton rag mat color based on the artwork's temperature.
- * Strictly maintains 90%–95% luminance (never dark or drab) while harmonizing subtle undertones.
+ * Generate a glare-free, museum cotton rag mat color based on the artwork's temperature.
+ * Maintains 85%–89% luminance (warm, tactile, non-glaring) while harmonizing undertones.
  */
 export async function generateAdaptiveMatColor(imageUrl: string): Promise<ColorAnalysis> {
   try {
@@ -160,20 +167,20 @@ export async function generateAdaptiveMatColor(imageUrl: string): Promise<ColorA
     // Determine artwork temperature: warm (red/amber/earth) vs cool (ocean/sky/greens)
     const warmth = (r - b) / 255 // >0 warm, <0 cool
 
-    // Base museum archival cotton rag (luminance ~93-94%)
-    let baseRag = { r: 246, g: 243, b: 234 } // #F6F3EA Spanish White
+    // Base museum archival cotton rag (luminance ~87-89%, soft warm linen)
+    let baseRag = { r: 232, g: 227, b: 216 } // #E8E3D8 Warm French Linen
     if (warmth > 0.12) {
       // Warm paintings (watercolors, sunsets, earth tones): Warm Alabaster
-      baseRag = { r: 248, g: 244, b: 235 }
+      baseRag = { r: 235, g: 228, b: 215 } // #EBE4D7
     } else if (warmth < -0.08) {
-      // Cool paintings (ocean, seascapes, blues): Cool Museum Rag
-      baseRag = { r: 239, g: 241, b: 244 }
+      // Cool paintings (ocean, seascapes, blues): Coastal Sage Mist
+      baseRag = { r: 224, g: 227, b: 224 } // #E0E3E0
     }
 
-    // Subtle 5% temperature tint from dominant color to harmonize without losing brightness
-    const matR = Math.min(250, Math.max(235, Math.round(baseRag.r * 0.95 + r * 0.05)))
-    const matG = Math.min(248, Math.max(232, Math.round(baseRag.g * 0.95 + g * 0.05)))
-    const matB = Math.min(245, Math.max(228, Math.round(baseRag.b * 0.95 + b * 0.05)))
+    // Subtle 8% temperature tint from dominant color to harmonize without losing calm tone
+    const matR = Math.min(242, Math.max(215, Math.round(baseRag.r * 0.92 + r * 0.08)))
+    const matG = Math.min(238, Math.max(212, Math.round(baseRag.g * 0.92 + g * 0.08)))
+    const matB = Math.min(232, Math.max(205, Math.round(baseRag.b * 0.92 + b * 0.08)))
 
     const complementaryRgb = getComplementary(r, g, b)
 
@@ -183,14 +190,14 @@ export async function generateAdaptiveMatColor(imageUrl: string): Promise<ColorA
       matColor: rgbToHex(matR, matG, matB),
       isLight: true,
     }
-    console.log(`[ColorUtils] Generated luminous museum mat color: ${result.matColor}`)
+    console.log(`[ColorUtils] Generated glare-free museum mat color: ${result.matColor}`)
     return result
   } catch (err) {
     console.error('[ColorUtils] Color generation failed:', err)
     return {
       dominant: '#808080',
       complementary: '#808080',
-      matColor: '#F6F3EA',
+      matColor: '#E8E3D7',
       isLight: true,
     }
   }

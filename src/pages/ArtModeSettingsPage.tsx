@@ -25,6 +25,15 @@ const PLAQUE_OPTIONS = [
   { value: 'hidden', label: 'Hidden' },
 ] as const
 
+const MAT_PRESET_OPTIONS = [
+  { value: 'auto', label: 'Auto' },
+  { value: 'warm_linen', label: 'Warm Linen' },
+  { value: 'travertine', label: 'Travertine' },
+  { value: 'coastal_mist', label: 'Coastal Mist' },
+  { value: 'french_ivory', label: 'French Ivory' },
+  { value: 'charcoal', label: 'Charcoal' },
+] as const
+
 const COASTAL_STARTER_ARTISTS = [
   'Winslow Homer',
   'Martin Johnson Heade',
@@ -442,6 +451,19 @@ export default function ArtModeSettingsPage() {
                 min={30} max={90} step={5} unit="vw"
               />
             </Row>
+            <div className="pt-4 border-t border-casa-border">
+              <div className="mb-2.5">
+                <p className="text-body-sm font-medium text-casa-navy">Matboard tone</p>
+                <p className="text-caption text-casa-muted mt-0.5">Archival cotton rag mat color surrounding the artwork.</p>
+              </div>
+              <SegmentedControl
+                aria-label="Matboard tone"
+                value={settings.matPreset ?? 'auto'}
+                options={MAT_PRESET_OPTIONS}
+                onChange={v => updateScreensaver({ matPreset: v })}
+                fullWidth
+              />
+            </div>
             <div className="pt-4 border-t border-casa-border">
               <div className="mb-2.5">
                 <p className="text-body-sm font-medium text-casa-navy">Artwork details plaque</p>
