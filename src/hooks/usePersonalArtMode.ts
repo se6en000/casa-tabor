@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import {
   getPersonalArtworkValidationError,
   normalizeArtSourceConfig,
+  sanitizeArtworkTitle,
   PERSONAL_ARTWORK_BUCKET,
   type ArtSourceMode,
 } from '../lib/artModeLibrary'
@@ -117,7 +118,7 @@ export function usePersonalArtMode() {
         .upload(storagePath, file, { contentType: file.type, upsert: false })
       if (uploadError) throw uploadError
 
-      const cleanTitle = (title ?? file.name.replace(/\.[^.]+$/, '')).trim() || 'Personal artwork'
+      const cleanTitle = (title ? title.trim() : sanitizeArtworkTitle(file.name)) || 'Personal artwork'
       const cleanArtist = artist?.trim() || null
       const { error: insertError } = await supabase.from('personal_artwork').insert({
         storage_path: storagePath,

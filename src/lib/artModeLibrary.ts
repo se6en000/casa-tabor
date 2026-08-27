@@ -39,6 +39,39 @@ export function buildArtworkFeed<T>(
   return mixed
 }
 
+export function sanitizeArtworkTitle(rawTitle: string): string {
+  if (!rawTitle) return 'Untitled'
+  
+  let cleaned = rawTitle
+    .replace(/\.[a-zA-Z0-9]{3,4}$/, '') // strip extension
+    .replace(/^(orig|img|dsc|photo|scan|pxl)[_\-\s]+/i, '') // strip camera / prefix tags
+    .replace(/[_\-\s]+(1920x\d*|4k|1080p|resized|scaled|wallpaper|hires|orig|preview)[_\-\s]*/gi, ' ') // strip dimension suffixes
+    .replace(/[_\-]+/g, ' ') // replace dashes and underscores with spaces
+    .replace(/\s+/g, ' ') // collapse multi spaces
+    .trim()
+
+  if (!cleaned) return 'Untitled'
+
+  return cleaned
+    .split(' ')
+    .map((word, idx) => {
+      if (!word) return ''
+      const lower = word.toLowerCase()
+      if (idx > 0 && ['a', 'an', 'the', 'in', 'on', 'of', 'at', 'by', 'for', 'with', 'and'].includes(lower)) {
+        return lower
+      }
+      return word.charAt(0).toUpperCase() + word.slice(1)
+    })
+    .join(' ')
+    .replace(/^[a-z]/, (match) => match.toUpperCase())
+}
+
+export function sanitizeArtworkMetadata(title: string, artist?: string): { title: string; artist: string } {
+  const cleanTitle = sanitizeArtworkTitle(title)
+  const cleanArtist = (artist?.trim() && artist.trim() !== 'Unknown') ? artist.trim() : 'Personal collection'
+  return { title: cleanTitle, artist: cleanArtist }
+}
+
 export function getPersonalArtworkValidationError(file: ArtworkFileDescriptor): string | null {
   if (!PERSONAL_ARTWORK_MIME_TYPES.includes(file.type as typeof PERSONAL_ARTWORK_MIME_TYPES[number])) {
     return 'Choose a JPG, PNG, or WebP image.'
@@ -51,3 +84,5 @@ export function getPersonalArtworkValidationError(file: ArtworkFileDescriptor): 
   }
   return null
 }
+
+

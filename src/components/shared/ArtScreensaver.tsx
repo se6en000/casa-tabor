@@ -2,12 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useArtwork } from '../../hooks/useArtwork'
 import { generateAdaptiveMatColor, generateHarmonizedBevel } from '../../utils/colorUtils'
 import { getTextureStyle, PAPER_GRAIN_TEXTURE } from '../../utils/textureUtils'
+import { sanitizeArtworkMetadata } from '../../lib/artModeLibrary'
 import { useTheme } from '../../contexts/ThemeContext'
 
 const SENSOR = 'http://127.0.0.1:8765'
-const EDGE_MAT_H_PX = 90
-const EDGE_MAT_TOP_PX = 76
-const EDGE_MAT_BOT_PX = 112
+const MAT_MARGIN_H_PX = 72
+const MAT_MARGIN_V_PX = 72
 const MIN_FRAME_PX = 320
 const MIDNIGHT_MAT_COLOR = '#07090D'
 const MIDNIGHT_MAT_TEXTURE = 'linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.22))'
@@ -54,6 +54,7 @@ interface Props {
   artDimOffset?: number
   minArtWidthVw?: number
   shuffle?: boolean
+  plaqueMode?: 'fade' | 'always' | 'hidden'
 }
 
 export default function ArtScreensaver({
@@ -63,11 +64,13 @@ export default function ArtScreensaver({
   artDimOffset = 30,
   minArtWidthVw = 55,
   shuffle = true,
+  plaqueMode = 'fade',
 }: Props) {
   const { artwork, loaded, onLoad, onError, next } = useArtwork(rotationMins * 60, shuffle)
   const { isMidnightActive } = useTheme()
   const [visible, setVisible] = useState(false)
   const [dismissable, setDismissable] = useState(false)
+  const [plaqueVisible, setPlaqueVisible] = useState(true)
   const [imageRatio, setImageRatio] = useState(16 / 9)
   const [matColor, setMatColor] = useState('#F6F3EA')
   const [dominantColor, setDominantColor] = useState('#808080')
@@ -107,8 +110,8 @@ export default function ArtScreensaver({
   }, [darkThemeActive, matColor, dominantColor])
 
   const frameSize = useMemo(() => {
-    const maxWidth = Math.max(viewport.width - EDGE_MAT_H_PX * 2, MIN_FRAME_PX)
-    const maxHeight = Math.max(viewport.height - (EDGE_MAT_TOP_PX + EDGE_MAT_BOT_PX), MIN_FRAME_PX)
+    const maxWidth = Math.max(viewport.width - MAT_MARGIN_H_PX * 2, MIN_FRAME_PX)
+    const maxHeight = Math.max(viewport.height - MAT_MARGIN_V_PX * 2, MIN_FRAME_PX)
     const minWidth = Math.min(maxWidth, (viewport.width * minArtWidthVw) / 100)
 
     let width = Math.max(maxWidth, minWidth)
@@ -181,6 +184,23 @@ export default function ArtScreensaver({
     return () => clearTimeout(timeout)
   }, [artwork?.id, artwork?.imageUrl, adaptiveMatColor, darkThemeActive])
 
+  useEffect(() => {
+    if (plaqueMode === 'hidden') {
+      setPlaqueVisible(false)
+      return
+    }
+    if (plaqueMode === 'always') {
+      setPlaqueVisible(true)
+      return
+    }
+    // 'fade' mode: reveal for 5.5 seconds then smoothly fade out
+    setPlaqueVisible(true)
+    const timer = setTimeout(() => {
+      setPlaqueVisible(false)
+    }, 5500)
+    return () => clearTimeout(timer)
+  }, [artwork?.id, loaded, plaqueMode])
+
   function handleImgLoad(e: React.SyntheticEvent<HTMLImageElement>) {
     const img = e.currentTarget
     if (img.naturalWidth && img.naturalHeight) {
@@ -204,6 +224,10 @@ export default function ArtScreensaver({
 
   function handleTouchStart(e: React.TouchEvent<HTMLDivElement>) {
     touchStartXRef.current = e.touches[0]?.clientX ?? null
+    if (plaqueMode === 'fade' && !plaqueVisible) {
+      setPlaqueVisible(true)
+      setTimeout(() => setPlaqueVisible(false), 5000)
+    }
   }
 
   function handleTouchEnd(e: React.TouchEvent<HTMLDivElement>) {
@@ -214,9 +238,13 @@ export default function ArtScreensaver({
     touchStartXRef.current = null
   }
 
+  const { title: cleanTitle, artist: cleanArtist } = artwork
+    ? sanitizeArtworkMetadata(artwork.title, artwork.artist)
+    : { title: '', artist: '' }
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center cursor-pointer"
+      className="fixed inset-0 z-50 flex items-center justify-center cursor-pointer select-none"
       style={{ opacity: visible ? 1 : 0, transition: 'opacity 0.6s ease' }}
       onClick={handleDismiss}
       onTouchStart={handleTouchStart}
@@ -235,11 +263,11 @@ export default function ArtScreensaver({
           boxShadow: darkThemeActive
             ? 'inset 0 2px 5px rgba(0,0,0,0.7), inset 0 0 1px rgba(0,0,0,0.9)'
             : 'inset 0 2px 6px rgba(0,0,0,0.12), inset 0 1px 2px rgba(0,0,0,0.06), inset 0 0 1px rgba(0,0,0,0.10)',
-          padding: '3.5vw 3.5vw 4.8vw 3.5vw',
+          padding: '3.5vw',
           transition: matTransition ? 'background-color 0.5s ease-out' : 'none',
         }}
       >
-        {/* Passe-Partout Aperture Frame with 6px 45-Degree Mitered Bevel Core */}
+        {/* Passe-Partout Aperture Frame with 45-Degree Mitered Cotton Rag Bevel Core */}
         <div
           style={{
             position: 'relative',
@@ -249,15 +277,15 @@ export default function ArtScreensaver({
             maxHeight: '100%',
             boxSizing: 'content-box',
             backgroundColor: paperBaseColor,
-            // 5px thick 45-degree mitered core bevel facets (dimmed warm ivory harmonized with mat & artwork light bounce)
-            borderTop: `5px solid ${bevelColors.top}`,
-            borderLeft: `5px solid ${bevelColors.left}`,
-            borderRight: `5px solid ${bevelColors.right}`,
-            borderBottom: `5px solid ${bevelColors.bottom}`,
+            // 2.5px thick 45-degree mitered core bevel facets (dimmed warm ivory harmonized with mat & artwork light bounce)
+            borderTop: `2.5px solid ${bevelColors.top}`,
+            borderLeft: `2.5px solid ${bevelColors.left}`,
+            borderRight: `2.5px solid ${bevelColors.right}`,
+            borderBottom: `2.5px solid ${bevelColors.bottom}`,
             // Clean razor blade incision groove where bevel meets the mat board
             boxShadow: darkThemeActive
               ? '0 0 0 1px rgba(0,0,0,0.9), 0 2px 10px rgba(0,0,0,0.45)'
-              : '0 0 0 1px rgba(50,40,30,0.12), 0 2px 8px rgba(0,0,0,0.05)',
+              : '0 0 0 1px rgba(50,40,30,0.10), 0 2px 8px rgba(0,0,0,0.05)',
             transform: ['translate3d(0px,0px,0)', 'translate3d(1px,0px,0)', 'translate3d(0px,1px,0)', 'translate3d(-1px,0px,0)'][driftIndex],
             transition: swiping ? 'transform 260ms cubic-bezier(0.4, 0, 0.2, 1)' : 'transform 16s linear',
             overflow: 'hidden',
@@ -291,7 +319,7 @@ export default function ArtScreensaver({
             <img
               key={artwork.id}
               src={artwork.imageUrl}
-              alt={artwork.title}
+              alt={cleanTitle}
               onLoad={handleImgLoad}
               onError={onError}
               style={{
@@ -345,8 +373,8 @@ export default function ArtScreensaver({
               pointerEvents: 'none',
               zIndex: 10,
               boxShadow: darkThemeActive
-                ? 'inset 0 4px 7px -1px rgba(0,0,0,0.60), inset 2px 0 4px -1px rgba(0,0,0,0.35)'
-                : `inset 0 4px 6px -1px rgba(50,35,20,0.12), inset 2px 0 3px -1px rgba(50,35,20,0.06), inset 0 0 16px -2px ${bevelColors.radiosity}`,
+                ? 'inset 0 3px 6px -1px rgba(0,0,0,0.65), inset 2px 0 4px -1px rgba(0,0,0,0.40)'
+                : `inset 0 3px 6px -1px rgba(45,30,15,0.14), inset 2px 0 3px -1px rgba(45,30,15,0.06), inset 0 0 16px -2px ${bevelColors.radiosity}`,
             }}
           />
         </div>
@@ -366,10 +394,11 @@ export default function ArtScreensaver({
           />
         )}
 
-        {artwork && loaded && (
+        {artwork && loaded && plaqueMode !== 'hidden' && (
           <div
-            className="absolute bottom-3.5 right-6 text-right pointer-events-none transition-opacity duration-700"
+            className="absolute bottom-4 right-6 text-right pointer-events-none transition-opacity duration-1000 ease-in-out"
             style={{
+              opacity: plaqueVisible ? 1 : 0,
               color: darkThemeActive ? 'rgba(215, 210, 200, 0.72)' : 'rgba(70, 55, 45, 0.75)',
               textShadow: darkThemeActive
                 ? '0 1px 0px rgba(0, 0, 0, 0.85), 0 -1px 0.5px rgba(255, 255, 255, 0.08)'
@@ -380,12 +409,12 @@ export default function ArtScreensaver({
               className="italic leading-snug tracking-wide"
               style={{
                 fontFamily: 'Georgia, "Cormorant Garamond", "Times New Roman", serif',
-                fontSize: '0.78rem',
+                fontSize: '0.80rem',
                 fontWeight: 500,
                 letterSpacing: '0.4px',
               }}
             >
-              {artwork.title}
+              {cleanTitle}
             </p>
             <p
               className="leading-tight mt-0.5 uppercase tracking-wider"
@@ -397,7 +426,7 @@ export default function ArtScreensaver({
                 opacity: 0.85,
               }}
             >
-              {artwork.artist}
+              {cleanArtist}
             </p>
           </div>
         )}

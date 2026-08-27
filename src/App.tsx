@@ -282,6 +282,7 @@ function AppShell() {
           minArtWidthVw={settings.minArtWidthVw}
           artDimOffset={settings.artDimOffset}
           shuffle={settings.shuffle}
+          plaqueMode={settings.plaqueMode}
         />
       )}
     </div>

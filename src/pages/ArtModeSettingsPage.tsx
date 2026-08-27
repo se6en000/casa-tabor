@@ -19,6 +19,12 @@ const ART_SOURCE_OPTIONS = [
   { value: 'mixed', label: 'Mix both' },
 ] as const
 
+const PLAQUE_OPTIONS = [
+  { value: 'fade', label: '5s on change' },
+  { value: 'always', label: 'Always visible' },
+  { value: 'hidden', label: 'Hidden' },
+] as const
+
 const COASTAL_STARTER_ARTISTS = [
   'Winslow Homer',
   'Martin Johnson Heade',
@@ -436,6 +442,19 @@ export default function ArtModeSettingsPage() {
                 min={30} max={90} step={5} unit="vw"
               />
             </Row>
+            <div className="pt-4 border-t border-casa-border">
+              <div className="mb-2.5">
+                <p className="text-body-sm font-medium text-casa-navy">Artwork details plaque</p>
+                <p className="text-caption text-casa-muted mt-0.5">Show title and artist credit on screen.</p>
+              </div>
+              <SegmentedControl
+                aria-label="Artwork details plaque"
+                value={settings.plaqueMode ?? 'fade'}
+                options={PLAQUE_OPTIONS}
+                onChange={v => updateScreensaver({ plaqueMode: v })}
+                fullWidth
+              />
+            </div>
           </div>
         )}
 
