@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useArtwork, type Artwork } from '../../hooks/useArtwork'
 import { generateAdaptiveMatColor, generateHarmonizedBevel, MAT_PRESETS, type MatPresetKey } from '../../utils/colorUtils'
 import { getTextureStyle, PAPER_GRAIN_TEXTURE } from '../../utils/textureUtils'
-import { sanitizeArtworkMetadata } from '../../lib/artModeLibrary'
+import { sanitizeArtworkMetadata, SIGNATURE_STYLES, getSignatureInkStyle } from '../../lib/artModeLibrary'
 import { useTheme } from '../../contexts/ThemeContext'
 
 const SENSOR = 'http://127.0.0.1:8765'
@@ -347,6 +347,43 @@ export default function ArtScreensaver({
               }}
             />
           )}
+          
+          {/* Artist Signature & Inscription Overlay */}
+          {artwork?.signature?.enabled && Boolean(artwork.signature.text) && (() => {
+            const sigStyle = SIGNATURE_STYLES[artwork.signature.style] || SIGNATURE_STYLES.fountain
+            const inkStyle = getSignatureInkStyle(artwork.signature.color, dominantColor)
+            const isBottomLeft = artwork.signature.position === 'bottom-left'
+            return (
+              <div
+                key={`sig-${artwork.id}`}
+                style={{
+                  position: 'absolute',
+                  bottom: 'clamp(14px, 3.2%, 36px)',
+                  ...(isBottomLeft ? { left: 'clamp(16px, 3.5%, 40px)', textAlign: 'left' } : { right: 'clamp(16px, 3.5%, 40px)', textAlign: 'right' }),
+                  fontFamily: sigStyle.fontFamily,
+                  fontSize: `clamp(${sigStyle.baseFontSizeRem * 0.9}rem, 2vw, ${sigStyle.baseFontSizeRem * 1.6}rem)`,
+                  fontWeight: sigStyle.weight,
+                  color: inkStyle.color,
+                  textShadow: inkStyle.textShadow,
+                  mixBlendMode: inkStyle.blendMode || 'normal',
+                  transform: isBottomLeft ? 'rotate(0.8deg)' : 'rotate(-1.2deg)',
+                  letterSpacing: '0.015em',
+                  lineHeight: 1.1,
+                  pointerEvents: 'none',
+                  userSelect: 'none',
+                  zIndex: 2,
+                  opacity: loaded ? 1 : 0,
+                  transition: 'opacity 600ms ease-out',
+                  maxWidth: '50%',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {artwork.signature.text}
+              </div>
+            )
+          })()}
           
           {/* Cold-Press Watercolor Paper Grain & Canvas Tooth Overlay */}
           <div

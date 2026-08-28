@@ -1,4 +1,4 @@
-import { Eye, EyeOff, Crop, Pencil, Trash2 } from 'lucide-react'
+import { Eye, EyeOff, Crop, Pencil, Trash2, Feather } from 'lucide-react'
 import { IconButton } from '../ui'
 import type { PersonalArtwork } from '../../hooks/usePersonalArtMode'
 import { cn } from '../../utils/cn'
@@ -47,6 +47,15 @@ export function PersonalArtworkCard({
           <div className="absolute top-2 left-2 z-10 flex items-center gap-1 px-2 py-0.5 rounded-full bg-casa-navy/85 backdrop-blur-xs text-white text-2xs font-semibold shadow-xs">
             <EyeOff size={11} className="text-casa-gold" />
             <span>Disabled</span>
+          </div>
+        )}
+        {artwork.signatureEnabled && (
+          <div
+            className="absolute bottom-2 right-2 z-10 flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-casa-navy/85 backdrop-blur-xs text-white text-3xs font-medium shadow-xs"
+            title={`Signature: "${artwork.signatureText || artwork.artist || 'Signed'}"`}
+          >
+            <Feather size={10} className="text-casa-gold" />
+            <span>Signed</span>
           </div>
         )}
       </div>

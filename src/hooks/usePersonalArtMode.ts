@@ -6,6 +6,9 @@ import {
   sanitizeArtworkTitle,
   PERSONAL_ARTWORK_BUCKET,
   type ArtSourceMode,
+  type SignatureStyle,
+  type SignaturePosition,
+  type SignatureColor,
 } from '../lib/artModeLibrary'
 
 const ART_SOURCE_SETTING_KEY = 'art_mode_source_config'
@@ -19,6 +22,11 @@ export interface PersonalArtwork {
   mimeType: string
   byteSize: number
   createdAt: string
+  signatureEnabled?: boolean
+  signatureText?: string
+  signatureStyle?: SignatureStyle
+  signaturePosition?: SignaturePosition
+  signatureColor?: SignatureColor
 }
 
 interface PersonalArtworkRow {
@@ -29,6 +37,11 @@ interface PersonalArtworkRow {
   mime_type: string
   byte_size: number
   created_at: string
+  signature_enabled?: boolean | null
+  signature_text?: string | null
+  signature_style?: string | null
+  signature_position?: string | null
+  signature_color?: string | null
 }
 
 export const personalArtworkQueryKey = ['personal-artwork'] as const
@@ -37,7 +50,7 @@ export const artSourceConfigQueryKey = ['settings', ART_SOURCE_SETTING_KEY] as c
 async function loadPersonalArtwork(): Promise<PersonalArtwork[]> {
   const { data, error } = await supabase
     .from('personal_artwork')
-    .select('id, storage_path, title, artist, mime_type, byte_size, created_at')
+    .select('id, storage_path, title, artist, mime_type, byte_size, created_at, signature_enabled, signature_text, signature_style, signature_position, signature_color')
     .order('sort_order')
     .order('created_at')
   if (error) throw error
@@ -51,6 +64,11 @@ async function loadPersonalArtwork(): Promise<PersonalArtwork[]> {
     mimeType: row.mime_type,
     byteSize: row.byte_size,
     createdAt: row.created_at,
+    signatureEnabled: Boolean(row.signature_enabled),
+    signatureText: row.signature_text?.trim() || undefined,
+    signatureStyle: (row.signature_style as SignatureStyle) || 'fountain',
+    signaturePosition: (row.signature_position as SignaturePosition) || 'bottom-right',
+    signatureColor: (row.signature_color as SignatureColor) || 'auto',
   }))
 }
 
@@ -139,16 +157,41 @@ export function usePersonalArtMode() {
   })
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, title, artist }: { id: string; title: string; artist?: string }) => {
+    mutationFn: async ({
+      id,
+      title,
+      artist,
+      signatureEnabled,
+      signatureText,
+      signatureStyle,
+      signaturePosition,
+      signatureColor,
+    }: {
+      id: string
+      title: string
+      artist?: string
+      signatureEnabled?: boolean
+      signatureText?: string
+      signatureStyle?: SignatureStyle
+      signaturePosition?: SignaturePosition
+      signatureColor?: SignatureColor
+    }) => {
       const cleanTitle = title.trim() || 'Untitled'
       const cleanArtist = artist?.trim() || null
+      const updatePayload: Record<string, unknown> = {
+        title: cleanTitle,
+        artist: cleanArtist,
+        updated_at: new Date().toISOString(),
+      }
+      if (signatureEnabled !== undefined) updatePayload.signature_enabled = signatureEnabled
+      if (signatureText !== undefined) updatePayload.signature_text = signatureText.trim() || null
+      if (signatureStyle !== undefined) updatePayload.signature_style = signatureStyle
+      if (signaturePosition !== undefined) updatePayload.signature_position = signaturePosition
+      if (signatureColor !== undefined) updatePayload.signature_color = signatureColor
+
       const { error } = await supabase
         .from('personal_artwork')
-        .update({
-          title: cleanTitle,
-          artist: cleanArtist,
-          updated_at: new Date().toISOString(),
-        })
+        .update(updatePayload)
         .eq('id', id)
       if (error) throw error
     },

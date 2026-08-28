@@ -3,7 +3,15 @@ import { Image, Sun, Palette, Monitor, Plus, Minus, X, ChevronDown, ChevronUp, U
 import { useScreensaverSettings } from '../hooks/useScreensaverSettings'
 import { useArtFeedPrefs, MEDIA_OPTIONS } from '../hooks/useArtFeedPrefs'
 import { usePersonalArtMode, type PersonalArtwork } from '../hooks/usePersonalArtMode'
-import type { ArtSourceMode } from '../lib/artModeLibrary'
+import {
+  type ArtSourceMode,
+  SIGNATURE_STYLE_OPTIONS,
+  SIGNATURE_POSITION_OPTIONS,
+  SIGNATURE_COLOR_OPTIONS,
+  type SignatureStyle,
+  type SignaturePosition,
+  type SignatureColor,
+} from '../lib/artModeLibrary'
 import { cn } from '../utils/cn'
 import { SettingsPageHeader, SettingsToggle as Toggle, ArtworkCropModal, PersonalArtworkCard } from '../components/settings'
 import { Alert, Button, Checkbox, EmptyState, IconButton, Modal, SegmentedControl, SectionHeader as SharedSectionHeader, Input } from '../components/ui'
@@ -211,6 +219,11 @@ export default function ArtModeSettingsPage() {
   const [editTitle, setEditTitle] = useState('')
   const [editArtist, setEditArtist] = useState('')
   const [editEnabled, setEditEnabled] = useState(true)
+  const [editSignatureEnabled, setEditSignatureEnabled] = useState(false)
+  const [editSignatureText, setEditSignatureText] = useState('')
+  const [editSignatureStyle, setEditSignatureStyle] = useState<SignatureStyle>('fountain')
+  const [editSignaturePosition, setEditSignaturePosition] = useState<SignaturePosition>('bottom-right')
+  const [editSignatureColor, setEditSignatureColor] = useState<SignatureColor>('auto')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const disabledArtworkIds = settings.disabledArtworkIds ?? []
@@ -273,6 +286,11 @@ export default function ArtModeSettingsPage() {
     setEditTitle(item.title)
     setEditArtist(item.artist || '')
     setEditEnabled(!disabledArtworkIds.includes(item.id))
+    setEditSignatureEnabled(Boolean(item.signatureEnabled))
+    setEditSignatureText(item.signatureText || item.artist || '')
+    setEditSignatureStyle(item.signatureStyle || 'fountain')
+    setEditSignaturePosition(item.signaturePosition || 'bottom-right')
+    setEditSignatureColor(item.signatureColor || 'auto')
   }
 
   const handleSaveEdit = async () => {
@@ -283,6 +301,11 @@ export default function ArtModeSettingsPage() {
         id: artworkToEdit.id,
         title: editTitle,
         artist: editArtist,
+        signatureEnabled: editSignatureEnabled,
+        signatureText: editSignatureText,
+        signatureStyle: editSignatureStyle,
+        signaturePosition: editSignaturePosition,
+        signatureColor: editSignatureColor,
       })
 
       // Sync disabled status for this device
@@ -785,11 +808,44 @@ export default function ArtModeSettingsPage() {
           {artworkToEdit && (
             <div className="flex items-center justify-between gap-3 rounded-lg border border-casa-border bg-casa-bg p-2.5">
               <div className="flex items-center gap-3 min-w-0 flex-1">
-                <img
-                  src={artworkToEdit.imageUrl}
-                  alt={artworkToEdit.title}
-                  className="h-14 w-14 rounded-md object-cover shrink-0"
-                />
+                <div className="relative h-14 w-20 rounded-md overflow-hidden bg-casa-surface-2 shrink-0 border border-casa-border/60">
+                  <img
+                    src={artworkToEdit.imageUrl}
+                    alt={artworkToEdit.title}
+                    className="h-full w-full object-cover"
+                  />
+                  {editSignatureEnabled && (editSignatureText || editArtist || artworkToEdit.title) && (() => {
+                    const isBottomLeft = editSignaturePosition === 'bottom-left'
+                    const fontClass =
+                      editSignatureStyle === 'brush'
+                        ? "font-['Caveat',_cursive] font-semibold text-xs"
+                        : editSignatureStyle === 'draft'
+                        ? "font-['Homemade_Apple',_cursive] font-normal text-2xs"
+                        : editSignatureStyle === 'classic'
+                        ? "font-['Marck_Script',_cursive] font-normal text-xs"
+                        : "font-['Alex_Brush',_cursive] font-normal text-xs"
+
+                    const colorClass =
+                      editSignatureColor === 'light'
+                        ? 'text-stone-100 drop-shadow-md mix-blend-screen'
+                        : editSignatureColor === 'sepia'
+                        ? 'text-amber-950/90 drop-shadow-xs mix-blend-multiply'
+                        : 'text-stone-900/90 drop-shadow-xs mix-blend-multiply'
+
+                    return (
+                      <div
+                        className={cn(
+                          'absolute pointer-events-none select-none z-10 leading-none truncate max-w-[85%]',
+                          isBottomLeft ? 'bottom-1 left-1.5 text-left rotate-1' : 'bottom-1 right-1.5 text-right -rotate-1',
+                          fontClass,
+                          colorClass
+                        )}
+                      >
+                        {editSignatureText || editArtist || artworkToEdit.title}
+                      </div>
+                    )
+                  })()}
+                </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-caption text-casa-muted">Artwork preview</p>
                   <p className="text-body-sm font-medium text-casa-navy truncate">{artworkToEdit.title}</p>
@@ -833,6 +889,84 @@ export default function ArtModeSettingsPage() {
               className="w-full"
             />
             <p className="text-caption text-casa-muted mt-1">Leaves as &ldquo;Personal collection&rdquo; if left blank.</p>
+          </div>
+
+          <div className="pt-2 border-t border-casa-border">
+            <Toggle
+              checked={editSignatureEnabled}
+              onChange={checked => {
+                setEditSignatureEnabled(checked)
+                if (checked && !editSignatureText) {
+                  setEditSignatureText(editArtist.trim() || artworkToEdit?.title || '')
+                }
+              }}
+              label="Artist signature overlay"
+              desc="Overlay handwritten artist signature or inscription on the image."
+            />
+
+            {editSignatureEnabled && (
+              <div className="mt-3 space-y-3 pl-2.5 sm:pl-3 border-l-2 border-casa-gold/60 ml-1">
+                <div>
+                  <label className="text-caption font-medium text-casa-navy block mb-1">
+                    Signature / Inscription Text
+                  </label>
+                  <Input
+                    type="text"
+                    value={editSignatureText}
+                    onChange={e => setEditSignatureText(e.target.value)}
+                    placeholder={editArtist || "e.g. Dwight Smith '78"}
+                    className="w-full"
+                  />
+                  <p className="text-caption text-casa-muted mt-1">
+                    Defaults to artist name or custom text (e.g. year, location, personal notes).
+                  </p>
+                </div>
+
+                <div>
+                  <label className="text-caption font-medium text-casa-navy block mb-1">
+                    Handwriting Style
+                  </label>
+                  <select
+                    value={editSignatureStyle}
+                    onChange={e => setEditSignatureStyle(e.target.value as SignatureStyle)}
+                    className="w-full h-10 px-3 rounded-button border border-casa-border bg-casa-bg text-body-sm text-casa-navy focus:border-casa-gold focus:outline-none transition-colors"
+                  >
+                    {SIGNATURE_STYLE_OPTIONS.map(opt => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-caption font-medium text-casa-navy block mb-1">
+                      Position
+                    </label>
+                    <SegmentedControl
+                      aria-label="Signature position"
+                      value={editSignaturePosition}
+                      options={SIGNATURE_POSITION_OPTIONS}
+                      onChange={pos => setEditSignaturePosition(pos as SignaturePosition)}
+                      fullWidth
+                    />
+                  </div>
+                  <div>
+                    <label className="text-caption font-medium text-casa-navy block mb-1">
+                      Ink Tone
+                    </label>
+                    <SegmentedControl
+                      aria-label="Signature ink color"
+                      value={editSignatureColor}
+                      options={SIGNATURE_COLOR_OPTIONS}
+                      onChange={col => setEditSignatureColor(col as SignatureColor)}
+                      fullWidth
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="pt-2 border-t border-casa-border">

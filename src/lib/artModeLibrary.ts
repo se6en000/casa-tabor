@@ -85,4 +85,122 @@ export function getPersonalArtworkValidationError(file: ArtworkFileDescriptor): 
   return null
 }
 
+export type SignatureStyle = 'fountain' | 'brush' | 'draft' | 'classic'
+export type SignaturePosition = 'bottom-right' | 'bottom-left'
+export type SignatureColor = 'auto' | 'dark' | 'light' | 'sepia'
+
+export interface SignatureConfig {
+  enabled: boolean
+  text: string
+  style: SignatureStyle
+  position: SignaturePosition
+  color: SignatureColor
+}
+
+export const SIGNATURE_STYLES: Record<
+  SignatureStyle,
+  { label: string; fontFamily: string; baseFontSizeRem: number; weight: number }
+> = {
+  fountain: {
+    label: 'Fine Fountain Pen',
+    fontFamily: "'Alex Brush', cursive",
+    baseFontSizeRem: 1.35,
+    weight: 400,
+  },
+  brush: {
+    label: "Painter's Brush",
+    fontFamily: "'Caveat', cursive",
+    baseFontSizeRem: 1.25,
+    weight: 600,
+  },
+  draft: {
+    label: 'Studio Pencil / Note',
+    fontFamily: "'Homemade Apple', cursive",
+    baseFontSizeRem: 0.95,
+    weight: 400,
+  },
+  classic: {
+    label: 'Classic Cursive',
+    fontFamily: "'Marck Script', cursive",
+    baseFontSizeRem: 1.15,
+    weight: 400,
+  },
+}
+
+export const SIGNATURE_STYLE_OPTIONS = [
+  { value: 'fountain', label: '✒️ Fine Fountain Pen (Alex Brush)' },
+  { value: 'brush', label: "🖌️ Painter's Brush (Caveat)" },
+  { value: 'draft', label: '✏️ Studio Pencil / Note (Homemade Apple)' },
+  { value: 'classic', label: '📜 Classic Cursive (Marck Script)' },
+] as const
+
+export const SIGNATURE_POSITION_OPTIONS = [
+  { value: 'bottom-right', label: 'Bottom Right' },
+  { value: 'bottom-left', label: 'Bottom Left' },
+] as const
+
+export const SIGNATURE_COLOR_OPTIONS = [
+  { value: 'auto', label: 'Auto (Contrast)' },
+  { value: 'dark', label: 'Charcoal Ink' },
+  { value: 'sepia', label: 'Warm Umber' },
+  { value: 'light', label: 'White Gesso' },
+] as const
+
+export function getSignatureInkStyle(
+  color: SignatureColor,
+  dominantColorHex = ''
+): { color: string; textShadow: string; blendMode?: 'normal' | 'multiply' | 'screen' } {
+  if (color === 'dark') {
+    return {
+      color: 'rgba(25, 23, 20, 0.88)',
+      textShadow: '0 0.5px 1px rgba(255, 255, 255, 0.35)',
+      blendMode: 'multiply',
+    }
+  }
+  if (color === 'sepia') {
+    return {
+      color: 'rgba(68, 48, 33, 0.90)',
+      textShadow: '0 0.5px 1px rgba(255, 255, 255, 0.40)',
+      blendMode: 'multiply',
+    }
+  }
+  if (color === 'light') {
+    return {
+      color: 'rgba(248, 245, 238, 0.92)',
+      textShadow: '0 1px 2px rgba(0, 0, 0, 0.65), 0 0.5px 0.5px rgba(0, 0, 0, 0.85)',
+      blendMode: 'screen',
+    }
+  }
+
+  // Auto mode: evaluate brightness of dominant/corner color
+  let r = 128, g = 128, b = 128
+  const raw = dominantColorHex.trim()
+  if (raw.startsWith('#')) {
+    const hex = raw.slice(1)
+    if (hex.length === 3) {
+      r = parseInt(hex[0] + hex[0], 16)
+      g = parseInt(hex[1] + hex[1], 16)
+      b = parseInt(hex[2] + hex[2], 16)
+    } else if (hex.length >= 6) {
+      r = parseInt(hex.slice(0, 2), 16)
+      g = parseInt(hex.slice(2, 4), 16)
+      b = parseInt(hex.slice(4, 6), 16)
+    }
+  }
+  const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
+  if (luminance < 0.42) {
+    return {
+      color: 'rgba(248, 245, 238, 0.92)',
+      textShadow: '0 1px 2px rgba(0, 0, 0, 0.75), 0 0.5px 0.5px rgba(0, 0, 0, 0.90)',
+      blendMode: 'screen',
+    }
+  }
+  return {
+    color: 'rgba(28, 24, 20, 0.88)',
+    textShadow: '0 0.5px 1px rgba(255, 255, 255, 0.35)',
+    blendMode: 'multiply',
+  }
+}
+
+
 

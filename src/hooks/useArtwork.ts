@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { buildArtworkFeed } from '../lib/artModeLibrary'
+import { buildArtworkFeed, type SignatureConfig } from '../lib/artModeLibrary'
 import { usePersonalArtModeData } from './usePersonalArtMode'
 import { useScreensaverSettings } from './useScreensaverSettings'
 
@@ -83,6 +83,7 @@ export interface Artwork {
   date?: string
   medium?: string
   origin?: string
+  signature?: SignatureConfig
 }
 
 type ArtworkPreference = 'up' | 'down'
@@ -365,6 +366,15 @@ export function useArtwork(rotateSecs = 240, shuffle = true) {
       artist: item.artist || 'Personal collection',
       imageUrl: item.imageUrl,
       medium: 'Uploaded artwork',
+      signature: item.signatureEnabled
+        ? {
+            enabled: true,
+            text: item.signatureText || item.artist || 'Personal collection',
+            style: item.signatureStyle || 'fountain',
+            position: item.signaturePosition || 'bottom-right',
+            color: item.signatureColor || 'auto',
+          }
+        : undefined,
     }))
     return buildArtworkFeed(
       sourceMode,
