@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
-import { Crop, ZoomIn, ZoomOut, RotateCcw, Move, Sparkles, AlertCircle } from 'lucide-react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
+import { Crop, ZoomIn, ZoomOut, RotateCcw, Move, Sparkles, AlertCircle, Maximize2, Minimize2 } from 'lucide-react'
 import { Modal, Button, IconButton, Chip } from '../ui'
 import type { PersonalArtwork } from '../../hooks/usePersonalArtMode'
+import { cn } from '../../utils/cn'
 
 interface ArtworkCropModalProps {
   open: boolean
@@ -21,6 +22,7 @@ export function ArtworkCropModal({
   const [imageLoaded, setImageLoaded] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [naturalSize, setNaturalSize] = useState<{ width: number; height: number } | null>(null)
+  const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({ width: 640, height: 360 })
   
   // Transform state
   const [zoom, setZoom] = useState(1.0)
@@ -32,6 +34,21 @@ export function ArtworkCropModal({
   const containerRef = useRef<HTMLDivElement>(null)
   const dragStartRef = useRef<{ clientX: number; clientY: number; startPanX: number; startPanY: number } | null>(null)
   const imageElementRef = useRef<HTMLImageElement | null>(null)
+
+  // Measure container size
+  useEffect(() => {
+    if (!open || !containerRef.current) return
+    const el = containerRef.current
+    const updateSize = () => {
+      if (el.clientWidth && el.clientHeight) {
+        setContainerSize({ width: el.clientWidth, height: el.clientHeight })
+      }
+    }
+    updateSize()
+    const observer = new ResizeObserver(updateSize)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [open, imageLoaded])
 
   // Load image safely as blob to prevent canvas cross-origin taint
   useEffect(() => {
@@ -81,6 +98,56 @@ export function ArtworkCropModal({
     }
   }, [localBlobUrl])
 
+  // Compute layout metrics (Cover and Fit baselines)
+  const metrics = useMemo(() => {
+    if (!naturalSize || !containerSize.width || !containerSize.height) return null
+    const containerWidth = containerSize.width
+    const containerHeight = containerSize.height
+
+    const imgAspect = naturalSize.width / naturalSize.height
+    const containerAspect = 16 / 9
+
+    let baseWidth: number
+    let baseHeight: number
+
+    if (imgAspect >= containerAspect) {
+      // Wider than 16:9 -> fit height to container in cover mode
+      baseHeight = containerHeight
+      baseWidth = containerHeight * imgAspect
+    } else {
+      // Taller than 16:9 -> fit width to container in cover mode
+      baseWidth = containerWidth
+      baseHeight = containerWidth / imgAspect
+    }
+
+    // Scale to fit the full original photo (Contain) inside 16:9 container
+    const fitScale = Number((Math.min(containerWidth / baseWidth, containerHeight / baseHeight)).toFixed(3))
+    const minZoom = Math.min(0.25, Number((fitScale * 0.8).toFixed(2)))
+    const maxZoom = 3.0
+
+    const scaledWidth = baseWidth * zoom
+    const scaledHeight = baseHeight * zoom
+
+    const maxPanX = Math.max(0, (scaledWidth - containerWidth) / 2)
+    const maxPanY = Math.max(0, (scaledHeight - containerHeight) / 2)
+
+    return {
+      containerWidth,
+      containerHeight,
+      baseWidth,
+      baseHeight,
+      fitScale,
+      minZoom,
+      maxZoom,
+      scaledWidth,
+      scaledHeight,
+      maxPanX,
+      maxPanY,
+      isTall: imgAspect < 16 / 9 - 0.02,
+      isWide: imgAspect > 16 / 9 + 0.02,
+    }
+  }, [naturalSize, containerSize, zoom])
+
   const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const img = e.currentTarget
     imageElementRef.current = img
@@ -92,58 +159,17 @@ export function ArtworkCropModal({
     setPan({ x: 0, y: 0 })
   }
 
-  // Calculate cover dimensions and pan constraints
-  const getLayoutMetrics = useCallback(() => {
-    if (!containerRef.current || !naturalSize) return null
-    const containerWidth = containerRef.current.clientWidth
-    const containerHeight = containerRef.current.clientHeight
-
-    const imgAspect = naturalSize.width / naturalSize.height
-    const containerAspect = 16 / 9
-
-    let baseWidth: number
-    let baseHeight: number
-
-    if (imgAspect > containerAspect) {
-      // Wider than 16:9 -> fit height, width overflows
-      baseHeight = containerHeight
-      baseWidth = containerHeight * imgAspect
-    } else {
-      // Taller than 16:9 -> fit width, height overflows
-      baseWidth = containerWidth
-      baseHeight = containerWidth / imgAspect
-    }
-
-    const scaledWidth = baseWidth * zoom
-    const scaledHeight = baseHeight * zoom
-
-    const maxPanX = Math.max(0, (scaledWidth - containerWidth) / 2)
-    const maxPanY = Math.max(0, (scaledHeight - containerHeight) / 2)
-
-    return {
-      containerWidth,
-      containerHeight,
-      scaledWidth,
-      scaledHeight,
-      maxPanX,
-      maxPanY,
-    }
-  }, [naturalSize, zoom])
-
-  // Clamp pan when zoom changes
+  // Clamp pan when zoom or dimensions change
   useEffect(() => {
-    const metrics = getLayoutMetrics()
     if (!metrics) return
-
     setPan(currentPan => ({
       x: Math.max(-metrics.maxPanX, Math.min(metrics.maxPanX, currentPan.x)),
       y: Math.max(-metrics.maxPanY, Math.min(metrics.maxPanY, currentPan.y)),
     }))
-  }, [zoom, getLayoutMetrics])
+  }, [metrics])
 
   // Drag handlers (Mouse & Touch)
   const handlePointerDown = (clientX: number, clientY: number) => {
-    const metrics = getLayoutMetrics()
     if (!metrics) return
     setIsDragging(true)
     dragStartRef.current = {
@@ -155,9 +181,7 @@ export function ArtworkCropModal({
   }
 
   const handlePointerMove = useCallback((clientX: number, clientY: number) => {
-    if (!dragStartRef.current) return
-    const metrics = getLayoutMetrics()
-    if (!metrics) return
+    if (!dragStartRef.current || !metrics) return
 
     const deltaX = clientX - dragStartRef.current.clientX
     const deltaY = clientY - dragStartRef.current.clientY
@@ -169,7 +193,7 @@ export function ArtworkCropModal({
       x: Math.max(-metrics.maxPanX, Math.min(metrics.maxPanX, nextX)),
       y: Math.max(-metrics.maxPanY, Math.min(metrics.maxPanY, nextY)),
     })
-  }, [getLayoutMetrics])
+  }, [metrics])
 
   const handlePointerUp = () => {
     setIsDragging(false)
@@ -177,11 +201,18 @@ export function ArtworkCropModal({
   }
 
   // Preset alignments
-  const applyPreset = (position: 'center' | 'top' | 'bottom' | 'left' | 'right') => {
-    const metrics = getLayoutMetrics()
+  const applyPreset = (position: 'center' | 'top' | 'bottom' | 'left' | 'right' | 'fill' | 'fit') => {
     if (!metrics) return
 
     switch (position) {
+      case 'fill':
+        setZoom(1.0)
+        setPan({ x: 0, y: 0 })
+        break
+      case 'fit':
+        setZoom(metrics.fitScale)
+        setPan({ x: 0, y: 0 })
+        break
       case 'center':
         setPan({ x: 0, y: 0 })
         break
@@ -200,46 +231,29 @@ export function ArtworkCropModal({
     }
   }
 
+  // Full reset back to original photo framing (fits uncropped photo if non-16:9, or 100% center)
   const handleReset = () => {
-    setZoom(1.0)
+    if (!metrics) {
+      setZoom(1.0)
+      setPan({ x: 0, y: 0 })
+      return
+    }
+    // If photo is non-16:9, reset to fitScale so full original photo is visible; otherwise 1.0
+    const resetZoom = metrics.fitScale < 0.98 ? metrics.fitScale : 1.0
+    setZoom(resetZoom)
     setPan({ x: 0, y: 0 })
   }
 
   // Generate cropped image on canvas at maximum source fidelity
   const handleConfirmCrop = async () => {
-    if (!artwork || !naturalSize || !containerRef.current || !imageElementRef.current) return
-
-    const metrics = getLayoutMetrics()
-    if (!metrics) return
+    if (!artwork || !naturalSize || !containerRef.current || !imageElementRef.current || !metrics) return
 
     try {
       const img = imageElementRef.current
       const containerWidth = metrics.containerWidth
-      const containerHeight = metrics.containerHeight
-      const scaledWidth = metrics.scaledWidth
-      const scaledHeight = metrics.scaledHeight
 
-      // Top-left of rendered image relative to container top-left
-      const imgRenderLeft = (containerWidth - scaledWidth) / 2 + pan.x
-      const imgRenderTop = (containerHeight - scaledHeight) / 2 + pan.y
-
-      // Visible crop window in image rendered space:
-      const cropLeftRender = -imgRenderLeft
-      const cropTopRender = -imgRenderTop
-      const cropWidthRender = containerWidth
-      const cropHeightRender = containerHeight
-
-      // Scale factors from rendered image to original natural image
-      const scaleX = naturalSize.width / scaledWidth
-      const scaleY = naturalSize.height / scaledHeight
-
-      const sx = Math.max(0, cropLeftRender * scaleX)
-      const sy = Math.max(0, cropTopRender * scaleY)
-      const sw = Math.min(naturalSize.width - sx, cropWidthRender * scaleX)
-      const sh = Math.min(naturalSize.height - sy, cropHeightRender * scaleY)
-
-      // High-resolution canvas dimensions (at least 1920x1080 if source allows)
-      const targetWidth = Math.max(1920, Math.round(sw))
+      // High-resolution canvas dimensions (at least 1920x1080)
+      const targetWidth = Math.max(1920, naturalSize.width)
       const targetHeight = Math.round((targetWidth * 9) / 16)
 
       const canvas = document.createElement('canvas')
@@ -248,9 +262,20 @@ export function ArtworkCropModal({
       const ctx = canvas.getContext('2d')
       if (!ctx) throw new Error('Could not get canvas 2d context')
 
+      // Fill background with obsidian dark tone for letterboxed areas
+      ctx.fillStyle = 'rgb(11, 19, 43)'
+      ctx.fillRect(0, 0, targetWidth, targetHeight)
+
+      // Calculate rendered scale & position from container to canvas
+      const scaleFactor = targetWidth / containerWidth
+      const renderWidth = metrics.baseWidth * zoom * scaleFactor
+      const renderHeight = metrics.baseHeight * zoom * scaleFactor
+      const renderX = (targetWidth - renderWidth) / 2 + (pan.x * scaleFactor)
+      const renderY = (targetHeight - renderHeight) / 2 + (pan.y * scaleFactor)
+
       ctx.imageSmoothingEnabled = true
       ctx.imageSmoothingQuality = 'high'
-      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, targetWidth, targetHeight)
+      ctx.drawImage(img, renderX, renderY, renderWidth, renderHeight)
 
       // Export as Blob
       const outputMime = artwork.mimeType === 'image/png' ? 'image/png' : 'image/jpeg'
@@ -272,8 +297,8 @@ export function ArtworkCropModal({
     }
   }
 
-  const isTall = naturalSize ? naturalSize.height / naturalSize.width > 9 / 16 : false
-  const isWide = naturalSize ? naturalSize.width / naturalSize.height > 16 / 9 : false
+  const isAtFit = metrics ? Math.abs(zoom - metrics.fitScale) < 0.02 : false
+  const isAtFill = Math.abs(zoom - 1.0) < 0.02
 
   return (
     <Modal
@@ -302,7 +327,7 @@ export function ArtworkCropModal({
         )}
 
         {/* 16:9 Aperture Frame / Viewport */}
-        <div className="relative overflow-hidden rounded-2xl border-2 border-casa-navy/20 bg-black shadow-card">
+        <div className="relative overflow-hidden rounded-2xl border-2 border-casa-navy/20 bg-neutral-950 shadow-card">
           <div
             ref={containerRef}
             className="relative aspect-video w-full cursor-grab active:cursor-grabbing select-none overflow-hidden touch-none"
@@ -322,7 +347,7 @@ export function ArtworkCropModal({
             }}
             onTouchEnd={handlePointerUp}
           >
-            {localBlobUrl && (
+            {localBlobUrl && metrics && (
               <img
                 ref={imageElementRef}
                 src={localBlobUrl}
@@ -333,17 +358,16 @@ export function ArtworkCropModal({
                   setLoadError('Failed to load artwork preview.')
                 }}
                 draggable={false}
-                className="absolute max-w-none transition-transform duration-75 ease-out select-none pointer-events-none"
+                className="absolute select-none pointer-events-none transition-transform duration-75 ease-out"
                 style={{
                   top: '50%',
                   left: '50%',
+                  width: `${metrics.baseWidth}px`,
+                  height: `${metrics.baseHeight}px`,
+                  maxWidth: 'none',
+                  maxHeight: 'none',
                   transform: `translate(calc(-50% + ${pan.x}px), calc(-50% + ${pan.y}px)) scale(${zoom})`,
                   transformOrigin: 'center center',
-                  maxHeight: isWide ? '100%' : 'none',
-                  maxWidth: isTall ? '100%' : 'none',
-                  minWidth: '100%',
-                  minHeight: '100%',
-                  objectFit: 'cover',
                 }}
               />
             )}
@@ -351,7 +375,7 @@ export function ArtworkCropModal({
             {/* Rule-of-Thirds Grid Overlay during adjustment */}
             <div
               className={`absolute inset-0 pointer-events-none transition-opacity duration-300 ${
-                isDragging ? 'opacity-70' : 'opacity-25'
+                isDragging ? 'opacity-70' : 'opacity-20'
               }`}
             >
               <div className="h-full w-full grid grid-cols-3 grid-rows-3 border border-white/30">
@@ -384,21 +408,24 @@ export function ArtworkCropModal({
               variant="secondary"
               icon={<ZoomOut size={16} />}
               aria-label="Zoom out"
-              onClick={() => setZoom(z => Math.max(1.0, Number((z - 0.1).toFixed(2))))}
-              disabled={zoom <= 1.0}
+              onClick={() => {
+                if (!metrics) return
+                setZoom(z => Math.max(metrics.minZoom, Number((z - 0.1).toFixed(2))))
+              }}
+              disabled={!metrics || zoom <= metrics.minZoom}
             />
             <div className="flex-1 flex items-center gap-2">
               <input
                 type="range"
-                min={1.0}
-                max={3.0}
-                step={0.05}
+                min={metrics?.minZoom ?? 0.25}
+                max={metrics?.maxZoom ?? 3.0}
+                step={0.01}
                 value={zoom}
                 onChange={e => setZoom(Number(e.target.value))}
                 aria-label="Zoom level"
                 className="w-full accent-casa-gold cursor-pointer"
               />
-              <span className="min-w-[3rem] text-right text-caption font-semibold text-casa-navy">
+              <span className="min-w-[3.25rem] text-right text-caption font-semibold text-casa-navy">
                 {Math.round(zoom * 100)}%
               </span>
             </div>
@@ -407,14 +434,40 @@ export function ArtworkCropModal({
               variant="secondary"
               icon={<ZoomIn size={16} />}
               aria-label="Zoom in"
-              onClick={() => setZoom(z => Math.min(3.0, Number((z + 0.1).toFixed(2))))}
-              disabled={zoom >= 3.0}
+              onClick={() => {
+                if (!metrics) return
+                setZoom(z => Math.min(metrics.maxZoom, Number((z + 0.1).toFixed(2))))
+              }}
+              disabled={!metrics || zoom >= metrics.maxZoom}
             />
           </div>
 
-          {/* Focal Presets */}
+          {/* Focal & Framing Presets */}
           <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-casa-border">
             <span className="text-caption font-medium text-casa-muted mr-1">Align:</span>
+            
+            {/* Fill 16:9 */}
+            <Chip
+              onClick={() => applyPreset('fill')}
+              selected={isAtFill}
+              className={cn(isAtFill ? 'bg-casa-navy text-white' : 'hover:bg-casa-navy hover:text-white')}
+            >
+              <Maximize2 size={12} className="inline mr-1" />
+              Fill 16:9
+            </Chip>
+
+            {/* Fit Original */}
+            {metrics && metrics.fitScale < 0.98 && (
+              <Chip
+                onClick={() => applyPreset('fit')}
+                selected={isAtFit}
+                className={cn(isAtFit ? 'bg-casa-navy text-white' : 'hover:bg-casa-navy hover:text-white')}
+              >
+                <Minimize2 size={12} className="inline mr-1" />
+                Fit Original
+              </Chip>
+            )}
+
             <Chip
               onClick={() => applyPreset('center')}
               className="hover:bg-casa-navy hover:text-white"
@@ -422,18 +475,21 @@ export function ArtworkCropModal({
               <Sparkles size={12} className="inline mr-1" />
               Center
             </Chip>
-            {isTall && (
+
+            {metrics?.isTall && (
               <>
-                <Chip onClick={() => applyPreset('top')}>Top Focus</Chip>
-                <Chip onClick={() => applyPreset('bottom')}>Bottom Focus</Chip>
+                <Chip onClick={() => applyPreset('top')}>Top</Chip>
+                <Chip onClick={() => applyPreset('bottom')}>Bottom</Chip>
               </>
             )}
-            {isWide && (
+
+            {metrics?.isWide && (
               <>
                 <Chip onClick={() => applyPreset('left')}>Left</Chip>
                 <Chip onClick={() => applyPreset('right')}>Right</Chip>
               </>
             )}
+
             <Chip
               onClick={handleReset}
               className="text-casa-muted hover:text-casa-navy"
