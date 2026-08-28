@@ -48,12 +48,21 @@ export const personalArtworkQueryKey = ['personal-artwork'] as const
 export const artSourceConfigQueryKey = ['settings', ART_SOURCE_SETTING_KEY] as const
 
 async function loadPersonalArtwork(): Promise<PersonalArtwork[]> {
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('personal_artwork')
     .select('id, storage_path, title, artist, mime_type, byte_size, created_at, signature_enabled, signature_text, signature_style, signature_position, signature_color')
     .order('sort_order')
     .order('created_at')
-  if (error) throw error
+
+  if (error) {
+    const fallback = await supabase
+      .from('personal_artwork')
+      .select('id, storage_path, title, artist, mime_type, byte_size, created_at')
+      .order('sort_order')
+      .order('created_at')
+    if (fallback.error) throw fallback.error
+    data = fallback.data as unknown as typeof data
+  }
 
   return ((data ?? []) as PersonalArtworkRow[]).map(row => ({
     id: row.id,
