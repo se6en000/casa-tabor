@@ -160,7 +160,7 @@ export default function ArtScreensaver({
     return () => window.removeEventListener('resize', updateViewport)
   }, [])
 
-  // Smooth Artwork Dissolve Transition Pipeline (1-Second Dissolve)
+  // Smooth Artwork Dissolve Transition Pipeline (2.8-Second Cinematic Dissolve)
   useEffect(() => {
     if (!artwork) return
 
@@ -183,22 +183,13 @@ export default function ArtScreensaver({
       const prevPiece = activeArtwork
       setOutgoingArtwork(prevPiece)
       setActiveArtwork(artwork)
-      setCrossFadeActive(false)
-
-      // Trigger dissolve on the next browser paint frame
-      const rAF = requestAnimationFrame(() => {
-        setCrossFadeActive(true)
-      })
+      setCrossFadeActive(true)
 
       if (fadeTimeoutRef.current) clearTimeout(fadeTimeoutRef.current)
       fadeTimeoutRef.current = setTimeout(() => {
         setOutgoingArtwork(null)
         setCrossFadeActive(false)
-      }, 1050)
-
-      return () => {
-        cancelAnimationFrame(rAF)
-      }
+      }, 2850)
     }
   }, [artwork?.id, artwork?.imageUrl, activeArtwork, darkThemeActive, matPreset, adaptiveMatColor])
 
@@ -386,7 +377,7 @@ export default function ArtScreensaver({
             ? 'inset 0 2px 6px rgba(0,0,0,0.7), inset 0 0 1px rgba(0,0,0,0.9)'
             : 'inset 0 2px 6px rgba(0,0,0,0.12), inset 0 1px 2px rgba(0,0,0,0.06), inset 0 0 1px rgba(0,0,0,0.10)',
           padding: '3.5vw',
-          transition: 'background-color 1000ms cubic-bezier(0.4, 0, 0.2, 1)',
+          transition: 'background-color 2800ms cubic-bezier(0.4, 0, 0.2, 1)',
         }}
       >
         {/* Passe-Partout Aperture Frame with 45-Degree Mitered Cotton Rag Bevel Core */}
@@ -415,11 +406,11 @@ export default function ArtScreensaver({
               : 'translate3d(0, 0, 0)',
             transition: swiping
               ? 'transform 260ms cubic-bezier(0.25, 1, 0.5, 1)'
-              : 'width 1000ms cubic-bezier(0.4, 0, 0.2, 1), height 1000ms cubic-bezier(0.4, 0, 0.2, 1), border-color 1000ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 1000ms cubic-bezier(0.4, 0, 0.2, 1)',
+              : 'width 2800ms cubic-bezier(0.4, 0, 0.2, 1), height 2800ms cubic-bezier(0.4, 0, 0.2, 1), border-color 2800ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 2800ms cubic-bezier(0.4, 0, 0.2, 1)',
             overflow: 'hidden',
           }}
         >
-          {/* Base Active Artwork Layer (Always Rendered Underneath at zIndex: 1) */}
+          {/* Base Active Artwork Layer (Dissolves In from 0 to 1 over 2.8s at zIndex: 1) */}
           {currentToDisplay && (
             <div
               key={`in-${currentToDisplay.id}`}
@@ -427,6 +418,8 @@ export default function ArtScreensaver({
                 position: 'absolute',
                 inset: 0,
                 zIndex: 1,
+                animation: crossFadeActive ? 'casa-art-dissolve-in 2800ms cubic-bezier(0.4, 0, 0.2, 1) forwards' : 'none',
+                willChange: 'opacity',
               }}
             >
               <img
@@ -493,17 +486,16 @@ export default function ArtScreensaver({
             </div>
           )}
 
-          {/* Top Outgoing Artwork Layer (Dissolves 1 -> 0 over 1.0 Second at zIndex: 2) */}
+          {/* Top Outgoing Artwork Layer (Dissolves Out from 1 to 0 over 2.8s at zIndex: 2) */}
           {outgoingArtwork && (
             <div
               key={`out-${outgoingArtwork.id}`}
               style={{
                 position: 'absolute',
                 inset: 0,
-                opacity: crossFadeActive ? 0 : 1,
-                transition: 'opacity 1000ms cubic-bezier(0.4, 0, 0.2, 1)',
-                pointerEvents: 'none',
                 zIndex: 2,
+                pointerEvents: 'none',
+                animation: 'casa-art-dissolve-out 2800ms cubic-bezier(0.4, 0, 0.2, 1) forwards',
                 willChange: 'opacity',
               }}
             >
