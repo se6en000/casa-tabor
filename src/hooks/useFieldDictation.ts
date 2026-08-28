@@ -279,7 +279,7 @@ export function useFieldDictation({
     }
   }, [emit, restartSilenceTimer, silenceTimeoutMs, WebSpeech, startWebSpeech])
 
-  const start = useCallback((seed: string) => {
+  const start = useCallback((seed = '') => {
     if (activeRef.current || IS_SAFE_MODE) return
     baseRef.current = seed.trim()
     committedRef.current = ''
@@ -298,7 +298,7 @@ export function useFieldDictation({
     }
   }, [startWebSpeech, startBridge, restartSilenceTimer])
 
-  const toggle = useCallback((seed: string): string | void => {
+  const toggle = useCallback((seed = ''): string | void => {
     if (activeRef.current) return stop()
     void start(seed)
   }, [start, stop])

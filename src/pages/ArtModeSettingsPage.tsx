@@ -6,8 +6,6 @@ import { usePersonalArtMode, type PersonalArtwork } from '../hooks/usePersonalAr
 import {
   type ArtSourceMode,
   SIGNATURE_STYLE_OPTIONS,
-  SIGNATURE_POSITION_OPTIONS,
-  SIGNATURE_COLOR_OPTIONS,
   type SignatureStyle,
   type SignaturePosition,
   type SignatureColor,
@@ -801,94 +799,104 @@ export default function ArtModeSettingsPage() {
         open={artworkToEdit !== null}
         onClose={() => setArtworkToEdit(null)}
         title="Edit Artwork Details"
-        size="sm"
+        size="lg"
         closeDisabled={updating}
       >
-        <div className="space-y-4 py-3">
+        <div className="space-y-4 py-2">
           {artworkToEdit && (
-            <div className="flex items-center justify-between gap-3 rounded-lg border border-casa-border bg-casa-bg p-2.5">
-              <div className="flex items-center gap-3 min-w-0 flex-1">
-                <div className="relative h-14 w-20 rounded-md overflow-hidden bg-casa-surface-2 shrink-0 border border-casa-border/60">
-                  <img
-                    src={artworkToEdit.imageUrl}
-                    alt={artworkToEdit.title}
-                    className="h-full w-full object-cover"
-                  />
-                  {editSignatureEnabled && (editSignatureText || editArtist || artworkToEdit.title) && (() => {
-                    const isBottomLeft = editSignaturePosition === 'bottom-left'
-                    const fontClass =
-                      editSignatureStyle === 'brush'
-                        ? "font-['Caveat',_cursive] font-semibold text-xs"
-                        : editSignatureStyle === 'draft'
-                        ? "font-['Homemade_Apple',_cursive] font-normal text-2xs"
-                        : editSignatureStyle === 'classic'
-                        ? "font-['Marck_Script',_cursive] font-normal text-xs"
-                        : "font-['Alex_Brush',_cursive] font-normal text-xs"
+            <div className="relative w-full aspect-[16/9] max-h-[260px] sm:max-h-[300px] rounded-xl overflow-hidden bg-stone-900 border border-casa-border shadow-inner group">
+              <img
+                src={artworkToEdit.imageUrl}
+                alt={artworkToEdit.title}
+                className="w-full h-full object-cover"
+              />
 
-                    const colorClass =
-                      editSignatureColor === 'light'
-                        ? 'text-stone-100 drop-shadow-md mix-blend-screen'
-                        : editSignatureColor === 'sepia'
-                        ? 'text-amber-950/90 drop-shadow-xs mix-blend-multiply'
-                        : 'text-stone-900/90 drop-shadow-xs mix-blend-multiply'
+              {/* Live Handwritten Signature Overlay */}
+              {editSignatureEnabled && (editSignatureText || editArtist || artworkToEdit.title) && (() => {
+                const isBottomLeft = editSignaturePosition === 'bottom-left'
+                const fontClass =
+                  editSignatureStyle === 'brush'
+                    ? "font-['Caveat',_cursive] font-semibold text-lg sm:text-xl md:text-2xl"
+                    : editSignatureStyle === 'draft'
+                    ? "font-['Homemade_Apple',_cursive] font-normal text-xs sm:text-sm md:text-base"
+                    : editSignatureStyle === 'classic'
+                    ? "font-['Marck_Script',_cursive] font-normal text-base sm:text-lg md:text-xl"
+                    : "font-['Alex_Brush',_cursive] font-normal text-xl sm:text-2xl md:text-3xl"
 
-                    return (
-                      <div
-                        className={cn(
-                          'absolute pointer-events-none select-none z-10 leading-none truncate max-w-[85%]',
-                          isBottomLeft ? 'bottom-1 left-1.5 text-left rotate-1' : 'bottom-1 right-1.5 text-right -rotate-1',
-                          fontClass,
-                          colorClass
-                        )}
-                      >
-                        {editSignatureText || editArtist || artworkToEdit.title}
-                      </div>
-                    )
-                  })()}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-caption text-casa-muted">Artwork preview</p>
-                  <p className="text-body-sm font-medium text-casa-navy truncate">{artworkToEdit.title}</p>
-                </div>
+                const colorClass =
+                  editSignatureColor === 'light'
+                    ? 'text-stone-100 drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)] mix-blend-screen'
+                    : editSignatureColor === 'sepia'
+                    ? 'text-amber-950/90 drop-shadow-[0_1px_1px_rgba(255,255,255,0.45)] mix-blend-multiply'
+                    : 'text-stone-900/90 drop-shadow-[0_1px_1px_rgba(255,255,255,0.45)] mix-blend-multiply'
+
+                return (
+                  <div
+                    className={cn(
+                      'absolute pointer-events-none select-none z-10 leading-none max-w-[55%] truncate transition-all duration-200',
+                      isBottomLeft
+                        ? 'bottom-3 sm:bottom-4 left-3 sm:left-5 text-left rotate-1'
+                        : 'bottom-3 sm:bottom-4 right-3 sm:right-5 text-right -rotate-1',
+                      fontClass,
+                      colorClass
+                    )}
+                  >
+                    {editSignatureText || editArtist || artworkToEdit.title}
+                  </div>
+                )
+              })()}
+
+              {/* Crop to 16:9 Action Chip on Preview */}
+              <div className="absolute top-2.5 right-2.5 z-20">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  leadingIcon={<Crop size={14} />}
+                  className="bg-white/85 backdrop-blur-xs hover:bg-white shadow-xs"
+                  onClick={() => {
+                    const target = artworkToEdit
+                    setArtworkToEdit(null)
+                    handleOpenCrop(target)
+                  }}
+                >
+                  Crop to 16:9
+                </Button>
               </div>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                leadingIcon={<Crop size={14} />}
-                onClick={() => {
-                  const target = artworkToEdit
-                  setArtworkToEdit(null)
-                  handleOpenCrop(target)
-                }}
-              >
-                Crop to 16:9
-              </Button>
+
+              {/* Live Preview Watermark Label */}
+              <div className="absolute bottom-2.5 left-2.5 z-10 pointer-events-none">
+                <span className="px-2 py-0.5 rounded-full bg-casa-navy/70 backdrop-blur-xs text-white text-3xs font-medium uppercase tracking-wider">
+                  Live Canvas Preview
+                </span>
+              </div>
             </div>
           )}
 
-          <div>
-            <label className="text-caption font-medium text-casa-navy block mb-1">Artwork Title</label>
-            <Input
-              type="text"
-              value={editTitle}
-              onChange={e => setEditTitle(e.target.value)}
-              placeholder="e.g. Highland Cattle with Espresso"
-              className="w-full"
-              autoFocus
-            />
-          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-caption font-medium text-casa-navy block mb-1">Artwork Title</label>
+              <Input
+                type="text"
+                value={editTitle}
+                onChange={e => setEditTitle(e.target.value)}
+                placeholder="e.g. Highland Cattle with Espresso"
+                className="w-full"
+                autoFocus
+              />
+            </div>
 
-          <div>
-            <label className="text-caption font-medium text-casa-navy block mb-1">Artist Name (Optional)</label>
-            <Input
-              type="text"
-              value={editArtist}
-              onChange={e => setEditArtist(e.target.value)}
-              placeholder="e.g. Dwight Smith"
-              className="w-full"
-            />
-            <p className="text-caption text-casa-muted mt-1">Leaves as &ldquo;Personal collection&rdquo; if left blank.</p>
+            <div>
+              <label className="text-caption font-medium text-casa-navy block mb-1">Artist Name (Optional)</label>
+              <Input
+                type="text"
+                value={editArtist}
+                onChange={e => setEditArtist(e.target.value)}
+                placeholder="e.g. Dwight Smith"
+                className="w-full"
+              />
+              <p className="text-caption text-casa-muted mt-1">Leaves as &ldquo;Personal collection&rdquo; if left blank.</p>
+            </div>
           </div>
 
           <div className="pt-2 border-t border-casa-border">
@@ -939,30 +947,54 @@ export default function ArtModeSettingsPage() {
                   </select>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-3">
                   <div>
                     <label className="text-caption font-medium text-casa-navy block mb-1">
-                      Position
+                      Signature Placement
                     </label>
-                    <SegmentedControl
-                      aria-label="Signature position"
-                      value={editSignaturePosition}
-                      options={SIGNATURE_POSITION_OPTIONS}
-                      onChange={pos => setEditSignaturePosition(pos as SignaturePosition)}
-                      fullWidth
-                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button
+                        type="button"
+                        variant={editSignaturePosition === 'bottom-right' ? 'strong' : 'secondary'}
+                        onClick={() => setEditSignaturePosition('bottom-right')}
+                        className="w-full justify-center text-body-sm"
+                      >
+                        ↘ Bottom Right
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={editSignaturePosition === 'bottom-left' ? 'strong' : 'secondary'}
+                        onClick={() => setEditSignaturePosition('bottom-left')}
+                        className="w-full justify-center text-body-sm"
+                      >
+                        ↙ Bottom Left
+                      </Button>
+                    </div>
                   </div>
+
                   <div>
                     <label className="text-caption font-medium text-casa-navy block mb-1">
-                      Ink Tone
+                      Ink Tone & Contrast
                     </label>
-                    <SegmentedControl
-                      aria-label="Signature ink color"
-                      value={editSignatureColor}
-                      options={SIGNATURE_COLOR_OPTIONS}
-                      onChange={col => setEditSignatureColor(col as SignatureColor)}
-                      fullWidth
-                    />
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {[
+                        { value: 'auto', label: 'Auto Contrast', swatch: 'bg-stone-500' },
+                        { value: 'dark', label: 'Charcoal Ink', swatch: 'bg-stone-900' },
+                        { value: 'sepia', label: 'Warm Umber', swatch: 'bg-amber-950' },
+                        { value: 'light', label: 'White Gesso', swatch: 'bg-stone-100 border border-stone-300' },
+                      ].map(tone => (
+                        <Button
+                          key={tone.value}
+                          type="button"
+                          variant={editSignatureColor === tone.value ? 'strong' : 'secondary'}
+                          onClick={() => setEditSignatureColor(tone.value as SignatureColor)}
+                          leadingIcon={<span className={cn('size-2.5 rounded-full shrink-0', tone.swatch)} />}
+                          className="w-full justify-center text-caption py-2 px-2.5"
+                        >
+                          <span className="truncate">{tone.label}</span>
+                        </Button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
