@@ -803,180 +803,198 @@ export default function ArtModeSettingsPage() {
         open={artworkToEdit !== null}
         onClose={() => setArtworkToEdit(null)}
         title="Edit Artwork Details"
-        size="lg"
+        size="xl"
+        panelClassName="max-w-4xl max-h-[92vh] flex flex-col"
+        contentClassName="p-0 flex-1 overflow-hidden flex flex-col"
         closeDisabled={updating}
       >
-        <div className="space-y-4 py-2">
-          {artworkToEdit && (
-            <div className="relative w-full aspect-[16/9] max-h-[260px] sm:max-h-[300px] rounded-xl overflow-hidden bg-stone-900 border border-casa-border shadow-inner group">
-              <img
-                src={artworkToEdit.imageUrl}
-                alt={artworkToEdit.title}
-                className="w-full h-full object-cover"
-              />
+        {/* Scrollable Studio Content */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-start">
+            {/* Left Column: Live Canvas Preview & Metadata */}
+            <div className="md:col-span-6 flex flex-col gap-4">
+              {artworkToEdit && (
+                <div className="relative w-full aspect-[16/9] rounded-xl overflow-hidden bg-stone-900 border border-casa-border shadow-inner group shrink-0">
+                  <img
+                    src={artworkToEdit.imageUrl}
+                    alt={artworkToEdit.title}
+                    className="w-full h-full object-cover"
+                  />
 
-              {/* Live Handwritten Signature Overlay */}
-              {editSignatureEnabled && (editSignatureText || editArtist || artworkToEdit.title) && (() => {
-                const isBottomLeft = editSignaturePosition === 'bottom-left'
-                const fontClass =
-                  editSignatureStyle === 'brush'
-                    ? editSignatureSize === 'sm'
-                      ? "font-['Caveat',_cursive] font-semibold text-sm sm:text-base md:text-lg"
-                      : editSignatureSize === 'lg'
-                      ? "font-['Caveat',_cursive] font-semibold text-xl sm:text-2xl md:text-3xl"
-                      : editSignatureSize === 'xl'
-                      ? "font-['Caveat',_cursive] font-semibold text-2xl sm:text-3xl md:text-4xl"
-                      : "font-['Caveat',_cursive] font-semibold text-lg sm:text-xl md:text-2xl"
-                    : editSignatureStyle === 'draft'
-                    ? editSignatureSize === 'sm'
-                      ? "font-['Homemade_Apple',_cursive] font-normal text-3xs sm:text-2xs md:text-xs"
-                      : editSignatureSize === 'lg'
-                      ? "font-['Homemade_Apple',_cursive] font-normal text-sm sm:text-base md:text-lg"
-                      : editSignatureSize === 'xl'
-                      ? "font-['Homemade_Apple',_cursive] font-normal text-base sm:text-lg md:text-xl"
-                      : "font-['Homemade_Apple',_cursive] font-normal text-xs sm:text-sm md:text-base"
-                    : editSignatureStyle === 'classic'
-                    ? editSignatureSize === 'sm'
-                      ? "font-['Marck_Script',_cursive] font-normal text-xs sm:text-sm md:text-base"
-                      : editSignatureSize === 'lg'
-                      ? "font-['Marck_Script',_cursive] font-normal text-lg sm:text-xl md:text-2xl"
-                      : editSignatureSize === 'xl'
-                      ? "font-['Marck_Script',_cursive] font-normal text-xl sm:text-2xl md:text-3xl"
-                      : "font-['Marck_Script',_cursive] font-normal text-base sm:text-lg md:text-xl"
-                    : editSignatureSize === 'sm'
-                    ? "font-['Alex_Brush',_cursive] font-normal text-base sm:text-lg md:text-xl"
-                    : editSignatureSize === 'lg'
-                    ? "font-['Alex_Brush',_cursive] font-normal text-2xl sm:text-3xl md:text-4xl"
-                    : editSignatureSize === 'xl'
-                    ? "font-['Alex_Brush',_cursive] font-normal text-3xl sm:text-4xl md:text-5xl"
-                    : "font-['Alex_Brush',_cursive] font-normal text-xl sm:text-2xl md:text-3xl"
+                  {/* Live Handwritten Signature Overlay */}
+                  {editSignatureEnabled && (editSignatureText || editArtist || artworkToEdit.title) && (() => {
+                    const isBottomLeft = editSignaturePosition === 'bottom-left'
+                    const fontClass =
+                      editSignatureStyle === 'brush'
+                        ? editSignatureSize === 'sm'
+                          ? "font-['Caveat',_cursive] font-semibold text-sm sm:text-base md:text-lg"
+                          : editSignatureSize === 'lg'
+                          ? "font-['Caveat',_cursive] font-semibold text-xl sm:text-2xl md:text-3xl"
+                          : editSignatureSize === 'xl'
+                          ? "font-['Caveat',_cursive] font-semibold text-2xl sm:text-3xl md:text-4xl"
+                          : "font-['Caveat',_cursive] font-semibold text-lg sm:text-xl md:text-2xl"
+                        : editSignatureStyle === 'draft'
+                        ? editSignatureSize === 'sm'
+                          ? "font-['Homemade_Apple',_cursive] font-normal text-3xs sm:text-2xs md:text-xs"
+                          : editSignatureSize === 'lg'
+                          ? "font-['Homemade_Apple',_cursive] font-normal text-sm sm:text-base md:text-lg"
+                          : editSignatureSize === 'xl'
+                          ? "font-['Homemade_Apple',_cursive] font-normal text-base sm:text-lg md:text-xl"
+                          : "font-['Homemade_Apple',_cursive] font-normal text-xs sm:text-sm md:text-base"
+                        : editSignatureStyle === 'classic'
+                        ? editSignatureSize === 'sm'
+                          ? "font-['Marck_Script',_cursive] font-normal text-xs sm:text-sm md:text-base"
+                          : editSignatureSize === 'lg'
+                          ? "font-['Marck_Script',_cursive] font-normal text-lg sm:text-xl md:text-2xl"
+                          : editSignatureSize === 'xl'
+                          ? "font-['Marck_Script',_cursive] font-normal text-xl sm:text-2xl md:text-3xl"
+                          : "font-['Marck_Script',_cursive] font-normal text-base sm:text-lg md:text-xl"
+                        : editSignatureSize === 'sm'
+                        ? "font-['Alex_Brush',_cursive] font-normal text-base sm:text-lg md:text-xl"
+                        : editSignatureSize === 'lg'
+                        ? "font-['Alex_Brush',_cursive] font-normal text-2xl sm:text-3xl md:text-4xl"
+                        : editSignatureSize === 'xl'
+                        ? "font-['Alex_Brush',_cursive] font-normal text-3xl sm:text-4xl md:text-5xl"
+                        : "font-['Alex_Brush',_cursive] font-normal text-xl sm:text-2xl md:text-3xl"
 
-                const colorClass =
-                  editSignatureColor === 'light'
-                    ? 'text-stone-100 drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)] mix-blend-screen'
-                    : editSignatureColor === 'sepia'
-                    ? 'text-amber-950/90 drop-shadow-[0_1px_1px_rgba(255,255,255,0.45)] mix-blend-multiply'
-                    : 'text-stone-900/90 drop-shadow-[0_1px_1px_rgba(255,255,255,0.45)] mix-blend-multiply'
+                    const colorClass =
+                      editSignatureColor === 'light'
+                        ? 'text-stone-100 drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)] mix-blend-screen'
+                        : editSignatureColor === 'sepia'
+                        ? 'text-amber-950/90 drop-shadow-[0_1px_1px_rgba(255,255,255,0.45)] mix-blend-multiply'
+                        : 'text-stone-900/90 drop-shadow-[0_1px_1px_rgba(255,255,255,0.45)] mix-blend-multiply'
 
-                return (
-                  <div
-                    className={cn(
-                      'absolute pointer-events-none select-none z-10 leading-none truncate transition-all duration-200',
-                      editSignatureSize === 'lg' || editSignatureSize === 'xl' ? 'max-w-[70%]' : 'max-w-[55%]',
-                      isBottomLeft
-                        ? 'bottom-3 sm:bottom-4 left-3 sm:left-5 text-left rotate-1'
-                        : 'bottom-3 sm:bottom-4 right-3 sm:right-5 text-right -rotate-1',
-                      fontClass,
-                      colorClass
-                    )}
-                  >
-                    {editSignatureText || editArtist || artworkToEdit.title}
+                    return (
+                      <div
+                        className={cn(
+                          'absolute pointer-events-none select-none z-10 leading-none truncate transition-all duration-200',
+                          editSignatureSize === 'lg' || editSignatureSize === 'xl' ? 'max-w-[70%]' : 'max-w-[55%]',
+                          isBottomLeft
+                            ? 'bottom-3 sm:bottom-4 left-3 sm:left-5 text-left rotate-1'
+                            : 'bottom-3 sm:bottom-4 right-3 sm:right-5 text-right -rotate-1',
+                          fontClass,
+                          colorClass
+                        )}
+                      >
+                        {editSignatureText || editArtist || artworkToEdit.title}
+                      </div>
+                    )
+                  })()}
+
+                  {/* Crop to 16:9 Action Chip on Preview */}
+                  <div className="absolute top-2.5 right-2.5 z-20">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      leadingIcon={<Crop size={14} />}
+                      className="bg-white/85 backdrop-blur-xs hover:bg-white shadow-xs"
+                      onClick={() => {
+                        const target = artworkToEdit
+                        setArtworkToEdit(null)
+                        handleOpenCrop(target)
+                      }}
+                    >
+                      Crop to 16:9
+                    </Button>
                   </div>
-                )
-              })()}
 
-              {/* Crop to 16:9 Action Chip on Preview */}
-              <div className="absolute top-2.5 right-2.5 z-20">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  leadingIcon={<Crop size={14} />}
-                  className="bg-white/85 backdrop-blur-xs hover:bg-white shadow-xs"
-                  onClick={() => {
-                    const target = artworkToEdit
-                    setArtworkToEdit(null)
-                    handleOpenCrop(target)
-                  }}
-                >
-                  Crop to 16:9
-                </Button>
-              </div>
+                  {/* Live Preview Watermark Label */}
+                  <div className="absolute bottom-2.5 left-2.5 z-10 pointer-events-none">
+                    <span className="px-2 py-0.5 rounded-full bg-casa-navy/70 backdrop-blur-xs text-white text-3xs font-medium uppercase tracking-wider">
+                      Live Canvas Preview
+                    </span>
+                  </div>
+                </div>
+              )}
 
-              {/* Live Preview Watermark Label */}
-              <div className="absolute bottom-2.5 left-2.5 z-10 pointer-events-none">
-                <span className="px-2 py-0.5 rounded-full bg-casa-navy/70 backdrop-blur-xs text-white text-3xs font-medium uppercase tracking-wider">
-                  Live Canvas Preview
-                </span>
-              </div>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-caption font-medium text-casa-navy block mb-1">Artwork Title</label>
-              <Input
-                type="text"
-                value={editTitle}
-                onChange={e => setEditTitle(e.target.value)}
-                placeholder="e.g. Highland Cattle with Espresso"
-                className="w-full"
-                autoFocus
-              />
-            </div>
-
-            <div>
-              <label className="text-caption font-medium text-casa-navy block mb-1">Artist Name (Optional)</label>
-              <Input
-                type="text"
-                value={editArtist}
-                onChange={e => setEditArtist(e.target.value)}
-                placeholder="e.g. Dwight Smith"
-                className="w-full"
-              />
-              <p className="text-caption text-casa-muted mt-1">Leaves as &ldquo;Personal collection&rdquo; if left blank.</p>
-            </div>
-          </div>
-
-          <div className="pt-2 border-t border-casa-border">
-            <Toggle
-              checked={editSignatureEnabled}
-              onChange={checked => {
-                setEditSignatureEnabled(checked)
-                if (checked && !editSignatureText) {
-                  setEditSignatureText(editArtist.trim() || artworkToEdit?.title || '')
-                }
-              }}
-              label="Artist signature overlay"
-              desc="Overlay handwritten artist signature or inscription on the image."
-            />
-
-            {editSignatureEnabled && (
-              <div className="mt-3 space-y-3 pl-2.5 sm:pl-3 border-l-2 border-casa-gold/60 ml-1">
+              <div className="space-y-3">
                 <div>
-                  <label className="text-caption font-medium text-casa-navy block mb-1">
-                    Signature / Inscription Text
-                  </label>
+                  <label className="text-caption font-medium text-casa-navy block mb-1">Artwork Title</label>
                   <Input
                     type="text"
-                    value={editSignatureText}
-                    onChange={e => setEditSignatureText(e.target.value)}
-                    placeholder={editArtist || "e.g. Dwight Smith '78"}
+                    value={editTitle}
+                    onChange={e => setEditTitle(e.target.value)}
+                    placeholder="e.g. Highland Cattle with Espresso"
                     className="w-full"
+                    autoFocus
                   />
-                  <p className="text-caption text-casa-muted mt-1">
-                    Defaults to artist name or custom text (e.g. year, location, personal notes).
-                  </p>
                 </div>
 
                 <div>
-                  <label className="text-caption font-medium text-casa-navy block mb-1">
-                    Handwriting Style
-                  </label>
-                  <select
-                    value={editSignatureStyle}
-                    onChange={e => setEditSignatureStyle(e.target.value as SignatureStyle)}
-                    className="w-full h-10 px-3 rounded-button border border-casa-border bg-casa-bg text-body-sm text-casa-navy focus:border-casa-gold focus:outline-none transition-colors"
-                  >
-                    {SIGNATURE_STYLE_OPTIONS.map(opt => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
+                  <label className="text-caption font-medium text-casa-navy block mb-1">Artist Name (Optional)</label>
+                  <Input
+                    type="text"
+                    value={editArtist}
+                    onChange={e => setEditArtist(e.target.value)}
+                    placeholder="e.g. Dwight Smith"
+                    className="w-full"
+                  />
+                  <p className="text-caption text-casa-muted mt-1">Leaves as &ldquo;Personal collection&rdquo; if left blank.</p>
                 </div>
 
-                <div className="space-y-3">
+                <div className="pt-2 border-t border-casa-border">
+                  <Toggle
+                    checked={editEnabled}
+                    onChange={setEditEnabled}
+                    label="Active on this device"
+                    desc="Include this photo during Art Mode rotation on this kiosk."
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Right Column: Signature Studio */}
+            <div className="md:col-span-6 flex flex-col gap-3.5">
+              <div className="rounded-xl border border-casa-border bg-casa-surface-2/30 p-3.5">
+                <Toggle
+                  checked={editSignatureEnabled}
+                  onChange={checked => {
+                    setEditSignatureEnabled(checked)
+                    if (checked && !editSignatureText) {
+                      setEditSignatureText(editArtist.trim() || artworkToEdit?.title || '')
+                    }
+                  }}
+                  label="Artist signature overlay"
+                  desc="Overlay handwritten artist signature or inscription on the image."
+                />
+              </div>
+
+              {editSignatureEnabled && (
+                <div className="space-y-3.5">
+                  <div>
+                    <label className="text-caption font-medium text-casa-navy block mb-1">
+                      Signature / Inscription Text
+                    </label>
+                    <Input
+                      type="text"
+                      value={editSignatureText}
+                      onChange={e => setEditSignatureText(e.target.value)}
+                      placeholder={editArtist || "e.g. Dwight Smith '78"}
+                      className="w-full"
+                    />
+                    <p className="text-caption text-casa-muted mt-1">
+                      Defaults to artist name or custom text (e.g. year, location, personal notes).
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="text-caption font-medium text-casa-navy block mb-1">
+                      Handwriting Style
+                    </label>
+                    <select
+                      value={editSignatureStyle}
+                      onChange={e => setEditSignatureStyle(e.target.value as SignatureStyle)}
+                      className="w-full h-10 px-3 rounded-button border border-casa-border bg-casa-bg text-body-sm text-casa-navy focus:border-casa-gold focus:outline-none transition-colors"
+                    >
+                      {SIGNATURE_STYLE_OPTIONS.map(opt => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
                   <div>
                     <label className="text-caption font-medium text-casa-navy block mb-1">
                       Signature Placement
@@ -1050,20 +1068,13 @@ export default function ArtModeSettingsPage() {
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
-          </div>
-
-          <div className="pt-2 border-t border-casa-border">
-            <Toggle
-              checked={editEnabled}
-              onChange={setEditEnabled}
-              label="Active on this device"
-              desc="When turned off, this photo is skipped during shuffle and playback on this kiosk."
-            />
+              )}
+            </div>
           </div>
         </div>
-        <div className="flex justify-end gap-2 pt-2">
+
+        {/* Pinned Sticky Action Footer */}
+        <div className="flex items-center justify-end gap-2.5 px-5 sm:px-6 py-3.5 border-t border-casa-border bg-casa-surface shrink-0 z-10">
           <Button variant="secondary" onClick={() => setArtworkToEdit(null)} disabled={updating}>
             Cancel
           </Button>
