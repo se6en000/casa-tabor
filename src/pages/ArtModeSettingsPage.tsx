@@ -6,6 +6,7 @@ import { usePersonalArtMode, type PersonalArtwork } from '../hooks/usePersonalAr
 import {
   type ArtSourceMode,
   SIGNATURE_STYLE_OPTIONS,
+  SIGNATURE_OPACITY_OPTIONS,
   type SignatureStyle,
   type SignaturePosition,
   type SignatureColor,
@@ -224,6 +225,7 @@ export default function ArtModeSettingsPage() {
   const [editSignaturePosition, setEditSignaturePosition] = useState<SignaturePosition>('bottom-right')
   const [editSignatureColor, setEditSignatureColor] = useState<SignatureColor>('auto')
   const [editSignatureSize, setEditSignatureSize] = useState<SignatureSize>('md')
+  const [editSignatureOpacity, setEditSignatureOpacity] = useState<number>(0.55)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const disabledArtworkIds = settings.disabledArtworkIds ?? []
@@ -292,6 +294,7 @@ export default function ArtModeSettingsPage() {
     setEditSignaturePosition(item.signaturePosition || 'bottom-right')
     setEditSignatureColor(item.signatureColor || 'auto')
     setEditSignatureSize(item.signatureSize || 'md')
+    setEditSignatureOpacity(item.signatureOpacity != null ? item.signatureOpacity : 0.55)
   }
 
   const handleSaveEdit = async () => {
@@ -308,6 +311,7 @@ export default function ArtModeSettingsPage() {
         signaturePosition: editSignaturePosition,
         signatureColor: editSignatureColor,
         signatureSize: editSignatureSize,
+        signatureOpacity: editSignatureOpacity,
       })
 
       // Sync disabled status for this device
@@ -857,28 +861,41 @@ export default function ArtModeSettingsPage() {
                         ? "font-['Alex_Brush',_cursive] font-normal text-3xl sm:text-4xl md:text-5xl"
                         : "font-['Alex_Brush',_cursive] font-normal text-xl sm:text-2xl md:text-3xl"
 
+                    const opacityClass =
+                      editSignatureOpacity === 0.35
+                        ? 'opacity-35'
+                        : editSignatureOpacity === 0.7
+                        ? 'opacity-70'
+                        : editSignatureOpacity === 0.9
+                        ? 'opacity-90'
+                        : 'opacity-55'
+
                     const colorClass =
                       editSignatureColor === 'light'
-                        ? 'text-stone-100 drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)] mix-blend-screen'
+                        ? 'text-stone-100 drop-shadow-[0_1px_2px_rgba(0,0,0,0.75)] mix-blend-screen'
                         : editSignatureColor === 'sepia'
-                        ? 'text-amber-950/90 drop-shadow-[0_1px_1px_rgba(255,255,255,0.45)] mix-blend-multiply'
-                        : 'text-stone-900/90 drop-shadow-[0_1px_1px_rgba(255,255,255,0.45)] mix-blend-multiply'
+                        ? 'text-amber-950 drop-shadow-[0_0.5px_0.5px_rgba(255,255,255,0.35)] mix-blend-multiply'
+                        : 'text-stone-900 drop-shadow-[0_0.5px_0.5px_rgba(255,255,255,0.35)] mix-blend-multiply'
 
                     return (
                       <div
                         className={cn(
-                          'absolute pointer-events-none select-none z-10 leading-normal pt-2 pb-1 max-w-[65%] truncate transition-all duration-200',
+                          'absolute pointer-events-none select-none z-10 leading-normal pt-2 pb-1 max-w-[65%] truncate transition-all duration-200 blur-[0.2px]',
                           isBottomLeft
                             ? 'bottom-2 sm:bottom-3 left-3 sm:left-5 text-left rotate-1'
                             : 'bottom-2 sm:bottom-3 right-3 sm:right-5 text-right -rotate-1',
                           fontClass,
-                          colorClass
+                          colorClass,
+                          opacityClass
                         )}
                       >
                         {editSignatureText || editArtist || artworkToEdit.title}
                       </div>
                     )
                   })()}
+
+                  {/* Cold-Press Watercolor Paper Grain & Canvas Tooth Overlay */}
+                  <div className="paper-grain-overlay z-15 opacity-55" />
 
                   {/* Crop to 16:9 Action Chip on Preview */}
                   <div className="absolute top-2.5 right-2.5 z-20">
@@ -1062,6 +1079,25 @@ export default function ArtModeSettingsPage() {
                           className="w-full justify-center text-caption py-2 px-2.5"
                         >
                           <span className="truncate">{tone.label}</span>
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-caption font-medium text-casa-navy block mb-1">
+                      Ink Density & Translucency
+                    </label>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {SIGNATURE_OPACITY_OPTIONS.map(opOpt => (
+                        <Button
+                          key={opOpt.value}
+                          type="button"
+                          variant={editSignatureOpacity === opOpt.value ? 'strong' : 'secondary'}
+                          onClick={() => setEditSignatureOpacity(opOpt.value)}
+                          className="w-full justify-center text-caption py-2 px-1"
+                        >
+                          <span className="truncate">{opOpt.label}</span>
                         </Button>
                       ))}
                     </div>

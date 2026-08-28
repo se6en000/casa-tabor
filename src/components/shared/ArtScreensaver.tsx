@@ -450,7 +450,11 @@ export default function ArtScreensaver({
               {/* Artist Signature Overlay on Active Artwork */}
               {currentToDisplay.signature?.enabled && Boolean(currentToDisplay.signature.text) && (() => {
                 const sigStyle = SIGNATURE_STYLES[currentToDisplay.signature.style] || SIGNATURE_STYLES.fountain
-                const inkStyle = getSignatureInkStyle(currentToDisplay.signature.color, dominantColor)
+                const inkStyle = getSignatureInkStyle(
+                  currentToDisplay.signature.color,
+                  dominantColor,
+                  currentToDisplay.signature.opacity ?? 0.55
+                )
                 const sizeScale = SIGNATURE_SIZE_SCALES[currentToDisplay.signature.size || 'md'] || 1.0
                 const isBottomLeft = currentToDisplay.signature.position === 'bottom-left'
                 return (
@@ -471,6 +475,8 @@ export default function ArtScreensaver({
                       lineHeight: 1.3,
                       paddingTop: '8px',
                       paddingBottom: '4px',
+                      filter: 'blur(0.2px) contrast(1.05)',
+                      textRendering: 'geometricPrecision',
                       pointerEvents: 'none',
                       userSelect: 'none',
                       zIndex: 3,
@@ -518,7 +524,11 @@ export default function ArtScreensaver({
               {/* Artist Signature on Outgoing Layer */}
               {outgoingArtwork.signature?.enabled && Boolean(outgoingArtwork.signature.text) && (() => {
                 const sigStyle = SIGNATURE_STYLES[outgoingArtwork.signature.style] || SIGNATURE_STYLES.fountain
-                const inkStyle = getSignatureInkStyle(outgoingArtwork.signature.color, dominantColor)
+                const inkStyle = getSignatureInkStyle(
+                  outgoingArtwork.signature.color,
+                  dominantColor,
+                  outgoingArtwork.signature.opacity ?? 0.55
+                )
                 const sizeScale = SIGNATURE_SIZE_SCALES[outgoingArtwork.signature.size || 'md'] || 1.0
                 const isBottomLeft = outgoingArtwork.signature.position === 'bottom-left'
                 return (
@@ -539,6 +549,8 @@ export default function ArtScreensaver({
                       lineHeight: 1.3,
                       paddingTop: '8px',
                       paddingBottom: '4px',
+                      filter: 'blur(0.2px) contrast(1.05)',
+                      textRendering: 'geometricPrecision',
                       pointerEvents: 'none',
                       userSelect: 'none',
                       zIndex: 3,

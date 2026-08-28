@@ -29,6 +29,7 @@ export interface PersonalArtwork {
   signaturePosition?: SignaturePosition
   signatureColor?: SignatureColor
   signatureSize?: SignatureSize
+  signatureOpacity?: number
 }
 
 interface PersonalArtworkRow {
@@ -45,6 +46,7 @@ interface PersonalArtworkRow {
   signature_position?: string | null
   signature_color?: string | null
   signature_size?: string | null
+  signature_opacity?: number | null
 }
 
 export const personalArtworkQueryKey = ['personal-artwork'] as const
@@ -53,7 +55,7 @@ export const artSourceConfigQueryKey = ['settings', ART_SOURCE_SETTING_KEY] as c
 async function loadPersonalArtwork(): Promise<PersonalArtwork[]> {
   let { data, error } = await supabase
     .from('personal_artwork')
-    .select('id, storage_path, title, artist, mime_type, byte_size, created_at, signature_enabled, signature_text, signature_style, signature_position, signature_color, signature_size')
+    .select('id, storage_path, title, artist, mime_type, byte_size, created_at, signature_enabled, signature_text, signature_style, signature_position, signature_color, signature_size, signature_opacity')
     .order('sort_order')
     .order('created_at')
 
@@ -82,6 +84,7 @@ async function loadPersonalArtwork(): Promise<PersonalArtwork[]> {
     signaturePosition: (row.signature_position as SignaturePosition) || 'bottom-right',
     signatureColor: (row.signature_color as SignatureColor) || 'auto',
     signatureSize: (row.signature_size as SignatureSize) || 'md',
+    signatureOpacity: row.signature_opacity != null ? Number(row.signature_opacity) : 0.55,
   }))
 }
 
@@ -180,6 +183,7 @@ export function usePersonalArtMode() {
       signaturePosition,
       signatureColor,
       signatureSize,
+      signatureOpacity,
     }: {
       id: string
       title: string
@@ -190,6 +194,7 @@ export function usePersonalArtMode() {
       signaturePosition?: SignaturePosition
       signatureColor?: SignatureColor
       signatureSize?: SignatureSize
+      signatureOpacity?: number
     }) => {
       const cleanTitle = title.trim() || 'Untitled'
       const cleanArtist = artist?.trim() || null
@@ -204,6 +209,7 @@ export function usePersonalArtMode() {
       if (signaturePosition !== undefined) updatePayload.signature_position = signaturePosition
       if (signatureColor !== undefined) updatePayload.signature_color = signatureColor
       if (signatureSize !== undefined) updatePayload.signature_size = signatureSize
+      if (signatureOpacity !== undefined) updatePayload.signature_opacity = signatureOpacity
 
       const { error } = await supabase
         .from('personal_artwork')

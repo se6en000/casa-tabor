@@ -90,6 +90,8 @@ export type SignaturePosition = 'bottom-right' | 'bottom-left'
 export type SignatureColor = 'auto' | 'dark' | 'light' | 'sepia'
 export type SignatureSize = 'sm' | 'md' | 'lg' | 'xl'
 
+export type SignatureOpacity = 0.35 | 0.55 | 0.7 | 0.9
+
 export interface SignatureConfig {
   enabled: boolean
   text: string
@@ -97,6 +99,7 @@ export interface SignatureConfig {
   position: SignaturePosition
   color: SignatureColor
   size?: SignatureSize
+  opacity?: number
 }
 
 export const SIGNATURE_SIZE_OPTIONS = [
@@ -104,6 +107,13 @@ export const SIGNATURE_SIZE_OPTIONS = [
   { value: 'md', label: 'Medium' },
   { value: 'lg', label: 'Large' },
   { value: 'xl', label: 'Extra Large' },
+] as const
+
+export const SIGNATURE_OPACITY_OPTIONS = [
+  { value: 0.35, label: '35% Faint' },
+  { value: 0.55, label: '55% Pencil' },
+  { value: 0.7, label: '70% Natural' },
+  { value: 0.9, label: '90% Bold' },
 ] as const
 
 export const SIGNATURE_SIZE_SCALES: Record<SignatureSize, number> = {
@@ -164,26 +174,29 @@ export const SIGNATURE_COLOR_OPTIONS = [
 
 export function getSignatureInkStyle(
   color: SignatureColor,
-  dominantColorHex = ''
+  dominantColorHex = '',
+  opacity = 0.55
 ): { color: string; textShadow: string; blendMode?: 'normal' | 'multiply' | 'screen' } {
+  const alpha = Math.max(0.2, Math.min(1.0, opacity))
+
   if (color === 'dark') {
     return {
-      color: 'rgba(25, 23, 20, 0.88)',
-      textShadow: '0 0.5px 1px rgba(255, 255, 255, 0.35)',
+      color: `rgba(22, 20, 18, ${alpha})`,
+      textShadow: `0 0.5px 0.5px rgba(255, 255, 255, ${Math.min(0.25, alpha * 0.35)})`,
       blendMode: 'multiply',
     }
   }
   if (color === 'sepia') {
     return {
-      color: 'rgba(68, 48, 33, 0.90)',
-      textShadow: '0 0.5px 1px rgba(255, 255, 255, 0.40)',
+      color: `rgba(62, 42, 28, ${alpha})`,
+      textShadow: `0 0.5px 0.5px rgba(255, 255, 255, ${Math.min(0.25, alpha * 0.35)})`,
       blendMode: 'multiply',
     }
   }
   if (color === 'light') {
     return {
-      color: 'rgba(248, 245, 238, 0.92)',
-      textShadow: '0 1px 2px rgba(0, 0, 0, 0.65), 0 0.5px 0.5px rgba(0, 0, 0, 0.85)',
+      color: `rgba(248, 245, 238, ${alpha})`,
+      textShadow: `0 1px 2px rgba(0, 0, 0, ${Math.min(0.7, alpha * 0.85)}), 0 0.5px 0.5px rgba(0, 0, 0, 0.9)`,
       blendMode: 'screen',
     }
   }
@@ -206,14 +219,14 @@ export function getSignatureInkStyle(
   const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
   if (luminance < 0.42) {
     return {
-      color: 'rgba(248, 245, 238, 0.92)',
-      textShadow: '0 1px 2px rgba(0, 0, 0, 0.75), 0 0.5px 0.5px rgba(0, 0, 0, 0.90)',
+      color: `rgba(248, 245, 238, ${alpha})`,
+      textShadow: `0 1px 2px rgba(0, 0, 0, ${Math.min(0.7, alpha * 0.85)}), 0 0.5px 0.5px rgba(0, 0, 0, 0.9)`,
       blendMode: 'screen',
     }
   }
   return {
-    color: 'rgba(28, 24, 20, 0.88)',
-    textShadow: '0 0.5px 1px rgba(255, 255, 255, 0.35)',
+    color: `rgba(24, 21, 18, ${alpha})`,
+    textShadow: `0 0.5px 0.5px rgba(255, 255, 255, ${Math.min(0.25, alpha * 0.35)})`,
     blendMode: 'multiply',
   }
 }
