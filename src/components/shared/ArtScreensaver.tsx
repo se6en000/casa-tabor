@@ -2,7 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useArtwork, type Artwork } from '../../hooks/useArtwork'
 import { generateAdaptiveMatColor, generateHarmonizedBevel, MAT_PRESETS, type MatPresetKey } from '../../utils/colorUtils'
 import { getTextureStyle, PAPER_GRAIN_TEXTURE } from '../../utils/textureUtils'
-import { sanitizeArtworkMetadata, SIGNATURE_STYLES, getSignatureInkStyle } from '../../lib/artModeLibrary'
+import {
+  sanitizeArtworkMetadata,
+  SIGNATURE_STYLES,
+  SIGNATURE_SIZE_SCALES,
+  getSignatureInkStyle,
+} from '../../lib/artModeLibrary'
 import { useTheme } from '../../contexts/ThemeContext'
 
 const SENSOR = 'http://127.0.0.1:8765'
@@ -352,6 +357,7 @@ export default function ArtScreensaver({
           {artwork?.signature?.enabled && Boolean(artwork.signature.text) && (() => {
             const sigStyle = SIGNATURE_STYLES[artwork.signature.style] || SIGNATURE_STYLES.fountain
             const inkStyle = getSignatureInkStyle(artwork.signature.color, dominantColor)
+            const sizeScale = SIGNATURE_SIZE_SCALES[artwork.signature.size || 'md'] || 1.0
             const isBottomLeft = artwork.signature.position === 'bottom-left'
             return (
               <div
@@ -361,7 +367,7 @@ export default function ArtScreensaver({
                   bottom: 'clamp(14px, 3.2%, 36px)',
                   ...(isBottomLeft ? { left: 'clamp(16px, 3.5%, 40px)', textAlign: 'left' } : { right: 'clamp(16px, 3.5%, 40px)', textAlign: 'right' }),
                   fontFamily: sigStyle.fontFamily,
-                  fontSize: `clamp(${sigStyle.baseFontSizeRem * 0.9}rem, 2vw, ${sigStyle.baseFontSizeRem * 1.6}rem)`,
+                  fontSize: `clamp(${sigStyle.baseFontSizeRem * 0.9 * sizeScale}rem, ${2 * sizeScale}vw, ${sigStyle.baseFontSizeRem * 1.6 * sizeScale}rem)`,
                   fontWeight: sigStyle.weight,
                   color: inkStyle.color,
                   textShadow: inkStyle.textShadow,
@@ -374,7 +380,7 @@ export default function ArtScreensaver({
                   zIndex: 2,
                   opacity: loaded ? 1 : 0,
                   transition: 'opacity 600ms ease-out',
-                  maxWidth: '50%',
+                  maxWidth: sizeScale > 1.2 ? '65%' : '50%',
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',

@@ -9,6 +9,7 @@ import {
   type SignatureStyle,
   type SignaturePosition,
   type SignatureColor,
+  type SignatureSize,
 } from '../lib/artModeLibrary'
 import { cn } from '../utils/cn'
 import { SettingsPageHeader, SettingsToggle as Toggle, ArtworkCropModal, PersonalArtworkCard } from '../components/settings'
@@ -222,6 +223,7 @@ export default function ArtModeSettingsPage() {
   const [editSignatureStyle, setEditSignatureStyle] = useState<SignatureStyle>('fountain')
   const [editSignaturePosition, setEditSignaturePosition] = useState<SignaturePosition>('bottom-right')
   const [editSignatureColor, setEditSignatureColor] = useState<SignatureColor>('auto')
+  const [editSignatureSize, setEditSignatureSize] = useState<SignatureSize>('md')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const disabledArtworkIds = settings.disabledArtworkIds ?? []
@@ -289,6 +291,7 @@ export default function ArtModeSettingsPage() {
     setEditSignatureStyle(item.signatureStyle || 'fountain')
     setEditSignaturePosition(item.signaturePosition || 'bottom-right')
     setEditSignatureColor(item.signatureColor || 'auto')
+    setEditSignatureSize(item.signatureSize || 'md')
   }
 
   const handleSaveEdit = async () => {
@@ -304,6 +307,7 @@ export default function ArtModeSettingsPage() {
         signatureStyle: editSignatureStyle,
         signaturePosition: editSignaturePosition,
         signatureColor: editSignatureColor,
+        signatureSize: editSignatureSize,
       })
 
       // Sync disabled status for this device
@@ -816,11 +820,35 @@ export default function ArtModeSettingsPage() {
                 const isBottomLeft = editSignaturePosition === 'bottom-left'
                 const fontClass =
                   editSignatureStyle === 'brush'
-                    ? "font-['Caveat',_cursive] font-semibold text-lg sm:text-xl md:text-2xl"
+                    ? editSignatureSize === 'sm'
+                      ? "font-['Caveat',_cursive] font-semibold text-sm sm:text-base md:text-lg"
+                      : editSignatureSize === 'lg'
+                      ? "font-['Caveat',_cursive] font-semibold text-xl sm:text-2xl md:text-3xl"
+                      : editSignatureSize === 'xl'
+                      ? "font-['Caveat',_cursive] font-semibold text-2xl sm:text-3xl md:text-4xl"
+                      : "font-['Caveat',_cursive] font-semibold text-lg sm:text-xl md:text-2xl"
                     : editSignatureStyle === 'draft'
-                    ? "font-['Homemade_Apple',_cursive] font-normal text-xs sm:text-sm md:text-base"
+                    ? editSignatureSize === 'sm'
+                      ? "font-['Homemade_Apple',_cursive] font-normal text-3xs sm:text-2xs md:text-xs"
+                      : editSignatureSize === 'lg'
+                      ? "font-['Homemade_Apple',_cursive] font-normal text-sm sm:text-base md:text-lg"
+                      : editSignatureSize === 'xl'
+                      ? "font-['Homemade_Apple',_cursive] font-normal text-base sm:text-lg md:text-xl"
+                      : "font-['Homemade_Apple',_cursive] font-normal text-xs sm:text-sm md:text-base"
                     : editSignatureStyle === 'classic'
-                    ? "font-['Marck_Script',_cursive] font-normal text-base sm:text-lg md:text-xl"
+                    ? editSignatureSize === 'sm'
+                      ? "font-['Marck_Script',_cursive] font-normal text-xs sm:text-sm md:text-base"
+                      : editSignatureSize === 'lg'
+                      ? "font-['Marck_Script',_cursive] font-normal text-lg sm:text-xl md:text-2xl"
+                      : editSignatureSize === 'xl'
+                      ? "font-['Marck_Script',_cursive] font-normal text-xl sm:text-2xl md:text-3xl"
+                      : "font-['Marck_Script',_cursive] font-normal text-base sm:text-lg md:text-xl"
+                    : editSignatureSize === 'sm'
+                    ? "font-['Alex_Brush',_cursive] font-normal text-base sm:text-lg md:text-xl"
+                    : editSignatureSize === 'lg'
+                    ? "font-['Alex_Brush',_cursive] font-normal text-2xl sm:text-3xl md:text-4xl"
+                    : editSignatureSize === 'xl'
+                    ? "font-['Alex_Brush',_cursive] font-normal text-3xl sm:text-4xl md:text-5xl"
                     : "font-['Alex_Brush',_cursive] font-normal text-xl sm:text-2xl md:text-3xl"
 
                 const colorClass =
@@ -833,7 +861,8 @@ export default function ArtModeSettingsPage() {
                 return (
                   <div
                     className={cn(
-                      'absolute pointer-events-none select-none z-10 leading-none max-w-[55%] truncate transition-all duration-200',
+                      'absolute pointer-events-none select-none z-10 leading-none truncate transition-all duration-200',
+                      editSignatureSize === 'lg' || editSignatureSize === 'xl' ? 'max-w-[70%]' : 'max-w-[55%]',
                       isBottomLeft
                         ? 'bottom-3 sm:bottom-4 left-3 sm:left-5 text-left rotate-1'
                         : 'bottom-3 sm:bottom-4 right-3 sm:right-5 text-right -rotate-1',
@@ -969,6 +998,30 @@ export default function ArtModeSettingsPage() {
                       >
                         ↙ Bottom Left
                       </Button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-caption font-medium text-casa-navy block mb-1">
+                      Signature Size
+                    </label>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {[
+                        { value: 'sm', label: 'Small' },
+                        { value: 'md', label: 'Medium' },
+                        { value: 'lg', label: 'Large' },
+                        { value: 'xl', label: 'Extra Large' },
+                      ].map(sizeOpt => (
+                        <Button
+                          key={sizeOpt.value}
+                          type="button"
+                          variant={editSignatureSize === sizeOpt.value ? 'strong' : 'secondary'}
+                          onClick={() => setEditSignatureSize(sizeOpt.value as SignatureSize)}
+                          className="w-full justify-center text-caption py-2 px-1"
+                        >
+                          <span className="truncate">{sizeOpt.label}</span>
+                        </Button>
+                      ))}
                     </div>
                   </div>
 

@@ -373,6 +373,7 @@ export function useArtwork(rotateSecs = 240, shuffle = true) {
             style: item.signatureStyle || 'fountain',
             position: item.signaturePosition || 'bottom-right',
             color: item.signatureColor || 'auto',
+            size: item.signatureSize || 'md',
           }
         : undefined,
     }))

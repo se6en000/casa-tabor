@@ -88,6 +88,7 @@ export function getPersonalArtworkValidationError(file: ArtworkFileDescriptor): 
 export type SignatureStyle = 'fountain' | 'brush' | 'draft' | 'classic'
 export type SignaturePosition = 'bottom-right' | 'bottom-left'
 export type SignatureColor = 'auto' | 'dark' | 'light' | 'sepia'
+export type SignatureSize = 'sm' | 'md' | 'lg' | 'xl'
 
 export interface SignatureConfig {
   enabled: boolean
@@ -95,6 +96,21 @@ export interface SignatureConfig {
   style: SignatureStyle
   position: SignaturePosition
   color: SignatureColor
+  size?: SignatureSize
+}
+
+export const SIGNATURE_SIZE_OPTIONS = [
+  { value: 'sm', label: 'Small' },
+  { value: 'md', label: 'Medium' },
+  { value: 'lg', label: 'Large' },
+  { value: 'xl', label: 'Extra Large' },
+] as const
+
+export const SIGNATURE_SIZE_SCALES: Record<SignatureSize, number> = {
+  sm: 0.75,
+  md: 1.0,
+  lg: 1.35,
+  xl: 1.75,
 }
 
 export const SIGNATURE_STYLES: Record<
