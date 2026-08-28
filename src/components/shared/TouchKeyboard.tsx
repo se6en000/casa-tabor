@@ -296,6 +296,8 @@ export default function TouchKeyboard() {
   const audioCtxRef = useRef<AudioContext | null>(null)
   const backspaceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const backspaceIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const backspaceStartXRef = useRef<number | null>(null)
+  const longPressAltTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastShiftTapRef = useRef<number>(0)
   const spaceDragStartXRef = useRef<number | null>(null)
   const spaceDragCaretStartRef = useRef<number>(0)
@@ -639,6 +641,34 @@ export default function TouchKeyboard() {
     })
   }, [playAcousticTap, withTarget])
 
+  const deletePreviousWord = useCallback(() => {
+    playAcousticTap('delete')
+    withTarget((el) => {
+      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+        const val = el.value
+        const start = el.selectionStart ?? val.length
+        if (start <= 0) return
+        const before = val.slice(0, start)
+        const match = before.match(/(\s*\S+)\s*$/)
+        const deleteLen = match ? match[0].length : 1
+        const replaceStart = Math.max(0, start - deleteLen)
+        if (canUseRangeText(el)) {
+          el.setRangeText('', replaceStart, start, 'end')
+        } else {
+          el.value = val.slice(0, replaceStart) + val.slice(start)
+          try {
+            el.setSelectionRange(replaceStart, replaceStart)
+          } catch {
+            // Ignore
+          }
+        }
+        emitInput(el)
+      } else {
+        emitKey(el, 'Backspace')
+      }
+    })
+  }, [playAcousticTap, withTarget])
+
   // Hold-to-Repeat Backspace Engine
   const startBackspaceRepeat = useCallback(() => {
     handleBackspace()
@@ -662,6 +692,64 @@ export default function TouchKeyboard() {
     if (backspaceIntervalRef.current) clearInterval(backspaceIntervalRef.current)
     backspaceTimerRef.current = null
     backspaceIntervalRef.current = null
+  }, [])
+
+  const handleBackspacePointerDown = useCallback((e: ReactPointerEvent<HTMLButtonElement>) => {
+    backspaceStartXRef.current = e.clientX
+    startBackspaceRepeat()
+  }, [startBackspaceRepeat])
+
+  const handleBackspacePointerMove = useCallback((e: ReactPointerEvent<HTMLButtonElement>) => {
+    if (backspaceStartXRef.current !== null) {
+      const deltaX = backspaceStartXRef.current - e.clientX
+      if (deltaX > 28) {
+        stopBackspaceRepeat()
+        deletePreviousWord()
+        backspaceStartXRef.current = null
+      }
+    }
+  }, [stopBackspaceRepeat, deletePreviousWord])
+
+  const handleBackspacePointerUp = useCallback(() => {
+    backspaceStartXRef.current = null
+    stopBackspaceRepeat()
+  }, [stopBackspaceRepeat])
+
+  // Long-press alternate character helper
+  const startKeyWithAlt = useCallback((displayChar: string, altChar?: string) => {
+    insertText(displayChar)
+    if (longPressAltTimerRef.current) clearTimeout(longPressAltTimerRef.current)
+    if (altChar) {
+      longPressAltTimerRef.current = setTimeout(() => {
+        withTarget((el) => {
+          if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+            const val = el.value
+            const pos = el.selectionStart ?? val.length
+            if (pos > 0 && val.slice(pos - 1, pos) === displayChar) {
+              if (canUseRangeText(el)) {
+                el.setRangeText(altChar, pos - 1, pos, 'end')
+              } else {
+                el.value = val.slice(0, pos - 1) + altChar + val.slice(pos)
+                try {
+                  el.setSelectionRange(pos, pos)
+                } catch {
+                  // Ignore
+                }
+              }
+              emitInput(el)
+              playAcousticTap('action')
+            }
+          }
+        })
+      }, 350)
+    }
+  }, [insertText, withTarget, playAcousticTap])
+
+  const cancelKeyAltTimer = useCallback(() => {
+    if (longPressAltTimerRef.current) {
+      clearTimeout(longPressAltTimerRef.current)
+      longPressAltTimerRef.current = null
+    }
   }, [])
 
   // Shift & Caps Lock State Machine
@@ -1055,8 +1143,11 @@ export default function TouchKeyboard() {
                         type="button"
                         onPointerDown={(e) => {
                           e.preventDefault()
-                          insertText(displayChar)
+                          startKeyWithAlt(displayChar, alt)
                         }}
+                        onPointerUp={cancelKeyAltTimer}
+                        onPointerLeave={cancelKeyAltTimer}
+                        onPointerCancel={cancelKeyAltTimer}
                         className="relative rounded-xl bg-casa-bg border border-casa-border text-casa-navy font-semibold flex items-center justify-center active:bg-casa-gold/20 active:border-casa-gold active:scale-95 transition-all text-headline-sm shadow-sm"
                         style={{ height: size === 'compact' ? '42px' : size === 'large' ? '54px' : '48px' }}
                       >
@@ -1079,8 +1170,11 @@ export default function TouchKeyboard() {
                         type="button"
                         onPointerDown={(e) => {
                           e.preventDefault()
-                          insertText(displayChar)
+                          startKeyWithAlt(displayChar, alt)
                         }}
+                        onPointerUp={cancelKeyAltTimer}
+                        onPointerLeave={cancelKeyAltTimer}
+                        onPointerCancel={cancelKeyAltTimer}
                         className="relative flex-1 rounded-xl bg-casa-bg border border-casa-border text-casa-navy font-semibold flex items-center justify-center active:bg-casa-gold/20 active:border-casa-gold active:scale-95 transition-all text-headline-sm shadow-sm"
                         style={{ height: size === 'compact' ? '42px' : size === 'large' ? '54px' : '48px' }}
                       >
@@ -1117,8 +1211,11 @@ export default function TouchKeyboard() {
                         type="button"
                         onPointerDown={(e) => {
                           e.preventDefault()
-                          insertText(displayChar)
+                          startKeyWithAlt(displayChar, alt)
                         }}
+                        onPointerUp={cancelKeyAltTimer}
+                        onPointerLeave={cancelKeyAltTimer}
+                        onPointerCancel={cancelKeyAltTimer}
                         className="relative flex-1 rounded-xl bg-casa-bg border border-casa-border text-casa-navy font-semibold flex items-center justify-center active:bg-casa-gold/20 active:border-casa-gold active:scale-95 transition-all text-headline-sm shadow-sm"
                         style={{ height: size === 'compact' ? '42px' : size === 'large' ? '54px' : '48px' }}
                       >
@@ -1130,21 +1227,22 @@ export default function TouchKeyboard() {
                     )
                   })}
 
-                  {/* Backspace key (Hold-to-Repeat) */}
+                  {/* Backspace key (Hold-to-Repeat + Swipe-to-Delete-Word) */}
                   <button
                     type="button"
                     onPointerDown={(e) => {
                       e.preventDefault()
-                      startBackspaceRepeat()
+                      handleBackspacePointerDown(e)
                     }}
+                    onPointerMove={handleBackspacePointerMove}
                     onPointerUp={(e) => {
                       e.preventDefault()
-                      stopBackspaceRepeat()
+                      handleBackspacePointerUp()
                     }}
-                    onPointerLeave={stopBackspaceRepeat}
-                    onPointerCancel={stopBackspaceRepeat}
+                    onPointerLeave={handleBackspacePointerUp}
+                    onPointerCancel={handleBackspacePointerUp}
                     aria-label="Backspace"
-                    className="flex-[1.4] rounded-xl bg-casa-bg border border-casa-border text-casa-navy flex items-center justify-center active:bg-red-500/10 active:border-red-400 active:scale-95 transition-all shadow-sm"
+                    className="flex-[1.4] rounded-xl bg-casa-bg border border-casa-border text-casa-navy flex items-center justify-center active:bg-red-500/10 active:border-red-400 active:scale-95 transition-all shadow-sm touch-none"
                     style={{ height: size === 'compact' ? '42px' : size === 'large' ? '54px' : '48px' }}
                   >
                     <Delete size={20} />
