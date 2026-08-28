@@ -10,6 +10,9 @@ export interface ColorAnalysis {
   matColor: string
   isLight: boolean
 }
+export const DEFAULT_DOMINANT_COLOR = '#808080'
+export const DEFAULT_MAT_COLOR = '#E8E3D7'
+
 export const MAT_PRESETS = {
   auto: 'auto',
   warm_linen: '#E8E3D7',     // Soft warm linen / oatmeal (RH & Aman benchmark)

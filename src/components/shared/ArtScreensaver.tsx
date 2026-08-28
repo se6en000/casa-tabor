@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { useArtwork, type Artwork } from '../../hooks/useArtwork'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
+import { useArtwork, artworkMetadataCache, type Artwork } from '../../hooks/useArtwork'
 import { generateAdaptiveMatColor, generateHarmonizedBevel, MAT_PRESETS, type MatPresetKey } from '../../utils/colorUtils'
 import { getTextureStyle, PAPER_GRAIN_TEXTURE } from '../../utils/textureUtils'
 import {
@@ -73,7 +73,7 @@ export default function ArtScreensaver({
   plaqueMode = 'fade',
   matPreset = 'auto',
 }: Props) {
-  const { artwork, loaded, onLoad, onError, next } = useArtwork(rotationMins * 60, shuffle)
+  const { artwork, onLoad, onError, next, prev } = useArtwork(rotationMins * 60, shuffle)
   const { isMidnightActive } = useTheme()
   const [visible, setVisible] = useState(false)
   const [dismissable, setDismissable] = useState(false)
@@ -81,24 +81,27 @@ export default function ArtScreensaver({
   const [imageRatio, setImageRatio] = useState(16 / 9)
   const [matColor, setMatColor] = useState('#F6F3EA')
   const [dominantColor, setDominantColor] = useState('#808080')
-  const [matTransition, setMatTransition] = useState(false)
-  const [driftIndex, setDriftIndex] = useState(0)
   const [swiping, setSwiping] = useState(false)
+  const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | null>(null)
+  const [activeArtwork, setActiveArtwork] = useState<Artwork | null>(artwork)
+  const [outgoingArtwork, setOutgoingArtwork] = useState<Artwork | null>(null)
+  const [crossFadeActive, setCrossFadeActive] = useState(false)
   const [viewport, setViewport] = useState(() => ({
     width: typeof window !== 'undefined' ? window.innerWidth : 1920,
     height: typeof window !== 'undefined' ? window.innerHeight : 1080,
   }))
-  
-  // Previous artwork for cross-fade
-  const [prevArtwork, setPrevArtwork] = useState<Artwork | null>(null)
-  
+
   const touchStartXRef = useRef<number | null>(null)
+  const touchStartYRef = useRef<number | null>(null)
+  const fadeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const textureStyle = useMemo(() => getTextureStyle(), [])
   const darkThemeActive = useMemo(() => {
     if (typeof window === 'undefined') return isMidnightActive
     const bg = getComputedStyle(document.documentElement).getPropertyValue('--color-casa-bg')
     return isMidnightActive || isDarkColor(bg)
   }, [isMidnightActive])
+
   const matTexture = darkThemeActive ? MIDNIGHT_MAT_TEXTURE : textureStyle.backgroundImage
   const matBlendMode = darkThemeActive ? 'normal' : textureStyle.backgroundBlendMode
   const paperBaseColor = darkThemeActive ? PAPER_BASE_DARK : PAPER_BASE_LIGHT
@@ -132,9 +135,10 @@ export default function ArtScreensaver({
     return { width: Math.round(width), height: Math.round(height) }
   }, [viewport.width, viewport.height, imageRatio, minArtWidthVw])
 
+  // Screen saver mount and ambient display brightness sync
   useEffect(() => {
-    const t1 = setTimeout(() => setVisible(true), 50)
-    const t2 = setTimeout(() => setDismissable(true), 1500)
+    const t1 = setTimeout(() => setVisible(true), 40)
+    const t2 = setTimeout(() => setDismissable(true), 1200)
     fetch(`${SENSOR}/display/art-mode`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -147,6 +151,7 @@ export default function ArtScreensaver({
     }
   }, [artDimOffset])
 
+  // Viewport resize tracking for kiosk & mobile
   useEffect(() => {
     function updateViewport() {
       setViewport({ width: window.innerWidth, height: window.innerHeight })
@@ -155,50 +160,81 @@ export default function ArtScreensaver({
     return () => window.removeEventListener('resize', updateViewport)
   }, [])
 
+  // Smooth Artwork Dissolve Transition Pipeline
   useEffect(() => {
-    // When artwork changes, save the current one as previous for cross-fade
-    if (artwork) {
-      setPrevArtwork(artwork)
+    if (!artwork) return
+
+    // Check if image ratio or colors are already in prefetch cache
+    const cached = artworkMetadataCache.get(artwork.imageUrl)
+    if (cached) {
+      setImageRatio(cached.aspectRatio)
+      if (!darkThemeActive && matPreset === 'auto' && adaptiveMatColor) {
+        setMatColor(cached.matColor)
+        setDominantColor(cached.dominantColor)
+      }
     }
-  }, [artwork?.id])
 
-  useEffect(() => {
-    const t = setInterval(() => setDriftIndex(i => (i + 1) % 4), 45000)
-    return () => clearInterval(t)
-  }, [])
+    if (!activeArtwork) {
+      setActiveArtwork(artwork)
+      return
+    }
 
+    if (activeArtwork.id !== artwork.id) {
+      setOutgoingArtwork(activeArtwork)
+      setActiveArtwork(artwork)
+      setCrossFadeActive(true)
+
+      if (fadeTimeoutRef.current) clearTimeout(fadeTimeoutRef.current)
+      fadeTimeoutRef.current = setTimeout(() => {
+        setOutgoingArtwork(null)
+        setCrossFadeActive(false)
+      }, 1400)
+    }
+  }, [artwork, activeArtwork, darkThemeActive, matPreset, adaptiveMatColor])
+
+  // Adaptive Mat Color & Harmonized Lighting Sync
   useEffect(() => {
     if (darkThemeActive) {
-      setMatTransition(false)
       setMatColor(MIDNIGHT_MAT_COLOR)
-      setTimeout(() => setMatTransition(true), 50)
       return
     }
 
     if (matPreset && matPreset !== 'auto' && MAT_PRESETS[matPreset]) {
-      setMatTransition(false)
       setMatColor(MAT_PRESETS[matPreset])
       setDominantColor('#808080')
-      setTimeout(() => setMatTransition(true), 50)
       return
     }
 
     if (!artwork?.imageUrl || !adaptiveMatColor) return
-    setMatTransition(false)
-    const timeout = setTimeout(async () => {
-      try {
-        const colorAnalysis = await generateAdaptiveMatColor(artwork.imageUrl)
-        setMatColor(colorAnalysis.matColor)
-        setDominantColor(colorAnalysis.dominant)
-        setTimeout(() => setMatTransition(true), 50)
-      } catch {
-        setMatColor('#E8E3D7')
-        setDominantColor('#808080')
-      }
-    }, 50)
-    return () => clearTimeout(timeout)
+
+    const cached = artworkMetadataCache.get(artwork.imageUrl)
+    if (cached) {
+      setMatColor(cached.matColor)
+      setDominantColor(cached.dominantColor)
+      return
+    }
+
+    let cancelled = false
+    void generateAdaptiveMatColor(artwork.imageUrl)
+      .then(analysis => {
+        if (!cancelled) {
+          setMatColor(analysis.matColor)
+          setDominantColor(analysis.dominant)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setMatColor('#E8E3D7')
+          setDominantColor('#808080')
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
   }, [artwork?.id, artwork?.imageUrl, adaptiveMatColor, darkThemeActive, matPreset])
 
+  // Plaque reveal timer
   useEffect(() => {
     if (plaqueMode === 'hidden') {
       setPlaqueVisible(false)
@@ -208,59 +244,120 @@ export default function ArtScreensaver({
       setPlaqueVisible(true)
       return
     }
-    // 'fade' mode: reveal for 5.5 seconds then smoothly fade out
+    // 'fade' mode: reveal for 6 seconds then smoothly fade out
     setPlaqueVisible(true)
     const timer = setTimeout(() => {
       setPlaqueVisible(false)
-    }, 5500)
+    }, 6000)
     return () => clearTimeout(timer)
-  }, [artwork?.id, loaded, plaqueMode])
+  }, [artwork?.id, plaqueMode])
 
-  function handleImgLoad(e: React.SyntheticEvent<HTMLImageElement>) {
-    const img = e.currentTarget
-    if (img.naturalWidth && img.naturalHeight) {
-      setImageRatio(img.naturalWidth / img.naturalHeight)
-    }
-    onLoad()
-  }
+  const handleImgLoad = useCallback(
+    (e: React.SyntheticEvent<HTMLImageElement>) => {
+      const img = e.currentTarget
+      if (img.naturalWidth && img.naturalHeight) {
+        setImageRatio(img.naturalWidth / img.naturalHeight)
+      }
+      onLoad()
+    },
+    [onLoad]
+  )
 
-  function handleDismiss() {
+  const handleDismiss = useCallback(() => {
     if (!dismissable) return
     setVisible(false)
     setTimeout(() => onDismiss?.(), 500)
-  }
+  }, [dismissable, onDismiss])
 
-  function handleNextPiece(e?: React.MouseEvent | React.TouchEvent) {
-    e?.stopPropagation()
-    setSwiping(true)
-    setTimeout(() => setSwiping(false), 260)
-    next()
-  }
+  const handleNextPiece = useCallback(
+    (e?: React.SyntheticEvent) => {
+      e?.stopPropagation()
+      setSwipeDirection('left')
+      setSwiping(true)
+      setTimeout(() => {
+        setSwiping(false)
+        setSwipeDirection(null)
+      }, 300)
+      next()
+    },
+    [next]
+  )
 
-  function handleTouchStart(e: React.TouchEvent<HTMLDivElement>) {
+  const handlePrevPiece = useCallback(
+    (e?: React.SyntheticEvent) => {
+      e?.stopPropagation()
+      setSwipeDirection('right')
+      setSwiping(true)
+      setTimeout(() => {
+        setSwiping(false)
+        setSwipeDirection(null)
+      }, 300)
+      prev()
+    },
+    [prev]
+  )
+
+  // Keyboard navigation (Arrow keys to switch, Escape/Space to dismiss)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight') {
+        e.preventDefault()
+        handleNextPiece()
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault()
+        handlePrevPiece()
+      } else if (e.key === 'Escape' || e.key === ' ' || e.key === 'Enter') {
+        e.preventDefault()
+        handleDismiss()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [handleNextPiece, handlePrevPiece, handleDismiss])
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
     touchStartXRef.current = e.touches[0]?.clientX ?? null
+    touchStartYRef.current = e.touches[0]?.clientY ?? null
     if (plaqueMode === 'fade' && !plaqueVisible) {
       setPlaqueVisible(true)
       setTimeout(() => setPlaqueVisible(false), 5000)
     }
   }
 
-  function handleTouchEnd(e: React.TouchEvent<HTMLDivElement>) {
+  const handleTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
     const startX = touchStartXRef.current
+    const startY = touchStartYRef.current
     if (startX == null) return
     const endX = e.changedTouches[0]?.clientX ?? startX
-    if (endX - startX < -50) handleNextPiece(e)
+    const endY = e.changedTouches[0]?.clientY ?? (startY ?? 0)
+    const diffX = endX - startX
+    const diffY = endY - (startY ?? 0)
+
+    // Horizontal swipe gesture
+    if (Math.abs(diffX) > 45 && Math.abs(diffX) > Math.abs(diffY)) {
+      if (diffX < 0) {
+        handleNextPiece(e)
+      } else {
+        handlePrevPiece(e)
+      }
+    }
     touchStartXRef.current = null
+    touchStartYRef.current = null
   }
 
-  const { title: cleanTitle, artist: cleanArtist } = artwork
-    ? sanitizeArtworkMetadata(artwork.title, artwork.artist)
+  const currentToDisplay = activeArtwork || artwork
+  const { title: cleanTitle, artist: cleanArtist } = currentToDisplay
+    ? sanitizeArtworkMetadata(currentToDisplay.title, currentToDisplay.artist)
     : { title: '', artist: '' }
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center cursor-pointer select-none"
-      style={{ opacity: visible ? 1 : 0, transition: 'opacity 0.6s ease' }}
+      className="fixed inset-0 z-50 flex items-center justify-center cursor-pointer select-none overflow-hidden"
+      style={{
+        opacity: visible ? 1 : 0,
+        transition: 'opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1)',
+        backgroundColor: '#000000',
+      }}
       onClick={handleDismiss}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
@@ -274,12 +371,12 @@ export default function ArtScreensaver({
           backgroundPosition: textureStyle.backgroundPosition,
           backgroundAttachment: textureStyle.backgroundAttachment,
           backgroundBlendMode: matBlendMode,
-          // Subtle frame lip shadow (eliminates muddy black edge smudges)
+          // Subtle frame lip shadow with warm depth
           boxShadow: darkThemeActive
-            ? 'inset 0 2px 5px rgba(0,0,0,0.7), inset 0 0 1px rgba(0,0,0,0.9)'
+            ? 'inset 0 2px 6px rgba(0,0,0,0.7), inset 0 0 1px rgba(0,0,0,0.9)'
             : 'inset 0 2px 6px rgba(0,0,0,0.12), inset 0 1px 2px rgba(0,0,0,0.06), inset 0 0 1px rgba(0,0,0,0.10)',
           padding: '3.5vw',
-          transition: matTransition ? 'background-color 0.5s ease-out' : 'none',
+          transition: 'background-color 1.4s cubic-bezier(0.22, 1, 0.36, 1)',
         }}
       >
         {/* Passe-Partout Aperture Frame with 45-Degree Mitered Cotton Rag Bevel Core */}
@@ -301,98 +398,118 @@ export default function ArtScreensaver({
             boxShadow: darkThemeActive
               ? '0 0 0 1px rgba(0,0,0,0.9), 0 3px 12px rgba(0,0,0,0.6)'
               : '0 0 0 1px rgba(50,40,30,0.18), 0 3px 10px rgba(0,0,0,0.08)',
-            transform: ['translate3d(0px,0px,0)', 'translate3d(1px,0px,0)', 'translate3d(0px,1px,0)', 'translate3d(-1px,0px,0)'][driftIndex],
-            transition: swiping ? 'transform 260ms cubic-bezier(0.4, 0, 0.2, 1)' : 'transform 16s linear',
+            transform: swiping
+              ? swipeDirection === 'left'
+                ? 'translate3d(-8px, 0, 0)'
+                : 'translate3d(8px, 0, 0)'
+              : 'translate3d(0, 0, 0)',
+            transition: swiping
+              ? 'transform 260ms cubic-bezier(0.25, 1, 0.5, 1)'
+              : 'width 1.2s cubic-bezier(0.22, 1, 0.36, 1), height 1.2s cubic-bezier(0.22, 1, 0.36, 1), border-color 1.4s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 1.4s cubic-bezier(0.22, 1, 0.36, 1)',
             overflow: 'hidden',
           }}
         >
-          {/* Previous image fades out as new one fades in */}
-          {prevArtwork && (
-            <img
-              src={prevArtwork.imageUrl}
-              alt={prevArtwork.title}
-              onError={onError}
+          {/* Outgoing Artwork (Dissolving Out Smoothly) */}
+          {outgoingArtwork && (
+            <div
+              key={`out-${outgoingArtwork.id}`}
               style={{
                 position: 'absolute',
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-                objectPosition: 'center center',
-                transform: 'scale(1.01)',
-                display: 'block',
-                filter: darkThemeActive ? 'contrast(0.98) brightness(0.92)' : 'none',
-                mixBlendMode: 'normal',
-                opacity: loaded ? 0 : 1,
-                transition: 'opacity 500ms ease-out',
+                inset: 0,
+                opacity: crossFadeActive ? 0 : 1,
+                transition: 'opacity 1.4s cubic-bezier(0.22, 1, 0.36, 1)',
                 pointerEvents: 'none',
+                zIndex: 1,
               }}
-            />
-          )}
-          
-          {/* Current image fades in */}
-          {artwork && (
-            <img
-              key={artwork.id}
-              src={artwork.imageUrl}
-              alt={cleanTitle}
-              onLoad={handleImgLoad}
-              onError={onError}
-              style={{
-                position: 'relative',
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-                objectPosition: 'center center',
-                transform: 'scale(1.01)',
-                display: 'block',
-                filter: darkThemeActive ? 'contrast(0.98) brightness(0.92)' : 'none',
-                mixBlendMode: 'normal',
-                opacity: loaded ? 1 : 0,
-                transition: 'opacity 500ms ease-out',
-              }}
-            />
-          )}
-          
-          {/* Artist Signature & Inscription Overlay */}
-          {artwork?.signature?.enabled && Boolean(artwork.signature.text) && (() => {
-            const sigStyle = SIGNATURE_STYLES[artwork.signature.style] || SIGNATURE_STYLES.fountain
-            const inkStyle = getSignatureInkStyle(artwork.signature.color, dominantColor)
-            const sizeScale = SIGNATURE_SIZE_SCALES[artwork.signature.size || 'md'] || 1.0
-            const isBottomLeft = artwork.signature.position === 'bottom-left'
-            return (
-              <div
-                key={`sig-${artwork.id}`}
+            >
+              <img
+                src={outgoingArtwork.imageUrl}
+                alt={outgoingArtwork.title}
                 style={{
-                  position: 'absolute',
-                  bottom: 'clamp(14px, 3.2%, 36px)',
-                  ...(isBottomLeft ? { left: 'clamp(16px, 3.5%, 40px)', textAlign: 'left' } : { right: 'clamp(16px, 3.5%, 40px)', textAlign: 'right' }),
-                  fontFamily: sigStyle.fontFamily,
-                  fontSize: `clamp(${sigStyle.baseFontSizeRem * 0.9 * sizeScale}rem, ${2 * sizeScale}vw, ${sigStyle.baseFontSizeRem * 1.6 * sizeScale}rem)`,
-                  fontWeight: sigStyle.weight,
-                  color: inkStyle.color,
-                  textShadow: inkStyle.textShadow,
-                  mixBlendMode: inkStyle.blendMode || 'normal',
-                  transform: isBottomLeft ? 'rotate(0.8deg)' : 'rotate(-1.2deg)',
-                  letterSpacing: '0.015em',
-                  lineHeight: 1.3,
-                  paddingTop: '8px',
-                  paddingBottom: '4px',
-                  pointerEvents: 'none',
-                  userSelect: 'none',
-                  zIndex: 2,
-                  opacity: loaded ? 1 : 0,
-                  transition: 'opacity 600ms ease-out',
-                  maxWidth: sizeScale > 1.2 ? '65%' : '50%',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  objectPosition: 'center center',
+                  transform: 'scale(1.02)',
+                  display: 'block',
+                  filter: darkThemeActive ? 'contrast(0.98) brightness(0.92)' : 'none',
                 }}
-              >
-                {artwork.signature.text}
-              </div>
-            )
-          })()}
-          
+              />
+            </div>
+          )}
+
+          {/* Active Incoming Artwork (Dissolving In with Living Ambient Drift) */}
+          {currentToDisplay && (
+            <div
+              key={`in-${currentToDisplay.id}`}
+              style={{
+                position: 'absolute',
+                inset: 0,
+                opacity: 1,
+                transition: 'opacity 1.2s cubic-bezier(0.22, 1, 0.36, 1)',
+                zIndex: 2,
+              }}
+            >
+              <img
+                src={currentToDisplay.imageUrl}
+                alt={cleanTitle}
+                onLoad={handleImgLoad}
+                onError={onError}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  objectPosition: 'center center',
+                  display: 'block',
+                  filter: darkThemeActive ? 'contrast(0.98) brightness(0.92)' : 'none',
+                  animation: 'casa-art-drift 48s ease-in-out infinite alternate',
+                  willChange: 'transform, opacity',
+                  transformOrigin: 'center center',
+                }}
+              />
+
+              {/* Artist Signature & Inscription Overlay */}
+              {currentToDisplay.signature?.enabled && Boolean(currentToDisplay.signature.text) && (() => {
+                const sigStyle = SIGNATURE_STYLES[currentToDisplay.signature.style] || SIGNATURE_STYLES.fountain
+                const inkStyle = getSignatureInkStyle(currentToDisplay.signature.color, dominantColor)
+                const sizeScale = SIGNATURE_SIZE_SCALES[currentToDisplay.signature.size || 'md'] || 1.0
+                const isBottomLeft = currentToDisplay.signature.position === 'bottom-left'
+                return (
+                  <div
+                    key={`sig-${currentToDisplay.id}`}
+                    style={{
+                      position: 'absolute',
+                      bottom: 'clamp(14px, 3.2%, 36px)',
+                      ...(isBottomLeft ? { left: 'clamp(16px, 3.5%, 40px)', textAlign: 'left' } : { right: 'clamp(16px, 3.5%, 40px)', textAlign: 'right' }),
+                      fontFamily: sigStyle.fontFamily,
+                      fontSize: `clamp(${sigStyle.baseFontSizeRem * 0.9 * sizeScale}rem, ${2 * sizeScale}vw, ${sigStyle.baseFontSizeRem * 1.6 * sizeScale}rem)`,
+                      fontWeight: sigStyle.weight,
+                      color: inkStyle.color,
+                      textShadow: inkStyle.textShadow,
+                      mixBlendMode: inkStyle.blendMode || 'normal',
+                      transform: isBottomLeft ? 'rotate(0.8deg)' : 'rotate(-1.2deg)',
+                      letterSpacing: '0.015em',
+                      lineHeight: 1.3,
+                      paddingTop: '8px',
+                      paddingBottom: '4px',
+                      pointerEvents: 'none',
+                      userSelect: 'none',
+                      zIndex: 3,
+                      opacity: 1,
+                      transition: 'opacity 1.2s ease-out',
+                      maxWidth: sizeScale > 1.2 ? '65%' : '50%',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {currentToDisplay.signature.text}
+                  </div>
+                )
+              })()}
+            </div>
+          )}
+
           {/* Cold-Press Watercolor Paper Grain & Canvas Tooth Overlay */}
           <div
             style={{
@@ -403,7 +520,8 @@ export default function ArtScreensaver({
               backgroundSize: '256px 256px',
               backgroundRepeat: 'repeat',
               mixBlendMode: 'overlay',
-              opacity: darkThemeActive ? 0.35 : 0.70,
+              opacity: darkThemeActive ? 0.35 : 0.65,
+              zIndex: 4,
             }}
           />
 
@@ -426,45 +544,47 @@ export default function ArtScreensaver({
               position: 'absolute',
               inset: 0,
               pointerEvents: 'none',
-              zIndex: 10,
+              zIndex: 6,
               boxShadow: darkThemeActive
                 ? 'inset 0 3px 6px -1px rgba(0,0,0,0.65), inset 2px 0 4px -1px rgba(0,0,0,0.40)'
                 : `inset 0 3px 6px -1px rgba(45,30,15,0.14), inset 2px 0 3px -1px rgba(45,30,15,0.06), inset 0 0 16px -2px ${bevelColors.radiosity}`,
+              transition: 'box-shadow 1.4s cubic-bezier(0.22, 1, 0.36, 1)',
             }}
           />
         </div>
 
-        {!loaded && (
-          <div
-            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
-            style={{
-              width: `${frameSize.width}px`,
-              height: `${frameSize.height}px`,
-              backgroundColor: matColor,
-              backgroundImage: matTexture,
-              backgroundSize: textureStyle.backgroundSize,
-              backgroundPosition: textureStyle.backgroundPosition,
-              animation: 'pulse 2s ease-in-out infinite',
-            }}
-          />
-        )}
+        {/* Tactile Edge Tap Zones for Kiosk Navigation */}
+        <div
+          className="absolute left-0 top-0 bottom-0 w-[22%] z-20 cursor-pointer"
+          title="Previous artwork"
+          onClick={handlePrevPiece}
+        />
+        <div
+          className="absolute right-0 top-0 bottom-0 w-[22%] z-20 cursor-pointer"
+          title="Next artwork"
+          onClick={handleNextPiece}
+        />
 
-        {artwork && loaded && plaqueMode !== 'hidden' && (
+        {/* Museum Gallery Plaque */}
+        {currentToDisplay && plaqueMode !== 'hidden' && (
           <div
-            className="absolute bottom-4 right-6 text-right pointer-events-none transition-opacity duration-1000 ease-in-out"
+            className="absolute bottom-5 right-7 text-right pointer-events-none"
             style={{
               opacity: plaqueVisible ? 1 : 0,
-              color: darkThemeActive ? 'rgba(215, 210, 200, 0.72)' : 'rgba(70, 55, 45, 0.75)',
+              transform: plaqueVisible ? 'translateY(0)' : 'translateY(6px)',
+              transition: 'opacity 1.2s cubic-bezier(0.16, 1, 0.3, 1), transform 1.2s cubic-bezier(0.16, 1, 0.3, 1)',
+              color: darkThemeActive ? 'rgba(220, 215, 205, 0.78)' : 'rgba(65, 50, 40, 0.80)',
               textShadow: darkThemeActive
-                ? '0 1px 0px rgba(0, 0, 0, 0.85), 0 -1px 0.5px rgba(255, 255, 255, 0.08)'
-                : '0 1px 0px rgba(255, 255, 255, 0.90), 0 -1px 0.5px rgba(0, 0, 0, 0.20)',
+                ? '0 1px 1px rgba(0, 0, 0, 0.90), 0 -1px 0.5px rgba(255, 255, 255, 0.08)'
+                : '0 1px 0px rgba(255, 255, 255, 0.92), 0 -1px 0.5px rgba(0, 0, 0, 0.18)',
+              zIndex: 30,
             }}
           >
             <p
               className="italic leading-snug tracking-wide"
               style={{
                 fontFamily: 'Georgia, "Cormorant Garamond", "Times New Roman", serif',
-                fontSize: '0.80rem',
+                fontSize: '0.86rem',
                 fontWeight: 500,
                 letterSpacing: '0.4px',
               }}
@@ -475,10 +595,10 @@ export default function ArtScreensaver({
               className="leading-tight mt-0.5 uppercase tracking-wider"
               style={{
                 fontFamily: 'Georgia, "Cormorant Garamond", "Times New Roman", serif',
-                fontSize: '0.62rem',
+                fontSize: '0.64rem',
                 fontWeight: 400,
-                letterSpacing: '1px',
-                opacity: 0.85,
+                letterSpacing: '1.2px',
+                opacity: 0.88,
               }}
             >
               {cleanArtist}
@@ -489,3 +609,4 @@ export default function ArtScreensaver({
     </div>
   )
 }
+

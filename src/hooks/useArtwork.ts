@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { buildArtworkFeed, type SignatureConfig } from '../lib/artModeLibrary'
 import { usePersonalArtModeData } from './usePersonalArtMode'
 import { useScreensaverSettings } from './useScreensaverSettings'
+import { generateAdaptiveMatColor, DEFAULT_DOMINANT_COLOR, DEFAULT_MAT_COLOR } from '../utils/colorUtils'
 
 const MET_API = 'https://collectionapi.metmuseum.org/public/collection/v1'
 const ARTIC_API = 'https://api.artic.edu/api/v1'
@@ -38,6 +39,72 @@ const ARTIC_QUERIES = [
 
 // Only painted / drawn mediums — excludes prints, photos, ceramics, textiles
 const PAINTED_MEDIUM = /\boil\b|watercolou?r|gouache|pastel|tempera|acrylic|fresco|\bchalk\b|ink wash|\bgraphite\b|pencil on|paint/i
+
+export interface ArtworkMetadataCache {
+  aspectRatio: number
+  dominantColor: string
+  matColor: string
+}
+
+export const artworkMetadataCache = new Map<string, ArtworkMetadataCache>()
+
+/**
+ * Pre-fetches and GPU pre-decodes an artwork image in background memory,
+ * caching its natural aspect ratio and adaptive museum mat color.
+ */
+export async function prefetchAndDecodeArtwork(imageUrl: string): Promise<ArtworkMetadataCache | null> {
+  if (!imageUrl || typeof window === 'undefined') return null
+  const cached = artworkMetadataCache.get(imageUrl)
+  if (cached) return cached
+
+  return new Promise((resolve) => {
+    const img = new window.Image()
+    img.crossOrigin = 'anonymous'
+    let settled = false
+
+    const finish = async (ratio: number) => {
+      if (settled) return
+      settled = true
+      try {
+        if ('decode' in img) {
+          await img.decode().catch(() => {})
+        }
+      } catch {
+        // Non-fatal decode error fallback
+      }
+      let dominant = DEFAULT_DOMINANT_COLOR
+      let matColor = DEFAULT_MAT_COLOR
+      try {
+        const analysis = await generateAdaptiveMatColor(imageUrl)
+        dominant = analysis.dominant
+        matColor = analysis.matColor
+      } catch {
+        // Fallback
+      }
+      const data: ArtworkMetadataCache = {
+        aspectRatio: ratio,
+        dominantColor: dominant,
+        matColor,
+      }
+      artworkMetadataCache.set(imageUrl, data)
+      resolve(data)
+    }
+
+    img.onload = () => {
+      const ratio = (img.naturalWidth && img.naturalHeight)
+        ? img.naturalWidth / img.naturalHeight
+        : 16 / 9
+      void finish(ratio)
+    }
+    img.onerror = () => {
+      if (!settled) {
+        settled = true
+        resolve(null)
+      }
+    }
+    img.src = imageUrl
+  })
+}
 
 // Known-good fallbacks — Florida/tropical/ocean themed public domain paintings
 const FALLBACKS: Artwork[] = [
@@ -84,6 +151,9 @@ export interface Artwork {
   medium?: string
   origin?: string
   signature?: SignatureConfig
+  aspectRatio?: number
+  dominantColor?: string
+  matColor?: string
 }
 
 type ArtworkPreference = 'up' | 'down'
@@ -430,14 +500,55 @@ export function useArtwork(rotateSecs = 240, shuffle = true) {
   const currentArtworkId = deck[deckIndex]
   const currentArtwork = (currentArtworkId != null ? feedMap.get(String(currentArtworkId)) : null) ?? activeFeed[0] ?? null
 
-  const advance = useCallback(() => {
+  // Next upcoming artwork for pre-rendering / pre-decoding
+  const nextArtworkId = deck.length > 1 ? deck[(deckIndex + 1) % deck.length] : null
+  const nextArtwork = nextArtworkId != null ? (feedMap.get(String(nextArtworkId)) ?? null) : null
+
+  // Trigger background pre-fetching and GPU decoding for upcoming pieces in the deck
+  useEffect(() => {
+    if (typeof window === 'undefined' || deck.length === 0) return
+
+    const toPreload: string[] = []
+    if (currentArtwork?.imageUrl) {
+      toPreload.push(currentArtwork.imageUrl)
+    }
+    if (nextArtwork?.imageUrl) {
+      toPreload.push(nextArtwork.imageUrl)
+    }
+    // Also prefetch the piece after next if available
+    if (deck.length > 2) {
+      const futureId = deck[(deckIndex + 2) % deck.length]
+      const futureArt = futureId != null ? feedMap.get(String(futureId)) : null
+      if (futureArt?.imageUrl) {
+        toPreload.push(futureArt.imageUrl)
+      }
+    }
+
+    for (const url of toPreload) {
+      void prefetchAndDecodeArtwork(url)
+    }
+  }, [deck, deckIndex, currentArtwork?.imageUrl, nextArtwork?.imageUrl, feedMap])
+
+  const advance = useCallback((direction: 'next' | 'prev' = 'next') => {
     if (availableIds.length <= 1) return
 
-    setLoaded(false)
     setDeck(prevDeck => {
       setDeckIndex(prevIndex => {
         const playedId = prevDeck[prevIndex]
         lastPlayedIdRef.current = playedId ?? null
+
+        if (direction === 'prev') {
+          const nextIndex = prevIndex - 1 < 0 ? prevDeck.length - 1 : prevIndex - 1
+          saveStoredDeck({
+            sourceMode,
+            isShuffled: shuffle,
+            deckIds: prevDeck,
+            deckIndex: nextIndex,
+            lastPlayedId: playedId ?? null,
+            updatedAt: Date.now(),
+          })
+          return nextIndex
+        }
 
         const nextIndex = prevIndex + 1
         // If we reached the end of the deck, start the next complete non-repeating cycle!
@@ -480,7 +591,7 @@ export function useArtwork(rotateSecs = 240, shuffle = true) {
     if (availableIds.length <= 1) return
     if (rotateRef.current) clearInterval(rotateRef.current)
     rotateRef.current = setInterval(() => {
-      advance()
+      advance('next')
     }, rotateSecs * 1000)
     return () => {
       if (rotateRef.current) clearInterval(rotateRef.current)
@@ -493,11 +604,15 @@ export function useArtwork(rotateSecs = 240, shuffle = true) {
     if (currentArtwork?.id != null) {
       failedIdsRef.current.add(currentArtwork.id)
     }
-    advance()
+    advance('next')
   }, [advance, currentArtwork?.id])
 
   const next = useCallback(() => {
-    advance()
+    advance('next')
+  }, [advance])
+
+  const prev = useCallback(() => {
+    advance('prev')
   }, [advance])
 
   const setPreference = useCallback((artworkId: Artwork['id'], preference: ArtworkPreference) => {
@@ -511,13 +626,16 @@ export function useArtwork(rotateSecs = 240, shuffle = true) {
 
   return {
     artwork: currentArtwork,
+    nextArtwork,
     loaded,
     onLoad,
     onError,
     next,
+    prev,
     total: activeFeed.length,
     deckProgress: deck.length > 0 ? { current: deckIndex + 1, total: deck.length } : null,
     setPreference,
     currentPreference,
   }
 }
+
