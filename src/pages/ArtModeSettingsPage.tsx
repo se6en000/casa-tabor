@@ -835,12 +835,12 @@ export default function ArtModeSettingsPage() {
                           : "font-['Caveat',_cursive] font-semibold text-lg sm:text-xl md:text-2xl"
                         : editSignatureStyle === 'draft'
                         ? editSignatureSize === 'sm'
-                          ? "font-['Homemade_Apple',_cursive] font-normal text-3xs sm:text-2xs md:text-xs"
+                          ? "font-['Homemade_Apple',_cursive] font-normal text-xs sm:text-sm md:text-base"
                           : editSignatureSize === 'lg'
-                          ? "font-['Homemade_Apple',_cursive] font-normal text-sm sm:text-base md:text-lg"
-                          : editSignatureSize === 'xl'
                           ? "font-['Homemade_Apple',_cursive] font-normal text-base sm:text-lg md:text-xl"
-                          : "font-['Homemade_Apple',_cursive] font-normal text-xs sm:text-sm md:text-base"
+                          : editSignatureSize === 'xl'
+                          ? "font-['Homemade_Apple',_cursive] font-normal text-lg sm:text-xl md:text-2xl"
+                          : "font-['Homemade_Apple',_cursive] font-normal text-sm sm:text-base md:text-lg"
                         : editSignatureStyle === 'classic'
                         ? editSignatureSize === 'sm'
                           ? "font-['Marck_Script',_cursive] font-normal text-xs sm:text-sm md:text-base"
@@ -867,11 +867,10 @@ export default function ArtModeSettingsPage() {
                     return (
                       <div
                         className={cn(
-                          'absolute pointer-events-none select-none z-10 leading-none truncate transition-all duration-200',
-                          editSignatureSize === 'lg' || editSignatureSize === 'xl' ? 'max-w-[70%]' : 'max-w-[55%]',
+                          'absolute pointer-events-none select-none z-10 leading-normal pt-2 pb-1 max-w-[65%] truncate transition-all duration-200',
                           isBottomLeft
-                            ? 'bottom-3 sm:bottom-4 left-3 sm:left-5 text-left rotate-1'
-                            : 'bottom-3 sm:bottom-4 right-3 sm:right-5 text-right -rotate-1',
+                            ? 'bottom-2 sm:bottom-3 left-3 sm:left-5 text-left rotate-1'
+                            : 'bottom-2 sm:bottom-3 right-3 sm:right-5 text-right -rotate-1',
                           fontClass,
                           colorClass
                         )}

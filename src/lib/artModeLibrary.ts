@@ -132,7 +132,7 @@ export const SIGNATURE_STYLES: Record<
   draft: {
     label: 'Studio Pencil / Note',
     fontFamily: "'Homemade Apple', cursive",
-    baseFontSizeRem: 0.95,
+    baseFontSizeRem: 1.05,
     weight: 400,
   },
   classic: {
