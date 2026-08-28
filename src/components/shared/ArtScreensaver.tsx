@@ -81,8 +81,6 @@ export default function ArtScreensaver({
   const [imageRatio, setImageRatio] = useState(16 / 9)
   const [matColor, setMatColor] = useState('#F6F3EA')
   const [dominantColor, setDominantColor] = useState('#808080')
-  const [swiping, setSwiping] = useState(false)
-  const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | null>(null)
   const [activeArtwork, setActiveArtwork] = useState<Artwork | null>(artwork)
   const [outgoingArtwork, setOutgoingArtwork] = useState<Artwork | null>(null)
   const [crossFadeActive, setCrossFadeActive] = useState(false)
@@ -273,12 +271,6 @@ export default function ArtScreensaver({
   const handleNextPiece = useCallback(
     (e?: React.SyntheticEvent) => {
       e?.stopPropagation()
-      setSwipeDirection('left')
-      setSwiping(true)
-      setTimeout(() => {
-        setSwiping(false)
-        setSwipeDirection(null)
-      }, 300)
       next()
     },
     [next]
@@ -287,12 +279,6 @@ export default function ArtScreensaver({
   const handlePrevPiece = useCallback(
     (e?: React.SyntheticEvent) => {
       e?.stopPropagation()
-      setSwipeDirection('right')
-      setSwiping(true)
-      setTimeout(() => {
-        setSwiping(false)
-        setSwipeDirection(null)
-      }, 300)
       prev()
     },
     [prev]
@@ -399,14 +385,7 @@ export default function ArtScreensaver({
             boxShadow: darkThemeActive
               ? '0 0 0 1px rgba(0,0,0,0.9), 0 3px 12px rgba(0,0,0,0.6)'
               : '0 0 0 1px rgba(50,40,30,0.18), 0 3px 10px rgba(0,0,0,0.08)',
-            transform: swiping
-              ? swipeDirection === 'left'
-                ? 'translate3d(-8px, 0, 0)'
-                : 'translate3d(8px, 0, 0)'
-              : 'translate3d(0, 0, 0)',
-            transition: swiping
-              ? 'transform 260ms cubic-bezier(0.25, 1, 0.5, 1)'
-              : 'width 2800ms cubic-bezier(0.4, 0, 0.2, 1), height 2800ms cubic-bezier(0.4, 0, 0.2, 1), border-color 2800ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 2800ms cubic-bezier(0.4, 0, 0.2, 1)',
+            transition: 'width 2800ms cubic-bezier(0.4, 0, 0.2, 1), height 2800ms cubic-bezier(0.4, 0, 0.2, 1), border-color 2800ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 2800ms cubic-bezier(0.4, 0, 0.2, 1)',
             overflow: 'hidden',
           }}
         >
