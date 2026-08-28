@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { Image, Sun, Palette, Monitor, Plus, Minus, X, ChevronDown, ChevronUp, Upload, Trash2, Pencil, Crop, Eye, EyeOff } from 'lucide-react'
+import { Image, Sun, Palette, Monitor, Plus, Minus, X, ChevronDown, ChevronUp, Upload, Crop } from 'lucide-react'
 import { useScreensaverSettings } from '../hooks/useScreensaverSettings'
 import { useArtFeedPrefs, MEDIA_OPTIONS } from '../hooks/useArtFeedPrefs'
 import { usePersonalArtMode, type PersonalArtwork } from '../hooks/usePersonalArtMode'
 import type { ArtSourceMode } from '../lib/artModeLibrary'
 import { cn } from '../utils/cn'
-import { SettingsPageHeader, SettingsToggle as Toggle, ArtworkCropModal } from '../components/settings'
+import { SettingsPageHeader, SettingsToggle as Toggle, ArtworkCropModal, PersonalArtworkCard } from '../components/settings'
 import { Alert, Button, Checkbox, EmptyState, IconButton, Modal, SegmentedControl, SectionHeader as SharedSectionHeader, Input } from '../components/ui'
 
 const ART_FEED_MODE_OPTIONS = [
@@ -579,85 +579,18 @@ export default function ArtModeSettingsPage() {
                     )}
                   />
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 2xl:grid-cols-6 gap-3.5">
-                    {personalArtwork.map(item => {
-                      const isDisabled = isArtworkDisabled(item.id)
-                      return (
-                        <div
-                          key={item.id}
-                          className={cn(
-                            'relative overflow-hidden rounded-xl border transition-all',
-                            isDisabled
-                              ? 'border-casa-border/60 bg-casa-surface-2 opacity-55 contrast-90 shadow-none'
-                              : 'border-casa-border bg-casa-bg group shadow-xs hover:shadow-card'
-                          )}
-                        >
-                          <div className="relative aspect-[16/9] w-full overflow-hidden bg-casa-surface-2">
-                            <img
-                              src={item.imageUrl}
-                              alt={item.title}
-                              className={cn(
-                                'h-full w-full object-cover transition-all',
-                                isDisabled && 'grayscale'
-                              )}
-                            />
-                            {isDisabled && (
-                              <div className="absolute top-2 left-2 z-10 flex items-center gap-1 px-2 py-0.5 rounded-full bg-casa-navy/85 backdrop-blur-xs text-white text-2xs font-semibold shadow-xs">
-                                <EyeOff size={11} className="text-casa-gold" />
-                                <span>Disabled</span>
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex items-center justify-between gap-1 p-2">
-                            <div className="min-w-0 flex-1">
-                              <p
-                                className={cn(
-                                  'min-w-0 truncate text-caption font-medium',
-                                  isDisabled ? 'text-casa-muted' : 'text-casa-navy'
-                                )}
-                                title={item.title}
-                              >
-                                {item.title}
-                              </p>
-                              <p className="min-w-0 truncate text-caption text-casa-muted" title={item.artist || 'Personal collection'}>
-                                {item.artist || 'Personal collection'}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-0.5 shrink-0">
-                              <IconButton
-                                size="sm"
-                                variant="ghost"
-                                icon={isDisabled ? <Eye size={15} className="text-casa-navy" /> : <EyeOff size={15} className="text-casa-muted hover:text-casa-navy" />}
-                                aria-label={isDisabled ? `Enable ${item.title}` : `Disable ${item.title}`}
-                                title={isDisabled ? "Enable on this device" : "Disable on this device"}
-                                onClick={() => toggleArtworkDisabled(item.id)}
-                              />
-                              <IconButton
-                                size="sm"
-                                variant="ghost"
-                                icon={<Crop size={15} />}
-                                aria-label={`Crop ${item.title} to 16:9`}
-                                onClick={() => handleOpenCrop(item)}
-                              />
-                              <IconButton
-                                size="sm"
-                                variant="ghost"
-                                icon={<Pencil size={15} />}
-                                aria-label={`Edit ${item.title}`}
-                                onClick={() => handleOpenEdit(item)}
-                              />
-                              <IconButton
-                                size="sm"
-                                variant="ghost"
-                                icon={<Trash2 size={15} />}
-                                aria-label={`Remove ${item.title}`}
-                                onClick={() => setArtworkToDelete(item)}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    })}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3.5">
+                    {personalArtwork.map(item => (
+                      <PersonalArtworkCard
+                        key={item.id}
+                        artwork={item}
+                        isDisabled={isArtworkDisabled(item.id)}
+                        onToggleDisabled={toggleArtworkDisabled}
+                        onCrop={handleOpenCrop}
+                        onEdit={handleOpenEdit}
+                        onDelete={setArtworkToDelete}
+                      />
+                    ))}
                   </div>
                 )}
               </div>

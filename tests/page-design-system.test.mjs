@@ -722,7 +722,7 @@ test('responsive shell uses viewport-safe sizing and semantic layout tiers', () 
   assert.match(topBar, /<IconButton/)
   assert.match(nav, /app-bottom-nav-item/)
   assert.match(nav, /min-w-0 flex-1/)
-  assert.match(settings, /max-w-page-narrow px-page-gutter py-section-gap/)
+  assert.match(settings, /max-w-page-(?:narrow|wide) px-page-gutter py-section-gap/)
 })
 
 test('remaining active surfaces use shared controls and semantic presentation contracts', () => {

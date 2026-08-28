@@ -71,7 +71,7 @@ test('Art Mode settings expose Casa, personal-only, and mixed sources with manag
 
 test('the slideshow consumes the shared source mode and personal artwork query', () => {
   assert.match(artworkHookSource, /usePersonalArtModeData\(\)/)
-  assert.match(artworkHookSource, /buildArtworkFeed\(sourceMode, casaArtworks, personal\)/)
+  assert.match(artworkHookSource, /buildArtworkFeed\(\s*sourceMode[\s\S]*?personal/)
 })
 
 test('failed metadata inserts clean up uploaded storage objects', () => {

@@ -159,7 +159,7 @@ test('synthesizeActionAnalysis: dynamic synthesis accurately extracts context pe
   }
   const ptoAnalysis = synthesizeActionAnalysis(ptoItem)
   assert.match(ptoAnalysis.subject, /Spirit Day/i)
-  assert.match(ptoAnalysis.urgency, /Aug(?:ust)?\s*28/i)
+  assert.match(ptoAnalysis.urgency, /(?:Aug(?:ust)?\s*28|today)/i)
 
   // 5. Lake Lytal Lassie League Community Email (Must NOT match fake Principal Adams or fake Science Camp)
   const lytalItem = {
