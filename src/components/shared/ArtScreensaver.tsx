@@ -160,7 +160,7 @@ export default function ArtScreensaver({
     return () => window.removeEventListener('resize', updateViewport)
   }, [])
 
-  // Smooth Artwork Dissolve Transition Pipeline
+  // Smooth Artwork Dissolve Transition Pipeline (1-Second Dissolve)
   useEffect(() => {
     if (!artwork) return
 
@@ -180,17 +180,27 @@ export default function ArtScreensaver({
     }
 
     if (activeArtwork.id !== artwork.id) {
-      setOutgoingArtwork(activeArtwork)
+      const prevPiece = activeArtwork
+      setOutgoingArtwork(prevPiece)
       setActiveArtwork(artwork)
-      setCrossFadeActive(true)
+      setCrossFadeActive(false)
+
+      // Trigger dissolve on the next browser paint frame
+      const rAF = requestAnimationFrame(() => {
+        setCrossFadeActive(true)
+      })
 
       if (fadeTimeoutRef.current) clearTimeout(fadeTimeoutRef.current)
       fadeTimeoutRef.current = setTimeout(() => {
         setOutgoingArtwork(null)
         setCrossFadeActive(false)
-      }, 1400)
+      }, 1050)
+
+      return () => {
+        cancelAnimationFrame(rAF)
+      }
     }
-  }, [artwork, activeArtwork, darkThemeActive, matPreset, adaptiveMatColor])
+  }, [artwork?.id, artwork?.imageUrl, activeArtwork, darkThemeActive, matPreset, adaptiveMatColor])
 
   // Adaptive Mat Color & Harmonized Lighting Sync
   useEffect(() => {
@@ -376,7 +386,7 @@ export default function ArtScreensaver({
             ? 'inset 0 2px 6px rgba(0,0,0,0.7), inset 0 0 1px rgba(0,0,0,0.9)'
             : 'inset 0 2px 6px rgba(0,0,0,0.12), inset 0 1px 2px rgba(0,0,0,0.06), inset 0 0 1px rgba(0,0,0,0.10)',
           padding: '3.5vw',
-          transition: 'background-color 1.4s cubic-bezier(0.22, 1, 0.36, 1)',
+          transition: 'background-color 1000ms cubic-bezier(0.4, 0, 0.2, 1)',
         }}
       >
         {/* Passe-Partout Aperture Frame with 45-Degree Mitered Cotton Rag Bevel Core */}
@@ -405,49 +415,18 @@ export default function ArtScreensaver({
               : 'translate3d(0, 0, 0)',
             transition: swiping
               ? 'transform 260ms cubic-bezier(0.25, 1, 0.5, 1)'
-              : 'width 1.2s cubic-bezier(0.22, 1, 0.36, 1), height 1.2s cubic-bezier(0.22, 1, 0.36, 1), border-color 1.4s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 1.4s cubic-bezier(0.22, 1, 0.36, 1)',
+              : 'width 1000ms cubic-bezier(0.4, 0, 0.2, 1), height 1000ms cubic-bezier(0.4, 0, 0.2, 1), border-color 1000ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 1000ms cubic-bezier(0.4, 0, 0.2, 1)',
             overflow: 'hidden',
           }}
         >
-          {/* Outgoing Artwork (Dissolving Out Smoothly) */}
-          {outgoingArtwork && (
-            <div
-              key={`out-${outgoingArtwork.id}`}
-              style={{
-                position: 'absolute',
-                inset: 0,
-                opacity: crossFadeActive ? 0 : 1,
-                transition: 'opacity 1.4s cubic-bezier(0.22, 1, 0.36, 1)',
-                pointerEvents: 'none',
-                zIndex: 1,
-              }}
-            >
-              <img
-                src={outgoingArtwork.imageUrl}
-                alt={outgoingArtwork.title}
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'cover',
-                  objectPosition: 'center center',
-                  transform: 'scale(1.02)',
-                  display: 'block',
-                  filter: darkThemeActive ? 'contrast(0.98) brightness(0.92)' : 'none',
-                }}
-              />
-            </div>
-          )}
-
-          {/* Active Incoming Artwork (Dissolving In with Living Ambient Drift) */}
+          {/* Base Active Artwork Layer (Always Rendered Underneath at zIndex: 1) */}
           {currentToDisplay && (
             <div
               key={`in-${currentToDisplay.id}`}
               style={{
                 position: 'absolute',
                 inset: 0,
-                opacity: 1,
-                transition: 'opacity 1.2s cubic-bezier(0.22, 1, 0.36, 1)',
-                zIndex: 2,
+                zIndex: 1,
               }}
             >
               <img
@@ -463,12 +442,12 @@ export default function ArtScreensaver({
                   display: 'block',
                   filter: darkThemeActive ? 'contrast(0.98) brightness(0.92)' : 'none',
                   animation: 'casa-art-drift 48s ease-in-out infinite alternate',
-                  willChange: 'transform, opacity',
+                  willChange: 'transform',
                   transformOrigin: 'center center',
                 }}
               />
 
-              {/* Artist Signature & Inscription Overlay */}
+              {/* Artist Signature Overlay on Active Artwork */}
               {currentToDisplay.signature?.enabled && Boolean(currentToDisplay.signature.text) && (() => {
                 const sigStyle = SIGNATURE_STYLES[currentToDisplay.signature.style] || SIGNATURE_STYLES.fountain
                 const inkStyle = getSignatureInkStyle(currentToDisplay.signature.color, dominantColor)
@@ -496,7 +475,6 @@ export default function ArtScreensaver({
                       userSelect: 'none',
                       zIndex: 3,
                       opacity: 1,
-                      transition: 'opacity 1.2s ease-out',
                       maxWidth: sizeScale > 1.2 ? '65%' : '50%',
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
@@ -504,6 +482,73 @@ export default function ArtScreensaver({
                     }}
                   >
                     {currentToDisplay.signature.text}
+                  </div>
+                )
+              })()}
+            </div>
+          )}
+
+          {/* Top Outgoing Artwork Layer (Dissolves 1 -> 0 over 1.0 Second at zIndex: 2) */}
+          {outgoingArtwork && (
+            <div
+              key={`out-${outgoingArtwork.id}`}
+              style={{
+                position: 'absolute',
+                inset: 0,
+                opacity: crossFadeActive ? 0 : 1,
+                transition: 'opacity 1000ms cubic-bezier(0.4, 0, 0.2, 1)',
+                pointerEvents: 'none',
+                zIndex: 2,
+                willChange: 'opacity',
+              }}
+            >
+              <img
+                src={outgoingArtwork.imageUrl}
+                alt={outgoingArtwork.title}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  objectPosition: 'center center',
+                  display: 'block',
+                  filter: darkThemeActive ? 'contrast(0.98) brightness(0.92)' : 'none',
+                }}
+              />
+
+              {/* Artist Signature on Outgoing Layer */}
+              {outgoingArtwork.signature?.enabled && Boolean(outgoingArtwork.signature.text) && (() => {
+                const sigStyle = SIGNATURE_STYLES[outgoingArtwork.signature.style] || SIGNATURE_STYLES.fountain
+                const inkStyle = getSignatureInkStyle(outgoingArtwork.signature.color, dominantColor)
+                const sizeScale = SIGNATURE_SIZE_SCALES[outgoingArtwork.signature.size || 'md'] || 1.0
+                const isBottomLeft = outgoingArtwork.signature.position === 'bottom-left'
+                return (
+                  <div
+                    key={`sig-out-${outgoingArtwork.id}`}
+                    style={{
+                      position: 'absolute',
+                      bottom: 'clamp(14px, 3.2%, 36px)',
+                      ...(isBottomLeft ? { left: 'clamp(16px, 3.5%, 40px)', textAlign: 'left' } : { right: 'clamp(16px, 3.5%, 40px)', textAlign: 'right' }),
+                      fontFamily: sigStyle.fontFamily,
+                      fontSize: `clamp(${sigStyle.baseFontSizeRem * 0.9 * sizeScale}rem, ${2 * sizeScale}vw, ${sigStyle.baseFontSizeRem * 1.6 * sizeScale}rem)`,
+                      fontWeight: sigStyle.weight,
+                      color: inkStyle.color,
+                      textShadow: inkStyle.textShadow,
+                      mixBlendMode: inkStyle.blendMode || 'normal',
+                      transform: isBottomLeft ? 'rotate(0.8deg)' : 'rotate(-1.2deg)',
+                      letterSpacing: '0.015em',
+                      lineHeight: 1.3,
+                      paddingTop: '8px',
+                      paddingBottom: '4px',
+                      pointerEvents: 'none',
+                      userSelect: 'none',
+                      zIndex: 3,
+                      maxWidth: sizeScale > 1.2 ? '65%' : '50%',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {outgoingArtwork.signature.text}
                   </div>
                 )
               })()}

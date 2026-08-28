@@ -47,18 +47,18 @@ test('ArtScreensaver eliminates flashing pulse placeholder and implements dual-l
   assert.match(screensaverSource, /currentToDisplay/)
   assert.match(screensaverSource, /crossFadeActive/)
   assert.match(screensaverSource, /opacity:\s*crossFadeActive\s*\?\s*0\s*:\s*1/)
-  assert.match(screensaverSource, /transition:\s*'opacity 1\.4s/)
+  assert.match(screensaverSource, /transition:\s*'opacity 1000ms/)
 })
 
 test('ArtScreensaver implements smooth aperture morphing and breathing mat transitions', () => {
   // Morphing frame aperture
-  assert.match(screensaverSource, /width 1\.2s cubic-bezier/)
-  assert.match(screensaverSource, /height 1\.2s cubic-bezier/)
+  assert.match(screensaverSource, /width 1000ms cubic-bezier/)
+  assert.match(screensaverSource, /height 1000ms cubic-bezier/)
   
   // Continuous breathing mat background and bevel transitions
-  assert.match(screensaverSource, /background-color 1\.4s cubic-bezier/)
-  assert.match(screensaverSource, /border-color 1\.4s cubic-bezier/)
-  assert.match(screensaverSource, /box-shadow 1\.4s cubic-bezier/)
+  assert.match(screensaverSource, /background-color 1000ms cubic-bezier/)
+  assert.match(screensaverSource, /border-color 1000ms cubic-bezier/)
+  assert.match(screensaverSource, /box-shadow 1000ms cubic-bezier/)
 })
 
 test('living canvas micro-drift animation is defined for kiosk hardware acceleration', () => {
@@ -68,7 +68,7 @@ test('living canvas micro-drift animation is defined for kiosk hardware accelera
   
   // Application in ArtScreensaver
   assert.match(screensaverSource, /animation:\s*'casa-art-drift 48s ease-in-out infinite alternate'/)
-  assert.match(screensaverSource, /willChange:\s*'transform,\s*opacity'/)
+  assert.match(screensaverSource, /willChange:\s*'transform'/)
 })
 
 test('ArtScreensaver supports kiosk touch edge-taps, swipe gestures, and keyboard arrows', () => {
