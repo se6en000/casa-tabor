@@ -880,7 +880,7 @@ export default function ArtModeSettingsPage() {
                     return (
                       <div
                         className={cn(
-                          'absolute pointer-events-none select-none z-10 leading-normal pt-2 pb-1 max-w-[65%] truncate transition-all duration-200 blur-[0.2px]',
+                          'absolute pointer-events-none select-none z-10 leading-relaxed pt-3 pb-3 max-w-[65%] whitespace-nowrap overflow-visible transition-all duration-200 blur-[0.2px]',
                           isBottomLeft
                             ? 'bottom-2 sm:bottom-3 left-3 sm:left-5 text-left rotate-1'
                             : 'bottom-2 sm:bottom-3 right-3 sm:right-5 text-right -rotate-1',

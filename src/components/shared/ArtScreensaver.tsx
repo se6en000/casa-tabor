@@ -472,9 +472,9 @@ export default function ArtScreensaver({
                       mixBlendMode: inkStyle.blendMode || 'normal',
                       transform: isBottomLeft ? 'rotate(0.8deg)' : 'rotate(-1.2deg)',
                       letterSpacing: '0.015em',
-                      lineHeight: 1.3,
-                      paddingTop: '8px',
-                      paddingBottom: '4px',
+                      lineHeight: 1.55,
+                      paddingTop: '12px',
+                      paddingBottom: '16px',
                       filter: 'blur(0.2px) contrast(1.05)',
                       textRendering: 'geometricPrecision',
                       pointerEvents: 'none',
@@ -483,8 +483,7 @@ export default function ArtScreensaver({
                       opacity: 1,
                       maxWidth: sizeScale > 1.2 ? '65%' : '50%',
                       whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
+                      overflow: 'visible',
                     }}
                   >
                     {currentToDisplay.signature.text}
@@ -546,9 +545,9 @@ export default function ArtScreensaver({
                       mixBlendMode: inkStyle.blendMode || 'normal',
                       transform: isBottomLeft ? 'rotate(0.8deg)' : 'rotate(-1.2deg)',
                       letterSpacing: '0.015em',
-                      lineHeight: 1.3,
-                      paddingTop: '8px',
-                      paddingBottom: '4px',
+                      lineHeight: 1.55,
+                      paddingTop: '12px',
+                      paddingBottom: '16px',
                       filter: 'blur(0.2px) contrast(1.05)',
                       textRendering: 'geometricPrecision',
                       pointerEvents: 'none',
@@ -556,8 +555,7 @@ export default function ArtScreensaver({
                       zIndex: 3,
                       maxWidth: sizeScale > 1.2 ? '65%' : '50%',
                       whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
+                      overflow: 'visible',
                     }}
                   >
                     {outgoingArtwork.signature.text}
