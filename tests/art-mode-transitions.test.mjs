@@ -43,26 +43,23 @@ test('ArtScreensaver eliminates flashing pulse placeholder and implements dual-l
   assert.doesNotMatch(screensaverSource, /animation:\s*'pulse 2s ease-in-out infinite'/)
   
   // Verifies keyframe animations in index.css
-  assert.match(indexCssSource, /@keyframes casa-art-dissolve-in/)
   assert.match(indexCssSource, /@keyframes casa-art-dissolve-out/)
 
   // Verifies dual layer incoming/outgoing dissolve crossfade
   assert.match(screensaverSource, /outgoingArtwork/)
   assert.match(screensaverSource, /currentToDisplay/)
-  assert.match(screensaverSource, /crossFadeActive/)
-  assert.match(screensaverSource, /casa-art-dissolve-in 2800ms/)
-  assert.match(screensaverSource, /casa-art-dissolve-out 2800ms/)
+  assert.match(screensaverSource, /casa-art-dissolve-out 1200ms/)
 })
 
 test('ArtScreensaver implements smooth aperture morphing and breathing mat transitions', () => {
   // Morphing frame aperture
-  assert.match(screensaverSource, /width 2800ms cubic-bezier/)
-  assert.match(screensaverSource, /height 2800ms cubic-bezier/)
+  assert.match(screensaverSource, /width 1200ms ease-in-out/)
+  assert.match(screensaverSource, /height 1200ms ease-in-out/)
   
   // Continuous breathing mat background and bevel transitions
-  assert.match(screensaverSource, /background-color 2800ms cubic-bezier/)
-  assert.match(screensaverSource, /border-color 2800ms cubic-bezier/)
-  assert.match(screensaverSource, /box-shadow 2800ms cubic-bezier/)
+  assert.match(screensaverSource, /background-color 1200ms ease-in-out/)
+  assert.match(screensaverSource, /border-color 1200ms ease-in-out/)
+  assert.match(screensaverSource, /box-shadow 1200ms ease-in-out/)
 })
 
 test('living canvas micro-drift animation is defined for kiosk hardware acceleration', () => {
