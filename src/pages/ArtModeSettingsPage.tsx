@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Image, Sun, Palette, Monitor, Plus, Minus, X, ChevronDown, ChevronUp, Upload, Trash2, Pencil, Crop } from 'lucide-react'
+import { Image, Sun, Palette, Monitor, Plus, Minus, X, ChevronDown, ChevronUp, Upload, Trash2, Pencil, Crop, Eye, EyeOff } from 'lucide-react'
 import { useScreensaverSettings } from '../hooks/useScreensaverSettings'
 import { useArtFeedPrefs, MEDIA_OPTIONS } from '../hooks/useArtFeedPrefs'
 import { usePersonalArtMode, type PersonalArtwork } from '../hooks/usePersonalArtMode'
@@ -210,7 +210,18 @@ export default function ArtModeSettingsPage() {
   const [artworkToCrop, setArtworkToCrop] = useState<PersonalArtwork | null>(null)
   const [editTitle, setEditTitle] = useState('')
   const [editArtist, setEditArtist] = useState('')
+  const [editEnabled, setEditEnabled] = useState(true)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const disabledArtworkIds = settings.disabledArtworkIds ?? []
+  const isArtworkDisabled = (id: string) => disabledArtworkIds.includes(id)
+  const toggleArtworkDisabled = (id: string) => {
+    const isCurrentlyDisabled = disabledArtworkIds.includes(id)
+    const nextDisabled = isCurrentlyDisabled
+      ? disabledArtworkIds.filter(x => x !== id)
+      : [...disabledArtworkIds, id]
+    updateScreensaver({ disabledArtworkIds: nextDisabled })
+  }
 
   const curatedMode = prefs.feedMode === 'curated'
   const includesCasaGallery = sourceMode !== 'personal'
@@ -261,6 +272,7 @@ export default function ArtModeSettingsPage() {
     setArtworkToEdit(item)
     setEditTitle(item.title)
     setEditArtist(item.artist || '')
+    setEditEnabled(!disabledArtworkIds.includes(item.id))
   }
 
   const handleSaveEdit = async () => {
@@ -272,6 +284,15 @@ export default function ArtModeSettingsPage() {
         title: editTitle,
         artist: editArtist,
       })
+
+      // Sync disabled status for this device
+      const isCurrentlyDisabled = disabledArtworkIds.includes(artworkToEdit.id)
+      if (editEnabled && isCurrentlyDisabled) {
+        updateScreensaver({ disabledArtworkIds: disabledArtworkIds.filter(id => id !== artworkToEdit.id) })
+      } else if (!editEnabled && !isCurrentlyDisabled) {
+        updateScreensaver({ disabledArtworkIds: [...disabledArtworkIds, artworkToEdit.id] })
+      }
+
       setLibraryMessage({ tone: 'success', text: `Details updated for "${editTitle.trim() || 'Untitled'}".` })
       setArtworkToEdit(null)
     } catch (error) {
@@ -516,6 +537,7 @@ export default function ArtModeSettingsPage() {
                       {personalArtwork.length > 0 && (
                         <span className="text-2xs font-bold px-2 py-0.5 rounded-full bg-casa-gold/15 text-casa-navy">
                           {personalArtwork.length} {personalArtwork.length === 1 ? 'artwork' : 'artworks'}
+                          {disabledArtworkIds.length > 0 && ` (${personalArtwork.length - personalArtwork.filter(a => disabledArtworkIds.includes(a.id)).length} active)`}
                         </span>
                       )}
                     </div>
@@ -558,48 +580,84 @@ export default function ArtModeSettingsPage() {
                   />
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 2xl:grid-cols-6 gap-3.5">
-                    {personalArtwork.map(item => (
-                      <div key={item.id} className="relative overflow-hidden rounded-xl border border-casa-border bg-casa-bg group shadow-xs hover:shadow-card transition-all">
-                        <img
-                          src={item.imageUrl}
-                          alt={item.title}
-                          className="aspect-[16/9] w-full object-cover"
-                        />
-                        <div className="flex items-center justify-between gap-1 p-2">
-                          <div className="min-w-0 flex-1">
-                            <p className="min-w-0 truncate text-caption font-medium text-casa-navy" title={item.title}>
-                              {item.title}
-                            </p>
-                            <p className="min-w-0 truncate text-caption text-casa-muted" title={item.artist || 'Personal collection'}>
-                              {item.artist || 'Personal collection'}
-                            </p>
+                    {personalArtwork.map(item => {
+                      const isDisabled = isArtworkDisabled(item.id)
+                      return (
+                        <div
+                          key={item.id}
+                          className={cn(
+                            'relative overflow-hidden rounded-xl border transition-all',
+                            isDisabled
+                              ? 'border-casa-border/60 bg-casa-surface-2 opacity-55 contrast-90 shadow-none'
+                              : 'border-casa-border bg-casa-bg group shadow-xs hover:shadow-card'
+                          )}
+                        >
+                          <div className="relative aspect-[16/9] w-full overflow-hidden bg-casa-surface-2">
+                            <img
+                              src={item.imageUrl}
+                              alt={item.title}
+                              className={cn(
+                                'h-full w-full object-cover transition-all',
+                                isDisabled && 'grayscale'
+                              )}
+                            />
+                            {isDisabled && (
+                              <div className="absolute top-2 left-2 z-10 flex items-center gap-1 px-2 py-0.5 rounded-full bg-casa-navy/85 backdrop-blur-xs text-white text-2xs font-semibold shadow-xs">
+                                <EyeOff size={11} className="text-casa-gold" />
+                                <span>Disabled</span>
+                              </div>
+                            )}
                           </div>
-                          <div className="flex items-center gap-0.5 shrink-0">
-                            <IconButton
-                              size="sm"
-                              variant="ghost"
-                              icon={<Crop size={15} />}
-                              aria-label={`Crop ${item.title} to 16:9`}
-                              onClick={() => handleOpenCrop(item)}
-                            />
-                            <IconButton
-                              size="sm"
-                              variant="ghost"
-                              icon={<Pencil size={15} />}
-                              aria-label={`Edit ${item.title}`}
-                              onClick={() => handleOpenEdit(item)}
-                            />
-                            <IconButton
-                              size="sm"
-                              variant="ghost"
-                              icon={<Trash2 size={15} />}
-                              aria-label={`Remove ${item.title}`}
-                              onClick={() => setArtworkToDelete(item)}
-                            />
+                          <div className="flex items-center justify-between gap-1 p-2">
+                            <div className="min-w-0 flex-1">
+                              <p
+                                className={cn(
+                                  'min-w-0 truncate text-caption font-medium',
+                                  isDisabled ? 'text-casa-muted' : 'text-casa-navy'
+                                )}
+                                title={item.title}
+                              >
+                                {item.title}
+                              </p>
+                              <p className="min-w-0 truncate text-caption text-casa-muted" title={item.artist || 'Personal collection'}>
+                                {item.artist || 'Personal collection'}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-0.5 shrink-0">
+                              <IconButton
+                                size="sm"
+                                variant="ghost"
+                                icon={isDisabled ? <Eye size={15} className="text-casa-navy" /> : <EyeOff size={15} className="text-casa-muted hover:text-casa-navy" />}
+                                aria-label={isDisabled ? `Enable ${item.title}` : `Disable ${item.title}`}
+                                title={isDisabled ? "Enable on this device" : "Disable on this device"}
+                                onClick={() => toggleArtworkDisabled(item.id)}
+                              />
+                              <IconButton
+                                size="sm"
+                                variant="ghost"
+                                icon={<Crop size={15} />}
+                                aria-label={`Crop ${item.title} to 16:9`}
+                                onClick={() => handleOpenCrop(item)}
+                              />
+                              <IconButton
+                                size="sm"
+                                variant="ghost"
+                                icon={<Pencil size={15} />}
+                                aria-label={`Edit ${item.title}`}
+                                onClick={() => handleOpenEdit(item)}
+                              />
+                              <IconButton
+                                size="sm"
+                                variant="ghost"
+                                icon={<Trash2 size={15} />}
+                                aria-label={`Remove ${item.title}`}
+                                onClick={() => setArtworkToDelete(item)}
+                              />
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
               </div>
@@ -842,6 +900,15 @@ export default function ArtModeSettingsPage() {
               className="w-full"
             />
             <p className="text-caption text-casa-muted mt-1">Leaves as &ldquo;Personal collection&rdquo; if left blank.</p>
+          </div>
+
+          <div className="pt-2 border-t border-casa-border">
+            <Toggle
+              checked={editEnabled}
+              onChange={setEditEnabled}
+              label="Active on this device"
+              desc="When turned off, this photo is skipped during shuffle and playback on this kiosk."
+            />
           </div>
         </div>
         <div className="flex justify-end gap-2 pt-2">

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { buildArtworkFeed } from '../lib/artModeLibrary'
 import { usePersonalArtModeData } from './usePersonalArtMode'
+import { useScreensaverSettings } from './useScreensaverSettings'
 
 const MET_API = 'https://collectionapi.metmuseum.org/public/collection/v1'
 const ARTIC_API = 'https://api.artic.edu/api/v1'
@@ -372,10 +373,18 @@ export function useArtwork(rotateSecs = 240, shuffle = true) {
     )
   }, [casaArtworks, personalArtwork, personalArtworkLoading, sourceMode])
 
-  // Filter out any known failed IDs
+  const { settings } = useScreensaverSettings()
+  const disabledArtworkIds = useMemo(
+    () => new Set((settings.disabledArtworkIds ?? []).map(String)),
+    [settings.disabledArtworkIds],
+  )
+
+  // Filter out any known failed IDs and disabled artwork IDs
   const activeFeed = useMemo(() => {
-    return rawFeed.filter(a => !failedIdsRef.current.has(a.id))
-  }, [rawFeed])
+    return rawFeed.filter(
+      a => !failedIdsRef.current.has(a.id) && !disabledArtworkIds.has(String(a.id)),
+    )
+  }, [rawFeed, disabledArtworkIds])
 
   const feedMap = useMemo(() => {
     const map = new Map<string, Artwork>()

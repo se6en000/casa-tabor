@@ -13,6 +13,7 @@ export interface ScreensaverSettings {
   matPreset: 'auto' | 'warm_linen' | 'travertine' | 'coastal_mist' | 'french_ivory' | 'charcoal' // mat color tone
   wakeWordSensitivity: number // 0.1 (very sensitive) – 0.6 (strict), default 0.3
   wakeWordEnabled: boolean  // master toggle for "Alexa" wake word listener
+  disabledArtworkIds?: string[] // IDs of photos disabled from playback on this device
 }
 
 const DEFAULTS: ScreensaverSettings = {
@@ -28,6 +29,7 @@ const DEFAULTS: ScreensaverSettings = {
   matPreset: 'auto',
   wakeWordSensitivity: 0.3,
   wakeWordEnabled: true,
+  disabledArtworkIds: [],
 }
 
 const KEY = 'casa-screensaver-settings'
