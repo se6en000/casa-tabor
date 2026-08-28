@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useArtwork } from '../../hooks/useArtwork'
+import { useArtwork, type Artwork } from '../../hooks/useArtwork'
 import { generateAdaptiveMatColor, generateHarmonizedBevel, MAT_PRESETS, type MatPresetKey } from '../../utils/colorUtils'
 import { getTextureStyle, PAPER_GRAIN_TEXTURE } from '../../utils/textureUtils'
 import { sanitizeArtworkMetadata } from '../../lib/artModeLibrary'
@@ -85,7 +85,7 @@ export default function ArtScreensaver({
   }))
   
   // Previous artwork for cross-fade
-  const [prevArtwork, setPrevArtwork] = useState<typeof artwork>(null)
+  const [prevArtwork, setPrevArtwork] = useState<Artwork | null>(null)
   
   const touchStartXRef = useRef<number | null>(null)
   const textureStyle = useMemo(() => getTextureStyle(), [])

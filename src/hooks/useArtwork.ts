@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { buildArtworkFeed } from '../lib/artModeLibrary'
 import { usePersonalArtModeData } from './usePersonalArtMode'
 
@@ -87,6 +87,16 @@ export interface Artwork {
 type ArtworkPreference = 'up' | 'down'
 type ArtworkPreferences = Record<string, ArtworkPreference>
 const PREFS_KEY = 'artwork-preferences-v1'
+const ART_SHUFFLE_STORAGE_KEY = 'casa_art_playback_deck_v2'
+
+interface StoredDeckState {
+  sourceMode: string
+  isShuffled: boolean
+  deckIds: (string | number)[]
+  deckIndex: number
+  lastPlayedId: string | number | null
+  updatedAt: number
+}
 
 function shuffled<T>(arr: T[]): T[] {
   const a = [...arr]
@@ -121,6 +131,98 @@ function savePrefs(prefs: ArtworkPreferences) {
     localStorage.setItem(PREFS_KEY, JSON.stringify(prefs))
   } catch {
     // Ignore storage failures.
+  }
+}
+
+function generateShuffledDeck(
+  ids: (string | number)[],
+  lastPlayedId: string | number | null = null,
+): (string | number)[] {
+  if (ids.length <= 1) return [...ids]
+  const deck = [...ids]
+  for (let i = deck.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[deck[i], deck[j]] = [deck[j], deck[i]]
+  }
+  // Ensure the first item of the new cycle is not the same as the last item of the previous cycle
+  if (lastPlayedId != null && deck.length > 1 && String(deck[0]) === String(lastPlayedId)) {
+    const swapIdx = 1 + Math.floor(Math.random() * (deck.length - 1))
+    ;[deck[0], deck[swapIdx]] = [deck[swapIdx], deck[0]]
+  }
+  return deck
+}
+
+function loadStoredDeck(
+  sourceMode: string,
+  shuffle: boolean,
+  availableIds: (string | number)[],
+): { deckIds: (string | number)[]; deckIndex: number; lastPlayedId: string | number | null } {
+  if (availableIds.length === 0) {
+    return { deckIds: [], deckIndex: 0, lastPlayedId: null }
+  }
+
+  try {
+    const raw = localStorage.getItem(ART_SHUFFLE_STORAGE_KEY)
+    if (raw) {
+      const parsed: StoredDeckState = JSON.parse(raw)
+      if (
+        parsed &&
+        parsed.sourceMode === sourceMode &&
+        parsed.isShuffled === shuffle &&
+        Array.isArray(parsed.deckIds)
+      ) {
+        const availableSet = new Set(availableIds.map(String))
+        const existingValidIds = parsed.deckIds.filter(id => availableSet.has(String(id)))
+        const existingSet = new Set(existingValidIds.map(String))
+        const newIds = availableIds.filter(id => !existingSet.has(String(id)))
+
+        if (existingValidIds.length > 0) {
+          let updatedDeck = existingValidIds
+          let updatedIndex = Math.max(0, Math.min(parsed.deckIndex ?? 0, existingValidIds.length))
+
+          // If new photos were added to the library, merge them into the unplayed deck portion
+          if (newIds.length > 0) {
+            const played = updatedDeck.slice(0, updatedIndex)
+            const remaining = shuffle
+              ? shuffled([...updatedDeck.slice(updatedIndex), ...newIds])
+              : [...updatedDeck.slice(updatedIndex), ...newIds]
+            updatedDeck = [...played, ...remaining]
+          }
+
+          // If the previous cycle finished, generate the next cycle
+          if (updatedIndex >= updatedDeck.length) {
+            updatedDeck = shuffle
+              ? generateShuffledDeck(availableIds, parsed.lastPlayedId)
+              : [...availableIds]
+            updatedIndex = 0
+          }
+
+          return {
+            deckIds: updatedDeck,
+            deckIndex: updatedIndex,
+            lastPlayedId: parsed.lastPlayedId ?? null,
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Failed to load stored art playback deck:', e)
+  }
+
+  // Brand new deck
+  const newDeck = shuffle ? generateShuffledDeck(availableIds, null) : [...availableIds]
+  return {
+    deckIds: newDeck,
+    deckIndex: 0,
+    lastPlayedId: null,
+  }
+}
+
+function saveStoredDeck(state: StoredDeckState) {
+  try {
+    localStorage.setItem(ART_SHUFFLE_STORAGE_KEY, JSON.stringify(state))
+  } catch {
+    // Ignore storage quota errors
   }
 }
 
@@ -191,14 +293,16 @@ async function fetchFromArtic(query: string): Promise<Artwork[]> {
 }
 
 export function useArtwork(rotateSecs = 240, shuffle = true) {
-  const [artworks, setArtworks]   = useState<Artwork[]>([])
   const [casaArtworks, setCasaArtworks] = useState<Artwork[]>([])
-  const [index, setIndex]         = useState(0)
-  const [loaded, setLoaded]       = useState(false)
+  const [deck, setDeck] = useState<(string | number)[]>([])
+  const [deckIndex, setDeckIndex] = useState(0)
+  const [loaded, setLoaded] = useState(false)
   const [, setPrefsVersion] = useState(0)
-  const rotateRef                 = useRef<ReturnType<typeof setInterval> | null>(null)
-  const failedIdsRef              = useRef<Set<Artwork['id']>>(new Set())
-  const prefsRef                  = useRef<ArtworkPreferences>({})
+  const rotateRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const failedIdsRef = useRef<Set<string | number>>(new Set())
+  const prefsRef = useRef<ArtworkPreferences>({})
+  const lastPlayedIdRef = useRef<string | number | null>(null)
+
   const {
     artworks: personalArtwork,
     sourceMode,
@@ -214,7 +318,6 @@ export function useArtwork(rotateSecs = 240, shuffle = true) {
     let cancelled = false
     async function load() {
       try {
-        // Pick 3 random Met queries + 2 random ARTIC queries each load cycle
         const metQs = pickRandom(MET_QUERIES, 3)
         const articQs = pickRandom(ARTIC_QUERIES, 2)
 
@@ -227,7 +330,6 @@ export function useArtwork(rotateSecs = 240, shuffle = true) {
         ])
 
         const combined = [...m1, ...m2, ...m3, ...a1, ...a2]
-        // Deduplicate by id
         const seen = new Set<Artwork['id']>()
         const all = combined.filter(a => {
           if (seen.has(a.id)) return false
@@ -236,23 +338,26 @@ export function useArtwork(rotateSecs = 240, shuffle = true) {
         })
 
         if (!cancelled && all.length > 0) {
-          setCasaArtworks(shuffle ? shuffled(all) : all)
+          setCasaArtworks(all)
         } else if (!cancelled) {
-          setCasaArtworks(shuffle ? shuffled(FALLBACKS) : FALLBACKS)
+          setCasaArtworks(FALLBACKS)
         }
       } catch (e) {
         console.error('Failed to load artwork:', e)
         if (!cancelled) {
-          setCasaArtworks(shuffle ? shuffled(FALLBACKS) : FALLBACKS)
+          setCasaArtworks(FALLBACKS)
         }
       }
     }
     load()
     return () => { cancelled = true }
-  }, [sourceMode, shuffle])
+  }, [sourceMode])
 
-  useEffect(() => {
-    if (personalArtworkLoading) return
+  // Build the complete available feed
+  const rawFeed: Artwork[] = useMemo(() => {
+    if (personalArtworkLoading && personalArtwork.length === 0 && sourceMode === 'personal') {
+      return []
+    }
     const personal: Artwork[] = personalArtwork.map(item => ({
       id: item.id,
       title: item.title,
@@ -260,51 +365,116 @@ export function useArtwork(rotateSecs = 240, shuffle = true) {
       imageUrl: item.imageUrl,
       medium: 'Uploaded artwork',
     }))
-    const feed = buildArtworkFeed(sourceMode, casaArtworks, personal)
-    setArtworks(shuffle ? shuffled(feed) : feed)
-    setLoaded(false)
-    setIndex(0)
-  }, [casaArtworks, personalArtwork, personalArtworkLoading, sourceMode, shuffle])
+    return buildArtworkFeed(
+      sourceMode,
+      casaArtworks.length > 0 ? casaArtworks : (sourceMode === 'casa' ? FALLBACKS : []),
+      personal,
+    )
+  }, [casaArtworks, personalArtwork, personalArtworkLoading, sourceMode])
+
+  // Filter out any known failed IDs
+  const activeFeed = useMemo(() => {
+    return rawFeed.filter(a => !failedIdsRef.current.has(a.id))
+  }, [rawFeed])
+
+  const feedMap = useMemo(() => {
+    const map = new Map<string, Artwork>()
+    for (const art of activeFeed) {
+      map.set(String(art.id), art)
+    }
+    return map
+  }, [activeFeed])
+
+  const availableIds = useMemo(() => activeFeed.map(a => a.id), [activeFeed])
+
+  // Synchronize deck whenever available items, sourceMode, or shuffle changes
+  useEffect(() => {
+    if (availableIds.length === 0) {
+      setDeck([])
+      setDeckIndex(0)
+      return
+    }
+
+    const { deckIds: syncedDeck, deckIndex: syncedIndex, lastPlayedId } = loadStoredDeck(
+      sourceMode,
+      shuffle,
+      availableIds,
+    )
+
+    lastPlayedIdRef.current = lastPlayedId
+    setDeck(syncedDeck)
+    setDeckIndex(syncedIndex)
+  }, [availableIds, sourceMode, shuffle])
+
+  // Current active artwork
+  const currentArtworkId = deck[deckIndex]
+  const currentArtwork = (currentArtworkId != null ? feedMap.get(String(currentArtworkId)) : null) ?? activeFeed[0] ?? null
 
   const advance = useCallback(() => {
-    setLoaded(false)
-    setIndex(prevIndex => {
-      if (artworks.length <= 1) return 0
-      const nextIndex = prevIndex + 1
-      if (nextIndex >= artworks.length) {
-        if (shuffle) {
-          setArtworks(prev => shuffled(prev))
-        }
-        return 0
-      }
-      return nextIndex
-    })
-  }, [artworks.length, shuffle])
+    if (availableIds.length <= 1) return
 
-  // Auto-rotate — only starts once artworks are loaded
+    setLoaded(false)
+    setDeck(prevDeck => {
+      setDeckIndex(prevIndex => {
+        const playedId = prevDeck[prevIndex]
+        lastPlayedIdRef.current = playedId ?? null
+
+        const nextIndex = prevIndex + 1
+        // If we reached the end of the deck, start the next complete non-repeating cycle!
+        if (nextIndex >= prevDeck.length) {
+          const nextDeck = shuffle
+            ? generateShuffledDeck(availableIds, playedId)
+            : [...availableIds]
+
+          saveStoredDeck({
+            sourceMode,
+            isShuffled: shuffle,
+            deckIds: nextDeck,
+            deckIndex: 0,
+            lastPlayedId: playedId ?? null,
+            updatedAt: Date.now(),
+          })
+
+          // Update deck in outer state
+          setTimeout(() => setDeck(nextDeck), 0)
+          return 0
+        }
+
+        saveStoredDeck({
+          sourceMode,
+          isShuffled: shuffle,
+          deckIds: prevDeck,
+          deckIndex: nextIndex,
+          lastPlayedId: playedId ?? null,
+          updatedAt: Date.now(),
+        })
+
+        return nextIndex
+      })
+      return prevDeck
+    })
+  }, [availableIds, shuffle, sourceMode])
+
+  // Auto-rotate timer
   useEffect(() => {
-    if (artworks.length === 0) return
+    if (availableIds.length <= 1) return
     if (rotateRef.current) clearInterval(rotateRef.current)
     rotateRef.current = setInterval(() => {
       advance()
     }, rotateSecs * 1000)
-    return () => { if (rotateRef.current) clearInterval(rotateRef.current) }
-  }, [artworks.length, rotateSecs, advance])
-
-  const current = artworks.length > 0 ? artworks[index] : null
+    return () => {
+      if (rotateRef.current) clearInterval(rotateRef.current)
+    }
+  }, [availableIds.length, rotateSecs, advance])
 
   const onLoad = useCallback(() => setLoaded(true), [])
 
-  // Called when an image fails to load — skip it and advance
   const onError = useCallback(() => {
-    setArtworks(prev => {
-      if (prev.length === 0) return prev
-      const failedId = prev[index]?.id
-      if (failedId != null) failedIdsRef.current.add(failedId)
-      return prev
-    })
+    if (currentArtwork?.id != null) {
+      failedIdsRef.current.add(currentArtwork.id)
+    }
     advance()
-  }, [advance, index])
+  }, [advance, currentArtwork?.id])
 
   const next = useCallback(() => {
     advance()
@@ -317,15 +487,16 @@ export function useArtwork(rotateSecs = 240, shuffle = true) {
     setPrefsVersion(v => v + 1)
   }, [])
 
-  const currentPreference = current ? prefsRef.current[String(current.id)] : undefined
+  const currentPreference = currentArtwork ? prefsRef.current[String(currentArtwork.id)] : undefined
 
   return {
-    artwork: current,
+    artwork: currentArtwork,
     loaded,
     onLoad,
     onError,
     next,
-    total: artworks.length,
+    total: activeFeed.length,
+    deckProgress: deck.length > 0 ? { current: deckIndex + 1, total: deck.length } : null,
     setPreference,
     currentPreference,
   }
