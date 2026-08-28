@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowBigUp, ChevronDown, ChevronLeft, ChevronRight, CornerDownLeft, Delete, Mic, MicOff, Settings2, Sparkles } from 'lucide-react'
+import { AnimatePresence, motion, useDragControls } from 'framer-motion'
+import { ArrowBigUp, ChevronDown, ChevronLeft, ChevronRight, CornerDownLeft, Delete, GripHorizontal, Mic, MicOff, RotateCcw, Settings2, Sparkles } from 'lucide-react'
 import { useFieldDictation } from '../../hooks/useFieldDictation'
 
 const MOBILE_BREAKPOINT = 1024
@@ -293,6 +293,7 @@ export default function TouchKeyboard() {
   const [caretPosState, setCaretPosState] = useState(0)
 
   const rootRef = useRef<HTMLDivElement>(null)
+  const dragControls = useDragControls()
   const audioCtxRef = useRef<AudioContext | null>(null)
   const backspaceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const backspaceIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -891,24 +892,52 @@ export default function TouchKeyboard() {
       {visible && (
         <motion.div
           ref={rootRef}
+          drag
+          dragControls={dragControls}
+          dragListener={false}
+          dragMomentum={false}
+          dragElastic={0.06}
           onPointerDownCapture={preserveEditableFocus}
           initial={{ y: '110%', opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: '110%', opacity: 0 }}
           transition={{ type: 'spring', damping: 30, stiffness: 280 }}
-          className="fixed z-toast border border-casa-border bg-casa-surface/98 backdrop-blur-md shadow-modal overflow-hidden rounded-2xl"
+          className="fixed z-toast border border-casa-border bg-casa-surface/98 backdrop-blur-md shadow-modal overflow-hidden rounded-2xl touch-none"
           style={{
             width: `${keyboardWidthPx}px`,
             bottom: `${VK_BOTTOM_OFFSET}px`,
             left: cardLeft,
           }}
         >
-          <div className="px-3 pt-2.5 pb-3 flex flex-col gap-2 select-none">
+          <div className="px-3 pt-1.5 pb-3 flex flex-col gap-1.5 select-none">
+            {/* ── Top Ambient Drag Handle ── */}
+            <div
+              onPointerDown={(e) => {
+                e.preventDefault()
+                playAcousticTap('scrub')
+                dragControls.start(e)
+              }}
+              className="w-full flex items-center justify-center py-1 cursor-grab active:cursor-grabbing hover:bg-casa-bg/60 transition-colors -mt-1 -mb-1 rounded-t-xl group touch-none"
+              title="Drag to move keyboard anywhere"
+            >
+              <div className="w-12 h-1 rounded-full bg-casa-border group-hover:bg-casa-gold/80 group-active:bg-casa-gold transition-colors" />
+            </div>
+
             {/* ── Top Header: Field Label, Navigation, Settings & Dismiss ── */}
-            <div className="flex items-center gap-1.5 pb-0.5 border-b border-casa-border/50">
+            <div
+              onPointerDown={(e) => {
+                if (!(e.target instanceof Element && e.target.closest('button'))) {
+                  e.preventDefault()
+                  playAcousticTap('scrub')
+                  dragControls.start(e)
+                }
+              }}
+              className="flex items-center gap-1.5 pb-0.5 border-b border-casa-border/50 cursor-grab active:cursor-grabbing"
+            >
               <div className="flex-1 flex items-center gap-2 min-w-0 pr-2">
+                <GripHorizontal size={15} className="text-casa-muted/60 shrink-0" />
                 <span className="w-2 h-2 rounded-full bg-casa-gold shrink-0 animate-pulse" />
-                <p className="text-body-sm font-semibold text-casa-navy truncate">
+                <p className="text-body-sm font-semibold text-casa-navy truncate select-none">
                   {getFieldLabel(target)}
                 </p>
                 {capsLock && (
@@ -999,6 +1028,19 @@ export default function TouchKeyboard() {
                       className="rounded-pill bg-casa-bg border border-casa-border px-3 py-1.5 text-caption font-semibold text-casa-navy active:scale-95"
                     >
                       Dock · <span className="capitalize">{handedness}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onPointerDown={(e) => {
+                        e.preventDefault()
+                        playAcousticTap('action')
+                        if (rootRef.current) {
+                          rootRef.current.style.transform = 'none'
+                        }
+                      }}
+                      className="rounded-pill bg-casa-bg border border-casa-border px-3 py-1.5 text-caption font-semibold text-casa-navy active:scale-95 flex items-center gap-1"
+                    >
+                      <RotateCcw size={12} /> Reset Dock
                     </button>
                     <button
                       type="button"

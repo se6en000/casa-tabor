@@ -43,3 +43,10 @@ test('virtual keyboard supports long-press alternate character replacement', () 
   assert.match(keyboard, /cancelKeyAltTimer/)
 })
 
+test('virtual keyboard provides draggable repositioning and drag controls', () => {
+  assert.match(keyboard, /useDragControls/)
+  assert.match(keyboard, /dragControls\.start/)
+  assert.match(keyboard, /GripHorizontal/)
+  assert.match(keyboard, /Reset Dock/)
+})
+
