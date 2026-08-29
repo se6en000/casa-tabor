@@ -157,10 +157,7 @@ def _is_push_enabled() -> bool:
             _user_brightness_min = int(cfg.get("brightness_min", BRIGHTNESS_MIN_DEFAULT))
             _user_brightness_max = int(cfg.get("brightness_max", BRIGHTNESS_MAX_DEFAULT))
             _brightness_min      = _user_brightness_min
-            if _art_mode_active:
-                _brightness_max  = max(_brightness_min, int(_user_brightness_max * (1.0 - _art_dim_offset)))
-            else:
-                _brightness_max  = _user_brightness_max
+            _brightness_max      = _user_brightness_max
             _auto_sleep_enabled  = bool(cfg.get("auto_sleep_enabled", True))
             _sleep_lux_threshold = float(cfg.get("sleep_lux_threshold", 0.5))
             _wake_lux_threshold  = float(cfg.get("wake_lux_threshold", 3.0))
@@ -246,15 +243,18 @@ POLL_INTERVAL = 0.5  # seconds between sensor reads (500 ms — continuous ambie
 #                      transitions. Deadband ignores sensor noise < 3 lux.
 #   _color_loop      — runs at 66 ms/step, slower glide is imperceptible.
 #
-# Brightness formula (power-law, mirrors human eye):
-#   brightness = min_b + (max_b - min_b) × (lux / LUX_REF) ^ LUX_EXPONENT
+# Brightness transfer curve (log-space normalization + CIE 1931 gamma expansion):
+#   Perception = night_floor + (day_ceiling - night_floor) * (log10(lux_norm) ^ PERCEIVED_EXP)
+#   PWM_fraction = Perception ^ GAMMA_CORRECTION
 
 DDC_I2C_BUS  = 14      # /dev/i2c-14 is the HDMI DDC bus on this Pi
 DDC_ADDR     = 0x37    # DDC/CI slave address (standard)
 DDC_SRC      = 0x51    # host source address (standard DDC/CI)
 
-LUX_REF      = 1000.0  # lux at which brightness reaches max_b
-LUX_EXPONENT = 0.35    # power-law exponent (0.35 ≈ human eye response)
+LUX_MIN_NIGHT    = 0.2     # Pitch dark room threshold (0.2 lux) -> pins to panel floor
+LUX_MAX_DAY      = 800.0   # Bright daylight threshold (800 lux) -> approaches max brightness
+PERCEIVED_EXP    = 0.80    # Perceptual curve shape in log-space
+GAMMA_CORRECTION = 2.2     # CIE 1931 / sRGB backlight power expansion (human eye response)
 
 BRIGHTNESS_MIN_DEFAULT = 1    # DDC level 1 (darkest stable setting)
 BRIGHTNESS_MAX_DEFAULT = 90
@@ -470,14 +470,48 @@ def _display_wake(target_brightness: int):
 
 
 def lux_to_brightness(lux: float) -> int:
-    """Map lux → DDC brightness % using power-law curve and art mode scaling."""
+    """
+    Map ambient lux → DDC hardware brightness level (1–90) using:
+    1. Logarithmic lux normalization (human vision dynamic range: 0.2 to 800+ lux).
+    2. Dynamic Art Mode scaling: dims daytime headroom to look like archival canvas,
+       while keeping dark rooms pinned safely at the soft, glare-free hardware floor.
+    3. CIE 1931 Gamma correction (perceived brightness → linear DDC PWM duty cycle).
+    """
     lo, hi = _effective_brightness_bounds()
-    ratio = min(max(lux, 0.0) / LUX_REF, 1.0)
-    mapped = lo + (hi - lo) * (ratio ** LUX_EXPONENT)
+    if lux is None or lux < 0:
+        lux = 0.0
+
+    # 1. Clamp and normalize lux in log10 space
+    lux_clamped = max(LUX_MIN_NIGHT, min(lux, LUX_MAX_DAY))
+    log_min = math.log10(LUX_MIN_NIGHT)
+    log_max = math.log10(LUX_MAX_DAY)
+    
+    # 0.0 (night / dark) -> 1.0 (bright day)
+    t = (math.log10(lux_clamped) - log_min) / (log_max - log_min)
+    t = max(0.0, min(1.0, t))
+    
+    # 2. Perceived curve: night floor ~1.5%, daytime ceiling ~95%
+    night_perceived = 0.015
+    day_perceived = 0.95
+    
+    # If Art Mode ("dim below ambient") is active, scale the daytime presence:
     if _art_mode_active and _art_dim_offset > 0.0:
-        dimmed = lo + (mapped - lo) * (1.0 - _art_dim_offset)
-        return max(lo, min(hi, round(dimmed)))
-    return max(lo, min(hi, round(mapped)))
+        # Scale daytime ceiling down based on dim_offset (e.g. 25% dim -> 0.95 * (1 - 0.25 * 0.75) = 0.77)
+        day_perceived = day_perceived * (1.0 - _art_dim_offset * 0.75)
+        # Night floor gently stays at minimum so dark rooms are never blinding
+        night_perceived = max(0.005, night_perceived * (1.0 - min(0.5, _art_dim_offset * 0.5)))
+    
+    # Smooth power-law interpolation in log space
+    perceived_target = night_perceived + (day_perceived - night_perceived) * (t ** PERCEIVED_EXP)
+    perceived_target = max(0.0, min(1.0, perceived_target))
+    
+    # 3. Gamma expansion: convert perceived lightness to physical DDC PWM duty cycle
+    # Perceived brightness = PWM^(1/gamma) ==> PWM = Perceived^gamma
+    pwm_fraction = perceived_target ** GAMMA_CORRECTION
+    
+    # Map into effective monitor DDC range [lo, hi]
+    ddc_level = lo + (hi - lo) * pwm_fraction
+    return max(lo, min(hi, int(round(ddc_level))))
 
 
 def set_brightness_target(lux: float):
@@ -1079,7 +1113,7 @@ async def art_mode(request: Request):
         _art_mode_active = True
         
         orig_max = _user_brightness_max if '_user_brightness_max' in globals() else _panel_brightness_max
-        _brightness_max = max(_brightness_min, int(orig_max * (1.0 - _art_dim_offset)))
+        _brightness_max = orig_max
         
         with _lock:
             lux_now = _latest.get("lux", 50.0)
