@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
+import { Info } from 'lucide-react'
 import { useArtwork, artworkMetadataCache, type Artwork } from '../../hooks/useArtwork'
+import { ArtworkProvenanceCard } from './ArtworkProvenanceCard'
+import { IconButton } from '../ui'
 import {
   generateHarmonizedBevel,
   getPaletteColorForKey,
@@ -87,6 +90,8 @@ export default function ArtScreensaver({
   const [imageRatio, setImageRatio] = useState(16 / 9)
   const [activeArtwork, setActiveArtwork] = useState<Artwork | null>(artwork)
   const [outgoingArtwork, setOutgoingArtwork] = useState<Artwork | null>(null)
+  const [infoOpen, setInfoOpen] = useState(false)
+  const infoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [viewport, setViewport] = useState(() => ({
     width: typeof window !== 'undefined' ? window.innerWidth : 1920,
     height: typeof window !== 'undefined' ? window.innerHeight : 1080,
@@ -95,6 +100,26 @@ export default function ArtScreensaver({
   const touchStartXRef = useRef<number | null>(null)
   const touchStartYRef = useRef<number | null>(null)
   const fadeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const handleToggleInfo = useCallback((e?: React.SyntheticEvent) => {
+    e?.stopPropagation()
+    setInfoOpen(prev => {
+      const nextState = !prev
+      if (infoTimerRef.current) clearTimeout(infoTimerRef.current)
+      if (nextState) {
+        infoTimerRef.current = setTimeout(() => {
+          setInfoOpen(false)
+        }, 8000)
+      }
+      return nextState
+    })
+  }, [])
+
+  // Auto-close info card on artwork change
+  useEffect(() => {
+    setInfoOpen(false)
+    if (infoTimerRef.current) clearTimeout(infoTimerRef.current)
+  }, [artwork?.id])
 
   const currentToDisplay = activeArtwork || artwork
 
@@ -272,9 +297,16 @@ export default function ArtScreensaver({
       } else if (e.key === 'ArrowLeft') {
         e.preventDefault()
         handlePrevPiece()
+      } else if (e.key === 'i' || e.key === 'I') {
+        e.preventDefault()
+        handleToggleInfo()
       } else if (e.key === 'Escape' || e.key === ' ' || e.key === 'Enter') {
         e.preventDefault()
-        handleDismiss()
+        if (infoOpen) {
+          setInfoOpen(false)
+        } else {
+          handleDismiss()
+        }
       }
     }
     window.addEventListener('keydown', handleKeyDown)
@@ -567,41 +599,85 @@ export default function ArtScreensaver({
         {/* Museum Gallery Plaque */}
         {currentToDisplay && plaqueMode !== 'hidden' && (
           <div
-            className="absolute bottom-5 right-7 text-right pointer-events-none"
+            className="absolute bottom-5 right-7 flex items-end gap-3 z-30 pointer-events-none"
             style={{
               opacity: plaqueVisible ? 1 : 0,
               transform: plaqueVisible ? 'translateY(0)' : 'translateY(6px)',
               transition: 'opacity 1.2s cubic-bezier(0.16, 1, 0.3, 1), transform 1.2s cubic-bezier(0.16, 1, 0.3, 1)',
-              color: darkThemeActive ? 'rgba(220, 215, 205, 0.78)' : 'rgba(65, 50, 40, 0.80)',
-              textShadow: darkThemeActive
-                ? '0 1px 1px rgba(0, 0, 0, 0.90), 0 -1px 0.5px rgba(255, 255, 255, 0.08)'
-                : '0 1px 0px rgba(255, 255, 255, 0.92), 0 -1px 0.5px rgba(0, 0, 0, 0.18)',
-              zIndex: 30,
             }}
           >
-            <p
-              className="italic leading-snug tracking-wide"
+            {/* Subtle Interactive (i) Provenance Trigger Pill */}
+            {(currentToDisplay.description || currentToDisplay.location || currentToDisplay.funFact || currentToDisplay.subjects) && (
+              <IconButton
+                size="sm"
+                variant="ghost"
+                icon={<Info size={14} className="text-amber-500 shrink-0" />}
+                onClick={handleToggleInfo}
+                aria-label="View photo provenance and story"
+                title="Photo details & provenance (press 'i')"
+                className="pointer-events-auto rounded-full transition-all duration-200 bg-white/10 dark:bg-black/20 hover:bg-white/20 dark:hover:bg-black/30 border border-white/20 dark:border-white/10 backdrop-blur-xs shadow-xs active:scale-95 cursor-pointer"
+              />
+            )}
+
+            <div
+              className="text-right"
               style={{
-                fontFamily: 'Georgia, "Cormorant Garamond", "Times New Roman", serif',
-                fontSize: '0.86rem',
-                fontWeight: 500,
-                letterSpacing: '0.4px',
+                color: darkThemeActive ? 'rgba(220, 215, 205, 0.78)' : 'rgba(65, 50, 40, 0.80)',
+                textShadow: darkThemeActive
+                  ? '0 1px 1px rgba(0, 0, 0, 0.90), 0 -1px 0.5px rgba(255, 255, 255, 0.08)'
+                  : '0 1px 0px rgba(255, 255, 255, 0.92), 0 -1px 0.5px rgba(0, 0, 0, 0.18)',
               }}
             >
-              {cleanTitle}
-            </p>
-            <p
-              className="leading-tight mt-0.5 uppercase tracking-wider"
-              style={{
-                fontFamily: 'Georgia, "Cormorant Garamond", "Times New Roman", serif',
-                fontSize: '0.64rem',
-                fontWeight: 400,
-                letterSpacing: '1.2px',
-                opacity: 0.88,
-              }}
-            >
-              {cleanArtist}
-            </p>
+              <p
+                className="italic leading-snug tracking-wide"
+                style={{
+                  fontFamily: 'Georgia, "Cormorant Garamond", "Times New Roman", serif',
+                  fontSize: '0.86rem',
+                  fontWeight: 500,
+                  letterSpacing: '0.4px',
+                }}
+              >
+                {cleanTitle}
+              </p>
+              <p
+                className="leading-tight mt-0.5 uppercase tracking-wider"
+                style={{
+                  fontFamily: 'Georgia, "Cormorant Garamond", "Times New Roman", serif',
+                  fontSize: '0.64rem',
+                  fontWeight: 400,
+                  letterSpacing: '1.2px',
+                  opacity: 0.88,
+                }}
+              >
+                {cleanArtist}
+                {currentToDisplay.location && ` · ${currentToDisplay.location.split(',')[0]}`}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Ambient Provenance Card Overlay */}
+        {infoOpen && currentToDisplay && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/45 backdrop-blur-xs animate-in fade-in duration-200"
+            onClick={e => {
+              e.stopPropagation()
+              setInfoOpen(false)
+            }}
+          >
+            <ArtworkProvenanceCard
+              title={cleanTitle}
+              artist={cleanArtist}
+              location={currentToDisplay.location}
+              dateTaken={currentToDisplay.dateTaken || currentToDisplay.date}
+              description={currentToDisplay.description}
+              subjects={currentToDisplay.subjects}
+              medium={currentToDisplay.medium}
+              funFact={currentToDisplay.funFact}
+              darkTheme={darkThemeActive}
+              onClose={() => setInfoOpen(false)}
+              className="max-w-lg w-full"
+            />
           </div>
         )}
       </div>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Image, Sun, Palette, Monitor, Plus, Minus, X, ChevronDown, ChevronUp, Upload, Crop } from 'lucide-react'
+import { Image, Sun, Palette, Monitor, Plus, Minus, X, ChevronDown, ChevronUp, Upload, Crop, BookOpen, Feather, Sparkles } from 'lucide-react'
 import { useScreensaverSettings } from '../hooks/useScreensaverSettings'
 import { useRoomTone } from '../hooks/useRoomTone'
 import { useArtFeedPrefs, MEDIA_OPTIONS } from '../hooks/useArtFeedPrefs'
@@ -15,7 +15,8 @@ import {
 } from '../lib/artModeLibrary'
 import { cn } from '../utils/cn'
 import { SettingsPageHeader, SettingsToggle as Toggle, ArtworkCropModal, PersonalArtworkCard } from '../components/settings'
-import { Alert, Button, Checkbox, EmptyState, IconButton, Modal, SegmentedControl, SectionHeader as SharedSectionHeader, Input } from '../components/ui'
+import { ArtworkProvenanceCard } from '../components/shared/ArtworkProvenanceCard'
+import { Alert, Button, Checkbox, EmptyState, IconButton, Modal, SegmentedControl, SectionHeader as SharedSectionHeader, Input, Textarea } from '../components/ui'
 
 const ART_FEED_MODE_OPTIONS = [
   { value: 'auto', label: 'Auto Gallery' },
@@ -217,8 +218,16 @@ export default function ArtModeSettingsPage() {
   const [artworkToDelete, setArtworkToDelete] = useState<PersonalArtwork | null>(null)
   const [artworkToEdit, setArtworkToEdit] = useState<PersonalArtwork | null>(null)
   const [artworkToCrop, setArtworkToCrop] = useState<PersonalArtwork | null>(null)
+  const [provenancePreviewArtwork, setProvenancePreviewArtwork] = useState<PersonalArtwork | null>(null)
+  const [editTab, setEditTab] = useState<'story' | 'signature'>('story')
   const [editTitle, setEditTitle] = useState('')
   const [editArtist, setEditArtist] = useState('')
+  const [editLocation, setEditLocation] = useState('')
+  const [editDateTaken, setEditDateTaken] = useState('')
+  const [editDescription, setEditDescription] = useState('')
+  const [editSubjects, setEditSubjects] = useState('')
+  const [editMedium, setEditMedium] = useState('Color photograph')
+  const [editFunFact, setEditFunFact] = useState('')
   const [editEnabled, setEditEnabled] = useState(true)
   const [editSignatureEnabled, setEditSignatureEnabled] = useState(false)
   const [editSignatureText, setEditSignatureText] = useState('')
@@ -311,8 +320,15 @@ export default function ArtModeSettingsPage() {
 
   const handleOpenEdit = (item: PersonalArtwork) => {
     setArtworkToEdit(item)
+    setEditTab('story')
     setEditTitle(item.title)
     setEditArtist(item.artist || '')
+    setEditLocation(item.location || '')
+    setEditDateTaken(item.dateTaken || '')
+    setEditDescription(item.description || '')
+    setEditSubjects(item.subjects || '')
+    setEditMedium(item.medium || 'Color photograph')
+    setEditFunFact(item.funFact || '')
     setEditEnabled(!disabledArtworkIds.includes(item.id))
     setEditSignatureEnabled(Boolean(item.signatureEnabled))
     setEditSignatureText(item.signatureText || item.artist || '')
@@ -331,6 +347,12 @@ export default function ArtModeSettingsPage() {
         id: artworkToEdit.id,
         title: editTitle,
         artist: editArtist,
+        location: editLocation,
+        dateTaken: editDateTaken,
+        description: editDescription,
+        subjects: editSubjects,
+        medium: editMedium,
+        funFact: editFunFact,
         signatureEnabled: editSignatureEnabled,
         signatureText: editSignatureText,
         signatureStyle: editSignatureStyle,
@@ -651,6 +673,7 @@ export default function ArtModeSettingsPage() {
                         onCrop={handleOpenCrop}
                         onEdit={handleOpenEdit}
                         onDelete={setArtworkToDelete}
+                        onViewProvenance={setProvenancePreviewArtwork}
                       />
                     ))}
                   </div>
@@ -835,21 +858,21 @@ export default function ArtModeSettingsPage() {
         )}
       </div>
 
-      {/* Edit Artwork Details Modal */}
+      {/* Edit Artwork Details & Provenance Studio Modal */}
       <Modal
         open={artworkToEdit !== null}
         onClose={() => setArtworkToEdit(null)}
-        title="Edit Artwork Details"
+        title="Edit Artwork & Provenance"
         size="xl"
-        panelClassName="max-w-4xl max-h-[92vh] flex flex-col"
+        panelClassName="max-w-5xl max-h-[92vh] flex flex-col"
         contentClassName="p-0 flex-1 overflow-hidden flex flex-col"
         closeDisabled={updating}
       >
         {/* Scrollable Studio Content */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-start">
-            {/* Left Column: Live Canvas Preview & Metadata */}
-            <div className="md:col-span-6 flex flex-col gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+            {/* Left Column: Live Canvas Preview & Metadata Overview */}
+            <div className="md:col-span-5 flex flex-col gap-4">
               {artworkToEdit && (
                 <div className="relative w-full aspect-[16/9] rounded-xl overflow-hidden bg-stone-900 border border-casa-border shadow-inner group shrink-0">
                   <img
@@ -957,184 +980,319 @@ export default function ArtModeSettingsPage() {
                 </div>
               )}
 
-              <div className="space-y-3">
+              {/* Provenance Live Preview Pill */}
+              <div className="rounded-xl border border-casa-border bg-casa-bg p-3.5 space-y-2">
+                <div className="flex items-center justify-between gap-2 border-b border-casa-border pb-2">
+                  <span className="text-2xs font-semibold uppercase tracking-wider text-casa-muted flex items-center gap-1">
+                    <Sparkles size={12} className="text-casa-gold" />
+                    Plaque Preview
+                  </span>
+                  <span className="text-3xs text-casa-muted">Screensaver bottom-right</span>
+                </div>
                 <div>
-                  <label className="text-caption font-medium text-casa-navy block mb-1">Artwork Title</label>
-                  <Input
-                    type="text"
-                    value={editTitle}
-                    onChange={e => setEditTitle(e.target.value)}
-                    placeholder="e.g. Highland Cattle with Espresso"
-                    className="w-full"
-                    autoFocus
-                  />
+                  <p className="font-serif italic text-body-sm text-casa-navy truncate font-medium">
+                    {editTitle.trim() || 'Untitled Artwork'}
+                  </p>
+                  <p className="text-caption text-casa-muted uppercase tracking-wider text-2xs truncate mt-0.5">
+                    {editArtist.trim() || 'Personal Collection'}
+                    {editLocation.trim() && ` · ${editLocation.trim().split(',')[0]}`}
+                    {editDateTaken.trim() && ` (${editDateTaken.trim()})`}
+                  </p>
                 </div>
+              </div>
 
-                <div>
-                  <label className="text-caption font-medium text-casa-navy block mb-1">Artist Name (Optional)</label>
-                  <Input
-                    type="text"
-                    value={editArtist}
-                    onChange={e => setEditArtist(e.target.value)}
-                    placeholder="e.g. Dwight Smith"
-                    className="w-full"
-                  />
-                  <p className="text-caption text-casa-muted mt-1">Leaves as &ldquo;Personal collection&rdquo; if left blank.</p>
-                </div>
-
-                <div className="pt-2 border-t border-casa-border">
-                  <Toggle
-                    checked={editEnabled}
-                    onChange={setEditEnabled}
-                    label="Active on this device"
-                    desc="Include this photo during Art Mode rotation on this kiosk."
-                  />
-                </div>
+              <div className="pt-1">
+                <Toggle
+                  checked={editEnabled}
+                  onChange={setEditEnabled}
+                  label="Active on this device"
+                  desc="Include this photo during Art Mode rotation on this kiosk."
+                />
               </div>
             </div>
 
-            {/* Right Column: Signature Studio */}
-            <div className="md:col-span-6 flex flex-col gap-3.5">
-              <div className="rounded-xl border border-casa-border bg-casa-surface-2/30 p-3.5">
-                <Toggle
-                  checked={editSignatureEnabled}
-                  onChange={checked => {
-                    setEditSignatureEnabled(checked)
-                    if (checked && !editSignatureText) {
-                      setEditSignatureText(editArtist.trim() || artworkToEdit?.title || '')
-                    }
-                  }}
-                  label="Artist signature overlay"
-                  desc="Overlay handwritten artist signature or inscription on the image."
-                />
+            {/* Right Column: Tabbed Editorial Studio */}
+            <div className="md:col-span-7 flex flex-col gap-4">
+              {/* Studio Tabs Header */}
+              <div className="flex items-center gap-2 border-b border-casa-border pb-2.5">
+                <Button
+                  type="button"
+                  variant={editTab === 'story' ? 'strong' : 'secondary'}
+                  size="sm"
+                  leadingIcon={<BookOpen size={15} />}
+                  onClick={() => setEditTab('story')}
+                >
+                  Story & Provenance
+                </Button>
+                <Button
+                  type="button"
+                  variant={editTab === 'signature' ? 'strong' : 'secondary'}
+                  size="sm"
+                  leadingIcon={<Feather size={15} />}
+                  onClick={() => setEditTab('signature')}
+                >
+                  Signature Studio
+                </Button>
               </div>
 
-              {editSignatureEnabled && (
+              {/* Tab 1: Story & Provenance Fields */}
+              {editTab === 'story' && (
                 <div className="space-y-3.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-caption font-medium text-casa-navy block mb-1">
+                        Artwork Title *
+                      </label>
+                      <Input
+                        type="text"
+                        value={editTitle}
+                        onChange={e => setEditTitle(e.target.value)}
+                        placeholder="e.g. Poolside Gossip"
+                        className="w-full"
+                        autoFocus
+                      />
+                    </div>
+                    <div>
+                      <label className="text-caption font-medium text-casa-navy block mb-1">
+                        Photographer / Artist
+                      </label>
+                      <Input
+                        type="text"
+                        value={editArtist}
+                        onChange={e => setEditArtist(e.target.value)}
+                        placeholder="e.g. Slim Aarons"
+                        className="w-full"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-caption font-medium text-casa-navy block mb-1">
+                        Year / Date Taken
+                      </label>
+                      <Input
+                        type="text"
+                        value={editDateTaken}
+                        onChange={e => setEditDateTaken(e.target.value)}
+                        placeholder="e.g. January 1970"
+                        className="w-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-caption font-medium text-casa-navy block mb-1">
+                        Location / Setting
+                      </label>
+                      <Input
+                        type="text"
+                        value={editLocation}
+                        onChange={e => setEditLocation(e.target.value)}
+                        placeholder="e.g. Palm Springs, California"
+                        className="w-full"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-caption font-medium text-casa-navy block mb-1">
+                        Medium / Format
+                      </label>
+                      <Input
+                        type="text"
+                        value={editMedium}
+                        onChange={e => setEditMedium(e.target.value)}
+                        placeholder="e.g. 35mm Kodachrome Slide"
+                        className="w-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-caption font-medium text-casa-navy block mb-1">
+                        Key Figures & Subjects
+                      </label>
+                      <Input
+                        type="text"
+                        value={editSubjects}
+                        onChange={e => setEditSubjects(e.target.value)}
+                        placeholder="e.g. Nelda Linsk, Helen Dzo Dzo"
+                        className="w-full"
+                      />
+                    </div>
+                  </div>
+
                   <div>
                     <label className="text-caption font-medium text-casa-navy block mb-1">
-                      Signature / Inscription Text
+                      Historical Background & Story
                     </label>
-                    <Input
-                      type="text"
-                      value={editSignatureText}
-                      onChange={e => setEditSignatureText(e.target.value)}
-                      placeholder={editArtist || "e.g. Dwight Smith '78"}
-                      className="w-full"
+                    <Textarea
+                      rows={3}
+                      value={editDescription}
+                      onChange={e => setEditDescription(e.target.value)}
+                      placeholder="Describe the moment, historical significance, or backstory..."
+                      className="w-full text-body-sm"
                     />
-                    <p className="text-caption text-casa-muted mt-1">
-                      Defaults to artist name or custom text (e.g. year, location, personal notes).
-                    </p>
                   </div>
 
                   <div>
                     <label className="text-caption font-medium text-casa-navy block mb-1">
-                      Handwriting Style
+                      Insider Trivia / Fun Facts
                     </label>
-                    <select
-                      value={editSignatureStyle}
-                      onChange={e => setEditSignatureStyle(e.target.value as SignatureStyle)}
-                      className="w-full h-10 px-3 rounded-button border border-casa-border bg-casa-bg text-body-sm text-casa-navy focus:border-casa-gold focus:outline-none transition-colors"
-                    >
-                      {SIGNATURE_STYLE_OPTIONS.map(opt => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
+                    <Textarea
+                      rows={2}
+                      value={editFunFact}
+                      onChange={e => setEditFunFact(e.target.value)}
+                      placeholder="Interesting trivia or backstory for curious viewers..."
+                      className="w-full text-body-sm"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 2: Handwritten Signature Studio */}
+              {editTab === 'signature' && (
+                <div className="space-y-3.5">
+                  <div className="rounded-xl border border-casa-border bg-casa-surface-2/30 p-3.5">
+                    <Toggle
+                      checked={editSignatureEnabled}
+                      onChange={checked => {
+                        setEditSignatureEnabled(checked)
+                        if (checked && !editSignatureText) {
+                          setEditSignatureText(editArtist.trim() || artworkToEdit?.title || '')
+                        }
+                      }}
+                      label="Artist signature overlay"
+                      desc="Overlay handwritten artist signature or inscription on the image."
+                    />
                   </div>
 
-                  <div>
-                    <label className="text-caption font-medium text-casa-navy block mb-1">
-                      Signature Placement
-                    </label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Button
-                        type="button"
-                        variant={editSignaturePosition === 'bottom-right' ? 'strong' : 'secondary'}
-                        onClick={() => setEditSignaturePosition('bottom-right')}
-                        className="w-full justify-center text-body-sm"
-                      >
-                        ↘ Bottom Right
-                      </Button>
-                      <Button
-                        type="button"
-                        variant={editSignaturePosition === 'bottom-left' ? 'strong' : 'secondary'}
-                        onClick={() => setEditSignaturePosition('bottom-left')}
-                        className="w-full justify-center text-body-sm"
-                      >
-                        ↙ Bottom Left
-                      </Button>
-                    </div>
-                  </div>
+                  {editSignatureEnabled && (
+                    <div className="space-y-3.5">
+                      <div>
+                        <label className="text-caption font-medium text-casa-navy block mb-1">
+                          Signature / Inscription Text
+                        </label>
+                        <Input
+                          type="text"
+                          value={editSignatureText}
+                          onChange={e => setEditSignatureText(e.target.value)}
+                          placeholder={editArtist || "e.g. Dwight Smith '78"}
+                          className="w-full"
+                        />
+                        <p className="text-caption text-casa-muted mt-1">
+                          Defaults to artist name or custom text (e.g. year, location, personal notes).
+                        </p>
+                      </div>
 
-                  <div>
-                    <label className="text-caption font-medium text-casa-navy block mb-1">
-                      Signature Size
-                    </label>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                      {[
-                        { value: 'sm', label: 'Small' },
-                        { value: 'md', label: 'Medium' },
-                        { value: 'lg', label: 'Large' },
-                        { value: 'xl', label: 'Extra Large' },
-                      ].map(sizeOpt => (
-                        <Button
-                          key={sizeOpt.value}
-                          type="button"
-                          variant={editSignatureSize === sizeOpt.value ? 'strong' : 'secondary'}
-                          onClick={() => setEditSignatureSize(sizeOpt.value as SignatureSize)}
-                          className="w-full justify-center text-caption py-2 px-1"
+                      <div>
+                        <label className="text-caption font-medium text-casa-navy block mb-1">
+                          Handwriting Style
+                        </label>
+                        <select
+                          value={editSignatureStyle}
+                          onChange={e => setEditSignatureStyle(e.target.value as SignatureStyle)}
+                          className="w-full h-10 px-3 rounded-button border border-casa-border bg-casa-bg text-body-sm text-casa-navy focus:border-casa-gold focus:outline-none transition-colors"
                         >
-                          <span className="truncate">{sizeOpt.label}</span>
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
+                          {SIGNATURE_STYLE_OPTIONS.map(opt => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
 
-                  <div>
-                    <label className="text-caption font-medium text-casa-navy block mb-1">
-                      Ink Tone & Contrast
-                    </label>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                      {[
-                        { value: 'auto', label: 'Auto Contrast', swatch: 'bg-stone-500' },
-                        { value: 'dark', label: 'Charcoal Ink', swatch: 'bg-stone-900' },
-                        { value: 'sepia', label: 'Warm Umber', swatch: 'bg-amber-950' },
-                        { value: 'light', label: 'White Gesso', swatch: 'bg-stone-100 border border-stone-300' },
-                      ].map(tone => (
-                        <Button
-                          key={tone.value}
-                          type="button"
-                          variant={editSignatureColor === tone.value ? 'strong' : 'secondary'}
-                          onClick={() => setEditSignatureColor(tone.value as SignatureColor)}
-                          leadingIcon={<span className={cn('size-2.5 rounded-full shrink-0', tone.swatch)} />}
-                          className="w-full justify-center text-caption py-2 px-2.5"
-                        >
-                          <span className="truncate">{tone.label}</span>
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
+                      <div>
+                        <label className="text-caption font-medium text-casa-navy block mb-1">
+                          Signature Placement
+                        </label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Button
+                            type="button"
+                            variant={editSignaturePosition === 'bottom-right' ? 'strong' : 'secondary'}
+                            onClick={() => setEditSignaturePosition('bottom-right')}
+                            className="w-full justify-center text-body-sm"
+                          >
+                            ↘ Bottom Right
+                          </Button>
+                          <Button
+                            type="button"
+                            variant={editSignaturePosition === 'bottom-left' ? 'strong' : 'secondary'}
+                            onClick={() => setEditSignaturePosition('bottom-left')}
+                            className="w-full justify-center text-body-sm"
+                          >
+                            ↙ Bottom Left
+                          </Button>
+                        </div>
+                      </div>
 
-                  <div>
-                    <label className="text-caption font-medium text-casa-navy block mb-1">
-                      Ink Density & Translucency
-                    </label>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                      {SIGNATURE_OPACITY_OPTIONS.map(opOpt => (
-                        <Button
-                          key={opOpt.value}
-                          type="button"
-                          variant={editSignatureOpacity === opOpt.value ? 'strong' : 'secondary'}
-                          onClick={() => setEditSignatureOpacity(opOpt.value)}
-                          className="w-full justify-center text-caption py-2 px-1"
-                        >
-                          <span className="truncate">{opOpt.label}</span>
-                        </Button>
-                      ))}
+                      <div>
+                        <label className="text-caption font-medium text-casa-navy block mb-1">
+                          Signature Size
+                        </label>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                          {[
+                            { value: 'sm', label: 'Small' },
+                            { value: 'md', label: 'Medium' },
+                            { value: 'lg', label: 'Large' },
+                            { value: 'xl', label: 'Extra Large' },
+                          ].map(sizeOpt => (
+                            <Button
+                              key={sizeOpt.value}
+                              type="button"
+                              variant={editSignatureSize === sizeOpt.value ? 'strong' : 'secondary'}
+                              onClick={() => setEditSignatureSize(sizeOpt.value as SignatureSize)}
+                              className="w-full justify-center text-caption py-2 px-1"
+                            >
+                              <span className="truncate">{sizeOpt.label}</span>
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-caption font-medium text-casa-navy block mb-1">
+                          Ink Tone & Contrast
+                        </label>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                          {[
+                            { value: 'auto', label: 'Auto Contrast', swatch: 'bg-stone-500' },
+                            { value: 'dark', label: 'Charcoal Ink', swatch: 'bg-stone-900' },
+                            { value: 'sepia', label: 'Warm Umber', swatch: 'bg-amber-950' },
+                            { value: 'light', label: 'White Gesso', swatch: 'bg-stone-100 border border-stone-300' },
+                          ].map(tone => (
+                            <Button
+                              key={tone.value}
+                              type="button"
+                              variant={editSignatureColor === tone.value ? 'strong' : 'secondary'}
+                              onClick={() => setEditSignatureColor(tone.value as SignatureColor)}
+                              leadingIcon={<span className={cn('size-2.5 rounded-full shrink-0', tone.swatch)} />}
+                              className="w-full justify-center text-caption py-2 px-2.5"
+                            >
+                              <span className="truncate">{tone.label}</span>
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-caption font-medium text-casa-navy block mb-1">
+                          Ink Density & Translucency
+                        </label>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                          {SIGNATURE_OPACITY_OPTIONS.map(opOpt => (
+                            <Button
+                              key={opOpt.value}
+                              type="button"
+                              variant={editSignatureOpacity === opOpt.value ? 'strong' : 'secondary'}
+                              onClick={() => setEditSignatureOpacity(opOpt.value)}
+                              className="w-full justify-center text-caption py-2 px-1"
+                            >
+                              <span className="truncate">{opOpt.label}</span>
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1150,6 +1308,31 @@ export default function ArtModeSettingsPage() {
             Save Details
           </Button>
         </div>
+      </Modal>
+
+      {/* Quick Provenance Peek Modal */}
+      <Modal
+        open={provenancePreviewArtwork !== null}
+        onClose={() => setProvenancePreviewArtwork(null)}
+        title="Artwork Provenance"
+        size="md"
+        panelClassName="max-w-lg p-0 bg-transparent border-0 shadow-none overflow-visible"
+        contentClassName="p-0"
+      >
+        {provenancePreviewArtwork && (
+          <ArtworkProvenanceCard
+            title={provenancePreviewArtwork.title}
+            artist={provenancePreviewArtwork.artist}
+            location={provenancePreviewArtwork.location}
+            dateTaken={provenancePreviewArtwork.dateTaken}
+            description={provenancePreviewArtwork.description}
+            subjects={provenancePreviewArtwork.subjects}
+            medium={provenancePreviewArtwork.medium}
+            funFact={provenancePreviewArtwork.funFact}
+            imageUrl={provenancePreviewArtwork.imageUrl}
+            onClose={() => setProvenancePreviewArtwork(null)}
+          />
+        )}
       </Modal>
 
       {/* Delete Artwork Modal */}

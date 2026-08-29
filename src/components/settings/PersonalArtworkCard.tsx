@@ -1,4 +1,4 @@
-import { Eye, EyeOff, Crop, Pencil, Trash2, Feather } from 'lucide-react'
+import { Eye, EyeOff, Crop, Pencil, Trash2, Feather, Info, MapPin } from 'lucide-react'
 import { IconButton } from '../ui'
 import type { PersonalArtwork } from '../../hooks/usePersonalArtMode'
 import { cn } from '../../utils/cn'
@@ -10,6 +10,7 @@ export interface PersonalArtworkCardProps {
   onCrop: (artwork: PersonalArtwork) => void
   onEdit: (artwork: PersonalArtwork) => void
   onDelete: (artwork: PersonalArtwork) => void
+  onViewProvenance?: (artwork: PersonalArtwork) => void
   className?: string
 }
 
@@ -20,6 +21,7 @@ export function PersonalArtworkCard({
   onCrop,
   onEdit,
   onDelete,
+  onViewProvenance,
   className,
 }: PersonalArtworkCardProps) {
   return (
@@ -77,6 +79,19 @@ export function PersonalArtworkCard({
         >
           {artwork.artist || 'Personal collection'}
         </p>
+
+        {(artwork.location || artwork.dateTaken) && (
+          <div className="flex items-center gap-1 mt-1 text-3xs text-casa-muted truncate">
+            {artwork.location && (
+              <span className="inline-flex items-center gap-0.5 truncate text-casa-muted font-medium">
+                <MapPin size={10} className="text-casa-gold shrink-0" />
+                <span className="truncate">{artwork.location.split(',')[0]}</span>
+              </span>
+            )}
+            {artwork.location && artwork.dateTaken && <span>·</span>}
+            {artwork.dateTaken && <span>{artwork.dateTaken}</span>}
+          </div>
+        )}
       </div>
 
       {/* Row 2: Dedicated Action Toolbar */}
@@ -96,6 +111,16 @@ export function PersonalArtworkCard({
 
         {/* Action Buttons Toolbar */}
         <div className="flex items-center gap-0.5 shrink-0">
+          {onViewProvenance && (
+            <IconButton
+              size="sm"
+              variant="ghost"
+              icon={<Info size={15} className="text-amber-600" />}
+              aria-label={`View provenance for ${artwork.title}`}
+              title="View provenance & story"
+              onClick={() => onViewProvenance(artwork)}
+            />
+          )}
           <IconButton
             size="sm"
             variant="ghost"

@@ -19,6 +19,12 @@ export interface PersonalArtwork {
   storagePath: string
   title: string
   artist?: string
+  location?: string
+  dateTaken?: string
+  description?: string
+  subjects?: string
+  medium?: string
+  funFact?: string
   imageUrl: string
   mimeType: string
   byteSize: number
@@ -37,6 +43,12 @@ interface PersonalArtworkRow {
   storage_path: string
   title: string
   artist?: string | null
+  location?: string | null
+  date_taken?: string | null
+  description?: string | null
+  subjects?: string | null
+  medium?: string | null
+  fun_fact?: string | null
   mime_type: string
   byte_size: number
   created_at: string
@@ -55,7 +67,7 @@ export const artSourceConfigQueryKey = ['settings', ART_SOURCE_SETTING_KEY] as c
 async function loadPersonalArtwork(): Promise<PersonalArtwork[]> {
   let { data, error } = await supabase
     .from('personal_artwork')
-    .select('id, storage_path, title, artist, mime_type, byte_size, created_at, signature_enabled, signature_text, signature_style, signature_position, signature_color, signature_size, signature_opacity')
+    .select('id, storage_path, title, artist, location, date_taken, description, subjects, medium, fun_fact, mime_type, byte_size, created_at, signature_enabled, signature_text, signature_style, signature_position, signature_color, signature_size, signature_opacity')
     .order('sort_order')
     .order('created_at')
 
@@ -74,6 +86,12 @@ async function loadPersonalArtwork(): Promise<PersonalArtwork[]> {
     storagePath: row.storage_path,
     title: row.title,
     artist: row.artist?.trim() || undefined,
+    location: row.location?.trim() || undefined,
+    dateTaken: row.date_taken?.trim() || undefined,
+    description: row.description?.trim() || undefined,
+    subjects: row.subjects?.trim() || undefined,
+    medium: row.medium?.trim() || undefined,
+    funFact: row.fun_fact?.trim() || undefined,
     imageUrl: supabase.storage.from(PERSONAL_ARTWORK_BUCKET).getPublicUrl(row.storage_path).data.publicUrl,
     mimeType: row.mime_type,
     byteSize: row.byte_size,
@@ -177,6 +195,12 @@ export function usePersonalArtMode() {
       id,
       title,
       artist,
+      location,
+      dateTaken,
+      description,
+      subjects,
+      medium,
+      funFact,
       signatureEnabled,
       signatureText,
       signatureStyle,
@@ -186,8 +210,14 @@ export function usePersonalArtMode() {
       signatureOpacity,
     }: {
       id: string
-      title: string
+      title?: string
       artist?: string
+      location?: string
+      dateTaken?: string
+      description?: string
+      subjects?: string
+      medium?: string
+      funFact?: string
       signatureEnabled?: boolean
       signatureText?: string
       signatureStyle?: SignatureStyle
@@ -196,13 +226,19 @@ export function usePersonalArtMode() {
       signatureSize?: SignatureSize
       signatureOpacity?: number
     }) => {
-      const cleanTitle = title.trim() || 'Untitled'
-      const cleanArtist = artist?.trim() || null
+      const cleanTitle = title !== undefined ? sanitizeArtworkTitle(title) : undefined
+      const cleanArtist = artist !== undefined ? (artist.trim() || null) : undefined
       const updatePayload: Record<string, unknown> = {
-        title: cleanTitle,
-        artist: cleanArtist,
         updated_at: new Date().toISOString(),
       }
+      if (cleanTitle !== undefined) updatePayload.title = cleanTitle
+      if (cleanArtist !== undefined) updatePayload.artist = cleanArtist
+      if (location !== undefined) updatePayload.location = location.trim() || null
+      if (dateTaken !== undefined) updatePayload.date_taken = dateTaken.trim() || null
+      if (description !== undefined) updatePayload.description = description.trim() || null
+      if (subjects !== undefined) updatePayload.subjects = subjects.trim() || null
+      if (medium !== undefined) updatePayload.medium = medium.trim() || null
+      if (funFact !== undefined) updatePayload.fun_fact = funFact.trim() || null
       if (signatureEnabled !== undefined) updatePayload.signature_enabled = signatureEnabled
       if (signatureText !== undefined) updatePayload.signature_text = signatureText.trim() || null
       if (signatureStyle !== undefined) updatePayload.signature_style = signatureStyle

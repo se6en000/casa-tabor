@@ -150,6 +150,11 @@ export interface Artwork {
   date?: string
   medium?: string
   origin?: string
+  location?: string
+  dateTaken?: string
+  description?: string
+  subjects?: string
+  funFact?: string
   signature?: SignatureConfig
   aspectRatio?: number
   dominantColor?: string
@@ -435,7 +440,13 @@ export function useArtwork(rotateSecs = 240, shuffle = true) {
       title: item.title,
       artist: item.artist || 'Personal collection',
       imageUrl: item.imageUrl,
-      medium: 'Uploaded artwork',
+      medium: item.medium || 'Color photograph',
+      location: item.location,
+      dateTaken: item.dateTaken,
+      description: item.description,
+      subjects: item.subjects,
+      funFact: item.funFact,
+      date: item.dateTaken,
       signature: item.signatureEnabled
         ? {
             enabled: true,
