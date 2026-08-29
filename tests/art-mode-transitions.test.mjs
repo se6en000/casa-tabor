@@ -60,14 +60,10 @@ test('ArtScreensaver implements smooth aperture morphing and stable mat presets'
   assert.match(screensaverSource, /background-color 1200ms ease-in-out/)
 })
 
-test('living canvas micro-drift animation is defined for kiosk hardware acceleration', () => {
-  // Keyframe definition in index.css
-  assert.match(indexCssSource, /@keyframes casa-art-drift/)
-  assert.match(indexCssSource, /transform:\s*scale\(1\.005\)\s*translate3d\(0,\s*0,\s*0\)/)
-  
-  // Application in ArtScreensaver
-  assert.match(screensaverSource, /animation:\s*'casa-art-drift 48s ease-in-out infinite alternate'/)
-  assert.match(screensaverSource, /willChange:\s*'transform'/)
+test('artwork renders with rock-solid static stability without optical drift or breathing', () => {
+  // Verifies drift/breathe motion is removed for true museum stability
+  assert.doesNotMatch(indexCssSource, /@keyframes casa-art-drift/)
+  assert.doesNotMatch(screensaverSource, /casa-art-drift/)
 })
 
 test('ArtScreensaver supports kiosk touch edge-taps, swipe gestures, and keyboard arrows', () => {

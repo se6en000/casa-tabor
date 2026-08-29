@@ -390,9 +390,6 @@ export default function ArtScreensaver({
                   objectPosition: 'center center',
                   display: 'block',
                   filter: darkThemeActive ? 'contrast(0.98) brightness(0.92)' : 'none',
-                  animation: 'casa-art-drift 48s ease-in-out infinite alternate',
-                  willChange: 'transform',
-                  transformOrigin: 'center center',
                 }}
               />
 
@@ -550,8 +547,7 @@ export default function ArtScreensaver({
               zIndex: 6,
               boxShadow: darkThemeActive
                 ? 'inset 0 3px 6px -1px rgba(0,0,0,0.65), inset 2px 0 4px -1px rgba(0,0,0,0.40)'
-                : `inset 0 3px 6px -1px rgba(45,30,15,0.14), inset 2px 0 3px -1px rgba(45,30,15,0.06), inset 0 0 16px -2px ${bevelColors.radiosity}`,
-              transition: 'box-shadow 1.4s cubic-bezier(0.22, 1, 0.36, 1)',
+                : 'inset 0 3px 6px -1px rgba(45,30,15,0.14), inset 2px 0 3px -1px rgba(45,30,15,0.06), inset 0 0 12px -2px rgba(0,0,0,0.05)',
             }}
           />
         </div>

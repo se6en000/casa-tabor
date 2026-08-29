@@ -161,17 +161,6 @@
   100% { box-shadow: 0 0 0 1.5px rgba(201,169,110,0.5),  0 0 12px  4px rgba(201,169,110,0.15); }
 }
 
-@keyframes casa-art-drift {
-  0% {
-    transform: scale(1.005) translate3d(0, 0, 0);
-  }
-  50% {
-    transform: scale(1.03) translate3d(0.4%, -0.3%, 0);
-  }
-  100% {
-    transform: scale(1.02) translate3d(-0.3%, 0.3%, 0);
-  }
-}
 
 @keyframes casa-art-dissolve-out {
   0% {
