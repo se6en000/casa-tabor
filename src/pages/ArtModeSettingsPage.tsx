@@ -240,13 +240,28 @@ export default function ArtModeSettingsPage() {
     updateScreensaver({ disabledArtworkIds: nextDisabled })
   }
 
+  const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (previewTimerRef.current) clearTimeout(previewTimerRef.current)
+      fetch('http://127.0.0.1:8765/display/art-mode-off', { method: 'POST' }).catch(() => {})
+    }
+  }, [])
+
   const handleDimOffsetChange = (v: number) => {
     updateScreensaver({ artDimOffset: v })
+    if (previewTimerRef.current) clearTimeout(previewTimerRef.current)
+    // Momentarily preview dimmed art level on physical screen for 3.5s, then return to bright active mode
     fetch('http://127.0.0.1:8765/display/art-mode', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ dim_offset: v / 100 }),
     }).catch(() => {})
+
+    previewTimerRef.current = setTimeout(() => {
+      fetch('http://127.0.0.1:8765/display/art-mode-off', { method: 'POST' }).catch(() => {})
+    }, 3500)
   }
 
   const curatedMode = prefs.feedMode === 'curated'
@@ -508,8 +523,8 @@ export default function ArtModeSettingsPage() {
                   label="Dim below ambient"
                   desc={
                     sensorData?.lux != null
-                      ? `Keeps artwork feeling like wall art (${Math.round(sensorData.lux)} lx ambient · ${sensorData.brightness ?? Math.round(100 - settings.artDimOffset)}% target)`
-                      : "Keeps artwork feeling like wall art, not a bright dashboard"
+                      ? `Dims idle screensaver to feel like wall art (${Math.round(sensorData.lux)} lx ambient · previews for 3.5s)`
+                      : "Dims idle screensaver to feel like wall art, returning to bright dashboard when touched"
                   }
                 >
                   <StepPicker
