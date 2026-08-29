@@ -473,8 +473,9 @@ def lux_to_brightness(lux: float) -> int:
     """
     Map ambient lux → DDC hardware brightness level (1–90) using:
     1. Logarithmic lux normalization (human vision dynamic range: 0.2 to 800+ lux).
-    2. Dynamic Art Mode scaling: dims daytime headroom to look like archival canvas,
-       while keeping dark rooms pinned safely at the soft, glare-free hardware floor.
+    2. Configurable Dimmer Strength: dim_offset (0.05 to 0.80) dynamically scales
+       perceived brightness across daytime and evening without compromising the
+       soft, glare-free night floor (1–2 DDC).
     3. CIE 1931 Gamma correction (perceived brightness → linear DDC PWM duty cycle).
     """
     lo, hi = _effective_brightness_bounds()
@@ -490,19 +491,20 @@ def lux_to_brightness(lux: float) -> int:
     t = (math.log10(lux_clamped) - log_min) / (log_max - log_min)
     t = max(0.0, min(1.0, t))
     
-    # 2. Perceived curve: night floor ~1.5%, daytime ceiling ~95%
+    # 2. Base perceived curve: night floor ~1.5%, daytime ceiling ~95%
     night_perceived = 0.015
     day_perceived = 0.95
+    base_perceived = night_perceived + (day_perceived - night_perceived) * (t ** PERCEIVED_EXP)
     
-    # If Art Mode ("dim below ambient") is active, scale the daytime presence:
+    # If Art Mode ("dim below ambient") is active, apply configurable dimming strength
     if _art_mode_active and _art_dim_offset > 0.0:
-        # Scale daytime ceiling down based on dim_offset (e.g. 25% dim -> 0.95 * (1 - 0.25 * 0.75) = 0.77)
-        day_perceived = day_perceived * (1.0 - _art_dim_offset * 0.75)
-        # Night floor gently stays at minimum so dark rooms are never blinding
-        night_perceived = max(0.005, night_perceived * (1.0 - min(0.5, _art_dim_offset * 0.5)))
+        # Dimming strength scales perceived brightness down, keeping night floor safe
+        # dim_offset: 0.10 -> light dim, 0.25 -> balanced, 0.80 -> deep dark dim
+        scale = 1.0 - (_art_dim_offset * (0.30 + 0.65 * t))
+        perceived_target = max(0.01, base_perceived * scale)
+    else:
+        perceived_target = base_perceived
     
-    # Smooth power-law interpolation in log space
-    perceived_target = night_perceived + (day_perceived - night_perceived) * (t ** PERCEIVED_EXP)
     perceived_target = max(0.0, min(1.0, perceived_target))
     
     # 3. Gamma expansion: convert perceived lightness to physical DDC PWM duty cycle
@@ -696,7 +698,7 @@ def _brightness_loop():
             continue
 
         lo, hi = _effective_brightness_bounds()
-        if delta >= round((hi - lo) * LUX_BURST_THRESH / LUX_REF ** LUX_EXPONENT / 10):
+        if delta >= 3:
             _fire_burst(b_current, b_target)
         else:
             nxt = b_current + (1 if b_target > b_current else -1)

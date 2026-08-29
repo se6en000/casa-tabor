@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Image, Sun, Palette, Monitor, Plus, Minus, X, ChevronDown, ChevronUp, Upload, Crop } from 'lucide-react'
 import { useScreensaverSettings } from '../hooks/useScreensaverSettings'
+import { useRoomTone } from '../hooks/useRoomTone'
 import { useArtFeedPrefs, MEDIA_OPTIONS } from '../hooks/useArtFeedPrefs'
 import { usePersonalArtMode, type PersonalArtwork } from '../hooks/usePersonalArtMode'
 import {
@@ -228,6 +229,7 @@ export default function ArtModeSettingsPage() {
   const [editSignatureOpacity, setEditSignatureOpacity] = useState<number>(0.55)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  const { sensorData } = useRoomTone()
   const disabledArtworkIds = settings.disabledArtworkIds ?? []
   const isArtworkDisabled = (id: string) => disabledArtworkIds.includes(id)
   const toggleArtworkDisabled = (id: string) => {
@@ -236,6 +238,15 @@ export default function ArtModeSettingsPage() {
       ? disabledArtworkIds.filter(x => x !== id)
       : [...disabledArtworkIds, id]
     updateScreensaver({ disabledArtworkIds: nextDisabled })
+  }
+
+  const handleDimOffsetChange = (v: number) => {
+    updateScreensaver({ artDimOffset: v })
+    fetch('http://127.0.0.1:8765/display/art-mode', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dim_offset: v / 100 }),
+    }).catch(() => {})
   }
 
   const curatedMode = prefs.feedMode === 'curated'
@@ -493,10 +504,17 @@ export default function ArtModeSettingsPage() {
             <div className="bg-casa-surface rounded-card border border-casa-border shadow-card p-5 flex flex-col justify-between">
               <div>
                 <SectionHeader icon={Sun} label="Look & Feel" />
-                <Row label="Dim below ambient" desc="Keeps artwork feeling like wall art, not a bright dashboard">
+                <Row
+                  label="Dim below ambient"
+                  desc={
+                    sensorData?.lux != null
+                      ? `Keeps artwork feeling like wall art (${Math.round(sensorData.lux)} lx ambient · ${sensorData.brightness ?? Math.round(100 - settings.artDimOffset)}% target)`
+                      : "Keeps artwork feeling like wall art, not a bright dashboard"
+                  }
+                >
                   <StepPicker
                     value={settings.artDimOffset}
-                    onChange={v => updateScreensaver({ artDimOffset: v })}
+                    onChange={handleDimOffsetChange}
                     min={5} max={80} step={5} unit="%"
                   />
                 </Row>
