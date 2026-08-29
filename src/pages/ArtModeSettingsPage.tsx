@@ -336,12 +336,12 @@ export default function ArtModeSettingsPage() {
     setEditMedium(item.medium || 'Color photograph')
     setEditFunFact(item.funFact || '')
     setEditEnabled(!disabledArtworkIds.includes(item.id))
-    setEditSignatureEnabled(Boolean(item.signatureEnabled))
+    setEditSignatureEnabled(item.signatureEnabled != null ? Boolean(item.signatureEnabled) : true)
     setEditSignatureText(item.signatureText || item.artist || '')
-    setEditSignatureStyle(item.signatureStyle || 'fountain')
+    setEditSignatureStyle(item.signatureStyle || 'draft')
     setEditSignaturePosition(item.signaturePosition || 'bottom-right')
-    setEditSignatureColor(item.signatureColor || 'auto')
-    setEditSignatureSize(item.signatureSize || 'md')
+    setEditSignatureColor(item.signatureColor || 'light')
+    setEditSignatureSize(item.signatureSize || 'sm')
     setEditSignatureOpacity(item.signatureOpacity != null ? item.signatureOpacity : 0.55)
   }
 

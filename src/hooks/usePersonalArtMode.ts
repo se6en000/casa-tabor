@@ -191,6 +191,13 @@ export function usePersonalArtMode() {
         artist: cleanArtist,
         mime_type: file.type,
         byte_size: file.size,
+        signature_enabled: true,
+        signature_style: 'draft',
+        signature_position: 'bottom-right',
+        signature_size: 'sm',
+        signature_color: 'light',
+        signature_opacity: 0.55,
+        signature_text: cleanArtist || cleanTitle,
       })
       if (insertError) {
         const { error: cleanupError } = await supabase.storage.from(PERSONAL_ARTWORK_BUCKET).remove([storagePath])
