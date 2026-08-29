@@ -12,6 +12,7 @@ import {
   type SignaturePosition,
   type SignatureColor,
   type SignatureSize,
+  buildTwoRowSignatureInscription,
 } from '../lib/artModeLibrary'
 import { cn } from '../utils/cn'
 import { SettingsPageHeader, SettingsToggle as Toggle, ArtworkCropModal, PersonalArtworkCard } from '../components/settings'
@@ -356,6 +357,11 @@ export default function ArtModeSettingsPage() {
         currentArtist: editArtist.trim() || undefined,
       })
 
+      const title = analysis.title || editTitle
+      const artist = analysis.artist || editArtist
+      const location = analysis.location || editLocation
+      const dateTaken = analysis.date_taken || editDateTaken
+
       if (analysis.title) setEditTitle(analysis.title)
       if (analysis.artist) setEditArtist(analysis.artist)
       if (analysis.location) setEditLocation(analysis.location)
@@ -364,11 +370,18 @@ export default function ArtModeSettingsPage() {
       if (analysis.subjects) setEditSubjects(analysis.subjects)
       if (analysis.description) setEditDescription(analysis.description)
       if (analysis.fun_fact) setEditFunFact(analysis.fun_fact)
-      if (analysis.suggested_signature && !editSignatureText) {
-        setEditSignatureText(analysis.suggested_signature)
-      }
 
-      setAiMessage(`Curated as "${analysis.title}"`)
+      // Auto-fill the 2-row signature inscription to match the plaque preview format
+      const twoRowSig = buildTwoRowSignatureInscription({
+        title,
+        artist,
+        location,
+        dateTaken,
+      })
+      setEditSignatureText(twoRowSig)
+      setEditSignatureEnabled(true)
+
+      setAiMessage(`Curated as "${title}"`)
     } catch (err) {
       setAiMessage(err instanceof Error ? `AI curation failed: ${err.message}` : 'AI curation failed')
     }
