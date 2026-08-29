@@ -101,17 +101,12 @@ export async function extractDominantColor(imageUrl: string): Promise<string> {
   })
 }
 
-/**
- * Select a random mat color from the curated palette.
- * This ensures variety even when color extraction fails.
- */
-function getPaletteColorForKey(key: string): string {
+export function getPaletteColorForKey(key: string): string {
   let hash = 0
   for (let i = 0; i < key.length; i += 1) {
     hash = (hash * 31 + key.charCodeAt(i)) >>> 0
   }
   const index = hash % MAT_PALETTE.length
-  console.log(`[ColorUtils] Palette color selected: ${MAT_PALETTE[index]} (index ${index})`)
   return MAT_PALETTE[index]
 }
 
@@ -263,37 +258,36 @@ export interface BevelPalette {
  * Generate physical, dimmed 45-degree bevel facets that color-harmonize with
  * both the luminous museum mat board and the adjacent artwork pigments.
  */
-export function generateHarmonizedBevel(matColorHex: string, dominantHex: string = '#808080'): BevelPalette {
+export function generateHarmonizedBevel(matColorHex: string, _dominantHex: string = '#808080'): BevelPalette {
   const mat = hexToRgb(matColorHex)
-  const dom = hexToRgb(dominantHex)
 
   // 1. Archival Cotton Rag Core Base (Natural unbleached cotton core pulp)
   const coreR = Math.round(240 * 0.70 + mat.r * 0.30)
   const coreG = Math.round(236 * 0.70 + mat.g * 0.30)
   const coreB = Math.round(226 * 0.70 + mat.b * 0.30)
 
-  // 2. Top Bevel: Downward-facing facet in soft shadow of the mat overhang (~80% luminance)
+  // 2. Top Bevel: Downward-facing facet in soft shadow of the mat overhang (~82% luminance)
   const topR = Math.round(coreR * 0.82)
   const topG = Math.round(coreG * 0.82)
   const topB = Math.round(coreB * 0.82)
 
-  // 3. Left Bevel: Soft side shade + delicate pigment bounce from painting (~86% luminance)
-  const leftR = Math.min(245, Math.round(coreR * 0.86 + dom.r * 0.14))
-  const leftG = Math.min(242, Math.round(coreG * 0.86 + dom.g * 0.14))
-  const leftB = Math.min(235, Math.round(coreB * 0.86 + dom.b * 0.14))
+  // 3. Left Bevel: Soft side shade (~88% luminance)
+  const leftR = Math.min(245, Math.round(coreR * 0.88))
+  const leftG = Math.min(242, Math.round(coreG * 0.88))
+  const leftB = Math.min(235, Math.round(coreB * 0.88))
 
   // 4. Right Bevel: Ambient illuminated facet (~95% luminance)
   const rightR = Math.min(248, Math.round(coreR * 0.95))
   const rightG = Math.min(245, Math.round(coreG * 0.95))
   const rightB = Math.min(238, Math.round(coreB * 0.95))
 
-  // 5. Bottom Bevel: Upward-facing facet catching ceiling/room illumination (Luminous Ivory highlight)
-  const botR = Math.min(254, Math.round(coreR * 1.06))
-  const botG = Math.min(252, Math.round(coreG * 1.06))
-  const botB = Math.min(246, Math.round(coreB * 1.06))
+  // 5. Bottom Bevel: Upward-facing facet catching ceiling/room illumination (Luminous highlight)
+  const botR = Math.min(254, Math.round(coreR * 1.04))
+  const botG = Math.min(252, Math.round(coreG * 1.04))
+  const botB = Math.min(246, Math.round(coreB * 1.04))
 
-  // 6. Subtle edge radiosity color
-  const radiosity = `rgba(${dom.r}, ${dom.g}, ${dom.b}, 0.08)`
+  // 6. Subtle edge depth
+  const radiosity = 'rgba(0, 0, 0, 0.06)'
 
   return {
     top: rgbToHex(topR, topG, topB),

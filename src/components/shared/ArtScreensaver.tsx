@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { useArtwork, artworkMetadataCache, type Artwork } from '../../hooks/useArtwork'
-import { generateAdaptiveMatColor, generateHarmonizedBevel, MAT_PRESETS, type MatPresetKey } from '../../utils/colorUtils'
+import {
+  generateHarmonizedBevel,
+  getPaletteColorForKey,
+  MAT_PRESETS,
+  DEFAULT_MAT_COLOR,
+  DEFAULT_DOMINANT_COLOR,
+  type MatPresetKey,
+} from '../../utils/colorUtils'
 import { getTextureStyle, PAPER_GRAIN_TEXTURE } from '../../utils/textureUtils'
 import {
   sanitizeArtworkMetadata,
@@ -66,7 +73,6 @@ interface Props {
 export default function ArtScreensaver({
   onDismiss,
   rotationMins = 4,
-  adaptiveMatColor = true,
   artDimOffset = 30,
   minArtWidthVw = 55,
   shuffle = true,
@@ -79,8 +85,6 @@ export default function ArtScreensaver({
   const [dismissable, setDismissable] = useState(false)
   const [plaqueVisible, setPlaqueVisible] = useState(true)
   const [imageRatio, setImageRatio] = useState(16 / 9)
-  const [matColor, setMatColor] = useState('#F6F3EA')
-  const [dominantColor, setDominantColor] = useState('#808080')
   const [activeArtwork, setActiveArtwork] = useState<Artwork | null>(artwork)
   const [outgoingArtwork, setOutgoingArtwork] = useState<Artwork | null>(null)
   const [viewport, setViewport] = useState(() => ({
@@ -92,12 +96,36 @@ export default function ArtScreensaver({
   const touchStartYRef = useRef<number | null>(null)
   const fadeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  const currentToDisplay = activeArtwork || artwork
+
   const textureStyle = useMemo(() => getTextureStyle(), [])
   const darkThemeActive = useMemo(() => {
     if (typeof window === 'undefined') return isMidnightActive
     const bg = getComputedStyle(document.documentElement).getPropertyValue('--color-casa-bg')
     return isMidnightActive || isDarkColor(bg)
   }, [isMidnightActive])
+
+  // Rock-solid, static mat color: if preset is chosen (e.g. warm_linen), it is 100% locked and NEVER fluxes
+  const matColor = useMemo(() => {
+    if (darkThemeActive) return MIDNIGHT_MAT_COLOR
+    if (matPreset && matPreset !== 'auto' && MAT_PRESETS[matPreset]) {
+      return MAT_PRESETS[matPreset]
+    }
+    if (currentToDisplay?.imageUrl) {
+      const cached = artworkMetadataCache.get(currentToDisplay.imageUrl)
+      if (cached) return cached.matColor
+      return getPaletteColorForKey(currentToDisplay.imageUrl)
+    }
+    return DEFAULT_MAT_COLOR
+  }, [darkThemeActive, matPreset, currentToDisplay?.imageUrl])
+
+  const dominantColor = useMemo(() => {
+    if (currentToDisplay?.imageUrl) {
+      const cached = artworkMetadataCache.get(currentToDisplay.imageUrl)
+      if (cached) return cached.dominantColor
+    }
+    return DEFAULT_DOMINANT_COLOR
+  }, [currentToDisplay?.imageUrl])
 
   const matTexture = darkThemeActive ? MIDNIGHT_MAT_TEXTURE : textureStyle.backgroundImage
   const matBlendMode = darkThemeActive ? 'normal' : textureStyle.backgroundBlendMode
@@ -161,14 +189,10 @@ export default function ArtScreensaver({
   useEffect(() => {
     if (!artwork) return
 
-    // Check if image ratio or colors are already in prefetch cache
+    // Check if image ratio is already in prefetch cache
     const cached = artworkMetadataCache.get(artwork.imageUrl)
     if (cached) {
       setImageRatio(cached.aspectRatio)
-      if (!darkThemeActive && matPreset === 'auto' && adaptiveMatColor) {
-        setMatColor(cached.matColor)
-        setDominantColor(cached.dominantColor)
-      }
     }
 
     if (!activeArtwork) {
@@ -186,49 +210,7 @@ export default function ArtScreensaver({
         setOutgoingArtwork(null)
       }, 1250)
     }
-  }, [artwork?.id, artwork?.imageUrl, activeArtwork, darkThemeActive, matPreset, adaptiveMatColor])
-
-  // Adaptive Mat Color & Harmonized Lighting Sync
-  useEffect(() => {
-    if (darkThemeActive) {
-      setMatColor(MIDNIGHT_MAT_COLOR)
-      return
-    }
-
-    if (matPreset && matPreset !== 'auto' && MAT_PRESETS[matPreset]) {
-      setMatColor(MAT_PRESETS[matPreset])
-      setDominantColor('#808080')
-      return
-    }
-
-    if (!artwork?.imageUrl || !adaptiveMatColor) return
-
-    const cached = artworkMetadataCache.get(artwork.imageUrl)
-    if (cached) {
-      setMatColor(cached.matColor)
-      setDominantColor(cached.dominantColor)
-      return
-    }
-
-    let cancelled = false
-    void generateAdaptiveMatColor(artwork.imageUrl)
-      .then(analysis => {
-        if (!cancelled) {
-          setMatColor(analysis.matColor)
-          setDominantColor(analysis.dominant)
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setMatColor('#E8E3D7')
-          setDominantColor('#808080')
-        }
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [artwork?.id, artwork?.imageUrl, adaptiveMatColor, darkThemeActive, matPreset])
+  }, [artwork?.id, artwork?.imageUrl, activeArtwork])
 
   // Plaque reveal timer
   useEffect(() => {
@@ -329,7 +311,6 @@ export default function ArtScreensaver({
     touchStartYRef.current = null
   }
 
-  const currentToDisplay = activeArtwork || artwork
   const { title: cleanTitle, artist: cleanArtist } = currentToDisplay
     ? sanitizeArtworkMetadata(currentToDisplay.title, currentToDisplay.artist)
     : { title: '', artist: '' }
@@ -360,7 +341,7 @@ export default function ArtScreensaver({
             ? 'inset 0 2px 6px rgba(0,0,0,0.7), inset 0 0 1px rgba(0,0,0,0.9)'
             : 'inset 0 2px 6px rgba(0,0,0,0.12), inset 0 1px 2px rgba(0,0,0,0.06), inset 0 0 1px rgba(0,0,0,0.10)',
           padding: '3.5vw',
-          transition: 'background-color 1200ms ease-in-out',
+          transition: matPreset === 'auto' ? 'background-color 1200ms ease-in-out' : 'none',
         }}
       >
         {/* Passe-Partout Aperture Frame with 45-Degree Mitered Cotton Rag Bevel Core */}
@@ -382,7 +363,7 @@ export default function ArtScreensaver({
             boxShadow: darkThemeActive
               ? '0 0 0 1px rgba(0,0,0,0.9), 0 3px 12px rgba(0,0,0,0.6)'
               : '0 0 0 1px rgba(50,40,30,0.18), 0 3px 10px rgba(0,0,0,0.08)',
-            transition: 'width 1200ms ease-in-out, height 1200ms ease-in-out, border-color 1200ms ease-in-out, box-shadow 1200ms ease-in-out',
+            transition: 'width 1200ms ease-in-out, height 1200ms ease-in-out',
             overflow: 'hidden',
           }}
         >

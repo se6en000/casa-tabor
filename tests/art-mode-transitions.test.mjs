@@ -51,15 +51,13 @@ test('ArtScreensaver eliminates flashing pulse placeholder and implements dual-l
   assert.match(screensaverSource, /casa-art-dissolve-out 1200ms/)
 })
 
-test('ArtScreensaver implements smooth aperture morphing and breathing mat transitions', () => {
+test('ArtScreensaver implements smooth aperture morphing and stable mat presets', () => {
   // Morphing frame aperture
   assert.match(screensaverSource, /width 1200ms ease-in-out/)
   assert.match(screensaverSource, /height 1200ms ease-in-out/)
   
-  // Continuous breathing mat background and bevel transitions
+  // Controlled mat background transition in auto mode
   assert.match(screensaverSource, /background-color 1200ms ease-in-out/)
-  assert.match(screensaverSource, /border-color 1200ms ease-in-out/)
-  assert.match(screensaverSource, /box-shadow 1200ms ease-in-out/)
 })
 
 test('living canvas micro-drift animation is defined for kiosk hardware acceleration', () => {
