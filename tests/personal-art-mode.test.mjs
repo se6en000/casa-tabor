@@ -87,3 +87,39 @@ test('personal Art Mode provides 16:9 image cropping with old storage cleanup an
   assert.match(settingsSource, /handleSaveCrop/)
   assert.match(settingsSource, /Crop to 16:9/)
 })
+
+test('personal Art Mode schema and hooks support full archival provenance fields', () => {
+  assert.match(personalHookSource, /location\?: string/)
+  assert.match(personalHookSource, /dateTaken\?: string/)
+  assert.match(personalHookSource, /description\?: string/)
+  assert.match(personalHookSource, /subjects\?: string/)
+  assert.match(personalHookSource, /medium\?: string/)
+  assert.match(personalHookSource, /funFact\?: string/)
+  assert.match(personalHookSource, /updatePayload\.location = location\.trim\(\)/)
+  assert.match(personalHookSource, /updatePayload\.date_taken = dateTaken\.trim\(\)/)
+  assert.match(personalHookSource, /updatePayload\.description = description\.trim\(\)/)
+  assert.match(artworkHookSource, /location:\s*item\.location/)
+  assert.match(artworkHookSource, /dateTaken:\s*item\.dateTaken/)
+  assert.match(artworkHookSource, /funFact:\s*item\.funFact/)
+})
+
+test('screensaver exposes interactive provenance plaque with touch guard and 8s auto-fade', () => {
+  const screensaverSource = readFileSync(
+    new URL('../src/components/shared/ArtScreensaver.tsx', import.meta.url),
+    'utf8',
+  )
+  assert.match(screensaverSource, /ArtworkProvenanceCard/)
+  assert.match(screensaverSource, /handleToggleInfo/)
+  assert.match(screensaverSource, /infoTimerRef\.current = setTimeout\([\s\S]*8000\)/)
+  assert.match(screensaverSource, /e\.key === 'i' \|\| e\.key === 'I'/)
+  assert.match(screensaverSource, /setInfoOpen\(false\)/)
+})
+
+test('Art Mode settings features 2-tab provenance and signature studio', () => {
+  assert.match(settingsSource, /Story & Provenance/)
+  assert.match(settingsSource, /Signature Studio/)
+  assert.match(settingsSource, /Historical Background & Story/)
+  assert.match(settingsSource, /Insider Trivia \/ Fun Facts/)
+  assert.match(settingsSource, /Key Figures & Subjects/)
+  assert.match(settingsSource, /onViewProvenance=\{setProvenancePreviewArtwork\}/)
+})
