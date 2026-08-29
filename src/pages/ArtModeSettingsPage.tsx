@@ -972,7 +972,7 @@ export default function ArtModeSettingsPage() {
                     return (
                       <div
                         className={cn(
-                          'absolute pointer-events-none select-none z-10 leading-relaxed pt-3 pb-3 max-w-[65%] whitespace-nowrap overflow-visible transition-all duration-200 blur-[0.2px]',
+                          'absolute pointer-events-none select-none z-10 leading-tight pt-2 pb-2 max-w-[75%] whitespace-pre-line overflow-visible transition-all duration-200 blur-[0.2px]',
                           isBottomLeft
                             ? 'bottom-2 sm:bottom-3 left-3 sm:left-5 text-left rotate-1'
                             : 'bottom-2 sm:bottom-3 right-3 sm:right-5 text-right -rotate-1',
@@ -1249,18 +1249,38 @@ export default function ArtModeSettingsPage() {
                   {editSignatureEnabled && (
                     <div className="space-y-3.5">
                       <div>
-                        <label className="text-caption font-medium text-casa-navy block mb-1">
-                          Signature / Inscription Text
-                        </label>
-                        <Input
-                          type="text"
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <label className="text-caption font-medium text-casa-navy block">
+                            Signature / Inscription Text
+                          </label>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            leadingIcon={<Sparkles size={11} className="text-casa-gold" />}
+                            onClick={() => {
+                              const line1 = editTitle.trim() || 'Untitled Artwork'
+                              const line2Parts = [
+                                editArtist.trim() || 'Personal Collection',
+                                editLocation.trim() ? editLocation.trim().split(',')[0] : null,
+                                editDateTaken.trim() ? `(${editDateTaken.trim()})` : null,
+                              ].filter(Boolean)
+                              setEditSignatureText(`${line1}\n${line2Parts.join(' · ')}`)
+                            }}
+                            className="text-3xs text-casa-gold hover:text-amber-700 h-auto py-0.5 px-1.5"
+                          >
+                            Insert 2-Row Plaque Inscription
+                          </Button>
+                        </div>
+                        <Textarea
+                          rows={2}
                           value={editSignatureText}
                           onChange={e => setEditSignatureText(e.target.value)}
-                          placeholder={editArtist || "e.g. Dwight Smith '78"}
-                          className="w-full"
+                          placeholder={'e.g. Riviera Rendezvous on a Riva\nSlim Aarons · Capri (circa 1960s)'}
+                          className="w-full text-body-sm font-sans"
                         />
                         <p className="text-caption text-casa-muted mt-1">
-                          Defaults to artist name or custom text (e.g. year, location, personal notes).
+                          Supports 2 rows: Line 1 for artwork title, Line 2 for artist, location & date.
                         </p>
                       </div>
 

@@ -133,3 +133,13 @@ test('personal Art Mode provides multimodal Gemini AI vision analysis and hint-a
   assert.match(settingsSource, /onAIAnalyze/)
   assert.match(settingsSource, /Auto-Fill Details/)
 })
+
+test('personal Art Mode supports 2-row plaque signature inscriptions with multiline rendering', () => {
+  const screensaverSource = readFileSync(
+    new URL('../src/components/shared/ArtScreensaver.tsx', import.meta.url),
+    'utf8',
+  )
+  assert.match(screensaverSource, /whiteSpace:\s*'pre-line'/)
+  assert.match(settingsSource, /Insert 2-Row Plaque Inscription/)
+  assert.match(settingsSource, /whitespace-pre-line/)
+})

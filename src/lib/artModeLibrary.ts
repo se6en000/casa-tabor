@@ -231,5 +231,25 @@ export function getSignatureInkStyle(
   }
 }
 
+export function buildTwoRowSignatureInscription({
+  title,
+  artist,
+  location,
+  dateTaken,
+}: {
+  title?: string | null
+  artist?: string | null
+  location?: string | null
+  dateTaken?: string | null
+}): string {
+  const line1 = title?.trim() || 'Untitled Artwork'
+  const line2Parts = [
+    artist?.trim() || 'Personal collection',
+    location?.trim() ? location.trim().split(',')[0] : null,
+    dateTaken?.trim() ? `(${dateTaken.trim()})` : null,
+  ].filter(Boolean)
+  return `${line1}\n${line2Parts.join(' · ')}`
+}
+
 
 
