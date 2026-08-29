@@ -206,10 +206,12 @@ export default function ArtModeSettingsPage() {
     updateArtwork,
     cropArtwork,
     deleteArtwork,
+    analyzeArtwork,
     uploading,
     updating,
     cropping,
     deleting,
+    analyzing: aiAnalyzing,
   } = usePersonalArtMode()
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [yearFromInput, setYearFromInput] = useState('')
@@ -219,6 +221,8 @@ export default function ArtModeSettingsPage() {
   const [artworkToEdit, setArtworkToEdit] = useState<PersonalArtwork | null>(null)
   const [artworkToCrop, setArtworkToCrop] = useState<PersonalArtwork | null>(null)
   const [provenancePreviewArtwork, setProvenancePreviewArtwork] = useState<PersonalArtwork | null>(null)
+  const [aiHint, setAiHint] = useState('')
+  const [aiMessage, setAiMessage] = useState<string | null>(null)
   const [editTab, setEditTab] = useState<'story' | 'signature'>('story')
   const [editTitle, setEditTitle] = useState('')
   const [editArtist, setEditArtist] = useState('')
@@ -321,6 +325,8 @@ export default function ArtModeSettingsPage() {
   const handleOpenEdit = (item: PersonalArtwork) => {
     setArtworkToEdit(item)
     setEditTab('story')
+    setAiHint('')
+    setAiMessage(null)
     setEditTitle(item.title)
     setEditArtist(item.artist || '')
     setEditLocation(item.location || '')
@@ -337,6 +343,35 @@ export default function ArtModeSettingsPage() {
     setEditSignatureColor(item.signatureColor || 'auto')
     setEditSignatureSize(item.signatureSize || 'md')
     setEditSignatureOpacity(item.signatureOpacity != null ? item.signatureOpacity : 0.55)
+  }
+
+  const handleAIAnalyze = async () => {
+    if (!artworkToEdit && !editTitle && !aiHint) return
+    setAiMessage(null)
+    try {
+      const analysis = await analyzeArtwork({
+        imageUrl: artworkToEdit?.imageUrl,
+        hint: aiHint.trim() || undefined,
+        currentTitle: editTitle.trim() || undefined,
+        currentArtist: editArtist.trim() || undefined,
+      })
+
+      if (analysis.title) setEditTitle(analysis.title)
+      if (analysis.artist) setEditArtist(analysis.artist)
+      if (analysis.location) setEditLocation(analysis.location)
+      if (analysis.date_taken) setEditDateTaken(analysis.date_taken)
+      if (analysis.medium) setEditMedium(analysis.medium)
+      if (analysis.subjects) setEditSubjects(analysis.subjects)
+      if (analysis.description) setEditDescription(analysis.description)
+      if (analysis.fun_fact) setEditFunFact(analysis.fun_fact)
+      if (analysis.suggested_signature && !editSignatureText) {
+        setEditSignatureText(analysis.suggested_signature)
+      }
+
+      setAiMessage(`Curated as "${analysis.title}"`)
+    } catch (err) {
+      setAiMessage(err instanceof Error ? `AI curation failed: ${err.message}` : 'AI curation failed')
+    }
   }
 
   const handleSaveEdit = async () => {
@@ -674,6 +709,7 @@ export default function ArtModeSettingsPage() {
                         onEdit={handleOpenEdit}
                         onDelete={setArtworkToDelete}
                         onViewProvenance={setProvenancePreviewArtwork}
+                        onAIAnalyze={handleOpenEdit}
                       />
                     ))}
                   </div>
@@ -1038,6 +1074,51 @@ export default function ArtModeSettingsPage() {
               {/* Tab 1: Story & Provenance Fields */}
               {editTab === 'story' && (
                 <div className="space-y-3.5">
+                  {/* AI Curate with Gemini Vision */}
+                  <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 dark:bg-amber-500/10 p-3.5 space-y-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-300">
+                        <Sparkles size={13} className="text-casa-gold shrink-0" />
+                        <span>AI Curate with Gemini Vision</span>
+                      </div>
+                      {aiMessage && (
+                        <span className="text-3xs font-medium px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 truncate max-w-[220px]">
+                          {aiMessage}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-caption text-casa-muted leading-tight">
+                      Let Gemini analyze the photo to automatically detect the artwork, artist, date, location, subjects, and backstory. Add an optional hint to guide the archivist.
+                    </p>
+                    <div className="flex gap-2">
+                      <Input
+                        type="text"
+                        value={aiHint}
+                        onChange={e => setAiHint(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            void handleAIAnalyze()
+                          }
+                        }}
+                        placeholder="e.g. Slim Aarons 1970, Capri vacation, Dad in 1982..."
+                        className="flex-1 text-body-sm"
+                        disabled={aiAnalyzing}
+                      />
+                      <Button
+                        type="button"
+                        variant="strong"
+                        size="sm"
+                        leadingIcon={<Sparkles size={14} />}
+                        loading={aiAnalyzing}
+                        onClick={() => void handleAIAnalyze()}
+                        className="shrink-0"
+                      >
+                        {aiAnalyzing ? 'Analyzing...' : 'Auto-Fill Details'}
+                      </Button>
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="text-caption font-medium text-casa-navy block mb-1">

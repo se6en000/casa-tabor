@@ -1,4 +1,4 @@
-import { Eye, EyeOff, Crop, Pencil, Trash2, Feather, Info, MapPin } from 'lucide-react'
+import { Eye, EyeOff, Crop, Pencil, Trash2, Feather, Info, MapPin, Sparkles } from 'lucide-react'
 import { IconButton } from '../ui'
 import type { PersonalArtwork } from '../../hooks/usePersonalArtMode'
 import { cn } from '../../utils/cn'
@@ -11,6 +11,7 @@ export interface PersonalArtworkCardProps {
   onEdit: (artwork: PersonalArtwork) => void
   onDelete: (artwork: PersonalArtwork) => void
   onViewProvenance?: (artwork: PersonalArtwork) => void
+  onAIAnalyze?: (artwork: PersonalArtwork) => void
   className?: string
 }
 
@@ -22,6 +23,7 @@ export function PersonalArtworkCard({
   onEdit,
   onDelete,
   onViewProvenance,
+  onAIAnalyze,
   className,
 }: PersonalArtworkCardProps) {
   return (
@@ -111,6 +113,16 @@ export function PersonalArtworkCard({
 
         {/* Action Buttons Toolbar */}
         <div className="flex items-center gap-0.5 shrink-0">
+          {onAIAnalyze && (
+            <IconButton
+              size="sm"
+              variant="ghost"
+              icon={<Sparkles size={14} className="text-casa-gold" />}
+              aria-label={`AI curate details for ${artwork.title}`}
+              title="AI Curate with Gemini Vision"
+              onClick={() => onAIAnalyze(artwork)}
+            />
+          )}
           {onViewProvenance && (
             <IconButton
               size="sm"

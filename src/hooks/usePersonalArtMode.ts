@@ -14,6 +14,19 @@ import {
 
 const ART_SOURCE_SETTING_KEY = 'art_mode_source_config'
 
+export interface ArtworkAnalysisResult {
+  title: string
+  artist: string
+  location: string
+  date_taken: string
+  medium: string
+  subjects: string
+  description: string
+  fun_fact: string
+  suggested_signature?: string
+  confidence: number
+}
+
 export interface PersonalArtwork {
   id: string
   storagePath: string
@@ -331,6 +344,33 @@ export function usePersonalArtMode() {
     onSettled: () => queryClient.invalidateQueries({ queryKey: personalArtworkQueryKey }),
   })
 
+  const analyzeMutation = useMutation({
+    mutationFn: async (params: {
+      imageUrl?: string
+      fileBase64?: string
+      mimeType?: string
+      hint?: string
+      currentTitle?: string
+      currentArtist?: string
+    }): Promise<ArtworkAnalysisResult> => {
+      const { data, error } = await supabase.functions.invoke('analyze-personal-artwork', {
+        body: {
+          image_url: params.imageUrl,
+          file_base64: params.fileBase64,
+          mime_type: params.mimeType,
+          hint: params.hint,
+          current_title: params.currentTitle,
+          current_artist: params.currentArtist,
+        },
+      })
+      if (error) throw error
+      if (!data || !data.success || !data.analysis) {
+        throw new Error(data?.error || 'AI analysis could not identify artwork metadata')
+      }
+      return data.analysis as ArtworkAnalysisResult
+    },
+  })
+
   return {
     ...data,
     setSourceMode: sourceMutation.mutateAsync,
@@ -338,10 +378,12 @@ export function usePersonalArtMode() {
     updateArtwork: updateMutation.mutateAsync,
     cropArtwork: cropMutation.mutateAsync,
     deleteArtwork: deleteMutation.mutateAsync,
+    analyzeArtwork: analyzeMutation.mutateAsync,
     changingSource: sourceMutation.isPending,
     uploading: uploadMutation.isPending,
     updating: updateMutation.isPending,
     cropping: cropMutation.isPending,
     deleting: deleteMutation.isPending,
+    analyzing: analyzeMutation.isPending,
   }
 }

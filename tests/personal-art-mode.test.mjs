@@ -123,3 +123,13 @@ test('Art Mode settings features 2-tab provenance and signature studio', () => {
   assert.match(settingsSource, /Key Figures & Subjects/)
   assert.match(settingsSource, /onViewProvenance=\{setProvenancePreviewArtwork\}/)
 })
+
+test('personal Art Mode provides multimodal Gemini AI vision analysis and hint-assisted curation', () => {
+  assert.match(personalHookSource, /analyzeArtwork/)
+  assert.match(personalHookSource, /analyzeMutation/)
+  assert.match(personalHookSource, /analyze-personal-artwork/)
+  assert.match(settingsSource, /AI Curate with Gemini Vision/)
+  assert.match(settingsSource, /handleAIAnalyze/)
+  assert.match(settingsSource, /onAIAnalyze/)
+  assert.match(settingsSource, /Auto-Fill Details/)
+})
