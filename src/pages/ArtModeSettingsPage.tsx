@@ -1031,10 +1031,10 @@ export default function ArtModeSettingsPage() {
                     return (
                       <div
                         className={cn(
-                          'absolute pointer-events-none select-none z-10 leading-tight pt-2 pb-2 max-w-[78%] whitespace-pre-line overflow-visible transition-all duration-200',
+                          'absolute pointer-events-none select-none z-10 leading-tight pt-0.5 pb-1 max-w-[85%] whitespace-pre-line overflow-visible transition-all duration-200',
                           isBottomLeft
-                            ? 'bottom-2 sm:bottom-3 left-3 sm:left-5 text-left rotate-[0.8deg]'
-                            : 'bottom-2 sm:bottom-3 right-3 sm:right-5 text-right -rotate-[1.2deg]'
+                            ? 'bottom-1 sm:bottom-1.5 left-1.5 sm:left-2.5 text-left rotate-[0.8deg]'
+                            : 'bottom-1 sm:bottom-1.5 right-1.5 sm:right-2.5 text-right -rotate-[1.2deg]'
                         )}
                         style={{
                           fontFamily: sigStyle.fontFamily,

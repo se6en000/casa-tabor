@@ -444,10 +444,10 @@ export default function ArtScreensaver({
               key={`sig-${art.id}`}
               style={{
                 position: 'absolute',
-                bottom: 'clamp(14px, 3.2%, 36px)',
+                bottom: 'clamp(6px, 1.2%, 14px)',
                 ...(isBottomLeft
-                  ? { left: 'clamp(16px, 3.5%, 40px)', textAlign: 'left' }
-                  : { right: 'clamp(16px, 3.5%, 40px)', textAlign: 'right' }),
+                  ? { left: 'clamp(8px, 1.6%, 20px)', textAlign: 'left' }
+                  : { right: 'clamp(8px, 1.6%, 20px)', textAlign: 'right' }),
                 fontFamily: sigStyle.fontFamily,
                 fontSize: `clamp(${sigStyle.baseFontSizeRem * 0.9 * sizeScale}rem, ${2 * sizeScale}vw, ${sigStyle.baseFontSizeRem * 1.6 * sizeScale}rem)`,
                 fontWeight: sigStyle.weight,
@@ -456,9 +456,9 @@ export default function ArtScreensaver({
                 mixBlendMode: inkStyle.blendMode || 'normal',
                 transform: isBottomLeft ? 'rotate(0.8deg)' : 'rotate(-1.2deg)',
                 letterSpacing: '0.015em',
-                lineHeight: 1.3,
-                paddingTop: '8px',
-                paddingBottom: '12px',
+                lineHeight: 1.25,
+                paddingTop: '2px',
+                paddingBottom: '4px',
                 filter: 'blur(0.2px) contrast(1.05)',
                 textRendering: 'geometricPrecision',
                 pointerEvents: 'none',
