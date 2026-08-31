@@ -46,18 +46,15 @@ test('ArtScreensaver eliminates flashing pulse placeholder and implements dual-l
   assert.match(indexCssSource, /@keyframes casa-art-dissolve-out/)
 
   // Verifies dual layer incoming/outgoing dissolve crossfade
-  assert.match(screensaverSource, /outgoingLeftArtwork|outgoingArtwork/)
-  assert.match(screensaverSource, /leftArtwork|currentToDisplay/)
+  assert.match(screensaverSource, /outgoingUnit/)
+  assert.match(screensaverSource, /leftArt|leftArtwork/)
   assert.match(screensaverSource, /casa-art-dissolve-out 1200ms/)
 })
 
-test('ArtScreensaver implements smooth aperture morphing and stable mat presets', () => {
-  // Morphing frame aperture
-  assert.match(screensaverSource, /width 1200ms ease-in-out/)
-  assert.match(screensaverSource, /height 1200ms ease-in-out/)
-  
-  // Controlled mat background transition in auto mode
-  assert.match(screensaverSource, /background-color 1200ms ease-in-out/)
+test('ArtScreensaver implements smooth full-frame dissolve and stable mat presets', () => {
+  // Full-frame slide rendering
+  assert.match(screensaverSource, /renderSlide/)
+  assert.match(screensaverSource, /slideMatColor/)
 })
 
 test('artwork renders with rock-solid static stability without optical drift or breathing', () => {
@@ -107,8 +104,8 @@ test('ArtScreensaver supports dual 1:1 diptych layout, split plaques, and dual p
   assert.match(screensaverSource, /squareApertureSize/)
   assert.match(screensaverSource, /diptychMullion/)
   assert.match(screensaverSource, /provenanceTab/)
-  assert.match(screensaverSource, /leftArtwork/)
-  assert.match(screensaverSource, /rightArtwork/)
+  assert.match(screensaverSource, /leftArt|leftArtwork/)
+  assert.match(screensaverSource, /rightArt|rightArtwork/)
   assert.match(screensaverSource, /title="Previous artwork"/)
   assert.match(screensaverSource, /title="Next artwork"/)
 })
