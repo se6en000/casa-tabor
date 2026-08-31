@@ -487,8 +487,10 @@ async function fetchFromArtic(query: string): Promise<Artwork[]> {
 
 export function useArtwork(rotateSecs = 240, shuffle = true) {
   const [casaArtworks, setCasaArtworks] = useState<Artwork[]>([])
-  const [deck, setDeck] = useState<(string | number)[]>([])
-  const [deckIndex, setDeckIndex] = useState(0)
+  const [deckState, setDeckState] = useState<{ deckIds: (string | number)[]; deckIndex: number }>({
+    deckIds: [],
+    deckIndex: 0,
+  })
   const [loaded, setLoaded] = useState(false)
   const [, setPrefsVersion] = useState(0)
   const rotateRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -571,11 +573,11 @@ export function useArtwork(rotateSecs = 240, shuffle = true) {
           ? {
               enabled: true,
               text: item.signatureText || item.artist || 'Personal collection',
-              style: item.signatureStyle || 'fountain',
+              style: item.signatureStyle || 'draft',
               position: item.signaturePosition || 'bottom-right',
-              color: item.signatureColor || 'auto',
-              size: item.signatureSize || 'md',
-              opacity: item.signatureOpacity ?? 0.55,
+              color: item.signatureColor || 'light',
+              size: item.signatureSize || 'xs',
+              opacity: item.signatureOpacity ?? 0.75,
             }
           : undefined,
       }
@@ -618,8 +620,7 @@ export function useArtwork(rotateSecs = 240, shuffle = true) {
   // Synchronize deck whenever available items, sourceMode, aspectRatioMode, or shuffle changes
   useEffect(() => {
     if (availableUnitIds.length === 0) {
-      setDeck([])
-      setDeckIndex(0)
+      setDeckState({ deckIds: [], deckIndex: 0 })
       return
     }
 
@@ -631,9 +632,11 @@ export function useArtwork(rotateSecs = 240, shuffle = true) {
     )
 
     lastPlayedIdRef.current = lastPlayedId
-    setDeck(syncedDeck)
-    setDeckIndex(syncedIndex)
+    setDeckState({ deckIds: syncedDeck, deckIndex: syncedIndex })
   }, [availableUnitIds, sourceMode, shuffle, settings.aspectRatioMode])
+
+  const deck = deckState.deckIds
+  const deckIndex = deckState.deckIndex
 
   // Current active presentation unit
   const currentUnitId = deck[deckIndex]
@@ -695,71 +698,73 @@ export function useArtwork(rotateSecs = 240, shuffle = true) {
 
     const deckStorageKey = `${sourceMode}_${settings.aspectRatioMode ?? 'mixed'}`
 
-    setDeck(prevDeck => {
-      setDeckIndex(prevIndex => {
-        const playedId = prevDeck[prevIndex]
-        lastPlayedIdRef.current = playedId ?? null
+    setDeckState(prev => {
+      const currentDeck = prev.deckIds.length > 0 ? prev.deckIds : availableUnitIds
+      const currentIndex = Math.max(0, Math.min(prev.deckIndex, currentDeck.length - 1))
+      const playedId = currentDeck[currentIndex]
+      lastPlayedIdRef.current = playedId ?? null
 
-        if (direction === 'prev') {
-          const nextIndex = prevIndex - 1 < 0 ? prevDeck.length - 1 : prevIndex - 1
-          saveStoredDeck({
-            sourceMode: deckStorageKey,
-            isShuffled: shuffle,
-            deckIds: prevDeck,
-            deckIndex: nextIndex,
-            lastPlayedId: playedId ?? null,
-            updatedAt: Date.now(),
-          })
-          return nextIndex
-        }
-
-        const nextIndex = prevIndex + 1
-        // If we reached the end of the deck, start the next complete non-repeating cycle!
-        if (nextIndex >= prevDeck.length) {
-          const nextDeck = shuffle
-            ? generateShuffledDeck(availableUnitIds, playedId)
-            : [...availableUnitIds]
-
-          saveStoredDeck({
-            sourceMode: deckStorageKey,
-            isShuffled: shuffle,
-            deckIds: nextDeck,
-            deckIndex: 0,
-            lastPlayedId: playedId ?? null,
-            updatedAt: Date.now(),
-          })
-
-          // Update deck in outer state
-          setTimeout(() => setDeck(nextDeck), 0)
-          return 0
-        }
-
+      if (direction === 'prev') {
+        const nextIndex = currentIndex - 1 < 0 ? currentDeck.length - 1 : currentIndex - 1
         saveStoredDeck({
           sourceMode: deckStorageKey,
           isShuffled: shuffle,
-          deckIds: prevDeck,
+          deckIds: currentDeck,
           deckIndex: nextIndex,
           lastPlayedId: playedId ?? null,
           updatedAt: Date.now(),
         })
+        return { deckIds: currentDeck, deckIndex: nextIndex }
+      }
 
-        return nextIndex
+      const nextIndex = currentIndex + 1
+      // If we reached the end of the deck, start the next complete non-repeating cycle!
+      if (nextIndex >= currentDeck.length) {
+        const nextDeck = shuffle
+          ? generateShuffledDeck(availableUnitIds, playedId)
+          : [...availableUnitIds]
+
+        saveStoredDeck({
+          sourceMode: deckStorageKey,
+          isShuffled: shuffle,
+          deckIds: nextDeck,
+          deckIndex: 0,
+          lastPlayedId: playedId ?? null,
+          updatedAt: Date.now(),
+        })
+
+        return { deckIds: nextDeck, deckIndex: 0 }
+      }
+
+      saveStoredDeck({
+        sourceMode: deckStorageKey,
+        isShuffled: shuffle,
+        deckIds: currentDeck,
+        deckIndex: nextIndex,
+        lastPlayedId: playedId ?? null,
+        updatedAt: Date.now(),
       })
-      return prevDeck
+
+      return { deckIds: currentDeck, deckIndex: nextIndex }
     })
   }, [availableUnitIds, shuffle, sourceMode, settings.aspectRatioMode])
 
+  const resetRotateTimer = useCallback(() => {
+    if (rotateRef.current) clearInterval(rotateRef.current)
+    if (availableUnitIds.length > 1) {
+      rotateRef.current = setInterval(() => {
+        advance('next')
+      }, rotateSecs * 1000)
+    }
+  }, [availableUnitIds.length, rotateSecs, advance])
+
   // Auto-rotate timer
   useEffect(() => {
-    if (availableUnitIds.length <= 1) return
-    if (rotateRef.current) clearInterval(rotateRef.current)
-    rotateRef.current = setInterval(() => {
-      advance('next')
-    }, rotateSecs * 1000)
+    resetRotateTimer()
     return () => {
       if (rotateRef.current) clearInterval(rotateRef.current)
     }
-  }, [availableUnitIds.length, rotateSecs, advance])
+  }, [resetRotateTimer])
 
   const onLoad = useCallback(() => setLoaded(true), [])
 
@@ -772,11 +777,13 @@ export function useArtwork(rotateSecs = 240, shuffle = true) {
 
   const next = useCallback(() => {
     advance('next')
-  }, [advance])
+    resetRotateTimer()
+  }, [advance, resetRotateTimer])
 
   const prev = useCallback(() => {
     advance('prev')
-  }, [advance])
+    resetRotateTimer()
+  }, [advance, resetRotateTimer])
 
   const setPreference = useCallback((artworkId: Artwork['id'], preference: ArtworkPreference) => {
     const nextPrefs: ArtworkPreferences = { ...prefsRef.current, [String(artworkId)]: preference }

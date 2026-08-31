@@ -110,6 +110,10 @@ export default function ArtScreensaver({
 
   const touchStartXRef = useRef<number | null>(null)
   const touchStartYRef = useRef<number | null>(null)
+  const pointerStartXRef = useRef<number | null>(null)
+  const pointerStartYRef = useRef<number | null>(null)
+  const isDraggingRef = useRef<boolean>(false)
+  const suppressDismissUntilRef = useRef<number>(0)
   const fadeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const handleToggleInfo = useCallback(
@@ -213,6 +217,7 @@ export default function ArtScreensaver({
 
   const handleDismiss = useCallback(() => {
     if (!dismissable) return
+    if (Date.now() < suppressDismissUntilRef.current) return
     setVisible(false)
     setTimeout(() => onDismiss?.(), 500)
   }, [dismissable, onDismiss])
@@ -220,6 +225,7 @@ export default function ArtScreensaver({
   const handleNextPiece = useCallback(
     (e?: React.SyntheticEvent) => {
       e?.stopPropagation()
+      suppressDismissUntilRef.current = Date.now() + 450
       next()
     },
     [next],
@@ -228,10 +234,27 @@ export default function ArtScreensaver({
   const handlePrevPiece = useCallback(
     (e?: React.SyntheticEvent) => {
       e?.stopPropagation()
+      suppressDismissUntilRef.current = Date.now() + 450
       prev()
     },
     [prev],
   )
+
+  // Global kiosk swipe listener
+  useEffect(() => {
+    const handleCasaSwipe = (e: Event) => {
+      const customEvent = e as CustomEvent<{ dir?: 'left' | 'right' }>
+      if (customEvent.detail?.dir === 'left') {
+        suppressDismissUntilRef.current = Date.now() + 450
+        next()
+      } else if (customEvent.detail?.dir === 'right') {
+        suppressDismissUntilRef.current = Date.now() + 450
+        prev()
+      }
+    }
+    window.addEventListener('casa:swipe', handleCasaSwipe)
+    return () => window.removeEventListener('casa:swipe', handleCasaSwipe)
+  }, [next, prev])
 
   // Keyboard navigation (Arrow keys to switch, Escape/Space to dismiss, I for info)
   useEffect(() => {
@@ -261,9 +284,21 @@ export default function ArtScreensaver({
   const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
     touchStartXRef.current = e.touches[0]?.clientX ?? null
     touchStartYRef.current = e.touches[0]?.clientY ?? null
+    isDraggingRef.current = false
     if (plaqueMode === 'fade' && !plaqueVisible) {
       setPlaqueVisible(true)
       setTimeout(() => setPlaqueVisible(false), 5000)
+    }
+  }
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    const startX = touchStartXRef.current
+    const startY = touchStartYRef.current
+    if (startX == null) return
+    const curX = e.touches[0]?.clientX ?? startX
+    const curY = e.touches[0]?.clientY ?? (startY ?? 0)
+    if (Math.hypot(curX - startX, curY - (startY ?? 0)) > 12) {
+      isDraggingRef.current = true
     }
   }
 
@@ -277,15 +312,44 @@ export default function ArtScreensaver({
     const diffY = endY - (startY ?? 0)
 
     // Horizontal swipe gesture
-    if (Math.abs(diffX) > 45 && Math.abs(diffX) > Math.abs(diffY)) {
+    if (Math.abs(diffX) > 40 && Math.abs(diffX) > Math.abs(diffY)) {
+      suppressDismissUntilRef.current = Date.now() + 450
+      if (diffX < 0) {
+        handleNextPiece(e)
+      } else {
+        handlePrevPiece(e)
+      }
+    } else if (isDraggingRef.current) {
+      suppressDismissUntilRef.current = Date.now() + 450
+    }
+    touchStartXRef.current = null
+    touchStartYRef.current = null
+    isDraggingRef.current = false
+  }
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === 'touch') return // handled by touch events
+    pointerStartXRef.current = e.clientX
+    pointerStartYRef.current = e.clientY
+  }
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === 'touch') return
+    const startX = pointerStartXRef.current
+    const startY = pointerStartYRef.current
+    if (startX == null) return
+    const diffX = e.clientX - startX
+    const diffY = e.clientY - (startY ?? 0)
+    if (Math.abs(diffX) > 50 && Math.abs(diffX) > Math.abs(diffY)) {
+      suppressDismissUntilRef.current = Date.now() + 450
       if (diffX < 0) {
         handleNextPiece(e)
       } else {
         handlePrevPiece(e)
       }
     }
-    touchStartXRef.current = null
-    touchStartYRef.current = null
+    pointerStartXRef.current = null
+    pointerStartYRef.current = null
   }
 
   // Active unit for info modal
@@ -731,9 +795,13 @@ export default function ArtScreensaver({
         transition: 'opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1)',
         backgroundColor: '#000000',
       }}
+      data-swipe-nav
       onClick={handleDismiss}
       onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
     >
       {/* Active Bottom Slide (z-1) */}
       {slideToRender && (

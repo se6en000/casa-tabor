@@ -70,14 +70,29 @@ test('ArtScreensaver supports kiosk touch edge-taps, swipe gestures, and keyboar
   assert.match(screensaverSource, /handlePrevPiece/)
   assert.match(screensaverSource, /handleNextPiece/)
   
-  // Touch swipe handling
+  // Touch swipe and pointer handling
   assert.match(screensaverSource, /handleTouchStart/)
+  assert.match(screensaverSource, /handleTouchMove/)
   assert.match(screensaverSource, /handleTouchEnd/)
+  assert.match(screensaverSource, /handlePointerDown/)
+  assert.match(screensaverSource, /handlePointerUp/)
+  assert.match(screensaverSource, /suppressDismissUntilRef/)
+  assert.match(screensaverSource, /data-swipe-nav/)
+  assert.match(screensaverSource, /casa:swipe/)
   
   // Keyboard arrow keys
   assert.match(screensaverSource, /e\.key === 'ArrowRight'/)
   assert.match(screensaverSource, /e\.key === 'ArrowLeft'/)
 })
+
+test('useArtwork hook unifies atomic deckState and resets auto-rotate timer on manual navigation', () => {
+  assert.match(artworkHookSource, /deckState/)
+  assert.match(artworkHookSource, /setDeckState/)
+  assert.match(artworkHookSource, /resetRotateTimer/)
+  assert.match(artworkHookSource, /generateShuffledDeck/)
+  assert.match(artworkHookSource, /loadStoredDeck/)
+})
+
 
 test('colorUtils provides harmonized bevel palettes and default fallback constants', () => {
   assert.equal(typeof DEFAULT_DOMINANT_COLOR, 'string')
