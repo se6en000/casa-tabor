@@ -1,4 +1,5 @@
-import { Eye, EyeOff, Crop, Pencil, Trash2, Feather, Info, MapPin, Sparkles } from 'lucide-react'
+import { useState } from 'react'
+import { Eye, EyeOff, Pencil, Trash2, Feather, MapPin } from 'lucide-react'
 import { IconButton } from '../ui'
 import type { PersonalArtwork } from '../../hooks/usePersonalArtMode'
 import { cn } from '../../utils/cn'
@@ -7,11 +8,8 @@ export interface PersonalArtworkCardProps {
   artwork: PersonalArtwork
   isDisabled?: boolean
   onToggleDisabled: (id: string) => void
-  onCrop: (artwork: PersonalArtwork) => void
   onEdit: (artwork: PersonalArtwork) => void
   onDelete: (artwork: PersonalArtwork) => void
-  onViewProvenance?: (artwork: PersonalArtwork) => void
-  onAIAnalyze?: (artwork: PersonalArtwork) => void
   className?: string
 }
 
@@ -19,40 +17,76 @@ export function PersonalArtworkCard({
   artwork,
   isDisabled = false,
   onToggleDisabled,
-  onCrop,
   onEdit,
   onDelete,
-  onViewProvenance,
-  onAIAnalyze,
   className,
 }: PersonalArtworkCardProps) {
+  const [aspectRatio, setAspectRatio] = useState<number | null>(() => {
+    if (artwork.aspectFormat === 'square_1_1' || artwork.storagePath.includes('_1x1')) return 1.0
+    if (artwork.aspectFormat === 'widescreen_16_9' || artwork.storagePath.includes('_16x9')) return 16 / 9
+    return null
+  })
+  const [isLoaded, setIsLoaded] = useState(false)
+
+  const isSquare = (aspectRatio != null && aspectRatio >= 0.88 && aspectRatio <= 1.14) || artwork.aspectFormat === 'square_1_1' || artwork.storagePath.includes('_1x1')
+  const isWidescreen = (aspectRatio != null && aspectRatio >= 1.55) || artwork.aspectFormat === 'widescreen_16_9' || artwork.storagePath.includes('_16x9')
+
   return (
     <div
       className={cn(
-        'group relative flex flex-col overflow-hidden rounded-xl border transition-all duration-200',
+        'group relative flex flex-col overflow-hidden rounded-2xl border transition-all duration-150 bg-casa-surface select-none cursor-pointer smooth-scroll-card',
         isDisabled
           ? 'border-casa-border/60 bg-casa-surface-2 opacity-65 contrast-90 shadow-none'
-          : 'border-casa-border bg-casa-bg shadow-xs hover:-translate-y-0.5 hover:border-casa-gold/50 hover:shadow-card',
+          : 'border-casa-border hover:-translate-y-0.5 hover:border-casa-gold/60 hover:shadow-card shadow-xs',
         className
       )}
+      onClick={() => onEdit(artwork)}
     >
-      {/* 16:9 Image Preview Container */}
-      <div className="relative aspect-[16/9] w-full overflow-hidden bg-casa-surface-2">
+      {/* Image Preview Container */}
+      <div className="relative aspect-[16/9] w-full overflow-hidden bg-casa-surface-subtle">
         <img
           src={artwork.imageUrl}
           alt={artwork.title}
           loading="lazy"
+          decoding="async"
+          onLoad={(e) => {
+            setIsLoaded(true)
+            const img = e.currentTarget
+            if (img.naturalWidth && img.naturalHeight) {
+              setAspectRatio(img.naturalWidth / img.naturalHeight)
+            }
+          }}
           className={cn(
-            'h-full w-full object-cover transition-all duration-200 group-hover:scale-[1.02]',
+            'h-full w-full object-cover transition-opacity duration-200',
+            isLoaded ? 'opacity-100' : 'opacity-0',
             isDisabled && 'grayscale'
           )}
         />
-        {isDisabled && (
-          <div className="absolute top-2 left-2 z-10 flex items-center gap-1 px-2 py-0.5 rounded-full bg-casa-navy/85 backdrop-blur-xs text-white text-2xs font-semibold shadow-xs">
-            <EyeOff size={11} className="text-casa-gold" />
-            <span>Disabled</span>
-          </div>
-        )}
+
+        {/* Top-Left: Aspect Ratio Badge & Disabled Badge */}
+        <div className="absolute top-2 left-2 z-10 flex items-center gap-1.5 flex-wrap">
+          {isDisabled ? (
+            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-casa-navy/90 backdrop-blur-xs text-white text-3xs font-semibold shadow-xs">
+              <EyeOff size={10} className="text-casa-gold" />
+              <span>Disabled</span>
+            </div>
+          ) : isSquare ? (
+            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-950/85 backdrop-blur-xs border border-emerald-500/40 text-emerald-300 text-3xs font-semibold shadow-xs">
+              <span className="size-1.5 rounded-full bg-emerald-400" />
+              <span>1:1 Square</span>
+            </div>
+          ) : isWidescreen ? (
+            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-casa-navy/85 backdrop-blur-xs border border-white/20 text-stone-200 text-3xs font-medium shadow-xs">
+              <span>16:9 Wide</span>
+            </div>
+          ) : aspectRatio != null ? (
+            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-stone-900/80 backdrop-blur-xs text-stone-300 text-3xs font-medium shadow-xs">
+              <span>Custom</span>
+            </div>
+          ) : null}
+        </div>
+
+        {/* Bottom-Right: Signature Badge */}
         {artwork.signatureEnabled && (
           <div
             className="absolute bottom-2 right-2 z-10 flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-casa-navy/85 backdrop-blur-xs text-white text-3xs font-medium shadow-xs"
@@ -64,12 +98,12 @@ export function PersonalArtworkCard({
         )}
       </div>
 
-      {/* Row 1: Full-Width Metadata (Title & Artist / Collection) */}
+      {/* Full-Width Metadata (Title & Artist / Location) */}
       <div className="flex-1 px-3 pt-2.5 pb-2 min-w-0">
         <p
           className={cn(
             'truncate text-body-sm font-semibold leading-snug',
-            isDisabled ? 'text-casa-muted' : 'text-casa-navy'
+            isDisabled ? 'text-casa-muted' : 'text-casa-navy group-hover:text-casa-gold transition-colors'
           )}
           title={artwork.title}
         >
@@ -96,8 +130,11 @@ export function PersonalArtworkCard({
         )}
       </div>
 
-      {/* Row 2: Dedicated Action Toolbar */}
-      <div className="border-t border-casa-border/60 bg-casa-surface/40 px-2 py-1.5 flex items-center justify-between gap-1">
+      {/* Streamlined 4-Control Action Toolbar */}
+      <div
+        className="border-t border-casa-border/60 bg-casa-surface/40 px-2 py-1.5 flex items-center justify-between gap-1"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Device Active / Disabled Status Pill */}
         <div className="flex items-center gap-1.5 pl-1 min-w-0">
           <span
@@ -111,28 +148,8 @@ export function PersonalArtworkCard({
           </span>
         </div>
 
-        {/* Action Buttons Toolbar */}
-        <div className="flex items-center gap-0.5 shrink-0">
-          {onAIAnalyze && (
-            <IconButton
-              size="sm"
-              variant="ghost"
-              icon={<Sparkles size={14} className="text-casa-gold" />}
-              aria-label={`AI curate details for ${artwork.title}`}
-              title="AI Curate with Gemini Vision"
-              onClick={() => onAIAnalyze(artwork)}
-            />
-          )}
-          {onViewProvenance && (
-            <IconButton
-              size="sm"
-              variant="ghost"
-              icon={<Info size={15} className="text-amber-600" />}
-              aria-label={`View provenance for ${artwork.title}`}
-              title="View provenance & story"
-              onClick={() => onViewProvenance(artwork)}
-            />
-          )}
+        {/* 3 Clean, Spaced Action Buttons */}
+        <div className="flex items-center gap-1 shrink-0">
           <IconButton
             size="sm"
             variant="ghost"
@@ -150,26 +167,18 @@ export function PersonalArtworkCard({
           <IconButton
             size="sm"
             variant="ghost"
-            icon={<Crop size={15} />}
-            aria-label={`Crop ${artwork.title} to 16:9`}
-            title="Crop to 16:9 widescreen"
-            onClick={() => onCrop(artwork)}
-          />
-          <IconButton
-            size="sm"
-            variant="ghost"
-            icon={<Pencil size={15} />}
+            icon={<Pencil size={15} className="text-casa-navy" />}
             aria-label={`Edit ${artwork.title}`}
-            title="Edit details"
+            title="Edit details & provenance"
             onClick={() => onEdit(artwork)}
           />
           <IconButton
             size="sm"
             variant="ghost"
-            icon={<Trash2 size={15} />}
-            className="hover:bg-casa-error/10 hover:text-casa-error"
+            icon={<Trash2 size={15} className="text-casa-muted hover:text-casa-error" />}
+            className="hover:bg-casa-error/10"
             aria-label={`Remove ${artwork.title}`}
-            title="Remove artwork"
+            title="Remove from gallery"
             onClick={() => onDelete(artwork)}
           />
         </div>

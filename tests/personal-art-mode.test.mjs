@@ -78,14 +78,14 @@ test('failed metadata inserts clean up uploaded storage objects', () => {
   assert.match(personalHookSource, /if \(insertError\)[\s\S]*\.remove\(\[storagePath\]\)/)
 })
 
-test('personal Art Mode provides 16:9 image cropping with old storage cleanup and UI integration', () => {
+test('personal Art Mode provides image cropping with old storage cleanup and UI integration', () => {
   assert.match(personalHookSource, /cropArtwork/)
   assert.match(personalHookSource, /cropMutation/)
   assert.match(personalHookSource, /if \(oldStoragePath && oldStoragePath !== newStoragePath\)[\s\S]*\.remove\(\[oldStoragePath\]\)/)
   assert.match(settingsSource, /ArtworkCropModal/)
   assert.match(settingsSource, /handleOpenCrop/)
   assert.match(settingsSource, /handleSaveCrop/)
-  assert.match(settingsSource, /Crop to 16:9/)
+  assert.match(settingsSource, /Crop \/ Frame/)
 })
 
 test('personal Art Mode schema and hooks support full archival provenance fields', () => {
@@ -121,7 +121,7 @@ test('Art Mode settings features 2-tab provenance and signature studio', () => {
   assert.match(settingsSource, /Historical Background & Story/)
   assert.match(settingsSource, /Insider Trivia \/ Fun Facts/)
   assert.match(settingsSource, /Key Figures & Subjects/)
-  assert.match(settingsSource, /onViewProvenance=\{setProvenancePreviewArtwork\}/)
+  assert.match(settingsSource, /Plaque Preview/)
 })
 
 test('personal Art Mode provides multimodal Gemini AI vision analysis and hint-assisted curation', () => {
@@ -130,7 +130,6 @@ test('personal Art Mode provides multimodal Gemini AI vision analysis and hint-a
   assert.match(personalHookSource, /analyze-personal-artwork/)
   assert.match(settingsSource, /AI Curate with Gemini Vision/)
   assert.match(settingsSource, /handleAIAnalyze/)
-  assert.match(settingsSource, /onAIAnalyze/)
   assert.match(settingsSource, /Auto-Fill Details/)
 })
 

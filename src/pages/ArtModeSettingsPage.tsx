@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Image, Sun, Palette, Monitor, Plus, Minus, X, ChevronDown, ChevronUp, Upload, Crop, BookOpen, Feather, Sparkles } from 'lucide-react'
+import { Image, Sun, Palette, Monitor, Plus, Minus, X, ChevronDown, ChevronUp, Upload, Crop, Sparkles, Trash2 } from 'lucide-react'
 import { useScreensaverSettings } from '../hooks/useScreensaverSettings'
 import { useRoomTone } from '../hooks/useRoomTone'
 import { useArtFeedPrefs, MEDIA_OPTIONS } from '../hooks/useArtFeedPrefs'
@@ -47,6 +47,12 @@ const MAT_PRESET_OPTIONS = [
   { value: 'coastal_mist', label: 'Coastal Mist' },
   { value: 'french_ivory', label: 'French Ivory' },
   { value: 'charcoal', label: 'Charcoal' },
+] as const
+
+const ASPECT_RATIO_OPTIONS = [
+  { value: 'mixed', label: 'Mixed (16:9 & 1:1 Pairs)' },
+  { value: 'diptych_only', label: '1:1 Diptychs Only' },
+  { value: 'single_only', label: '16:9 Single Only' },
 ] as const
 
 const COASTAL_STARTER_ARTISTS = [
@@ -311,20 +317,34 @@ export default function ArtModeSettingsPage() {
     }
   }
 
-  const handleUpload = async (file: File | undefined) => {
-    if (!file) return
+  const handleUpload = async (files: FileList | null | undefined) => {
+    if (!files || files.length === 0) return
     setLibraryMessage(null)
-    try {
-      await uploadArtwork(file)
-      setLibraryMessage({ tone: 'success', text: `${file.name} is now in your personal gallery.` })
-    } catch (error) {
-      setLibraryMessage({
-        tone: 'danger',
-        text: error instanceof Error ? error.message : 'Artwork could not be uploaded.',
-      })
-    } finally {
-      if (fileInputRef.current) fileInputRef.current.value = ''
+    const fileList = Array.from(files)
+    let uploadedCount = 0
+    let lastError: string | null = null
+
+    for (const file of fileList) {
+      try {
+        await uploadArtwork(file)
+        uploadedCount++
+      } catch (error) {
+        lastError = error instanceof Error ? error.message : 'Artwork could not be uploaded.'
+      }
     }
+
+    if (uploadedCount > 0) {
+      setLibraryMessage({
+        tone: 'success',
+        text: fileList.length === 1
+          ? `Added "${fileList[0].name}" to your personal gallery.`
+          : `Successfully added ${uploadedCount} photo${uploadedCount === 1 ? '' : 's'} to your gallery.`,
+      })
+    } else if (lastError) {
+      setLibraryMessage({ tone: 'danger', text: lastError })
+    }
+
+    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   const handleOpenEdit = (item: PersonalArtwork) => {
@@ -354,8 +374,51 @@ export default function ArtModeSettingsPage() {
     if (!artworkToEdit && !editTitle && !aiHint) return
     setAiMessage(null)
     try {
+      let fileBase64: string | undefined
+      let mimeType: string | undefined
+
+      if (artworkToEdit?.imageUrl && typeof window !== 'undefined') {
+        try {
+          const img = new window.Image()
+          img.crossOrigin = 'anonymous'
+          await new Promise<void>((resolve, reject) => {
+            img.onload = () => resolve()
+            img.onerror = () => reject(new Error('Image load failed'))
+            img.src = artworkToEdit.imageUrl
+          })
+
+          const maxDim = 1200
+          let w = img.naturalWidth || img.width
+          let h = img.naturalHeight || img.height
+          if (w > maxDim || h > maxDim) {
+            if (w > h) {
+              h = Math.round((h * maxDim) / w)
+              w = maxDim
+            } else {
+              w = Math.round((w * maxDim) / h)
+              h = maxDim
+            }
+          }
+
+          const canvas = document.createElement('canvas')
+          canvas.width = w
+          canvas.height = h
+          const ctx = canvas.getContext('2d')
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, w, h)
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
+            fileBase64 = dataUrl.split(',')[1]
+            mimeType = 'image/jpeg'
+          }
+        } catch {
+          // If canvas extraction fails, fallback to passing URL
+        }
+      }
+
       const analysis = await analyzeArtwork({
         imageUrl: artworkToEdit?.imageUrl,
+        fileBase64,
+        mimeType,
         hint: aiHint.trim() || undefined,
         currentTitle: editTitle.trim() || undefined,
         currentArtist: editArtist.trim() || undefined,
@@ -436,21 +499,30 @@ export default function ArtModeSettingsPage() {
     setArtworkToCrop(item)
   }
 
-  const handleSaveCrop = async (croppedFile: File) => {
+  const handleSaveCrop = async (croppedFile: File, aspectFormat: 'square_1_1' | 'widescreen_16_9') => {
     if (!artworkToCrop) return
     setLibraryMessage(null)
     try {
-      await cropArtwork({
+      const result = await cropArtwork({
         id: artworkToCrop.id,
         file: croppedFile,
         oldStoragePath: artworkToCrop.storagePath,
         title: artworkToCrop.title,
         artist: artworkToCrop.artist,
+        aspectFormat,
       })
-      setLibraryMessage({
-        tone: 'success',
-        text: `"${artworkToCrop.title}" cropped to 16:9 widescreen format.`,
-      })
+
+      // If we are currently editing this artwork, update the active editor state with the new cropped image so the live canvas preview updates instantly!
+      if (artworkToEdit && artworkToEdit.id === artworkToCrop.id) {
+        const previewUrl = URL.createObjectURL(croppedFile)
+        setArtworkToEdit({
+          ...artworkToEdit,
+          imageUrl: previewUrl,
+          aspectFormat,
+          storagePath: result?.storagePath || artworkToCrop.storagePath,
+        })
+      }
+
       setArtworkToCrop(null)
     } catch (error) {
       setLibraryMessage({
@@ -640,6 +712,19 @@ export default function ArtModeSettingsPage() {
                     fullWidth
                   />
                 </div>
+                <div className="pt-4 border-t border-casa-border">
+                  <div className="mb-2.5">
+                    <p className="text-body-sm font-medium text-casa-navy">Presentation layout</p>
+                    <p className="text-caption text-casa-muted mt-0.5">Display 1:1 square artwork as side-by-side diptych pairs on widescreen displays.</p>
+                  </div>
+                  <SegmentedControl
+                    aria-label="Presentation layout"
+                    value={settings.aspectRatioMode ?? 'mixed'}
+                    options={ASPECT_RATIO_OPTIONS}
+                    onChange={v => updateScreensaver({ aspectRatioMode: v })}
+                    fullWidth
+                  />
+                </div>
               </div>
             </div>
           ) : (
@@ -691,9 +776,10 @@ export default function ArtModeSettingsPage() {
                   <input
                     ref={fileInputRef}
                     type="file"
+                    multiple
                     accept="image/jpeg,image/png,image/webp"
                     className="sr-only"
-                    onChange={event => void handleUpload(event.target.files?.[0])}
+                    onChange={event => void handleUpload(event.target.files)}
                   />
                 </div>
 
@@ -722,11 +808,8 @@ export default function ArtModeSettingsPage() {
                         artwork={item}
                         isDisabled={isArtworkDisabled(item.id)}
                         onToggleDisabled={toggleArtworkDisabled}
-                        onCrop={handleOpenCrop}
                         onEdit={handleOpenEdit}
                         onDelete={setArtworkToDelete}
-                        onViewProvenance={setProvenancePreviewArtwork}
-                        onAIAnalyze={handleOpenEdit}
                       />
                     ))}
                   </div>
@@ -917,17 +1000,17 @@ export default function ArtModeSettingsPage() {
         onClose={() => setArtworkToEdit(null)}
         title="Edit Artwork & Provenance"
         size="xl"
-        panelClassName="max-w-5xl max-h-[92vh] flex flex-col"
+        panelClassName="max-w-5xl max-h-[92vh] flex flex-col rounded-3xl overflow-hidden"
         contentClassName="p-0 flex-1 overflow-hidden flex flex-col"
         closeDisabled={updating}
       >
         {/* Scrollable Studio Content */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+        <div className="flex-1 overflow-y-auto p-5 sm:p-6">
           <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
             {/* Left Column: Live Canvas Preview & Metadata Overview */}
             <div className="md:col-span-5 flex flex-col gap-4">
               {artworkToEdit && (
-                <div className="relative w-full aspect-[16/9] rounded-xl overflow-hidden bg-stone-900 border border-casa-border shadow-inner group shrink-0">
+                <div className="relative w-full aspect-[16/9] rounded-2xl overflow-hidden bg-stone-900 border border-casa-border shadow-md group shrink-0">
                   <img
                     src={artworkToEdit.imageUrl}
                     alt={artworkToEdit.title}
@@ -973,21 +1056,33 @@ export default function ArtModeSettingsPage() {
                   {/* Cold-Press Watercolor Paper Grain & Canvas Tooth Overlay */}
                   <div className="paper-grain-overlay z-15 opacity-55" />
 
-                  {/* Crop to 16:9 Action Chip on Preview */}
+                  {/* Top-Left: Aspect Ratio Badge */}
+                  <div className="absolute top-2.5 left-2.5 z-20">
+                    {artworkToEdit.aspectFormat === 'square_1_1' || artworkToEdit.storagePath.includes('_1x1') ? (
+                      <span className="px-2.5 py-1 rounded-full bg-emerald-950/85 backdrop-blur-xs border border-emerald-500/40 text-emerald-300 text-3xs font-semibold shadow-xs flex items-center gap-1.5">
+                        <span className="size-1.5 rounded-full bg-emerald-400" />
+                        1:1 Square (Diptych)
+                      </span>
+                    ) : (
+                      <span className="px-2.5 py-1 rounded-full bg-casa-navy/85 backdrop-blur-xs border border-white/20 text-stone-200 text-3xs font-medium shadow-xs">
+                        16:9 Widescreen
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Top-Right: Crop / Frame Action */}
                   <div className="absolute top-2.5 right-2.5 z-20">
                     <Button
                       type="button"
                       variant="secondary"
                       size="sm"
                       leadingIcon={<Crop size={14} />}
-                      className="bg-white/85 backdrop-blur-xs hover:bg-white shadow-xs"
+                      className="bg-white/90 backdrop-blur-xs hover:bg-white text-casa-navy shadow-xs font-semibold"
                       onClick={() => {
-                        const target = artworkToEdit
-                        setArtworkToEdit(null)
-                        handleOpenCrop(target)
+                        handleOpenCrop(artworkToEdit)
                       }}
                     >
-                      Crop to 16:9
+                      Crop / Frame
                     </Button>
                   </div>
 
@@ -1001,8 +1096,8 @@ export default function ArtModeSettingsPage() {
               )}
 
               {/* Provenance Live Preview Pill */}
-              <div className="rounded-xl border border-casa-border bg-casa-bg p-3.5 space-y-2">
-                <div className="flex items-center justify-between gap-2 border-b border-casa-border pb-2">
+              <div className="rounded-2xl border border-casa-border bg-casa-surface/60 p-4 space-y-2">
+                <div className="flex items-center justify-between gap-2 border-b border-casa-border/60 pb-2">
                   <span className="text-2xs font-semibold uppercase tracking-wider text-casa-muted flex items-center gap-1">
                     <Sparkles size={12} className="text-casa-gold" />
                     Plaque Preview
@@ -1034,32 +1129,24 @@ export default function ArtModeSettingsPage() {
             {/* Right Column: Tabbed Editorial Studio */}
             <div className="md:col-span-7 flex flex-col gap-4">
               {/* Studio Tabs Header */}
-              <div className="flex items-center gap-2 border-b border-casa-border pb-2.5">
-                <Button
-                  type="button"
-                  variant={editTab === 'story' ? 'strong' : 'secondary'}
-                  size="sm"
-                  leadingIcon={<BookOpen size={15} />}
-                  onClick={() => setEditTab('story')}
-                >
-                  Story & Provenance
-                </Button>
-                <Button
-                  type="button"
-                  variant={editTab === 'signature' ? 'strong' : 'secondary'}
-                  size="sm"
-                  leadingIcon={<Feather size={15} />}
-                  onClick={() => setEditTab('signature')}
-                >
-                  Signature Studio
-                </Button>
+              <div>
+                <SegmentedControl
+                  aria-label="Studio Mode"
+                  value={editTab}
+                  options={[
+                    { value: 'story', label: 'Story & Provenance' },
+                    { value: 'signature', label: 'Signature Studio' },
+                  ]}
+                  onChange={(val) => setEditTab(val as 'story' | 'signature')}
+                  fullWidth
+                />
               </div>
 
               {/* Tab 1: Story & Provenance Fields */}
               {editTab === 'story' && (
                 <div className="space-y-3.5">
                   {/* AI Curate with Gemini Vision */}
-                  <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 dark:bg-amber-500/10 p-3.5 space-y-2.5">
+                  <div className="rounded-2xl border border-casa-gold/35 bg-casa-gold/5 dark:bg-amber-500/10 p-4 space-y-3">
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-300">
                         <Sparkles size={13} className="text-casa-gold shrink-0" />
@@ -1216,7 +1303,7 @@ export default function ArtModeSettingsPage() {
               {/* Tab 2: Handwritten Signature Studio */}
               {editTab === 'signature' && (
                 <div className="space-y-3.5">
-                  <div className="rounded-xl border border-casa-border bg-casa-surface-2/30 p-3.5">
+                  <div className="rounded-2xl border border-casa-border bg-casa-surface-2/30 p-4">
                     <Toggle
                       checked={editSignatureEnabled}
                       onChange={checked => {
@@ -1296,7 +1383,7 @@ export default function ArtModeSettingsPage() {
                                 contentClassName="w-full flex-col items-start gap-1"
                                 onClick={() => setEditSignatureStyle(opt.value)}
                                 className={cn(
-                                  'p-2.5 h-auto min-h-[58px] rounded-xl transition-all cursor-pointer text-left',
+                                  'p-3 h-auto min-h-[60px] rounded-2xl transition-all cursor-pointer text-left',
                                   isSelected && 'border-casa-gold ring-1 ring-casa-gold/40'
                                 )}
                               >
@@ -1342,7 +1429,7 @@ export default function ArtModeSettingsPage() {
                       </div>
 
                       {/* Live Inscription Specimen Preview Box */}
-                      <div className="rounded-xl border border-casa-border bg-stone-100/80 dark:bg-stone-900/60 p-3 space-y-2">
+                      <div className="rounded-2xl border border-casa-border bg-stone-100/80 dark:bg-stone-900/60 p-4 space-y-2">
                         <div className="flex items-center justify-between gap-2 border-b border-casa-border/50 pb-1.5">
                           <span className="text-2xs font-semibold uppercase tracking-wider text-casa-muted flex items-center gap-1.5">
                             <Sparkles size={12} className="text-casa-gold" />
@@ -1477,13 +1564,27 @@ export default function ArtModeSettingsPage() {
         </div>
 
         {/* Pinned Sticky Action Footer */}
-        <div className="flex items-center justify-end gap-2.5 px-5 sm:px-6 py-3.5 border-t border-casa-border bg-casa-surface shrink-0 z-10">
-          <Button variant="secondary" onClick={() => setArtworkToEdit(null)} disabled={updating}>
-            Cancel
+        <div className="flex items-center justify-between gap-2.5 px-5 sm:px-6 py-3.5 border-t border-casa-border bg-casa-surface shrink-0 z-10">
+          <Button
+            variant="danger"
+            onClick={() => {
+              const target = artworkToEdit
+              setArtworkToEdit(null)
+              setArtworkToDelete(target)
+            }}
+            disabled={updating}
+            leadingIcon={<Trash2 size={15} />}
+          >
+            Delete from Gallery
           </Button>
-          <Button variant="strong" loading={updating} onClick={() => void handleSaveEdit()}>
-            Save Details
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" onClick={() => setArtworkToEdit(null)} disabled={updating}>
+              Cancel
+            </Button>
+            <Button variant="strong" loading={updating} onClick={() => void handleSaveEdit()}>
+              Save Details
+            </Button>
+          </div>
         </div>
       </Modal>
 

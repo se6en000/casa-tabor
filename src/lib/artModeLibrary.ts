@@ -43,6 +43,14 @@ export function sanitizeArtworkTitle(rawTitle: string): string {
   if (!rawTitle) return 'Untitled'
   
   let cleaned = rawTitle
+  try {
+    cleaned = decodeURIComponent(cleaned)
+  } catch {
+    // ignore
+  }
+
+  cleaned = cleaned
+    .replace(/\+/g, ' ') // replace + signs with spaces
     .replace(/\.[a-zA-Z0-9]{3,4}$/, '') // strip extension
     .replace(/^(orig|img|dsc|photo|scan|pxl)[_\-\s]+/i, '') // strip camera / prefix tags
     .replace(/[_\-\s]+(1920x\d*|4k|1080p|resized|scaled|wallpaper|hires|orig|preview)[_\-\s]*/gi, ' ') // strip dimension suffixes

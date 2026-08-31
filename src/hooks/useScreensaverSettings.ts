@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useSyncExternalStore, useCallback } from 'react'
 
 export interface ScreensaverSettings {
   screensaverMins: number   // idle minutes before art mode (default 5)
@@ -11,6 +11,7 @@ export interface ScreensaverSettings {
   shuffle: boolean          // randomize artwork playback order (default true)
   plaqueMode: 'fade' | 'always' | 'hidden' // museum plaque visibility (default 'fade' 5s)
   matPreset: 'auto' | 'warm_linen' | 'travertine' | 'coastal_mist' | 'french_ivory' | 'charcoal' // mat color tone
+  aspectRatioMode?: 'mixed' | 'diptych_only' | 'single_only' // 1:1 diptych playback preference (default 'mixed')
   wakeWordSensitivity: number // 0.1 (very sensitive) – 0.6 (strict), default 0.3
   wakeWordEnabled: boolean  // master toggle for "Alexa" wake word listener
   disabledArtworkIds?: string[] // IDs of photos disabled from playback on this device
@@ -27,6 +28,7 @@ const DEFAULTS: ScreensaverSettings = {
   shuffle: true,
   plaqueMode: 'fade',
   matPreset: 'auto',
+  aspectRatioMode: 'mixed',
   wakeWordSensitivity: 0.3,
   wakeWordEnabled: true,
   disabledArtworkIds: [],
@@ -37,49 +39,63 @@ const SYNC_EVENT = 'casa-screensaver-settings-updated'
 
 function load(): ScreensaverSettings {
   try {
-    const raw = localStorage.getItem(KEY)
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(KEY) : null
     if (raw) return { ...DEFAULTS, ...JSON.parse(raw) }
   } catch { /* ignore */ }
-  return DEFAULTS
+  return { ...DEFAULTS }
+}
+
+let storeSettings: ScreensaverSettings = load()
+const listeners = new Set<() => void>()
+
+function emitChange() {
+  for (const listener of listeners) {
+    listener()
+  }
+}
+
+export function saveScreensaverSettings(settings: ScreensaverSettings) {
+  storeSettings = settings
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(KEY, JSON.stringify(settings))
+    }
+  } catch { /* ignore */ }
+  emitChange()
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent<ScreensaverSettings>(SYNC_EVENT, { detail: settings }))
+  }
+}
+
+export function updateScreensaverSettings(patch: Partial<ScreensaverSettings>) {
+  saveScreensaverSettings({ ...storeSettings, ...patch })
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key === KEY) {
+      storeSettings = load()
+      emitChange()
+    }
+  })
+}
+
+function subscribe(listener: () => void) {
+  listeners.add(listener)
+  return () => {
+    listeners.delete(listener)
+  }
+}
+
+function getSnapshot() {
+  return storeSettings
 }
 
 export function useScreensaverSettings() {
-  const [settings, setSettings] = useState<ScreensaverSettings>(load)
-
-  useEffect(() => {
-    localStorage.setItem(KEY, JSON.stringify(settings))
-  }, [settings])
-
-  useEffect(() => {
-    const onSync = (event: Event) => {
-      const detail = (event as CustomEvent<ScreensaverSettings>).detail
-      if (detail) {
-        setSettings(current => ({ ...current, ...detail }))
-        return
-      }
-      setSettings(load())
-    }
-    const onStorage = (event: StorageEvent) => {
-      if (event.key !== KEY) return
-      setSettings(load())
-    }
-
-    document.addEventListener(SYNC_EVENT, onSync as EventListener)
-    window.addEventListener('storage', onStorage)
-    return () => {
-      document.removeEventListener(SYNC_EVENT, onSync as EventListener)
-      window.removeEventListener('storage', onStorage)
-    }
+  const settings = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+  const update = useCallback((patch: Partial<ScreensaverSettings>) => {
+    updateScreensaverSettings(patch)
   }, [])
-
-  function update(patch: Partial<ScreensaverSettings>) {
-    setSettings(current => {
-      const next = { ...current, ...patch }
-      document.dispatchEvent(new CustomEvent<ScreensaverSettings>(SYNC_EVENT, { detail: next }))
-      return next
-    })
-  }
-
   return { settings, update }
 }
 

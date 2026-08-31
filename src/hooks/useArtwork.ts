@@ -115,6 +115,7 @@ const FALLBACKS: Artwork[] = [
     imageUrl: 'https://images.metmuseum.org/CRDImages/ad/original/DP-20821-001.jpg',
     date: '1899',
     medium: 'Oil on canvas',
+    aspectRatio: 1.51,
   },
   {
     id: 11125,
@@ -123,6 +124,7 @@ const FALLBACKS: Artwork[] = [
     imageUrl: 'https://images.metmuseum.org/CRDImages/ad/original/ap54.183.jpg',
     date: '1883',
     medium: 'Watercolor',
+    aspectRatio: 1.38,
   },
   {
     id: 11051,
@@ -131,6 +133,25 @@ const FALLBACKS: Artwork[] = [
     imageUrl: 'https://images.metmuseum.org/CRDImages/ad/original/DT9511.jpg',
     date: '1875',
     medium: 'Oil on canvas',
+    aspectRatio: 1.0,
+  },
+  {
+    id: 11052,
+    title: 'Orchid with Two Hummingbirds',
+    artist: 'Martin Johnson Heade',
+    imageUrl: 'https://images.metmuseum.org/CRDImages/ad/original/DT1532.jpg',
+    date: '1871',
+    medium: 'Oil on canvas',
+    aspectRatio: 1.0,
+  },
+  {
+    id: 10482,
+    title: 'Water Lilies',
+    artist: 'Claude Monet',
+    imageUrl: 'https://images.metmuseum.org/CRDImages/ep/original/DP-25465-001.jpg',
+    date: '1919',
+    medium: 'Oil on canvas',
+    aspectRatio: 1.0,
   },
   {
     id: ARTIC_OFFSET + 64724,
@@ -139,8 +160,103 @@ const FALLBACKS: Artwork[] = [
     imageUrl: `${ARTIC_IIIF}/0f2d999d-0173-2935-a6d0-0175bb97b2a9/full/1200,/0/default.jpg`,
     date: '1893',
     medium: 'Oil on canvas',
+    aspectRatio: 1.34,
   },
 ]
+
+export type PresentationUnit =
+  | { id: string; type: 'single'; artwork: Artwork }
+  | { id: string; type: 'diptych'; left: Artwork; right: Artwork }
+
+export function isSquareArtwork(artwork: Artwork | null | undefined): boolean {
+  if (!artwork) return false
+  if (typeof artwork.aspectRatio === 'number' && !isNaN(artwork.aspectRatio) && artwork.aspectRatio > 0) {
+    return artwork.aspectRatio >= 0.88 && artwork.aspectRatio <= 1.14
+  }
+  if (artwork.imageUrl) {
+    const cached = artworkMetadataCache.get(artwork.imageUrl)
+    if (cached && typeof cached.aspectRatio === 'number' && cached.aspectRatio > 0) {
+      return cached.aspectRatio >= 0.88 && cached.aspectRatio <= 1.14
+    }
+  }
+  return false
+}
+
+export function buildPresentationUnits(
+  artworks: Artwork[],
+  aspectRatioMode: 'mixed' | 'diptych_only' | 'single_only' = 'mixed',
+): PresentationUnit[] {
+  if (!artworks || artworks.length === 0) return []
+
+  if (aspectRatioMode === 'single_only') {
+    return artworks.map(art => ({
+      id: `single-${art.id}`,
+      type: 'single' as const,
+      artwork: art,
+    }))
+  }
+
+  if (aspectRatioMode === 'diptych_only') {
+    const squareCandidates = artworks.filter(isSquareArtwork)
+    const pool = squareCandidates.length >= 2 ? squareCandidates : artworks
+    const units: PresentationUnit[] = []
+    for (let i = 0; i < pool.length; i += 2) {
+      const left = pool[i]
+      const right = pool[i + 1] ?? pool[0]
+      units.push({
+        id: `diptych-${left.id}-${right.id}`,
+        type: 'diptych' as const,
+        left,
+        right,
+      })
+    }
+    return units
+  }
+
+  // Mixed Mode (Default):
+  // Collect squares and singles
+  const squares: Artwork[] = []
+  const singles: Artwork[] = []
+
+  for (const art of artworks) {
+    if (isSquareArtwork(art)) {
+      squares.push(art)
+    } else {
+      singles.push(art)
+    }
+  }
+
+  const diptychUnits: PresentationUnit[] = []
+  for (let i = 0; i < squares.length; i += 2) {
+    const left = squares[i]
+    const right = squares[i + 1] ?? squares[0]
+    diptychUnits.push({
+      id: `diptych-${left.id}-${right.id}`,
+      type: 'diptych' as const,
+      left,
+      right,
+    })
+  }
+
+  const singleUnits: PresentationUnit[] = singles.map(art => ({
+    id: `single-${art.id}`,
+    type: 'single' as const,
+    artwork: art,
+  }))
+
+  const interleaved: PresentationUnit[] = []
+  const maxLen = Math.max(singleUnits.length, diptychUnits.length)
+  for (let i = 0; i < maxLen; i++) {
+    if (singleUnits[i]) interleaved.push(singleUnits[i])
+    if (diptychUnits[i]) interleaved.push(diptychUnits[i])
+  }
+
+  return interleaved.length > 0 ? interleaved : artworks.map(art => ({
+    id: `single-${art.id}`,
+    type: 'single' as const,
+    artwork: art,
+  }))
+}
 
 export interface Artwork {
   id: number | string
@@ -435,30 +551,35 @@ export function useArtwork(rotateSecs = 240, shuffle = true) {
     if (personalArtworkLoading && personalArtwork.length === 0 && sourceMode === 'personal') {
       return []
     }
-    const personal: Artwork[] = personalArtwork.map(item => ({
-      id: item.id,
-      title: item.title,
-      artist: item.artist || 'Personal collection',
-      imageUrl: item.imageUrl,
-      medium: item.medium || 'Color photograph',
-      location: item.location,
-      dateTaken: item.dateTaken,
-      description: item.description,
-      subjects: item.subjects,
-      funFact: item.funFact,
-      date: item.dateTaken,
-      signature: item.signatureEnabled
-        ? {
-            enabled: true,
-            text: item.signatureText || item.artist || 'Personal collection',
-            style: item.signatureStyle || 'fountain',
-            position: item.signaturePosition || 'bottom-right',
-            color: item.signatureColor || 'auto',
-            size: item.signatureSize || 'md',
-            opacity: item.signatureOpacity ?? 0.55,
-          }
-        : undefined,
-    }))
+    const personal: Artwork[] = personalArtwork.map(item => {
+      const isSquare = item.aspectFormat === 'square_1_1' || item.storagePath.includes('_1x1')
+      const isWide = item.aspectFormat === 'widescreen_16_9' || item.storagePath.includes('_16x9')
+      return {
+        id: item.id,
+        title: item.title,
+        artist: item.artist || 'Personal collection',
+        imageUrl: item.imageUrl,
+        medium: item.medium || 'Color photograph',
+        location: item.location,
+        dateTaken: item.dateTaken,
+        description: item.description,
+        subjects: item.subjects,
+        funFact: item.funFact,
+        date: item.dateTaken,
+        aspectRatio: isSquare ? 1.0 : isWide ? 16 / 9 : undefined,
+        signature: item.signatureEnabled
+          ? {
+              enabled: true,
+              text: item.signatureText || item.artist || 'Personal collection',
+              style: item.signatureStyle || 'fountain',
+              position: item.signaturePosition || 'bottom-right',
+              color: item.signatureColor || 'auto',
+              size: item.signatureSize || 'md',
+              opacity: item.signatureOpacity ?? 0.55,
+            }
+          : undefined,
+      }
+    })
     return buildArtworkFeed(
       sourceMode,
       casaArtworks.length > 0 ? casaArtworks : (sourceMode === 'casa' ? FALLBACKS : []),
@@ -479,70 +600,100 @@ export function useArtwork(rotateSecs = 240, shuffle = true) {
     )
   }, [rawFeed, disabledArtworkIds])
 
-  const feedMap = useMemo(() => {
-    const map = new Map<string, Artwork>()
-    for (const art of activeFeed) {
-      map.set(String(art.id), art)
+  // Build presentation units (single vs diptych pairs) based on settings.aspectRatioMode
+  const presentationUnits = useMemo(() => {
+    return buildPresentationUnits(activeFeed, settings.aspectRatioMode ?? 'mixed')
+  }, [activeFeed, settings.aspectRatioMode])
+
+  const presentationUnitMap = useMemo(() => {
+    const map = new Map<string, PresentationUnit>()
+    for (const unit of presentationUnits) {
+      map.set(unit.id, unit)
     }
     return map
-  }, [activeFeed])
+  }, [presentationUnits])
 
-  const availableIds = useMemo(() => activeFeed.map(a => a.id), [activeFeed])
+  const availableUnitIds = useMemo(() => presentationUnits.map(u => u.id), [presentationUnits])
 
-  // Synchronize deck whenever available items, sourceMode, or shuffle changes
+  // Synchronize deck whenever available items, sourceMode, aspectRatioMode, or shuffle changes
   useEffect(() => {
-    if (availableIds.length === 0) {
+    if (availableUnitIds.length === 0) {
       setDeck([])
       setDeckIndex(0)
       return
     }
 
+    const deckStorageKey = `${sourceMode}_${settings.aspectRatioMode ?? 'mixed'}`
     const { deckIds: syncedDeck, deckIndex: syncedIndex, lastPlayedId } = loadStoredDeck(
-      sourceMode,
+      deckStorageKey,
       shuffle,
-      availableIds,
+      availableUnitIds,
     )
 
     lastPlayedIdRef.current = lastPlayedId
     setDeck(syncedDeck)
     setDeckIndex(syncedIndex)
-  }, [availableIds, sourceMode, shuffle])
+  }, [availableUnitIds, sourceMode, shuffle, settings.aspectRatioMode])
 
-  // Current active artwork
-  const currentArtworkId = deck[deckIndex]
-  const currentArtwork = (currentArtworkId != null ? feedMap.get(String(currentArtworkId)) : null) ?? activeFeed[0] ?? null
+  // Current active presentation unit
+  const currentUnitId = deck[deckIndex]
+  const currentUnit: PresentationUnit | null =
+    (currentUnitId != null ? presentationUnitMap.get(String(currentUnitId)) : null) ??
+    presentationUnits[0] ??
+    null
 
-  // Next upcoming artwork for pre-rendering / pre-decoding
-  const nextArtworkId = deck.length > 1 ? deck[(deckIndex + 1) % deck.length] : null
-  const nextArtwork = nextArtworkId != null ? (feedMap.get(String(nextArtworkId)) ?? null) : null
+  const currentArtwork: Artwork | null = currentUnit
+    ? currentUnit.type === 'single'
+      ? currentUnit.artwork
+      : currentUnit.left
+    : (activeFeed[0] ?? null)
+
+  const diptychArtworks = currentUnit && currentUnit.type === 'diptych'
+    ? { left: currentUnit.left, right: currentUnit.right }
+    : null
+
+  // Next upcoming presentation unit for pre-rendering / pre-decoding
+  const nextUnitId = deck.length > 1 ? deck[(deckIndex + 1) % deck.length] : null
+  const nextUnit: PresentationUnit | null =
+    nextUnitId != null ? (presentationUnitMap.get(String(nextUnitId)) ?? null) : null
+
+  const nextArtwork: Artwork | null = nextUnit
+    ? nextUnit.type === 'single'
+      ? nextUnit.artwork
+      : nextUnit.left
+    : null
 
   // Trigger background pre-fetching and GPU decoding for upcoming pieces in the deck
   useEffect(() => {
     if (typeof window === 'undefined' || deck.length === 0) return
 
     const toPreload: string[] = []
-    if (currentArtwork?.imageUrl) {
-      toPreload.push(currentArtwork.imageUrl)
+    if (currentUnit) {
+      if (currentUnit.type === 'single' && currentUnit.artwork.imageUrl) {
+        toPreload.push(currentUnit.artwork.imageUrl)
+      } else if (currentUnit.type === 'diptych') {
+        if (currentUnit.left.imageUrl) toPreload.push(currentUnit.left.imageUrl)
+        if (currentUnit.right.imageUrl) toPreload.push(currentUnit.right.imageUrl)
+      }
     }
-    if (nextArtwork?.imageUrl) {
-      toPreload.push(nextArtwork.imageUrl)
-    }
-    // Also prefetch the piece after next if available
-    if (deck.length > 2) {
-      const futureId = deck[(deckIndex + 2) % deck.length]
-      const futureArt = futureId != null ? feedMap.get(String(futureId)) : null
-      if (futureArt?.imageUrl) {
-        toPreload.push(futureArt.imageUrl)
+    if (nextUnit) {
+      if (nextUnit.type === 'single' && nextUnit.artwork.imageUrl) {
+        toPreload.push(nextUnit.artwork.imageUrl)
+      } else if (nextUnit.type === 'diptych') {
+        if (nextUnit.left.imageUrl) toPreload.push(nextUnit.left.imageUrl)
+        if (nextUnit.right.imageUrl) toPreload.push(nextUnit.right.imageUrl)
       }
     }
 
     for (const url of toPreload) {
       void prefetchAndDecodeArtwork(url)
     }
-  }, [deck, deckIndex, currentArtwork?.imageUrl, nextArtwork?.imageUrl, feedMap])
+  }, [deck, deckIndex, currentUnit, nextUnit])
 
   const advance = useCallback((direction: 'next' | 'prev' = 'next') => {
-    if (availableIds.length <= 1) return
+    if (availableUnitIds.length <= 1) return
+
+    const deckStorageKey = `${sourceMode}_${settings.aspectRatioMode ?? 'mixed'}`
 
     setDeck(prevDeck => {
       setDeckIndex(prevIndex => {
@@ -552,7 +703,7 @@ export function useArtwork(rotateSecs = 240, shuffle = true) {
         if (direction === 'prev') {
           const nextIndex = prevIndex - 1 < 0 ? prevDeck.length - 1 : prevIndex - 1
           saveStoredDeck({
-            sourceMode,
+            sourceMode: deckStorageKey,
             isShuffled: shuffle,
             deckIds: prevDeck,
             deckIndex: nextIndex,
@@ -566,11 +717,11 @@ export function useArtwork(rotateSecs = 240, shuffle = true) {
         // If we reached the end of the deck, start the next complete non-repeating cycle!
         if (nextIndex >= prevDeck.length) {
           const nextDeck = shuffle
-            ? generateShuffledDeck(availableIds, playedId)
-            : [...availableIds]
+            ? generateShuffledDeck(availableUnitIds, playedId)
+            : [...availableUnitIds]
 
           saveStoredDeck({
-            sourceMode,
+            sourceMode: deckStorageKey,
             isShuffled: shuffle,
             deckIds: nextDeck,
             deckIndex: 0,
@@ -584,7 +735,7 @@ export function useArtwork(rotateSecs = 240, shuffle = true) {
         }
 
         saveStoredDeck({
-          sourceMode,
+          sourceMode: deckStorageKey,
           isShuffled: shuffle,
           deckIds: prevDeck,
           deckIndex: nextIndex,
@@ -596,11 +747,11 @@ export function useArtwork(rotateSecs = 240, shuffle = true) {
       })
       return prevDeck
     })
-  }, [availableIds, shuffle, sourceMode])
+  }, [availableUnitIds, shuffle, sourceMode, settings.aspectRatioMode])
 
   // Auto-rotate timer
   useEffect(() => {
-    if (availableIds.length <= 1) return
+    if (availableUnitIds.length <= 1) return
     if (rotateRef.current) clearInterval(rotateRef.current)
     rotateRef.current = setInterval(() => {
       advance('next')
@@ -608,7 +759,7 @@ export function useArtwork(rotateSecs = 240, shuffle = true) {
     return () => {
       if (rotateRef.current) clearInterval(rotateRef.current)
     }
-  }, [availableIds.length, rotateSecs, advance])
+  }, [availableUnitIds.length, rotateSecs, advance])
 
   const onLoad = useCallback(() => setLoaded(true), [])
 
@@ -637,14 +788,17 @@ export function useArtwork(rotateSecs = 240, shuffle = true) {
   const currentPreference = currentArtwork ? prefsRef.current[String(currentArtwork.id)] : undefined
 
   return {
+    presentationUnit: currentUnit,
     artwork: currentArtwork,
+    diptychArtworks,
+    nextPresentationUnit: nextUnit,
     nextArtwork,
     loaded,
     onLoad,
     onError,
     next,
     prev,
-    total: activeFeed.length,
+    total: presentationUnits.length,
     deckProgress: deck.length > 0 ? { current: deckIndex + 1, total: deck.length } : null,
     setPreference,
     currentPreference,

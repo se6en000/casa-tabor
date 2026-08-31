@@ -1,28 +1,38 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { Crop, ZoomIn, ZoomOut, RotateCcw, Move, Sparkles, AlertCircle, Maximize2, Minimize2 } from 'lucide-react'
-import { Modal, Button, IconButton, Chip } from '../ui'
+import { Modal, Button, IconButton, Chip, SegmentedControl } from '../ui'
 import type { PersonalArtwork } from '../../hooks/usePersonalArtMode'
 import { cn } from '../../utils/cn'
+
+export type CropAspectFormat = 'square_1_1' | 'widescreen_16_9'
+
+const CROP_ASPECT_OPTIONS = [
+  { value: 'square_1_1' as const, label: '1:1 Square (Dual Diptych)' },
+  { value: 'widescreen_16_9' as const, label: '16:9 Widescreen (Single Frame)' },
+] as const
 
 interface ArtworkCropModalProps {
   open: boolean
   artwork: PersonalArtwork | null
+  initialAspect?: CropAspectFormat
   onClose: () => void
-  onSaveCrop: (croppedFile: File) => Promise<void>
+  onSaveCrop: (croppedFile: File, aspectFormat: CropAspectFormat) => Promise<void>
   saving?: boolean
 }
 
 export function ArtworkCropModal({
   open,
   artwork,
+  initialAspect,
   onClose,
   onSaveCrop,
   saving = false,
 }: ArtworkCropModalProps) {
+  const [targetAspect, setTargetAspect] = useState<CropAspectFormat>('square_1_1')
   const [imageLoaded, setImageLoaded] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [naturalSize, setNaturalSize] = useState<{ width: number; height: number } | null>(null)
-  const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({ width: 640, height: 360 })
+  const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({ width: 420, height: 420 })
   
   // Transform state
   const [zoom, setZoom] = useState(1.0)
@@ -34,6 +44,18 @@ export function ArtworkCropModal({
   const containerRef = useRef<HTMLDivElement>(null)
   const dragStartRef = useRef<{ clientX: number; clientY: number; startPanX: number; startPanY: number } | null>(null)
   const imageElementRef = useRef<HTMLImageElement | null>(null)
+
+  // Set initial aspect ratio when opened
+  useEffect(() => {
+    if (!open) return
+    if (initialAspect) {
+      setTargetAspect(initialAspect)
+    } else if (artwork?.aspectFormat === 'square_1_1' || artwork?.storagePath.includes('_1x1')) {
+      setTargetAspect('square_1_1')
+    } else if (artwork?.aspectFormat === 'widescreen_16_9' || artwork?.storagePath.includes('_16x9')) {
+      setTargetAspect('widescreen_16_9')
+    }
+  }, [open, initialAspect, artwork])
 
   // Measure container size
   useEffect(() => {
@@ -48,7 +70,7 @@ export function ArtworkCropModal({
     const observer = new ResizeObserver(updateSize)
     observer.observe(el)
     return () => observer.disconnect()
-  }, [open, imageLoaded])
+  }, [open, imageLoaded, targetAspect])
 
   // Load image safely as blob to prevent canvas cross-origin taint
   useEffect(() => {
@@ -74,10 +96,48 @@ export function ArtworkCropModal({
         if (isCancelled) return
         const blobUrl = URL.createObjectURL(blob)
         setLocalBlobUrl(blobUrl)
+
+        const preloadImg = new Image()
+        preloadImg.crossOrigin = 'anonymous'
+        preloadImg.onload = () => {
+          if (!isCancelled) {
+            const w = preloadImg.naturalWidth || preloadImg.width
+            const h = preloadImg.naturalHeight || preloadImg.height
+            setNaturalSize({ width: w, height: h })
+            setImageLoaded(true)
+            if (!initialAspect && !artwork?.aspectFormat) {
+              const ratio = w / h
+              if (ratio >= 0.85 && ratio <= 1.15) {
+                setTargetAspect('square_1_1')
+              } else if (ratio >= 1.55) {
+                setTargetAspect('widescreen_16_9')
+              }
+            }
+          }
+        }
+        preloadImg.src = blobUrl
       } catch {
         if (!isCancelled) {
-          // Fallback to direct URL if fetch blob fails
           setLocalBlobUrl(artwork!.imageUrl)
+          const preloadImg = new Image()
+          preloadImg.crossOrigin = 'anonymous'
+          preloadImg.onload = () => {
+            if (!isCancelled) {
+              const w = preloadImg.naturalWidth || preloadImg.width
+              const h = preloadImg.naturalHeight || preloadImg.height
+              setNaturalSize({ width: w, height: h })
+              setImageLoaded(true)
+              if (!initialAspect && !artwork?.aspectFormat) {
+                const ratio = w / h
+                if (ratio >= 0.85 && ratio <= 1.15) {
+                  setTargetAspect('square_1_1')
+                } else if (ratio >= 1.55) {
+                  setTargetAspect('widescreen_16_9')
+                }
+              }
+            }
+          }
+          preloadImg.src = artwork!.imageUrl
         }
       }
     }
@@ -98,29 +158,29 @@ export function ArtworkCropModal({
     }
   }, [localBlobUrl])
 
-  // Compute layout metrics (Cover and Fit baselines)
+  // Compute layout metrics (Cover and Fit baselines) based on targetAspect
   const metrics = useMemo(() => {
     if (!naturalSize || !containerSize.width || !containerSize.height) return null
     const containerWidth = containerSize.width
     const containerHeight = containerSize.height
 
     const imgAspect = naturalSize.width / naturalSize.height
-    const containerAspect = 16 / 9
+    const containerAspect = targetAspect === 'square_1_1' ? 1.0 : 16 / 9
 
     let baseWidth: number
     let baseHeight: number
 
     if (imgAspect >= containerAspect) {
-      // Wider than 16:9 -> fit height to container in cover mode
+      // Wider than aperture -> fit height to container in cover mode
       baseHeight = containerHeight
       baseWidth = containerHeight * imgAspect
     } else {
-      // Taller than 16:9 -> fit width to container in cover mode
+      // Taller than aperture -> fit width to container in cover mode
       baseWidth = containerWidth
       baseHeight = containerWidth / imgAspect
     }
 
-    // Scale to fit the full original photo (Contain) inside 16:9 container
+    // Scale to fit the full original photo (Contain) inside aperture
     const fitScale = Number((Math.min(containerWidth / baseWidth, containerHeight / baseHeight)).toFixed(3))
     const minZoom = Math.min(0.25, Number((fitScale * 0.8).toFixed(2)))
     const maxZoom = 3.0
@@ -143,10 +203,10 @@ export function ArtworkCropModal({
       scaledHeight,
       maxPanX,
       maxPanY,
-      isTall: imgAspect < 16 / 9 - 0.02,
-      isWide: imgAspect > 16 / 9 + 0.02,
+      isTall: imgAspect < containerAspect - 0.02,
+      isWide: imgAspect > containerAspect + 0.02,
     }
-  }, [naturalSize, containerSize, zoom])
+  }, [naturalSize, containerSize, zoom, targetAspect])
 
   const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const img = e.currentTarget
@@ -155,6 +215,13 @@ export function ArtworkCropModal({
     const height = img.naturalHeight || img.height
     setNaturalSize({ width, height })
     setImageLoaded(true)
+    setZoom(1.0)
+    setPan({ x: 0, y: 0 })
+  }
+
+  // Switch aspect mode and reset zoom / pan
+  const handleAspectChange = (mode: CropAspectFormat) => {
+    setTargetAspect(mode)
     setZoom(1.0)
     setPan({ x: 0, y: 0 })
   }
@@ -231,14 +298,12 @@ export function ArtworkCropModal({
     }
   }
 
-  // Full reset back to original photo framing (fits uncropped photo if non-16:9, or 100% center)
   const handleReset = () => {
     if (!metrics) {
       setZoom(1.0)
       setPan({ x: 0, y: 0 })
       return
     }
-    // If photo is non-16:9, reset to fitScale so full original photo is visible; otherwise 1.0
     const resetZoom = metrics.fitScale < 0.98 ? metrics.fitScale : 1.0
     setZoom(resetZoom)
     setPan({ x: 0, y: 0 })
@@ -252,9 +317,14 @@ export function ArtworkCropModal({
       const img = imageElementRef.current
       const containerWidth = metrics.containerWidth
 
-      // High-resolution canvas dimensions (at least 1920x1080)
-      const targetWidth = Math.max(1920, naturalSize.width)
-      const targetHeight = Math.round((targetWidth * 9) / 16)
+      // High-resolution canvas dimensions
+      const isSquare = targetAspect === 'square_1_1'
+      const targetWidth = isSquare
+        ? Math.max(1080, Math.min(naturalSize.width, naturalSize.height))
+        : Math.max(1920, naturalSize.width)
+      const targetHeight = isSquare
+        ? targetWidth
+        : Math.round((targetWidth * 9) / 16)
 
       const canvas = document.createElement('canvas')
       canvas.width = targetWidth
@@ -262,7 +332,7 @@ export function ArtworkCropModal({
       const ctx = canvas.getContext('2d')
       if (!ctx) throw new Error('Could not get canvas 2d context')
 
-      // Fill background with obsidian dark tone for letterboxed areas
+      // Fill background with archival obsidian tone for letterboxed areas
       ctx.fillStyle = 'rgb(11, 19, 43)'
       ctx.fillRect(0, 0, targetWidth, targetHeight)
 
@@ -286,10 +356,11 @@ export function ArtworkCropModal({
       if (!blob) throw new Error('Canvas export failed')
 
       const extension = outputMime === 'image/png' ? 'png' : 'jpg'
-      const cleanFileName = `${(artwork.title || 'artwork').replace(/[^a-zA-Z0-9_-]/g, '_')}_16x9.${extension}`
+      const suffix = isSquare ? '_1x1' : '_16x9'
+      const cleanFileName = `${(artwork.title || 'artwork').replace(/[^a-zA-Z0-9_-]/g, '_')}${suffix}.${extension}`
       const croppedFile = new File([blob], cleanFileName, { type: outputMime })
 
-      await onSaveCrop(croppedFile)
+      await onSaveCrop(croppedFile, targetAspect)
       onClose()
     } catch (err) {
       console.error('Failed to crop artwork:', err)
@@ -299,23 +370,37 @@ export function ArtworkCropModal({
 
   const isAtFit = metrics ? Math.abs(zoom - metrics.fitScale) < 0.02 : false
   const isAtFill = Math.abs(zoom - 1.0) < 0.02
+  const isSquareMode = targetAspect === 'square_1_1'
 
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title="Crop to 16:9 Widescreen"
+      title={isSquareMode ? 'Crop to 1:1 Square (Dual Diptych)' : 'Crop to 16:9 Widescreen (Single Frame)'}
       size="lg"
       closeDisabled={saving}
     >
       <div className="space-y-4 py-2">
+        {/* Aspect Ratio Switcher */}
+        <div>
+          <SegmentedControl
+            aria-label="Crop Aspect Ratio"
+            value={targetAspect}
+            options={CROP_ASPECT_OPTIONS}
+            onChange={handleAspectChange}
+            fullWidth
+          />
+        </div>
+
         {/* Descriptive Header Info */}
         <div className="flex items-center justify-between gap-2">
           <p className="text-body-sm text-casa-muted">
-            Reposition and frame for the 1080p ambient kiosk display (`1920×1080`).
+            {isSquareMode
+              ? 'Framed as a 1:1 square for side-by-side dual diptych presentation.'
+              : 'Framed for full-screen single 16:9 widescreen presentation.'}
           </p>
           <span className="inline-flex items-center gap-1 rounded-full bg-casa-surface border border-casa-border px-2.5 py-0.5 text-caption font-semibold text-casa-navy">
-            16:9 Ambient Fit
+            {isSquareMode ? '1:1 Diptych Aperture' : '16:9 Ambient Aperture'}
           </span>
         </div>
 
@@ -326,11 +411,14 @@ export function ArtworkCropModal({
           </div>
         )}
 
-        {/* 16:9 Aperture Frame / Viewport */}
-        <div className="relative overflow-hidden rounded-2xl border-2 border-casa-navy/20 bg-neutral-950 shadow-card">
+        {/* Aperture Frame / Viewport */}
+        <div className="relative overflow-hidden rounded-2xl border-2 border-casa-navy/20 bg-neutral-950 shadow-card flex items-center justify-center p-2">
           <div
             ref={containerRef}
-            className="relative aspect-video w-full cursor-grab active:cursor-grabbing select-none overflow-hidden touch-none"
+            className={cn(
+              'relative cursor-grab active:cursor-grabbing select-none overflow-hidden touch-none rounded-xl',
+              isSquareMode ? 'aspect-square w-full max-w-[380px]' : 'aspect-video w-full'
+            )}
             onMouseDown={e => handlePointerDown(e.clientX, e.clientY)}
             onMouseMove={e => isDragging && handlePointerMove(e.clientX, e.clientY)}
             onMouseUp={handlePointerUp}
@@ -347,7 +435,7 @@ export function ArtworkCropModal({
             }}
             onTouchEnd={handlePointerUp}
           >
-            {localBlobUrl && metrics && (
+            {localBlobUrl && (
               <img
                 ref={imageElementRef}
                 src={localBlobUrl}
@@ -358,17 +446,30 @@ export function ArtworkCropModal({
                   setLoadError('Failed to load artwork preview.')
                 }}
                 draggable={false}
-                className="absolute select-none pointer-events-none transition-transform duration-75 ease-out"
-                style={{
-                  top: '50%',
-                  left: '50%',
-                  width: `${metrics.baseWidth}px`,
-                  height: `${metrics.baseHeight}px`,
-                  maxWidth: 'none',
-                  maxHeight: 'none',
-                  transform: `translate(calc(-50% + ${pan.x}px), calc(-50% + ${pan.y}px)) scale(${zoom})`,
-                  transformOrigin: 'center center',
-                }}
+                className={cn(
+                  'absolute select-none pointer-events-none transition-transform duration-75 ease-out',
+                  !metrics && 'opacity-0'
+                )}
+                style={
+                  metrics
+                    ? {
+                        top: '50%',
+                        left: '50%',
+                        width: `${metrics.baseWidth}px`,
+                        height: `${metrics.baseHeight}px`,
+                        maxWidth: 'none',
+                        maxHeight: 'none',
+                        transform: `translate(calc(-50% + ${pan.x}px), calc(-50% + ${pan.y}px)) scale(${zoom})`,
+                        transformOrigin: 'center center',
+                      }
+                    : {
+                        top: '50%',
+                        left: '50%',
+                        transform: 'translate(-50%, -50%)',
+                        maxWidth: '100%',
+                        maxHeight: '100%',
+                      }
+                }
               />
             )}
 
@@ -400,7 +501,7 @@ export function ArtworkCropModal({
         </div>
 
         {/* Framing & Zoom Controls */}
-        <div className="rounded-xl border border-casa-border bg-casa-surface p-3.5 space-y-3">
+        <div className="rounded-2xl border border-casa-border bg-casa-surface p-4 space-y-3">
           {/* Zoom Slider */}
           <div className="flex items-center gap-3">
             <IconButton
@@ -446,14 +547,14 @@ export function ArtworkCropModal({
           <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-casa-border">
             <span className="text-caption font-medium text-casa-muted mr-1">Align:</span>
             
-            {/* Fill 16:9 */}
+            {/* Fill Aperture */}
             <Chip
               onClick={() => applyPreset('fill')}
               selected={isAtFill}
               className={cn(isAtFill ? 'bg-casa-navy text-white' : 'hover:bg-casa-navy hover:text-white')}
             >
               <Maximize2 size={12} className="inline mr-1" />
-              Fill 16:9
+              {isSquareMode ? 'Fill 1:1' : 'Fill 16:9'}
             </Chip>
 
             {/* Fit Original */}
@@ -508,11 +609,11 @@ export function ArtworkCropModal({
           <Button
             variant="strong"
             leadingIcon={<Crop size={16} />}
-            loading={saving || !imageLoaded}
+            loading={saving}
             disabled={!imageLoaded || saving}
             onClick={() => void handleConfirmCrop()}
           >
-            Apply 16:9 Crop
+            {isSquareMode ? 'Apply 1:1 Square Crop' : 'Apply 16:9 Crop'}
           </Button>
         </div>
       </div>

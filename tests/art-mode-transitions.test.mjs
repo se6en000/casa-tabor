@@ -31,7 +31,7 @@ test('useArtwork hook implements artworkMetadataCache and background prefetch', 
 })
 
 test('useArtwork hook exports nextArtwork, prev, next, and bidirectional controls', () => {
-  assert.match(artworkHookSource, /nextArtworkId/)
+  assert.match(artworkHookSource, /nextUnitId|nextArtworkId/)
   assert.match(artworkHookSource, /nextArtwork/)
   assert.match(artworkHookSource, /const prev = useCallback/)
   assert.match(artworkHookSource, /advance\('prev'\)/)
@@ -46,8 +46,8 @@ test('ArtScreensaver eliminates flashing pulse placeholder and implements dual-l
   assert.match(indexCssSource, /@keyframes casa-art-dissolve-out/)
 
   // Verifies dual layer incoming/outgoing dissolve crossfade
-  assert.match(screensaverSource, /outgoingArtwork/)
-  assert.match(screensaverSource, /currentToDisplay/)
+  assert.match(screensaverSource, /outgoingLeftArtwork|outgoingArtwork/)
+  assert.match(screensaverSource, /leftArtwork|currentToDisplay/)
   assert.match(screensaverSource, /casa-art-dissolve-out 1200ms/)
 })
 
@@ -93,3 +93,23 @@ test('colorUtils provides harmonized bevel palettes and default fallback constan
   assert.ok(bevels.bottom.startsWith('#'))
   assert.ok(bevels.radiosity.startsWith('rgba'))
 })
+
+test('useArtwork implements 1:1 square detection, pairing, and presentation units', () => {
+  assert.match(artworkHookSource, /export function isSquareArtwork/)
+  assert.match(artworkHookSource, /export function buildPresentationUnits/)
+  assert.match(artworkHookSource, /type PresentationUnit/)
+  assert.match(artworkHookSource, /aspectRatioMode/)
+  assert.match(artworkHookSource, /diptychArtworks/)
+})
+
+test('ArtScreensaver supports dual 1:1 diptych layout, split plaques, and dual provenance tabs', () => {
+  assert.match(screensaverSource, /isDiptych/)
+  assert.match(screensaverSource, /squareApertureSize/)
+  assert.match(screensaverSource, /diptychMullion/)
+  assert.match(screensaverSource, /provenanceTab/)
+  assert.match(screensaverSource, /leftArtwork/)
+  assert.match(screensaverSource, /rightArtwork/)
+  assert.match(screensaverSource, /title="Previous artwork"/)
+  assert.match(screensaverSource, /title="Next artwork"/)
+})
+

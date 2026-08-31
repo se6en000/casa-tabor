@@ -164,7 +164,7 @@ export const DESIGN_TOKENS = {
     card: '0.75rem',
     widget: '1.25rem',
     container: '1.5rem',
-    modal: '1rem',
+    modal: '1.5rem',
     pill: '9999px',
   },
   shadow: {

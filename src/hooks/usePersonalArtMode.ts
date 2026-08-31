@@ -49,6 +49,8 @@ export interface PersonalArtwork {
   signatureColor?: SignatureColor
   signatureSize?: SignatureSize
   signatureOpacity?: number
+  aspectFormat?: 'widescreen_16_9' | 'square_1_1' | 'portrait' | string
+  aspectRatio?: number
 }
 
 interface PersonalArtworkRow {
@@ -72,6 +74,7 @@ interface PersonalArtworkRow {
   signature_color?: string | null
   signature_size?: string | null
   signature_opacity?: number | null
+  aspect_format?: string | null
 }
 
 export const personalArtworkQueryKey = ['personal-artwork'] as const
@@ -80,16 +83,14 @@ export const artSourceConfigQueryKey = ['settings', ART_SOURCE_SETTING_KEY] as c
 async function loadPersonalArtwork(): Promise<PersonalArtwork[]> {
   let { data, error } = await supabase
     .from('personal_artwork')
-    .select('id, storage_path, title, artist, location, date_taken, description, subjects, medium, fun_fact, mime_type, byte_size, created_at, signature_enabled, signature_text, signature_style, signature_position, signature_color, signature_size, signature_opacity')
-    .order('sort_order')
-    .order('created_at')
+    .select('id, storage_path, title, artist, location, date_taken, description, subjects, medium, fun_fact, mime_type, byte_size, created_at, signature_enabled, signature_text, signature_style, signature_position, signature_color, signature_size, signature_opacity, aspect_format')
+    .order('created_at', { ascending: false })
 
   if (error) {
     const fallback = await supabase
       .from('personal_artwork')
       .select('id, storage_path, title, artist, mime_type, byte_size, created_at')
-      .order('sort_order')
-      .order('created_at')
+      .order('created_at', { ascending: false })
     if (fallback.error) throw fallback.error
     data = fallback.data as unknown as typeof data
   }
@@ -116,17 +117,28 @@ async function loadPersonalArtwork(): Promise<PersonalArtwork[]> {
     signatureColor: (row.signature_color as SignatureColor) || 'auto',
     signatureSize: (row.signature_size as SignatureSize) || 'md',
     signatureOpacity: row.signature_opacity != null ? Number(row.signature_opacity) : 0.55,
+    aspectFormat: row.aspect_format || (row.storage_path.includes('_1x1') ? 'square_1_1' : undefined),
   }))
 }
 
 async function loadArtSourceMode(): Promise<ArtSourceMode> {
-  const { data, error } = await supabase
-    .from('settings')
-    .select('value')
-    .eq('key', ART_SOURCE_SETTING_KEY)
-    .maybeSingle()
-  if (error) throw error
-  return normalizeArtSourceConfig(data?.value).sourceMode
+  try {
+    const { data, error } = await supabase
+      .from('settings')
+      .select('value')
+      .eq('key', ART_SOURCE_SETTING_KEY)
+      .maybeSingle()
+    if (!error && data) {
+      const mode = normalizeArtSourceConfig(data.value).sourceMode
+      if (typeof localStorage !== 'undefined') localStorage.setItem(ART_SOURCE_SETTING_KEY, mode)
+      return mode
+    }
+  } catch {
+    // Fall back to localStorage or default
+  }
+  const local = typeof localStorage !== 'undefined' ? localStorage.getItem(ART_SOURCE_SETTING_KEY) : null
+  if (local === 'personal' || local === 'mixed' || local === 'casa') return local
+  return 'casa'
 }
 
 export function usePersonalArtModeData() {
@@ -155,16 +167,25 @@ export function usePersonalArtMode() {
 
   const sourceMutation = useMutation({
     mutationFn: async (sourceMode: ArtSourceMode) => {
-      const { error } = await supabase.from('settings').upsert(
-        {
-          key: ART_SOURCE_SETTING_KEY,
-          value: { sourceMode },
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'key' },
-      )
-      if (error) throw error
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(ART_SOURCE_SETTING_KEY, sourceMode)
+      }
+      try {
+        await supabase.from('settings').upsert(
+          {
+            key: ART_SOURCE_SETTING_KEY,
+            value: { sourceMode },
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'key' },
+        )
+      } catch {
+        // Fall back gracefully in offline/local dev
+      }
       return sourceMode
+    },
+    onMutate: async (sourceMode: ArtSourceMode) => {
+      queryClient.setQueryData(artSourceConfigQueryKey, sourceMode)
     },
     onSuccess: sourceMode => {
       queryClient.setQueryData(artSourceConfigQueryKey, sourceMode)
@@ -176,8 +197,36 @@ export function usePersonalArtMode() {
       const validationError = getPersonalArtworkValidationError(file)
       if (validationError) throw new Error(validationError)
 
+      // Auto-detect natural aspect ratio upon upload
+      let detectedAspectFormat: 'square_1_1' | 'widescreen_16_9' | undefined
+      try {
+        if (typeof window !== 'undefined') {
+          const blobUrl = URL.createObjectURL(file)
+          const img = new Image()
+          await new Promise<void>((resolve) => {
+            img.onload = () => {
+              if (img.naturalWidth && img.naturalHeight) {
+                const ratio = img.naturalWidth / img.naturalHeight
+                if (ratio >= 0.88 && ratio <= 1.14) {
+                  detectedAspectFormat = 'square_1_1'
+                } else if (ratio >= 1.55) {
+                  detectedAspectFormat = 'widescreen_16_9'
+                }
+              }
+              resolve()
+            }
+            img.onerror = () => resolve()
+            img.src = blobUrl
+          })
+          URL.revokeObjectURL(blobUrl)
+        }
+      } catch {
+        // Non-fatal
+      }
+
       const extension = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg'
-      const storagePath = `${crypto.randomUUID()}.${extension}`
+      const suffix = detectedAspectFormat === 'square_1_1' ? '_1x1' : detectedAspectFormat === 'widescreen_16_9' ? '_16x9' : ''
+      const storagePath = `${crypto.randomUUID()}${suffix}.${extension}`
       const { error: uploadError } = await supabase.storage
         .from(PERSONAL_ARTWORK_BUCKET)
         .upload(storagePath, file, { contentType: file.type, upsert: false })
@@ -198,6 +247,7 @@ export function usePersonalArtMode() {
         signature_color: 'light',
         signature_opacity: 0.55,
         signature_text: cleanArtist || cleanTitle,
+        aspect_format: detectedAspectFormat,
       })
       if (insertError) {
         const { error: cleanupError } = await supabase.storage.from(PERSONAL_ARTWORK_BUCKET).remove([storagePath])
@@ -283,18 +333,21 @@ export function usePersonalArtMode() {
       oldStoragePath,
       title,
       artist,
+      aspectFormat,
     }: {
       id: string
       file: File
       oldStoragePath?: string
       title?: string
       artist?: string
+      aspectFormat?: 'square_1_1' | 'widescreen_16_9' | string
     }) => {
       const validationError = getPersonalArtworkValidationError(file)
       if (validationError) throw new Error(validationError)
 
       const extension = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg'
-      const newStoragePath = `${crypto.randomUUID()}.${extension}`
+      const suffix = aspectFormat === 'square_1_1' ? '_1x1' : aspectFormat === 'widescreen_16_9' ? '_16x9' : ''
+      const newStoragePath = `${crypto.randomUUID()}${suffix}.${extension}`
       const { error: uploadError } = await supabase.storage
         .from(PERSONAL_ARTWORK_BUCKET)
         .upload(newStoragePath, file, { contentType: file.type, upsert: false })
@@ -307,6 +360,7 @@ export function usePersonalArtMode() {
         updated_at: string
         title?: string
         artist?: string | null
+        aspect_format?: string | null
       } = {
         storage_path: newStoragePath,
         mime_type: file.type,
@@ -315,6 +369,7 @@ export function usePersonalArtMode() {
       }
       if (title !== undefined) updatePayload.title = title.trim() || 'Personal artwork'
       if (artist !== undefined) updatePayload.artist = artist.trim() || null
+      if (aspectFormat !== undefined) updatePayload.aspect_format = aspectFormat
 
       const { error: updateError } = await supabase
         .from('personal_artwork')
@@ -328,6 +383,14 @@ export function usePersonalArtMode() {
 
       if (oldStoragePath && oldStoragePath !== newStoragePath) {
         await supabase.storage.from(PERSONAL_ARTWORK_BUCKET).remove([oldStoragePath]).catch(() => {})
+      }
+
+      const { data: publicUrlData } = supabase.storage.from(PERSONAL_ARTWORK_BUCKET).getPublicUrl(newStoragePath)
+      return {
+        id,
+        storagePath: newStoragePath,
+        imageUrl: publicUrlData.publicUrl,
+        aspectFormat,
       }
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: personalArtworkQueryKey }),
@@ -370,7 +433,19 @@ export function usePersonalArtMode() {
           current_artist: params.currentArtist,
         },
       })
-      if (error) throw error
+      if (error) {
+        if ('context' in error && typeof (error as { context?: { json?: () => Promise<unknown> } }).context?.json === 'function') {
+          try {
+            const body = await (error as { context: { json: () => Promise<{ error?: string }> } }).context.json()
+            if (body?.error) throw new Error(body.error)
+          } catch (jsonErr) {
+            if (jsonErr instanceof Error && jsonErr.message && !jsonErr.message.includes('json')) {
+              throw jsonErr
+            }
+          }
+        }
+        throw error
+      }
       if (!data || !data.success || !data.analysis) {
         throw new Error(data?.error || 'AI analysis could not identify artwork metadata')
       }

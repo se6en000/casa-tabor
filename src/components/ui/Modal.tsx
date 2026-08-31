@@ -78,11 +78,11 @@ export function Modal({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 8 }}
             transition={{ duration: 0.18 }}
-            className={cn(modalPanelClassName({ size }), panelClassName)}
+            className={cn(modalPanelClassName({ size }), 'overflow-hidden border border-casa-border shadow-modal rounded-modal', panelClassName)}
           >
             {showHeader && (
               <div className="flex h-16 shrink-0 items-center justify-between gap-3 border-b border-casa-border bg-casa-surface px-6">
-                <h3 id={titleId} className="font-display text-display-sm text-content-heading leading-tight">{title}</h3>
+                <h3 id={titleId} className="font-serif text-2xl font-medium text-casa-navy leading-tight">{title}</h3>
                 <IconButton
                   icon={<X size={18} />}
                   aria-label="Close"

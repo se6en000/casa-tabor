@@ -1,8 +1,13 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { Info } from 'lucide-react'
-import { useArtwork, artworkMetadataCache, type Artwork } from '../../hooks/useArtwork'
+import {
+  useArtwork,
+  artworkMetadataCache,
+  type Artwork,
+  type PresentationUnit,
+} from '../../hooks/useArtwork'
 import { ArtworkProvenanceCard } from './ArtworkProvenanceCard'
-import { IconButton } from '../ui'
+import { Button, IconButton } from '../ui'
 import {
   generateHarmonizedBevel,
   getPaletteColorForKey,
@@ -71,6 +76,7 @@ interface Props {
   shuffle?: boolean
   plaqueMode?: 'fade' | 'always' | 'hidden'
   matPreset?: MatPresetKey
+  aspectRatioMode?: 'mixed' | 'diptych_only' | 'single_only'
 }
 
 export default function ArtScreensaver({
@@ -82,15 +88,21 @@ export default function ArtScreensaver({
   plaqueMode = 'fade',
   matPreset = 'auto',
 }: Props) {
-  const { artwork, onLoad, onError, next, prev } = useArtwork(rotationMins * 60, shuffle)
+  const { presentationUnit, artwork, onLoad, onError, next, prev } = useArtwork(
+    rotationMins * 60,
+    shuffle,
+  )
   const { isMidnightActive } = useTheme()
   const [visible, setVisible] = useState(false)
   const [dismissable, setDismissable] = useState(false)
   const [plaqueVisible, setPlaqueVisible] = useState(true)
   const [imageRatio, setImageRatio] = useState(16 / 9)
-  const [activeArtwork, setActiveArtwork] = useState<Artwork | null>(artwork)
-  const [outgoingArtwork, setOutgoingArtwork] = useState<Artwork | null>(null)
+
+  const [activeUnit, setActiveUnit] = useState<PresentationUnit | null>(presentationUnit)
+  const [outgoingUnit, setOutgoingUnit] = useState<PresentationUnit | null>(null)
+
   const [infoOpen, setInfoOpen] = useState(false)
+  const [provenanceTab, setProvenanceTab] = useState<'left' | 'right'>('left')
   const infoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [viewport, setViewport] = useState(() => ({
     width: typeof window !== 'undefined' ? window.innerWidth : 1920,
@@ -101,27 +113,38 @@ export default function ArtScreensaver({
   const touchStartYRef = useRef<number | null>(null)
   const fadeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const handleToggleInfo = useCallback((e?: React.SyntheticEvent) => {
-    e?.stopPropagation()
-    setInfoOpen(prev => {
-      const nextState = !prev
-      if (infoTimerRef.current) clearTimeout(infoTimerRef.current)
-      if (nextState) {
-        infoTimerRef.current = setTimeout(() => {
-          setInfoOpen(false)
-        }, 8000)
-      }
-      return nextState
-    })
-  }, [])
+  const handleToggleInfo = useCallback(
+    (tab: 'left' | 'right' = 'left', e?: React.SyntheticEvent) => {
+      e?.stopPropagation()
+      setProvenanceTab(tab)
+      setInfoOpen(prev => {
+        const nextState = !prev
+        if (infoTimerRef.current) clearTimeout(infoTimerRef.current)
+        if (nextState) {
+          infoTimerRef.current = setTimeout(() => {
+            setInfoOpen(false)
+          }, 8000)
+        }
+        return nextState
+      })
+    },
+    [],
+  )
 
-  // Auto-close info card on artwork change
+  // Auto-close info card on unit change
   useEffect(() => {
     setInfoOpen(false)
     if (infoTimerRef.current) clearTimeout(infoTimerRef.current)
-  }, [artwork?.id])
+  }, [presentationUnit?.id])
 
-  const currentToDisplay = activeArtwork || artwork
+  const currentUnit = activeUnit || presentationUnit
+
+  // Fallback single artwork reference
+  const primaryArtwork = currentUnit
+    ? currentUnit.type === 'single'
+      ? currentUnit.artwork
+      : currentUnit.left
+    : artwork
 
   const textureStyle = useMemo(() => getTextureStyle(), [])
   const darkThemeActive = useMemo(() => {
@@ -130,27 +153,27 @@ export default function ArtScreensaver({
     return isMidnightActive || isDarkColor(bg)
   }, [isMidnightActive])
 
-  // Rock-solid, static mat color: if preset is chosen (e.g. warm_linen), it is 100% locked and NEVER fluxes
+  // Rock-solid, static mat color
   const matColor = useMemo(() => {
     if (darkThemeActive) return MIDNIGHT_MAT_COLOR
     if (matPreset && matPreset !== 'auto' && MAT_PRESETS[matPreset]) {
       return MAT_PRESETS[matPreset]
     }
-    if (currentToDisplay?.imageUrl) {
-      const cached = artworkMetadataCache.get(currentToDisplay.imageUrl)
+    if (primaryArtwork?.imageUrl) {
+      const cached = artworkMetadataCache.get(primaryArtwork.imageUrl)
       if (cached) return cached.matColor
-      return getPaletteColorForKey(currentToDisplay.imageUrl)
+      return getPaletteColorForKey(primaryArtwork.imageUrl)
     }
     return DEFAULT_MAT_COLOR
-  }, [darkThemeActive, matPreset, currentToDisplay?.imageUrl])
+  }, [darkThemeActive, matPreset, primaryArtwork?.imageUrl])
 
   const dominantColor = useMemo(() => {
-    if (currentToDisplay?.imageUrl) {
-      const cached = artworkMetadataCache.get(currentToDisplay.imageUrl)
+    if (primaryArtwork?.imageUrl) {
+      const cached = artworkMetadataCache.get(primaryArtwork.imageUrl)
       if (cached) return cached.dominantColor
     }
     return DEFAULT_DOMINANT_COLOR
-  }, [currentToDisplay?.imageUrl])
+  }, [primaryArtwork?.imageUrl])
 
   const matTexture = darkThemeActive ? MIDNIGHT_MAT_TEXTURE : textureStyle.backgroundImage
   const matBlendMode = darkThemeActive ? 'normal' : textureStyle.backgroundBlendMode
@@ -169,7 +192,14 @@ export default function ArtScreensaver({
     return generateHarmonizedBevel(matColor, dominantColor)
   }, [darkThemeActive, matColor, dominantColor])
 
-  const frameSize = useMemo(() => {
+  // Calculate aperture framing geometry for Single vs Diptych
+  const isDiptych = currentUnit?.type === 'diptych'
+
+  const diptychMullion = useMemo(() => {
+    return Math.round(Math.max(32, Math.min(56, viewport.width * 0.026)))
+  }, [viewport.width])
+
+  const singleFrameSize = useMemo(() => {
     const maxWidth = Math.max(viewport.width - MAT_MARGIN_H_PX * 2, MIN_FRAME_PX)
     const maxHeight = Math.max(viewport.height - MAT_MARGIN_V_PX * 2, MIN_FRAME_PX)
     const minWidth = Math.min(maxWidth, (viewport.width * minArtWidthVw) / 100)
@@ -184,6 +214,14 @@ export default function ArtScreensaver({
 
     return { width: Math.round(width), height: Math.round(height) }
   }, [viewport.width, viewport.height, imageRatio, minArtWidthVw])
+
+  const squareApertureSize = useMemo(() => {
+    const maxWidth = Math.max(viewport.width - MAT_MARGIN_H_PX * 2, MIN_FRAME_PX)
+    const maxHeight = Math.max(viewport.height - MAT_MARGIN_V_PX * 2, MIN_FRAME_PX)
+    const maxSquareWidth = Math.floor((maxWidth - diptychMullion) / 2)
+    const size = Math.min(maxSquareWidth, maxHeight)
+    return Math.round(size)
+  }, [viewport.width, viewport.height, diptychMullion])
 
   // Screen saver mount and ambient display brightness sync
   useEffect(() => {
@@ -210,32 +248,37 @@ export default function ArtScreensaver({
     return () => window.removeEventListener('resize', updateViewport)
   }, [])
 
-  // Smooth Artwork Dissolve Transition Pipeline (1.2-Second Solid-Base Cross-Dissolve)
+  // Smooth Presentation Unit Dissolve Transition Pipeline (1.2-Second Solid-Base Cross-Dissolve)
   useEffect(() => {
-    if (!artwork) return
+    if (!presentationUnit) return
 
-    // Check if image ratio is already in prefetch cache
-    const cached = artworkMetadataCache.get(artwork.imageUrl)
-    if (cached) {
-      setImageRatio(cached.aspectRatio)
+    if (presentationUnit.type === 'single') {
+      const cached = artworkMetadataCache.get(presentationUnit.artwork.imageUrl)
+      if (cached) {
+        setImageRatio(cached.aspectRatio)
+      } else if (presentationUnit.artwork.aspectRatio) {
+        setImageRatio(presentationUnit.artwork.aspectRatio)
+      }
+    } else {
+      setImageRatio(1.0)
     }
 
-    if (!activeArtwork) {
-      setActiveArtwork(artwork)
+    if (!activeUnit) {
+      setActiveUnit(presentationUnit)
       return
     }
 
-    if (activeArtwork.id !== artwork.id) {
-      const prevPiece = activeArtwork
-      setOutgoingArtwork(prevPiece)
-      setActiveArtwork(artwork)
+    if (activeUnit.id !== presentationUnit.id) {
+      const prevUnit = activeUnit
+      setOutgoingUnit(prevUnit)
+      setActiveUnit(presentationUnit)
 
       if (fadeTimeoutRef.current) clearTimeout(fadeTimeoutRef.current)
       fadeTimeoutRef.current = setTimeout(() => {
-        setOutgoingArtwork(null)
+        setOutgoingUnit(null)
       }, 1250)
     }
-  }, [artwork?.id, artwork?.imageUrl, activeArtwork])
+  }, [presentationUnit?.id, activeUnit])
 
   // Plaque reveal timer
   useEffect(() => {
@@ -253,17 +296,17 @@ export default function ArtScreensaver({
       setPlaqueVisible(false)
     }, 6000)
     return () => clearTimeout(timer)
-  }, [artwork?.id, plaqueMode])
+  }, [presentationUnit?.id, plaqueMode])
 
   const handleImgLoad = useCallback(
     (e: React.SyntheticEvent<HTMLImageElement>) => {
       const img = e.currentTarget
-      if (img.naturalWidth && img.naturalHeight) {
+      if (img.naturalWidth && img.naturalHeight && !isDiptych) {
         setImageRatio(img.naturalWidth / img.naturalHeight)
       }
       onLoad()
     },
-    [onLoad]
+    [onLoad, isDiptych],
   )
 
   const handleDismiss = useCallback(() => {
@@ -277,7 +320,7 @@ export default function ArtScreensaver({
       e?.stopPropagation()
       next()
     },
-    [next]
+    [next],
   )
 
   const handlePrevPiece = useCallback(
@@ -285,10 +328,10 @@ export default function ArtScreensaver({
       e?.stopPropagation()
       prev()
     },
-    [prev]
+    [prev],
   )
 
-  // Keyboard navigation (Arrow keys to switch, Escape/Space to dismiss)
+  // Keyboard navigation (Arrow keys to switch, Escape/Space to dismiss, I for info)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowRight') {
@@ -299,7 +342,7 @@ export default function ArtScreensaver({
         handlePrevPiece()
       } else if (e.key === 'i' || e.key === 'I') {
         e.preventDefault()
-        handleToggleInfo()
+        handleToggleInfo('left')
       } else if (e.key === 'Escape' || e.key === ' ' || e.key === 'Enter') {
         e.preventDefault()
         if (infoOpen) {
@@ -311,7 +354,7 @@ export default function ArtScreensaver({
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [handleNextPiece, handlePrevPiece, handleDismiss])
+  }, [handleNextPiece, handlePrevPiece, handleDismiss, handleToggleInfo, infoOpen])
 
   const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
     touchStartXRef.current = e.touches[0]?.clientX ?? null
@@ -343,9 +386,252 @@ export default function ArtScreensaver({
     touchStartYRef.current = null
   }
 
-  const { title: cleanTitle, artist: cleanArtist } = currentToDisplay
-    ? sanitizeArtworkMetadata(currentToDisplay.title, currentToDisplay.artist)
+  // Metadata sanitization for left and right / single
+  const leftArtwork = currentUnit
+    ? currentUnit.type === 'single'
+      ? currentUnit.artwork
+      : currentUnit.left
+    : null
+  const rightArtwork = currentUnit && currentUnit.type === 'diptych' ? currentUnit.right : null
+
+  const outgoingLeftArtwork = outgoingUnit
+    ? outgoingUnit.type === 'single'
+      ? outgoingUnit.artwork
+      : outgoingUnit.left
+    : null
+  const outgoingRightArtwork = outgoingUnit && outgoingUnit.type === 'diptych' ? outgoingUnit.right : null
+
+  const leftMeta = leftArtwork
+    ? sanitizeArtworkMetadata(leftArtwork.title, leftArtwork.artist)
     : { title: '', artist: '' }
+  const rightMeta = rightArtwork
+    ? sanitizeArtworkMetadata(rightArtwork.title, rightArtwork.artist)
+    : { title: '', artist: '' }
+
+  // Artwork to display in provenance dialog
+  const provenanceTarget =
+    isDiptych && provenanceTab === 'right' ? rightArtwork ?? leftArtwork : leftArtwork
+
+  const provenanceMeta = provenanceTarget
+    ? sanitizeArtworkMetadata(provenanceTarget.title, provenanceTarget.artist)
+    : { title: '', artist: '' }
+
+  // Render individual artwork inside an aperture (with signature, paper grain, spotlight)
+  const renderApertureContent = (
+    currentArt: Artwork | null,
+    outgoingArt: Artwork | null,
+    cleanTitleStr: string,
+  ) => {
+    if (!currentArt) return null
+
+    return (
+      <>
+        {/* Base Active Artwork Layer */}
+        <div
+          key={`in-${currentArt.id}`}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 1,
+            opacity: 1,
+          }}
+        >
+          <img
+            src={currentArt.imageUrl}
+            alt={cleanTitleStr}
+            onLoad={handleImgLoad}
+            onError={onError}
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              objectPosition: 'center center',
+              display: 'block',
+              filter: darkThemeActive ? 'contrast(0.98) brightness(0.92)' : 'none',
+            }}
+          />
+
+          {/* Artist Signature Overlay */}
+          {currentArt.signature?.enabled && Boolean(currentArt.signature.text) && (() => {
+            const sigStyle =
+              SIGNATURE_STYLES[currentArt.signature.style] || SIGNATURE_STYLES.fountain
+            const inkStyle = getSignatureInkStyle(
+              currentArt.signature.color,
+              dominantColor,
+              currentArt.signature.opacity ?? 0.55,
+            )
+            const sizeScale =
+              SIGNATURE_SIZE_SCALES[currentArt.signature.size || 'md'] || 1.0
+            const isBottomLeft = currentArt.signature.position === 'bottom-left'
+            return (
+              <div
+                key={`sig-${currentArt.id}`}
+                style={{
+                  position: 'absolute',
+                  bottom: 'clamp(14px, 3.2%, 36px)',
+                  ...(isBottomLeft
+                    ? { left: 'clamp(16px, 3.5%, 40px)', textAlign: 'left' }
+                    : { right: 'clamp(16px, 3.5%, 40px)', textAlign: 'right' }),
+                  fontFamily: sigStyle.fontFamily,
+                  fontSize: `clamp(${sigStyle.baseFontSizeRem * 0.9 * sizeScale}rem, ${2 * sizeScale}vw, ${sigStyle.baseFontSizeRem * 1.6 * sizeScale}rem)`,
+                  fontWeight: sigStyle.weight,
+                  color: inkStyle.color,
+                  textShadow: inkStyle.textShadow,
+                  mixBlendMode: inkStyle.blendMode || 'normal',
+                  transform: isBottomLeft ? 'rotate(0.8deg)' : 'rotate(-1.2deg)',
+                  letterSpacing: '0.015em',
+                  lineHeight: 1.3,
+                  paddingTop: '8px',
+                  paddingBottom: '12px',
+                  filter: 'blur(0.2px) contrast(1.05)',
+                  textRendering: 'geometricPrecision',
+                  pointerEvents: 'none',
+                  userSelect: 'none',
+                  zIndex: 3,
+                  maxWidth: sizeScale > 1.2 ? '75%' : '60%',
+                  whiteSpace: 'pre-line',
+                  overflow: 'visible',
+                }}
+              >
+                {currentArt.signature.text}
+              </div>
+            )
+          })()}
+        </div>
+
+        {/* Top Outgoing Artwork Layer (Dissolves Out 1.0 -> 0.0 over 1.2s at zIndex: 2) */}
+        {outgoingArt && (
+          <div
+            key={`out-${outgoingArt.id}`}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              zIndex: 2,
+              pointerEvents: 'none',
+              animation: 'casa-art-dissolve-out 1200ms ease-in-out forwards',
+              willChange: 'opacity',
+            }}
+          >
+            <img
+              src={outgoingArt.imageUrl}
+              alt={outgoingArt.title}
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                objectPosition: 'center center',
+                display: 'block',
+                filter: darkThemeActive ? 'contrast(0.98) brightness(0.92)' : 'none',
+              }}
+            />
+
+            {outgoingArt.signature?.enabled && Boolean(outgoingArt.signature.text) && (() => {
+              const sigStyle =
+                SIGNATURE_STYLES[outgoingArt.signature.style] || SIGNATURE_STYLES.fountain
+              const inkStyle = getSignatureInkStyle(
+                outgoingArt.signature.color,
+                dominantColor,
+                outgoingArt.signature.opacity ?? 0.55,
+              )
+              const sizeScale =
+                SIGNATURE_SIZE_SCALES[outgoingArt.signature.size || 'md'] || 1.0
+              const isBottomLeft = outgoingArt.signature.position === 'bottom-left'
+              return (
+                <div
+                  key={`sig-out-${outgoingArt.id}`}
+                  style={{
+                    position: 'absolute',
+                    bottom: 'clamp(14px, 3.2%, 36px)',
+                    ...(isBottomLeft
+                      ? { left: 'clamp(16px, 3.5%, 40px)', textAlign: 'left' }
+                      : { right: 'clamp(16px, 3.5%, 40px)', textAlign: 'right' }),
+                    fontFamily: sigStyle.fontFamily,
+                    fontSize: `clamp(${sigStyle.baseFontSizeRem * 0.9 * sizeScale}rem, ${2 * sizeScale}vw, ${sigStyle.baseFontSizeRem * 1.6 * sizeScale}rem)`,
+                    fontWeight: sigStyle.weight,
+                    color: inkStyle.color,
+                    textShadow: inkStyle.textShadow,
+                    mixBlendMode: inkStyle.blendMode || 'normal',
+                    transform: isBottomLeft ? 'rotate(0.8deg)' : 'rotate(-1.2deg)',
+                    letterSpacing: '0.015em',
+                    lineHeight: 1.3,
+                    paddingTop: '8px',
+                    paddingBottom: '12px',
+                    filter: 'blur(0.2px) contrast(1.05)',
+                    textRendering: 'geometricPrecision',
+                    pointerEvents: 'none',
+                    userSelect: 'none',
+                    zIndex: 3,
+                    maxWidth: sizeScale > 1.2 ? '75%' : '60%',
+                    whiteSpace: 'pre-line',
+                    overflow: 'visible',
+                  }}
+                >
+                  {outgoingArt.signature.text}
+                </div>
+              )
+            })()}
+          </div>
+        )}
+
+        {/* Cold-Press Watercolor Paper Grain & Canvas Tooth Overlay */}
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            pointerEvents: 'none',
+            backgroundImage: `url("${PAPER_GRAIN_TEXTURE}")`,
+            backgroundSize: '256px 256px',
+            backgroundRepeat: 'repeat',
+            mixBlendMode: 'overlay',
+            opacity: darkThemeActive ? 0.35 : 0.65,
+            zIndex: 4,
+          }}
+        />
+
+        {/* Directional Gallery Spotlight & Ambient Falloff */}
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            pointerEvents: 'none',
+            zIndex: 5,
+            background: darkThemeActive
+              ? 'radial-gradient(ellipse 80% 65% at 50% 12%, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.01) 55%, transparent 100%)'
+              : 'radial-gradient(ellipse 85% 70% at 50% 12%, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.03) 50%, transparent 100%)',
+          }}
+        />
+
+        {/* Subtle Directional Cast Shadow & Ambient Color Bounce Radiosity */}
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            pointerEvents: 'none',
+            zIndex: 6,
+            boxShadow: darkThemeActive
+              ? 'inset 0 3px 6px -1px rgba(0,0,0,0.65), inset 2px 0 4px -1px rgba(0,0,0,0.40)'
+              : 'inset 0 3px 6px -1px rgba(45,30,15,0.14), inset 2px 0 3px -1px rgba(45,30,15,0.06), inset 0 0 12px -2px rgba(0,0,0,0.05)',
+          }}
+        />
+      </>
+    )
+  }
+
+  // Common aperture border style
+  const apertureBevelStyle: React.CSSProperties = {
+    boxSizing: 'content-box',
+    backgroundColor: paperBaseColor,
+    borderTop: `4.5px solid ${bevelColors.top}`,
+    borderLeft: `4.5px solid ${bevelColors.left}`,
+    borderRight: `4.5px solid ${bevelColors.right}`,
+    borderBottom: `4.5px solid ${bevelColors.bottom}`,
+    boxShadow: darkThemeActive
+      ? '0 0 0 1px rgba(0,0,0,0.9), 0 3px 12px rgba(0,0,0,0.6)'
+      : '0 0 0 1px rgba(50,40,30,0.18), 0 3px 10px rgba(0,0,0,0.08)',
+    overflow: 'hidden',
+    position: 'relative',
+    transition: 'width 1200ms ease-in-out, height 1200ms ease-in-out',
+  }
 
   return (
     <div
@@ -368,7 +654,6 @@ export default function ArtScreensaver({
           backgroundPosition: textureStyle.backgroundPosition,
           backgroundAttachment: textureStyle.backgroundAttachment,
           backgroundBlendMode: matBlendMode,
-          // Subtle frame lip shadow with warm depth
           boxShadow: darkThemeActive
             ? 'inset 0 2px 6px rgba(0,0,0,0.7), inset 0 0 1px rgba(0,0,0,0.9)'
             : 'inset 0 2px 6px rgba(0,0,0,0.12), inset 0 1px 2px rgba(0,0,0,0.06), inset 0 0 1px rgba(0,0,0,0.10)',
@@ -376,213 +661,52 @@ export default function ArtScreensaver({
           transition: matPreset === 'auto' ? 'background-color 1200ms ease-in-out' : 'none',
         }}
       >
-        {/* Passe-Partout Aperture Frame with 45-Degree Mitered Cotton Rag Bevel Core */}
-        <div
-          style={{
-            position: 'relative',
-            width: `${frameSize.width}px`,
-            height: `${frameSize.height}px`,
-            maxWidth: '100%',
-            maxHeight: '100%',
-            boxSizing: 'content-box',
-            backgroundColor: paperBaseColor,
-            // 4.5px thick 45-degree mitered core bevel facets (thick 8-ply museum board depth)
-            borderTop: `4.5px solid ${bevelColors.top}`,
-            borderLeft: `4.5px solid ${bevelColors.left}`,
-            borderRight: `4.5px solid ${bevelColors.right}`,
-            borderBottom: `4.5px solid ${bevelColors.bottom}`,
-            // Clean razor blade incision groove where bevel meets the mat board
-            boxShadow: darkThemeActive
-              ? '0 0 0 1px rgba(0,0,0,0.9), 0 3px 12px rgba(0,0,0,0.6)'
-              : '0 0 0 1px rgba(50,40,30,0.18), 0 3px 10px rgba(0,0,0,0.08)',
-            transition: 'width 1200ms ease-in-out, height 1200ms ease-in-out',
-            overflow: 'hidden',
-          }}
-        >
-          {/* Base Active Artwork Layer (Solid 100% Opaque Underneath at zIndex: 1) */}
-          {currentToDisplay && (
+        {/* Passe-Partout Aperture Frame Container */}
+        {isDiptych ? (
+          /* Dual 1:1 Diptych Layout (Two Square Apertures with Central Mat Divider) */
+          <div
+            className="flex items-center justify-center"
+            style={{
+              gap: `${diptychMullion}px`,
+              transition: 'gap 1200ms ease-in-out',
+            }}
+          >
+            {/* Left Square Aperture */}
             <div
-              key={`in-${currentToDisplay.id}`}
               style={{
-                position: 'absolute',
-                inset: 0,
-                zIndex: 1,
-                opacity: 1,
+                ...apertureBevelStyle,
+                width: `${squareApertureSize}px`,
+                height: `${squareApertureSize}px`,
               }}
             >
-              <img
-                src={currentToDisplay.imageUrl}
-                alt={cleanTitle}
-                onLoad={handleImgLoad}
-                onError={onError}
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'cover',
-                  objectPosition: 'center center',
-                  display: 'block',
-                  filter: darkThemeActive ? 'contrast(0.98) brightness(0.92)' : 'none',
-                }}
-              />
-
-              {/* Artist Signature Overlay on Active Artwork */}
-              {currentToDisplay.signature?.enabled && Boolean(currentToDisplay.signature.text) && (() => {
-                const sigStyle = SIGNATURE_STYLES[currentToDisplay.signature.style] || SIGNATURE_STYLES.fountain
-                const inkStyle = getSignatureInkStyle(
-                  currentToDisplay.signature.color,
-                  dominantColor,
-                  currentToDisplay.signature.opacity ?? 0.55
-                )
-                const sizeScale = SIGNATURE_SIZE_SCALES[currentToDisplay.signature.size || 'md'] || 1.0
-                const isBottomLeft = currentToDisplay.signature.position === 'bottom-left'
-                return (
-                  <div
-                    key={`sig-${currentToDisplay.id}`}
-                    style={{
-                      position: 'absolute',
-                      bottom: 'clamp(14px, 3.2%, 36px)',
-                      ...(isBottomLeft ? { left: 'clamp(16px, 3.5%, 40px)', textAlign: 'left' } : { right: 'clamp(16px, 3.5%, 40px)', textAlign: 'right' }),
-                      fontFamily: sigStyle.fontFamily,
-                      fontSize: `clamp(${sigStyle.baseFontSizeRem * 0.9 * sizeScale}rem, ${2 * sizeScale}vw, ${sigStyle.baseFontSizeRem * 1.6 * sizeScale}rem)`,
-                      fontWeight: sigStyle.weight,
-                      color: inkStyle.color,
-                      textShadow: inkStyle.textShadow,
-                      mixBlendMode: inkStyle.blendMode || 'normal',
-                      transform: isBottomLeft ? 'rotate(0.8deg)' : 'rotate(-1.2deg)',
-                      letterSpacing: '0.015em',
-                      lineHeight: 1.3,
-                      paddingTop: '8px',
-                      paddingBottom: '12px',
-                      filter: 'blur(0.2px) contrast(1.05)',
-                      textRendering: 'geometricPrecision',
-                      pointerEvents: 'none',
-                      userSelect: 'none',
-                      zIndex: 3,
-                      opacity: 1,
-                      maxWidth: sizeScale > 1.2 ? '75%' : '60%',
-                      whiteSpace: 'pre-line',
-                      overflow: 'visible',
-                    }}
-                  >
-                    {currentToDisplay.signature.text}
-                  </div>
-                )
-              })()}
+              {renderApertureContent(leftArtwork, outgoingLeftArtwork, leftMeta.title)}
             </div>
-          )}
 
-          {/* Top Outgoing Artwork Layer (Dissolves Out 1.0 -> 0.0 over 1.2s at zIndex: 2) */}
-          {outgoingArtwork && (
+            {/* Right Square Aperture */}
             <div
-              key={`out-${outgoingArtwork.id}`}
               style={{
-                position: 'absolute',
-                inset: 0,
-                zIndex: 2,
-                pointerEvents: 'none',
-                animation: 'casa-art-dissolve-out 1200ms ease-in-out forwards',
-                willChange: 'opacity',
+                ...apertureBevelStyle,
+                width: `${squareApertureSize}px`,
+                height: `${squareApertureSize}px`,
               }}
             >
-              <img
-                src={outgoingArtwork.imageUrl}
-                alt={outgoingArtwork.title}
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'cover',
-                  objectPosition: 'center center',
-                  display: 'block',
-                  filter: darkThemeActive ? 'contrast(0.98) brightness(0.92)' : 'none',
-                }}
-              />
-
-              {/* Artist Signature on Outgoing Layer */}
-              {outgoingArtwork.signature?.enabled && Boolean(outgoingArtwork.signature.text) && (() => {
-                const sigStyle = SIGNATURE_STYLES[outgoingArtwork.signature.style] || SIGNATURE_STYLES.fountain
-                const inkStyle = getSignatureInkStyle(
-                  outgoingArtwork.signature.color,
-                  dominantColor,
-                  outgoingArtwork.signature.opacity ?? 0.55
-                )
-                const sizeScale = SIGNATURE_SIZE_SCALES[outgoingArtwork.signature.size || 'md'] || 1.0
-                const isBottomLeft = outgoingArtwork.signature.position === 'bottom-left'
-                return (
-                  <div
-                    key={`sig-out-${outgoingArtwork.id}`}
-                    style={{
-                      position: 'absolute',
-                      bottom: 'clamp(14px, 3.2%, 36px)',
-                      ...(isBottomLeft ? { left: 'clamp(16px, 3.5%, 40px)', textAlign: 'left' } : { right: 'clamp(16px, 3.5%, 40px)', textAlign: 'right' }),
-                      fontFamily: sigStyle.fontFamily,
-                      fontSize: `clamp(${sigStyle.baseFontSizeRem * 0.9 * sizeScale}rem, ${2 * sizeScale}vw, ${sigStyle.baseFontSizeRem * 1.6 * sizeScale}rem)`,
-                      fontWeight: sigStyle.weight,
-                      color: inkStyle.color,
-                      textShadow: inkStyle.textShadow,
-                      mixBlendMode: inkStyle.blendMode || 'normal',
-                      transform: isBottomLeft ? 'rotate(0.8deg)' : 'rotate(-1.2deg)',
-                      letterSpacing: '0.015em',
-                      lineHeight: 1.3,
-                      paddingTop: '8px',
-                      paddingBottom: '12px',
-                      filter: 'blur(0.2px) contrast(1.05)',
-                      textRendering: 'geometricPrecision',
-                      pointerEvents: 'none',
-                      userSelect: 'none',
-                      zIndex: 3,
-                      maxWidth: sizeScale > 1.2 ? '75%' : '60%',
-                      whiteSpace: 'pre-line',
-                      overflow: 'visible',
-                    }}
-                  >
-                    {outgoingArtwork.signature.text}
-                  </div>
-                )
-              })()}
+              {renderApertureContent(rightArtwork, outgoingRightArtwork, rightMeta.title)}
             </div>
-          )}
-
-          {/* Cold-Press Watercolor Paper Grain & Canvas Tooth Overlay */}
+          </div>
+        ) : (
+          /* Single Passe-Partout Aperture Frame */
           <div
             style={{
-              position: 'absolute',
-              inset: 0,
-              pointerEvents: 'none',
-              backgroundImage: `url("${PAPER_GRAIN_TEXTURE}")`,
-              backgroundSize: '256px 256px',
-              backgroundRepeat: 'repeat',
-              mixBlendMode: 'overlay',
-              opacity: darkThemeActive ? 0.35 : 0.65,
-              zIndex: 4,
+              ...apertureBevelStyle,
+              width: `${singleFrameSize.width}px`,
+              height: `${singleFrameSize.height}px`,
+              maxWidth: '100%',
+              maxHeight: '100%',
             }}
-          />
-
-          {/* Directional Gallery Spotlight & Ambient Falloff */}
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              pointerEvents: 'none',
-              zIndex: 5,
-              background: darkThemeActive
-                ? 'radial-gradient(ellipse 80% 65% at 50% 12%, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.01) 55%, transparent 100%)'
-                : 'radial-gradient(ellipse 85% 70% at 50% 12%, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.03) 50%, transparent 100%)',
-            }}
-          />
-
-          {/* Subtle Directional Cast Shadow & Ambient Color Bounce Radiosity */}
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              pointerEvents: 'none',
-              zIndex: 6,
-              boxShadow: darkThemeActive
-                ? 'inset 0 3px 6px -1px rgba(0,0,0,0.65), inset 2px 0 4px -1px rgba(0,0,0,0.40)'
-                : 'inset 0 3px 6px -1px rgba(45,30,15,0.14), inset 2px 0 3px -1px rgba(45,30,15,0.06), inset 0 0 12px -2px rgba(0,0,0,0.05)',
-            }}
-          />
-        </div>
+          >
+            {renderApertureContent(leftArtwork, outgoingLeftArtwork, leftMeta.title)}
+          </div>
+        )}
 
         {/* Tactile Edge Tap Zones for Kiosk Navigation */}
         <div
@@ -596,84 +720,197 @@ export default function ArtScreensaver({
           onClick={handleNextPiece}
         />
 
-        {/* Museum Gallery Plaque */}
-        {currentToDisplay && plaqueMode !== 'hidden' && (
-          <div
-            className="absolute bottom-5 right-7 flex items-end gap-3 z-30 pointer-events-none"
-            style={{
-              opacity: plaqueVisible ? 1 : 0,
-              transform: plaqueVisible ? 'translateY(0)' : 'translateY(6px)',
-              transition: 'opacity 1.2s cubic-bezier(0.16, 1, 0.3, 1), transform 1.2s cubic-bezier(0.16, 1, 0.3, 1)',
-            }}
-          >
-            {/* Subtle Interactive (i) Provenance Trigger Pill */}
-            {(currentToDisplay.description || currentToDisplay.location || currentToDisplay.funFact || currentToDisplay.subjects) && (
-              <IconButton
-                size="sm"
-                variant="ghost"
-                icon={<Info size={14} className="text-amber-500 shrink-0" />}
-                onClick={handleToggleInfo}
-                aria-label="View photo provenance and story"
-                title="Photo details & provenance (press 'i')"
-                className="pointer-events-auto rounded-full transition-all duration-200 bg-white/10 dark:bg-black/20 hover:bg-white/20 dark:hover:bg-black/30 border border-white/20 dark:border-white/10 backdrop-blur-xs shadow-xs active:scale-95 cursor-pointer"
-              />
-            )}
+        {/* Museum Gallery Plaques */}
+        {plaqueMode !== 'hidden' && (
+          <>
+            {/* Diptych Left Plaque / Single Plaque */}
+            {isDiptych ? (
+              /* Symmetrical Left Plaque for Diptych Image A */
+              leftArtwork && (
+                <div
+                  className="absolute bottom-5 left-7 flex items-end gap-3 z-30 pointer-events-none"
+                  style={{
+                    opacity: plaqueVisible ? 1 : 0,
+                    transform: plaqueVisible ? 'translateY(0)' : 'translateY(6px)',
+                    transition:
+                      'opacity 1.2s cubic-bezier(0.16, 1, 0.3, 1), transform 1.2s cubic-bezier(0.16, 1, 0.3, 1)',
+                  }}
+                >
+                  {(leftArtwork.description ||
+                    leftArtwork.location ||
+                    leftArtwork.funFact ||
+                    leftArtwork.subjects) && (
+                    <IconButton
+                      size="sm"
+                      variant="ghost"
+                      icon={<Info size={14} className="text-amber-500 shrink-0" />}
+                      onClick={e => handleToggleInfo('left', e)}
+                      aria-label="View left photo provenance and story"
+                      title="Left photo details & provenance (press 'i')"
+                      className="pointer-events-auto rounded-full transition-all duration-200 bg-white/10 dark:bg-black/20 hover:bg-white/20 dark:hover:bg-black/30 border border-white/20 dark:border-white/10 backdrop-blur-xs shadow-xs active:scale-95 cursor-pointer"
+                    />
+                  )}
 
-            <div
-              className="text-right"
-              style={{
-                color: darkThemeActive ? 'rgba(220, 215, 205, 0.78)' : 'rgba(65, 50, 40, 0.80)',
-                textShadow: darkThemeActive
-                  ? '0 1px 1px rgba(0, 0, 0, 0.90), 0 -1px 0.5px rgba(255, 255, 255, 0.08)'
-                  : '0 1px 0px rgba(255, 255, 255, 0.92), 0 -1px 0.5px rgba(0, 0, 0, 0.18)',
-              }}
-            >
-              <p
-                className="italic leading-snug tracking-wide"
+                  <div
+                    className="text-left"
+                    style={{
+                      color: darkThemeActive
+                        ? 'rgba(220, 215, 205, 0.78)'
+                        : 'rgba(65, 50, 40, 0.80)',
+                      textShadow: darkThemeActive
+                        ? '0 1px 1px rgba(0, 0, 0, 0.90), 0 -1px 0.5px rgba(255, 255, 255, 0.08)'
+                        : '0 1px 0px rgba(255, 255, 255, 0.92), 0 -1px 0.5px rgba(0, 0, 0, 0.18)',
+                    }}
+                  >
+                    <p
+                      className="italic leading-snug tracking-wide"
+                      style={{
+                        fontFamily: 'Georgia, "Cormorant Garamond", "Times New Roman", serif',
+                        fontSize: '0.86rem',
+                        fontWeight: 500,
+                        letterSpacing: '0.4px',
+                      }}
+                    >
+                      {leftMeta.title}
+                    </p>
+                    <p
+                      className="leading-tight mt-0.5 uppercase tracking-wider"
+                      style={{
+                        fontFamily: 'Georgia, "Cormorant Garamond", "Times New Roman", serif',
+                        fontSize: '0.64rem',
+                        fontWeight: 400,
+                        letterSpacing: '1.2px',
+                        opacity: 0.88,
+                      }}
+                    >
+                      {leftMeta.artist}
+                      {leftArtwork.location && ` · ${leftArtwork.location.split(',')[0]}`}
+                    </p>
+                  </div>
+                </div>
+              )
+            ) : null}
+
+            {/* Right Plaque (Used for Single Artwork OR Diptych Image B) */}
+            {(isDiptych ? rightArtwork : leftArtwork) && (
+              <div
+                className="absolute bottom-5 right-7 flex items-end gap-3 z-30 pointer-events-none"
                 style={{
-                  fontFamily: 'Georgia, "Cormorant Garamond", "Times New Roman", serif',
-                  fontSize: '0.86rem',
-                  fontWeight: 500,
-                  letterSpacing: '0.4px',
+                  opacity: plaqueVisible ? 1 : 0,
+                  transform: plaqueVisible ? 'translateY(0)' : 'translateY(6px)',
+                  transition:
+                    'opacity 1.2s cubic-bezier(0.16, 1, 0.3, 1), transform 1.2s cubic-bezier(0.16, 1, 0.3, 1)',
                 }}
               >
-                {cleanTitle}
-              </p>
-              <p
-                className="leading-tight mt-0.5 uppercase tracking-wider"
-                style={{
-                  fontFamily: 'Georgia, "Cormorant Garamond", "Times New Roman", serif',
-                  fontSize: '0.64rem',
-                  fontWeight: 400,
-                  letterSpacing: '1.2px',
-                  opacity: 0.88,
-                }}
-              >
-                {cleanArtist}
-                {currentToDisplay.location && ` · ${currentToDisplay.location.split(',')[0]}`}
-              </p>
-            </div>
-          </div>
+                {((isDiptych ? rightArtwork : leftArtwork)?.description ||
+                  (isDiptych ? rightArtwork : leftArtwork)?.location ||
+                  (isDiptych ? rightArtwork : leftArtwork)?.funFact ||
+                  (isDiptych ? rightArtwork : leftArtwork)?.subjects) && (
+                  <IconButton
+                    size="sm"
+                    variant="ghost"
+                    icon={<Info size={14} className="text-amber-500 shrink-0" />}
+                    onClick={e => handleToggleInfo(isDiptych ? 'right' : 'left', e)}
+                    aria-label="View photo provenance and story"
+                    title="Photo details & provenance (press 'i')"
+                    className="pointer-events-auto rounded-full transition-all duration-200 bg-white/10 dark:bg-black/20 hover:bg-white/20 dark:hover:bg-black/30 border border-white/20 dark:border-white/10 backdrop-blur-xs shadow-xs active:scale-95 cursor-pointer"
+                  />
+                )}
+
+                <div
+                  className="text-right"
+                  style={{
+                    color: darkThemeActive
+                      ? 'rgba(220, 215, 205, 0.78)'
+                      : 'rgba(65, 50, 40, 0.80)',
+                    textShadow: darkThemeActive
+                      ? '0 1px 1px rgba(0, 0, 0, 0.90), 0 -1px 0.5px rgba(255, 255, 255, 0.08)'
+                      : '0 1px 0px rgba(255, 255, 255, 0.92), 0 -1px 0.5px rgba(0, 0, 0, 0.18)',
+                  }}
+                >
+                  <p
+                    className="italic leading-snug tracking-wide"
+                    style={{
+                      fontFamily: 'Georgia, "Cormorant Garamond", "Times New Roman", serif',
+                      fontSize: '0.86rem',
+                      fontWeight: 500,
+                      letterSpacing: '0.4px',
+                    }}
+                  >
+                    {isDiptych ? rightMeta.title : leftMeta.title}
+                  </p>
+                  <p
+                    className="leading-tight mt-0.5 uppercase tracking-wider"
+                    style={{
+                      fontFamily: 'Georgia, "Cormorant Garamond", "Times New Roman", serif',
+                      fontSize: '0.64rem',
+                      fontWeight: 400,
+                      letterSpacing: '1.2px',
+                      opacity: 0.88,
+                    }}
+                  >
+                    {isDiptych ? rightMeta.artist : leftMeta.artist}
+                    {(isDiptych ? rightArtwork : leftArtwork)?.location &&
+                      ` · ${(isDiptych ? rightArtwork : leftArtwork)?.location?.split(',')[0]}`}
+                  </p>
+                </div>
+              </div>
+            )}
+          </>
         )}
 
         {/* Ambient Provenance Card Overlay */}
-        {infoOpen && currentToDisplay && (
+        {infoOpen && provenanceTarget && (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/45 backdrop-blur-xs animate-in fade-in duration-200"
+            className="fixed inset-0 z-50 flex flex-col items-center justify-center p-4 sm:p-6 bg-black/45 backdrop-blur-xs animate-in fade-in duration-200"
             onClick={e => {
               e.stopPropagation()
               setInfoOpen(false)
             }}
           >
+            {/* Dual Diptych Tab Selector */}
+            {isDiptych && leftArtwork && rightArtwork && (
+              <div
+                className="flex items-center gap-2 mb-3 bg-black/60 backdrop-blur-md p-1.5 rounded-full border border-white/20 z-10 shadow-lg"
+                onClick={e => e.stopPropagation()}
+              >
+                <Button
+                  size="sm"
+                  variant={provenanceTab === 'left' ? 'primary' : 'ghost'}
+                  onClick={() => setProvenanceTab('left')}
+                  className={
+                    provenanceTab === 'left'
+                      ? 'bg-amber-500 hover:bg-amber-400 text-stone-950 font-semibold rounded-full shadow-xs'
+                      : 'text-stone-300 hover:text-white rounded-full'
+                  }
+                >
+                  Left: {leftMeta.title}
+                </Button>
+                <Button
+                  size="sm"
+                  variant={provenanceTab === 'right' ? 'primary' : 'ghost'}
+                  onClick={() => setProvenanceTab('right')}
+                  className={
+                    provenanceTab === 'right'
+                      ? 'bg-amber-500 hover:bg-amber-400 text-stone-950 font-semibold rounded-full shadow-xs'
+                      : 'text-stone-300 hover:text-white rounded-full'
+                  }
+                >
+                  Right: {rightMeta.title}
+                </Button>
+              </div>
+            )}
+
             <ArtworkProvenanceCard
-              title={cleanTitle}
-              artist={cleanArtist}
-              location={currentToDisplay.location}
-              dateTaken={currentToDisplay.dateTaken || currentToDisplay.date}
-              description={currentToDisplay.description}
-              subjects={currentToDisplay.subjects}
-              medium={currentToDisplay.medium}
-              funFact={currentToDisplay.funFact}
+              title={provenanceMeta.title}
+              artist={provenanceMeta.artist}
+              location={provenanceTarget.location}
+              dateTaken={provenanceTarget.dateTaken || provenanceTarget.date}
+              description={provenanceTarget.description}
+              subjects={provenanceTarget.subjects}
+              medium={provenanceTarget.medium}
+              funFact={provenanceTarget.funFact}
+              imageUrl={provenanceTarget.imageUrl}
               darkTheme={darkThemeActive}
               onClose={() => setInfoOpen(false)}
               className="max-w-lg w-full"

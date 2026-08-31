@@ -46,6 +46,17 @@ function parseJsonObject(raw: string): Record<string, unknown> {
   throw new Error('Model did not return valid JSON')
 }
 
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+  let binary = ''
+  const len = bytes.byteLength
+  const CHUNK_SIZE = 8192
+  for (let i = 0; i < len; i += CHUNK_SIZE) {
+    const chunk = bytes.subarray(i, Math.min(i + CHUNK_SIZE, len))
+    binary += String.fromCharCode.apply(null, chunk as unknown as number[])
+  }
+  return btoa(binary)
+}
+
 async function callGeminiVision(
   config: Required<LlmConfig>,
   parts: Array<Record<string, unknown>>,
@@ -59,6 +70,7 @@ async function callGeminiVision(
       temperature: 0.2,
       maxOutputTokens: 2048,
       responseMimeType: 'application/json',
+      thinkingConfig: { thinkingBudget: 0 },
     },
   }
 
@@ -74,8 +86,8 @@ async function callGeminiVision(
   }
 
   const json = await res.json()
-  const candidate = json.candidates?.[0]
-  const text = candidate?.content?.parts?.[0]?.text
+  const responseParts = (json.candidates?.[0]?.content?.parts ?? []) as Array<{ text?: string; thought?: boolean }>
+  const text = responseParts.filter((p) => !p.thought).map((p) => p.text ?? '').join('').trim()
   if (!text) {
     throw new Error('Gemini Vision returned empty content')
   }
@@ -90,11 +102,7 @@ async function fetchImageAsBase64(imageUrl: string): Promise<{ base64: string; m
   const contentType = res.headers.get('content-type') || 'image/jpeg'
   const buffer = await res.arrayBuffer()
   const bytes = new Uint8Array(buffer)
-  let binary = ''
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i])
-  }
-  const base64 = btoa(binary)
+  const base64 = uint8ArrayToBase64(bytes)
   return { base64, mimeType: contentType }
 }
 
@@ -197,8 +205,8 @@ Deno.serve(async (req) => {
     const parts: Array<Record<string, unknown>> = [{ text: promptText }]
     if (fileBase64) {
       parts.push({
-        inline_data: {
-          mime_type: mimeType,
+        inlineData: {
+          mimeType: mimeType,
           data: fileBase64,
         },
       })

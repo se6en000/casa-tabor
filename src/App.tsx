@@ -284,6 +284,7 @@ function AppShell() {
           shuffle={settings.shuffle}
           plaqueMode={settings.plaqueMode}
           matPreset={settings.matPreset}
+          aspectRatioMode={settings.aspectRatioMode}
         />
       )}
     </div>
