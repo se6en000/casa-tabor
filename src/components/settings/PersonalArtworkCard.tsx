@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { Eye, EyeOff, Pencil, Trash2, Feather, MapPin } from 'lucide-react'
 import { IconButton } from '../ui'
 import type { PersonalArtwork } from '../../hooks/usePersonalArtMode'
@@ -21,15 +20,8 @@ export function PersonalArtworkCard({
   onDelete,
   className,
 }: PersonalArtworkCardProps) {
-  const [aspectRatio, setAspectRatio] = useState<number | null>(() => {
-    if (artwork.aspectFormat === 'square_1_1' || artwork.storagePath.includes('_1x1')) return 1.0
-    if (artwork.aspectFormat === 'widescreen_16_9' || artwork.storagePath.includes('_16x9')) return 16 / 9
-    return null
-  })
-  const [isLoaded, setIsLoaded] = useState(false)
-
-  const isSquare = (aspectRatio != null && aspectRatio >= 0.88 && aspectRatio <= 1.14) || artwork.aspectFormat === 'square_1_1' || artwork.storagePath.includes('_1x1')
-  const isWidescreen = (aspectRatio != null && aspectRatio >= 1.55) || artwork.aspectFormat === 'widescreen_16_9' || artwork.storagePath.includes('_16x9')
+  const isSquare = artwork.aspectFormat === 'square_1_1' || artwork.storagePath.includes('_1x1')
+  const isWidescreen = artwork.aspectFormat === 'widescreen_16_9' || artwork.storagePath.includes('_16x9')
 
   return (
     <div
@@ -49,39 +41,27 @@ export function PersonalArtworkCard({
           alt={artwork.title}
           loading="lazy"
           decoding="async"
-          onLoad={(e) => {
-            setIsLoaded(true)
-            const img = e.currentTarget
-            if (img.naturalWidth && img.naturalHeight) {
-              setAspectRatio(img.naturalWidth / img.naturalHeight)
-            }
-          }}
           className={cn(
-            'h-full w-full object-cover transition-opacity duration-200',
-            isLoaded ? 'opacity-100' : 'opacity-0',
-            isDisabled && 'grayscale'
+            'h-full w-full object-cover',
+            isDisabled && 'grayscale opacity-75'
           )}
         />
 
         {/* Top-Left: Aspect Ratio Badge & Disabled Badge */}
         <div className="absolute top-2 left-2 z-10 flex items-center gap-1.5 flex-wrap">
           {isDisabled ? (
-            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-casa-navy/90 backdrop-blur-xs text-white text-3xs font-semibold shadow-xs">
+            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-casa-navy text-white text-3xs font-semibold shadow-xs">
               <EyeOff size={10} className="text-casa-gold" />
               <span>Disabled</span>
             </div>
           ) : isSquare ? (
-            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-950/85 backdrop-blur-xs border border-emerald-500/40 text-emerald-300 text-3xs font-semibold shadow-xs">
+            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-900 border border-emerald-500/40 text-emerald-200 text-3xs font-semibold shadow-xs">
               <span className="size-1.5 rounded-full bg-emerald-400" />
               <span>1:1 Square</span>
             </div>
           ) : isWidescreen ? (
-            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-casa-navy/85 backdrop-blur-xs border border-white/20 text-stone-200 text-3xs font-medium shadow-xs">
+            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-casa-navy border border-white/20 text-stone-200 text-3xs font-medium shadow-xs">
               <span>16:9 Wide</span>
-            </div>
-          ) : aspectRatio != null ? (
-            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-stone-900/80 backdrop-blur-xs text-stone-300 text-3xs font-medium shadow-xs">
-              <span>Custom</span>
             </div>
           ) : null}
         </div>
@@ -89,7 +69,7 @@ export function PersonalArtworkCard({
         {/* Bottom-Right: Signature Badge */}
         {artwork.signatureEnabled && (
           <div
-            className="absolute bottom-2 right-2 z-10 flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-casa-navy/85 backdrop-blur-xs text-white text-3xs font-medium shadow-xs"
+            className="absolute bottom-2 right-2 z-10 flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-casa-navy text-white text-3xs font-medium shadow-xs"
             title={`Signature: "${artwork.signatureText || artwork.artist || 'Signed'}"`}
           >
             <Feather size={10} className="text-casa-gold" />
