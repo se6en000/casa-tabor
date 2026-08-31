@@ -256,6 +256,12 @@ test('segmented control presents one track with a sliding selection thumb', () =
       'selected segment text must meet WCAG AA in every built-in theme',
     )
   }
+
+  // Verify SegmentedControl interaction invariants (prevents regression of desktop click suppression)
+  const scSource = readFileSync(new URL('../src/components/ui/SegmentedControl.tsx', import.meta.url), 'utf8')
+  assert.ok(!scSource.includes('handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {\n    if (event.button !== 0 || enabledOptions.length === 0) return\n    event.currentTarget.setPointerCapture'), 'Pointer capture must not be set prematurely on pointer down')
+  assert.match(scSource, /interaction\.dragging = true[\s\S]*setPointerCapture/, 'Pointer capture must be deferred to active drag')
+  assert.match(scSource, /if \(enabledOptions\.length === 0\) return/, 'Empty enabled options must be guarded against TypeError')
 })
 
 test('cardClassName covers every padding and tone combination', () => {

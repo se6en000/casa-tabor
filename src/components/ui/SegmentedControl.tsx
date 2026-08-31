@@ -44,6 +44,7 @@ export function SegmentedControl<T extends string>({
 
   const pointerPosition = (event: PointerEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
+    if (rect.width <= 0) return selectedIndex
     return Math.min(
       options.length - 1,
       Math.max(0, ((event.clientX - rect.left) / rect.width) * options.length - 0.5),
@@ -51,6 +52,7 @@ export function SegmentedControl<T extends string>({
   }
 
   const selectNearestEnabled = (position: number) => {
+    if (enabledOptions.length === 0) return
     const nearestEnabled = enabledOptions.reduce((nearest, option) => {
       const optionIndex = options.indexOf(option)
       const nearestIndex = options.indexOf(nearest)
@@ -61,15 +63,21 @@ export function SegmentedControl<T extends string>({
 
   const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0 || enabledOptions.length === 0) return
-    event.currentTarget.setPointerCapture(event.pointerId)
     pointerInteraction.current = { pointerId: event.pointerId, startX: event.clientX, dragging: false }
   }
 
   const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
     const interaction = pointerInteraction.current
     if (!interaction || interaction.pointerId !== event.pointerId) return
-    if (!interaction.dragging && Math.abs(event.clientX - interaction.startX) < 6) return
-    interaction.dragging = true
+    if (!interaction.dragging) {
+      if (Math.abs(event.clientX - interaction.startX) < 6) return
+      interaction.dragging = true
+      try {
+        event.currentTarget.setPointerCapture(event.pointerId)
+      } catch {
+        // Pointer capture can fail in certain synthetic or detached environments
+      }
+    }
     const position = pointerPosition(event)
     setDragPosition(position)
     selectNearestEnabled(position)
@@ -77,7 +85,11 @@ export function SegmentedControl<T extends string>({
 
   const releasePointer = (event: PointerEvent<HTMLDivElement>) => {
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
+      try {
+        event.currentTarget.releasePointerCapture(event.pointerId)
+      } catch {
+        // Ignore
+      }
     }
     pointerInteraction.current = null
     setDragPosition(null)
@@ -86,6 +98,9 @@ export function SegmentedControl<T extends string>({
   const handlePointerUp = (event: PointerEvent<HTMLDivElement>) => {
     const interaction = pointerInteraction.current
     if (interaction?.dragging) {
+      selectNearestEnabled(pointerPosition(event))
+    } else if (event.target === event.currentTarget) {
+      // Click landed directly on track container padding
       selectNearestEnabled(pointerPosition(event))
     }
     releasePointer(event)
