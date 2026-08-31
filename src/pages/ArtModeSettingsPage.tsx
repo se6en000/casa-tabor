@@ -246,11 +246,11 @@ export default function ArtModeSettingsPage() {
   const [editEnabled, setEditEnabled] = useState(true)
   const [editSignatureEnabled, setEditSignatureEnabled] = useState(false)
   const [editSignatureText, setEditSignatureText] = useState('')
-  const [editSignatureStyle, setEditSignatureStyle] = useState<SignatureStyle>('fountain')
+  const [editSignatureStyle, setEditSignatureStyle] = useState<SignatureStyle>('draft')
   const [editSignaturePosition, setEditSignaturePosition] = useState<SignaturePosition>('bottom-right')
-  const [editSignatureColor, setEditSignatureColor] = useState<SignatureColor>('auto')
-  const [editSignatureSize, setEditSignatureSize] = useState<SignatureSize>('md')
-  const [editSignatureOpacity, setEditSignatureOpacity] = useState<number>(0.55)
+  const [editSignatureColor, setEditSignatureColor] = useState<SignatureColor>('light')
+  const [editSignatureSize, setEditSignatureSize] = useState<SignatureSize>('xs')
+  const [editSignatureOpacity, setEditSignatureOpacity] = useState<number>(0.75)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const { sensorData } = useRoomTone()
@@ -366,8 +366,8 @@ export default function ArtModeSettingsPage() {
     setEditSignatureStyle(item.signatureStyle || 'draft')
     setEditSignaturePosition(item.signaturePosition || 'bottom-right')
     setEditSignatureColor(item.signatureColor || 'light')
-    setEditSignatureSize(item.signatureSize || 'sm')
-    setEditSignatureOpacity(item.signatureOpacity != null ? item.signatureOpacity : 0.55)
+    setEditSignatureSize(item.signatureSize || 'xs')
+    setEditSignatureOpacity(item.signatureOpacity != null ? item.signatureOpacity : 0.75)
   }
 
   const handleAIAnalyze = async () => {
@@ -1521,7 +1521,7 @@ export default function ArtModeSettingsPage() {
                             { value: 'auto', label: 'Auto Contrast', swatch: 'bg-stone-500' },
                             { value: 'dark', label: 'Charcoal Ink', swatch: 'bg-stone-900' },
                             { value: 'sepia', label: 'Warm Umber', swatch: 'bg-amber-950' },
-                            { value: 'light', label: 'White Gesso', swatch: 'bg-stone-100 border border-stone-300' },
+                            { value: 'light', label: 'White Gel Pen', swatch: 'bg-stone-100 border border-stone-300' },
                           ].map(tone => (
                             <Button
                               key={tone.value}

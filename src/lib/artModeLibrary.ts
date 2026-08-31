@@ -98,7 +98,7 @@ export type SignaturePosition = 'bottom-right' | 'bottom-left'
 export type SignatureColor = 'auto' | 'dark' | 'light' | 'sepia'
 export type SignatureSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl'
 
-export type SignatureOpacity = 0.35 | 0.55 | 0.7 | 0.9
+export type SignatureOpacity = 0.35 | 0.55 | 0.7 | 0.75 | 0.9
 
 export interface SignatureConfig {
   enabled: boolean
@@ -121,7 +121,7 @@ export const SIGNATURE_SIZE_OPTIONS = [
 export const SIGNATURE_OPACITY_OPTIONS = [
   { value: 0.35, label: '35% Faint' },
   { value: 0.55, label: '55% Pencil' },
-  { value: 0.7, label: '70% Natural' },
+  { value: 0.75, label: '75% Gel Pen' },
   { value: 0.9, label: '90% Bold' },
 ] as const
 
@@ -205,7 +205,7 @@ export const SIGNATURE_COLOR_OPTIONS = [
   { value: 'auto', label: 'Auto (Contrast)' },
   { value: 'dark', label: 'Charcoal Ink' },
   { value: 'sepia', label: 'Warm Umber' },
-  { value: 'light', label: 'White Gesso' },
+  { value: 'light', label: 'White Gel Pen' },
 ] as const
 
 export function getSignatureInkStyle(

@@ -112,11 +112,11 @@ async function loadPersonalArtwork(): Promise<PersonalArtwork[]> {
     createdAt: row.created_at,
     signatureEnabled: Boolean(row.signature_enabled),
     signatureText: row.signature_text?.trim() || undefined,
-    signatureStyle: (row.signature_style as SignatureStyle) || 'fountain',
+    signatureStyle: (row.signature_style as SignatureStyle) || 'draft',
     signaturePosition: (row.signature_position as SignaturePosition) || 'bottom-right',
-    signatureColor: (row.signature_color as SignatureColor) || 'auto',
-    signatureSize: (row.signature_size as SignatureSize) || 'md',
-    signatureOpacity: row.signature_opacity != null ? Number(row.signature_opacity) : 0.55,
+    signatureColor: (row.signature_color as SignatureColor) || 'light',
+    signatureSize: (row.signature_size as SignatureSize) || 'xs',
+    signatureOpacity: row.signature_opacity != null ? Number(row.signature_opacity) : 0.75,
     aspectFormat: row.aspect_format || (row.storage_path.includes('_1x1') ? 'square_1_1' : undefined),
   }))
 }
@@ -243,9 +243,9 @@ export function usePersonalArtMode() {
         signature_enabled: true,
         signature_style: 'draft',
         signature_position: 'bottom-right',
-        signature_size: 'sm',
+        signature_size: 'xs',
         signature_color: 'light',
-        signature_opacity: 0.55,
+        signature_opacity: 0.75,
         signature_text: cleanArtist || cleanTitle,
         aspect_format: detectedAspectFormat,
       })

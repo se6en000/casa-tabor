@@ -366,14 +366,14 @@ export default function ArtScreensaver({
         {/* Artist Signature Overlay */}
         {art.signature?.enabled && Boolean(art.signature.text) && (() => {
           const sigStyle =
-            SIGNATURE_STYLES[art.signature.style] || SIGNATURE_STYLES.fountain
+            SIGNATURE_STYLES[art.signature.style] || SIGNATURE_STYLES.draft
           const inkStyle = getSignatureInkStyle(
             art.signature.color,
             dominantColor,
-            art.signature.opacity ?? 0.55,
+            art.signature.opacity ?? 0.75,
           )
           const sizeScale =
-            SIGNATURE_SIZE_SCALES[art.signature.size || 'md'] || 1.0
+            SIGNATURE_SIZE_SCALES[art.signature.size || 'xs'] || 0.55
           const isBottomLeft = art.signature.position === 'bottom-left'
           return (
             <div
