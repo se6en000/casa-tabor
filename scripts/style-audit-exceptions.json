@@ -50,6 +50,10 @@
     ],
     "inlineStyleBlocks": [
       {
+        "path": "src/pages/ArtModeSettingsPage.tsx",
+        "reason": "Dynamic signature typography font face, scale, and ink contrast previews."
+      },
+      {
         "path": "src/components/settings/ArtworkCropModal.tsx",
         "reason": "Interactive drag, pan offset, and zoom scale dynamic transforms for 16:9 crop viewport preview."
       },

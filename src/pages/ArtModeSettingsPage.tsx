@@ -8,6 +8,10 @@ import {
   type ArtSourceMode,
   SIGNATURE_STYLE_OPTIONS,
   SIGNATURE_OPACITY_OPTIONS,
+  SIGNATURE_SIZE_OPTIONS,
+  SIGNATURE_STYLES,
+  SIGNATURE_SIZE_SCALES,
+  getSignatureInkStyle,
   type SignatureStyle,
   type SignaturePosition,
   type SignatureColor,
@@ -933,66 +937,33 @@ export default function ArtModeSettingsPage() {
                   {/* Live Handwritten Signature Overlay */}
                   {editSignatureEnabled && (editSignatureText || editArtist || artworkToEdit.title) && (() => {
                     const isBottomLeft = editSignaturePosition === 'bottom-left'
-                    const fontClass =
-                      editSignatureStyle === 'brush'
-                        ? editSignatureSize === 'sm'
-                          ? "font-['Caveat',_cursive] font-semibold text-sm sm:text-base md:text-lg"
-                          : editSignatureSize === 'lg'
-                          ? "font-['Caveat',_cursive] font-semibold text-xl sm:text-2xl md:text-3xl"
-                          : editSignatureSize === 'xl'
-                          ? "font-['Caveat',_cursive] font-semibold text-2xl sm:text-3xl md:text-4xl"
-                          : "font-['Caveat',_cursive] font-semibold text-lg sm:text-xl md:text-2xl"
-                        : editSignatureStyle === 'draft'
-                        ? editSignatureSize === 'sm'
-                          ? "font-['Homemade_Apple',_cursive] font-normal text-xs sm:text-sm md:text-base"
-                          : editSignatureSize === 'lg'
-                          ? "font-['Homemade_Apple',_cursive] font-normal text-base sm:text-lg md:text-xl"
-                          : editSignatureSize === 'xl'
-                          ? "font-['Homemade_Apple',_cursive] font-normal text-lg sm:text-xl md:text-2xl"
-                          : "font-['Homemade_Apple',_cursive] font-normal text-sm sm:text-base md:text-lg"
-                        : editSignatureStyle === 'classic'
-                        ? editSignatureSize === 'sm'
-                          ? "font-['Marck_Script',_cursive] font-normal text-xs sm:text-sm md:text-base"
-                          : editSignatureSize === 'lg'
-                          ? "font-['Marck_Script',_cursive] font-normal text-lg sm:text-xl md:text-2xl"
-                          : editSignatureSize === 'xl'
-                          ? "font-['Marck_Script',_cursive] font-normal text-xl sm:text-2xl md:text-3xl"
-                          : "font-['Marck_Script',_cursive] font-normal text-base sm:text-lg md:text-xl"
-                        : editSignatureSize === 'sm'
-                        ? "font-['Alex_Brush',_cursive] font-normal text-base sm:text-lg md:text-xl"
-                        : editSignatureSize === 'lg'
-                        ? "font-['Alex_Brush',_cursive] font-normal text-2xl sm:text-3xl md:text-4xl"
-                        : editSignatureSize === 'xl'
-                        ? "font-['Alex_Brush',_cursive] font-normal text-3xl sm:text-4xl md:text-5xl"
-                        : "font-['Alex_Brush',_cursive] font-normal text-xl sm:text-2xl md:text-3xl"
-
-                    const opacityClass =
-                      editSignatureOpacity === 0.35
-                        ? 'opacity-35'
-                        : editSignatureOpacity === 0.7
-                        ? 'opacity-70'
-                        : editSignatureOpacity === 0.9
-                        ? 'opacity-90'
-                        : 'opacity-55'
-
-                    const colorClass =
-                      editSignatureColor === 'light'
-                        ? 'text-stone-100 drop-shadow-[0_1px_2px_rgba(0,0,0,0.75)] mix-blend-screen'
-                        : editSignatureColor === 'sepia'
-                        ? 'text-amber-950 drop-shadow-[0_0.5px_0.5px_rgba(255,255,255,0.35)] mix-blend-multiply'
-                        : 'text-stone-900 drop-shadow-[0_0.5px_0.5px_rgba(255,255,255,0.35)] mix-blend-multiply'
+                    const sigStyle = SIGNATURE_STYLES[editSignatureStyle] || SIGNATURE_STYLES.draft
+                    const inkStyle = getSignatureInkStyle(
+                      editSignatureColor,
+                      '',
+                      editSignatureOpacity
+                    )
+                    const sizeScale = SIGNATURE_SIZE_SCALES[editSignatureSize] || 1.0
 
                     return (
                       <div
                         className={cn(
-                          'absolute pointer-events-none select-none z-10 leading-tight pt-2 pb-2 max-w-[75%] whitespace-pre-line overflow-visible transition-all duration-200 blur-[0.2px]',
+                          'absolute pointer-events-none select-none z-10 leading-tight pt-2 pb-2 max-w-[78%] whitespace-pre-line overflow-visible transition-all duration-200',
                           isBottomLeft
-                            ? 'bottom-2 sm:bottom-3 left-3 sm:left-5 text-left rotate-1'
-                            : 'bottom-2 sm:bottom-3 right-3 sm:right-5 text-right -rotate-1',
-                          fontClass,
-                          colorClass,
-                          opacityClass
+                            ? 'bottom-2 sm:bottom-3 left-3 sm:left-5 text-left rotate-[0.8deg]'
+                            : 'bottom-2 sm:bottom-3 right-3 sm:right-5 text-right -rotate-[1.2deg]'
                         )}
+                        style={{
+                          fontFamily: sigStyle.fontFamily,
+                          fontSize: `clamp(${sigStyle.baseFontSizeRem * 0.75 * sizeScale}rem, ${1.8 * sizeScale}vw, ${sigStyle.baseFontSizeRem * 1.4 * sizeScale}rem)`,
+                          fontWeight: sigStyle.weight,
+                          color: inkStyle.color,
+                          textShadow: inkStyle.textShadow,
+                          mixBlendMode: inkStyle.blendMode || 'normal',
+                          filter: 'blur(0.15px) contrast(1.05)',
+                          textRendering: 'geometricPrecision',
+                          letterSpacing: '0.01em',
+                        }}
                       >
                         {editSignatureText || editArtist || artworkToEdit.title}
                       </div>
@@ -1297,21 +1268,109 @@ export default function ArtModeSettingsPage() {
                         </p>
                       </div>
 
+                      {/* Visual Handwriting Font Selector */}
                       <div>
-                        <label className="text-caption font-medium text-casa-navy block mb-1">
-                          Handwriting Style
-                        </label>
-                        <select
-                          value={editSignatureStyle}
-                          onChange={e => setEditSignatureStyle(e.target.value as SignatureStyle)}
-                          className="w-full h-10 px-3 rounded-button border border-casa-border bg-casa-bg text-body-sm text-casa-navy focus:border-casa-gold focus:outline-none transition-colors"
-                        >
-                          {SIGNATURE_STYLE_OPTIONS.map(opt => (
-                            <option key={opt.value} value={opt.value}>
-                              {opt.label}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                          <label className="text-caption font-medium text-casa-navy block">
+                            Handwriting Style
+                          </label>
+                          <span className="text-3xs text-casa-muted">
+                            Select regular print or script style
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {SIGNATURE_STYLE_OPTIONS.map(opt => {
+                            const isSelected = editSignatureStyle === opt.value
+                            const styleDef = SIGNATURE_STYLES[opt.value]
+                            const previewSample = editSignatureText
+                              ? editSignatureText.split('\n')[0]
+                              : editArtist || artworkToEdit?.title || styleDef.sample
+
+                            return (
+                              <Button
+                                key={opt.value}
+                                type="button"
+                                variant={isSelected ? 'strong' : 'secondary'}
+                                align="start"
+                                contentClassName="w-full flex-col items-start gap-1"
+                                onClick={() => setEditSignatureStyle(opt.value)}
+                                className={cn(
+                                  'p-2.5 h-auto min-h-[58px] rounded-xl transition-all cursor-pointer text-left',
+                                  isSelected && 'border-casa-gold ring-1 ring-casa-gold/40'
+                                )}
+                              >
+                                <div className="flex items-center justify-between gap-1 w-full">
+                                  <span className="text-caption font-semibold truncate">
+                                    {styleDef.label}
+                                  </span>
+                                  <span
+                                    className={cn(
+                                      'text-3xs uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded-full shrink-0',
+                                      styleDef.category === 'print'
+                                        ? isSelected
+                                          ? 'bg-emerald-500/30 text-emerald-100 border border-emerald-400/40'
+                                          : 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30'
+                                        : isSelected
+                                        ? 'bg-white/20 text-white border border-white/20'
+                                        : 'bg-casa-surface-2 text-casa-muted border border-casa-border'
+                                    )}
+                                  >
+                                    {styleDef.category === 'print'
+                                      ? 'Regular Print'
+                                      : styleDef.category === 'calligraphy'
+                                      ? 'Calligraphy'
+                                      : 'Script'}
+                                  </span>
+                                </div>
+                                <div
+                                  className={cn(
+                                    'text-body-sm truncate py-0.5 leading-snug w-full text-left',
+                                    isSelected ? 'text-white/95' : 'text-casa-navy'
+                                  )}
+                                  style={{
+                                    fontFamily: styleDef.fontFamily,
+                                    fontWeight: styleDef.weight,
+                                  }}
+                                >
+                                  {previewSample}
+                                </div>
+                              </Button>
+                            )
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Live Inscription Specimen Preview Box */}
+                      <div className="rounded-xl border border-casa-border bg-stone-100/80 dark:bg-stone-900/60 p-3 space-y-2">
+                        <div className="flex items-center justify-between gap-2 border-b border-casa-border/50 pb-1.5">
+                          <span className="text-2xs font-semibold uppercase tracking-wider text-casa-muted flex items-center gap-1.5">
+                            <Sparkles size={12} className="text-casa-gold" />
+                            Live Inscription Specimen
+                          </span>
+                          <span className="text-3xs font-mono text-casa-muted">
+                            {SIGNATURE_STYLES[editSignatureStyle]?.label} · {editSignatureSize.toUpperCase()} (
+                            {Math.round((SIGNATURE_SIZE_SCALES[editSignatureSize] || 1.0) * 100)}%)
+                          </span>
+                        </div>
+                        <div className="py-2.5 px-3 rounded-lg bg-white/80 dark:bg-black/40 border border-casa-border/40 overflow-hidden">
+                          <div
+                            className={cn(
+                              'leading-tight whitespace-pre-line transition-all duration-150',
+                              editSignaturePosition === 'bottom-left' ? 'text-left' : 'text-right'
+                            )}
+                            style={{
+                              fontFamily: SIGNATURE_STYLES[editSignatureStyle]?.fontFamily,
+                              fontWeight: SIGNATURE_STYLES[editSignatureStyle]?.weight,
+                              fontSize: `${(SIGNATURE_STYLES[editSignatureStyle]?.baseFontSizeRem || 1.1) * (SIGNATURE_SIZE_SCALES[editSignatureSize] || 1.0)}rem`,
+                              color: getSignatureInkStyle(editSignatureColor, '', editSignatureOpacity).color,
+                              textShadow: getSignatureInkStyle(editSignatureColor, '', editSignatureOpacity).textShadow,
+                              mixBlendMode: getSignatureInkStyle(editSignatureColor, '', editSignatureOpacity).blendMode || 'normal',
+                            }}
+                          >
+                            {editSignatureText || editArtist || artworkToEdit?.title || 'Artist Signature'}
+                          </div>
+                        </div>
                       </div>
 
                       <div>
@@ -1342,21 +1401,25 @@ export default function ArtModeSettingsPage() {
                         <label className="text-caption font-medium text-casa-navy block mb-1">
                           Signature Size
                         </label>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                          {[
-                            { value: 'sm', label: 'Small' },
-                            { value: 'md', label: 'Medium' },
-                            { value: 'lg', label: 'Large' },
-                            { value: 'xl', label: 'Extra Large' },
-                          ].map(sizeOpt => (
+                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 sm:gap-2">
+                          {SIGNATURE_SIZE_OPTIONS.map(sizeOpt => (
                             <Button
                               key={sizeOpt.value}
                               type="button"
                               variant={editSignatureSize === sizeOpt.value ? 'strong' : 'secondary'}
                               onClick={() => setEditSignatureSize(sizeOpt.value as SignatureSize)}
-                              className="w-full justify-center text-caption py-2 px-1"
+                              className="w-full justify-center text-caption py-2 px-1 flex flex-col items-center gap-0.5 h-auto min-h-[44px]"
                             >
-                              <span className="truncate">{sizeOpt.label}</span>
+                              <span className="truncate font-semibold">
+                                {sizeOpt.label === 'Extra Small'
+                                  ? 'Extra Small'
+                                  : sizeOpt.label === 'Extra Large'
+                                  ? 'Extra Large'
+                                  : sizeOpt.label}
+                              </span>
+                              <span className="text-3xs opacity-75 font-mono">
+                                {Math.round(SIGNATURE_SIZE_SCALES[sizeOpt.value] * 100)}%
+                              </span>
                             </Button>
                           ))}
                         </div>

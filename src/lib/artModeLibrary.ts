@@ -85,10 +85,10 @@ export function getPersonalArtworkValidationError(file: ArtworkFileDescriptor): 
   return null
 }
 
-export type SignatureStyle = 'fountain' | 'brush' | 'draft' | 'classic'
+export type SignatureStyle = 'fountain' | 'brush' | 'draft' | 'classic' | 'architect' | 'clean'
 export type SignaturePosition = 'bottom-right' | 'bottom-left'
 export type SignatureColor = 'auto' | 'dark' | 'light' | 'sepia'
-export type SignatureSize = 'sm' | 'md' | 'lg' | 'xl'
+export type SignatureSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl'
 
 export type SignatureOpacity = 0.35 | 0.55 | 0.7 | 0.9
 
@@ -103,6 +103,7 @@ export interface SignatureConfig {
 }
 
 export const SIGNATURE_SIZE_OPTIONS = [
+  { value: 'xs', label: 'Extra Small' },
   { value: 'sm', label: 'Small' },
   { value: 'md', label: 'Medium' },
   { value: 'lg', label: 'Large' },
@@ -117,6 +118,7 @@ export const SIGNATURE_OPACITY_OPTIONS = [
 ] as const
 
 export const SIGNATURE_SIZE_SCALES: Record<SignatureSize, number> = {
+  xs: 0.55,
   sm: 0.75,
   md: 1.0,
   lg: 1.35,
@@ -125,39 +127,65 @@ export const SIGNATURE_SIZE_SCALES: Record<SignatureSize, number> = {
 
 export const SIGNATURE_STYLES: Record<
   SignatureStyle,
-  { label: string; fontFamily: string; baseFontSizeRem: number; weight: number }
+  { label: string; fontFamily: string; baseFontSizeRem: number; weight: number; category: 'print' | 'script' | 'calligraphy'; sample: string }
 > = {
-  fountain: {
-    label: 'Fine Fountain Pen',
-    fontFamily: "'Alex Brush', cursive",
-    baseFontSizeRem: 1.35,
+  clean: {
+    label: 'Clean Notebook Print',
+    fontFamily: "'Patrick Hand', cursive",
+    baseFontSizeRem: 1.2,
     weight: 400,
+    category: 'print',
+    sample: 'Handwritten Print',
   },
-  brush: {
-    label: "Painter's Brush",
-    fontFamily: "'Caveat', cursive",
-    baseFontSizeRem: 1.25,
-    weight: 600,
+  architect: {
+    label: 'Architect Drafting',
+    fontFamily: "'Architects Daughter', cursive",
+    baseFontSizeRem: 1.1,
+    weight: 400,
+    category: 'print',
+    sample: 'Drafting Print',
   },
   draft: {
     label: 'Studio Pencil / Note',
     fontFamily: "'Homemade Apple', cursive",
     baseFontSizeRem: 1.05,
     weight: 400,
+    category: 'script',
+    sample: 'Casual Pencil',
+  },
+  brush: {
+    label: "Painter's Brush",
+    fontFamily: "'Caveat', cursive",
+    baseFontSizeRem: 1.25,
+    weight: 600,
+    category: 'script',
+    sample: 'Brush Script',
+  },
+  fountain: {
+    label: 'Fine Fountain Pen',
+    fontFamily: "'Alex Brush', cursive",
+    baseFontSizeRem: 1.35,
+    weight: 400,
+    category: 'calligraphy',
+    sample: 'Calligraphy Flow',
   },
   classic: {
     label: 'Classic Cursive',
     fontFamily: "'Marck Script', cursive",
     baseFontSizeRem: 1.15,
     weight: 400,
+    category: 'script',
+    sample: 'Classic Flourish',
   },
 }
 
 export const SIGNATURE_STYLE_OPTIONS = [
-  { value: 'fountain', label: '✒️ Fine Fountain Pen (Alex Brush)' },
-  { value: 'brush', label: "🖌️ Painter's Brush (Caveat)" },
-  { value: 'draft', label: '✏️ Studio Pencil / Note (Homemade Apple)' },
-  { value: 'classic', label: '📜 Classic Cursive (Marck Script)' },
+  { value: 'clean', label: 'Clean Notebook Print (Patrick Hand)', category: 'Print' },
+  { value: 'architect', label: 'Architect Drafting (Architects Daughter)', category: 'Print' },
+  { value: 'draft', label: 'Studio Pencil (Homemade Apple)', category: 'Script' },
+  { value: 'brush', label: "Painter's Brush (Caveat)", category: 'Script' },
+  { value: 'fountain', label: 'Fine Fountain Pen (Alex Brush)', category: 'Calligraphy' },
+  { value: 'classic', label: 'Classic Cursive (Marck Script)', category: 'Script' },
 ] as const
 
 export const SIGNATURE_POSITION_OPTIONS = [
