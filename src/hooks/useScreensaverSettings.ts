@@ -7,7 +7,7 @@ export interface ScreensaverSettings {
   minArtWidthVw: number     // minimum painting width % of viewport (default 55)
   enabled: boolean          // master toggle for screensaver
   displaySleepEnabled: boolean
-  artDimOffset: number      // how much dimmer than ambient lux in art mode (0–80, default 30%)
+  artDimOffset: number      // how much dimmer than ambient lux in art mode (0–90, default 30%)
   shuffle: boolean          // randomize artwork playback order (default true)
   plaqueMode: 'fade' | 'always' | 'hidden' // museum plaque visibility (default 'fade' 5s)
   matPreset: 'auto' | 'warm_linen' | 'travertine' | 'coastal_mist' | 'french_ivory' | 'charcoal' // mat color tone

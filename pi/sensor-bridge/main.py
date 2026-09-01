@@ -57,9 +57,24 @@ except ImportError:
     SPI_AVAILABLE = False
     logging.warning("spidev not installed — LED strip disabled")
 
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-import uvicorn
+try:
+    from fastapi import FastAPI, Request
+    from fastapi.middleware.cors import CORSMiddleware
+    import uvicorn
+    FASTAPI_AVAILABLE = True
+except ImportError:
+    FASTAPI_AVAILABLE = False
+    class FastAPI:
+        def __init__(self, *args, **kwargs): pass
+        def get(self, *args, **kwargs): return lambda f: f
+        def post(self, *args, **kwargs): return lambda f: f
+        def add_middleware(self, *args, **kwargs): pass
+    class Request:
+        pass
+    class CORSMiddleware:
+        pass
+    uvicorn = None
+    logging.warning("FastAPI/uvicorn not installed — running in headless/test mode")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("sensor-bridge")
@@ -251,12 +266,12 @@ DDC_I2C_BUS  = 14      # /dev/i2c-14 is the HDMI DDC bus on this Pi
 DDC_ADDR     = 0x37    # DDC/CI slave address (standard)
 DDC_SRC      = 0x51    # host source address (standard DDC/CI)
 
-LUX_MIN_NIGHT    = 0.2     # Pitch dark room threshold (0.2 lux) -> pins to panel floor
+LUX_MIN_NIGHT    = 0.05    # Pitch dark / dim LED threshold (0.05 lux) -> pins to panel floor (DDC 0)
 LUX_MAX_DAY      = 800.0   # Bright daylight threshold (800 lux) -> approaches max brightness
-PERCEIVED_EXP    = 0.80    # Perceptual curve shape in log-space
+PERCEIVED_EXP    = 0.65    # CIE 1931 / Stevens power law perceptual lightness curve
 GAMMA_CORRECTION = 2.2     # CIE 1931 / sRGB backlight power expansion (human eye response)
 
-BRIGHTNESS_MIN_DEFAULT = 1    # DDC level 1 (darkest stable setting)
+BRIGHTNESS_MIN_DEFAULT = 0    # DDC level 0 (darkest possible hardware setting)
 BRIGHTNESS_MAX_DEFAULT = 90
 
 _user_brightness_min = BRIGHTNESS_MIN_DEFAULT
@@ -471,18 +486,20 @@ def _display_wake(target_brightness: int):
 
 def lux_to_brightness(lux: float) -> int:
     """
-    Map ambient lux → DDC hardware brightness level (1–90) using:
-    1. Logarithmic lux normalization (human vision dynamic range: 0.2 to 800+ lux).
-    2. Configurable Dimmer Strength: dim_offset (0.05 to 0.80) dynamically scales
-       perceived brightness across daytime and evening without compromising the
-       soft, glare-free night floor (1–2 DDC).
-    3. CIE 1931 Gamma correction (perceived brightness → linear DDC PWM duty cycle).
+    Map ambient lux → DDC hardware brightness level (0–90) using:
+    1. Logarithmic lux normalization (human vision dynamic range: 0.05 to 800+ lux).
+    2. Uniform Perceptual Dimmer Strength: dim_offset (0.00 to 0.90) uniformly scales
+       perceived lightness (CIE 1931 / Stevens Power Law) consistently across daylight,
+       evening, and night without distorting the ratio.
+    3. Ultra-Dark Ambient Floor: in near pitch-black rooms (< 0.8 lux), Art Mode
+       decays all the way down to DDC 0 for zero-glare, dark-room museum viewing.
+    4. CIE 1931 Gamma correction (perceived lightness → physical DDC PWM duty cycle).
     """
     lo, hi = _effective_brightness_bounds()
     if lux is None or lux < 0:
         lux = 0.0
 
-    # 1. Clamp and normalize lux in log10 space
+    # 1. Clamp and normalize lux in log10 space (0.05 lx to 800 lx)
     lux_clamped = max(LUX_MIN_NIGHT, min(lux, LUX_MAX_DAY))
     log_min = math.log10(LUX_MIN_NIGHT)
     log_max = math.log10(LUX_MAX_DAY)
@@ -491,23 +508,29 @@ def lux_to_brightness(lux: float) -> int:
     t = (math.log10(lux_clamped) - log_min) / (log_max - log_min)
     t = max(0.0, min(1.0, t))
     
-    # 2. Base perceived curve: night floor ~1.5%, daytime ceiling ~95%
-    night_perceived = 0.015
-    day_perceived = 0.95
-    base_perceived = night_perceived + (day_perceived - night_perceived) * (t ** PERCEIVED_EXP)
+    # 2. Active Dashboard perceived lightness curve (0.06 night floor to 1.00 daytime ceiling)
+    # Yields DDC 1-2 in near dark (soft glare-free dashboard) and DDC 90 in full daylight
+    night_active_perceived = 0.06
+    day_active_perceived = 1.00
+    active_perceived = night_active_perceived + (day_active_perceived - night_active_perceived) * (t ** PERCEIVED_EXP)
     
-    # If Art Mode ("dim below ambient") is active, apply configurable dimming strength
+    # 3. Art Mode ("dim below ambient"): uniform perceptual scaling
     if _art_mode_active and _art_dim_offset > 0.0:
-        # Dimming strength scales perceived brightness down, keeping night floor safe
-        # dim_offset: 0.10 -> light dim, 0.25 -> balanced, 0.80 -> deep dark dim
-        scale = 1.0 - (_art_dim_offset * (0.30 + 0.65 * t))
-        perceived_target = max(0.01, base_perceived * scale)
+        # User-selected offset directly scales perceived lightness by (1.0 - dim_offset)
+        dim_fraction = max(0.0, min(0.95, _art_dim_offset))
+        art_perceived = active_perceived * (1.0 - dim_fraction)
+        
+        # When in very dark ambient light (t < 0.25, i.e. < 0.8 lux), decay to 0 to reach true panel floor (DDC 0)
+        if t < 0.25:
+            dark_factor = t / 0.25
+            art_perceived = art_perceived * (0.20 + 0.80 * dark_factor)
+        perceived_target = art_perceived
     else:
-        perceived_target = base_perceived
+        perceived_target = active_perceived
     
     perceived_target = max(0.0, min(1.0, perceived_target))
     
-    # 3. Gamma expansion: convert perceived lightness to physical DDC PWM duty cycle
+    # 4. Gamma expansion: convert perceived lightness to physical DDC PWM duty cycle
     # Perceived brightness = PWM^(1/gamma) ==> PWM = Perceived^gamma
     pwm_fraction = perceived_target ** GAMMA_CORRECTION
     
@@ -1154,15 +1177,15 @@ def art_mode_off():
 async def art_brightness_min(request: Request):
     """Set minimum brightness for art mode (how dark it can go).
     
-    Expects JSON: { "min": 1-20 }
-    min=1 is darkest, min=10 allows slightly brighter.
+    Expects JSON: { "min": 0-20 }
+    min=0 is darkest (absolute panel floor), min=10 allows slightly brighter.
     """
     try:
        try:
            data = await request.json()
        except Exception:
            data = {}
-       min_val = int(data.get("min", 1))
+       min_val = int(data.get("min", 0))
        min_val = max(_panel_brightness_min, min(20, min_val))  # clamp to panel floor
         
        global _brightness_min

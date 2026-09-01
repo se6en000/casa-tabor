@@ -276,7 +276,7 @@ export default function ArtModeSettingsPage() {
   const handleDimOffsetChange = (v: number) => {
     updateScreensaver({ artDimOffset: v })
     if (previewTimerRef.current) clearTimeout(previewTimerRef.current)
-    // Momentarily preview dimmed art level on physical screen for 3.5s, then return to bright active mode
+    // Momentarily preview dimmed art level on physical screen for 5s, then return to bright active mode
     fetch('http://127.0.0.1:8765/display/art-mode', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -285,7 +285,7 @@ export default function ArtModeSettingsPage() {
 
     previewTimerRef.current = setTimeout(() => {
       fetch('http://127.0.0.1:8765/display/art-mode-off', { method: 'POST' }).catch(() => {})
-    }, 3500)
+    }, 5000)
   }
 
   const curatedMode = prefs.feedMode === 'curated'
@@ -669,14 +669,14 @@ export default function ArtModeSettingsPage() {
                   label="Dim below ambient"
                   desc={
                     sensorData?.lux != null
-                      ? `Dims idle screensaver to feel like wall art (${Math.round(sensorData.lux)} lx ambient · previews for 3.5s)`
+                      ? `Dims idle screensaver to feel like wall art (${Math.round(sensorData.lux)} lx ambient · previews for 5s)`
                       : "Dims idle screensaver to feel like wall art, returning to bright dashboard when touched"
                   }
                 >
                   <StepPicker
                     value={settings.artDimOffset}
                     onChange={handleDimOffsetChange}
-                    min={5} max={80} step={5} unit="%"
+                    min={0} max={90} step={5} unit="%"
                   />
                 </Row>
                 <Row label="Minimum art width" desc="Portrait works won’t render smaller than this">
