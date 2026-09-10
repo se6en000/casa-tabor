@@ -179,6 +179,26 @@ test('natural activity scheduling maps to event creation', () => {
   }
 })
 
+test('date-less "schedule a [descriptive] appointment/meeting" phrasing still maps to event creation', () => {
+  // Bug: mutationLanguage's general verb list includes add/create/book but not
+  // schedule -- "schedule" instead relied on its own narrower regex requiring the
+  // generic noun (event/appointment/meeting/reminder) to appear *immediately* after
+  // "a/an", with no room for the descriptive word real phrasing almost always
+  // includes ("a PLUMBER appointment", "a DENTIST appointment"). Without a day
+  // word to route through the separate naturalScheduleCreate path, these fell
+  // through to intent undefined, which upstream (ai-assistant/index.ts) misroutes
+  // into a generic "which event would you like to update?" clarification.
+  for (const text of [
+    'Schedule a plumber appointment at 11.',
+    'Schedule a dentist appointment at 2pm.',
+    'Schedule a bank appointment at 8am.',
+    'Schedule a parent-teacher meeting at 4.',
+    'Schedule an important client meeting at 3pm.',
+  ]) {
+    assert.equal(parseCalendarLanguage(text)?.intent, 'event.create', text)
+  }
+})
+
 test('calendar moves expose explicit requested local clock time', () => {
   const frame = parseCalendarLanguage('Move it to 6:30 PM that same day.', {
     activeEntityType: 'event',

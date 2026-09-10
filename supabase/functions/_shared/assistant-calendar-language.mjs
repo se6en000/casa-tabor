@@ -273,8 +273,15 @@ export function parseCalendarLanguage(text, options = {}) {
   const attendeeUpdate = /\badd\s+[\w'-]+(?:\s+too|\s+to\s+(?:the\s+)?(?:calendar\s+)?(?:event|appointment|meeting|dinner|party|practice))\b/.test(input)
   const activeEditLanguage = activeEvent &&
     /\b(set|put|adjust|make|rename|call|include|exclude|extend|shorten)\b/.test(input)
+  // "Schedule" is deliberately kept out of the bare add/create/book/... verb list
+  // below: unlike those, "schedule" is also a common noun ("what's on my
+  // schedule?"), so it needs its own verb-usage check rather than a blanket
+  // keyword match. That check allows up to a few descriptive words between the
+  // article and the noun ("schedule a PLUMBER appointment", "schedule an
+  // IMPORTANT CLIENT meeting") -- real phrasing almost always names what kind of
+  // appointment/meeting it is, rather than using the bare generic noun alone.
   const mutationLanguage = /\b(add|create|book|move|reschedule|shift|push|change|update|edit|delete|remove|cancel)\b/.test(input) ||
-    /\bschedule\s+(?:an?\s+)?(?:event|appointment|meeting|reminder)\b/.test(input) ||
+    /\bschedule\s+(?:an?\s+)?(?:\w+\s+){0,6}(?:event|appointment|meeting|reminder)\b/.test(input) ||
     naturalScheduleCreate ||
     activeEditLanguage
   const namedTemporalMove = Boolean(
