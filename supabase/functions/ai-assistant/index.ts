@@ -57,7 +57,6 @@ import {
   resolveActiveCalendarMutation,
   resolveCalendarDeleteDisambiguation,
   resolveClarifiedCalendarCreate,
-  resolveDefaultCalendarCreate,
   resolvePendingCalendarCorrection,
   singularBulkDeleteClarification,
 } from '../_shared/assistant-calendar-mutation-edge.mjs'
@@ -2138,41 +2137,13 @@ Deno.serve(async (req) => {
   const authorizedFamilyNames = familyMembers.flatMap((member: { name?: unknown }) =>
     typeof member?.name === 'string' ? [member.name] : []
   )
-  const defaultCalendarCreate = calendarFrame?.intent === 'event.create'
-    ? resolveDefaultCalendarCreate(latestUserText, { now, utcOffset: context?.utcOffset })
-    : null
-  if (talkPlanCommandLane && defaultCalendarCreate) {
-    appendServerTrace('date_clarification_required', defaultCalendarCreate.args.title, {
-      defaults: defaultCalendarCreate.defaults,
-      start: defaultCalendarCreate.args.start,
-      end: defaultCalendarCreate.args.end,
-    })
-    if (experienceMode === 'talk_plan' && activeMemberId && privateConversationId && !dryRun) {
-      await saveUndatedCalendarDraft(sb, {
-        memberId: activeMemberId,
-        conversationId: privateConversationId,
-        sourceMessageId: messages?.at(-1)?.id ?? turnId ?? `draft-${Date.now().toString(36)}`,
-        title: defaultCalendarCreate.args.title,
-      })
-      appendServerTrace('draft_saved', defaultCalendarCreate.args.title, { due_at: null })
-    }
-    return {
-      status: 200,
-      payload: {
-        type: 'text',
-        text: experienceMode === 'talk_plan'
-          ? `I saved "${defaultCalendarCreate.args.title}" as an undated planning task. What date should it go on the calendar?`
-          : `What date should I use for "${defaultCalendarCreate.args.title}"? Nothing was added to the calendar.`,
-        semantic_intent: 'calendar.default_create',
-        correlation_id: cid,
-        telemetry: {
-          ...llmTelemetry,
-          request_total_ms: Date.now() - requestStartMs,
-          context_load_ms: contextLoadMs,
-        },
-      },
-    }
-  }
+  // A deterministic "default calendar create" fast-path used to short-circuit here
+  // for date-less "book an appointment at TIME" requests, bypassing the LLM planner
+  // entirely. It was retired (see git history) after repeatedly corrupting the
+  // parsed time/title via regex edge cases. The agent-write planner below is
+  // already at 100% rollout and has its own equivalent safety net for the same
+  // no-date-evidence case (classifyCalendarTemporalEvidence, later in this file),
+  // so date-less creates now just fall through to it like everything else.
   const shouldRunAgentWrite = talkPlanCommandLane && shouldUseAgentWritePlanner({
     agentRuntimeEnabled,
     agentWriteEnabled: agentWriteConfig?.enabled === true,

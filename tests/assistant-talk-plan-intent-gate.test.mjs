@@ -66,7 +66,6 @@ test('Talk and Plan preflight runs before domain responders and conversational t
     /if \(talkPlanCommandLane && householdDirectoryQuestion/,
     /if \(talkPlanCommandLane && \(memoryInsightsReadIntent \|\| bugTrackerReadIntent\)\)/,
     /if \(talkPlanCommandLane && cookingFrame\?\.intent === 'recipe\.find'\)/,
-    /if \(talkPlanCommandLane && defaultCalendarCreate\)/,
     /if \(talkPlanCommandLane && requestAmbiguity\)/,
     /if \(talkPlanCommandLane && intentRouting\.profile === 'grocery' && groceryFrame\)/,
   ]) {

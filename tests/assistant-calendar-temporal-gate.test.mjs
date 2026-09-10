@@ -13,8 +13,7 @@ test('assistant validates temporal evidence before auto-executing create_event',
   assert.match(createBlock, /temporal_provenance/)
   assert.match(createBlock, /requiresExactDateConfirmation/)
   assert.ok(createBlock.indexOf('classifyCalendarTemporalEvidence') < createBlock.indexOf('isLowRiskCreate'))
-  const defaultCreateBlock = assistantSource.split('if (talkPlanCommandLane && defaultCalendarCreate)')[1]?.split('const shouldRunAgentWrite')[0] ?? ''
-  assert.match(defaultCreateBlock, /date_clarification_required/)
+  assert.doesNotMatch(assistantSource, /defaultCalendarCreate/)
   const agentAdoptionBlock = assistantSource.split("agentWriteData.type === 'tool_action'")[1]?.split("appendServerTrace('server_agent_write_adopted'")[0] ?? ''
   assert.match(agentAdoptionBlock, /classifyCalendarTemporalEvidence|temporal_provenance/)
 })
