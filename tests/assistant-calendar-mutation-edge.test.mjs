@@ -82,6 +82,36 @@ test('complete appointment requests default to today, AM, and one hour', () => {
   }
 })
 
+test('appointment requests where the title comes before the time do not swallow the AM/PM word as the title', () => {
+  // Bug: resolveDefaultCalendarCreate's regex assumes the title always follows the
+  // time ("...appointment at 8am for the dentist"). When the title instead precedes
+  // the time and nothing follows it ("Book a dentist appointment at 8am"), the
+  // optional (am|pm) capture group backtracks and the literal word "am"/"pm" gets
+  // captured into the title-catchall group instead of the real subject.
+  const now = new Date('2026-07-19T12:53:07.000Z')
+  const cases = [
+    ['Book a bank appointment at 8am.', 'bank appointment'],
+    ['Book a bank appointment at 8 am.', 'bank appointment'],
+    ['Add a haircut appointment at 8am.', 'haircut appointment'],
+    ['Schedule a dentist appointment at 2pm.', 'dentist appointment'],
+    ['Create a vet appointment at 9 pm.', 'vet appointment'],
+  ]
+  // Deeper variant of the same defect: with no am/pm marker AND nothing trailing,
+  // the old regex's mandatory trailing group backtracked into the hour digits
+  // themselves ("at 11." -> hour parsed as 1, not 11) rather than just the title.
+  const noMeridiem = resolveDefaultCalendarCreate('Schedule a plumber appointment at 11.', { now, utcOffset: '-04:00' })
+  assert.ok(noMeridiem)
+  assert.equal(noMeridiem.args.title.toLowerCase(), 'plumber appointment')
+  assert.equal(noMeridiem.args.start, '2026-07-19T15:00:00.000Z')
+  for (const [phrase, expectedTitle] of cases) {
+    const created = resolveDefaultCalendarCreate(phrase, { now, utcOffset: '-04:00' })
+    assert.ok(created, phrase)
+    assert.notEqual(created.args.title.toLowerCase(), 'am', phrase)
+    assert.notEqual(created.args.title.toLowerCase(), 'pm', phrase)
+    assert.equal(created.args.title.toLowerCase(), expectedTitle, phrase)
+  }
+})
+
 test('active event shifts preserve duration and support relational scheduling', () => {
   const shifted = resolveActiveCalendarMutation('Move that trip back two days.', event, [event], { utcOffset: '-04:00' })
   assert.equal(shifted.args.start, '2026-07-14T14:00:00.000Z')

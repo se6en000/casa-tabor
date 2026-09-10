@@ -51,17 +51,39 @@ export function resolveDefaultCalendarCreate(text, options = {}) {
     /\b(?:today|tomorrow|tonight|monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d{1,2}\/\d{1,2}|january|february|march|april|may|june|july|august|september|october|november|december)\b/i.test(input)
   ) return null
 
-  const match = input.match(/\b(?:for|at)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:to\s+)?(?:go\s+to\s+|visit\s+|attend\s+)?(.+)$/i)
+  // The trailing group is intentionally *-quantified (zero-or-more), not
+  // +-quantified: a mandatory one-or-more group forces the regex engine to
+  // backtrack into the hour/meridiem captures themselves whenever nothing
+  // meaningful follows the time (e.g. "...appointment at 11." with no trailing
+  // title), corrupting the parsed time itself rather than just the title.
+  const match = input.match(/\b(?:for|at)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:to\s+)?(?:go\s+to\s+|visit\s+|attend\s+)?(.*)$/i)
   if (!match) return null
   const hour12 = Number(match[1])
   const minute = Number(match[2] ?? 0)
   if (hour12 < 1 || hour12 > 12 || minute > 59) return null
   const meridiem = match[3]?.toLowerCase() ?? 'am'
   const hour = (hour12 % 12) + (meridiem === 'pm' ? 12 : 0)
-  const title = match[4]
+  // The title usually follows the time ("...appointment at 8am for the dentist"),
+  // captured above. But when the title instead precedes the time ("Book a dentist
+  // appointment at 8am") there's nothing left after the time to capture, and the
+  // optional (am|pm) group backtracks so the trailing catch-all grabs the literal
+  // "am"/"pm" word instead of a real title. Detect that and fall back to pulling
+  // the title out of the text before the matched time expression instead.
+  const suffixTitle = match[4]
     .replace(/^(?:an?\s+)?(?:event|appointment|meeting)\s+(?:for|at)\s+/i, '')
     .replace(/\bfor\s+(?:an?\s+hour|\d+\s+(?:hours?|minutes?))$/i, '')
     .trim()
+  const suffixTitleUsable = suffixTitle.length > 0 &&
+    /\w/.test(suffixTitle) &&
+    !/^(?:an?\s+)?(?:event|appointment|meeting)$/i.test(suffixTitle) &&
+    !/^(?:am|pm)$/i.test(suffixTitle)
+  const title = suffixTitleUsable
+    ? suffixTitle
+    : input
+        .slice(0, match.index)
+        .replace(/^\s*(?:add|create|book|schedule)\b\s*/i, '')
+        .replace(/^\s*(?:an?|the)\s+/i, '')
+        .trim()
   if (!title || /^(?:an?\s+)?(?:event|appointment|meeting)$/i.test(title)) return null
 
   const now = options.now instanceof Date ? options.now : new Date()
