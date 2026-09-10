@@ -32,9 +32,12 @@ Supabase:
 ```bash
 npm run supabase:check                 # verify-supabase.mjs
 npm run db:health                       # db-health-check.mjs
+npm run functions:typecheck             # deno check on every supabase/functions/*/index.ts — run before deploying any edge function
 npx supabase functions deploy FUNCTION_NAME --project-ref sjiejymuuuqzqukyeagk
 ```
 Never deploy edge functions via the base64 management API approach — use the CLI above.
+
+**`supabase/functions/**/*.ts` gets zero type-checking from `tsc -b`** (that project only covers `src/` — see `tsconfig.json`), so a plain undefined-variable reference can sit in production code, completely invisible, until the exact branch finally runs. That's a real incident that happened here, not a hypothetical. `npm run functions:typecheck` (`scripts/deno-typecheck.mjs`, needs `deno` on PATH — installed via `curl -fsSL https://deno.land/install.sh | sh`) closes that gap: it fails only on "Cannot find name" errors (TS2304/TS2552), since those are always real bugs, while reporting-but-not-blocking-on the pre-existing backlog of other type-mismatch errors (mostly Supabase client generic types) that isn't practical to clear in one pass. Run it before deploying any edge function you touched, and before deploying `ai-assistant`/`ai-agent-write` specifically since they're the highest-traffic, highest-blast-radius functions.
 
 ## Deployment (see `.github/instructions/deployment.instructions.md` for full detail)
 

@@ -37,7 +37,8 @@
     "style:audit": "node scripts/style-audit.mjs",
     "style:report": "node scripts/style-audit.mjs --json",
     "style:check": "node scripts/style-audit.mjs --check",
-    "certify:experience": "node scripts/experience-certification.mjs"
+    "certify:experience": "node scripts/experience-certification.mjs",
+    "functions:typecheck": "node scripts/deno-typecheck.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.2",
