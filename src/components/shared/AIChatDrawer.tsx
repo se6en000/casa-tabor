@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import type React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIcon, Camera, Mic, Keyboard, RotateCcw, Plus, Square, Calendar, CalendarDays, Car, ShoppingCart, ChefHat, Pencil, AlertTriangle, Clock3, Utensils, Bell, UserPlus, MapPin, Mail, Activity, ChevronRight, Navigation, Rotate3d, BookOpen, Lock, Building2, Users, FileText } from 'lucide-react'
+import { X, Send, Sparkles, Check, XCircle, Loader2, Paperclip, Image as ImageIcon, Camera, Mic, Keyboard, RotateCcw, Plus, Square, Calendar, CalendarDays, Car, ShoppingCart, ChefHat, Pencil, AlertTriangle, Clock3, Utensils, Bell, UserPlus, MapPin, Mail, Activity, ChevronRight, Navigation, Rotate3d, BookOpen, Lock, Building2, Users, FileText, Bug } from 'lucide-react'
 import { format } from 'date-fns'
 import { useNavigate } from 'react-router-dom'
 import { cn } from '../../utils/cn'
@@ -34,6 +34,7 @@ import { buildCreatePreviewCopy, buildDeleteManyPreviewCopy, buildDeletePreviewC
 import { matchDinnerPlanIntent, getDinnerPlanSuggestions } from '../../utils/dinnerPlanManager'
 import { saveTonightDinnerPlan } from '../../utils/dinnerPlanSync'
 import { invalidateAllCalendarQueries } from '../../lib/eventMutations'
+import { buildCopilotFlagRecord } from '../../lib/copilotFlagPayload'
 
 const LOW_CONFIDENCE_CONFIRM_PHRASES = /\b(yes|yeah|yep|ok|okay|use it|that one|correct|right|go ahead)\b/i
 const LOW_CONFIDENCE_REJECT_PHRASES = /\b(no|nope|try again|wrong|not that|cancel)\b/i
@@ -129,6 +130,10 @@ export default function AIChatDrawer({
   const [historyUnlockError, setHistoryUnlockError] = useState<string | null>(null)
   const [historyConversations, setHistoryConversations] = useState<PrivateConversation[]>([])
   const [historyListLoading, setHistoryListLoading] = useState(false)
+  const [flagModalOpen, setFlagModalOpen] = useState(false)
+  const [flagNote, setFlagNote] = useState('')
+  const [flagSubmitting, setFlagSubmitting] = useState(false)
+  const [flagError, setFlagError] = useState<string | null>(null)
   const [conversationMode] = useState<boolean>(() => {
     try {
       const stored = localStorage.getItem(CONVERSATION_MODE_KEY)
@@ -1086,6 +1091,30 @@ export default function AIChatDrawer({
   }, [markUserInteraction, speech.stop])
 
   const hasSession = !sessionLoading && !!session && session.messages.length > 0
+
+  const submitCopilotFlag = useCallback(async () => {
+    setFlagSubmitting(true)
+    setFlagError(null)
+    try {
+      const record = buildCopilotFlagRecord({
+        messages,
+        note: flagNote,
+        page,
+        sessionId: session?.id ?? null,
+        deviceId: getAssistantDeviceId(),
+        memberName: profile?.memberName ?? null,
+      })
+      const { error } = await supabase.from('ai_bug_reports').insert(record)
+      if (error) throw error
+      setFlagModalOpen(false)
+      setFlagNote('')
+    } catch (err) {
+      setFlagError(err instanceof Error ? err.message : 'Could not save the flag. Try again.')
+    } finally {
+      setFlagSubmitting(false)
+    }
+  }, [messages, flagNote, page, session, profile])
+
   const voiceLevel = Math.max(0, Math.min(1, speech.volume / 100))
 
   const loadHistoryConversations = useCallback(() => {
@@ -1180,6 +1209,20 @@ export default function AIChatDrawer({
               aria-label="Private conversation history"
               className="min-h-[32px] min-w-[32px] p-1.5 rounded-full hover:bg-amber-50 text-amber-900"
               icon={<Lock size={15} className="text-amber-800" />}
+            />
+          )}
+
+          {(hasSession || messages.length > 0) && (
+            <IconButton
+              variant="ghost"
+              onClick={() => {
+                setFlagError(null)
+                setFlagModalOpen(true)
+              }}
+              title="Flag this chat as a bug"
+              aria-label="Flag this chat as a bug"
+              className="min-h-[32px] min-w-[32px] p-1.5 rounded-full hover:bg-amber-50 group"
+              icon={<Bug size={15} className="text-slate-800 group-hover:text-amber-700" />}
             />
           )}
 
@@ -2041,6 +2084,54 @@ export default function AIChatDrawer({
                     Sign out of Casa
                   </Button>
                 </div>
+            </Modal>
+
+            <Modal
+              open={flagModalOpen}
+              onClose={() => {
+                if (flagSubmitting) return
+                setFlagModalOpen(false)
+                setFlagError(null)
+              }}
+              title="Flag this chat as a bug"
+              size="sm"
+              className="z-toast"
+            >
+              <div className="flex flex-col gap-3">
+                <Text className="text-body-sm text-casa-muted">
+                  Saves this whole conversation so it can be reviewed later. Adding a quick note about what you expected helps a lot.
+                </Text>
+                <textarea
+                  autoFocus
+                  value={flagNote}
+                  onChange={e => setFlagNote(e.target.value)}
+                  placeholder="What went wrong? (optional)"
+                  rows={3}
+                  className="w-full rounded-lg border border-casa-border bg-casa-surface p-2.5 text-body-sm text-casa-navy placeholder:text-casa-muted focus:outline-none focus:ring-2 focus:ring-casa-gold/50"
+                />
+                {flagError && (
+                  <Text className="text-body-sm text-red-600">{flagError}</Text>
+                )}
+                <div className="flex items-center gap-2 justify-end">
+                  <Button
+                    variant="ghost"
+                    disabled={flagSubmitting}
+                    onClick={() => {
+                      setFlagModalOpen(false)
+                      setFlagError(null)
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="primary"
+                    disabled={flagSubmitting}
+                    onClick={submitCopilotFlag}
+                  >
+                    {flagSubmitting ? 'Flagging…' : 'Flag it'}
+                  </Button>
+                </div>
+              </div>
             </Modal>
     </>
   )
