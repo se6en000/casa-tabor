@@ -2378,13 +2378,21 @@ Deno.serve(async (req) => {
       }
     }
   }
+  // Only assume "this must be about an existing event" when the classifier
+  // actually said so (event.move/edit/delete/etc with no specific target).
+  // When it drew a complete blank (calendarFrame is null or has no intent at
+  // all -- a message the regex classifier just doesn't recognize), guessing
+  // "update" and listing random unrelated events is a worse failure than
+  // falling through to the LLM planner below, which already handles arbitrary
+  // phrasing far better than a fixed keyword/noun list ever will.
   if (
     talkPlanCommandLane &&
     intentRouting.profile === 'event' &&
     latestUserText &&
     !activeConversationEvent &&
     (allEvents ?? []).length > 0 &&
-    !['event.create'].includes(calendarFrame?.intent ?? '')
+    Boolean(calendarFrame?.intent) &&
+    calendarFrame?.intent !== 'event.create'
   ) {
     const upcomingCandidates = (allEvents ?? [])
       .filter((e: { start_time: string }) => new Date(e.start_time).getTime() >= now.getTime() - 4 * 3600000)

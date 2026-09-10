@@ -73,6 +73,21 @@ test('Talk and Plan preflight runs before domain responders and conversational t
   }
 })
 
+test('the "which event would you like to update" fallback requires a real classified intent, not just "not event.create"', () => {
+  // Bug: this fallback used to fire whenever calendarFrame?.intent simply wasn't
+  // 'event.create' -- which included calendarFrame being null/undefined entirely
+  // (the regex classifier drawing a complete blank on unrecognized phrasing, e.g.
+  // "Schedule a call with the bank at 8am."). That silently guessed "this must be
+  // an ambiguous update" and listed unrelated real events, instead of falling
+  // through to the LLM planner like an unclassified request should. Requiring a
+  // truthy intent keeps this fallback for genuine ambiguous mutations
+  // (event.move/edit/delete with no specific target) while letting anything the
+  // classifier doesn't recognize at all reach the planner instead.
+  const fallbackBlock = server.split('Which event would you like to update?')[0].slice(-800)
+  assert.match(fallbackBlock, /Boolean\(calendarFrame\?\.intent\)/)
+  assert.doesNotMatch(fallbackBlock, /!\['event\.create'\]\.includes\(calendarFrame\?\.intent \?\? ''\)/)
+})
+
 test('Talk and Plan keeps grounded read tools while excluding mutation tools', () => {
   assert.match(
     server,
