@@ -8,9 +8,9 @@ import {
 } from '../scripts/ai-agent-model-benchmark-corpus.mjs'
 
 test('model benchmark corpus is frozen, substantial, and fully auditable', () => {
-  assert.equal(MODEL_BENCHMARK_CORPUS_VERSION, 'casa-natural-v1')
-  assert.equal(MODEL_BENCHMARK_SCENARIOS.length, 20)
-  assert.equal(new Set(MODEL_BENCHMARK_SCENARIOS.map((item) => item.key)).size, 20)
+  assert.equal(MODEL_BENCHMARK_CORPUS_VERSION, 'casa-natural-v2-calendar-create')
+  assert.equal(MODEL_BENCHMARK_SCENARIOS.length, 120)
+  assert.equal(new Set(MODEL_BENCHMARK_SCENARIOS.map((item) => item.key)).size, 120)
   for (const item of MODEL_BENCHMARK_SCENARIOS) {
     assert.ok(item.messages.length > 0, item.key)
     assert.ok(item.expectation.length > 20, item.key)
@@ -45,7 +45,7 @@ test('exact mutation scenarios ground expected IDs and versions', () => {
 
 test('core benchmark excludes cooking while retaining calendar and grocery safety', () => {
   const core = MODEL_BENCHMARK_SCENARIOS.filter((item) => item.category !== 'cooking')
-  assert.equal(core.length, 18)
+  assert.equal(core.length, 118)
   assert.ok(core.some((item) => item.key === 'ambiguous-calendar-delete'))
   assert.ok(core.some((item) => item.key === 'duplicate-grocery-target'))
   assert.ok(core.every((item) => item.page !== 'cooking'))

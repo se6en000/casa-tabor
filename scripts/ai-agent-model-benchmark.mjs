@@ -20,7 +20,11 @@ const env = Object.fromEntries(
 )
 
 const SUPABASE_URL = env.VITE_SUPABASE_URL
-const SERVICE_KEY = env.SUPABASE_SERVICE_ROLE_KEY
+// The service role key is preferred (matches CI), but ai-agent-write never touches
+// real data for the synthetic 'benchmark-household' this script uses, so the anon
+// key works too (verified: both return identical planner responses) — falling back
+// to it keeps this runnable on a machine that only has the frontend's .env.local.
+const SERVICE_KEY = env.SUPABASE_SERVICE_ROLE_KEY || env.VITE_SUPABASE_ANON_KEY
 const DEFAULT_MODELS = ['gemini-2.5-flash']
 const MODEL_PRICES = {
   'gemini-2.5-flash-lite': { input: 0.10, output: 0.40 },

@@ -1,3 +1,5 @@
+import { CALENDAR_CREATE_BENCHMARK_SCENARIOS } from './calendar-create-benchmark-corpus.mjs'
+
 const dentistMorning = {
   type: 'event',
   id: '11111111-1111-4111-8111-111111111111',
@@ -64,7 +66,7 @@ const pendingCreate = {
   },
 }
 
-export const MODEL_BENCHMARK_CORPUS_VERSION = 'casa-natural-v1'
+export const MODEL_BENCHMARK_CORPUS_VERSION = 'casa-natural-v2-calendar-create'
 
 export const MODEL_BENCHMARK_SCENARIOS = Object.freeze([
   scenario({
@@ -340,9 +342,10 @@ export const MODEL_BENCHMARK_SCENARIOS = Object.freeze([
     expectedTools: ['calendar.search'],
     expectation: 'Do not silently execute one part of a three-outcome cross-domain request.',
   }),
+  ...CALENDAR_CREATE_BENCHMARK_SCENARIOS,
 ])
 
-function scenario(input) {
+export function scenario(input) {
   return Object.freeze({
     expectedKinds: [],
     expectedTools: [],
@@ -351,6 +354,6 @@ function scenario(input) {
   })
 }
 
-function user(content) {
+export function user(content) {
   return [{ role: 'user', content }]
 }
