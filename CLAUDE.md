@@ -40,13 +40,15 @@ Never deploy edge functions via the base64 management API approach — use the C
 
 - Deploy targets: Vercel project `casa-projects/casa-tabor`, Supabase project ref `sjiejymuuuqzqukyeagk`.
 - **No agent may deploy code that hasn't passed** `tokens:check`, `style:check`, `certify:experience`, and `npm test`. `npm run deploy` (`scripts/deploy.sh`) enforces this and halts on failure.
-- Always deploy to both git remotes and Vercel directly:
+- **Canonical one-command path — use this, don't hand-run the steps below:**
   ```bash
-  git push origin main && git push deploy main
-  npx vercel --prod
+  bash scripts/ship.sh ["commit message"]     # tests -> gates+build (once) -> commit -> push both remotes ->
+                                               # Vercel prod (prebuilt, no redundant remote rebuild) -> verify live SHA -> Pi kiosk refresh
+  SKIP_KIOSK=1 bash scripts/ship.sh           # web-only deploy, skip the Pi
   ```
-  or the one-command flow that also refreshes the kiosk: `bash pi/deploy-prod-and-refresh-pi.sh`.
-- After any frontend change, refresh the Pi kiosk yourself (don't just hand back to the user) — see `pi/refresh-casa-kiosk.sh` and the SSH sequence in the deployment instructions file. Kiosk host: `jake@192.168.86.118`.
+  This app is meant to be portable — built and shipped from any machine (Mac, this Pi itself, etc.). `scripts/ship.sh` adapts automatically: if it detects it's running ON the kiosk Pi itself (its own IP matches `PI_HOST`), it self-bootstraps SSH trust (adds its own key to its own `authorized_keys`, its own host key to `known_hosts`) so the refresh step can SSH to itself over the LAN — this only ever self-trusts the exact host it's running on, never a different unknown host. From any other machine it behaves like a normal remote SSH deploy.
+- The older manual path still works if you need to skip steps: push to both git remotes, `npx vercel --prod`, then `bash pi/refresh-casa-kiosk.sh` (see `.github/instructions/deployment.instructions.md`) — but prefer `scripts/ship.sh`, it's faster (no duplicate build) and verifies the production version hash actually matches what you pushed before touching the kiosk.
+- After any frontend change, refresh the Pi kiosk yourself (don't just hand back to the user) — `scripts/ship.sh` does this by default; pass `SKIP_KIOSK=1` only for changes that don't need the wall display updated. Kiosk host: `jake@192.168.86.118`.
 
 ## Architecture
 
