@@ -14,6 +14,7 @@ import { motion } from 'framer-motion'
 import { cn } from '../../../utils/cn'
 import type { EventWithDetails } from '../../../hooks/useCalendarEvents'
 import { useHeroTheme } from '../../../hooks/useHeroTheme'
+import { getEventDisplayDescription } from '../../../utils/eventDescription'
 import { JourneyProgressBar } from '../../ui'
 import { Button } from '../../ui'
 
@@ -240,14 +241,14 @@ export default function ImminentTransitWidget({
           {event.title}
         </h2>
 
-        {event.description && (
+        {getEventDisplayDescription(event.description) && (
           <p
             className={cn(
               'text-body-sm mt-2.5 line-clamp-2 leading-relaxed',
               isHeroNavy ? 'text-white/70' : 'text-casa-text-secondary',
             )}
           >
-            {event.description}
+            {getEventDisplayDescription(event.description)}
           </p>
         )}
 
