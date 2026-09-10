@@ -48,8 +48,6 @@ export default function KitchenSousChefSidecar({
   ingredients = [],
   recipeScale = '1',
   onAddTimer,
-  onStepChange: _onStepChange,
-  onChangeScale: _onChangeScale,
   onClose,
   className,
 }: KitchenSousChefSidecarProps) {
@@ -158,7 +156,7 @@ export default function KitchenSousChefSidecar({
     // 1. Check instant local culinary knowledge engine
     const instantAnswer = resolveCulinaryQuery(query, cookingContext)
 
-    let finalResponse = ''
+    let finalResponse: string
 
     if (instantAnswer) {
       finalResponse = instantAnswer

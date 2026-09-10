@@ -2989,10 +2989,15 @@ Deno.serve(async (req) => {
   // forwards text-part deltas through emitToken, and re-assembles chunks into the
   // exact same shape as generateContent ({candidates:[{content:{parts},finishReason}], usageMetadata})
   // so ALL downstream logic (functionCall detection, resolveModelParts, telemetry) is unchanged.
+  type GeminiResponsePart = { text?: string; functionCall?: { name: string; args: Record<string, unknown> } }
+  type GeminiGenerateContentResponse = {
+    candidates?: Array<{ content?: { parts?: GeminiResponsePart[] }; finishReason?: string }>
+    usageMetadata?: GeminiUsageMetadata
+  }
   const callModel = async (
     reqBody: unknown,
     opts: { stream: boolean; timeoutMs: number },
-  ): Promise<{ ok: boolean; status: number; data: any; errText: string }> => {
+  ): Promise<{ ok: boolean; status: number; data: GeminiGenerateContentResponse | null; errText: string }> => {
     const base = `https://generativelanguage.googleapis.com/v1beta/models/${model}`
     const timeoutMs = Math.max(1, Math.min(opts.timeoutMs, remainingRequestBudgetMs()))
     if (timeoutMs < 500) {
@@ -3018,11 +3023,11 @@ Deno.serve(async (req) => {
     const decoder = new TextDecoder()
     let buf = ''
     let textAccum = ''
-    const funcParts: any[] = []
+    const funcParts: GeminiResponsePart[] = []
     let finishReason: string | undefined
-    let usageMetadata: any
+    let usageMetadata: GeminiUsageMetadata | undefined
     const handleData = (jsonStr: string) => {
-      let obj: any
+      let obj: GeminiGenerateContentResponse | undefined
       try { obj = JSON.parse(jsonStr) } catch { return }
       const cand = obj?.candidates?.[0]
       if (cand?.finishReason) finishReason = cand.finishReason
@@ -3047,7 +3052,7 @@ Deno.serve(async (req) => {
     }
     const tail = buf.trim()
     if (tail.startsWith('data:')) handleData(tail.slice(5).trim())
-    const parts: any[] = []
+    const parts: GeminiResponsePart[] = []
     if (textAccum) parts.push({ text: textAccum })
     parts.push(...funcParts)
     const data = { candidates: [{ content: { parts }, finishReason }], usageMetadata }
@@ -4643,7 +4648,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
 
       // Server-side math interceptor: catch tip/percentage/arithmetic queries
       const mathIntercept =
-        /^[\s\d\.\+\-\*\/x×÷()]+$/.test(query) ||
+        /^[\s\d.+\-*/x×÷()]+$/.test(query) ||
         /\b\d+\s*(percent|%)\s*(tip|off|of|on)\s+\$?\d+/i.test(query) ||
         /\btip\b.*\$?\d+/i.test(query) ||
         /\b(what\s+is|calc(ulate)?|compute|solve)\b.{0,30}\b\d+\b.{0,20}\b\d+\b/i.test(query) ||
@@ -5166,7 +5171,6 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       const runWriteToolRescue = async (
         reason: string,
         rescueContents: GeminiContent[],
-        secondaryDepth: number,
       ): Promise<GeminiPart[] | null> => {
         if (!userLikelyRequestedWrite || writeTools.length === 0 || remainingRequestBudgetMs() < 1000) {
           return null
@@ -5219,7 +5223,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
 
         if (!funcCallPart && textParts.length > 0) {
           if (userLikelyRequestedWrite && !writeRescueUsed) {
-            const rescueParts = await runWriteToolRescue('text_without_tool', contents, secondaryDepth)
+            const rescueParts = await runWriteToolRescue('text_without_tool', contents)
             if (rescueParts) {
               const rescueResolved = await resolveModelParts(rescueParts, secondaryDepth + 1, true)
               if (rescueResolved) return rescueResolved
@@ -5303,7 +5307,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
                 { role: 'model', parts: [funcCallPart as GeminiPart] },
                 { role: 'user', parts: [{ functionResponse: { name, response: toolResult } } as GeminiPart] },
               ]
-              const rescueParts = await runWriteToolRescue('search_events_no_secondary', rescueContents, secondaryDepth)
+              const rescueParts = await runWriteToolRescue('search_events_no_secondary', rescueContents)
               if (rescueParts) {
                 const rescueResolved = await resolveModelParts(rescueParts, secondaryDepth + 1, true)
                 if (rescueResolved) return rescueResolved

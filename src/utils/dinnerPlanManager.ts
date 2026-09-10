@@ -87,12 +87,11 @@ export function calculateOrderOrPrepWindow(
   const match = targetTimeStr.match(/(\d+)(?::(\d+))?\s*(AM|PM)/i)
   let targetHours = 18
   let targetMinutes = 30
-  let isPm = true
 
   if (match) {
     targetHours = parseInt(match[1], 10)
     targetMinutes = match[2] ? parseInt(match[2], 10) : 0
-    isPm = match[3].toUpperCase() === 'PM'
+    const isPm = match[3].toUpperCase() === 'PM'
     if (isPm && targetHours < 12) targetHours += 12
     if (!isPm && targetHours === 12) targetHours = 0
   }

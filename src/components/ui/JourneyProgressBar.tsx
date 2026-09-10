@@ -96,8 +96,8 @@ export function JourneyProgressBar({
     const drive = Boolean(driveTimeMins && driveTimeMins > 0)
 
     // Determine current journey phase
-    let currentPhase: 'prep' | 'leave-now' | 'en-route' | 'in-session' | 'concluded' = 'prep'
-    let progress = 0
+    let currentPhase: 'prep' | 'leave-now' | 'en-route' | 'in-session' | 'concluded'
+    let progress: number
 
     if (mEnd <= 0) {
       currentPhase = 'concluded'

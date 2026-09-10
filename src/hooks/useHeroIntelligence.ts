@@ -54,7 +54,7 @@ function scoreEventForHero(e: EventWithDetails, currentTime: Date): number {
     const isUnderway = start.getTime() <= currentTime.getTime() && end.getTime() > currentTime.getTime()
     const minsToStart = differenceInMinutes(start, currentTime)
 
-    let driveTime = e.enrichment?.drive_time_mins || 0
+    const driveTime = e.enrichment?.drive_time_mins || 0
     let departureTime: Date | null = null
     if (e.enrichment?.departure_time) {
       departureTime = new Date(e.enrichment.departure_time)
@@ -85,7 +85,7 @@ function scoreEventForHero(e: EventWithDetails, currentTime: Date): number {
     }
 
     score -= (start.getTime() - currentTime.getTime()) / (1000 * 60 * 60)
-  } catch {}
+  } catch { /* ignore — best-effort, non-critical */ }
 
   return score
 }
@@ -93,6 +93,7 @@ function scoreEventForHero(e: EventWithDetails, currentTime: Date): number {
 export function useHeroIntelligence(
   now: Date = new Date(),
   todayEvents: EventWithDetails[] = [],
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- kept for positional signature compatibility with callers
   _familyMembers: FamilyMember[] = [],
   manualView: 'today' | 'tomorrow' = 'today',
 ): HeroIntelligenceState {
@@ -137,7 +138,7 @@ export function useHeroIntelligence(
       }
     })
 
-    let pool: EventWithDetails[] = []
+    let pool: EventWithDetails[]
     if (underwayEvents.length > 0) {
       pool = underwayEvents
     } else {
@@ -198,7 +199,7 @@ export function useHeroIntelligence(
       const isUnderway = now.getTime() >= start.getTime() && now.getTime() <= end.getTime()
       const isTravel = checkIsTravelEvent(imminentEvent)
 
-      let driveTime = imminentEvent.enrichment?.drive_time_mins || null
+      const driveTime = imminentEvent.enrichment?.drive_time_mins || null
       let leaveAt: Date | null = null
 
       if (imminentEvent.enrichment?.departure_time) {

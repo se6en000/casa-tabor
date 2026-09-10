@@ -47,7 +47,7 @@ Deno.serve(async (req) => {
     if (body.save_selection || body.select_calendar_id || Array.isArray(body.select_read_calendar_ids)) {
       const targetCalendarId = typeof body.select_calendar_id === 'string' ? body.select_calendar_id.trim() : connection.calendar_id
       const readCalendarIds = Array.isArray(body.select_read_calendar_ids)
-        ? body.select_read_calendar_ids.map((id: any) => String(id).trim()).filter(Boolean)
+        ? body.select_read_calendar_ids.map((id: unknown) => String(id).trim()).filter(Boolean)
         : (connection.read_calendar_ids || [])
       const readMetadata = Array.isArray(body.read_calendar_metadata) ? body.read_calendar_metadata : []
 
@@ -87,9 +87,19 @@ Deno.serve(async (req) => {
       throw new Error(`Google CalendarList API ${calListRes.status}: ${errText}`)
     }
 
-    const calList = await calListRes.json()
+    interface GoogleCalendarListEntry {
+      id: string
+      summary?: string
+      summaryOverride?: string
+      description?: string
+      primary?: boolean
+      accessRole?: string
+      backgroundColor?: string
+      foregroundColor?: string
+    }
+    const calList = await calListRes.json() as { items?: GoogleCalendarListEntry[] }
     const readIds = new Set(connection.read_calendar_ids || [])
-    const calendars = (calList.items ?? []).map((c: any) => ({
+    const calendars = (calList.items ?? []).map((c) => ({
       id: c.id,
       summary: c.summaryOverride || c.summary || c.id,
       description: c.description || null,

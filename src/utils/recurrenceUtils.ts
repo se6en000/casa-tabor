@@ -160,7 +160,7 @@ export function formatRecurrenceSummary(
       [0, 6].every((d) => effectiveDays.includes(d))
     const isAllDays = effectiveDays.length === 7
 
-    let dayString = ''
+    let dayString: string
     if (isAllDays) {
       dayString = 'every day'
     } else if (isWeekdays) {

@@ -81,16 +81,6 @@ function extractBodyText(payload: Record<string, unknown>): string {
   return texts.join('\n')
 }
 
-function hasPdfAttachment(payload: Record<string, unknown>): boolean {
-  const parts = (payload.parts as Record<string, unknown>[] | undefined) ?? []
-  for (const part of parts) {
-    const mime = part.mimeType as string ?? ''
-    if (mime === 'application/pdf') return true
-    if (hasPdfAttachment(part as Record<string, unknown>)) return true
-  }
-  return false
-}
-
 async function searchTravelEmails(token: string, since: Date): Promise<{ id: string }[]> {
   const after = Math.floor(since.getTime() / 1000)
 
@@ -182,43 +172,6 @@ async function callLLM(
   if (!res.ok) throw new Error(`OpenAI error: ${await res.text()}`)
   const data = await res.json()
   return data.choices[0].message.content
-}
-
-// Airport timezone offsets (UTC offset in hours, standard time; add 1 for DST Mar–Nov)
-const AIRPORT_TZ: Record<string, number> = {
-  // Eastern (EST -5 / EDT -4)
-  PBI: -5, MIA: -5, FLL: -5, MCO: -5, TPA: -5, JAX: -5,
-  JFK: -5, LGA: -5, EWR: -5, BOS: -5, BDL: -5, PHL: -5, PIT: -5,
-  CLT: -5, RDU: -5, BWI: -5, IAD: -5, DCA: -5, ATL: -5,
-  DTW: -5, CLE: -5, CMH: -5, CVG: -5, IND: -5,
-  // Central (CST -6 / CDT -5)
-  DFW: -6, DAL: -6, IAH: -6, HOU: -6, SAT: -6, AUS: -6, MSY: -6,
-  ORD: -6, MDW: -6, MKE: -6, STL: -6, MCI: -6, OMA: -6,
-  MSP: -6, DSM: -6, LIT: -6, MEM: -6, BNA: -6,
-  // Mountain (MST -7 / MDT -6)
-  DEN: -7, SLC: -7, ABQ: -7, PHX: -7, TUS: -7, BOI: -7, BIL: -7,
-  // Pacific (PST -8 / PDT -7)
-  LAX: -8, SFO: -8, SJC: -8, OAK: -8, SEA: -8, PDX: -8, LAS: -8, SAN: -8,
-}
-
-function isDst(date: Date): boolean {
-  // US DST: second Sunday of March through first Sunday of November
-  const jan = new Date(date.getFullYear(), 0, 1).getTimezoneOffset()
-  const jul = new Date(date.getFullYear(), 6, 1).getTimezoneOffset()
-  return date.getTimezoneOffset() < Math.max(jan, jul)
-}
-
-function tzOffsetForAirport(iata: string, dateStr: string): number {
-  const base = AIRPORT_TZ[iata.toUpperCase()] ?? -5 // default Eastern
-  const date = new Date(dateStr + 'T12:00:00Z')
-  return isDst(date) ? base + 1 : base
-}
-
-function toOffsetString(hours: number): string {
-  const abs = Math.abs(hours)
-  const h = String(Math.floor(abs)).padStart(2, '0')
-  const m = String((abs % 1) * 60).padStart(2, '0')
-  return (hours < 0 ? '-' : '+') + h + ':' + m
 }
 
 const EXTRACT_SYSTEM = `You are a travel data extractor. Extract ALL flight, hotel, and car rental information from the email.
@@ -322,7 +275,6 @@ async function getWeatherForecast(
   city: string,
   state: string | null,
   startDateStr?: string | null,   // YYYY-MM-DD trip start — show weather for trip dates
-  _apiKey?: string
 ): Promise<{ date: string; high: number; low: number; condition: string; icon: string }[]> {
   // Step 1: geocode the city
   const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=en&format=json`
@@ -1106,7 +1058,6 @@ Deno.serve(async (req) => {
   // Optional event context — when scanning for a specific event, use these to
   // update the existing dupe trip (re-extract with new timezone prompt) and link it
   const scanEventId: string | null = body.event_id ?? null
-  const scanEventDate: string | null = body.event_date ?? null
   const scanEventLocation: string | null = body.event_location ?? null
 
   // The automatic daily trigger (useTravelScan.ts) calls this with no member/event

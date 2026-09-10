@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CheckCircle, Monitor, Clock, Eye, Sunset, Sliders, Cpu, Palette, Image, Type, Sparkles, LayoutGrid, Sun, Moon } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { supabase } from '../lib/supabase'
+import { setSetting, settingsQueryKey } from '../lib/settingsStore'
 import { cn } from '../utils/cn'
 import { SettingsPageHeader, SettingsToggle as Toggle } from '../components/settings'
 import { Button, Card, SectionHeader as SharedSectionHeader } from '../components/ui'
-import { useTheme, PRESETS, type ThemeColors } from '../contexts/ThemeContext'
+import { PRESETS, type ThemeColors } from '../contexts/ThemeContext'
+import { useTheme } from '../contexts/useTheme'
 import { DEFAULT_FONT_SCALE, MAX_FONT_SCALE, MIN_FONT_SCALE } from '../design-system/tokens.mjs'
 import { useAppStore } from '../stores/appStore'
 import { useHeroTheme } from '../hooks/useHeroTheme'
@@ -198,14 +199,11 @@ export default function DisplaySettingsPage() {
 
   const saveMutation = useMutation({
     mutationFn: async (cfg: DisplayConfig) => {
-      const { error } = await supabase.from('settings').upsert(
-        { key: 'display_config', value: cfg, updated_at: new Date().toISOString() },
-        { onConflict: 'key' }
-      )
+      const { error } = await setSetting('display_config', cfg)
       if (error) throw error
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['settings', 'display_config'] })
+      qc.invalidateQueries({ queryKey: settingsQueryKey('display_config') })
       setSaveState('saved')
       setTimeout(() => setSaveState('idle'), 1500)
       setDirty(false)

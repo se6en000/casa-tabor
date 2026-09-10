@@ -1,6 +1,7 @@
 
 import { useEffect, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 import { startOfWeek, endOfWeek, addDays, subDays, startOfDay, startOfMonth, endOfMonth, eachDayOfInterval, format } from 'date-fns'
 import { eventOverlapsRange } from '../utils/eventTime'
@@ -157,11 +158,28 @@ const EVENT_DETAIL_SELECT = `
   event_action_items (*)
 `
 
-function normalizeEventRow(row: any): EventWithDetails {
+// Raw shape of a row returned by EVENT_SUMMARY_SELECT / EVENT_DETAIL_SELECT (or
+// the get_calendar_feed RPC). Supabase's query builder can't type a raw select
+// string, so this models the joined shape the callers below actually rely on.
+interface RawEventMemberRow {
+  id: string
+  role: string
+  family_member: FamilyMember
+}
+interface RawEventRow extends Omit<CalendarEvent, 'members' | 'enrichment'> {
+  event_members?: RawEventMemberRow[] | null
+  event_enrichments?: EventEnrichment[] | EventEnrichment | null
+  event_plan_overrides?: EventPlanOverride[] | EventPlanOverride | null
+  event_logistics?: EventLogistic[] | null
+  event_checklist_items?: EventChecklistItem[] | null
+  event_action_items?: EventActionItem[] | null
+}
+
+function normalizeEventRow(row: RawEventRow): EventWithDetails {
   return {
     ...row,
     title: normalizePossessiveSuffixCasing(typeof row.title === 'string' ? row.title : ''),
-    members: row.event_members?.map((eventMember: any) => ({
+    members: row.event_members?.map((eventMember): EventWithDetails['members'][number] => ({
       id: eventMember.id,
       role: eventMember.role,
       family_member: eventMember.family_member,
@@ -220,7 +238,12 @@ async function fetchEventsForRange(start: Date, end: Date): Promise<RangeEventsR
 
   if (error) throw error
 
-  const normalized = (events || []).map(normalizeEventRow)
+  // Without generated Database types, Supabase's select-string parser can't
+  // determine relation cardinality and infers `family_member` (a to-one FK
+  // join) as an array. The real runtime shape is the joined single object
+  // normalizeEventRow expects, so we go through `unknown` rather than trust
+  // that structural guess.
+  const normalized = ((events || []) as unknown as RawEventRow[]).map(normalizeEventRow)
   const active = normalized
     .filter((event) => event.status !== 'cancelled' && !event.deleted_at)
     .filter((event) => eventOverlapsRange(event, start, end))
@@ -298,7 +321,10 @@ function useEventsForRange(queryKey: readonly unknown[], start: Date, end: Date)
           family_member: m.family_member || familyMembers.find(f => f.id === m.family_member_id)!,
         })).filter(m => Boolean(m.family_member)),
         enrichment: ev.enrichment || null,
-        plan_override: (ev as any).plan_override || null,
+        // CalendarEvent doesn't declare plan_override; routine-synthesized events
+        // never carry one today, but this stays defensive in case a future
+        // upstream shape adds it.
+        plan_override: (ev as CalendarEvent & { plan_override?: EventPlanOverride | null }).plan_override || null,
         logistics: [],
         checklist: [],
         actions: [],
@@ -310,7 +336,10 @@ function useEventsForRange(queryKey: readonly unknown[], start: Date, end: Date)
     if (!eventsQuery.data) return undefined
     const baseEvents = eventsQuery.data.active
     const cancelledEvents = eventsQuery.data.cancelled
-    const deriveEventSourceType = (event: any): 'routine' | 'google' | 'gmail' | 'casa' => {
+    // `raw_google_json` isn't part of EventWithDetails (no such DB column exists
+    // today) — kept as an optional extension field so the Google-origination
+    // check below stays defensive without resorting to `any`.
+    const deriveEventSourceType = (event: EventWithDetails & { raw_google_json?: unknown }): 'routine' | 'google' | 'gmail' | 'casa' => {
       if (event.source_type) return event.source_type
       const title = (event.title || '').toLowerCase()
       const desc = (event.description || '').toLowerCase()
@@ -514,12 +543,15 @@ let _heartbeatTimer: ReturnType<typeof setInterval> | null = null
 function _evictDeletedEventFromCache(deletedId: string) {
   if (!deletedId) return
   _queryClientInstances.forEach((qc) => {
-    qc.setQueriesData({ queryKey: ['events'] }, (old: any) => {
-      if (Array.isArray(old)) return old.filter((ev) => ev?.id !== deletedId)
-      if (old && Array.isArray(old.active)) {
+    qc.setQueriesData({ queryKey: ['events'] }, (old: unknown) => {
+      if (Array.isArray(old)) {
+        return old.filter((ev: { id?: string } | null | undefined) => ev?.id !== deletedId)
+      }
+      if (old && typeof old === 'object' && Array.isArray((old as RangeEventsResult).active)) {
+        const typed = old as RangeEventsResult
         return {
-          ...old,
-          active: old.active.filter((ev: any) => ev?.id !== deletedId),
+          ...typed,
+          active: typed.active.filter((ev) => ev?.id !== deletedId),
         }
       }
       return old
@@ -551,10 +583,10 @@ function _subscribeRealtimeChannel() {
   if (_realtimeChannel) return
   _realtimeChannel = supabase
     .channel('events-realtime-singleton')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, (payload: any) => {
-      if (payload?.eventType === 'DELETE' && payload.old?.id) {
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, (payload: RealtimePostgresChangesPayload<{ id: string; status?: string }>) => {
+      if (payload?.eventType === 'DELETE' && 'id' in payload.old && payload.old.id) {
         _evictDeletedEventFromCache(payload.old.id)
-      } else if (payload?.eventType === 'UPDATE' && payload.new?.id && payload.new?.status === 'cancelled') {
+      } else if (payload?.eventType === 'UPDATE' && 'id' in payload.new && payload.new.id && payload.new.status === 'cancelled') {
         _evictDeletedEventFromCache(payload.new.id)
       }
       _fireInvalidation()
@@ -571,7 +603,7 @@ function _subscribeRealtimeChannel() {
           _reconnectTimer = setTimeout(() => {
             _reconnectTimer = null
             if (_realtimeSubscribers > 0 && _realtimeChannel) {
-              try { supabase.removeChannel(_realtimeChannel) } catch {}
+              try { supabase.removeChannel(_realtimeChannel) } catch { /* ignore — best-effort, non-critical */ }
               _realtimeChannel = null
               _subscribeRealtimeChannel()
             }
@@ -585,7 +617,7 @@ function _subscribeRealtimeChannel() {
       if (_realtimeSubscribers > 0 && typeof document !== 'undefined' && document.visibilityState !== 'hidden') {
         if (!_realtimeChannel || _realtimeChannel.state === 'closed' || _realtimeChannel.state === 'errored') {
           console.log('[CalendarRealtime] Heartbeat reconnecting idle/dropped channel...')
-          try { if (_realtimeChannel) supabase.removeChannel(_realtimeChannel) } catch {}
+          try { if (_realtimeChannel) supabase.removeChannel(_realtimeChannel) } catch { /* ignore — best-effort, non-critical */ }
           _realtimeChannel = null
           _subscribeRealtimeChannel()
         }

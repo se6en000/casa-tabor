@@ -132,8 +132,16 @@ export async function searchYouTubeMusic(query: string): Promise<YouTubeTrack[]>
     if (res.ok) {
       const data = await res.json()
       if (data.results && data.results.length > 0) {
-        return data.results.map((item: any, idx: number) => ({
-          id: `yt-gen-${idx}-${encodeURIComponent(item.trackName)}`,
+        interface ITunesSearchResult {
+          trackName?: string
+          artistName?: string
+          collectionName?: string
+          artworkUrl100?: string
+          trackTimeMillis?: number
+          previewUrl?: string
+        }
+        return (data.results as ITunesSearchResult[]).map((item, idx: number) => ({
+          id: `yt-gen-${idx}-${encodeURIComponent(item.trackName || query)}`,
           videoId: POPULAR_CURATED_TRACKS[idx % POPULAR_CURATED_TRACKS.length].videoId,
           name: item.trackName || query,
           artists: [item.artistName || 'Artist'],

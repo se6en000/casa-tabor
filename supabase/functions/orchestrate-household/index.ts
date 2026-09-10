@@ -19,7 +19,7 @@ type ActionItem = {
 
 function parseRainChance(text: string | null | undefined): number | null {
   if (!text) return null
-  const match = text.match(/(\d+)\%\s*rain chance/i)
+  const match = text.match(/(\d+)%\s*rain chance/i)
   if (!match) return null
   const value = Number(match[1])
   return Number.isFinite(value) ? value : null

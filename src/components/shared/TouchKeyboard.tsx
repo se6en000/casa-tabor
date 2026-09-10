@@ -224,7 +224,7 @@ function focusables(): HTMLElement[] {
 function normalizeForType(text: string, target: EditableTarget | null): string {
   const type = getInputType(target)
   if (type === 'number') {
-    return text.replace(/[^0-9.\-]/g, '')
+    return text.replace(/[^0-9.-]/g, '')
   }
   if (type === 'tel') {
     return text.replace(/[^0-9+\-() ]/g, '')

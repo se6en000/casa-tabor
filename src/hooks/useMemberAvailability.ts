@@ -12,7 +12,7 @@ let _availabilitySubscribers = 0
 let _availabilityDebounceTimer: ReturnType<typeof setTimeout> | null = null
 let _availabilityReconnectTimer: ReturnType<typeof setTimeout> | null = null
 const _availabilityInvalidateCallbacks = new Set<() => void>()
-const _availabilityQueryClientInstances = new Set<any>()
+const _availabilityQueryClientInstances = new Set<ReturnType<typeof useQueryClient>>()
 
 function _fireAvailabilityInvalidation() {
   if (_availabilityDebounceTimer) clearTimeout(_availabilityDebounceTimer)
@@ -42,7 +42,7 @@ function _subscribeAvailabilityRealtimeChannel() {
           _availabilityReconnectTimer = setTimeout(() => {
             _availabilityReconnectTimer = null
             if (_availabilitySubscribers > 0 && _availabilityRealtimeChannel) {
-              try { supabase.removeChannel(_availabilityRealtimeChannel) } catch {}
+              try { supabase.removeChannel(_availabilityRealtimeChannel) } catch { /* ignore — best-effort, non-critical */ }
               _availabilityRealtimeChannel = null
               _subscribeAvailabilityRealtimeChannel()
             }

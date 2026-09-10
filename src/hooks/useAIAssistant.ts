@@ -16,10 +16,28 @@ import {
   type AssistantTraceContext,
 } from '../lib/assistantTelemetry'
 import { assistantErrorMessage } from '../lib/assistantErrors.mjs'
-import { useProfileSession } from '../contexts/ProfileSessionContext'
+import { useProfileSession } from '../contexts/useProfileSession'
 import { resolveFocusedEventDeterministicAnswer, deriveEventTransportation } from '../lib/focusedEventDeterministicAnswer'
 
 export type { AIMessage }
+
+// Shape of the ai-assistant edge function response, identical for the
+// streaming `final` SSE event and the non-streaming JSON body.
+interface AssistantServerPayload {
+  type?: string
+  code?: string
+  message?: string
+  text?: string
+  tool?: string
+  args?: Record<string, unknown>
+  display_text?: string
+  conversation_state?: AIMessage['conversationState']
+  evidence?: unknown
+  sources_considered?: unknown
+  partial_sources?: unknown
+  safety_rejection?: unknown
+  delta?: string
+}
 
 export interface GroceryAssistantContext {
   totalItems: number
@@ -470,7 +488,7 @@ export function useAIAssistant(ctx: AssistantContext) {
     // Maps a server payload (identical shape for streaming `final` and the
     // non-streaming JSON body) into an AIMessage. One code path → both flows stay
     // perfectly consistent.
-    const buildAssistantMsg = (data: any, id: string): AIMessage => {
+    const buildAssistantMsg = (data: AssistantServerPayload, id: string): AIMessage => {
       const evidence = normalizeFamilyEvidence(data?.evidence)
       const sourceMetadata = {
         evidence: evidence.length > 0 ? evidence : undefined,
@@ -586,7 +604,7 @@ export function useAIAssistant(ctx: AssistantContext) {
         const decoder = new TextDecoder()
         let buf = ''
         const handleEvent = (evt: string, dataStr: string) => {
-          let payload: any
+          let payload: AssistantServerPayload
           try { payload = JSON.parse(dataStr) } catch { return }
           if (evt === 'token') {
             if (!firstTokenSeen) {

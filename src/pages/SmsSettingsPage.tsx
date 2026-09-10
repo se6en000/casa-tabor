@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { CheckCircle, MessageSquare, Bell, Clock, Send, ExternalLink, Copy, Smartphone, AlertCircle } from 'lucide-react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
+import { getSetting, setSetting, settingsQueryKey } from '../lib/settingsStore'
 import { cn } from '../utils/cn'
 import { SettingsPageHeader, SettingsToggle as Toggle } from '../components/settings'
 import { Button, Field as FormField, Input } from '../components/ui'
@@ -100,10 +101,10 @@ export default function SmsSettingsPage() {
   })
 
   const { data, isLoading } = useQuery({
-    queryKey: ['settings', 'sms_config'],
+    queryKey: settingsQueryKey('sms_config'),
     queryFn: async () => {
-      const { data } = await supabase.from('settings').select('value').eq('key', 'sms_config').single()
-      return data?.value as SmsConfig | null
+      const { data } = await getSetting<SmsConfig>('sms_config')
+      return data
     },
   })
 
@@ -113,10 +114,7 @@ export default function SmsSettingsPage() {
 
   const saveMutation = useMutation({
     mutationFn: async (cfg: SmsConfig) => {
-      const { error } = await supabase.from('settings').upsert(
-        { key: 'sms_config', value: cfg, updated_at: new Date().toISOString() },
-        { onConflict: 'key' }
-      )
+      const { error } = await setSetting('sms_config', cfg)
       if (error) throw error
     },
     onSuccess: () => {

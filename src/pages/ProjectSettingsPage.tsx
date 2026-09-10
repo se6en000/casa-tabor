@@ -17,7 +17,7 @@ import {
   Textarea,
 } from '../components/ui'
 import { SettingsPageHeader } from '../components/settings'
-import { useProfileSession } from '../contexts/ProfileSessionContext'
+import { useProfileSession } from '../contexts/useProfileSession'
 import { invokeAssistantHistory } from '../lib/assistantConversationHistoryClient'
 
 type ProjectStatus = 'active' | 'paused' | 'completed' | 'archived'

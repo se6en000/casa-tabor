@@ -216,7 +216,7 @@ export function useTurboCanvasPresenter(): TurboCanvasPresenterState {
     if (!firstEvent.all_day && firstEvent.start_time) {
       try {
         firstTimeStr = ` at ${format(parseISO(firstEvent.start_time), 'h:mm a')}`
-      } catch {}
+      } catch { /* ignore — best-effort, non-critical */ }
     }
 
     const firstMember = firstEvent.members?.[0]?.family_member?.name
@@ -228,7 +228,7 @@ export function useTurboCanvasPresenter(): TurboCanvasPresenterState {
         const lastTimeStr = format(parseISO(lastEvent.start_time), 'h:mm a')
         const lastMember = lastEvent.members?.[0]?.family_member?.name
         lastPart = `, wrapping up with ${lastEvent.title}${lastMember ? ` (${lastMember})` : ''} at ${lastTimeStr}`
-      } catch {}
+      } catch { /* ignore — best-effort, non-critical */ }
     }
 
     const triageSuffix =

@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase.ts'
+import { getSettings, setSetting } from '../lib/settingsStore.ts'
 import { isSameDay, parseISO } from 'date-fns'
 
 export const TODO_COMPLETIONS_SETTINGS_KEY = 'household_todo_completions'
@@ -39,7 +40,7 @@ export function saveStoredTodoCompletions(map: Record<string, boolean>): void {
   if (typeof window === 'undefined' && typeof localStorage === 'undefined') return
   try {
     localStorage.setItem(TODO_COMPLETIONS_STORAGE_KEY, JSON.stringify(map))
-  } catch {}
+  } catch { /* ignore — best-effort, non-critical */ }
 }
 
 export function getStoredTodoCompletionTimestamps(): Record<string, number> {
@@ -56,7 +57,7 @@ export function saveStoredTodoCompletionTimestamps(map: Record<string, number>):
   if (typeof window === 'undefined' && typeof localStorage === 'undefined') return
   try {
     localStorage.setItem(TODO_COMPLETIONS_TIMESTAMPS_STORAGE_KEY, JSON.stringify(map))
-  } catch {}
+  } catch { /* ignore — best-effort, non-critical */ }
 }
 
 /**
@@ -109,9 +110,9 @@ function getOrCreateTodoRealtimeChannel() {
       },
     })
     .on(
-      'broadcast' as any,
+      'broadcast',
       { event: TODO_COMPLETIONS_BROADCAST_EVENT },
-      ({ payload }: { payload?: TodoTogglePayload }) => {
+      ({ payload }: { type: 'broadcast'; event: string; payload: TodoTogglePayload }) => {
         if (!payload || !payload.id) return
         if (payload.senderId === CLIENT_INSTANCE_ID) {
           // Ignore echo of our own broadcast
@@ -170,14 +171,11 @@ function getOrCreateTodoRealtimeChannel() {
  */
 export async function fetchTodoCompletions(): Promise<Record<string, boolean>> {
   try {
-    const { data, error } = await supabase
-      .from('settings')
-      .select('key, value')
-      .in('key', [
-        TODO_COMPLETIONS_SETTINGS_KEY,
-        TODO_COMPLETIONS_TIMESTAMPS_SETTINGS_KEY,
-        'routine_checklist_completions',
-      ])
+    const { data, error } = await getSettings([
+      TODO_COMPLETIONS_SETTINGS_KEY,
+      TODO_COMPLETIONS_TIMESTAMPS_SETTINGS_KEY,
+      'routine_checklist_completions',
+    ])
 
     if (error) {
       console.warn('[TodoCompletionsSync] Failed to fetch todo completions from Supabase:', error.message)
@@ -190,16 +188,16 @@ export async function fetchTodoCompletions(): Promise<Record<string, boolean>> {
     const localTimestamps = getStoredTodoCompletionTimestamps()
     let mergedTimestamps = { ...localTimestamps }
 
-    if (data && Array.isArray(data)) {
-      data.forEach((row) => {
-        if (row && row.value && typeof row.value === 'object') {
-          if (row.key === TODO_COMPLETIONS_TIMESTAMPS_SETTINGS_KEY) {
-            mergedTimestamps = { ...mergedTimestamps, ...(row.value as Record<string, number>) }
+    if (data) {
+      for (const [key, value] of Object.entries(data)) {
+        if (value && typeof value === 'object') {
+          if (key === TODO_COMPLETIONS_TIMESTAMPS_SETTINGS_KEY) {
+            mergedTimestamps = { ...mergedTimestamps, ...(value as Record<string, number>) }
           } else {
-            merged = { ...merged, ...(row.value as Record<string, boolean>) }
+            merged = { ...merged, ...(value as Record<string, boolean>) }
           }
         }
-      })
+      }
       saveStoredTodoCompletions(merged)
       saveStoredTodoCompletionTimestamps(mergedTimestamps)
       return merged
@@ -248,22 +246,8 @@ async function flushPersistToSupabase(
     }
 
     await Promise.allSettled([
-      supabase.from('settings').upsert(
-        {
-          key: TODO_COMPLETIONS_SETTINGS_KEY,
-          value: pruned,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'key' }
-      ),
-      supabase.from('settings').upsert(
-        {
-          key: TODO_COMPLETIONS_TIMESTAMPS_SETTINGS_KEY,
-          value: prunedTimestamps,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'key' }
-      ),
+      setSetting(TODO_COMPLETIONS_SETTINGS_KEY, pruned),
+      setSetting(TODO_COMPLETIONS_TIMESTAMPS_SETTINGS_KEY, prunedTimestamps),
     ])
   } catch (err) {
     console.warn('[TodoCompletionsSync] Exception upserting to Supabase settings:', err)
@@ -376,7 +360,7 @@ export function subscribeToTodoSync(
           const changedKey = Object.keys(parsed)[0] || ''
           onToggle(changedKey, Boolean(parsed[changedKey]), parsed)
         }
-      } catch {}
+      } catch { /* ignore — best-effort, non-critical */ }
     }
   }
 

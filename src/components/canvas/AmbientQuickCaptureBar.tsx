@@ -162,8 +162,9 @@ export default function AmbientQuickCaptureBar({ className }: Props) {
       setTimeout(() => {
         setSaveFeedback(null)
       }, 2400)
-    } catch (err: any) {
-      setSaveFeedback(`Error saving: ${err.message || 'Check connection'}`)
+    } catch (err) {
+      const message = err instanceof Error && err.message ? err.message : 'Check connection'
+      setSaveFeedback(`Error saving: ${message}`)
       setTimeout(() => {
         setSaveFeedback(null)
       }, 3500)

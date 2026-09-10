@@ -220,7 +220,6 @@ export function parseCalendarNaturalLanguage(
           matchedPlace = place
           matchedDetailsCount++
           text = text.replace(atLocationMatch[0], '')
-          matched = true
         }
       }
     }
@@ -358,7 +357,7 @@ export function parseCalendarNaturalLanguage(
     .replace(/\b(to\s+play|to\s+go|to\s+do|to\s+see|needs?\s+to|has\s+to|have\s+to)\b/gi, '')
     .replace(/\s+/g, ' ')
     .replace(/\b(at|on|for|with|by|in|and)\s*$/i, '')
-    .replace(/^[\s,·\-\/.]+|[\s,·\-\/.]+$/g, '')
+    .replace(/^[\s,·\-/.]+|[\s,·\-/.]+$/g, '')
     .trim()
 
   // Map action verbs into clean editorial titles (e.g. "babysit" -> "Babysitting")

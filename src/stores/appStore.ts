@@ -72,7 +72,7 @@ const getInitialExperienceMode = (): ExperienceMode => {
   try {
     const saved = localStorage.getItem('casa-experience-mode')
     if (saved === 'classic' || saved === 'living_canvas') return saved
-  } catch {}
+  } catch { /* ignore — best-effort, non-critical */ }
   return 'living_canvas'
 }
 
@@ -80,7 +80,7 @@ const getInitialCanvasSubmode = (): CanvasSubmode => {
   try {
     const saved = localStorage.getItem('casa-canvas-submode')
     if (saved === 'calm' || saved === 'turbo') return saved
-  } catch {}
+  } catch { /* ignore — best-effort, non-critical */ }
   return 'calm'
 }
 
@@ -93,7 +93,7 @@ const getInitialDinnerPlan = (): DinnerPlan => {
         return parsed as DinnerPlan
       }
     }
-  } catch {}
+  } catch { /* ignore — best-effort, non-critical */ }
   return DEFAULT_DINNER_PLAN
 }
 
@@ -163,7 +163,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   setExperienceMode: (experienceMode) => {
     try {
       localStorage.setItem('casa-experience-mode', experienceMode)
-    } catch {}
+    } catch { /* ignore — best-effort, non-critical */ }
     set({ experienceMode })
   },
 
@@ -171,7 +171,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   setCanvasSubmode: (canvasSubmode) => {
     try {
       localStorage.setItem('casa-canvas-submode', canvasSubmode)
-    } catch {}
+    } catch { /* ignore — best-effort, non-critical */ }
     set({ canvasSubmode })
   },
 
@@ -179,7 +179,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const next = get().canvasSubmode === 'calm' ? 'turbo' : 'calm'
     try {
       localStorage.setItem('casa-canvas-submode', next)
-    } catch {}
+    } catch { /* ignore — best-effort, non-critical */ }
     set({ canvasSubmode: next })
   },
 
@@ -206,7 +206,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const normalized = normalizeDinnerPlan(dinnerPlan) || dinnerPlan
     try {
       localStorage.setItem('casa-tonight-kitchen-plan', JSON.stringify(normalized))
-    } catch {}
+    } catch { /* ignore — best-effort, non-critical */ }
     set({ dinnerPlan: normalized })
     if (!options?.localOnly) {
       void saveTonightDinnerPlan(normalized)
@@ -215,7 +215,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   resetDinnerPlan: (options) => {
     try {
       localStorage.setItem('casa-tonight-kitchen-plan', JSON.stringify(DEFAULT_DINNER_PLAN))
-    } catch {}
+    } catch { /* ignore — best-effort, non-critical */ }
     set({ dinnerPlan: DEFAULT_DINNER_PLAN })
     if (!options?.localOnly) {
       void saveTonightDinnerPlan(DEFAULT_DINNER_PLAN)

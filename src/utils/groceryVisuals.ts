@@ -5,7 +5,47 @@
 // urgency — every tone here resolves to a canonical casa-* token class
 // (see src/design-system/tokens.mjs), so both the light and midnight themes
 // stay correct automatically.
+import {
+  Leaf,
+  Milk,
+  Beef,
+  Croissant,
+  Snowflake,
+  Package,
+  Coffee,
+  Popcorn,
+  Sandwich,
+  House,
+  HeartPulse,
+  Baby as BabyIcon,
+  PawPrint,
+  ShoppingCart,
+  type LucideIcon,
+} from 'lucide-react'
 import type { GroceryCategoryKey } from './groceryCategorization'
+
+/** Category -> Lucide icon used for the grocery row's leading category glyph. */
+export const CATEGORY_ICONS: Record<string, LucideIcon> = {
+  produce: Leaf,
+  dairy: Milk,
+  meat: Beef,
+  bakery: Croissant,
+  frozen: Snowflake,
+  pantry: Package,
+  beverages: Coffee,
+  snacks: Popcorn,
+  deli: Sandwich,
+  household: House,
+  'personal-care': HeartPulse,
+  baby: BabyIcon,
+  pet: PawPrint,
+  other: ShoppingCart,
+}
+
+/** Strips any leading/trailing emoji from a category label (e.g. "🥬 Produce" -> "Produce"). */
+export function splitCategoryLabel(raw: string): string {
+  return raw.replace(/\p{Emoji}|\p{Extended_Pictographic}|️|‍|⃣/gu, '').trim()
+}
 
 /** Shared semantic tone vocabulary — mirrors Chip's CHIP_TONES so category and
  * urgency badges stay visually consistent with the rest of the design system. */

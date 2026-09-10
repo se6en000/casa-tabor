@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { ChefHat, Save, Users, PackageCheck } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { getSetting, setSetting } from '../lib/settingsStore'
 import { DEFAULT_FOOD_PROFILE, normalizeFoodProfile, type FoodProfile } from '../lib/foodProfile'
 import { formatSupabaseError } from '../lib/formatSupabaseError'
 import { Alert, Button, Card, Field, Heading, Input, SegmentedControl, SkeletonRow, Textarea } from '../components/ui'
@@ -19,14 +19,10 @@ export default function FoodProfileSettingsPage({ initialTab = 'diet' }: { initi
     let active = true
     void (async () => {
       try {
-        const { data, error: loadError } = await supabase
-          .from('settings')
-          .select('value')
-          .eq('key', 'food_profile')
-          .maybeSingle()
+        const { data, error: loadError } = await getSetting('food_profile')
         if (loadError) throw loadError
         if (!active) return
-        setProfile(normalizeFoodProfile(data?.value))
+        setProfile(normalizeFoodProfile(data))
       } catch (loadError) {
         if (!active) return
         setError(formatSupabaseError(loadError, 'Could not load food profile'))
@@ -45,10 +41,7 @@ export default function FoodProfileSettingsPage({ initialTab = 'diet' }: { initi
     setStatus(null)
     try {
       const normalized = normalizeFoodProfile(profile)
-      const { error: saveError } = await supabase.from('settings').upsert(
-        { key: 'food_profile', value: normalized, updated_at: new Date().toISOString() },
-        { onConflict: 'key' },
-      )
+      const { error: saveError } = await setSetting('food_profile', normalized)
       if (saveError) throw saveError
       setProfile(normalized)
       setStatus('Food profile successfully saved.')

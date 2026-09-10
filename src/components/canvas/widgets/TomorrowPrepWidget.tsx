@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { cn } from '../../../utils/cn'
 import { useFamilyRoutineIntelligence, type DepartureItem } from '../../../hooks/useFamilyRoutineIntelligence'
+import type { EventWithDetails } from '../../../hooks/useCalendarEvents'
 import { useHeroTheme } from '../../../hooks/useHeroTheme'
 import { openEventDetails } from '../../../utils/openEventDetails'
 import { Button } from '../../ui'
@@ -14,7 +15,7 @@ import { Button } from '../../ui'
 interface TomorrowPrepWidgetProps {
   now?: Date
   onToggleTodayView?: () => void
-  onOpenEvent?: (event: any) => void
+  onOpenEvent?: (event: EventWithDetails) => void
   showViewToggle?: boolean
   className?: string
 }

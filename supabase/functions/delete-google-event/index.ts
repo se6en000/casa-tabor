@@ -115,7 +115,7 @@ Deno.serve(async (req) => {
 
   // If Google IDs not directly provided in payload, load from events table
   if (!googleEventId && event_id) {
-    const { data: event, error: evErr } = await sb
+    const { data: event } = await sb
       .from('events')
       .select('id, google_event_id, google_calendar_id, google_connection_id, source_member_id')
       .eq('id', event_id)

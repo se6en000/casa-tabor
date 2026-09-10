@@ -168,8 +168,11 @@ export function isEventAtHome(evt: EventWithDetails | null | undefined): boolean
     return true
   }
 
-  // 6. Explicit mode override of none
-  if ((evt.plan_override as any)?.mode_override === 'none') {
+  // 6. Explicit mode override of none. `mode_override` doesn't declare
+  // 'none' in EventPlanOverride's type, but some legacy/manual records still
+  // carry it, so this reads it as a loosened string rather than widening the
+  // real union.
+  if ((evt.plan_override as { mode_override?: string } | null)?.mode_override === 'none') {
     return true
   }
 
@@ -192,7 +195,7 @@ export function isEventRequiringDriving(evt: EventWithDetails | null | undefined
 
   // 2. If at home or no-ride mode, strictly no driving commitment needed
   if (isEventAtHome(evt)) return false
-  if ((evt.plan_override as any)?.mode_override === 'none') return false
+  if ((evt.plan_override as { mode_override?: string } | null)?.mode_override === 'none') return false
 
   const loc = (evt.location_name || '').toLowerCase().trim()
   const addr = (evt.address || '').toLowerCase().trim()

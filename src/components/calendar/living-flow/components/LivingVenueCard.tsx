@@ -201,7 +201,7 @@ export default function LivingVenueCard({
         } else {
           setGoogleResults([])
         }
-      } catch (err) {
+      } catch {
         if (requestId === requestIdRef.current) {
           setIsLoading(false)
           setGoogleResults([])

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { BookmarkPlus, Car, Check, ChevronDown, House, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
+import { getSetting } from '../../lib/settingsStore'
 import { useFamilyMembers } from '../../hooks/useFamilyMembers'
 import {
   findExactSavedPlace,
@@ -397,9 +398,9 @@ export default function EventTransportationSection({
     queryKey: ['home-config'],
     staleTime: 10 * 60_000,
     queryFn: async () => {
-      const { data, error } = await supabase.from('settings').select('value').eq('key', 'home_config').maybeSingle()
+      const { data, error } = await getSetting<{ address?: string; city?: string; state?: string; zip?: string }>('home_config')
       if (error) throw error
-      return (data?.value ?? null) as { address?: string; city?: string; state?: string; zip?: string } | null
+      return data
     },
   })
   const homeAddress = [homeConfig?.address, homeConfig?.city, homeConfig?.state, homeConfig?.zip].filter(Boolean).join(', ').trim()

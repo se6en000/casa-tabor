@@ -105,7 +105,7 @@ function normalizeTimeStr(rawTime: unknown): string | null {
   return null
 }
 
-function normalizeItem(raw: unknown, index: number, anchorDate: Date, timezone: string): ExtractedScannedItem | null {
+function normalizeItem(raw: unknown, index: number, anchorDate: Date): ExtractedScannedItem | null {
   if (!raw || typeof raw !== 'object') return null
   const row = raw as Record<string, unknown>
   const title = String(row.title ?? row.name ?? row.summary ?? '').trim()
@@ -128,8 +128,8 @@ function normalizeItem(raw: unknown, index: number, anchorDate: Date, timezone: 
   }
 
   // Build standard start_time and end_time ISO strings
-  let startTimeIso = ''
-  let endTimeIso = ''
+  let startTimeIso: string
+  let endTimeIso: string
 
   if (allDay) {
     const [y, m, d] = date.split('-').map(Number)
@@ -314,7 +314,7 @@ RETURN STRICT JSON matching this exact schema:
     const parsed = parseJsonObject(rawResponse)
     const rawItems = Array.isArray(parsed.items) ? parsed.items : []
     const normalizedItems = rawItems
-      .map((item, idx) => normalizeItem(item, idx, validAnchor, timezone))
+      .map((item, idx) => normalizeItem(item, idx, validAnchor))
       .filter((item): item is ExtractedScannedItem => item !== null)
 
     const summary = String(parsed.document_summary || `Found ${normalizedItems.length} items from document scan`).trim()

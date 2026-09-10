@@ -7,7 +7,7 @@ import { useHomeWeather } from '../../hooks/useHomeWeather'
 import { useTodayEvents } from '../../hooks/useCalendarEvents'
 import { cn } from '../../utils/cn'
 import { IconButton } from '../ui'
-import { useProfileSession } from '../../contexts/ProfileSessionContext'
+import { useProfileSession } from '../../contexts/useProfileSession'
 import { useAppStore } from '../../stores/appStore'
 import MaisonCrest from './MaisonCrest'
 

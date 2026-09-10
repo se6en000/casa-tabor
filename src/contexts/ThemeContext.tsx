@@ -4,7 +4,7 @@
  * auto activation during night zones and manual override.
  */
 
-import { createContext, useContext, useEffect, useMemo, useState, useCallback, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, useCallback, type ReactNode } from 'react'
 import type { RoomToneZone } from '../hooks/useRoomTone'
 import {
   DEFAULT_THEME_COLORS,
@@ -13,18 +13,14 @@ import {
   MIDNIGHT_THEME_COLORS,
   MIN_FONT_SCALE,
   THEME_COLOR_KEYS,
-  type ThemeColorPalette,
 } from '../design-system/tokens.mjs'
-import { APPEARANCE_PRESETS, type AppearancePreset } from '../design-system/themes.mjs'
+import { APPEARANCE_PRESETS } from '../design-system/themes.mjs'
+import { ThemeContext, type ThemeColors, type ThemeContextValue, type ThemePreset, type ThemeTarget } from './useTheme'
 
-export type ThemeColors = ThemeColorPalette
-
-export type ThemeTarget = 'day' | 'midnight'
+export type { ThemeColors, ThemeTarget, ThemePreset } from './useTheme'
 
 export const DEFAULTS: ThemeColors = DEFAULT_THEME_COLORS
 export const MIDNIGHT_GALLERY_DEFAULTS: ThemeColors = MIDNIGHT_THEME_COLORS
-
-export type ThemePreset = AppearancePreset
 export const PRESETS = APPEARANCE_PRESETS
 
 const STORAGE_DAY = 'casa-theme-day-colors'
@@ -91,28 +87,6 @@ function shouldEnableMidnight(forceMidnight: boolean, autoMidnight: boolean, roo
   if (!autoMidnight) return false
   return roomToneZone === 'night' || roomToneZone === 'late-night'
 }
-
-interface ThemeContextValue {
-  colors: ThemeColors
-  dayColors: ThemeColors
-  midnightColors: ThemeColors
-  activeTarget: ThemeTarget
-  isMidnightActive: boolean
-  autoMidnight: boolean
-  forceMidnight: boolean
-  fontScale: number
-  setAutoMidnight: (enabled: boolean) => void
-  setForceMidnight: (enabled: boolean) => void
-  setFontScale: (scale: number) => void
-  setActiveTarget: (target: ThemeTarget) => void
-  setColor: (key: keyof ThemeColors, value: string) => void
-  applyDayPreset: (preset: ThemePreset) => void
-  resetToDefaults: () => void
-  setRoomToneZone: (zone: RoomToneZone) => void
-  isDefault: boolean
-}
-
-const ThemeContext = createContext<ThemeContextValue | null>(null)
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [dayColors, setDayColors] = useState<ThemeColors>(() => loadColors(STORAGE_DAY, DEFAULTS))
@@ -237,10 +211,4 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       {children}
     </ThemeContext.Provider>
   )
-}
-
-export function useTheme() {
-  const ctx = useContext(ThemeContext)
-  if (!ctx) throw new Error('useTheme must be used inside <ThemeProvider>')
-  return ctx
 }

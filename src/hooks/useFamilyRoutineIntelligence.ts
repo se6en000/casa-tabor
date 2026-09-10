@@ -211,7 +211,7 @@ function deriveDeparturesForDate(
           isDeparted,
           isWeekendActivity: true,
         })
-      } catch {}
+      } catch { /* ignore — best-effort, non-critical */ }
     }
 
     return departures
@@ -671,7 +671,7 @@ function derivePrepChecklist(
             iconType: 'general',
           })
         }
-      } catch {}
+      } catch { /* ignore — best-effort, non-critical */ }
     }
 
     // 7. Proactive To-Dos / Reminders for Tomorrow
@@ -858,7 +858,7 @@ export function useFamilyRoutineIntelligence(now: Date = new Date()): FamilyRout
       const next = { ...prev, [id]: nextVal }
       try {
         localStorage.setItem(`${STORAGE_PREFIX}${todayKey}`, JSON.stringify(next))
-      } catch {}
+      } catch { /* ignore — best-effort, non-critical */ }
       void saveTodoToggle(id, nextVal)
       return next
     })
@@ -870,7 +870,7 @@ export function useFamilyRoutineIntelligence(now: Date = new Date()): FamilyRout
       const next = { ...prev, [id]: nextVal }
       try {
         localStorage.setItem(`${STORAGE_PREFIX}${tomorrowKey}`, JSON.stringify(next))
-      } catch {}
+      } catch { /* ignore — best-effort, non-critical */ }
       void saveTodoToggle(id, nextVal)
       return next
     })

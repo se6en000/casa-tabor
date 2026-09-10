@@ -234,8 +234,8 @@ export function parseNaturalLanguageCapture(
   }
 
   // Start & End date construction
-  let startDate: Date | null = null
-  let endDate: Date | null = null
+  let startDate: Date | null
+  let endDate: Date | null
 
   if (detectedDate) {
     startDate = detectedDate

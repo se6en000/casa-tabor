@@ -73,7 +73,9 @@ export default function MobileDocumentScanSheet({
   const triggerHaptic = (ms = 12) => {
     try {
       navigator.vibrate?.(ms)
-    } catch {}
+    } catch {
+      // ignore — vibrate not supported
+    }
   }
 
   const processFiles = async (files: File[]) => {

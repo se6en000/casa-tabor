@@ -8,12 +8,16 @@ test('RecurrenceRuleBuilder component exists and exports builder UI', () => {
   assert.equal(existsSync(componentPath), true, 'RecurrenceRuleBuilder.tsx must exist')
 
   const content = readFileSync(componentPath, 'utf8')
+  const helpersContent = readFileSync(
+    resolve('src/components/calendar/RecurrenceRuleBuilder.helpers.ts'),
+    'utf8'
+  )
   assert.match(content, /export default function RecurrenceRuleBuilder/, 'Must export RecurrenceRuleBuilder component')
-  assert.match(content, /export function parseRrule/, 'Must export parseRrule parser helper')
-  assert.match(content, /export function buildRruleString/, 'Must export buildRruleString builder helper')
-  assert.match(content, /export function buildRruleSummary/, 'Must export buildRruleSummary human readable summary helper')
-  assert.match(content, /byDay/, 'Must support BYDAY day-of-week selection')
-  assert.match(content, /FREQ=/, 'Must build RFC 5545 FREQ string')
+  assert.match(helpersContent, /export function parseRrule/, 'Must export parseRrule parser helper')
+  assert.match(helpersContent, /export function buildRruleString/, 'Must export buildRruleString builder helper')
+  assert.match(helpersContent, /export function buildRruleSummary/, 'Must export buildRruleSummary human readable summary helper')
+  assert.match(helpersContent, /byDay/, 'Must support BYDAY day-of-week selection')
+  assert.match(helpersContent, /FREQ=/, 'Must build RFC 5545 FREQ string')
   assert.match(content, /SegmentedControl/, 'Must use luxury SegmentedControl UI')
 })
 

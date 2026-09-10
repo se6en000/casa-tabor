@@ -208,7 +208,7 @@ export default function EventBlock({ event, onClick, onDoubleClick, columnCount 
         className="absolute right-1.5 top-1.5 z-10"
       />
       {/* Repeat indicator for recurring instances */}
-      {(event as any).recurrence_master_id && (
+      {event.recurrence_master_id && (
         <span className="absolute bottom-1 right-1 opacity-60">
           <Repeat size={9} className="text-white" />
         </span>

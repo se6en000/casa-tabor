@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
-const source = readFileSync(new URL('../src/components/calendar/StackedView.tsx', import.meta.url), 'utf8')
+const source = readFileSync(new URL('../src/components/calendar/StackedView.helpers.ts', import.meta.url), 'utf8')
 
 test('getGoingMembers recognizes the "attendee" role written by the attendee editor', () => {
   // The MemberEditor (EventDetailPanel.tsx) always saves members with role:

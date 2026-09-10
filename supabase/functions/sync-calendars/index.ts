@@ -82,7 +82,10 @@ Deno.serve(async (req) => {
 
     // Auto-renew or register webhook push notification channels
     const nowMs = Date.now()
-    const needsWebhookRenew = (connections ?? []).some((c: any) => {
+    // webhook_expires_at/webhook_status are real calendar_connections columns
+    // used for push-notification renewal, but aren't part of the shared
+    // CalendarConnection interface (which only models sync-relevant fields).
+    const needsWebhookRenew = (connections as (CalendarConnection & { webhook_expires_at?: string | null; webhook_status?: string })[] ?? []).some((c) => {
       if (!c.webhook_expires_at || c.webhook_status !== 'active') return true
       const expMs = new Date(c.webhook_expires_at).getTime()
       return isNaN(expMs) || expMs < nowMs + 24 * 3600 * 1000
@@ -358,8 +361,8 @@ async function upsertEvent(
   const start = ev.start as Record<string, string> | undefined
   const end = ev.end as Record<string, string> | undefined
   const isAllDay = !start?.dateTime && Boolean(start?.date)
-  let startTime: string | null = null
-  let endTime: string | null = null
+  let startTime: string | null
+  let endTime: string | null
 
   if (isAllDay && start?.date) {
     startTime = `${start.date}T00:00:00Z`

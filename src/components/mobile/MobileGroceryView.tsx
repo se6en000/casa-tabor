@@ -78,7 +78,9 @@ export default function MobileGroceryView({
   const triggerHaptic = (durationMs = 8) => {
     try {
       navigator.vibrate?.(durationMs)
-    } catch {}
+    } catch {
+      // ignore — vibrate not supported
+    }
   }
 
   const handleDelete = (id: string) => {
@@ -114,7 +116,9 @@ export default function MobileGroceryView({
     e.preventDefault()
     try {
       e.currentTarget.setPointerCapture(e.pointerId)
-    } catch {}
+    } catch {
+      // ignore — pointer capture not supported
+    }
     triggerHaptic(10)
     setIsPressingMic(true)
     setInputValue('')
@@ -128,7 +132,9 @@ export default function MobileGroceryView({
       if (e.currentTarget.hasPointerCapture(e.pointerId)) {
         e.currentTarget.releasePointerCapture(e.pointerId)
       }
-    } catch {}
+    } catch {
+      // ignore — pointer capture not supported
+    }
     triggerHaptic(8)
     setIsPressingMic(false)
     const captured = stopDictation()
@@ -151,7 +157,9 @@ export default function MobileGroceryView({
       if (e.currentTarget.hasPointerCapture(e.pointerId)) {
         e.currentTarget.releasePointerCapture(e.pointerId)
       }
-    } catch {}
+    } catch {
+      // ignore — pointer capture not supported
+    }
     setIsPressingMic(false)
     const captured = stopDictation()
     const textToAdd = (captured || inputValue).trim()

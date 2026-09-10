@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Plus, Save, Trash2, PackageCheck, AlertTriangle, History, Layers } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { getSettings, setSettings } from '../lib/settingsStore'
 import { formatSupabaseError } from '../lib/formatSupabaseError'
 import {
   appendPantryInventoryAudit,
@@ -67,13 +67,10 @@ export default function PantryInventorySettingsPage({ hideHeader = false }: { hi
     let active = true
     void (async () => {
       try {
-        const { data, error: loadError } = await supabase
-          .from('settings')
-          .select('key,value')
-          .in('key', ['meal_planner_pantry_inventory', 'meal_planner_pantry_audit_log'])
+        const { data, error: loadError } = await getSettings(['meal_planner_pantry_inventory', 'meal_planner_pantry_audit_log'])
         if (loadError) throw loadError
         if (!active) return
-        const rowMap = new Map((data ?? []).map((row) => [row.key, row.value]))
+        const rowMap = new Map(Object.entries(data ?? {}))
         const nextRows = sanitizeInventory(rowMap.get('meal_planner_pantry_inventory'))
         setRows(nextRows)
         setBaselineInventory(
@@ -205,13 +202,10 @@ export default function PantryInventorySettingsPage({ hideHeader = false }: { hi
       }
       const nextAuditLog = appendPantryInventoryAudit(auditLog, manualAuditEntries)
 
-      const { error: saveError } = await supabase.from('settings').upsert(
-        [
-          { key: 'meal_planner_pantry_inventory', value: payload, updated_at: nowIso },
-          { key: 'meal_planner_pantry_audit_log', value: nextAuditLog, updated_at: nowIso },
-        ],
-        { onConflict: 'key' },
-      )
+      const { error: saveError } = await setSettings([
+        { key: 'meal_planner_pantry_inventory', value: payload },
+        { key: 'meal_planner_pantry_audit_log', value: nextAuditLog },
+      ])
       if (saveError) throw saveError
       const nextRows = sanitizeInventory(payload)
       setRows(nextRows)

@@ -5,12 +5,13 @@ import {
 } from 'lucide-react'
 import { cn } from '../../../utils/cn'
 import { useFamilyRoutineIntelligence, type DepartureItem } from '../../../hooks/useFamilyRoutineIntelligence'
+import type { EventWithDetails } from '../../../hooks/useCalendarEvents'
 import { useHeroTheme } from '../../../hooks/useHeroTheme'
 import { openEventDetails } from '../../../utils/openEventDetails'
 
 interface MorningLaunchpadWidgetProps {
   now?: Date
-  onOpenEvent?: (event: any) => void
+  onOpenEvent?: (event: EventWithDetails) => void
   className?: string
 }
 

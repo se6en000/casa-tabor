@@ -10,7 +10,7 @@ interface Props {
   onDismiss?: (id: string) => void
 }
 
-export default function SwipeableReminderPill({ id: _id, title, members, onClick }: Props) {
+export default function SwipeableReminderPill({ title, members, onClick }: Props) {
   const people = members
     .map(m => (m.family_member ? { id: m.id, name: m.family_member.name, color: m.family_member.color_hex } : null))
     .filter(Boolean) as { id: string; name: string; color?: string }[]

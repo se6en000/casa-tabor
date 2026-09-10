@@ -16,7 +16,7 @@ import {
   CheckSquare,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
-import { useRollingEvents, type EventWithDetails } from '../../hooks/useCalendarEvents'
+import { useRollingEvents } from '../../hooks/useCalendarEvents'
 import { getEventStartDate, getEventEndDate, eventOverlapsDay } from '../../utils/eventTime'
 import { useLiveClock } from '../../hooks/useLiveClock'
 import {
@@ -26,26 +26,12 @@ import {
   getStoredTodoCompletions,
   isTodoCompletedToday,
 } from '../../utils/todoCompletionsSync.ts'
-import { inferEventMode, inferEventPlanKind } from '../../lib/eventCommandCenter'
 import { isReminderOrChore } from '../../lib/heroFocus.mjs'
 import { openEventDetails } from '../../utils/openEventDetails'
 import GmailSyncStatusIndicator from '../shared/GmailSyncStatusIndicator'
 import { EventSyncStatusDot } from '../calendar/EventSyncStatusDot'
 import { IconButton } from '../ui'
 import { cn } from '../../utils/cn'
-
-export function isHeroTravel(ev: EventWithDetails | null | undefined): boolean {
-  if (!ev || ev.all_day || ev.event_type === 'reminder') return false
-  const mode = inferEventMode(ev)
-  const kind = inferEventPlanKind(ev, mode)
-  if (kind !== 'travel') return false
-  const loc = (ev.location_name || '').trim().toLowerCase()
-  if (loc === 'home' || loc.includes('at home')) return false
-  return Boolean(
-    (ev.address && ev.address.trim().length > 0) ||
-    (ev.location_name && ev.location_name.trim().length > 0)
-  )
-}
 
 function getMemberColorClass(colorHex?: string): string {
   if (!colorHex) return 'bg-casa-gold'
@@ -63,7 +49,8 @@ interface MobileTodayViewProps {
   onOpenQuickCreate?: () => void
 }
 
-export default function MobileTodayView({ onOpenQuickCreate: _onOpenQuickCreate }: MobileTodayViewProps) {
+export default function MobileTodayView(props: MobileTodayViewProps) {
+  void props // onOpenQuickCreate not used by this view; kept for the shared mobile-view prop contract
   const now = useLiveClock(30_000)
   const { data: rollingEvents = [] } = useRollingEvents(now)
   const [showCompletedTodos, setShowCompletedTodos] = useState(false)

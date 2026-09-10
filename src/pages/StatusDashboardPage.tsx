@@ -24,6 +24,7 @@ import {
   Zap,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { getSetting, setSetting } from '../lib/settingsStore'
 import { cn } from '../utils/cn'
 import {
   Alert,
@@ -296,7 +297,7 @@ export default function StatusDashboardPage() {
         p_start: periodStart.toISOString(),
         p_end: periodEnd.toISOString(),
       }),
-      supabase.from('settings').select('value').eq('key', 'llm_config').single(),
+      getSetting<{ provider: string; model: string }>('llm_config'),
     ])
 
     if (summaryRes.error) {
@@ -309,8 +310,8 @@ export default function StatusDashboardPage() {
         setSelectedHour(data.hourly[data.hourly.length - 1] ?? null)
       }
     }
-    if (cfgRes.data?.value) {
-      setLlmConfig(cfgRes.data.value as { provider: string; model: string })
+    if (cfgRes.data) {
+      setLlmConfig(cfgRes.data)
     }
     setLastRefresh(new Date())
     setLoading(false)
@@ -359,11 +360,7 @@ export default function StatusDashboardPage() {
       daily_cost_cap_usd: summary?.circuit_breaker?.daily_cost_cap_usd ?? 2.0,
     }
 
-    await supabase.from('settings').upsert({
-      key: 'ai_circuit_breaker',
-      value: payload,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'key' })
+    await setSetting('ai_circuit_breaker', payload)
 
     setCircuitBreakerSaving(false)
     void load()

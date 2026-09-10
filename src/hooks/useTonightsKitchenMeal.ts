@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { format, subMinutes } from 'date-fns'
 import { supabase } from '../lib/supabase'
+import { getSetting } from '../lib/settingsStore'
 
 export interface RecipeMealPlanRow {
   id?: string
@@ -89,13 +90,9 @@ export function useTonightsKitchenMeal() {
         .order('sort_order', { ascending: true })
 
       // 4. Fetch pantry inventory from settings
-      const { data: pantrySetting } = await supabase
-        .from('settings')
-        .select('value')
-        .eq('key', 'meal_planner_pantry_inventory')
-        .maybeSingle()
+      const { data: pantryInventoryValue } = await getSetting<Record<string, PantryItem>>('meal_planner_pantry_inventory')
 
-      const pantryInventory = (pantrySetting?.value ?? {}) as Record<string, PantryItem>
+      const pantryInventory = pantryInventoryValue ?? {}
 
       return {
         mealPlan,
@@ -110,7 +107,7 @@ export function useTonightsKitchenMeal() {
   const mealPlan = queryData?.mealPlan ?? null
   const recipe = queryData?.recipe ?? null
   const ingredients = queryData?.ingredients ?? []
-  const pantryInventory = queryData?.pantryInventory ?? {}
+  const pantryInventory: Record<string, PantryItem> = queryData?.pantryInventory ?? {}
 
   const hasMeal = Boolean(mealPlan && recipe)
 
@@ -133,7 +130,7 @@ export function useTonightsKitchenMeal() {
   if (ingredients.length > 0) {
     for (const item of ingredients) {
       const nameLower = (item.name || item.raw_text).toLowerCase().trim()
-      const foundInPantry = Object.values(pantryInventory).some((p: any) => {
+      const foundInPantry = Object.values(pantryInventory).some((p: PantryItem) => {
         const pName = (p.name || '').toLowerCase().trim()
         return pName && (nameLower.includes(pName) || pName.includes(nameLower))
       })

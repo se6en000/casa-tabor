@@ -31,7 +31,7 @@ async function geocodeAddress(address: string, apiKey: string): Promise<{ lat: n
   } catch { return null }
 }
 
-async function fetchHourlyForecast(lat: number, lng: number, _apiKey: string) {
+async function fetchHourlyForecast(lat: number, lng: number) {
   try {
     const res = await fetch(
       `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&hourly=weather_code,temperature_2m,precipitation_probability&temperature_unit=fahrenheit&forecast_days=5&timezone=GMT`
@@ -127,7 +127,7 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ ok: false, error: `Could not geocode: ${location}` }), { headers: { ...CORS, 'content-type': 'application/json' } })
   }
 
-  const forecast = await fetchHourlyForecast(loc.lat, loc.lng, apiKey)
+  const forecast = await fetchHourlyForecast(loc.lat, loc.lng)
   if (!forecast) {
     return new Response(JSON.stringify({ ok: false, error: 'No forecast data returned' }), { headers: { ...CORS, 'content-type': 'application/json' } })
   }

@@ -27,6 +27,7 @@ import {
 } from '../lib/familyRoutines'
 import { syncMemberRoutineExceptions } from '../lib/routineRecurrenceCoordinator'
 import SmartPlaceInput from '../components/calendar/SmartPlaceInput'
+import { DEFAULT_CASA_TABOR_MEMBERS } from './FamilySettingsPage.helpers'
 
 const COLOR_OPTIONS = PROFILE_COLOR_OPTIONS
 
@@ -87,123 +88,6 @@ function formatExceptionWindow(exception: MemberAvailabilityException): string {
   const endTime = end.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
   return `${dateLabel} · ${startTime}–${endTime}`
 }
-
-export const DEFAULT_CASA_TABOR_MEMBERS: FamilyMember[] = [
-  {
-    id: 'member-jake',
-    name: 'Jake',
-    full_name: 'Jacob Tabor',
-    role: 'parent',
-    color_hex: PROFILE_COLOR_OPTIONS[0].hex,
-    color_name: 'Navy',
-    phone: '+1 (561) 555-0101',
-    email: 'jake@casatabor.com',
-    google_calendar_id: null,
-    can_drive: true,
-    availability_mode: 'flexible',
-    show_on_home_sidebar: true,
-    is_admin: true,
-    avatar_url: null,
-    sort_order: 0,
-    created_at: '2026-01-01T00:00:00Z',
-    updated_at: '2026-01-01T00:00:00Z',
-  },
-  {
-    id: 'member-kelly',
-    name: 'Kelly',
-    full_name: 'Kelly Tabor',
-    role: 'parent',
-    color_hex: PROFILE_COLOR_OPTIONS[2].hex,
-    color_name: 'Forest',
-    phone: '+1 (561) 555-0102',
-    email: 'kelly@casatabor.com',
-    google_calendar_id: null,
-    can_drive: true,
-    availability_mode: 'strict',
-    show_on_home_sidebar: true,
-    is_admin: true,
-    avatar_url: null,
-    sort_order: 1,
-    created_at: '2026-01-01T00:00:00Z',
-    updated_at: '2026-01-01T00:00:00Z',
-  },
-  {
-    id: 'member-olivia',
-    name: 'Olivia',
-    full_name: 'Olivia Tabor',
-    role: 'child',
-    color_hex: PROFILE_COLOR_OPTIONS[3].hex,
-    color_name: 'Purple',
-    phone: null,
-    email: null,
-    google_calendar_id: null,
-    can_drive: false,
-    availability_mode: 'strict',
-    show_on_home_sidebar: true,
-    is_admin: false,
-    avatar_url: null,
-    sort_order: 2,
-    created_at: '2026-01-01T00:00:00Z',
-    updated_at: '2026-01-01T00:00:00Z',
-  },
-  {
-    id: 'member-owen',
-    name: 'Owen',
-    full_name: 'Owen Tabor',
-    role: 'child',
-    color_hex: PROFILE_COLOR_OPTIONS[4].hex,
-    color_name: 'Blue',
-    phone: null,
-    email: null,
-    google_calendar_id: null,
-    can_drive: false,
-    availability_mode: 'strict',
-    show_on_home_sidebar: true,
-    is_admin: false,
-    avatar_url: null,
-    sort_order: 3,
-    created_at: '2026-01-01T00:00:00Z',
-    updated_at: '2026-01-01T00:00:00Z',
-  },
-  {
-    id: 'member-emme',
-    name: 'Emme',
-    full_name: 'Emme Tabor',
-    role: 'child',
-    color_hex: PROFILE_COLOR_OPTIONS[1].hex,
-    color_name: 'Gold',
-    phone: null,
-    email: null,
-    google_calendar_id: null,
-    can_drive: false,
-    availability_mode: 'strict',
-    show_on_home_sidebar: true,
-    is_admin: false,
-    avatar_url: null,
-    sort_order: 4,
-    created_at: '2026-01-01T00:00:00Z',
-    updated_at: '2026-01-01T00:00:00Z',
-  },
-  {
-    id: 'member-giselle',
-    name: 'Giselle',
-    full_name: 'Giselle (Nanny / Driver)',
-    role: 'caregiver',
-    color_hex: PROFILE_COLOR_OPTIONS[8].hex,
-    color_name: 'Slate',
-    phone: '+1 (561) 555-0109',
-    email: 'giselle@casatabor.com',
-    google_calendar_id: null,
-    can_drive: true,
-    availability_mode: 'strict',
-    show_on_home_sidebar: true,
-    is_admin: false,
-    avatar_url: null,
-    sort_order: 5,
-    created_at: '2026-01-01T00:00:00Z',
-    updated_at: '2026-01-01T00:00:00Z',
-  },
-]
 
 export default function FamilySettingsPage() {
   const qc = useQueryClient()
@@ -291,7 +175,9 @@ export default function FamilySettingsPage() {
         const parsed = JSON.parse(cached)
         if (parsed && typeof parsed === 'object' && parsed.title) return parsed
       }
-    } catch {}
+    } catch {
+      // ignore — best-effort local cache read
+    }
 
     return createSchoolRoutine(memberId, memberName || undefined)
   }
@@ -306,7 +192,9 @@ export default function FamilySettingsPage() {
     }))
     try {
       localStorage.setItem(`casa_tabor_member_routine_${memberId}`, JSON.stringify(updated))
-    } catch {}
+    } catch {
+      // ignore — best-effort local cache write
+    }
   }
 
   useEffect(() => {
@@ -520,7 +408,9 @@ export default function FamilySettingsPage() {
   async function saveRoutineForMember(memberId: string, routine: FamilyRoutine) {
     try {
       localStorage.setItem(`casa_tabor_member_routine_${memberId}`, JSON.stringify(routine))
-    } catch {}
+    } catch {
+      // ignore — best-effort local cache write
+    }
 
     const serialized = routine.enabled && routine.daysOfWeek.length > 0
       ? serializeRoutineToAvailabilityRules(routine)

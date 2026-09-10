@@ -23,7 +23,7 @@ Deno.serve(async (req) => {
   const body = req.method === 'POST' ? await req.json().catch(() => ({})) : {}
   const results: Record<string, unknown> = {}
 
-  let connectionsToRegister: CalendarConnection[] = []
+  let connectionsToRegister: CalendarConnection[]
 
   if (body.connection_id) {
     const { data, error } = await sb

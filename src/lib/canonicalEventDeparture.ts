@@ -102,7 +102,7 @@ export function resolveCanonicalDeparture(
 
   // 1. Check if event is at home
   if (isEventAtHome(evt)) {
-    let arrivalDate: Date | null = null
+    let arrivalDate: Date | null
     try {
       arrivalDate = parseISO(evt.start_time)
     } catch {
@@ -119,8 +119,11 @@ export function resolveCanonicalDeparture(
     }
   }
 
-  // 2. Check if explicitly marked No Ride
-  if ((evt.plan_override as any)?.mode_override === 'none') {
+  // 2. Check if explicitly marked No Ride. `mode_override` doesn't declare
+  // 'none' in EventPlanOverride's type, but some legacy/manual records still
+  // carry it, so this reads it as a loosened string rather than widening the
+  // real union.
+  if ((evt.plan_override as { mode_override?: string } | null)?.mode_override === 'none') {
     return {
       ...emptyResult,
       venueName,

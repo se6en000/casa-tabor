@@ -168,9 +168,9 @@ export function initCastRealtimeChannel(): () => void {
 
       realtimeChannel
         .on(
-          'broadcast' as any,
+          'broadcast',
           { event: YOUTUBE_CAST_STATE_EVENT },
-          (payload: { payload?: Partial<YouTubeCastState> }) => {
+          (payload: { type: 'broadcast'; event: string; payload: Partial<YouTubeCastState> }) => {
             if (payload?.payload) {
               const updated = saveStoredCastState(payload.payload)
               stateListeners.forEach(listener => {
@@ -227,7 +227,7 @@ async function dispatchCastCommand(action: string, payload: Record<string, unkno
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(message),
       }).catch(() => {})
-    } catch {}
+    } catch { /* ignore — best-effort, non-critical */ }
   }
 }
 
@@ -246,7 +246,7 @@ export async function discoverCastDevices(): Promise<CastDevice[]> {
         return merged
       }
     }
-  } catch {}
+  } catch { /* ignore — best-effort, non-critical */ }
 
   // Merge known household devices & groups
   const current = getStoredCastState()

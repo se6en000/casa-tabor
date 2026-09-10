@@ -94,8 +94,8 @@ Deno.serve(async (req) => {
         headers: { authorization: 'Bearer ' + tokens.access_token },
       })
       if (calListRes.ok) {
-        const calList = await calListRes.json()
-        const casaCal = (calList.items ?? []).find((c: any) =>
+        const calList = await calListRes.json() as { items?: { id: string; summary?: string; summaryOverride?: string }[] }
+        const casaCal = (calList.items ?? []).find((c) =>
           (c.summaryOverride || c.summary || '').trim().toLowerCase() === 'casa tabor'
         )
         if (casaCal?.id) {

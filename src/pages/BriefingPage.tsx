@@ -34,7 +34,7 @@ import { useCalendarStore } from '../stores/calendarStore'
 import { useAppStore } from '../stores/appStore'
 import { cn } from '../utils/cn'
 import type { Conflict, PrepItem } from '../types'
-import { useProfileSession } from '../contexts/ProfileSessionContext'
+import { useProfileSession } from '../contexts/useProfileSession'
 import { invokeAssistantHistory } from '../lib/assistantConversationHistoryClient'
 
 interface MemberEvent {

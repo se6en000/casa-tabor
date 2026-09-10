@@ -362,8 +362,11 @@ export function usePrepItemDetails(item: PrepItem | null) {
           .from('event_members')
           .select('family_member:family_members(id, name, color_hex)')
           .eq('event_id', linkedEventId)
-        suggestedAssignees = (members ?? [])
-          .map((row: any) => row.family_member)
+        // `family_member` is a to-one FK join; without generated Database
+        // types Supabase's select-string parser infers it as an array, so we
+        // go through `unknown` rather than trust that structural guess.
+        suggestedAssignees = ((members ?? []) as unknown as { family_member: PrepItemAttendee | null }[])
+          .map((row) => row.family_member)
           .filter((member: PrepItemAttendee | null): member is PrepItemAttendee => !!member)
       }
 

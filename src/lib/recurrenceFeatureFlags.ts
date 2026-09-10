@@ -1,4 +1,4 @@
-import { supabase } from './supabase'
+import { getSetting } from './settingsStore'
 
 export const RECURRENCE_FEATURE_FLAG_NAMES = [
   'recurrence_v2_read',
@@ -29,12 +29,8 @@ export function normalizeRecurrenceFeatureFlags(value: unknown): RecurrenceFeatu
 }
 
 export async function loadRecurrenceFeatureFlags(): Promise<RecurrenceFeatureFlags> {
-  const { data, error } = await supabase
-    .from('settings')
-    .select('value')
-    .eq('key', 'recurrence_v2_flags')
-    .maybeSingle()
+  const { data, error } = await getSetting('recurrence_v2_flags')
 
   if (error) throw new Error(`Could not load recurrence feature flags: ${error.message}`)
-  return normalizeRecurrenceFeatureFlags(data?.value)
+  return normalizeRecurrenceFeatureFlags(data)
 }

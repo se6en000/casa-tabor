@@ -695,6 +695,22 @@ export function mergeEtaDisplay(etaA?: string | null, etaB?: string | null): str
   return etaA.length >= etaB.length ? etaA : etaB
 }
 
+/**
+ * `DeliveryUpdateEvent.rawItem` (and `DeliveryTransitItem.rawItem`) are declared as
+ * `PrepItem`, but the values that actually flow through delivery-transit merging can
+ * originate from older/alternate ingestion paths that stash a few extra fields on the
+ * raw payload which `PrepItem` never declared: a bare `cost`, a legacy camelCase
+ * `policyDisclaimer` (the current field is snake_case `policy_disclaimer`, already on
+ * `PrepItem`), and a raw `transaction_status` string. This local extension documents
+ * that superset without widening the shared `PrepItem` type, since nothing else in the
+ * codebase reads these fields off a `PrepItem`.
+ */
+type VendorRawItem = PrepItem & {
+  cost?: string | null
+  policyDisclaimer?: string | null
+  transaction_status?: string | null
+}
+
 export function mergeDeliveryTransitItem(
   existing: DeliveryTransitItem,
   incoming: DeliveryTransitItem
@@ -768,23 +784,23 @@ export function mergeDeliveryTransitItem(
 
   const reversedHistory = [...uniqueHistory].reverse()
   const historyCostItem = reversedHistory.find(
-    (h) => (h as any).cost || (h as any).rawItem?.cost
+    (h) => h.cost || (h.rawItem as VendorRawItem | undefined)?.cost
   )
   const latestCost =
-    (historyCostItem as any)?.cost ||
-    (historyCostItem as any)?.rawItem?.cost ||
+    historyCostItem?.cost ||
+    (historyCostItem?.rawItem as VendorRawItem | undefined)?.cost ||
     (isLatestIncoming ? (incoming.cost || existing.cost || null) : (existing.cost || incoming.cost || null))
 
   const mergedSummary = mergeItemSummary(existing.itemSummary, incoming.itemSummary)
   const mergedEta = mergeEtaDisplay(existing.etaDisplay, incoming.etaDisplay)
 
   const historyPolicyItem = reversedHistory.find(
-    (h) => (h as any).policyDisclaimer || (h as any).rawItem?.policy_disclaimer || (h as any).rawItem?.policyDisclaimer
+    (h) => h.policyDisclaimer || h.rawItem?.policy_disclaimer || (h.rawItem as VendorRawItem | undefined)?.policyDisclaimer
   )
   const latestPolicy =
-    (historyPolicyItem as any)?.policyDisclaimer ||
-    (historyPolicyItem as any)?.rawItem?.policy_disclaimer ||
-    (historyPolicyItem as any)?.rawItem?.policyDisclaimer ||
+    historyPolicyItem?.policyDisclaimer ||
+    historyPolicyItem?.rawItem?.policy_disclaimer ||
+    (historyPolicyItem?.rawItem as VendorRawItem | undefined)?.policyDisclaimer ||
     (isLatestIncoming ? (incoming.policyDisclaimer || existing.policyDisclaimer || null) : (existing.policyDisclaimer || incoming.policyDisclaimer || null))
 
   const newerDate = isLatestIncoming ? incoming.occurredAt : existing.occurredAt
@@ -888,13 +904,30 @@ function extractAmount(text?: string | null): string | null {
   return match ? match[0] : null
 }
 
+/**
+ * Loose "vendor-like" item shape accepted by the classifier heuristics below
+ * (`isBillOrUtilityOrHouseholdService`, `isPerishableDelivery`). Real callers mostly
+ * pass a `PrepItem`, but some pass partials or ad-hoc objects assembled elsewhere in
+ * the app. `PrepItem` itself never declares `title`/`vendor` (only their
+ * `event_title`/`attention_vendor` counterparts), so every field here is optional and
+ * both naming variants are declared — `PrepItem`/`Partial<PrepItem>` remain
+ * structurally assignable to this type since none of these fields are required.
+ */
+interface VendorLikeItem {
+  event_title?: string | null
+  title?: string | null
+  description?: string | null
+  vendor?: string | null
+  attention_vendor?: string | null
+}
+
 export function isBillOrUtilityOrHouseholdService(
-  item: PrepItem | Partial<PrepItem> | { title?: string; vendor?: string; description?: string; event_title?: string; attention_vendor?: string } | string | null | undefined
+  item: VendorLikeItem | string | null | undefined
 ): boolean {
   if (!item) return false
   const text = typeof item === 'string'
     ? item.toLowerCase()
-    : `${(item as any).event_title ?? (item as any).title ?? ''} ${(item as any).description ?? ''} ${(item as any).attention_vendor ?? (item as any).vendor ?? ''}`.toLowerCase()
+    : `${item.event_title ?? item.title ?? ''} ${item.description ?? ''} ${item.attention_vendor ?? item.vendor ?? ''}`.toLowerCase()
 
   // 1. Utilities (Electric, Power, Water, Sewer, Gas, Trash/Waste, Internet, Telecom)
   if (/\b(?:fpl|florida\s*power|power\s*bill|electric\s*bill|electricity|duke\s*energy|nextera|coned|pg&e|teco|peoples\s*gas|natural\s*gas|water\s*utilities|water\s*bill|sewer\s*bill|wastewater|waste\s*management|republic\s*services|solid\s*waste|xfinity|comcast|at&t|spectrum|verizon|t-mobile|centurylink|google\s*fiber|internet\s*bill|cable\s*bill|utility\s*bill|utilities\s*bill|utility\s*account)\b/i.test(text)) {
@@ -1015,16 +1048,16 @@ export function isDeliveryTransitItem(item: PrepItem): boolean {
 }
 
 export function isPerishableDelivery(
-  item: PrepItem | Partial<PrepItem> | { title?: string; vendor?: string; description?: string; event_title?: string; attention_vendor?: string } | string | null | undefined
+  item: VendorLikeItem | string | null | undefined
 ): boolean {
   if (!item) return false
   let combined = ''
   if (typeof item === 'string') {
     combined = item.toLowerCase()
   } else if (typeof item === 'object') {
-    const desc = (item as any).description || ''
-    const title = (item as any).event_title || (item as any).title || ''
-    const vendor = (item as any).vendor || (item as any).attention_vendor || ''
+    const desc = item.description || ''
+    const title = item.event_title || item.title || ''
+    const vendor = item.vendor || item.attention_vendor || ''
     combined = `${vendor} ${title} ${desc}`.toLowerCase()
   }
 
@@ -1192,7 +1225,7 @@ export function isItemInTransit(item: DeliveryTransitItem, now?: Date): boolean 
 }
 
 export function isItemDelivered(item: DeliveryTransitItem, now?: Date): boolean {
-  if (item.stage === 'delivered' || (item.rawItem && (item.rawItem as any).transaction_status === 'delivered')) return true
+  if (item.stage === 'delivered' || (item.rawItem && (item.rawItem as VendorRawItem).transaction_status === 'delivered')) return true
   if (item.etaDisplay && /^delivered\b/i.test(item.etaDisplay)) return true
   const targetDate = resolveDeliveryDate(item.rawItem)
   const effectiveStage = resolveEffectiveStage(item.stage, targetDate, now)

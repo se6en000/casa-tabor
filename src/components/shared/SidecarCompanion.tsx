@@ -116,9 +116,12 @@ export default function SidecarCompanion({
 
     const fromRolling = rollingEvents.find((e) => e.id === selectedSidecarEventId)
 
-    // Search any active event queries cached in queryClient
+    // Search any active event queries cached in queryClient. Different queries under the
+    // ['events'] key shape their cache differently — a plain array, or an object with an
+    // `active` or `events` list.
+    type CachedEventsData = EventWithDetails[] | { active?: EventWithDetails[]; events?: EventWithDetails[] } | null | undefined
     let foundInCachedList: EventWithDetails | null = null
-    const allEventQueries = queryClient.getQueriesData<any>({ queryKey: ['events'] })
+    const allEventQueries = queryClient.getQueriesData<CachedEventsData>({ queryKey: ['events'] })
     for (const [, cachedData] of allEventQueries) {
       const list = Array.isArray(cachedData)
         ? cachedData
@@ -128,7 +131,7 @@ export default function SidecarCompanion({
         ? cachedData.events
         : null
       if (list) {
-        const found = list.find((e: any) => e?.id === selectedSidecarEventId)
+        const found = list.find((e) => e?.id === selectedSidecarEventId)
         if (found && found.start_time) {
           foundInCachedList = found
           break

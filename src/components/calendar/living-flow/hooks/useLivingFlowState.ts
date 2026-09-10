@@ -427,7 +427,7 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     newDriverLeg2: string,
     newBehavior: TravelBehavior,
   ) => {
-    let currentEvent = activeEventRef.current || initialEvent
+    const currentEvent = activeEventRef.current || initialEvent
     if (!currentEvent?.id) return
 
     const findMember = (name: string): FamilyMember | undefined => {
@@ -688,6 +688,10 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
         location_name: newLocation,
         address: newAddress,
         members: patchedMembers,
+        // `enrichment` is built from a dynamic effective_bundle snapshot with
+        // id/event_id/created_at/updated_at stripped, so it doesn't fully satisfy
+        // EventEnrichment. Safe here — this only feeds an optimistic UI cache patch.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         enrichment: enrichment as any,
         updated_at: new Date().toISOString(),
       })
@@ -1267,15 +1271,16 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
         return
       }
 
-      let targetMasterId = (currentEvent.record_kind === 'occurrence' && (currentEvent.recurrence_master_id || recurringContext?.series?.template_event_id))
-        ? (currentEvent.recurrence_master_id || recurringContext?.series?.template_event_id!)
+      const recurrenceFallbackMasterId = currentEvent.recurrence_master_id || recurringContext?.series?.template_event_id
+      let targetMasterId = (currentEvent.record_kind === 'occurrence' && recurrenceFallbackMasterId)
+        ? recurrenceFallbackMasterId
         : currentEvent.id
 
-      if (currentEvent.record_kind === 'occurrence' && targetMasterId === currentEvent.id && (currentEvent as any).series_id) {
+      if (currentEvent.record_kind === 'occurrence' && targetMasterId === currentEvent.id && currentEvent.series_id) {
         const { data: foundSeries } = await supabase
           .from('event_series')
           .select('template_event_id')
-          .eq('id', (currentEvent as any).series_id)
+          .eq('id', currentEvent.series_id)
           .maybeSingle()
         if (foundSeries?.template_event_id) {
           targetMasterId = foundSeries.template_event_id
@@ -1337,7 +1342,7 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
         await supabase
           .from('event_series')
           .delete()
-          .or(`template_event_id.eq.${targetMasterId},id.eq.${(currentEvent as any).series_id || recurringContext?.series?.id || '00000000-0000-0000-0000-000000000000'}`)
+          .or(`template_event_id.eq.${targetMasterId},id.eq.${currentEvent.series_id || recurringContext?.series?.id || '00000000-0000-0000-0000-000000000000'}`)
 
         // Delete all child instances
         await supabase.from('events').delete().eq('recurrence_master_id', masterIdToUpdate)

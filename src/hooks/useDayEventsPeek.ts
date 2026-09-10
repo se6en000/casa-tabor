@@ -61,7 +61,21 @@ export function useDayEventsPeek(proposedAction: ProposedActionSlot | null, enab
         console.warn('Error fetching day peek events:', error)
       }
 
-      const events: CalendarEventSummary[] = (data || []).map((row: any) => ({
+      interface DayPeekEventRow {
+        id: string
+        title: string
+        description: string | null
+        start_time: string | null
+        end_time: string | null
+        all_day: boolean | null
+        category: string | null
+        event_type: string | null
+        google_event_id: string | null
+        location_name: string | null
+        members: CalendarEventSummary['members']
+      }
+
+      const events: CalendarEventSummary[] = ((data || []) as unknown as DayPeekEventRow[]).map((row) => ({
         id: row.id,
         title: row.title,
         description: row.description,

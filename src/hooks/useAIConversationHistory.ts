@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { useProfileSession } from '../contexts/ProfileSessionContext'
+import { useProfileSession } from '../contexts/useProfileSession'
 import { sanitizeConversationMessage } from '../lib/assistantConversationHistory.mjs'
 import { invokeAssistantHistory } from '../lib/assistantConversationHistoryClient'
 import type { AIMessage, AISession } from './useAISession'

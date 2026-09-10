@@ -1,22 +1,9 @@
-import { createContext, useCallback, useContext, useState, type ReactNode } from 'react'
+import { useCallback, useState, type ReactNode } from 'react'
 
 import { invokeHistoryUnlock } from '../lib/assistantConversationHistoryClient'
 import { normalizeProfileSession, PROFILE_SESSION_STORAGE_KEY } from '../lib/profileSession.mjs'
 import type { FamilyMember } from '../types'
-
-export type ProfileSession = {
-  memberId: string
-  memberName: string
-  token: string
-}
-
-type ProfileSessionContextValue = {
-  profile: ProfileSession | null
-  unlock: (member: FamilyMember, pin: string) => Promise<void>
-  signOut: () => void
-}
-
-const ProfileSessionContext = createContext<ProfileSessionContextValue | null>(null)
+import { ProfileSessionContext, type ProfileSession } from './useProfileSession'
 
 function readStoredProfile(): ProfileSession | null {
   try {
@@ -59,10 +46,4 @@ export function ProfileSessionProvider({ children }: { children: ReactNode }) {
       {children}
     </ProfileSessionContext.Provider>
   )
-}
-
-export function useProfileSession() {
-  const context = useContext(ProfileSessionContext)
-  if (!context) throw new Error('useProfileSession must be used inside ProfileSessionProvider.')
-  return context
 }

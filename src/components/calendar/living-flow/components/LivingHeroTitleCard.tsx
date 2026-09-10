@@ -271,7 +271,7 @@ export default function LivingHeroTitleCard({
     if (parts.length === 3) {
       const nextStart = new Date(currentStartDate)
       nextStart.setFullYear(parts[0], parts[1] - 1, parts[2])
-      let nextEnd = new Date(currentEndDate)
+      let nextEnd: Date
       if (scheduleTab === 'multiday') {
         const spanDays = Math.max(1, differenceInCalendarDays(currentEndDate, currentStartDate))
         nextEnd = addDays(nextStart, spanDays)
@@ -310,7 +310,7 @@ export default function LivingHeroTitleCard({
       const endOfDay = new Date(currentStartDate.getFullYear(), currentStartDate.getMonth(), currentStartDate.getDate(), 23, 59, 59)
       commitScheduleChange(startOfDay, endOfDay, true)
     } else {
-      let nextStart = new Date(currentStartDate)
+      const nextStart = new Date(currentStartDate)
       if (localIsAllDay && nextStart.getHours() === 0 && nextStart.getMinutes() === 0) {
         nextStart.setHours(9, 0, 0, 0) // Default 9:00 AM when unchecking All Day
       }

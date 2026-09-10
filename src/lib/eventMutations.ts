@@ -9,7 +9,7 @@ import type { EventWithDetails } from '../hooks/useCalendarEvents'
 
 const rrulestr = RRulePkg.rrulestr || (RRulePkg as unknown as { default: { rrulestr: typeof RRulePkg.rrulestr } }).default?.rrulestr
 const recurrenceEngine = createRecurrenceEngine({ rrulestr, formatInTimeZone, fromZonedTime })
-import type { FamilyMember } from '../types'
+import type { FamilyMember, EventEnrichment } from '../types'
 import type { EventTransportationPlan } from './eventTransportation.ts'
 import {
   syncTransportationAttendees,
@@ -20,6 +20,7 @@ import {
 } from './eventTransportation.ts'
 import {
   saveEventTransportationOverride,
+  type EventPlanOverrideDbRow,
 } from './eventPlanOverrides.ts'
 import {
   publishEventAggregatePatch,
@@ -285,7 +286,8 @@ export async function materializeSyntheticRoutineEvent(
     if (memErr) console.warn('[materializeSyntheticRoutineEvent] event_members error:', memErr)
   }
 
-  const enrichmentPayload = {
+  const nowIso = new Date().toISOString()
+  const enrichmentPayload: EventEnrichment = {
     id: crypto.randomUUID(),
     event_id: newEventId,
     category,
@@ -295,14 +297,26 @@ export async function materializeSyntheticRoutineEvent(
     departure_time: depTimeIso,
     route_summary: routeSummary,
     what_to_bring: [],
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    weather_at_event: null,
+    weather_summary: null,
+    prep_notes: null,
+    outfit_suggestion: null,
+    parking_notes: null,
+    dietary_notes: null,
+    cost_estimate: null,
+    contact_name: null,
+    contact_phone: null,
+    meal_impact: null,
+    enriched_by: 'routine_synthesis',
+    enriched_at: nowIso,
+    created_at: nowIso,
+    updated_at: nowIso,
   }
   const { error: enrErr } = await supabase.from('event_enrichments').insert(enrichmentPayload)
   if (enrErr) console.warn('[materializeSyntheticRoutineEvent] event_enrichments error:', enrErr)
 
   // Build and save transportation plan override & logistics
-  let planOverridePayload: any = null
+  let planOverridePayload: EventPlanOverrideDbRow | null = null
   if (travelBehavior !== 'none' && !isAllDay && driveMins > 0) {
     const driver1Obj = { id: driver1Member?.id ?? null, name: driver1Name }
     const driver2Obj = { id: driver2Member?.id ?? null, name: driver2Name }
@@ -319,7 +333,7 @@ export async function materializeSyntheticRoutineEvent(
         role: mi.role,
         family_member: members.find(m => m.id === mi.family_member_id)!,
       })).filter(m => Boolean(m.family_member)),
-      enrichment: enrichmentPayload as any,
+      enrichment: enrichmentPayload,
       plan_override: null,
       logistics: [],
       checklist: [],
@@ -393,7 +407,7 @@ export async function materializeSyntheticRoutineEvent(
     address,
     event_type: eventType,
     is_exception: true,
-    enrichment: enrichmentPayload as any,
+    enrichment: enrichmentPayload,
     plan_override: planOverridePayload,
     members: memberInserts.map((mi) => ({
       id: crypto.randomUUID(),
@@ -552,7 +566,7 @@ export async function updateEventVenue(
   }
 
   // Generate logistics steps
-  let steps: any[] = []
+  let steps: ReturnType<typeof buildLogisticsStepsFromRoute> = []
   if (!isHome && driveMins !== undefined) {
     const attendeeNames = (event.members ?? [])
       .map((m) => m.family_member?.name || '')
@@ -621,7 +635,10 @@ export async function updateEventVenue(
     location_name: venue.name,
     address: venue.address,
     enrichment: optimisticEnrichment,
-    logistics: steps,
+    // buildLogisticsStepsFromRoute's steps are meant for DB insert (created_at
+    // is populated by the database), but this optimistic patch needs full
+    // EventLogistic rows, so it's backfilled here for the in-memory cache.
+    logistics: steps.map((step) => ({ ...step, created_at: new Date().toISOString() })),
     ...(updatedPlan ? {
       plan_override: {
         ...(event.plan_override ?? {
@@ -789,10 +806,17 @@ export async function updateEventCategory(
   // 0ms Optimistic UI cache update for category and mode switch
   publishEventAggregatePatch(queryClient, eventId, {
     event_type: mode === 'reminder' ? 'reminder' : 'event',
+    // EventAggregatePatch types `enrichment` as a full EventEnrichment, but
+    // this optimistic cache patch intentionally only touches category fields
+    // (the underlying cache merge is a shallow spread) — a full record isn't
+    // available here without an extra fetch, and guessing values for the
+    // unrelated fields (drive_time_mins, confidence, etc.) would be worse
+    // than this narrow, honest exception.
     enrichment: {
       category: catSlug,
       category_locked: true,
       updated_at: new Date().toISOString(),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any,
     updated_at: new Date().toISOString(),
   })
@@ -1024,7 +1048,7 @@ export async function syncAndMaterializeRecurringSeries(
     let { data: series } = await supabase
       .from('event_series')
       .select('*')
-      .or(`template_event_id.eq.${templateEventId},id.eq.${(master as any).series_id || '00000000-0000-0000-0000-000000000000'}`)
+      .or(`template_event_id.eq.${templateEventId},id.eq.${master.series_id || '00000000-0000-0000-0000-000000000000'}`)
       .maybeSingle()
 
     const formattedRrule = master.rrule

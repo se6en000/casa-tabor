@@ -26,6 +26,7 @@ import {
 import { saveTonightDinnerPlan } from '../utils/dinnerPlanSync'
 import type { DinnerPlan } from '../types'
 import { supabase } from '../lib/supabase'
+import { getSetting, setSetting } from '../lib/settingsStore'
 import { formatSupabaseError } from '../lib/formatSupabaseError'
 import { inferCategoryFromName } from '../utils/groceryCategorization'
 import { normalizeRecipeIngredientFields } from '../utils/recipeIngredientParsing'
@@ -65,10 +66,11 @@ import {
 import {
   TACTILE_SPRING_TRANSITION,
   TACTILE_SWAP_SCALE_ANIMATION,
-} from '../components/ui/TactileSwap'
+} from '../components/ui/TactileSwap.helpers'
 import ActiveKitchenWorkbench from '../components/kitchen/ActiveKitchenWorkbench'
 import MobileCookingView from '../components/mobile/MobileCookingView'
 import { useAppStore } from '../stores/appStore'
+import { formatRecipeTitle } from './CookPage.helpers'
 
 
 type Recipe = {
@@ -290,7 +292,7 @@ const SLOT_LABELS: Record<RecipeMealPlan['slot'], string> = {
   'this-week': 'This week',
 }
 
-const SLOT_ORDER: RecipeMealPlan['slot'][] = ['tonight', 'tomorrow', 'this-week']
+type MealSlot = RecipeMealPlan['slot']
 
 function parseCookMinutes(value: string | null): number | null {
   if (!value) return null
@@ -323,40 +325,6 @@ function isCookMood(value: string | null): value is CookMood {
   return value === 'quick' || value === 'family' || value === 'new' || value === 'fancy' || value === 'pantry'
 }
 
-export function formatRecipeTitle(raw: string | null | undefined): string {
-  if (!raw) return ''
-  const trimmed = raw.trim()
-  if (!trimmed) return ''
-
-  const upperAcronyms = new Set(['GLP-1', 'AI', 'BBQ', 'BLT', 'BLTS', 'PB&J', 'USA', 'IP', 'NY', 'NYC'])
-  const lowerMinorWords = new Set(['a', 'an', 'and', 'as', 'at', 'but', 'by', 'for', 'in', 'nor', 'of', 'on', 'or', 'so', 'the', 'to', 'up', 'yet', 'with', 'la', 'alla', 'de', 'du'])
-
-  const isAllUpper = trimmed === trimmed.toUpperCase() && /[A-Z]/.test(trimmed)
-  const isAllLower = trimmed === trimmed.toLowerCase()
-
-  const words = trimmed.split(/(\s+|-|\/)/)
-  let isFirstWord = true
-  return words
-    .map((w) => {
-      if (/^\s+$/.test(w) || w === '-' || w === '/') return w
-      const lower = w.toLowerCase()
-      if (upperAcronyms.has(w.toUpperCase()) || /^glp-1$/i.test(w)) {
-        isFirstWord = false
-        return w.toUpperCase() === 'GLP-1' || /^glp-1$/i.test(w) ? 'GLP-1' : w.toUpperCase()
-      }
-      if (!isFirstWord && lowerMinorWords.has(lower) && (isAllUpper || isAllLower)) {
-        isFirstWord = false
-        return lower
-      }
-      if (isAllUpper || isAllLower || (w === w.toLowerCase() && !lowerMinorWords.has(lower))) {
-        isFirstWord = false
-        return lower.charAt(0).toUpperCase() + lower.slice(1)
-      }
-      isFirstWord = false
-      return w
-    })
-    .join('')
-}
 
 
 
@@ -697,14 +665,7 @@ export default function CookPage() {
       ...entry,
     }
     const nextLog = [nextRow, ...mealPlannerActionLog].slice(0, 200)
-    const { error } = await supabase.from('settings').upsert(
-      {
-        key: 'meal_planner_action_log',
-        value: nextLog,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'key' },
-    )
+    const { error } = await setSetting('meal_planner_action_log', nextLog)
     if (error) throw error
     setMealPlannerActionLog(nextLog)
   }
@@ -794,9 +755,9 @@ export default function CookPage() {
   const { data: foodProfileData } = useQuery({
     queryKey: ['cook-page-food-profile'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('settings').select('value').eq('key', 'food_profile').maybeSingle()
+      const { data, error } = await getSetting('food_profile')
       if (error) throw error
-      return normalizeFoodProfile(data?.value)
+      return normalizeFoodProfile(data)
     },
     staleTime: 60_000,
   })
@@ -809,9 +770,9 @@ export default function CookPage() {
   const { data: plannerTemplatesData } = useQuery({
     queryKey: ['cook-page-meal-planner-templates'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('settings').select('value').eq('key', 'meal_planner_templates').maybeSingle()
+      const { data, error } = await getSetting('meal_planner_templates')
       if (error) throw error
-      const rows = Array.isArray(data?.value) ? data.value : []
+      const rows = Array.isArray(data) ? data : []
       return rows
         .map((row: unknown) => {
           if (!row || typeof row !== 'object') return null
@@ -839,9 +800,9 @@ export default function CookPage() {
   const { data: plannerLearningData } = useQuery({
     queryKey: ['cook-page-meal-planner-learning'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('settings').select('value').eq('key', 'meal_planner_learning').maybeSingle()
+      const { data, error } = await getSetting('meal_planner_learning')
       if (error) throw error
-      const value = data?.value as Record<string, unknown> | undefined
+      const value = data as Record<string, unknown> | undefined
       const normalizeList = (input: unknown, max = 20) => Array.isArray(input)
         ? input.map((row) => String(row ?? '').trim().toLowerCase()).filter(Boolean).slice(0, max)
         : []
@@ -867,9 +828,9 @@ export default function CookPage() {
   useEffect(() => {
     let active = true
     void (async () => {
-      const { data, error } = await supabase.from('settings').select('value').eq('key', 'meal_planner_action_log').maybeSingle()
+      const { data, error } = await getSetting('meal_planner_action_log')
       if (error || !active) return
-      const rows = Array.isArray(data?.value) ? data.value : []
+      const rows = Array.isArray(data) ? data : []
       const parsed = rows
         .map((row) => {
           if (!row || typeof row !== 'object') return null
@@ -897,9 +858,9 @@ export default function CookPage() {
   const { data: pantryInventoryData } = useQuery({
     queryKey: ['cook-page-meal-planner-pantry-inventory'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('settings').select('value').eq('key', 'meal_planner_pantry_inventory').maybeSingle()
+      const { data, error } = await getSetting('meal_planner_pantry_inventory')
       if (error) throw error
-      return sanitizePantryInventory(data?.value)
+      return sanitizePantryInventory(data)
     },
     staleTime: 60_000,
   })
@@ -1308,14 +1269,7 @@ export default function CookPage() {
   }
 
   async function persistMealPlannerPantryInventory(nextInventory: Record<string, PantryInventoryEntry>) {
-    const { error } = await supabase.from('settings').upsert(
-      {
-        key: 'meal_planner_pantry_inventory',
-        value: nextInventory,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'key' },
-    )
+    const { error } = await setSetting('meal_planner_pantry_inventory', nextInventory)
     if (error) throw error
     setMealPlannerPantryInventory(nextInventory)
   }
@@ -1860,7 +1814,7 @@ export default function CookPage() {
     }
   }
 
-  async function undoScheduleMeal(recipe: Recipe, assignedSlot: (typeof SLOT_ORDER)[number], previousSlot?: (typeof SLOT_ORDER)[number]) {
+  async function undoScheduleMeal(recipe: Recipe, assignedSlot: MealSlot, previousSlot?: MealSlot) {
     try {
       await supabase
         .from('recipe_meal_plans')
@@ -2172,27 +2126,13 @@ export default function CookPage() {
   }
 
   async function persistMealPlannerTemplates(nextTemplates: MealPlannerTemplate[]) {
-    const { error } = await supabase.from('settings').upsert(
-      {
-        key: 'meal_planner_templates',
-        value: nextTemplates,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'key' },
-    )
+    const { error } = await setSetting('meal_planner_templates', nextTemplates)
     if (error) throw error
     setMealPlannerTemplates(nextTemplates)
   }
 
   async function persistMealPlannerLearning(nextLearning: MealPlannerLearning) {
-    const { error } = await supabase.from('settings').upsert(
-      {
-        key: 'meal_planner_learning',
-        value: nextLearning,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'key' },
-    )
+    const { error } = await setSetting('meal_planner_learning', nextLearning)
     if (error) throw error
     setMealPlannerLearning(nextLearning)
   }
@@ -2428,22 +2368,11 @@ export default function CookPage() {
       }
       await persistMealPlannerPantryInventory(nextInventory)
       if (auditEntries.length > 0) {
-        const { data: auditSettingsRow, error: auditLoadError } = await supabase
-          .from('settings')
-          .select('value')
-          .eq('key', 'meal_planner_pantry_audit_log')
-          .maybeSingle()
+        const { data: auditSettingsValue, error: auditLoadError } = await getSetting('meal_planner_pantry_audit_log')
         if (auditLoadError) throw auditLoadError
-        const existingAudit = sanitizePantryInventoryAudit(auditSettingsRow?.value)
+        const existingAudit = sanitizePantryInventoryAudit(auditSettingsValue)
         const nextAudit = appendPantryInventoryAudit(existingAudit, auditEntries)
-        const { error: auditSaveError } = await supabase.from('settings').upsert(
-          {
-            key: 'meal_planner_pantry_audit_log',
-            value: nextAudit,
-            updated_at: nowIso,
-          },
-          { onConflict: 'key' },
-        )
+        const { error: auditSaveError } = await setSetting('meal_planner_pantry_audit_log', nextAudit)
         if (auditSaveError) throw auditSaveError
       }
       setMealPlannerAddResult({ attempted, inserted, at: new Date().toISOString() })

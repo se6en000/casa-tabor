@@ -297,7 +297,7 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
       const isUnderway = start.getTime() <= currentTime.getTime() && end.getTime() > currentTime.getTime()
       const minsToStart = differenceInMinutes(start, currentTime)
 
-      let driveTime = e.enrichment?.drive_time_mins || 0
+      const driveTime = e.enrichment?.drive_time_mins || 0
       let departureTime: Date | null = null
       if (e.enrichment?.departure_time) {
         departureTime = new Date(e.enrichment.departure_time)
@@ -331,7 +331,7 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
 
       // Secondary tie-breaker: earlier start time gets priority
       score -= (start.getTime() - currentTime.getTime()) / (1000 * 60 * 60)
-    } catch {}
+    } catch { /* ignore — best-effort, non-critical */ }
 
     return score
   }
@@ -369,7 +369,7 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
       }
     })
 
-    let activePool: EventWithDetails[] = []
+    let activePool: EventWithDetails[]
     if (underwayEvents.length > 0) {
       activePool = underwayEvents
     } else {
@@ -552,7 +552,7 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
         if (!e.all_day && parseISO(e.end_time).getTime() < now.getTime() - 30 * 60 * 1000) {
           return false
         }
-      } catch {}
+      } catch { /* ignore — best-effort, non-critical */ }
       return true
     })
   }, [effectiveTodayEvents, now])
@@ -659,7 +659,7 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
       const start = parseISO(e.start_time)
       const daysAway = differenceInCalendarDays(startOfDay(start), todayStart)
 
-      let timeLabel = ''
+      let timeLabel: string
       if (daysAway === 1) {
         timeLabel = 'tomorrow'
       } else if (daysAway === 2) {
@@ -736,7 +736,7 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
             const pickupPart = pickupName ? ` (${pickupName} on pickup)` : ''
             tomorrowEarlyNote = `Early start tomorrow at ${format(start, 'h:mm a')} with ${firstEvent.title}${pickupPart}.`
           }
-        } catch {}
+        } catch { /* ignore — best-effort, non-critical */ }
       }
     }
 
@@ -794,7 +794,11 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
 
   const transportationPlan = useMemo<EventTransportationPlan | null>(() => {
     if (!isTravelEvent) return null
-    return nextEvent?.plan_override?.transportation_plan ?? (nextEvent as any)?.transportation_plan ?? null
+    // EventWithDetails only carries the plan under plan_override; the
+    // top-level fallback guards against an older/alternate event shape that
+    // placed it directly on the event.
+    const legacyEvent = nextEvent as (EventWithDetails & { transportation_plan?: EventTransportationPlan | null }) | null
+    return nextEvent?.plan_override?.transportation_plan ?? legacyEvent?.transportation_plan ?? null
   }, [isTravelEvent, nextEvent])
 
   const outboundLeg = useMemo<TransportationLeg | null>(() => {
@@ -931,7 +935,7 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     const locLower = locName.toLowerCase()
 
     // Check partial token overlap (e.g. "Cooper" in "Party at Coopers")
-    const locTokens = locLower.split(/[\s,.'’\-]+/).filter((t) => t.length > 3)
+    const locTokens = locLower.split(/[\s,.'’-]+/).filter((t) => t.length > 3)
     const titleHasOverlap = locTokens.some((t) => titleLower.includes(t))
 
     if (titleHasOverlap || titleLower.includes(locLower) || locLower.includes(titleLower)) {

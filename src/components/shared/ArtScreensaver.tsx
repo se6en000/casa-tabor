@@ -23,7 +23,7 @@ import {
   SIGNATURE_SIZE_SCALES,
   getSignatureInkStyle,
 } from '../../lib/artModeLibrary'
-import { useTheme } from '../../contexts/ThemeContext'
+import { useTheme } from '../../contexts/useTheme'
 
 const SENSOR = 'http://127.0.0.1:8765'
 const MAT_MARGIN_H_PX = 72

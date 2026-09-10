@@ -5,19 +5,21 @@ import test from 'node:test'
 
 test('TactileSwap: defines canonical spring physics and keyframe animations', async () => {
   const source = await readFile(resolve('src/components/ui/TactileSwap.tsx'), 'utf8')
-  assert.match(source, /export const TACTILE_SPRING_TRANSITION(?::\s*\w+)?\s*=\s*\{/)
-  assert.match(source, /type:\s*'spring'/)
-  assert.match(source, /stiffness:\s*350/)
-  assert.match(source, /damping:\s*26/)
+  const helpers = await readFile(resolve('src/components/ui/TactileSwap.helpers.ts'), 'utf8')
 
-  assert.match(source, /export const TACTILE_SWAP_SCALE_ANIMATION(?::\s*\w+)?\s*=\s*\{/)
-  assert.match(source, /scale:\s*\[1,\s*1\.015,\s*0\.995,\s*1\]/)
-  assert.match(source, /duration:\s*0\.65/)
+  assert.match(helpers, /export const TACTILE_SPRING_TRANSITION(?::\s*\w+)?\s*=\s*\{/)
+  assert.match(helpers, /type:\s*'spring'/)
+  assert.match(helpers, /stiffness:\s*350/)
+  assert.match(helpers, /damping:\s*26/)
+
+  assert.match(helpers, /export const TACTILE_SWAP_SCALE_ANIMATION(?::\s*\w+)?\s*=\s*\{/)
+  assert.match(helpers, /scale:\s*\[1,\s*1\.015,\s*0\.995,\s*1\]/)
+  assert.match(helpers, /duration:\s*0\.65/)
 
   assert.match(source, /export function TactileSheenBeam/)
   assert.match(source, /export function TactileSwapBadge/)
-  assert.match(source, /export function useTactileSwapState/)
-  assert.match(source, /export function getTactileCardClasses/)
+  assert.match(helpers, /export function useTactileSwapState/)
+  assert.match(helpers, /export function getTactileCardClasses/)
 })
 
 test('Design System index: exports public Tactile components', async () => {

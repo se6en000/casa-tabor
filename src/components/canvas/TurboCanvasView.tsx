@@ -15,7 +15,8 @@ interface TurboCanvasViewProps {
   onQuickCreate: () => void
 }
 
-export default function TurboCanvasView({ onOpenEvent: _onOpenEvent, onQuickCreate: _onQuickCreate }: TurboCanvasViewProps) {
+export default function TurboCanvasView(props: TurboCanvasViewProps) {
+  void props // onOpenEvent/onQuickCreate not used by this view; kept for the shared canvas-view prop contract
   const {
     activeConflicts,
     activePrep,

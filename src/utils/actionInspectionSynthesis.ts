@@ -261,7 +261,7 @@ export function detectSuggestedActionBundle(
       const smart = extractSmartActionTitle(actItem)
       const actionTitle = smart || (!isGenericNewsletterOrFragment(actItem.event_title) ? actItem.event_title : null) || actItem.description || 'Action Item'
       const origin: 'email_body' | 'attachment' | 'compound' =
-        (actItem.source_origin as any) ||
+        actItem.source_origin ||
         (actItem.description.toLowerCase().includes('attached') || actItem.description.toLowerCase().includes('pdf') || actItem.description.toLowerCase().includes('flyer') ? 'attachment' : 'email_body')
       const isEvt = actItem.type === 'event' || actItem.type === 'event_suggestion' || actItem.source_pattern_key === 'event_suggestion'
       const isPay = actItem.type === 'payment'
@@ -607,12 +607,12 @@ export function synthesizeActionAnalysis(
     const cleanSubject = smartSubject || (!isGenericNewsletterOrFragment(subject) ? subject : null) || (!isGenericNewsletterOrFragment(item?.event_title) ? item?.event_title : null) || desc || 'Email Action Item'
     
     // Extract real attachments if present
-    const rawAttachments = (detailedItem.gmailContext as any).attachments || []
+    const rawAttachments = detailedItem.gmailContext.attachments || []
     let extractedDocs: ExtractedActionDocument[] = []
     let docPreview: ExtractedDocumentPreview | null = null
 
     if (rawAttachments.length > 0) {
-      extractedDocs = rawAttachments.map((att: any, idx: number) => {
+      extractedDocs = rawAttachments.map((att, idx: number) => {
         const cleanTitle = att.filename ? att.filename.replace(/[_-]+/g, ' ').replace(/\.[^/.]+$/, '') : 'Attached Document'
         return {
           id: `doc-att-${idx}`,

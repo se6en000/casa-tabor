@@ -4,21 +4,7 @@ import {
   GripVertical,
   Sparkles,
   X,
-  Leaf,
-  Milk,
-  Beef,
-  Croissant,
-  Snowflake,
-  Package,
-  Coffee,
-  Popcorn,
-  Sandwich,
-  House,
-  HeartPulse,
-  Baby as BabyIcon,
-  PawPrint,
   ShoppingCart,
-  type LucideIcon,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { GROCERY_CATEGORIES, type GroceryItem } from '../../hooks/useGroceryList'
@@ -32,30 +18,10 @@ import {
 import {
   TACTILE_SPRING_TRANSITION,
   TACTILE_SWAP_SCALE_ANIMATION,
-} from '../ui/TactileSwap'
+} from '../ui/TactileSwap.helpers'
+import { CATEGORY_ICONS, splitCategoryLabel } from '../../utils/groceryVisuals'
 
 export const LOW_CONFIDENCE_REVIEW_THRESHOLD = 0.82
-
-export const CATEGORY_ICONS: Record<string, LucideIcon> = {
-  produce: Leaf,
-  dairy: Milk,
-  meat: Beef,
-  bakery: Croissant,
-  frozen: Snowflake,
-  pantry: Package,
-  beverages: Coffee,
-  snacks: Popcorn,
-  deli: Sandwich,
-  household: House,
-  'personal-care': HeartPulse,
-  baby: BabyIcon,
-  pet: PawPrint,
-  other: ShoppingCart,
-}
-
-export function splitCategoryLabel(raw: string): string {
-  return raw.replace(/[\p{Emoji}\p{Extended_Pictographic}\uFE0F\u200D\u20E3]/gu, '').trim()
-}
 
 export interface GroceryItemRowProps {
   item: GroceryItem

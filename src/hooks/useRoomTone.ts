@@ -18,6 +18,7 @@
 import { useEffect, useCallback, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
+import { getSetting, settingsQueryKey } from '../lib/settingsStore'
 import { ROOM_TONE_COLORS } from '../design-system/tokens.mjs'
 import { usePageVisibility } from './usePageVisibility'
 
@@ -138,10 +139,10 @@ const SENSOR_ROW_ID     = '00000000-0000-0000-0000-000000000001'
 export function useRoomTone() {
   const isPageVisible = usePageVisibility()
   const { data } = useQuery<DisplayConfig | null>({
-    queryKey: ['settings', 'display_config'],
+    queryKey: settingsQueryKey('display_config'),
     queryFn: async () => {
-      const { data } = await supabase.from('settings').select('value').eq('key', 'display_config').single()
-      return data?.value as DisplayConfig | null
+      const { data } = await getSetting<DisplayConfig>('display_config')
+      return data
     },
     staleTime: Infinity,
     refetchInterval: false,

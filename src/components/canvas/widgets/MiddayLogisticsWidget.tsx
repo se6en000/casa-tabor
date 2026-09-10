@@ -68,12 +68,10 @@ export default function MiddayLogisticsWidget({
   now = new Date(),
   todayEvents = [],
   openReminders = [],
-  todayReminders: _todayReminders = [],
   completedReminders = [],
   onToggleReminder,
   tomorrowEvents = [],
   familyMembers = [],
-  nextEvent: _nextEvent = null,
   onOpenEvent,
   onToggleTomorrowView,
   isTomorrowActive = false,
@@ -990,7 +988,9 @@ export default function MiddayLogisticsWidget({
               if (onToggleReminder && priorityFocusReminder) {
                 try {
                   navigator.vibrate?.(10)
-                } catch {}
+                } catch {
+                  // ignore — vibrate not supported
+                }
                 await onToggleReminder(priorityFocusReminder.id)
               }
             }}

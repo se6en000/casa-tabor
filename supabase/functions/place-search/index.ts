@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
   }
 
   // 1. Try strict local restriction first so queries like "Walmart" or "Target" return local Palm Beach stores instead of Texas/California
-  let res = await mapsFetch('https://places.googleapis.com/v1/places:searchText', {
+  const res = await mapsFetch('https://places.googleapis.com/v1/places:searchText', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',

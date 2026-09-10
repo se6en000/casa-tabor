@@ -255,7 +255,7 @@ export function redactEmailPII(text: string): string {
 
   // 5. DOB
   result = result.replace(
-    /\b(?:DOB|Date of Birth|birthdate)\s*[:#-]?\s*(\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4})\b/gi,
+    /\b(?:DOB|Date of Birth|birthdate)\s*[:#-]?\s*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\b/gi,
     'DOB: [DOB_REDACTED]',
   )
 
@@ -468,7 +468,7 @@ export function extractEmailEntities(
     const linkRegex = /<a\s+(?:[^>]*?\s+)?href=(["'])(.*?)\1[^>]*?>(.*?)<\/a>/gi
     let linkMatch: RegExpExecArray | null
     while ((linkMatch = linkRegex.exec(bodyHtml)) !== null) {
-      const [_, __, url, label] = linkMatch
+      const [, , url, label] = linkMatch
       const cleanLabel = label.replace(/<[^>]*>/g, '').trim()
       if (/\b(sign|waiver|consent|permission|fill out|complete form)\b/i.test(cleanLabel)) {
         actionUrls.push({ label: cleanLabel, url, actionType: 'sign' })
@@ -514,7 +514,7 @@ export function classifyEmail(email: StandardEmailMessage): EmailClassificationR
   const fullText = `${subject} ${snippet} ${bodyText}`
 
   // Multi-hop Forwarded Message Unwrapping
-  let analyzedSubject = subject.replace(/^(?:fwd|fw|re):\s*/gi, '').trim()
+  const analyzedSubject = subject.replace(/^(?:fwd|fw|re):\s*/gi, '').trim()
   let analyzedText = fullText
   const fwdMarkers = [
     '---------- forwarded message ---------',
@@ -698,7 +698,7 @@ export function deduplicateEmailCorpus(emails: StandardEmailMessage[]): Standard
   const index = new Map<string, StandardEmailMessage>()
 
   for (const email of emails) {
-    let key = ''
+    let key: string
     const msgId = email.messageId
     if (msgId) {
       key = `rfc:${msgId.replace(/^<|>$/g, '').trim().toLowerCase()}`

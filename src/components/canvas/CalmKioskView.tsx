@@ -87,7 +87,9 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
       const next = !prev
       try {
         localStorage.setItem('casa:calm:completed-todos-collapsed', String(next))
-      } catch {}
+      } catch {
+        // ignore — best-effort localStorage write
+      }
       return next
     })
   }
@@ -97,7 +99,9 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
       const next = !prev
       try {
         localStorage.setItem('casa:calm:overdue-collapsed', String(!next))
-      } catch {}
+      } catch {
+        // ignore — best-effort localStorage write
+      }
       return next
     })
   }
@@ -107,7 +111,9 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
       const next = !prev
       try {
         localStorage.setItem('casa:calm:todos-collapsed', String(next))
-      } catch {}
+      } catch {
+        // ignore — best-effort localStorage write
+      }
       return next
     })
   }
@@ -117,7 +123,9 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
       const next = !prev
       try {
         localStorage.setItem('casa:calm:schedule-collapsed', String(next))
-      } catch {}
+      } catch {
+        // ignore — best-effort localStorage write
+      }
       return next
     })
   }
@@ -127,7 +135,9 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
       const next = !prev
       try {
         localStorage.setItem('casa:calm:tomorrow-collapsed', String(next))
-      } catch {}
+      } catch {
+        // ignore — best-effort localStorage write
+      }
       return next
     })
   }
@@ -786,7 +796,9 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                                       e.stopPropagation()
                                       try {
                                         navigator.vibrate?.(10)
-                                      } catch {}
+                                      } catch {
+                                        // ignore — vibrate not supported
+                                      }
                                       await handleToggleReminder(evt.id)
                                     }}
                                     className="rounded-full shrink-0 transition-all duration-150 text-casa-muted hover:text-casa-navy hover:bg-casa-surface-subtle h-6 w-6 min-h-0 p-0"
@@ -873,7 +885,9 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                               e.stopPropagation()
                               try {
                                 navigator.vibrate?.(10)
-                              } catch {}
+                              } catch {
+                                // ignore — vibrate not supported
+                              }
                               await handleToggleReminder(evt.id)
                             }}
                             className="rounded-full shrink-0 transition-all duration-150 h-6 w-6 min-h-0 p-0 text-casa-muted hover:text-casa-navy hover:bg-casa-surface-subtle"
@@ -1001,7 +1015,9 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                                     e.stopPropagation()
                                     try {
                                       navigator.vibrate?.(10)
-                                    } catch {}
+                                    } catch {
+                                      // ignore — vibrate not supported
+                                    }
                                     await handleToggleReminder(evt.id)
                                   }}
                                   className="rounded-full shrink-0 transition-all duration-150 text-emerald-700 hover:text-emerald-900 bg-emerald-100/70 hover:bg-emerald-200 h-6 w-6 min-h-0 p-0"

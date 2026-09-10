@@ -35,6 +35,7 @@ import GroceryAisleGrid from '../components/grocery/GroceryAisleGrid'
 import MobileGroceryView from '../components/mobile/MobileGroceryView'
 import { normalizeRecipeIngredientFields } from '../utils/recipeIngredientParsing'
 import { supabase } from '../lib/supabase'
+import { setSettings } from '../lib/settingsStore'
 import { formatSupabaseError } from '../lib/formatSupabaseError'
 import {
   Alert,
@@ -49,7 +50,7 @@ import {
   Text,
   Textarea,
 } from '../components/ui'
-import { useTactileSwapState } from '../components/ui/TactileSwap'
+import { useTactileSwapState } from '../components/ui/TactileSwap.helpers'
 import {
   appendPantryInventoryAudit,
   normalizePackageUnit,
@@ -746,7 +747,9 @@ export default function GroceryPage() {
     e.preventDefault()
     try {
       e.currentTarget.setPointerCapture(e.pointerId)
-    } catch {}
+    } catch {
+      // ignore — pointer capture is best-effort
+    }
     setIsPressingMic(true)
     setInputValue('')
     void dictation.start('')
@@ -759,7 +762,9 @@ export default function GroceryPage() {
       if (e.currentTarget.hasPointerCapture(e.pointerId)) {
         e.currentTarget.releasePointerCapture(e.pointerId)
       }
-    } catch {}
+    } catch {
+      // ignore — pointer capture is best-effort
+    }
     setIsPressingMic(false)
     const captured = dictation.stop()
     const textToProcess = (captured || inputValue).trim()
@@ -774,7 +779,9 @@ export default function GroceryPage() {
       if (e.currentTarget.hasPointerCapture(e.pointerId)) {
         e.currentTarget.releasePointerCapture(e.pointerId)
       }
-    } catch {}
+    } catch {
+      // ignore — pointer capture is best-effort
+    }
     setIsPressingMic(false)
     const captured = dictation.stop()
     const textToProcess = (captured || inputValue).trim()
@@ -1575,11 +1582,11 @@ export default function GroceryPage() {
       }
 
       const nextAuditLog = appendPantryInventoryAudit(pantryReconcileDraft.audit_log, auditEntries)
-      const { error: saveError } = await supabase.from('settings').upsert([
-        { key: 'meal_planner_pantry_inventory', value: pantryInventory, updated_at: nowIso },
-        { key: 'meal_planner_reconciled_checked_items', value: reconciledItems, updated_at: nowIso },
-        { key: 'meal_planner_pantry_audit_log', value: nextAuditLog, updated_at: nowIso },
-      ], { onConflict: 'key' })
+      const { error: saveError } = await setSettings([
+        { key: 'meal_planner_pantry_inventory', value: pantryInventory },
+        { key: 'meal_planner_reconciled_checked_items', value: reconciledItems },
+        { key: 'meal_planner_pantry_audit_log', value: nextAuditLog },
+      ])
       if (saveError) throw saveError
 
       setPantryReconcileDraft(null)

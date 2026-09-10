@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
+import { getSetting, setSetting } from '../lib/settingsStore'
 import {
   getPersonalArtworkValidationError,
   normalizeArtSourceConfig,
@@ -81,10 +82,12 @@ export const personalArtworkQueryKey = ['personal-artwork'] as const
 export const artSourceConfigQueryKey = ['settings', ART_SOURCE_SETTING_KEY] as const
 
 async function loadPersonalArtwork(): Promise<PersonalArtwork[]> {
-  let { data, error } = await supabase
+  const initialResult = await supabase
     .from('personal_artwork')
     .select('id, storage_path, title, artist, location, date_taken, description, subjects, medium, fun_fact, mime_type, byte_size, created_at, signature_enabled, signature_text, signature_style, signature_position, signature_color, signature_size, signature_opacity, aspect_format')
     .order('created_at', { ascending: false })
+  let data = initialResult.data
+  const error = initialResult.error
 
   if (error) {
     const fallback = await supabase
@@ -123,13 +126,9 @@ async function loadPersonalArtwork(): Promise<PersonalArtwork[]> {
 
 async function loadArtSourceMode(): Promise<ArtSourceMode> {
   try {
-    const { data, error } = await supabase
-      .from('settings')
-      .select('value')
-      .eq('key', ART_SOURCE_SETTING_KEY)
-      .maybeSingle()
+    const { data, error } = await getSetting(ART_SOURCE_SETTING_KEY)
     if (!error && data) {
-      const mode = normalizeArtSourceConfig(data.value).sourceMode
+      const mode = normalizeArtSourceConfig(data).sourceMode
       if (typeof localStorage !== 'undefined') localStorage.setItem(ART_SOURCE_SETTING_KEY, mode)
       return mode
     }
@@ -171,14 +170,7 @@ export function usePersonalArtMode() {
         localStorage.setItem(ART_SOURCE_SETTING_KEY, sourceMode)
       }
       try {
-        await supabase.from('settings').upsert(
-          {
-            key: ART_SOURCE_SETTING_KEY,
-            value: { sourceMode },
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'key' },
-        )
+        await setSetting(ART_SOURCE_SETTING_KEY, { sourceMode })
       } catch {
         // Fall back gracefully in offline/local dev
       }

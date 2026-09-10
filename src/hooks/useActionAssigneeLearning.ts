@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { supabase } from '../lib/supabase'
+import { getSetting, setSetting } from '../lib/settingsStore'
 
 export interface AssigneeLearningState {
   keywordRules: Record<string, string> // e.g. { "4th grade": "Liv", "strings": "Emme", "kindergarten": "Owen" }
@@ -19,17 +19,13 @@ export function useActionAssigneeLearning() {
     staleTime: 60_000,
     queryFn: async () => {
       try {
-        const { data, error } = await supabase
-          .from('settings')
-          .select('value')
-          .eq('key', 'action_assignee_learning')
-          .maybeSingle()
+        const { data, error } = await getSetting<AssigneeLearningState>('action_assignee_learning')
 
         if (error) {
           console.warn('Could not fetch action assignee learning, fallback to default:', error)
           return DEFAULT_LEARNING
         }
-        return (data?.value as AssigneeLearningState) || DEFAULT_LEARNING
+        return data || DEFAULT_LEARNING
       } catch {
         return DEFAULT_LEARNING
       }
@@ -38,11 +34,7 @@ export function useActionAssigneeLearning() {
 
   const saveMutation = useMutation({
     mutationFn: async (nextLearning: AssigneeLearningState) => {
-      const { error } = await supabase.from('settings').upsert({
-        key: 'action_assignee_learning',
-        value: nextLearning,
-        updated_at: new Date().toISOString(),
-      })
+      const { error } = await setSetting('action_assignee_learning', nextLearning)
       if (error) console.warn('Could not persist assignee learning:', error)
       return nextLearning
     },

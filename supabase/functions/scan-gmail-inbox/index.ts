@@ -78,11 +78,15 @@ async function fetchHouseholdCaptureRules(sb: ReturnType<typeof createClient>): 
   try {
     const { data, error } = await sb.from('household_capture_rules').select('*').eq('active', true)
     if (!error && Array.isArray(data)) return data
-  } catch {}
+  } catch {
+    // ignore — best-effort lookup, fall through to settings-table fallback
+  }
   try {
     const { data: setting } = await sb.from('settings').select('value').eq('key', 'household_capture_rules').maybeSingle()
     if (setting?.value && Array.isArray(setting.value)) return setting.value
-  } catch {}
+  } catch {
+    // ignore — best-effort lookup, fall through to empty result
+  }
   return []
 }
 
@@ -103,7 +107,9 @@ async function persistLearnedCaptureRule(
       updated_at: new Date().toISOString(),
     }, { onConflict: 'pattern_type,pattern_value' })
     if (!error) return
-  } catch {}
+  } catch {
+    // ignore — best-effort write, fall through to settings-table fallback
+  }
 
   // Fallback to settings table
   try {
@@ -116,7 +122,9 @@ async function persistLearnedCaptureRule(
       current.push(rule)
     }
     await sb.from('settings').upsert({ key: 'household_capture_rules', value: current })
-  } catch {}
+  } catch {
+    // ignore — best-effort cleanup
+  }
 }
 
 function filterMatchingCaptureRules(rules: HouseholdCaptureRule[], from: string, subject: string): HouseholdCaptureRule[] {
@@ -784,9 +792,12 @@ async function persistInboxActions(
         persistedCount += data.length
         continue
       }
-    } catch {}
+    } catch {
+      // ignore — best-effort insert, fall through to fallback insert below
+    }
 
     // Fallback without newly added schema columns if migration pending
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { is_user_labeled: _u, cluster_id: _c, agency_level: _al, policy_disclaimer: _pd, ...fallbackRow } = rowData
     const { data: fbData, error: fbErr } = await sb.from('prep_items').insert([fallbackRow]).select('id')
     if (!fbErr && fbData) {
@@ -872,8 +883,11 @@ async function persistEventSuggestions(
   try {
     const { data, error } = await sb.from('prep_items').insert(rows).select('id')
     if (!error) return data?.length ?? 0
-  } catch {}
+  } catch {
+    // ignore — best-effort insert, fall through to fallback insert below
+  }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const fallbackRows = rows.map(({ is_user_labeled: _u, cluster_id: _c, ...rest }) => rest)
   const { data, error } = await sb.from('prep_items').insert(fallbackRows).select('id')
   if (error) throw error
@@ -1147,7 +1161,8 @@ async function handleGmailScan(req: Request): Promise<Response> {
       }
       const combinedMessages = Array.from(messageMap.values())
 
-      let scanned = 0, created = 0, updated = 0, travel = 0, skipped = 0, conflicts = 0, actions = 0, evidence = 0
+      let scanned = 0, updated = 0, travel = 0, skipped = 0, conflicts = 0, actions = 0, evidence = 0
+      const created = 0
 
       for (const { id: msgId, isUserLabeled } of combinedMessages) {
         // Skip already-processed UNLESS this email was newly labeled 'Casa' by the user

@@ -258,6 +258,7 @@ export interface BevelPalette {
  * Generate physical, dimmed 45-degree bevel facets that color-harmonize with
  * both the luminous museum mat board and the adjacent artwork pigments.
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- kept for call-site signature compatibility (ArtScreensaver passes a second arg)
 export function generateHarmonizedBevel(matColorHex: string, _dominantHex: string = '#808080'): BevelPalette {
   const mat = hexToRgb(matColorHex)
 

@@ -137,7 +137,6 @@ import { useActionAssigneeLearning } from '../../../hooks/useActionAssigneeLearn
 export default function ActionInspectionSidecar({
   actionId,
   actionItem: propActionItem,
-  conflictItem: _conflictItem,
   queueItems = [],
   onClose,
   onSwitchToAi,

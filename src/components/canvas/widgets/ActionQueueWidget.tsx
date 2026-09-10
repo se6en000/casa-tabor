@@ -112,7 +112,6 @@ function shortTitle(raw?: string | null, maxLen = 22): string {
 export default function ActionQueueWidget({
   activeConflicts,
   activePrep,
-  pushedPrep: _pushedPrep,
   familyMembers = [],
   getDriverAvailabilities,
   handleResolveConflict,
@@ -120,7 +119,6 @@ export default function ActionQueueWidget({
   handleDownvotePrep,
   handleSnoozePrep,
   handlePushPrep,
-  handleRestorePushedPrep: _handleRestorePushedPrep,
   handleBatchAutoTriage,
   openCopilotForConflict,
 }: ActionQueueWidgetProps) {

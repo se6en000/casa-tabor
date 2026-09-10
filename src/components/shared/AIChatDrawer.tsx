@@ -13,8 +13,9 @@ import {
   type VoiceTranscriptRevision,
 } from '../../hooks/useSpeechInput'
 import { useLedStrip } from '../../hooks/useLedStrip'
-import { useProfileSession } from '../../contexts/ProfileSessionContext'
+import { useProfileSession } from '../../contexts/useProfileSession'
 import { supabase } from '../../lib/supabase'
+import { getSetting } from '../../lib/settingsStore'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import type { FamilyMember, DinnerPlan, DinnerMode } from '../../types'
@@ -68,10 +69,39 @@ interface Props {
 
 const SLEEP_PHRASES = /\b(sleep|goodnight|good night|art mode|screen saver|screensaver|night mode)\b/i
 
+/** Row shape for the copilot's meal-plan preload query (recipe_meal_plans joined to recipes + ingredients). */
+interface CopilotMealPlanRow {
+  id: string
+  recipe_id: string | null
+  slot: string | null
+  recipes: {
+    name: string | null
+    cook_time: string | null
+    servings: string | null
+    recipe_ingredients: Array<{ raw_text: string | null }> | null
+  } | null
+}
+
+/** Shape covering both the normalized `EventWithDetails.members` entries and raw `event_members` join rows. */
+interface EventMemberLike {
+  family_member?: { name?: string | null } | null
+  family_members?: { name?: string | null } | null
+  name?: string | null
+}
+
+/** Dynamic pantry inventory entry from the `meal_planner_pantry_inventory` setting; field names vary across writers. */
+interface CopilotPantryEntry {
+  name?: string
+  category?: string
+  current_stock?: number
+  quantity?: number
+  unit?: string
+  low_stock_threshold?: number
+}
+
 export default function AIChatDrawer({
   open,
   onClose,
-  anchor: _anchor,
   page,
   launchContext,
   events,
@@ -134,12 +164,8 @@ export default function AIChatDrawer({
   const { data: copilotPantrySettings } = useQuery({
     queryKey: ['copilot-pantry-settings'],
     queryFn: async () => {
-      const { data } = await supabase
-        .from('settings')
-        .select('value')
-        .eq('key', 'pantry_inventory')
-        .maybeSingle()
-      return data?.value ?? null
+      const { data } = await getSetting('meal_planner_pantry_inventory')
+      return data ?? null
     },
     staleTime: 60_000,
   })
@@ -151,7 +177,10 @@ export default function AIChatDrawer({
         .from('recipe_meal_plans')
         .select('id,recipe_id,slot,recipes(name,cook_time,servings,recipe_ingredients(raw_text))')
         .order('created_at', { ascending: false })
-      return (data ?? []) as any[]
+      // supabase-js infers embedded `recipes(...)` as an array from the select string alone
+      // (it can't see the FK cardinality without generated Database types); the actual join
+      // is many-to-one, so the runtime shape is a single object as used below.
+      return (data ?? []) as unknown as CopilotMealPlanRow[]
     },
     staleTime: 60_000,
   })
@@ -160,7 +189,7 @@ export default function AIChatDrawer({
     const toBuy = copilotGroceryItems.filter((i) => !i.checked)
     const inCart = copilotGroceryItems.filter((i) => i.checked)
 
-    const pantryMap = (copilotPantrySettings && typeof copilotPantrySettings === 'object' ? copilotPantrySettings : {}) as Record<string, any>
+    const pantryMap = (copilotPantrySettings && typeof copilotPantrySettings === 'object' ? copilotPantrySettings : {}) as Record<string, CopilotPantryEntry>
     const pantryInventory = Object.entries(pantryMap).map(([key, val]) => ({
       name: val?.name ?? key,
       category: val?.category ?? 'pantry',
@@ -169,13 +198,15 @@ export default function AIChatDrawer({
       lowStockThreshold: Number(val?.low_stock_threshold ?? 1),
     }))
 
-    const plannedDinners = copilotMealPlans.map((plan: any) => ({
+    const plannedDinners = copilotMealPlans.map((plan) => ({
       slot: plan.slot ?? 'tonight',
       recipeName: plan.recipes?.name ?? 'Planned Recipe',
       cookTime: plan.recipes?.cook_time ?? null,
       servings: plan.recipes?.servings ?? null,
       ingredientCount: plan.recipes?.recipe_ingredients?.length ?? 0,
-      ingredients: (plan.recipes?.recipe_ingredients ?? []).map((ing: any) => ing.raw_text).filter(Boolean),
+      ingredients: (plan.recipes?.recipe_ingredients ?? [])
+        .map((ing) => ing.raw_text)
+        .filter((text): text is string => Boolean(text)),
     }))
 
     return {
@@ -307,7 +338,6 @@ export default function AIChatDrawer({
   const pendingVoiceActionRef = useRef<PendingVoiceAction | null>(null)
   const pendingLowConfidenceRef = useRef<{ transcript: string; confidence: number } | null>(null)
   // Ref to speech.stop — avoids circular dependency when calling stop inside useSpeechInput callbacks
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const speechStopRef = useRef<() => void>(() => {})
   const latestVoiceConfidenceRef = useRef<number | null>(null)
   const appliedLaunchRef = useRef<string | null>(null)
@@ -419,7 +449,7 @@ export default function AIChatDrawer({
           if (error || data?.success === false) throw (error || new Error(data?.error ?? 'Failed to add grocery items'))
 
           const createdIds = Array.isArray(data?.items)
-            ? data.items.map((i: any) => i.id).filter(Boolean)
+            ? data.items.map((i: { id?: string }) => i.id).filter(Boolean)
             : []
 
           autoGroceryCreatedIdsRef.current.set(messageId, createdIds)
@@ -1082,7 +1112,7 @@ export default function AIChatDrawer({
             : speech.listening || speech.connecting
               ? 'listening'
               : 'idle'
-  const presenceStyle = { ['--voice-level' as '--voice-level']: String(voiceLevel) } as React.CSSProperties
+  const presenceStyle = { ['--voice-level' as const]: String(voiceLevel) } as React.CSSProperties
 
   const drawerBody = (
     <>
@@ -1497,10 +1527,11 @@ export default function AIChatDrawer({
                             const resp = (error as { context?: unknown }).context
                             if (resp && typeof resp === 'object' && 'json' in resp) {
                               try {
-                                const readable = 'clone' in resp && typeof (resp as any).clone === 'function'
-                                  ? (resp as any).clone()
+                                const respWithClone = resp as { clone?: () => unknown }
+                                const readable = typeof respWithClone.clone === 'function'
+                                  ? respWithClone.clone()
                                   : resp
-                                const parsed = await (readable as { json: () => Promise<any> }).json()
+                                const parsed = await (readable as { json: () => Promise<unknown> }).json()
                                 if (parsed && typeof parsed === 'object') {
                                   responseData = parsed
                                 }
@@ -2901,7 +2932,10 @@ function findOverlappingEvent(
     const overlaps = Math.max(startMs, eStart) < Math.min(endMs, eEnd)
     if (!overlaps) return false
 
-    const eMembers = (e.members ?? (e as any).event_members ?? []).map((m: any) =>
+    // Some cached event objects still carry the raw `event_members` join shape
+    // instead of the normalized `members` field — support both.
+    const rawMembers = (e as EventWithDetails & { event_members?: EventMemberLike[] }).event_members
+    const eMembers = ((e.members ?? rawMembers ?? []) as EventMemberLike[]).map((m) =>
       (m.family_member?.name ?? m.family_members?.name ?? m.name ?? '').trim().toLowerCase()
     ).filter(Boolean)
 

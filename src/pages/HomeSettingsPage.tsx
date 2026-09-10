@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Home } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
-import { supabase } from '../lib/supabase'
+import { getSettings, setSetting, settingsQueryKey } from '../lib/settingsStore'
 import { Alert, Card, Field, Input, SkeletonRow, Text } from '../components/ui'
 import { SettingsPageHeader, SettingsToggle } from '../components/settings'
 
@@ -35,13 +35,10 @@ export default function HomeSettingsPage({ hideHeader = false }: { hideHeader?: 
   const qc = useQueryClient()
 
   useEffect(() => {
-    Promise.all([
-      supabase.from('settings').select('value').eq('key', 'home_config').single(),
-      supabase.from('settings').select('value').eq('key', 'display_config').single(),
-    ]).then(([homeRes, displayRes]) => {
-      if (homeRes.data?.value) setHome(homeRes.data.value as HomeConfig)
-      if (displayRes.data?.value) {
-        const cfg = displayRes.data.value as Partial<HomeScreenLayout>
+    getSettings(['home_config', 'home_screen_layout']).then(({ data }) => {
+      if (data?.home_config) setHome(data.home_config as HomeConfig)
+      if (data?.home_screen_layout) {
+        const cfg = data.home_screen_layout as Partial<HomeScreenLayout>
         setHomeScreenLayout({
           show_home_hero: cfg.show_home_hero ?? true,
           show_weather: cfg.show_weather ?? true,
@@ -58,35 +55,14 @@ export default function HomeSettingsPage({ hideHeader = false }: { hideHeader?: 
     setSaveStatus('saving')
     
     // Save home address
-    const { error: homeError } = await supabase.from('settings').upsert(
-      { key: 'home_config', value: home, updated_at: new Date().toISOString() },
-      { onConflict: 'key' }
-    )
+    const { error: homeError } = await setSetting('home_config', home)
 
-    // Save home screen layout toggles to display_config
-    const { error: layoutError } = await supabase.from('settings').select('value').eq('key', 'display_config').single().then(async ({ data }) => {
-      const currentCfg = data?.value ?? {}
-      return supabase.from('settings').upsert(
-        {
-          key: 'display_config',
-          value: {
-            ...currentCfg,
-            show_home_hero: homeScreenLayout.show_home_hero,
-            show_weather: homeScreenLayout.show_weather,
-            show_briefing: homeScreenLayout.show_briefing,
-            show_conflicts: homeScreenLayout.show_conflicts,
-            show_prep: homeScreenLayout.show_prep,
-            updated_at: new Date().toISOString(),
-          },
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'key' }
-      )
-    })
+    // Save home screen layout toggles to their own dedicated key
+    const { error: layoutError } = await setSetting('home_screen_layout', homeScreenLayout)
 
     const hasError = homeError || layoutError
     setSaveStatus(hasError ? 'error' : 'saved')
-    if (!hasError) qc.invalidateQueries({ queryKey: ['settings', 'display_config'] })
+    if (!hasError) qc.invalidateQueries({ queryKey: settingsQueryKey('home_screen_layout') })
     if (!hasError) setTimeout(() => setSaveStatus('idle'), 3000)
   }
 

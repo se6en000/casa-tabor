@@ -1,10 +1,9 @@
 import { forwardRef } from 'react'
-import type { ButtonHTMLAttributes } from 'react'
-import { motion } from 'framer-motion'
+import { motion, type HTMLMotionProps } from 'framer-motion'
 import { cn } from '../../utils/cn'
 import { CopilotIcon, type CopilotIconState } from './CopilotIcon'
 
-export interface JewelCapsuleCopilotProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+export interface JewelCapsuleCopilotProps extends HTMLMotionProps<'button'> {
   isActive?: boolean
   isProactive?: boolean
   isProcessing?: boolean
@@ -93,7 +92,7 @@ export const JewelCapsuleCopilot = forwardRef<HTMLButtonElement, JewelCapsuleCop
         title={isActive ? 'Close Copilot' : 'Open Copilot'}
         aria-label={isActive ? 'Close Copilot' : 'Open Copilot'}
         aria-expanded={isActive}
-        {...(rest as any)}
+        {...rest}
       >
         {/* Luxury Animated SVG Flat Design Copilot Icon */}
         <span className="relative shrink-0 flex items-center justify-center transition-transform duration-300 group-hover:scale-110">

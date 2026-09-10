@@ -15,7 +15,7 @@ function getStoredPreference(): HeroThemePreference {
   try {
     const val = localStorage.getItem(STORAGE_PREFERENCE)
     if (val === 'auto' || val === 'navy' || val === 'linen') return val
-  } catch {}
+  } catch { /* ignore — best-effort, non-critical */ }
   return 'auto'
 }
 
@@ -23,7 +23,7 @@ function getStoredDayTheme(): HeroTheme {
   try {
     const val = localStorage.getItem(STORAGE_DAY_THEME)
     if (val === 'navy' || val === 'linen') return val
-  } catch {}
+  } catch { /* ignore — best-effort, non-critical */ }
   return 'linen'
 }
 
@@ -31,7 +31,7 @@ function getStoredNightTheme(): HeroTheme {
   try {
     const val = localStorage.getItem(STORAGE_NIGHT_THEME)
     if (val === 'navy' || val === 'linen') return val
-  } catch {}
+  } catch { /* ignore — best-effort, non-critical */ }
   return 'navy'
 }
 
@@ -39,7 +39,7 @@ function getStoredManualOverride(): HeroTheme | null {
   try {
     const val = localStorage.getItem(STORAGE_MANUAL_OVERRIDE)
     if (val === 'navy' || val === 'linen') return val
-  } catch {}
+  } catch { /* ignore — best-effort, non-critical */ }
   return null
 }
 
@@ -92,7 +92,7 @@ export function useHeroTheme(now: Date = new Date()) {
       } else {
         localStorage.removeItem(STORAGE_MANUAL_OVERRIDE)
       }
-    } catch {}
+    } catch { /* ignore — best-effort, non-critical */ }
     setPreferenceState(pref)
     setManualOverrideState(pref === 'navy' || pref === 'linen' ? pref : null)
     notifyChange()
@@ -101,7 +101,7 @@ export function useHeroTheme(now: Date = new Date()) {
   const setDayTheme = useCallback((theme: HeroTheme) => {
     try {
       localStorage.setItem(STORAGE_DAY_THEME, theme)
-    } catch {}
+    } catch { /* ignore — best-effort, non-critical */ }
     setDayThemeState(theme)
     notifyChange()
   }, [])
@@ -109,7 +109,7 @@ export function useHeroTheme(now: Date = new Date()) {
   const setNightTheme = useCallback((theme: HeroTheme) => {
     try {
       localStorage.setItem(STORAGE_NIGHT_THEME, theme)
-    } catch {}
+    } catch { /* ignore — best-effort, non-critical */ }
     setNightThemeState(theme)
     notifyChange()
   }, [])
@@ -118,7 +118,7 @@ export function useHeroTheme(now: Date = new Date()) {
     const nextTheme: HeroTheme = resolvedTheme === 'navy' ? 'linen' : 'navy'
     try {
       localStorage.setItem(STORAGE_MANUAL_OVERRIDE, nextTheme)
-    } catch {}
+    } catch { /* ignore — best-effort, non-critical */ }
     setManualOverrideState(nextTheme)
     notifyChange()
   }, [resolvedTheme])
@@ -126,7 +126,7 @@ export function useHeroTheme(now: Date = new Date()) {
   const resetToSchedule = useCallback(() => {
     try {
       localStorage.removeItem(STORAGE_MANUAL_OVERRIDE)
-    } catch {}
+    } catch { /* ignore — best-effort, non-critical */ }
     setManualOverrideState(null)
     notifyChange()
   }, [])

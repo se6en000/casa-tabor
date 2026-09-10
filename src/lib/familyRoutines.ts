@@ -302,7 +302,6 @@ export function generateConsolidatedRoutineActionEvents(options: {
     routines,
     members,
     date,
-    homeAddress: _homeAddress = '3209 Washington Road, West Palm Beach, FL',
     filterBySyncMode = false,
     forExternalSync = false,
   } = options
@@ -604,7 +603,7 @@ export function generateRoutineActionEvents(options: {
   filterBySyncMode?: boolean
   forExternalSync?: boolean
 }): CalendarEvent[] {
-  const { routine, child, date, homeAddress, driveMinutes, bufferMinutes: _bufferMinutes, filterBySyncMode, forExternalSync } = options
+  const { routine, child, date, homeAddress, driveMinutes, filterBySyncMode, forExternalSync } = options
   if (!routine.enabled) return []
 
   const events = generateConsolidatedRoutineActionEvents({
@@ -780,7 +779,7 @@ export function deserializeRoutineFromAvailabilityRules(
   const days = Array.from(new Set(routineRules.map((r) => r.day_of_week))).sort()
 
   const rawSyncMode = payload.syncMode
-  let syncMode: RoutineSyncMode = 'exceptions_only'
+  let syncMode: RoutineSyncMode
   if (rawSyncMode === 'none' || rawSyncMode === 'exceptions_only' || rawSyncMode === 'all') {
     syncMode = rawSyncMode
   } else if (payload.syncToGoogle === false) {

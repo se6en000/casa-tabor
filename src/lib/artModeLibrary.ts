@@ -54,7 +54,7 @@ export function sanitizeArtworkTitle(rawTitle: string): string {
     .replace(/\.[a-zA-Z0-9]{3,4}$/, '') // strip extension
     .replace(/^(orig|img|dsc|photo|scan|pxl)[_\-\s]+/i, '') // strip camera / prefix tags
     .replace(/[_\-\s]+(1920x\d*|4k|1080p|resized|scaled|wallpaper|hires|orig|preview)[_\-\s]*/gi, ' ') // strip dimension suffixes
-    .replace(/[_\-]+/g, ' ') // replace dashes and underscores with spaces
+    .replace(/[_-]+/g, ' ') // replace dashes and underscores with spaces
     .replace(/\s+/g, ' ') // collapse multi spaces
     .trim()
 

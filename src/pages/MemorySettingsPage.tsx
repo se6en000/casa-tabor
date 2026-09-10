@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { Alert, Button, Card, Chip, EmptyState, Field, Input, Modal, SegmentedControl, SkeletonRow, Text, Textarea } from '../components/ui'
 import { SettingsPageHeader } from '../components/settings'
-import { useProfileSession } from '../contexts/ProfileSessionContext'
+import { useProfileSession } from '../contexts/useProfileSession'
 import { invokeAssistantHistory } from '../lib/assistantConversationHistoryClient'
 
 type MemoryRow = {

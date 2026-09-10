@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
+import { dirname } from 'node:path'
 import test from 'node:test'
 
 const mainPyPath = new URL('../pi/sensor-bridge/main.py', import.meta.url).pathname
+const sensorBridgeDir = dirname(mainPyPath)
 const settingsHookSource = readFileSync(
   new URL('../src/hooks/useScreensaverSettings.ts', import.meta.url),
   'utf8',
@@ -16,7 +18,7 @@ const settingsPageSource = readFileSync(
 function evaluatePyBrightness(lux, artMode = false, dimOffset = 0.0) {
   const script = `
 import sys
-sys.path.insert(0, '/Users/taboj/Public/casa-tabor/pi/sensor-bridge')
+sys.path.insert(0, ${JSON.stringify(sensorBridgeDir)})
 import main
 
 main._art_mode_active = ${artMode ? 'True' : 'False'}

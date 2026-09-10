@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { FlaskConical, CheckCircle, AlertCircle, Home, Mic, Activity, RefreshCw, Gauge, BarChart3, Minus, Plus, Zap, MessagesSquare, Workflow, Smartphone, Volume2, Sparkles, Send } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { getSettings, setSetting, setSettings } from '../lib/settingsStore'
 import { cn } from '../utils/cn'
 import { useScreensaverSettings } from '../hooks/useScreensaverSettings'
 import {
@@ -335,13 +336,12 @@ export default function AISettingsPage() {
   }, [])
 
   useEffect(() => {
-    Promise.all([
-      supabase.from('settings').select('value').eq('key', 'llm_config').maybeSingle(),
-      supabase.from('settings').select('value').eq('key', 'ai_custom_instructions').maybeSingle(),
-      supabase.from('settings').select('value').eq('key', 'assistant_talk_plan_config').maybeSingle(),
-    ]).then(([cfg, ci, talkPlanCfg]) => {
-      if (cfg.data?.value) {
-        const loaded = cfg.data.value as LLMConfig
+    getSettings(['llm_config', 'ai_custom_instructions', 'assistant_talk_plan_config']).then(({ data }) => {
+      const cfgValue = data?.llm_config
+      const ciValue = data?.ai_custom_instructions
+      const talkPlanValue = data?.assistant_talk_plan_config
+      if (cfgValue) {
+        const loaded = cfgValue as LLMConfig
         // Older settings rows predate the background/automation model field —
         // backfill it so the UI highlights the model that's actually running
         // today (the previous hardcoded default) instead of nothing.
@@ -354,8 +354,8 @@ export default function AISettingsPage() {
           background_reasoning_preset: loaded.background_reasoning_preset || 'fast',
         })
       }
-      setTalkPlanEnabled((talkPlanCfg.data?.value as { enabled?: boolean } | null)?.enabled === true)
-      const ciVal = (ci.data?.value as { text?: string } | null)?.text
+      setTalkPlanEnabled((talkPlanValue as { enabled?: boolean } | undefined)?.enabled === true)
+      const ciVal = (ciValue as { text?: string } | undefined)?.text
       if (ciVal) setCustomInstructions(ciVal)
       setIsLoading(false)
       void loadCaptureDevices()
@@ -706,23 +706,13 @@ export default function AISettingsPage() {
 
   const handleSave = useCallback(async () => {
     setSaveStatus('saving')
-    const updatedAt = new Date().toISOString()
-    const [a, b, c] = await Promise.all([
-      supabase.from('settings').upsert(
-        { key: 'llm_config', value: config, updated_at: updatedAt },
-        { onConflict: 'key' }
-      ),
-      supabase.from('settings').upsert(
-        { key: 'ai_custom_instructions', value: { text: customInstructions.trim() }, updated_at: updatedAt },
-        { onConflict: 'key' }
-      ),
-      supabase.from('settings').upsert(
-        { key: 'assistant_talk_plan_config', value: { enabled: talkPlanEnabled }, updated_at: updatedAt },
-        { onConflict: 'key' }
-      ),
+    const { error } = await setSettings([
+      { key: 'llm_config', value: config },
+      { key: 'ai_custom_instructions', value: { text: customInstructions.trim() } },
+      { key: 'assistant_talk_plan_config', value: { enabled: talkPlanEnabled } },
     ])
-    setSaveStatus(a.error || b.error || c.error ? 'error' : 'saved')
-    if (!a.error && !b.error && !c.error) setTimeout(() => setSaveStatus('idle'), 3000)
+    setSaveStatus(error ? 'error' : 'saved')
+    if (!error) setTimeout(() => setSaveStatus('idle'), 3000)
   }, [config, customInstructions, talkPlanEnabled])
 
   useEffect(() => {
@@ -744,10 +734,7 @@ export default function AISettingsPage() {
     setModeTestStatus(current => ({ ...current, [workload]: 'testing' }))
     setModeTestMessage(current => ({ ...current, [workload]: '' }))
     try {
-      const saved = await supabase.from('settings').upsert(
-        { key: 'llm_config', value: config, updated_at: new Date().toISOString() },
-        { onConflict: 'key' },
-      )
+      const saved = await setSetting('llm_config', config)
       if (saved.error) throw saved.error
       const { data, error } = await supabase.functions.invoke('ai-assistant', {
         body: {

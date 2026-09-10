@@ -53,7 +53,7 @@ Deno.serve(async (req) => {
   const today = new Date().toISOString().slice(0, 10)
 
   // Try to get existing briefing for today, otherwise generate one
-  let briefingText = ''
+  let briefingText: string
   const { data: existing } = await sb
     .from('daily_briefings')
     .select('summary_text')

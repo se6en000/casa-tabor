@@ -92,7 +92,9 @@ export default function ImminentTransitWidget({
   } else if (driveTimeMins && driveTimeMins > 0) {
     try {
       leaveAt = subMinutes(parseISO(event.start_time), driveTimeMins)
-    } catch {}
+    } catch {
+      // ignore — invalid start_time, leaveAt stays null
+    }
   }
 
   return (
@@ -443,7 +445,9 @@ export default function ImminentTransitWidget({
                 const start = parseISO(evt.start_time).getTime()
                 const end = parseISO(evt.end_time).getTime()
                 isUnderway = !evt.all_day && now.getTime() >= start && now.getTime() <= end
-              } catch {}
+              } catch {
+                // ignore — invalid event times, isUnderway stays false
+              }
 
               const evtMember = evt.members?.[0]?.family_member
 

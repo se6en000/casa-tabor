@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
+import { getSetting, setSetting } from '../lib/settingsStore'
 
 export type CaptureRulePatternType = 'domain' | 'sender' | 'subject' | 'phrase'
 export type CaptureRuleOrigin =
@@ -54,12 +55,8 @@ export function useHouseholdCaptureRules() {
       }
 
       try {
-        const { data: setting } = await supabase
-          .from('settings')
-          .select('value')
-          .eq('key', 'household_capture_rules')
-          .maybeSingle()
-        if (setting?.value && Array.isArray(setting.value)) return setting.value as HouseholdCaptureRule[]
+        const { data } = await getSetting<HouseholdCaptureRule[]>('household_capture_rules')
+        if (data && Array.isArray(data)) return data
       } catch {
         // Fallback to empty rules array
       }
@@ -152,12 +149,8 @@ function useHouseholdCaptureRulesRealtimeInvalidation() {
       }
 
       // Fallback to settings table
-      const { data: setting } = await supabase
-        .from('settings')
-        .select('value')
-        .eq('key', 'household_capture_rules')
-        .maybeSingle()
-      const current: HouseholdCaptureRule[] = Array.isArray(setting?.value) ? setting.value : []
+      const { data: settingValue } = await getSetting<HouseholdCaptureRule[]>('household_capture_rules')
+      const current: HouseholdCaptureRule[] = Array.isArray(settingValue) ? settingValue : []
       const idx = current.findIndex(
         (r) => r.pattern_type === rule.pattern_type && r.pattern_value.toLowerCase() === normVal
       )
@@ -177,7 +170,7 @@ function useHouseholdCaptureRulesRealtimeInvalidation() {
           created_at: new Date().toISOString(),
         })
       }
-      await supabase.from('settings').upsert({ key: 'household_capture_rules', value: current })
+      await setSetting('household_capture_rules', current)
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['household-capture-rules'] })
@@ -218,17 +211,13 @@ function useHouseholdCaptureRulesRealtimeInvalidation() {
       }
 
       try {
-        const { data: setting } = await supabase
-          .from('settings')
-          .select('value')
-          .eq('key', 'household_capture_rules')
-          .maybeSingle()
-        if (setting?.value && Array.isArray(setting.value)) {
-          const filtered = setting.value.filter(
+        const { data: settingValue } = await getSetting<HouseholdCaptureRule[]>('household_capture_rules')
+        if (settingValue && Array.isArray(settingValue)) {
+          const filtered = settingValue.filter(
             (r: HouseholdCaptureRule) =>
               !(r.pattern_type === target.pattern_type && r.pattern_value.toLowerCase() === normVal)
           )
-          await supabase.from('settings').upsert({ key: 'household_capture_rules', value: filtered })
+          await setSetting('household_capture_rules', filtered)
         }
       } catch {
         // Ignore settings fallback errors

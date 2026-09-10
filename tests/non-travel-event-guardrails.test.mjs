@@ -24,8 +24,8 @@ const presenterSource = readFileSync(
   new URL('../src/hooks/useCalmKioskPresenter.ts', import.meta.url),
   'utf8',
 )
-const mobileSource = readFileSync(
-  new URL('../src/components/mobile/MobileTodayView.tsx', import.meta.url),
+const mobileHelpersSource = readFileSync(
+  new URL('../src/components/mobile/MobileTodayView.helpers.ts', import.meta.url),
   'utf8',
 )
 
@@ -82,5 +82,5 @@ test('CalmKioskView and useCalmKioskPresenter strictly gate travel UI and progre
   assert.match(imminentWidgetSource, /driveTimeMins=\{isTravelEvent \? driveTimeMins : null\}/)
   assert.match(imminentWidgetSource, /leaveAt=\{isTravelEvent \? leaveAt : null\}/)
   assert.match(imminentWidgetSource, /\{isTravelEvent && \(event\.address \|\| event\.location_name\) && \(/)
-  assert.match(mobileSource, /isHeroTravel/)
+  assert.match(mobileHelpersSource, /isHeroTravel/)
 })

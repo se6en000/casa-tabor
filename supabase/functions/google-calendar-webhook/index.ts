@@ -15,7 +15,6 @@ Deno.serve(async (req) => {
   const channelId = req.headers.get('x-goog-channel-id') || req.headers.get('X-Goog-Channel-ID')
   const resourceState = req.headers.get('x-goog-resource-state') || req.headers.get('X-Goog-Resource-State')
   const channelToken = req.headers.get('x-goog-channel-token') || req.headers.get('X-Goog-Channel-Token')
-  const resourceId = req.headers.get('x-goog-resource-id') || req.headers.get('X-Goog-Resource-ID')
   const messageNumber = req.headers.get('x-goog-message-number') || req.headers.get('X-Goog-Message-Number')
 
   console.log(`[google-calendar-webhook] Notification received: channel=${channelId} state=${resourceState} msg=${messageNumber}`)

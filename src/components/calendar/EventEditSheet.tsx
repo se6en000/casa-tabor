@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { useEventDetails, type EventWithDetails } from '../../hooks/useCalendarEvents'
-import type { FamilyMember } from '../../types'
+import type { FamilyMember, EventEnrichment, CalendarEvent } from '../../types'
 import {
   getFieldsForCategory, FIELD_CONFIG, CATEGORY_LABEL,
   type EnrichmentFieldKey,
@@ -56,6 +56,9 @@ import { publishEventAggregatePatch } from '../../lib/eventAggregateCache'
 const ALL_CATEGORIES = Object.keys(CATEGORY_LABEL) as string[]
 
 type EnrichStatus = 'idle' | 'loading' | 'success' | 'error'
+
+/** Shape of the enrichment row selected on the recurring master query below (omits `category_locked`, which isn't selected). */
+type MasterEnrichmentRow = Omit<EventEnrichment, 'category_locked'> & { category_locked?: boolean }
 
 /** Expand an RRULE into occurrence {start,end} pairs, excluding the master (first) occurrence. */
 function expandRrule(masterStart: string, masterEnd: string, rrule: string): Array<{ start: string; end: string }> {  const get = (key: string) => rrule.match(new RegExp(`${key}=([^;]+)`))?.[1] ?? ''
@@ -235,7 +238,9 @@ function EventEditSheetContent({
   // Canonical v2 occurrences use series_id; legacy instances use recurrence_master_id.
   const isCanonicalOccurrence = Boolean(event.series_id && event.record_kind === 'occurrence')
   const isInstance = isCanonicalOccurrence || Boolean(event.recurrence_master_id)
-  const [masterData, setMasterData] = useState<{ rrule: string | null; enrichment: typeof enr } | null>(null)
+  // The master event's rrule + enrichment query doesn't select `category_locked`,
+  // so it's optional here (downstream reads fall back to falsy when absent).
+  const [masterData, setMasterData] = useState<{ rrule: string | null; enrichment: MasterEnrichmentRow | null } | null>(null)
   const [recurringContext, setRecurringContext] = useState<RecurringEditorContext | null>(null)
   const [recurringEditorEnabled, setRecurringEditorEnabled] = useState(false)
   const [recurringEditorWritable, setRecurringEditorWritable] = useState(false)
@@ -280,11 +285,15 @@ function EventEditSheetContent({
       )
     `).eq('id', event.recurrence_master_id).single()
       .then(({ data }) => {
-        if (data) setMasterData({
-          rrule: (data as any).rrule ?? null,
-          enrichment: Array.isArray((data as any).event_enrichments)
-            ? (data as any).event_enrichments[0] ?? null
-            : (data as any).event_enrichments ?? null,
+        const row = data as {
+          rrule: string | null
+          event_enrichments: MasterEnrichmentRow | MasterEnrichmentRow[] | null
+        } | null
+        if (row) setMasterData({
+          rrule: row.rrule ?? null,
+          enrichment: Array.isArray(row.event_enrichments)
+            ? row.event_enrichments[0] ?? null
+            : row.event_enrichments ?? null,
         })
       })
   }, [open, event.id, event.recurrence_master_id, isCanonicalOccurrence])
@@ -322,7 +331,7 @@ function EventEditSheetContent({
   type RecurScope = EventLocationScope
   const [showScopeModal, setShowScopeModal] = useState(false)
   const [showDeleteScopeModal, setShowDeleteScopeModal] = useState(false)
-  const [_pendingSave, setPendingSave] = useState(false)
+  const [, setPendingSave] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'saving' | 'slow'>('saving')
 
@@ -507,7 +516,7 @@ function EventEditSheetContent({
     return `${day} · ${time.format(start)}–${time.format(end)}`
   })()
 
-  function buildForm(enrichment: typeof enr, fieldList: EnrichmentFieldKey[]) {
+  function buildForm(enrichment: Partial<EventEnrichment> | null | undefined, fieldList: EnrichmentFieldKey[]) {
     const out: Record<string, string> = {}
     for (const field of fieldList) {
       const raw = enrichment?.[field as keyof typeof enrichment]
@@ -1000,11 +1009,12 @@ function EventEditSheetContent({
       const masterId = event.recurrence_master_id!
 
       // Load master first (need its rrule, source_member_id, etc.)
-      const { data: masterEvent } = await supabase.from('events').select('*').eq('id', masterId).single()
-      if (!masterEvent) { alert('Could not load master event'); return }
+      const { data: masterEventRaw } = await supabase.from('events').select('*').eq('id', masterId).single()
+      if (!masterEventRaw) { alert('Could not load master event'); return }
+      const masterEvent = masterEventRaw as CalendarEvent
 
       // Step 1: Truncate original master's rrule — add UNTIL 1 second before the split
-      const originalRrule = (masterEvent as any).rrule as string | null
+      const originalRrule = masterEvent.rrule
       if (originalRrule) {
         const splitMs = new Date(event.start_time).getTime() - 1000
         const untilStr = toGoogleUntil(new Date(splitMs))
@@ -1021,7 +1031,7 @@ function EventEditSheetContent({
       // Step 2: Create a NEW master for the future branch
       const { data: newMaster, error: newMasterErr } = await supabase.from('events').insert({
         title: titleToSave,
-        description: (masterEvent as any).description ?? null,
+        description: masterEvent.description ?? null,
         location_name: normalizedLocation,
         address: normalizedAddress,
         lat: latForSave,
@@ -1031,8 +1041,8 @@ function EventEditSheetContent({
         all_day: isAllDay,
         event_type: eventType,
         rrule: rruleStr,
-        google_calendar_id: (masterEvent as any).google_calendar_id ?? null,
-        source_member_id: (masterEvent as any).source_member_id ?? event.source_member_id ?? null,
+        google_calendar_id: masterEvent.google_calendar_id ?? null,
+        source_member_id: masterEvent.source_member_id ?? event.source_member_id ?? null,
         status: 'confirmed' as const,
         is_enriched: true,
         updated_at: new Date().toISOString(),
@@ -1060,7 +1070,7 @@ function EventEditSheetContent({
           const { data: newInstances } = await supabase.from('events').insert(
             occurrences.map(occ => ({
               title: titleToSave,
-              description: (masterEvent as any).description ?? null,
+              description: masterEvent.description ?? null,
               start_time: occ.start,
               end_time: occ.end,
               all_day: isAllDay,
@@ -1069,8 +1079,8 @@ function EventEditSheetContent({
               address: normalizedAddress,
               lat: latForSave,
               lng: lngForSave,
-              google_calendar_id: (masterEvent as any).google_calendar_id ?? null,
-              source_member_id: (masterEvent as any).source_member_id ?? event.source_member_id ?? null,
+              google_calendar_id: masterEvent.google_calendar_id ?? null,
+              source_member_id: masterEvent.source_member_id ?? event.source_member_id ?? null,
               status: 'confirmed' as const,
               is_enriched: true, // instances inherit from master — skip per-instance AI enrichment
               rrule: null,

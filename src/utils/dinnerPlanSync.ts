@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase.ts'
+import { getSettingRow, setSetting } from '../lib/settingsStore.ts'
 import type { DinnerPlan, DinnerMode } from '../types'
 
 export const DINNER_PLAN_SETTINGS_KEY = 'tonight_kitchen_plan'
@@ -73,7 +74,7 @@ function getOrCreateDinnerRealtimeChannel() {
         if (parsed) {
           try {
             localStorage.setItem(DINNER_PLAN_STORAGE_KEY, JSON.stringify(parsed))
-          } catch {}
+          } catch { /* ignore — best-effort, non-critical */ }
           broadcastListeners.forEach((listener) => {
             try {
               listener(parsed)
@@ -98,7 +99,7 @@ function releaseDinnerRealtimeChannel() {
   if (channelSubscriberCount === 0 && activeRealtimeChannel) {
     try {
       supabase.removeChannel(activeRealtimeChannel)
-    } catch {}
+    } catch { /* ignore — best-effort, non-critical */ }
     activeRealtimeChannel = null
   }
 }
@@ -117,11 +118,7 @@ export async function fetchTonightDinnerPlan(): Promise<DinnerPlan | null> {
       .limit(1)
       .maybeSingle()
 
-    const { data, error } = await supabase
-      .from('settings')
-      .select('value, updated_at')
-      .eq('key', DINNER_PLAN_SETTINGS_KEY)
-      .maybeSingle()
+    const { data, error } = await getSettingRow<DinnerPlan>(DINNER_PLAN_SETTINGS_KEY)
 
     if (error) {
       console.warn('[DinnerSync] Failed to fetch dinner plan from Supabase:', error.message)
@@ -131,14 +128,25 @@ export async function fetchTonightDinnerPlan(): Promise<DinnerPlan | null> {
     if (data && data.value) {
       plan = normalizeDinnerPlan({
         ...(typeof data.value === 'object' ? data.value : {}),
-        updatedAt: data.updated_at,
+        updatedAt: data.updatedAt,
       })
     }
 
+    // Without generated Database types, Supabase's select-string parser can't
+    // tell that `recipes(...)` is a to-one FK join, so it infers `recipes` as
+    // an array; the real runtime shape is the single joined row this code expects.
+    interface TonightMealRow {
+      recipe_id: string | null
+      slot: string
+      planned_for: string | null
+      recipes: { id: string; name: string; cook_time: string | null; servings: string | null } | null
+    }
+    const tonightMealRow = tonightMeal as unknown as TonightMealRow | null
+
     // If settings has the legacy 'Herb-Roasted Chicken' or is missing, and we have a tonightMeal, use tonightMeal!
     const isLegacyStalePlan = !plan || plan.title.toLowerCase().includes('herb-roasted chicken')
-    if (isLegacyStalePlan && tonightMeal && (tonightMeal as any).recipes) {
-      const rec = (tonightMeal as any).recipes
+    if (isLegacyStalePlan && tonightMealRow && tonightMealRow.recipes) {
+      const rec = tonightMealRow.recipes
       const prepTime = rec.cook_time ? `${rec.cook_time} prep` : '25m prep'
       const activeRecipePlan: DinnerPlan = {
         mode: 'cook',
@@ -178,7 +186,7 @@ export async function saveTonightDinnerPlan(
   // 1. Local storage cache
   try {
     localStorage.setItem(DINNER_PLAN_STORAGE_KEY, JSON.stringify(syncedPlan))
-  } catch {}
+  } catch { /* ignore — best-effort, non-critical */ }
 
   // 2. Dispatch local DOM event for same-window / component sync
   if (typeof document !== 'undefined') {
@@ -212,14 +220,7 @@ export async function saveTonightDinnerPlan(
   // 4. Persist to Supabase `settings` table for durable cross-session and cross-device source of truth
   if (!options?.skipCloud) {
     try {
-      const { error } = await supabase.from('settings').upsert(
-        {
-          key: DINNER_PLAN_SETTINGS_KEY,
-          value: syncedPlan,
-          updated_at: timestamp,
-        },
-        { onConflict: 'key' }
-      )
+      const { error } = await setSetting(DINNER_PLAN_SETTINGS_KEY, syncedPlan)
       if (error) {
         console.warn('[DinnerSync] Could not save dinner plan to Supabase settings:', error.message)
       }
@@ -255,7 +256,7 @@ export function subscribeToTonightDinnerPlan(
       if (normalized) {
         onPlanChange(normalized)
       }
-    } catch {}
+    } catch { /* ignore — best-effort, non-critical */ }
   }
 
   if (typeof document !== 'undefined') {

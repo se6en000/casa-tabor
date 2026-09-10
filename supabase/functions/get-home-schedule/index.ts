@@ -22,42 +22,6 @@ function jsonResp(body: unknown, status = 200) {
   })
 }
 
-// Start-of-day (midnight) for a given date in a timezone, returned as UTC ISO string.
-function dayStartUTC(date: Date, tz: string): string {
-  const fmt = new Intl.DateTimeFormat('en-CA', {
-    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
-  })
-  const local = fmt.format(date) // e.g. "2026-06-16"
-  return new Date(`${local}T00:00:00`).toISOString().replace(
-    /T.*/, `T${new Date(`${local}T00:00:00`).toISOString().slice(11)}`,
-  )
-}
-
-// Build a clean UTC ISO range from local date string + timezone.
-function buildRange(tz: string, days: number): { start: string; end: string } {
-  const now = new Date()
-  // Today midnight in target timezone
-  const localNow = new Intl.DateTimeFormat('en-CA', {
-    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
-  }).format(now)
-
-  // Parse back to UTC for start-of-day
-  const startLocal = new Date(`${localNow}T00:00:00`)
-  // Adjust for timezone offset: compute what UTC instant = midnight in that tz
-  const utcOffset = (now.getTime() - new Date(
-    new Intl.DateTimeFormat('en-US', {
-      timeZone: tz,
-      year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit', second: '2-digit',
-      hour12: false,
-    }).format(now).replace(/(\d+)\/(\d+)\/(\d+),\s+(\d+):(\d+):(\d+)/, '$3-$1-$2T$4:$5:$6')
-  ).getTime())
-
-  const start = new Date(startLocal.getTime() - utcOffset).toISOString()
-  const end   = new Date(startLocal.getTime() - utcOffset + days * 24 * 60 * 60 * 1000).toISOString()
-  return { start, end }
-}
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
 

@@ -95,7 +95,7 @@ const STOP_WORDS = new Set([
 export function normalizeEventTokens(text: string): Set<string> {
   if (!text) return new Set()
 
-  let clean = text
+  const clean = text
     .toLowerCase()
     .replace(/suggested appointment:\s*/i, '')
     .replace(/\bi[-_ ]ready\b/g, 'iready')

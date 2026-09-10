@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase.ts'
+import { getSetting, setSetting } from '../lib/settingsStore.ts'
 
 export const ROUTINE_CHECKLIST_SETTINGS_KEY = 'routine_checklist_completions'
 export const ROUTINE_CHECKLIST_STORAGE_KEY = 'casa_routine_checklist_completions'
@@ -33,7 +34,7 @@ export function saveStoredRoutineChecklistCompletions(map: Record<string, boolea
   if (typeof window === 'undefined') return
   try {
     localStorage.setItem(ROUTINE_CHECKLIST_STORAGE_KEY, JSON.stringify(map))
-  } catch {}
+  } catch { /* ignore — best-effort, non-critical */ }
 }
 
 // ── Realtime Broadcast Channel Singleton ─────────────────────────────────────
@@ -47,9 +48,9 @@ function getOrCreateChecklistRealtimeChannel() {
   activeRealtimeChannel = supabase
     .channel(ROUTINE_CHECKLIST_REALTIME_CHANNEL)
     .on(
-      'broadcast' as any,
+      'broadcast',
       { event: ROUTINE_CHECKLIST_BROADCAST_EVENT },
-      ({ payload }: { payload?: ChecklistTogglePayload }) => {
+      ({ payload }: { type: 'broadcast'; event: string; payload: ChecklistTogglePayload }) => {
         if (!payload || !payload.id) return
         if (payload.senderId === CLIENT_INSTANCE_ID) {
           // Ignore echo of our own broadcast
@@ -83,7 +84,7 @@ function releaseChecklistRealtimeChannel() {
   if (channelSubscriberCount === 0 && activeRealtimeChannel) {
     try {
       supabase.removeChannel(activeRealtimeChannel)
-    } catch {}
+    } catch { /* ignore — best-effort, non-critical */ }
     activeRealtimeChannel = null
   }
 }
@@ -93,19 +94,15 @@ function releaseChecklistRealtimeChannel() {
  */
 export async function fetchRoutineChecklistCompletions(): Promise<Record<string, boolean>> {
   try {
-    const { data, error } = await supabase
-      .from('settings')
-      .select('value')
-      .eq('key', ROUTINE_CHECKLIST_SETTINGS_KEY)
-      .maybeSingle()
+    const { data, error } = await getSetting(ROUTINE_CHECKLIST_SETTINGS_KEY)
 
     if (error) {
       console.warn('[RoutineChecklistSync] Failed to fetch checklist completions from Supabase:', error.message)
       return getStoredRoutineChecklistCompletions()
     }
 
-    if (data && data.value && typeof data.value === 'object') {
-      const serverMap = data.value as Record<string, boolean>
+    if (data && typeof data === 'object') {
+      const serverMap = data as Record<string, boolean>
       // Merge with local storage cache
       const localMap = getStoredRoutineChecklistCompletions()
       const merged = { ...localMap, ...serverMap }
@@ -143,14 +140,7 @@ async function flushPersistToSupabase(mapToSave: Record<string, boolean>) {
       }
     }
 
-    const { error } = await supabase.from('settings').upsert(
-      {
-        key: ROUTINE_CHECKLIST_SETTINGS_KEY,
-        value: pruned,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'key' }
-    )
+    const { error } = await setSetting(ROUTINE_CHECKLIST_SETTINGS_KEY, pruned)
     if (error) {
       console.warn('[RoutineChecklistSync] Could not save checklist completions to Supabase settings:', error.message)
     }
@@ -243,7 +233,7 @@ export function subscribeToRoutineChecklistSync(
         const changedKey = Object.keys(parsed)[0] || ''
         onToggle(changedKey, Boolean(parsed[changedKey]), parsed)
       }
-    } catch {}
+    } catch { /* ignore — best-effort, non-critical */ }
   }
 
   if (typeof document !== 'undefined') {

@@ -88,7 +88,7 @@ function parseJsonObject(raw: string): Record<string, unknown> {
   throw new Error('Model did not return JSON')
 }
 
-function normalizeIngredient(raw: unknown, index: number): RecipeIngredient | null {
+function normalizeIngredient(raw: unknown): RecipeIngredient | null {
   if (!raw) return null
   if (typeof raw === 'string') {
     const value = raw.trim()
@@ -135,7 +135,7 @@ function normalizeExtractedRecipe(payload: Record<string, unknown>, fallbackName
   const ingredientsRaw = Array.isArray(payload.ingredients) ? payload.ingredients : []
   const stepsRaw = Array.isArray(payload.steps) ? payload.steps : []
   const ingredients = ingredientsRaw
-    .map((row, index) => normalizeIngredient(row, index))
+    .map((row) => normalizeIngredient(row))
     .filter((row): row is RecipeIngredient => row !== null)
   const steps = stepsRaw
     .map((row, index) => normalizeStep(row, index))
@@ -218,7 +218,7 @@ function readRecipeFromJsonLd(html: string): ExtractedRecipe | null {
 
       const ingredientSource = Array.isArray(recipe.recipeIngredient) ? recipe.recipeIngredient : []
       const ingredients = ingredientSource
-        .map((item, index) => normalizeIngredient(item, index))
+        .map((item) => normalizeIngredient(item))
         .filter((item): item is RecipeIngredient => item !== null)
 
       const instructionSource = recipe.recipeInstructions

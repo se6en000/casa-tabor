@@ -4,8 +4,8 @@ import { ShoppingCart } from 'lucide-react'
 import { Button, Chip, Heading, Text } from '../ui'
 import { cn } from '../../utils/cn'
 import { GROCERY_CATEGORIES, type GroceryItem } from '../../hooks/useGroceryList'
-import { categoryIconBadgeClassName, getCategoryTone } from '../../utils/groceryVisuals'
-import GroceryItemRow, { splitCategoryLabel } from './GroceryItemRow'
+import { categoryIconBadgeClassName, getCategoryTone, splitCategoryLabel } from '../../utils/groceryVisuals'
+import GroceryItemRow from './GroceryItemRow'
 
 export interface CategoryVisualDef {
   icon: ComponentType<{ size?: number; className?: string }>

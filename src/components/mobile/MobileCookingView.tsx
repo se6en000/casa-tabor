@@ -267,7 +267,7 @@ export default function MobileCookingView({
     const foundCatalog = combinedCatalog.find((r) => r.id === selectedRecipeId)
     if (foundCatalog) {
       // 1. Resolve ingredients
-      let parsedIngredients: IngredientItem[] = []
+      let parsedIngredients: IngredientItem[]
       if (foundCatalog.ingredients && foundCatalog.ingredients.length > 0) {
         parsedIngredients = foundCatalog.ingredients.map((ing, idx) => {
           const raw = ing.raw_text || ing.name || ''
@@ -305,7 +305,7 @@ export default function MobileCookingView({
       }
 
       // 2. Resolve steps
-      let parsedSteps: StepItem[] = []
+      let parsedSteps: StepItem[]
       if (foundCatalog.steps && foundCatalog.steps.length > 0) {
         parsedSteps = foundCatalog.steps.map((st, idx) => {
           const stepNum = st.step_number || idx + 1
@@ -323,7 +323,7 @@ export default function MobileCookingView({
         // Split text by lines
         const lines = foundCatalog.instructions_text
           .split(/\n+/)
-          .map((l) => l.trim().replace(/^\d+[\.\)]\s*/, ''))
+          .map((l) => l.trim().replace(/^\d+[.)]\s*/, ''))
           .filter(Boolean)
 
         parsedSteps = lines.map((line, idx) => {
@@ -422,7 +422,9 @@ export default function MobileCookingView({
               next[stepNum] = { secondsLeft: 0, running: false }
               try {
                 navigator.vibrate?.([200, 100, 200])
-              } catch {}
+              } catch {
+                // ignore — vibrate not supported
+              }
             } else {
               next[stepNum] = { secondsLeft: state.secondsLeft - 1, running: true }
             }
