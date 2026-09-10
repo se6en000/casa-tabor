@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   classifyCalendarTemporalEvidence,
   extractUserTemporalEvidence,
+  resolvePastRelativeCreateRollover,
   validateCalendarTemporalProvenance,
 } from '../supabase/functions/_shared/assistant-temporal-evidence.mjs'
 
@@ -105,4 +106,67 @@ test('dayparts and days-from-now are deterministic relative date evidence', () =
   assert.equal(offset.rangeStart, '2026-08-17')
   assert.equal(daypart.resolutionKind, 'relative')
   assert.equal(offset.resolutionKind, 'relative')
+})
+
+test('a relative "today" resolution whose time has already passed rolls to the next day', () => {
+  // Bug: "Schedule a call with the bank today at 8am." asked at 7pm the same day
+  // passed the date-evidence check fine (the DATE really is today, matching the
+  // evidence in the text) and silently created a start time ~11 hours in the past.
+  // classifyCalendarTemporalEvidence only validates the date is grounded, not that
+  // the resulting timestamp is still in the future -- this closes that gap.
+  const now = new Date('2026-09-10T23:25:00.000Z') // 7:25 PM local at -04:00
+  const evidence = { resolutionKind: 'relative', rangeStart: '2026-09-10', rangeEnd: '2026-09-10' }
+  const rollover = resolvePastRelativeCreateRollover(
+    { start: '2026-09-10T08:00:00-04:00', end: '2026-09-10T09:00:00-04:00' },
+    evidence,
+    { now },
+  )
+  assert.deepEqual(rollover, {
+    start: '2026-09-11T08:00:00-04:00',
+    end: '2026-09-11T09:00:00-04:00',
+  })
+})
+
+test('rollover is a no-op when the resolved time is still in the future, or the resolution is not relative', () => {
+  const now = new Date('2026-09-10T23:25:00.000Z')
+  assert.equal(
+    resolvePastRelativeCreateRollover(
+      { start: '2026-09-11T08:00:00-04:00', end: '2026-09-11T09:00:00-04:00' },
+      { resolutionKind: 'relative' },
+      { now },
+    ),
+    null,
+    'future relative time',
+  )
+  assert.equal(
+    resolvePastRelativeCreateRollover(
+      { start: '2026-09-10T08:00:00-04:00', end: '2026-09-10T09:00:00-04:00' },
+      { resolutionKind: 'explicit_date' },
+      { now },
+    ),
+    null,
+    'explicitly-typed past date is left alone -- may be intentionally historical',
+  )
+  assert.equal(
+    resolvePastRelativeCreateRollover(
+      { start: 'not-a-date', end: 'not-a-date' },
+      { resolutionKind: 'relative' },
+      { now },
+    ),
+    null,
+    'unparseable start',
+  )
+})
+
+test('rollover works on the start_time/end_time key convention too, and preserves each side\'s own offset', () => {
+  const now = new Date('2026-09-10T23:25:00.000Z')
+  const rollover = resolvePastRelativeCreateRollover(
+    { start_time: '2026-09-10T08:00:00-04:00', end_time: '2026-09-10T09:30:00-04:00' },
+    { resolutionKind: 'relative' },
+    { now },
+  )
+  assert.deepEqual(rollover, {
+    start: '2026-09-11T08:00:00-04:00',
+    end: '2026-09-11T09:30:00-04:00',
+  })
 })

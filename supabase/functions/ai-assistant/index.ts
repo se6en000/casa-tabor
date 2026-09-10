@@ -158,7 +158,7 @@ import {
   resolveExplicitReminderDaypartRange,
   resolveStructuredReminderDueBy,
 } from '../_shared/assistant-reminder-intent.mjs'
-import { classifyCalendarTemporalEvidence } from '../_shared/assistant-temporal-evidence.mjs'
+import { classifyCalendarTemporalEvidence, resolvePastRelativeCreateRollover } from '../_shared/assistant-temporal-evidence.mjs'
 import { assessCalendarCreatePreflight } from '../_shared/assistant-calendar-create-preflight.mjs'
 
 const CORS = {
@@ -2573,6 +2573,17 @@ Deno.serve(async (req) => {
           }
         } else {
           normalizedAgentWriteArgs.temporal_provenance = temporalEvidence
+          const rollover = resolvePastRelativeCreateRollover(normalizedAgentWriteArgs, temporalEvidence, { now })
+          if (rollover) {
+            if (typeof normalizedAgentWriteArgs.start === 'string') normalizedAgentWriteArgs.start = rollover.start
+            if (typeof normalizedAgentWriteArgs.start_time === 'string') normalizedAgentWriteArgs.start_time = rollover.start
+            if (rollover.end && typeof normalizedAgentWriteArgs.end === 'string') normalizedAgentWriteArgs.end = rollover.end
+            if (rollover.end && typeof normalizedAgentWriteArgs.end_time === 'string') normalizedAgentWriteArgs.end_time = rollover.end
+            appendServerTrace('past_relative_time_rolled_to_next_day', String(normalizedAgentWriteArgs.title ?? 'calendar create'), {
+              original_start: startStr,
+              rolled_start: rollover.start,
+            })
+          }
         }
         if (experienceMode === 'talk_plan' && activeMemberId && privateConversationId && !dryRun) {
           const draftItemId = await findUndatedCalendarDraft(sb, {
@@ -5552,6 +5563,15 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
             }
           } else {
             args.temporal_provenance = temporalEvidence
+            const rollover = resolvePastRelativeCreateRollover(args, temporalEvidence, { now })
+            if (rollover) {
+              if (typeof args.start === 'string') args.start = rollover.start
+              if (rollover.end && typeof args.end === 'string') args.end = rollover.end
+              appendServerTrace('past_relative_time_rolled_to_next_day', title || 'calendar create', {
+                original_start: start,
+                rolled_start: rollover.start,
+              })
+            }
           }
           if (experienceMode === 'talk_plan' && activeMemberId && privateConversationId && !dryRun) {
             const draftItemId = await findUndatedCalendarDraft(sb, {

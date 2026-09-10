@@ -243,6 +243,42 @@ export function classifyCalendarTemporalEvidence(messages, proposed, options = {
   }
 }
 
+function shiftIsoDateOnly(isoTimestamp, days) {
+  const match = String(isoTimestamp ?? '').match(/^(\d{4})-(\d{2})-(\d{2})(T.*)$/)
+  if (!match) return null
+  const shifted = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]) + days))
+  const yyyy = String(shifted.getUTCFullYear()).padStart(4, '0')
+  const mm = String(shifted.getUTCMonth() + 1).padStart(2, '0')
+  const dd = String(shifted.getUTCDate()).padStart(2, '0')
+  return `${yyyy}-${mm}-${dd}${match[4]}`
+}
+
+// classifyCalendarTemporalEvidence only validates that a proposed create's DATE is
+// grounded in something the user said -- it doesn't check the resulting timestamp
+// is still in the future. A relative resolution ("today", "this Tuesday" said on
+// an actual Tuesday, "this morning") can land in the past once the specific time
+// of day has already gone by (e.g. "call the bank today at 8am" asked at 7pm),
+// producing a grounded-but-already-past create. Roll that forward by one day.
+// Deliberately scoped to resolutionKind 'relative' only: an explicitly-typed past
+// date ("September 5th") might be intentionally historical (backfilling a record)
+// rather than a mistake, so it's left alone.
+export function resolvePastRelativeCreateRollover(proposed, evidence, options = {}) {
+  if (evidence?.resolutionKind !== 'relative') return null
+  const now = options.now instanceof Date ? options.now : new Date()
+  const startStr = typeof proposed?.start === 'string'
+    ? proposed.start
+    : typeof proposed?.start_time === 'string' ? proposed.start_time : null
+  const endStr = typeof proposed?.end === 'string'
+    ? proposed.end
+    : typeof proposed?.end_time === 'string' ? proposed.end_time : null
+  const startMs = startStr ? Date.parse(startStr) : NaN
+  if (!Number.isFinite(startMs) || startMs >= now.getTime()) return null
+  const rolledStart = shiftIsoDateOnly(startStr, 1)
+  if (!rolledStart) return null
+  const rolledEnd = endStr ? shiftIsoDateOnly(endStr, 1) : null
+  return { start: rolledStart, end: rolledEnd ?? null }
+}
+
 export function validateCalendarTemporalProvenance(provenance, proposed, options = {}) {
   if (
     !provenance ||
