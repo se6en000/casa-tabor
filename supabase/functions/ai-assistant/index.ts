@@ -2513,6 +2513,15 @@ Deno.serve(async (req) => {
       typeof normalizedAgentWriteArgs === 'object'
     ) {
       if (agentWriteData.tool === 'create_event') {
+        // Pre-existing bug, exposed (not caused) by retiring the deterministic
+        // default-create fast-path: this referenced allowImageTemporalProvenance
+        // without ever declaring it in this scope (a separate create_event handler
+        // further down the file, around the imageDirectEventCreateFlow definition,
+        // declares its own copy). It was never reachable for a text-only, no-date-
+        // evidence request before, because resolveDefaultCalendarCreate intercepted
+        // that exact shape earlier -- so the ReferenceError never fired in
+        // production until that fast-path was removed.
+        const allowImageTemporalProvenance = hasImages || imageDirectEventCreateFlow
         const temporalEvidence = classifyCalendarTemporalEvidence(
           messages,
           normalizedAgentWriteArgs,
