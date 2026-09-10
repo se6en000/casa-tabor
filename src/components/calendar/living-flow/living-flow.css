@@ -7,9 +7,7 @@
 .living-sidecar-modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.3);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  background: rgba(15, 23, 42, 0.42);
   z-index: 990;
   animation: fadeInScrim 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
@@ -100,7 +98,7 @@
   padding: 5px 14px 5px 5px;
   border-radius: 28px;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   box-shadow: 0 1px 4px rgba(201, 169, 110, 0.15);
 }
 .living-attendee-capsule:hover {
@@ -145,7 +143,7 @@
   color: var(--color-casa-navy, #1B2A4A);
   cursor: pointer;
   font-size: 14px;
-  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s cubic-bezier(0.16, 1, 0.3, 1), color 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .living-header-action-btn:hover {
   border-color: var(--color-casa-gold, #C9A96E);
@@ -167,7 +165,7 @@
   justify-content: center;
   color: var(--color-casa-muted, #7E7F8A);
   cursor: pointer;
-  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s cubic-bezier(0.16, 1, 0.3, 1), color 0.18s cubic-bezier(0.16, 1, 0.3, 1);
   flex-shrink: 0;
 }
 .living-footer-action-btn:hover {
@@ -217,16 +215,14 @@
 @keyframes luxuryUnfold {
   0% {
     opacity: 0;
-    transform: translateY(-10px) scale(0.985);
-    max-height: 0;
+    transform: translateY(-10px) scaleY(0.985);
   }
   50% {
     opacity: 0.7;
   }
   100% {
     opacity: 1;
-    transform: translateY(0) scale(1);
-    max-height: 800px;
+    transform: translateY(0) scaleY(1);
   }
 }
 
@@ -248,7 +244,7 @@
   border-radius: 18px;
   border: 1px solid var(--color-casa-border, #E8E2D9);
   box-shadow: 0 2px 12px rgba(27, 42, 74, 0.04);
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.25s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1), color 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .living-hero-title-card.has-expanded {
   border-color: var(--color-casa-gold, #C9A96E);
@@ -292,7 +288,7 @@
   align-items: center;
   gap: 5px;
   cursor: pointer;
-  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s cubic-bezier(0.16, 1, 0.3, 1), color 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .living-action-chip:hover {
   border-color: var(--color-casa-gold, #C9A96E);
@@ -331,7 +327,7 @@
   background: var(--color-casa-bg, #FAF8F5);
   border: 1.5px solid var(--color-casa-border, #E8E2D9);
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .living-member-card:hover {
   border-color: var(--color-casa-gold, #C9A96E);
@@ -406,7 +402,7 @@
   background: #FFFFFF;
   color: var(--color-casa-navy, #1B2A4A);
   cursor: pointer;
-  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s cubic-bezier(0.16, 1, 0.3, 1), color 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .living-recur-pill:hover {
   border-color: var(--color-casa-gold, #C9A96E);
@@ -439,7 +435,7 @@
   font-size: 12px;
   font-weight: 700;
   color: var(--color-casa-navy, #1B2A4A);
-  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s cubic-bezier(0.16, 1, 0.3, 1), color 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .day-select-pill-btn:hover {
   border-color: var(--color-casa-gold, #C9A96E);
@@ -500,7 +496,7 @@
   width: 100%;
   text-align: center;
   box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-  transition: all 0.15s ease;
+  transition: transform 0.15s ease, border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
 }
 
 .stepper-buttons-row {
@@ -522,7 +518,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.15s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.15s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.15s cubic-bezier(0.16, 1, 0.3, 1), color 0.15s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .stepper-arrow-btn:hover {
   background: var(--color-casa-gold-light, #F7EFE1);
@@ -549,7 +545,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.15s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.15s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.15s cubic-bezier(0.16, 1, 0.3, 1), color 0.15s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .ampm-toggle-btn:hover {
   background: var(--color-casa-gold-light, #F7EFE1);
@@ -575,7 +571,7 @@
   font-weight: 700;
   color: var(--color-casa-navy, #1B2A4A);
   cursor: pointer;
-  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s cubic-bezier(0.16, 1, 0.3, 1), color 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .dur-chip-btn:hover {
   border-color: var(--color-casa-gold, #C9A96E);
@@ -615,7 +611,7 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s cubic-bezier(0.16, 1, 0.3, 1), color 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .living-mode-btn:active {
   transform: scale(0.97);
@@ -644,7 +640,7 @@
   font-weight: 700;
   color: var(--color-casa-navy, #1B2A4A);
   cursor: pointer;
-  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s cubic-bezier(0.16, 1, 0.3, 1), color 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .category-picker-item:hover {
   border-color: var(--color-casa-gold, #C9A96E);
@@ -711,7 +707,7 @@
   width: fit-content;
   margin-top: 4px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s cubic-bezier(0.16, 1, 0.3, 1), color 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .living-driver-pill:hover {
   border-color: var(--color-casa-gold, #C9A96E);
@@ -732,7 +728,7 @@
   flex-direction: column;
   gap: 10px;
   box-shadow: 0 2px 12px rgba(27, 42, 74, 0.04);
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -746,7 +742,7 @@
   display: flex;
   flex-direction: column;
   box-shadow: 0 2px 12px rgba(27, 42, 74, 0.04);
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .living-prep-card.living-prep-card-empty {
@@ -765,7 +761,7 @@
   border: 1.5px solid transparent;
   cursor: pointer;
   min-height: 48px;
-  transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.16s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.16s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.16s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.16s cubic-bezier(0.16, 1, 0.3, 1), color 0.16s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .living-prep-item-row:hover {
@@ -798,7 +794,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s cubic-bezier(0.16, 1, 0.3, 1), color 0.18s cubic-bezier(0.16, 1, 0.3, 1);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
@@ -825,7 +821,7 @@
   font-weight: 700;
   cursor: pointer;
   min-height: 32px;
-  transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.16s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.16s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.16s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.16s cubic-bezier(0.16, 1, 0.3, 1), color 0.16s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .living-prep-suggestion-pill:hover {
@@ -892,7 +888,7 @@
   align-items: center;
   justify-content: center;
   text-align: center;
-  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s cubic-bezier(0.16, 1, 0.3, 1), color 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .recur-preset-pill:hover {
@@ -931,7 +927,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.16s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.16s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.16s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.16s cubic-bezier(0.16, 1, 0.3, 1), color 0.16s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .recur-day-circle-btn:hover {
@@ -973,7 +969,7 @@
   align-items: center;
   justify-content: center;
   gap: 4px;
-  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s cubic-bezier(0.16, 1, 0.3, 1), color 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .recur-end-tab-btn:active {
