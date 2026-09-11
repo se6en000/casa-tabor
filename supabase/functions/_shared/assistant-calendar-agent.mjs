@@ -84,10 +84,21 @@ export function resolveCalendarSemanticTurn(turn, context = {}) {
       : turn.action
 
   if (action === 'create' || action === 'revise') {
-    if (action === 'revise' && pending?.toolName !== 'calendar.create') {
-      return reject('pending_calendar_create_required')
-    }
-    return resolveCreate(turn, pending?.args ?? null, context)
+    // A "revise" with no valid pending create to revise almost always just
+    // means "create this fresh" -- the planner sometimes interprets a
+    // follow-up as continuing a recent conversational turn (based on wording
+    // similarity) even when there's no live pending draft to attach it to,
+    // e.g. the user restated their request instead of confirming/cancelling
+    // the earlier proposal. Falling back to a plain create using only this
+    // turn's own details -- rather than rejecting outright -- turns this into
+    // a working request instead of a confusing dead end. resolveCreate already
+    // safely asks for a title/time if this turn genuinely doesn't have enough
+    // on its own (see the null-baseArgs "create" case just below), so this
+    // isn't "always guess," just "don't dead-end when a plain create would work."
+    const baseArgs = action === 'revise' && pending?.toolName !== 'calendar.create'
+      ? null
+      : pending?.args ?? null
+    return resolveCreate(turn, baseArgs, context)
   }
 
   const target = resolveTarget(turn, activeEntity, entities, context)

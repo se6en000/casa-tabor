@@ -150,6 +150,45 @@ test('pending reminder correction preserves reminder type and storage duration',
   assert.equal(result.args.event_type, 'reminder')
 })
 
+test('a "revise" turn with no valid pending create to revise falls back to a plain create instead of rejecting', () => {
+  // Root cause of two real bug reports (filed by the user through the copilot's
+  // own bug button): the planner sometimes interprets a follow-up as "revise"
+  // based on conversational continuity alone -- e.g. restating a request after
+  // a prior proposal, without ever confirming or cancelling it -- even when
+  // context.pendingAction is absent or doesn't match. The old behavior rejected
+  // outright with 'pending_calendar_create_required', producing a confusing
+  // dead end for what was, to the user, an unambiguous plain create request.
+  // Confirmed via direct reproduction against the live endpoint that the exact
+  // same wording succeeds fine as a create when given the chance.
+  const noPendingAtAll = resolveCalendarSemanticTurn(turn('revise', {
+    title: 'Go play pickle ball at the gym',
+    date_reference: { kind: 'tomorrow' },
+    time: { hour: 9, period: 'am' },
+  }), context)
+  assert.equal(noPendingAtAll.kind, 'tool')
+  assert.equal(noPendingAtAll.toolName, 'calendar.create')
+  assert.equal(noPendingAtAll.args.title, 'Go play pickle ball at the gym')
+
+  const mismatchedPending = resolveCalendarSemanticTurn(turn('revise', {
+    title: 'Go play pickle ball at the gym',
+    date_reference: { kind: 'tomorrow' },
+    time: { hour: 9, period: 'am' },
+  }), {
+    ...context,
+    pendingAction: { toolName: 'calendar.update', args: { id: 'some-event' } },
+  })
+  assert.equal(mismatchedPending.kind, 'tool')
+  assert.equal(mismatchedPending.toolName, 'calendar.create')
+
+  // Still correctly asks rather than guessing when the fallback create itself
+  // has nothing to go on (no title at all) -- this isn't a blanket "always
+  // succeed," just "don't dead-end when a plain create would work."
+  const noTitleEither = resolveCalendarSemanticTurn(turn('revise', {
+    time: { hour: 9, period: 'am' },
+  }), context)
+  assert.equal(noTitleEither.kind, 'clarify')
+})
+
 test('only an authoritative reminder can be completed', () => {
   const reminder = {
     type: 'event',
