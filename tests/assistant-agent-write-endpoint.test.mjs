@@ -136,4 +136,15 @@ test('multi-event calendar_batch_create plans are resolved per-item through the 
   // in here rather than left unused.
   assert.match(batchSection, /enrichBatchCandidates/)
   assert.match(batchSection, /duplicateHint/)
+  // Found live 2026-09-11 while discussing this feature with the user: a
+  // "conflict" (the same family member double-booked into two events) can
+  // only ever be detected by assessCalendarCreatePreflight when it's given
+  // the proposed event's members -- omitting them here means every batch
+  // item silently loses the "same person, two places" conflict check that a
+  // single create effectively gets via this same preflight function.
+  const enrichCallSection = batchSection.slice(
+    batchSection.indexOf('enrichBatchCandidates'),
+    batchSection.indexOf('enrichBatchCandidates') + 600,
+  )
+  assert.match(enrichCallSection, /members:/)
 })

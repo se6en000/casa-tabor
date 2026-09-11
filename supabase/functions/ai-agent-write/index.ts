@@ -273,6 +273,7 @@ Deno.serve(async (req) => {
                 start: resolvedTurn.args?.start,
                 end: resolvedTurn.args?.end,
                 eventType: resolvedTurn.args?.event_type === 'reminder' ? 'reminder' : 'event',
+                members: resolvedTurn.args?.members,
               }
             : { title: '', start: '', end: '' }
         ),

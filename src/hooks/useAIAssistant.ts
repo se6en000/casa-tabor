@@ -37,6 +37,7 @@ interface AssistantServerPayload {
   partial_sources?: unknown
   safety_rejection?: unknown
   delta?: string
+  actions?: NonNullable<AIMessage['toolActionBatch']>['actions']
 }
 
 export interface GroceryAssistantContext {
@@ -500,6 +501,24 @@ export function useAIAssistant(ctx: AssistantContext) {
           id,
           role: 'assistant',
           content: assistantErrorMessage(data.code, data.message),
+          ...sourceMetadata,
+        }
+      }
+      if (data?.type === 'tool_action_batch') {
+        const actions = Array.isArray(data.actions) ? data.actions : []
+        const proposedCount = actions.filter((action) => action.status === 'proposed').length
+        const needsAttentionCount = actions.length - proposedCount
+        const summary = proposedCount === 0
+          ? "I couldn't prepare any of those safely."
+          : `I found ${proposedCount} event${proposedCount === 1 ? '' : 's'} to add` +
+            (needsAttentionCount > 0 ? `, and ${needsAttentionCount} that need${needsAttentionCount === 1 ? 's' : ''} a bit more detail` : '') +
+            '. Review below:'
+        return {
+          id,
+          role: 'assistant',
+          content: summary,
+          toolActionBatch: { actions },
+          conversationState: data.conversation_state,
           ...sourceMetadata,
         }
       }

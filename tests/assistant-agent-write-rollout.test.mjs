@@ -42,6 +42,16 @@ test('bounded write rejections cannot fall through to legacy execution', () => {
   assert.match(assistant, /'agent\.write\.blocked'/)
 })
 
+test('write rollout forwards a calendar_batch_create proposal to the client as its own batch type, normalized the same way single tool actions are', () => {
+  assert.match(assistant, /agentWriteData\.type === 'tool_action_batch'/)
+  const batchSection = assistant.slice(assistant.indexOf("'tool_action_batch'"))
+  // Batch items must go through the same legacy-arg normalization a single
+  // tool_action already does (normalizeLegacyCalendarActionArgs) -- the
+  // client/execute-ai-action layer expects that shape regardless of whether
+  // the proposal came from a single create or a batch item.
+  assert.match(batchSection.slice(0, 3000), /normalizeLegacyCalendarActionArgs/)
+})
+
 test('write rollout adopts only allowlisted proposal actions', () => {
   assert.match(assistant, /agentWriteData\?\.supported === true/)
   assert.match(assistant, /agentWriteData\.type === 'tool_action'/)

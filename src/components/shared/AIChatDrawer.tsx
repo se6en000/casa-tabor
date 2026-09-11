@@ -31,7 +31,7 @@ import { classifyPendingConfirmation } from '../../lib/assistantConfirmation.mjs
 import { conversationStateAfterCalendarAction } from '../../lib/assistantConversationState.mjs'
 import { linkAssistantEventMentions, parseAssistantEventHref, parseAssistantHref } from '../../lib/assistantEntityLinks'
 import { openEventDetails } from '../../utils/openEventDetails'
-import { buildCreatePreviewCopy, buildDeleteManyPreviewCopy, buildDeletePreviewCopy, buildUpdatePreviewCopy } from '../../utils/aiConfirmPreview'
+import { buildCreatePreviewCopy, buildDeleteManyPreviewCopy, buildDeletePreviewCopy, buildUpdatePreviewCopy, formatEventSpan } from '../../utils/aiConfirmPreview'
 import { matchDinnerPlanIntent, getDinnerPlanSuggestions } from '../../utils/dinnerPlanManager'
 import { saveTonightDinnerPlan } from '../../utils/dinnerPlanSync'
 import { invalidateAllCalendarQueries } from '../../lib/eventMutations'
@@ -2797,7 +2797,181 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
             )}
           </div>
         )}
+
+        {/* Multi-event batch create curation card */}
+        {msg.toolActionBatch && (
+          <div className="mt-2.5 pt-2.5 border-t border-casa-divider">
+            <BatchProposalCard msg={msg} onConfirmToolAction={onConfirmToolAction} />
+          </div>
+        )}
       </div>
+    </div>
+  )
+}
+
+function BatchProposalCard({ msg, onConfirmToolAction }: {
+  msg: AIMessage
+  onConfirmToolAction: (messageId: string, tool: string, args: Record<string, unknown>) => Promise<boolean>
+}) {
+  const batch = msg.toolActionBatch
+  const rows = useMemo(
+    () => (batch?.actions ?? []).map((action, index) => ({ action, index })),
+    [batch],
+  )
+  const proposedRows = useMemo(() => rows.filter((row) => row.action.status === 'proposed'), [rows])
+  const attentionRows = useMemo(() => rows.filter((row) => row.action.status !== 'proposed'), [rows])
+
+  const [checked, setChecked] = useState<Record<number, boolean>>(() =>
+    Object.fromEntries(proposedRows.map((row) => [row.index, true])),
+  )
+  const [eventType, setEventType] = useState<Record<number, 'event' | 'reminder'>>(() =>
+    Object.fromEntries(proposedRows.map((row) => [
+      row.index,
+      (row.action.args?.event_type === 'reminder' ? 'reminder' : 'event') as 'event' | 'reminder',
+    ])),
+  )
+  const [rowStatus, setRowStatus] = useState<Record<number, 'idle' | 'loading' | 'done' | 'error'>>({})
+  const [rowError, setRowError] = useState<Record<number, string>>({})
+  const [confirming, setConfirming] = useState(false)
+
+  if (!batch || proposedRows.length + attentionRows.length === 0) return null
+
+  const selectedCount = proposedRows.filter((row) => checked[row.index] && rowStatus[row.index] !== 'done').length
+  const doneCount = proposedRows.filter((row) => rowStatus[row.index] === 'done').length
+  const allSettled = proposedRows.every((row) => !checked[row.index] || rowStatus[row.index] === 'done')
+
+  const handleConfirmAll = async () => {
+    setConfirming(true)
+    for (const row of proposedRows) {
+      if (!checked[row.index] || rowStatus[row.index] === 'done') continue
+      setRowStatus((prev) => ({ ...prev, [row.index]: 'loading' }))
+      const args: Record<string, unknown> = { ...row.action.args }
+      if (eventType[row.index] === 'reminder') args.event_type = 'reminder'
+      else delete args.event_type
+      const actionId = row.action.actionId ?? `${msg.id}:${row.index}`
+      try {
+        const success = await onConfirmToolAction(actionId, row.action.tool ?? 'create_event', args)
+        setRowStatus((prev) => ({ ...prev, [row.index]: success ? 'done' : 'error' }))
+      } catch (err) {
+        setRowStatus((prev) => ({ ...prev, [row.index]: 'error' }))
+        setRowError((prev) => ({ ...prev, [row.index]: (err as Error).message }))
+      }
+    }
+    setConfirming(false)
+  }
+
+  return (
+    <div className="space-y-2.5">
+      {proposedRows.map((row) => {
+        const args = row.action.args ?? {}
+        const title = String(args.title ?? 'Untitled')
+        const span = typeof args.start === 'string' && typeof args.end === 'string'
+          ? formatEventSpan({ start_time: args.start, end_time: args.end, all_day: args.all_day === true })
+          : null
+        const status = rowStatus[row.index] ?? 'idle'
+        const conflictEvent = row.action.duplicateHint?.conflicts?.[0]
+        const duplicateEvent = row.action.duplicateHint?.exactDuplicate ?? row.action.duplicateHint?.probableDuplicates?.[0]
+        const peekEvent = conflictEvent ?? duplicateEvent
+        const peekSpan = peekEvent?.start_time && peekEvent?.end_time
+          ? formatEventSpan({ start_time: peekEvent.start_time, end_time: peekEvent.end_time })
+          : null
+        return (
+          <div
+            key={row.index}
+            className={cn(
+              'rounded-2xl border p-3 space-y-2 transition-colors',
+              status === 'done'
+                ? 'border-emerald-500/30 bg-emerald-500/5'
+                : status === 'error'
+                  ? 'border-red-500/30 bg-red-500/5'
+                  : 'border-casa-border bg-casa-surface',
+            )}
+          >
+            <div className="flex items-start gap-2.5">
+              <Button
+                variant="ghost"
+                type="button"
+                disabled={status === 'loading' || status === 'done'}
+                onClick={() => setChecked((prev) => ({ ...prev, [row.index]: !prev[row.index] }))}
+                aria-pressed={Boolean(checked[row.index])}
+                className={cn(
+                  'shrink-0 w-6 h-6 rounded-md border flex items-center justify-center p-0',
+                  checked[row.index]
+                    ? 'bg-casa-gold border-casa-gold text-white'
+                    : 'border-casa-border bg-casa-surface text-transparent',
+                )}
+              >
+                <Check size={14} />
+              </Button>
+              <div className="min-w-0 flex-1">
+                <p className="text-body-sm font-semibold text-casa-navy truncate">{title}</p>
+                {span && <p className="text-caption text-casa-muted">{span}</p>}
+                {peekEvent && (
+                  <div className="mt-1 rounded-lg border border-amber-500/30 bg-amber-500/5 px-2 py-1.5">
+                    <p className="text-caption text-amber-700 flex items-center gap-1 font-semibold">
+                      <AlertTriangle size={11} />
+                      {conflictEvent ? 'Conflicts with someone’s existing plans' : 'Might already be on the calendar'}
+                    </p>
+                    <p className="text-caption text-casa-muted mt-0.5">
+                      {peekEvent.title ?? 'Existing event'}{peekSpan ? ` · ${peekSpan}` : ''}
+                    </p>
+                  </div>
+                )}
+                {status === 'error' && rowError[row.index] && (
+                  <p className="text-caption text-red-500 mt-0.5">{rowError[row.index]}</p>
+                )}
+              </div>
+              {status === 'done' && <Check size={16} className="text-emerald-600 shrink-0 mt-1" />}
+              {status === 'loading' && <Loader2 size={16} className="animate-spin text-casa-muted shrink-0 mt-1" />}
+            </div>
+            {status !== 'done' && (
+              <div className="flex gap-1.5 pl-8">
+                {(['event', 'reminder'] as const).map((kind) => (
+                  <Button
+                    key={kind}
+                    variant="ghost"
+                    type="button"
+                    disabled={status === 'loading'}
+                    onClick={() => setEventType((prev) => ({ ...prev, [row.index]: kind }))}
+                    className={cn(
+                      'px-2.5 py-1 rounded-full text-caption font-semibold border transition-colors',
+                      eventType[row.index] === kind
+                        ? 'bg-casa-navy text-white border-casa-navy'
+                        : 'border-casa-border text-casa-muted',
+                    )}
+                  >
+                    {kind === 'event' ? 'Event' : 'Reminder'}
+                  </Button>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      })}
+
+      {attentionRows.map((row) => (
+        <div key={row.index} className="rounded-2xl border border-casa-border bg-casa-surface/60 p-3">
+          <p className="text-caption text-casa-muted">{row.action.text ?? "I couldn't prepare this one safely."}</p>
+        </div>
+      ))}
+
+      {proposedRows.length > 0 && !allSettled && (
+        <Button
+          variant="ghost"
+          type="button"
+          disabled={confirming || selectedCount === 0}
+          onClick={handleConfirmAll}
+          className="min-h-control flex items-center gap-2 px-4 rounded-button bg-casa-gold text-white text-body-sm font-semibold hover:brightness-110 transition-all disabled:opacity-50"
+        >
+          {confirming ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+          {confirming ? 'Adding…' : `Add ${selectedCount} event${selectedCount === 1 ? '' : 's'}`}
+        </Button>
+      )}
+      {allSettled && proposedRows.length > 0 && (
+        <p className="text-caption text-casa-muted">
+          {doneCount} of {proposedRows.length} added.
+        </p>
+      )}
     </div>
   )
 }

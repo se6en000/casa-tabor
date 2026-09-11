@@ -103,6 +103,27 @@ export interface AIMessage {
     undoStatus?: 'idle' | 'loading' | 'done' | 'error'
     undoErrorMsg?: string
   }
+  // A multi-event create proposal (see the 2026-09-11 multi-event design
+  // discussion): several candidate calendar.create actions reviewed and
+  // confirmed together in one curation card, rather than one toolAction per
+  // message. Each row still executes through the same single-item
+  // execute-ai-action path as a normal create -- this only changes how many
+  // are reviewed/confirmed at once and adds a per-row event/reminder toggle.
+  toolActionBatch?: {
+    actions: Array<{
+      status: 'proposed' | 'needs_input' | 'rejected'
+      tool?: string
+      args?: Record<string, unknown>
+      actionId?: string
+      text?: string
+      duplicateHint?: {
+        status?: string
+        exactDuplicate?: { title?: string; start_time?: string; end_time?: string } | null
+        probableDuplicates?: Array<{ title?: string; start_time?: string; end_time?: string }>
+        conflicts?: Array<{ title?: string; start_time?: string; end_time?: string }>
+      } | null
+    }>
+  }
 }
 
 export interface AISession {

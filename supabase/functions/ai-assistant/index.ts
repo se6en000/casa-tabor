@@ -2492,6 +2492,17 @@ Deno.serve(async (req) => {
           args?: Record<string, unknown>
         }
       }
+      actions?: Array<{
+        status?: string
+        tool?: string
+        args?: Record<string, unknown>
+        text?: string
+        slot?: string | null
+        code?: string
+        action_id?: string
+        idempotency_key?: string
+        duplicateHint?: Record<string, unknown> | null
+      }>
     } | null
     const normalizedAgentWriteArgs = normalizeLegacyCalendarActionArgs(
       agentWriteData?.tool,
@@ -2642,6 +2653,41 @@ Deno.serve(async (req) => {
               ? 'agent.write.destructive'
               : 'agent.write.update'
             : 'agent.write.additive',
+          correlation_id: cid,
+          telemetry: {
+            ...llmTelemetry,
+            agentic: true,
+            agent_write_ms: agentWriteData.elapsed_ms ?? null,
+            request_total_ms: Date.now() - requestStartMs,
+            context_load_ms: contextLoadMs,
+          },
+        },
+      }
+    }
+    if (
+      !agentWriteResult.error &&
+      agentWriteData?.supported === true &&
+      agentWriteData.type === 'tool_action_batch' &&
+      Array.isArray(agentWriteData.actions)
+    ) {
+      const proposedCount = agentWriteData.actions.filter((action) => action.status === 'proposed').length
+      appendServerTrace('server_agent_write_batch_adopted', `count=${agentWriteData.actions.length}`, {
+        proposed_count: proposedCount,
+        total_count: agentWriteData.actions.length,
+      })
+      return {
+        status: 200,
+        payload: {
+          type: 'tool_action_batch',
+          actions: agentWriteData.actions.map((action) => {
+            if (action.status !== 'proposed' || !action.tool) return action
+            const normalizedArgs = normalizeLegacyCalendarActionArgs(action.tool, action.args) as Record<string, unknown>
+            return {
+              ...action,
+              args: normalizedArgs,
+              display_text: buildDisplayText(action.tool, normalizedArgs),
+            }
+          }),
           correlation_id: cid,
           telemetry: {
             ...llmTelemetry,
