@@ -50,6 +50,7 @@ export default function ActionHubPage() {
     handleResolveConflict,
     handleCompletePrep,
     handleDownvotePrep,
+    handleDismissPrep,
     handleSnoozePrep,
     handlePushPrep,
     handleRestorePushedPrep,
@@ -203,6 +204,7 @@ export default function ActionHubPage() {
             handleResolveConflict={handleResolveConflict}
             handleCompletePrep={handleCompletePrep}
             handleDownvotePrep={handleDownvotePrep}
+            handleDismissPrep={handleDismissPrep}
             handleSnoozePrep={handleSnoozePrep}
             handlePushPrep={handlePushPrep}
             handleRestorePushedPrep={handleRestorePushedPrep}

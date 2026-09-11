@@ -25,6 +25,7 @@ export default function TurboCanvasView(props: TurboCanvasViewProps) {
     handleResolveConflict,
     handleCompletePrep,
     handleDownvotePrep,
+    handleDismissPrep,
     handleSnoozePrep,
     handlePushPrep,
     handleRestorePushedPrep,
@@ -92,7 +93,7 @@ export default function TurboCanvasView(props: TurboCanvasViewProps) {
           <EstateLogisticsWidget
             activePrep={activePrep}
             familyMembers={familyMembers}
-            onDismissDelivery={handleCompletePrep}
+            onDismissDelivery={handleDismissPrep}
           />
         </div>
 
@@ -107,6 +108,7 @@ export default function TurboCanvasView(props: TurboCanvasViewProps) {
             handleResolveConflict={handleResolveConflict}
             handleCompletePrep={handleCompletePrep}
             handleDownvotePrep={handleDownvotePrep}
+            handleDismissPrep={handleDismissPrep}
             handleSnoozePrep={handleSnoozePrep}
             handlePushPrep={handlePushPrep}
             handleRestorePushedPrep={handleRestorePushedPrep}

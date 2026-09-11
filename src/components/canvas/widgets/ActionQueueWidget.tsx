@@ -25,6 +25,7 @@ import {
   ShieldAlert,
   Eye,
   ChevronRight,
+  X,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button, IconButton, StatusDot } from '../../ui'
@@ -56,6 +57,7 @@ interface ActionQueueWidgetProps {
   handleResolveConflict: (conflict: Conflict, resolution: string) => void
   handleCompletePrep: (item: PrepItem) => void
   handleDownvotePrep: (item: PrepItem) => void
+  handleDismissPrep: (item: PrepItem) => void
   handleSnoozePrep: (id: string, period: SnoozeDuration) => void
   handlePushPrep: (item: PrepItem, bucket: 'later_today' | 'tomorrow' | 'weekend') => void
   handleRestorePushedPrep: (itemId: string) => void
@@ -117,6 +119,7 @@ export default function ActionQueueWidget({
   handleResolveConflict,
   handleCompletePrep,
   handleDownvotePrep,
+  handleDismissPrep,
   handleSnoozePrep,
   handlePushPrep,
   handleBatchAutoTriage,
@@ -231,6 +234,19 @@ export default function ActionQueueWidget({
     for (const id of cluster.itemIds) {
       const found = visiblePrep.find((p) => p.id === id) || cluster.item
       handleDownvotePrep(found)
+    }
+  }
+
+  const onInstantDismissCluster = (cluster: PrepItemCluster) => {
+    setOptimisticDismissedIds((prev) => {
+      const next = new Set(prev)
+      for (const id of cluster.itemIds) next.add(`prep-${id}`)
+      return next
+    })
+    setOpenMenuId(null)
+    for (const id of cluster.itemIds) {
+      const found = visiblePrep.find((p) => p.id === id) || cluster.item
+      handleDismissPrep(found)
     }
   }
 
@@ -696,6 +712,16 @@ export default function ActionQueueWidget({
                           {/* Overflow / Downvote Menu */}
                           {isHeroMenuOpen && (
                             <div className="absolute right-0 top-full mt-1 w-48 bg-casa-surface rounded-xl border border-casa-border shadow-modal p-1.5 z-40 flex flex-col gap-1 animate-in fade-in zoom-in-95 duration-150">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                align="start"
+                                onClick={() => onInstantDismissCluster(heroCluster)}
+                                className="w-full text-caption text-casa-muted hover:bg-casa-bg transition-colors font-medium min-h-[40px]"
+                                leadingIcon={<X size={12} />}
+                              >
+                                <span>Dismiss (just FYI)</span>
+                              </Button>
                               <Button
                                 variant="ghost"
                                 size="sm"

@@ -35,8 +35,9 @@ const timeReelTransition = {
   ease: [0.22, 1, 0.36, 1] as const,
 }
 
-import { usePrepItems, usePrepItemDetails, useCompletePrepItem, useSnoozePrepItem } from '../../hooks/usePrepItems'
+import { usePrepItems, usePrepItemDetails, useCompletePrepItem, useSnoozePrepItem, useDismissPrepItem } from '../../hooks/usePrepItems'
 import { synthesizeActionAnalysis, extractAmount } from '../../utils/actionInspectionSynthesis'
+import { splitActionableAndTransitItems } from '../../utils/needsYouFeed'
 import type { ActionAiContext } from '../../hooks/useAIAssistant'
 
 interface SidecarCompanionProps {
@@ -76,6 +77,16 @@ export default function SidecarCompanion({
     if (!selectedSidecarActionId) return null
     return allPrep.find((p) => p.id === selectedSidecarActionId) || null
   }, [allPrep, selectedSidecarActionId])
+  // The sidecar's queue stepper/"advance to next item" is the Executive Action
+  // Queue specifically -- it must never land on a passive delivery/transit item
+  // (which renders the shipping-manifest panel instead of an actionable item).
+  // A delivery item opened directly from the Inbound Manifest still resolves
+  // correctly via `actionId` lookup against the full `allPrep` list inside
+  // ActionInspectionSidecar, independent of this filtered queue.
+  const actionQueueItems = useMemo(
+    () => splitActionableAndTransitItems(allPrep).actionableItems,
+    [allPrep],
+  )
   const { data: activePrepDetails } = usePrepItemDetails(activePrepItem)
 
   const activeActionContext = useMemo<ActionAiContext | null>(() => {
@@ -280,6 +291,7 @@ export default function SidecarCompanion({
 
   const completePrepItem = useCompletePrepItem()
   const snoozePrepItem = useSnoozePrepItem()
+  const dismissPrepItem = useDismissPrepItem()
 
   const prevEventTimeRef = useRef<number | null>(null)
   const prevActionIdRef = useRef<string | null>(null)
@@ -373,8 +385,11 @@ export default function SidecarCompanion({
                   onSnoozeAction={async (item, period) => {
                     await snoozePrepItem(item.id, period, item.due_by)
                   }}
+                  onDismissAction={async (item) => {
+                    await dismissPrepItem(item.id)
+                  }}
                   onSelectAction={(id) => openActionInSidecar(id)}
-                  queueItems={allPrep}
+                  queueItems={actionQueueItems}
                 />
               </motion.div>
             ) : selectedEvent && selectedEvent.start_time ? (

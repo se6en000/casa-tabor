@@ -7,6 +7,7 @@ import {
   usePrepItems,
   useCompletePrepItem,
   useDownvotePrepItem,
+  useDismissPrepItem,
   useSnoozePrepItem,
 } from './usePrepItems'
 import { useFamilyMembers } from './useFamilyMembers'
@@ -51,6 +52,7 @@ export interface TurboCanvasPresenterState {
   handleResolveConflict: (conflict: Conflict, resolution: string) => void
   handleCompletePrep: (item: PrepItem) => void
   handleDownvotePrep: (item: PrepItem) => void
+  handleDismissPrep: (item: PrepItem) => void
   handleSnoozePrep: (id: string, period: SnoozeDuration) => void
   handlePushPrep: (item: PrepItem, bucket: 'later_today' | 'tomorrow' | 'weekend') => void
   handleRestorePushedPrep: (itemId: string) => void
@@ -75,6 +77,7 @@ export function useTurboCanvasPresenter(): TurboCanvasPresenterState {
   const resolveConflict = useResolveConflict()
   const completePrep = useCompletePrepItem()
   const downvotePrep = useDownvotePrepItem()
+  const dismissPrep = useDismissPrepItem()
   const snoozePrep = useSnoozePrepItem()
   const { queueMissedReminders } = useReminderNeedsYouActions()
 
@@ -322,6 +325,18 @@ export function useTurboCanvasPresenter(): TurboCanvasPresenterState {
     })
   }
 
+  const handleDismissPrep = (item: PrepItem) => {
+    const toastId = `prep-${item.id}`
+    const label = item.description || item.event_title || 'Prep Item'
+    scheduleUndoableAction({
+      id: toastId,
+      title: 'Dismissed',
+      actionLabel: label,
+      onCommit: () => dismissPrep(item.id),
+      onUndo: () => {},
+    })
+  }
+
   const handleSnoozePrep = (id: string, period: SnoozeDuration) => {
     const item = prepItems.find((p) => p.id === id)
     const toastId = `prep-${id}`
@@ -414,6 +429,7 @@ export function useTurboCanvasPresenter(): TurboCanvasPresenterState {
     handleResolveConflict,
     handleCompletePrep,
     handleDownvotePrep,
+    handleDismissPrep,
     handleSnoozePrep,
     handlePushPrep,
     handleRestorePushedPrep,

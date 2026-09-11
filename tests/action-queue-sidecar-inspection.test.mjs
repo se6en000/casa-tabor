@@ -304,25 +304,35 @@ test('ActionInspectionSidecar: Snooze and Done buttons execute mutations and aut
   // 1. ActionInspectionSidecar imports mutation hooks
   assert.match(sidecarCode, /useCompletePrepItem/, 'Must import useCompletePrepItem')
   assert.match(sidecarCode, /useSnoozePrepItem/, 'Must import useSnoozePrepItem')
+  assert.match(sidecarCode, /useDismissPrepItem/, 'Must import useDismissPrepItem')
 
-  // 2. ActionInspectionSidecar defines handleActionComplete and handleActionSnooze
+  // 2. ActionInspectionSidecar defines handleActionComplete, handleActionSnooze, handleActionDismiss
   assert.match(sidecarCode, /handleActionComplete/, 'Must implement handleActionComplete')
   assert.match(sidecarCode, /handleActionSnooze/, 'Must implement handleActionSnooze')
+  assert.match(sidecarCode, /handleActionDismiss/, 'Must implement handleActionDismiss')
   assert.match(sidecarCode, /completePrepItem\(activeItem\.id\)/, 'Must call completePrepItem as fallback')
   assert.match(sidecarCode, /snoozePrepItem\(activeItem\.id,\s*period,\s*activeItem\.due_by\)/, 'Must call snoozePrepItem as fallback')
+  assert.match(sidecarCode, /dismissPrepItem\(activeItem\.id\)/, 'Must call dismissPrepItem as fallback')
 
   // 3. Snooze dropdown options
   assert.match(sidecarCode, /handleActionSnooze\('3h'\)/, 'Must support Tonight (+3h) snooze')
   assert.match(sidecarCode, /handleActionSnooze\('tomorrow'\)/, 'Must support Tomorrow Morning snooze')
   assert.match(sidecarCode, /handleActionSnooze\('1d'\)/, 'Must support In 24 Hours snooze')
 
-  // 4. SidecarCompanion wires onCompleteAction and onSnoozeAction
+  // 4. SidecarCompanion wires onCompleteAction, onSnoozeAction, onDismissAction
   assert.match(sidecarCompanionCode, /useCompletePrepItem/, 'SidecarCompanion must import useCompletePrepItem')
   assert.match(sidecarCompanionCode, /useSnoozePrepItem/, 'SidecarCompanion must import useSnoozePrepItem')
+  assert.match(sidecarCompanionCode, /useDismissPrepItem/, 'SidecarCompanion must import useDismissPrepItem')
   assert.match(sidecarCompanionCode, /onCompleteAction=\{/, 'SidecarCompanion must pass onCompleteAction')
   assert.match(sidecarCompanionCode, /onSnoozeAction=\{/, 'SidecarCompanion must pass onSnoozeAction')
+  assert.match(sidecarCompanionCode, /onDismissAction=\{/, 'SidecarCompanion must pass onDismissAction')
   assert.match(sidecarCompanionCode, /onSelectAction=\{/, 'SidecarCompanion must pass onSelectAction')
-  assert.match(sidecarCompanionCode, /queueItems=\{allPrep\}/, 'SidecarCompanion must pass queueItems')
+  // The queue stepper must be built from actionable items only (delivery/transit
+  // items excluded) -- fixed 2026-09-11 after this being unfiltered caused the
+  // "advance to next item" flow to sometimes land on a delivery item and render
+  // the shipping-manifest panel instead of a genuine action item.
+  assert.match(sidecarCompanionCode, /splitActionableAndTransitItems/, 'SidecarCompanion must filter queueItems to actionable items only')
+  assert.match(sidecarCompanionCode, /queueItems=\{actionQueueItems\}/, 'SidecarCompanion must pass the filtered actionQueueItems, not raw allPrep')
 })
 
 test('buildGmailWebUrl & resolveGmailAccountEmail targets specific user account', async () => {

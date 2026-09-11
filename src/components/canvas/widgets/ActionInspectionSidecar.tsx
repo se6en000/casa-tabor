@@ -58,6 +58,7 @@ import {
   useDownvotePrepItem,
   useCompletePrepItem,
   useSnoozePrepItem,
+  useDismissPrepItem,
 } from '../../../hooks/usePrepItems'
 import { useHouseholdCaptureRules } from '../../../hooks/useHouseholdCaptureRules'
 import {
@@ -126,6 +127,7 @@ interface ActionInspectionSidecarProps {
   onSwitchToAi: (actionContext?: ActionAiContext) => void
   onCompleteAction?: (item: PrepItem) => void
   onSnoozeAction?: (item: PrepItem, period: SnoozeDuration) => void
+  onDismissAction?: (item: PrepItem) => void
   onSelectAction?: (itemId: string) => void
   embedded?: boolean
 }
@@ -142,6 +144,7 @@ export default function ActionInspectionSidecar({
   onSwitchToAi,
   onCompleteAction,
   onSnoozeAction,
+  onDismissAction,
   onSelectAction,
   embedded = false,
 }: ActionInspectionSidecarProps) {
@@ -152,6 +155,7 @@ export default function ActionInspectionSidecar({
   const now = useLiveClock(60_000)
   const { data: rollingEvents = [] } = useRollingEvents(now)
   const { learnAssignee, getLearnedAssignee } = useActionAssigneeLearning()
+  const dismissPrepItem = useDismissPrepItem()
 
   const [snoozeOpen, setSnoozeOpen] = useState(false)
   const [isResolving, setIsResolving] = useState(false)
@@ -412,6 +416,34 @@ export default function ActionInspectionSidecar({
       }
     } catch (err) {
       console.error('ActionInspectionSidecar: Failed to snooze action', err)
+    } finally {
+      setIsResolving(false)
+    }
+  }
+
+  const handleActionDismiss = async () => {
+    if (!activeItem || isResolving) return
+    setIsResolving(true)
+    navigator.vibrate?.(25)
+    try {
+      const siblingIds = siblingItems.map((s) => s.id)
+      const allRelatedIds = new Set([activeItem.id, ...siblingIds])
+
+      if (onDismissAction) {
+        await onDismissAction(activeItem)
+      } else {
+        await dismissPrepItem(activeItem.id)
+      }
+
+      // Auto-advance to next distinct matter in queue
+      const nextDistinctItem = queueItems.find((q) => !allRelatedIds.has(q.id))
+      if (nextDistinctItem) {
+        handleSelectAction(nextDistinctItem.id)
+      } else {
+        onClose()
+      }
+    } catch (err) {
+      console.error('ActionInspectionSidecar: Failed to dismiss action', err)
     } finally {
       setIsResolving(false)
     }
@@ -1657,6 +1689,20 @@ export default function ActionInspectionSidecar({
               </div>
             )}
           </div>
+
+          {/* Dismiss: for FYI/not-actionable items -- hides this item without
+              completing it or feeding the "not relevant" learning signal that
+              "Not Relevant / Adjust" above does. */}
+          <IconButton
+            size="lg"
+            variant="ghost"
+            disabled={isResolving}
+            onClick={handleActionDismiss}
+            aria-label="Dismiss (not actionable)"
+            title="Dismiss -- not actionable, just FYI"
+            className="shrink-0 min-h-[48px] sm:min-h-[52px] min-w-[48px] rounded-full border border-casa-border text-casa-muted hover:text-casa-navy hover:bg-casa-bg transition-colors"
+            icon={<X size={18} />}
+          />
         </div>
       </div>
 

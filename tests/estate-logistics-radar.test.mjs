@@ -112,7 +112,10 @@ test('EstateLogisticsWidget provides 1-tap single-instance dismissal with X butt
   assert.match(estateLogisticsWidget, /onDismissDelivery\?: \(item: PrepItem\) => void/)
   assert.match(estateLogisticsWidget, /handleDismissItem/)
   assert.match(estateLogisticsWidget, /Dismiss this delivery/)
-  assert.match(turboCanvasView, /onDismissDelivery=\{handleCompletePrep\}/)
+  // A real dismiss (sets the `dismissed` flag), not a relabeled "mark complete" --
+  // fixed 2026-09-11 after this X button was found to silently mark parcels
+  // received/complete instead of actually dismissing them.
+  assert.match(turboCanvasView, /onDismissDelivery=\{handleDismissPrep\}/)
 })
 
 test('InHome grocery delivery windows are classified as delivery transit items and never calendar appointments', async () => {
