@@ -29,6 +29,7 @@ fail() {
 }
 
 START=$(date +%s)
+PRE_BUILD_SHA=$(git rev-parse HEAD)
 
 step "1/6 Tests (node --test)"
 npm test >"$LOG" 2>&1 || fail "tests failed"
@@ -44,17 +45,32 @@ if [ -n "$(git status --porcelain)" ]; then
   git add -A
   git commit -m "${COMMIT_MSG:-Deploy $(date -u +%Y-%m-%dT%H:%M:%SZ)}" >>"$LOG" 2>&1
   ok "committed"
-  # vite.config.ts bakes `git rev-parse HEAD` into version.json at build time --
-  # but the build in step 2 ran BEFORE this commit existed, so that file has
+  # vite.config.ts bakes `git rev-parse HEAD` into BOTH version.json AND every
+  # JS asset (as the literal __BUILD_ID__ string, via vite's `define`) at build
+  # time -- but the build in step 2 ran BEFORE this commit existed, so both hold
   # the PREVIOUS commit's SHA, one behind what's about to be pushed/deployed.
-  # Patch just this tiny manifest post-commit instead of repeating the whole
-  # build (this is exactly what the "prebuilt" step 5 relies on being cheap).
+  # Patching only version.json (as this used to do) leaves the deployed bundle
+  # permanently disagreeing with its own manifest -- useAppUpdater.ts polls
+  # exactly that pair to detect a new deploy, so every connected browser
+  # reload-loops forever (reloading just re-serves the same mismatched build).
+  # Confirmed live 2026-09-11: this was shipped and caused exactly that kiosk/
+  # browser reload loop. Fix: rewrite the same literal SHA string across the
+  # built JS assets too, not just the manifest (still cheaper than a full
+  # rebuild, which is what the "prebuilt" step 5 relies on).
   NEW_SHA=$(git rev-parse HEAD)
   BUILT_AT=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
   VERSION_JSON="{\"version\":\"$NEW_SHA\",\"builtAt\":\"$BUILT_AT\"}"
   for f in dist/version.json .vercel/output/static/version.json; do
     [ -f "$f" ] && printf '%s' "$VERSION_JSON" > "$f"
   done
+  if [ "$PRE_BUILD_SHA" != "$NEW_SHA" ]; then
+    for dir in dist/assets .vercel/output/static/assets; do
+      [ -d "$dir" ] || continue
+      grep -rl "$PRE_BUILD_SHA" "$dir" 2>/dev/null | while IFS= read -r f; do
+        sed -i.bak "s/$PRE_BUILD_SHA/$NEW_SHA/g" "$f" && rm -f "$f.bak"
+      done
+    done
+  fi
 else
   ok "working tree already clean"
 fi
