@@ -458,7 +458,6 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
           <HouseholdDispatchCard
             timeHorizonLabel={timeHorizonLabel}
             headline={dispatchHeadline}
-            weatherLabel={weather ? `${weather.temp}°F` : null}
             weekDays={dispatchWeekDays}
             horizon={dispatchHorizon}
             isRefreshing={isRefreshing}

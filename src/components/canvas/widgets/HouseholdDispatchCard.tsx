@@ -1,4 +1,4 @@
-import { Sparkles, RotateCw, Cloud } from 'lucide-react'
+import { Sparkles, RotateCw } from 'lucide-react'
 import { cn } from '../../../utils/cn'
 import { IconButton } from '../../ui'
 import type { DispatchBucket, DispatchDay, DispatchHorizonItem } from '../../../hooks/useCalmKioskPresenter'
@@ -6,7 +6,6 @@ import type { DispatchBucket, DispatchDay, DispatchHorizonItem } from '../../../
 interface HouseholdDispatchCardProps {
   timeHorizonLabel: string
   headline: string
-  weatherLabel: string | null
   weekDays: DispatchDay[]
   horizon: DispatchHorizonItem[]
   isRefreshing: boolean
@@ -48,7 +47,6 @@ const LEGEND: Array<{ bucket: DispatchBucket; label: string }> = [
 export default function HouseholdDispatchCard({
   timeHorizonLabel,
   headline,
-  weatherLabel,
   weekDays,
   horizon,
   isRefreshing,
@@ -71,12 +69,6 @@ export default function HouseholdDispatchCard({
           {timeHorizonLabel}
         </span>
         <div className="flex items-center gap-2">
-          {weatherLabel && (
-            <span className="font-mono text-caption text-casa-muted flex items-center gap-1.5 bg-casa-bg-2 border border-casa-border rounded-full px-2.5 py-1">
-              <Cloud size={13} className="text-amber-700" />
-              {weatherLabel}
-            </span>
-          )}
           <IconButton
             variant="ghost"
             size="sm"
