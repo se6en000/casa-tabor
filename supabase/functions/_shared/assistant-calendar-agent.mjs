@@ -152,10 +152,32 @@ export function resolveCalendarBatchCreate(turns, context = {}) {
   })
 }
 
+const TITLE_CASE_LOWERCASE_WORDS = new Set([
+  'a', 'an', 'and', 'at', 'but', 'by', 'for', 'in', 'of', 'on', 'or', 'the', 'to', 'with',
+])
+
+// Reformats a title the planner left FULLY lowercase (a terse word or two
+// echoed verbatim, common for short multi-event batch items -- see the
+// 2026-09-11 request) into Title Case. Any title with existing
+// capitalization is left untouched -- an acronym, proper noun, or a title
+// the planner already cased correctly should never be second-guessed.
+export function formatEventTitleCase(title) {
+  const value = String(title ?? '').trim()
+  if (!value || value !== value.toLowerCase()) return value
+  return value
+    .split(' ')
+    .map((word, index) => {
+      if (!word) return word
+      if (index > 0 && TITLE_CASE_LOWERCASE_WORDS.has(word)) return word
+      return word.charAt(0).toUpperCase() + word.slice(1)
+    })
+    .join(' ')
+}
+
 function resolveCreate(turn, baseArgs, context) {
   const patch = normalizePatch(turn.patch)
   const eventType = patch.eventType ?? normalizeEventType(baseArgs?.event_type)
-  const title = patch.title ?? optionalText(baseArgs?.title)
+  const title = formatEventTitleCase(patch.title ?? optionalText(baseArgs?.title))
   if (!title) return clarify(`What should I call the ${eventType}?`, 'title')
 
   const range = resolveRange(patch, baseArgs, context, {

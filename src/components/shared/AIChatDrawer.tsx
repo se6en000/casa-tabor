@@ -1515,6 +1515,8 @@ export default function AIChatDrawer({
                       editSeed={messages.slice(0, messageIndex).findLast((message) => message.role === 'user')?.content ?? ''}
                       onQuickSaveRecipe={quickSaveRecipeSuggestion}
                       onQuickSaveAndSetTonight={quickSaveAndSetTonightRecipe}
+                      sessionId={session?.id ?? null}
+                      getTraceContext={() => activeTraceRef.current}
                       onConfirmToolAction={async (messageId, tool, args) => {
                         if (tool === 'confirm_talk_plan_action_intent') {
                           updateMessageToolStatus(messageId, 'done')
@@ -2245,7 +2247,7 @@ export default function AIChatDrawer({
 
 const MAX_VISIBLE_SOURCES = 3
 
-function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, events, onOpenEventDetails, onLinkClick, onQuickSaveRecipe, onQuickSaveAndSetTonight, onConfirmToolAction, onUndoToolAction, onCancelToolAction, onRefreshToolAction, registerPendingAction, onSelectSuggestion, onEditMessage }: {
+function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, events, onOpenEventDetails, onLinkClick, onQuickSaveRecipe, onQuickSaveAndSetTonight, onConfirmToolAction, onUndoToolAction, onCancelToolAction, onRefreshToolAction, registerPendingAction, onSelectSuggestion, onEditMessage, sessionId, getTraceContext }: {
   msg: AIMessage
   isActivePending: boolean
   enableQuickSaveRecipe?: boolean
@@ -2265,6 +2267,8 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
   ) => void
   onSelectSuggestion?: (text: string) => void
   onEditMessage?: (content: string) => void
+  sessionId: string | null
+  getTraceContext: () => ReturnType<typeof createAssistantTraceContext> | null
 }) {
   const isUser = msg.role === 'user'
   const ta = msg.toolAction
@@ -2801,7 +2805,12 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
         {/* Multi-event batch create curation card */}
         {msg.toolActionBatch && (
           <div className="mt-2.5 pt-2.5 border-t border-casa-divider">
-            <BatchProposalCard msg={msg} onConfirmToolAction={onConfirmToolAction} />
+            <BatchProposalCard
+              msg={msg}
+              onOpenEventDetails={onOpenEventDetails}
+              sessionId={sessionId}
+              getTraceContext={getTraceContext}
+            />
           </div>
         )}
       </div>
@@ -2809,10 +2818,13 @@ function MessageBubble({ msg, isActivePending, enableQuickSaveRecipe, editSeed, 
   )
 }
 
-function BatchProposalCard({ msg, onConfirmToolAction }: {
+function BatchProposalCard({ msg, onOpenEventDetails, sessionId, getTraceContext }: {
   msg: AIMessage
-  onConfirmToolAction: (messageId: string, tool: string, args: Record<string, unknown>) => Promise<boolean>
+  onOpenEventDetails?: (eventId: string) => void
+  sessionId: string | null
+  getTraceContext: () => ReturnType<typeof createAssistantTraceContext> | null
 }) {
+  const qc = useQueryClient()
   const batch = msg.toolActionBatch
   const rows = useMemo(
     () => (batch?.actions ?? []).map((action, index) => ({ action, index })),
@@ -2832,6 +2844,7 @@ function BatchProposalCard({ msg, onConfirmToolAction }: {
   )
   const [rowStatus, setRowStatus] = useState<Record<number, 'idle' | 'loading' | 'done' | 'error'>>({})
   const [rowError, setRowError] = useState<Record<number, string>>({})
+  const [rowResultEventId, setRowResultEventId] = useState<Record<number, string>>({})
   const [confirming, setConfirming] = useState(false)
 
   if (!batch || proposedRows.length + attentionRows.length === 0) return null
@@ -2849,9 +2862,35 @@ function BatchProposalCard({ msg, onConfirmToolAction }: {
       if (eventType[row.index] === 'reminder') args.event_type = 'reminder'
       else delete args.event_type
       const actionId = row.action.actionId ?? `${msg.id}:${row.index}`
+      const trace = getTraceContext()
       try {
-        const success = await onConfirmToolAction(actionId, row.action.tool ?? 'create_event', args)
-        setRowStatus((prev) => ({ ...prev, [row.index]: success ? 'done' : 'error' }))
+        const { data, error } = await supabase.functions.invoke('execute-ai-action', {
+          body: {
+            tool: row.action.tool ?? 'create_event',
+            args,
+            action_id: actionId,
+            session_id: sessionId,
+            correlation_id: `${actionId}:confirm`,
+            trace_id: trace?.traceId ?? null,
+            turn_id: trace?.turnId ?? null,
+            lane: trace?.lane ?? 'llm',
+            device_id: getAssistantDeviceId(),
+            client_trace_present: Boolean(trace),
+            client_build: typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'unknown',
+            client_trace_source: trace?.source ?? 'ai-drawer-batch-confirmation',
+            confirmed_by_user: true,
+          },
+        })
+        const responseData = data as { success?: boolean; error?: string; event_id?: string } | null
+        if (error && responseData?.success !== true) {
+          throw new Error(responseData?.error ?? error.message)
+        }
+        if (responseData?.success === false) throw new Error(responseData.error ?? 'Action failed')
+        setRowStatus((prev) => ({ ...prev, [row.index]: 'done' }))
+        if (responseData?.event_id) {
+          setRowResultEventId((prev) => ({ ...prev, [row.index]: responseData.event_id! }))
+        }
+        invalidateAllCalendarQueries(qc, responseData?.event_id)
       } catch (err) {
         setRowStatus((prev) => ({ ...prev, [row.index]: 'error' }))
         setRowError((prev) => ({ ...prev, [row.index]: (err as Error).message }))
@@ -2924,6 +2963,16 @@ function BatchProposalCard({ msg, onConfirmToolAction }: {
               {status === 'done' && <Check size={16} className="text-emerald-600 shrink-0 mt-1" />}
               {status === 'loading' && <Loader2 size={16} className="animate-spin text-casa-muted shrink-0 mt-1" />}
             </div>
+            {status === 'done' && rowResultEventId[row.index] && (
+              <Button
+                variant="ghost"
+                type="button"
+                onClick={() => onOpenEventDetails?.(rowResultEventId[row.index])}
+                className="min-h-11 px-0 pl-8 text-caption font-semibold text-casa-gold underline underline-offset-2 hover:text-casa-navy"
+              >
+                Open details
+              </Button>
+            )}
             {status !== 'done' && (
               <div className="flex gap-1.5 pl-8">
                 {(['event', 'reminder'] as const).map((kind) => (

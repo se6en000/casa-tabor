@@ -3,8 +3,10 @@ import test from 'node:test'
 
 import {
   CALENDAR_SEMANTIC_TURN_VERSION,
+  formatEventTitleCase,
   hardenExplicitCalendarRangeTurn,
   hardenExplicitCalendarTemporalTurn,
+  resolveCalendarBatchCreate,
   resolveCalendarSemanticTurn,
   shouldPreferActiveCalendarEntity,
 } from '../supabase/functions/_shared/assistant-calendar-agent.mjs'
@@ -596,4 +598,43 @@ test('explicit spoken clock survives provider omission and defaults to today AM'
   assert.equal(result.kind, 'tool')
   assert.equal(result.args.start, '2026-07-19T10:30:00-04:00')
   assert.equal(result.args.end, '2026-07-19T11:30:00-04:00')
+})
+
+// Asked by the user 2026-09-11 after seeing lowercase titles ("soccer",
+// "piano", "dentist") come back from a multi-event batch create -- the
+// planner sometimes just echoes a short, terse word verbatim instead of
+// producing a naturally-cased title the way it does for longer natural
+// sentences. formatEventTitleCase only reformats a title the model left
+// FULLY lowercase, leaving any title with existing capitalization untouched
+// (acronyms, proper nouns, or a title the model already cased correctly).
+test('formatEventTitleCase title-cases a fully lowercase title, leaving already-cased titles untouched', () => {
+  assert.equal(formatEventTitleCase('soccer'), 'Soccer')
+  assert.equal(formatEventTitleCase('piano lesson'), 'Piano Lesson')
+  assert.equal(formatEventTitleCase('call the dentist'), 'Call the Dentist')
+  assert.equal(formatEventTitleCase('dinner with mom'), 'Dinner with Mom')
+  assert.equal(formatEventTitleCase('Family Bike Ride'), 'Family Bike Ride')
+  assert.equal(formatEventTitleCase('PTA meeting'), 'PTA meeting')
+  assert.equal(formatEventTitleCase('iPhone pickup'), 'iPhone pickup')
+  assert.equal(formatEventTitleCase(''), '')
+})
+
+test('a single create resolves a fully lowercase title through Title Case', () => {
+  const result = resolveCalendarSemanticTurn(turn('create', {
+    title: 'soccer practice',
+    date_reference: { kind: 'weekday', weekday: 'tuesday' },
+    time: { hour: 4, period: 'pm' },
+  }), context)
+
+  assert.equal(result.kind, 'tool')
+  assert.equal(result.args.title, 'Soccer Practice')
+})
+
+test('a batch create resolves each item\'s fully lowercase title through Title Case too', () => {
+  const results = resolveCalendarBatchCreate([
+    { patch: { title: 'soccer', date_reference: { kind: 'weekday', weekday: 'tuesday' }, time: { hour: 4, period: 'pm' } } },
+    { patch: { title: 'Grandmas Birthday Lunch', date_reference: { kind: 'weekday', weekday: 'sunday' }, time: { hour: 12, period: 'pm' } } },
+  ], context)
+
+  assert.equal(results[0].args.title, 'Soccer')
+  assert.equal(results[1].args.title, 'Grandmas Birthday Lunch')
 })
