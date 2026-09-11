@@ -108,6 +108,45 @@ test('dayparts and days-from-now are deterministic relative date evidence', () =
   assert.equal(offset.resolutionKind, 'relative')
 })
 
+test('misspelled weekday and relative-day words still resolve as temporal evidence', () => {
+  // Bug found via a 50-scenario "harder phrasing" benchmark: exact-match regexes
+  // for weekday names and today/tomorrow/tonight have zero typo tolerance, so a
+  // real day reference that's just misspelled ("tommorow", "Frdiay", "Wendsday",
+  // "Satuday") produces NO temporal evidence at all -- indistinguishable from the
+  // user never having mentioned a day -- triggering an unnecessary "what date
+  // should I use?" for something a human reader would understand immediately.
+  const now = { now: new Date('2026-09-10T23:55:00.000Z'), utcOffset: '-04:00' } // Thursday
+  const cases = [
+    ['Shedule a dentist apointment for tommorow at 2pm.', '2026-09-11'],
+    ['Add a hair cut appointmnet for Frdiay at 10am.', '2026-09-11'],
+    ['Put a meetign on for Wendsday at 3.', '2026-09-16'],
+    ['Book a vet vist for Satuday at 1pm.', '2026-09-12'],
+  ]
+  for (const [text, expectedDate] of cases) {
+    const evidence = extractUserTemporalEvidence({ id: 'u1', role: 'user', content: text }, now)
+    assert.ok(evidence, text)
+    assert.equal(evidence.rangeStart, expectedDate, text)
+  }
+})
+
+test('typo-correction for weekday names does not misfire on unrelated real words', () => {
+  const now = { now: new Date('2026-09-10T23:55:00.000Z'), utcOffset: '-04:00' }
+  // "sundry" is one edit from "sunday", and "night" is two edits from "tonight"
+  // (found via a scratch collision sweep during development, not a hypothetical)
+  // -- both are real, common-enough English words that must not get corrected
+  // into a false day/relative-day match.
+  const sundry = extractUserTemporalEvidence(
+    { id: 'u1', role: 'user', content: 'Add a sundry collection of odds and ends to the notes.' },
+    now,
+  )
+  assert.equal(sundry, null)
+  const night = extractUserTemporalEvidence(
+    { id: 'u2', role: 'user', content: 'The moon was full last night.' },
+    now,
+  )
+  assert.equal(night, null)
+})
+
 test('a relative "today" resolution whose time has already passed rolls to the next day', () => {
   // Bug: "Schedule a call with the bank today at 8am." asked at 7pm the same day
   // passed the date-evidence check fine (the DATE really is today, matching the

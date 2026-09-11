@@ -14,6 +14,63 @@ const MONTHS = new Map([
   ['december', 12], ['dec', 12],
 ])
 
+// Weekday names and today/tomorrow/tonight are a small, closed vocabulary --
+// unlike free-form phrasing, this is exactly the kind of bounded problem a
+// deterministic edit-distance check can solve safely, rather than a general
+// spell-checker. Words this short are excluded because the collision risk with
+// unrelated real words grows as the word gets shorter and less distinctive.
+const FUZZY_TEMPORAL_TOKENS = [...WEEKDAYS, 'today', 'tomorrow', 'tonight']
+// Real English words close enough (by edit distance) to one of the tokens above
+// to risk a false match -- e.g. "night" is two edits from "tonight" (a common
+// word, not a typo of it), "fridge" from "friday". Found via a systematic sweep
+// of plausible collisions, not just the cases hit by testing; if a new false
+// positive turns up in practice, add it here rather than tightening the
+// distance thresholds globally (which would also break real typo corrections).
+const TEMPORAL_TYPO_EXCLUSIONS = new Set([
+  'sundry', 'night', 'money', 'sunny', 'morrow', 'moody', 'fridge', 'sandy', 'funday',
+])
+
+function levenshteinDistance(a, b) {
+  if (a === b) return 0
+  const rows = a.length + 1
+  const cols = b.length + 1
+  const dp = Array.from({ length: rows }, () => new Array(cols).fill(0))
+  for (let i = 0; i < rows; i++) dp[i][0] = i
+  for (let j = 0; j < cols; j++) dp[0][j] = j
+  for (let i = 1; i < rows; i++) {
+    for (let j = 1; j < cols; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1])
+    }
+  }
+  return dp[rows - 1][cols - 1]
+}
+
+function maxAllowedTypoDistance(tokenLength) {
+  return tokenLength <= 5 ? 1 : 2
+}
+
+function correctTemporalTypos(text) {
+  return text.replace(/\b[a-zA-Z]+\b/g, (word) => {
+    const lower = word.toLowerCase()
+    if (lower.length < 4 || FUZZY_TEMPORAL_TOKENS.includes(lower) || TEMPORAL_TYPO_EXCLUSIONS.has(lower)) {
+      return word
+    }
+    let bestToken = null
+    let bestDistance = Infinity
+    for (const token of FUZZY_TEMPORAL_TOKENS) {
+      if (Math.abs(token.length - lower.length) > 2) continue
+      const distance = levenshteinDistance(lower, token)
+      if (distance < bestDistance) {
+        bestDistance = distance
+        bestToken = token
+      }
+    }
+    return bestToken && bestDistance <= maxAllowedTypoDistance(bestToken.length) ? bestToken : word
+  })
+}
+
 function offsetMinutes(value) {
   const match = String(value ?? '').match(/^([+-])(\d{2}):(\d{2})$/)
   if (!match) return 0
@@ -178,10 +235,11 @@ export function extractUserTemporalEvidence(message, options = {}) {
   if (message?.role !== 'user' || typeof message.content !== 'string') return null
   const text = message.content.replace(/\s+/g, ' ').trim()
   if (!text) return null
+  const matchText = correctTemporalTypos(text)
   const now = options.now instanceof Date ? options.now : new Date()
   const nowParts = localDateParts(now, options.utcOffset)
-  const exact = exactRange(text, nowParts)
-  const resolved = exact ?? relativeRange(text, nowParts)
+  const exact = exactRange(matchText, nowParts)
+  const resolved = exact ?? relativeRange(matchText, nowParts)
   if (!resolved) return null
   return {
     sourceMessageId: typeof message.id === 'string' ? message.id : null,
