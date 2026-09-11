@@ -10,6 +10,7 @@ import {
   isBefore,
   isSameDay,
   differenceInCalendarDays,
+  addDays,
 } from 'date-fns'
 import { getEventStartDate } from '../utils/eventTime'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -45,11 +46,109 @@ import { isItemAlreadyScheduled, isExpiredEventSuggestion } from '../utils/calen
 import { useGoogleSyncTriage } from './useGoogleSyncTriage'
 import { supabase } from '../lib/supabase'
 import type { Conflict, PrepItem, FamilyMember } from '../types'
+import { CATEGORY_LABEL } from '../components/calendar/categoryFields'
+
+// ── Household Dispatch (home-screen digest) ────────────────────────────────
+// Categorizes a calendar event into the small set of buckets the dispatch
+// card visualizes (a week-ribbon dot color, or a horizon-item tag) --
+// deliberately coarser than the full 14-value event_enrichments.category
+// taxonomy, since a glance-widget needs a handful of colors, not fourteen.
+export type DispatchBucket = 'sports' | 'school' | 'social' | 'travel' | 'other'
+
+function rawEventCategory(e: EventWithDetails): string {
+  return ((e.enrichment?.category || (e as unknown as Record<string, unknown>).category || '') as string).toLowerCase()
+}
+
+function dispatchBucketForEvent(e: EventWithDetails): DispatchBucket {
+  const cat = rawEventCategory(e)
+  if (cat === 'sports') return 'sports'
+  if (cat === 'school' || cat === 'child_care') return 'school'
+  if (cat === 'social' || cat === 'birthday' || cat === 'holiday') return 'social'
+  if (cat === 'travel') return 'travel'
+  return 'other'
+}
+
+function dispatchCategoryLabel(e: EventWithDetails): string {
+  const cat = rawEventCategory(e)
+  return CATEGORY_LABEL[cat] || 'Household'
+}
+
+// Milestone-grade: worth naming individually on the 30-day horizon ledger
+// (a real celebration or trip), not just anything with a category.
+function isDispatchMilestone(e: EventWithDetails): boolean {
+  const titleLower = (e.title || '').toLowerCase()
+  const catLower = rawEventCategory(e)
+  const isCelebration =
+    /birthday|bday|anniversary|party|celebration|wedding|shower|graduation|gala|reunion|festival|tournament|recital|concert/i.test(titleLower) ||
+    /birthday|anniversary|party|celebration|wedding|graduation/i.test(catLower)
+  const isTrip = Boolean(
+    e.trip_id || /trip|travel|flight|vacation|getaway|hotel/i.test(catLower) || /flight|hotel|trip to|vacation/i.test(titleLower),
+  )
+  return isCelebration || isTrip
+}
+
+// Day-worthy for the week ribbon: either milestone-grade, carries real prep
+// (unchecked checklist, prep notes, a linked prep item), or falls into a
+// category worth flagging at a glance -- excludes routine/admin noise
+// (errands, chores, work) so a busy calendar doesn't dot every single day.
+function isDispatchNotable(e: EventWithDetails, prepItems: PrepItem[]): boolean {
+  if (isDispatchMilestone(e)) return true
+  const eWithChecklist = e as unknown as { checklist?: Array<{ checked: boolean }> }
+  const hasUncheckedChecklist = Boolean(eWithChecklist.checklist?.some((item) => !item.checked))
+  const hasPrepNotes = Boolean(
+    (e.enrichment?.prep_notes && e.enrichment.prep_notes.trim().length > 0) ||
+      (e.enrichment?.what_to_bring &&
+        (Array.isArray(e.enrichment.what_to_bring) ? e.enrichment.what_to_bring.length > 0 : Boolean(e.enrichment.what_to_bring))),
+  )
+  const hasLinkedPrepItem = prepItems.some((p) => Boolean(p.event_id && p.event_id === e.id && !p.dismissed))
+  if (hasUncheckedChecklist || hasPrepNotes || hasLinkedPrepItem) return true
+  const bucket = dispatchBucketForEvent(e)
+  return bucket === 'sports' || bucket === 'school' || bucket === 'social' || bucket === 'travel'
+}
+
+function dispatchPrepPhrase(e: EventWithDetails): string | null {
+  const eWithChecklist = e as unknown as { checklist?: Array<{ checked: boolean; label: string }> }
+  if (eWithChecklist.checklist && eWithChecklist.checklist.length > 0) {
+    const total = eWithChecklist.checklist.length
+    const checked = eWithChecklist.checklist.filter((c) => c.checked).length
+    if (checked < total) return `${checked} of ${total} ready`
+  }
+  if (e.enrichment?.what_to_bring) {
+    const raw = e.enrichment.what_to_bring
+    const itemStr = Array.isArray(raw) ? raw[0] : String(raw).split(/[,;]/)[0]
+    if (itemStr) return `Bring: ${itemStr.trim()}`
+  }
+  if (e.enrichment?.prep_notes) {
+    const note = e.enrichment.prep_notes.trim()
+    if (note.length > 0 && note.length <= 60) return note
+  }
+  return null
+}
+
+export interface DispatchDay {
+  date: Date
+  dayName: string
+  dayNum: string
+  isToday: boolean
+  categories: DispatchBucket[]
+}
+
+export interface DispatchHorizonItem {
+  id: string
+  title: string
+  daysAway: number
+  dateLabel: string
+  bucket: DispatchBucket
+  categoryLabel: string
+  prepPhrase: string | null
+}
 
 export interface CalmKioskPresenterState {
   now: Date
   greeting: string
-  dailyBriefing: string
+  dispatchHeadline: string
+  dispatchWeekDays: DispatchDay[]
+  dispatchHorizon: DispatchHorizonItem[]
   timeHorizonLabel: string
   weather: ReturnType<typeof useHomeWeather>['data']
   nextEvent: EventWithDetails | null
@@ -100,8 +199,6 @@ export interface CalmKioskPresenterState {
   navigateTo: (path: string) => void
   isRefreshing: boolean
   refreshBriefing: () => Promise<void>
-  upcomingMilestonesAndPrep: EventWithDetails[]
-  milestonePhrases: string[]
 }
 
 export function useCalmKioskPresenter(): CalmKioskPresenterState {
@@ -591,174 +688,106 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     }).length
   }, [effectiveTodayEvents])
 
-  // ── Upcoming Milestone & Long-Term Prep Radar (Tomorrow through +14 days) ──
-  const upcomingMilestonesAndPrep = useMemo(() => {
+  // ── Household Dispatch: This Week ribbon (today through +6 days) ──
+  // Signal, not noise: only events isDispatchNotable() flags get a dot, so a
+  // routine errand-filled day doesn't drown out the days that actually matter.
+  const dispatchWeekDays = useMemo<DispatchDay[]>(() => {
+    const todayStart = startOfDay(now)
+    return Array.from({ length: 7 }, (_, i) => {
+      const dayStart = addDays(todayStart, i)
+      const dayEnd = addDays(dayStart, 1)
+      const dayEvents = rollingEvents.filter((e: EventWithDetails) => {
+        if (isMealEvent(e)) return false
+        try {
+          const start = parseISO(e.start_time)
+          return start >= dayStart && start < dayEnd
+        } catch {
+          return false
+        }
+      })
+      const buckets = new Set<DispatchBucket>()
+      for (const e of dayEvents) {
+        if (isDispatchNotable(e, prepItems)) buckets.add(dispatchBucketForEvent(e))
+      }
+      return {
+        date: dayStart,
+        dayName: format(dayStart, 'EEE'),
+        dayNum: format(dayStart, 'd'),
+        isToday: i === 0,
+        categories: Array.from(buckets),
+      }
+    })
+  }, [rollingEvents, prepItems, now])
+
+  // ── Household Dispatch: On the Horizon (7–30 day lookahead) ──
+  // Deliberately a higher bar than the week ribbon -- only milestone-grade
+  // events (a real celebration or trip) earn a named line on this ledger;
+  // routine prep-heavy events already showed up as a dot in the week above.
+  const dispatchHorizon = useMemo<DispatchHorizonItem[]>(() => {
     const todayStart = startOfDay(now)
     const candidates = rollingEvents.filter((e: EventWithDetails) => {
       if (isMealEvent(e)) return false
       try {
         const eventStart = startOfDay(parseISO(e.start_time))
         const daysAway = differenceInCalendarDays(eventStart, todayStart)
-        // Must be in the future (tomorrow through 14 days out)
-        if (daysAway < 1 || daysAway > 14) return false
-
-        const titleLower = (e.title || '').toLowerCase()
-        const catLower = (e.enrichment?.category || (e as unknown as Record<string, unknown>).category || '').toString().toLowerCase()
-
-        // 1. Celebrations, Anniversaries, Birthdays, Parties, Special Events
-        const isCelebration =
-          /birthday|bday|anniversary|party|celebration|wedding|shower|graduation|gala|reunion|festival|tournament|recital|concert/i.test(
-            titleLower,
-          ) ||
-          /birthday|anniversary|party|celebration|wedding|graduation|social|school|sports/i.test(
-            catLower,
-          )
-
-        // 2. Travel & Trips
-        const isTrip = Boolean(
-          e.trip_id ||
-            /trip|travel|flight|vacation|getaway|hotel/i.test(catLower) ||
-            /flight|hotel|trip to|vacation/i.test(titleLower),
-        )
-
-        // 3. Events with Active Prep Requirements or Checklists
-        const hasUncheckedChecklist = Boolean(
-          (e as unknown as { checklist?: Array<{ checked: boolean }> }).checklist &&
-            (e as unknown as { checklist?: Array<{ checked: boolean }> }).checklist?.some((item: { checked: boolean }) => !item.checked),
-        )
-        const hasPrepNotes = Boolean(
-          (e.enrichment?.prep_notes && e.enrichment.prep_notes.trim().length > 0) ||
-            (e.enrichment?.what_to_bring &&
-              (Array.isArray(e.enrichment.what_to_bring)
-                ? e.enrichment.what_to_bring.length > 0
-                : Boolean(e.enrichment.what_to_bring))),
-        )
-        const hasLinkedPrepItem = prepItems.some(
-          (p) => Boolean(p.event_id && p.event_id === e.id && !p.dismissed),
-        )
-
-        return isCelebration || isTrip || hasUncheckedChecklist || hasPrepNotes || hasLinkedPrepItem
+        if (daysAway < 7 || daysAway > 30) return false
+        return isDispatchMilestone(e)
       } catch {
         return false
       }
     })
-
-    // Sort by chronological start time
-    return candidates.sort((a: EventWithDetails, b: EventWithDetails) => {
-      try {
-        return parseISO(a.start_time).getTime() - parseISO(b.start_time).getTime()
-      } catch {
-        return 0
-      }
-    })
-  }, [rollingEvents, prepItems, now])
-
-  const milestonePhrases = useMemo(() => {
-    const todayStart = startOfDay(now)
-    return upcomingMilestonesAndPrep.map((e: EventWithDetails) => {
-      const start = parseISO(e.start_time)
-      const daysAway = differenceInCalendarDays(startOfDay(start), todayStart)
-
-      let timeLabel: string
-      if (daysAway === 1) {
-        timeLabel = 'tomorrow'
-      } else if (daysAway === 2) {
-        timeLabel = `in 2 days (${format(start, 'EEEE')})`
-      } else if (daysAway <= 6) {
-        timeLabel = `this ${format(start, 'EEEE')}`
-      } else if (daysAway <= 13) {
-        timeLabel = `next ${format(start, 'EEEE')} (${format(start, 'MMM d')})`
-      } else {
-        timeLabel = `in ${daysAway} days (${format(start, 'MMM d')})`
-      }
-
-      // Check prep details
-      let prepTag = ''
-      const eWithChecklist = e as unknown as { checklist?: Array<{ checked: boolean; label: string }> }
-      if (eWithChecklist.checklist && eWithChecklist.checklist.length > 0) {
-        const unchecked = eWithChecklist.checklist.filter((c: { checked: boolean }) => !c.checked).length
-        if (unchecked > 0) {
-          prepTag = ` · ${unchecked} prep task${unchecked > 1 ? 's' : ''} open`
+    return candidates
+      .sort((a, b) => {
+        try {
+          return parseISO(a.start_time).getTime() - parseISO(b.start_time).getTime()
+        } catch {
+          return 0
         }
-      } else if (e.enrichment?.what_to_bring) {
-        const raw = e.enrichment.what_to_bring
-        const itemStr = Array.isArray(raw) ? raw[0] : String(raw).split(/[,;]/)[0]
-        if (itemStr) {
-          prepTag = ` · prep: ${itemStr.trim()}`
+      })
+      .slice(0, 4)
+      .map((e): DispatchHorizonItem => {
+        const start = parseISO(e.start_time)
+        return {
+          id: e.id,
+          title: e.title,
+          daysAway: differenceInCalendarDays(startOfDay(start), todayStart),
+          dateLabel: format(start, 'MMM d'),
+          bucket: dispatchBucketForEvent(e),
+          categoryLabel: dispatchCategoryLabel(e),
+          prepPhrase: dispatchPrepPhrase(e),
         }
-      } else if (e.enrichment?.prep_notes) {
-        const note = e.enrichment.prep_notes.trim()
-        if (note.length > 0 && note.length <= 35) {
-          prepTag = ` · ${note}`
-        }
-      }
+      })
+  }, [rollingEvents, now])
 
-      return `${e.title} ${timeLabel}${prepTag}`
-    })
-  }, [upcomingMilestonesAndPrep, now])
-
-  const dailyBriefing = useMemo(() => {
-    // 1. Weather note
+  // ── Household Dispatch: one-line headline (weather + tomorrow's first move) ──
+  // Open reminders/to-dos already have their own dedicated section on this
+  // page (see the To-Dos list below) -- repeating them here was pure
+  // redundancy, so this headline stays to exactly the two things nothing
+  // else on the page already says.
+  const dispatchHeadline = useMemo(() => {
     const weatherNote = weather
       ? weather.temp >= 85
-        ? `Warm ${weather.temp}°F afternoon ahead. Remember hydration & sun protection.`
+        ? `Warm, ${weather.temp}°F.`
         : weather.temp <= 50
-        ? `Crisp ${weather.temp}°F conditions. Light jackets recommended.`
-        : `${weather.temp}°F with ${weather.condition.toLowerCase()} skies.`
+          ? `Crisp, ${weather.temp}°F.`
+          : `${weather.temp}°F, ${weather.condition.toLowerCase()}.`
       : ''
 
-    // 2. Reminders / To-Dos note (focus on unclosed items)
-    let remindersNote = ''
-    if (openReminders.length === 1) {
-      remindersNote = `1 open to-do today: ${openReminders[0].title}.`
-    } else if (openReminders.length === 2) {
-      remindersNote = `2 open to-dos today: ${openReminders[0].title} & ${openReminders[1].title}.`
-    } else if (openReminders.length > 2) {
-      remindersNote = `${openReminders.length} open to-dos today including ${openReminders[0].title} & ${openReminders[1].title}.`
-    } else if (todayReminders.length > 0 && openReminders.length === 0) {
-      remindersNote = 'All daily to-dos completed.'
+    let nextMoveNote = ''
+    const timedTomorrow = tomorrowEventsSorted.filter((e) => !e.all_day)
+    const firstTomorrow = timedTomorrow[0]
+    if (firstTomorrow) {
+      try {
+        const start = parseISO(firstTomorrow.start_time)
+        const prep = dispatchPrepPhrase(firstTomorrow)
+        nextMoveNote = `Tomorrow's first move: ${firstTomorrow.title}, ${format(start, 'h:mm a')}${prep ? ` — ${prep}` : ''}.`
+      } catch { /* ignore — best-effort, non-critical */ }
+    } else if (tomorrowEventsSorted.length === 0) {
+      nextMoveNote = 'Tomorrow is wide open.'
     }
 
-    // 3. Tomorrow morning critical start (if early < 9am or special departure)
-    let tomorrowEarlyNote = ''
-    if (tomorrowEventsSorted.length > 0) {
-      const timedEvents = tomorrowEventsSorted.filter((e) => !e.all_day)
-      const firstEvent = timedEvents[0]
-      if (firstEvent && !firstEvent.all_day) {
-        try {
-          const start = parseISO(firstEvent.start_time)
-          if (start.getHours() < 9) {
-            const pickupEvt = tomorrowEventsSorted.find((e) => {
-              const t = (e.title || '').toLowerCase()
-              return t.includes('pickup') || t.includes('drop-off') || t.includes('carpool')
-            })
-            const pickupName = pickupEvt?.members?.[0]?.family_member?.name
-            const pickupPart = pickupName ? ` (${pickupName} on pickup)` : ''
-            tomorrowEarlyNote = `Early start tomorrow at ${format(start, 'h:mm a')} with ${firstEvent.title}${pickupPart}.`
-          }
-        } catch { /* ignore — best-effort, non-critical */ }
-      }
-    }
-
-    // 4. Milestone & Long-Term Prep Radar (7–14 day lookahead)
-    let radarNote = ''
-    if (milestonePhrases.length === 1) {
-      radarNote = `On the radar: ${milestonePhrases[0]}.`
-    } else if (milestonePhrases.length >= 2) {
-      radarNote = `On the radar: ${milestonePhrases[0]} and ${milestonePhrases[1]}.`
-    } else if (tomorrowEventsSorted.length === 0 && !tomorrowEarlyNote) {
-      radarNote = 'Upcoming schedule is clear with no urgent long-term prep.'
-    }
-
-    // Synthesis: Zero redundancy with Hero (next event) and Kitchen (dinner)
-    return [weatherNote, remindersNote, tomorrowEarlyNote, radarNote].filter(Boolean).join(' ')
-  }, [
-    weather,
-    openReminders,
-    todayReminders,
-    tomorrowEventsSorted,
-    milestonePhrases,
-  ])
+    return [weatherNote, nextMoveNote].filter(Boolean).join(' ')
+  }, [weather, tomorrowEventsSorted])
 
   const minutesUntilNext = useMemo(() => {
     if (!nextEvent) return null
@@ -950,7 +979,9 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
   return {
     now,
     greeting,
-    dailyBriefing,
+    dispatchHeadline,
+    dispatchWeekDays,
+    dispatchHorizon,
     timeHorizonLabel,
     weather,
     nextEvent,
@@ -1001,7 +1032,5 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     navigateTo: navigate,
     isRefreshing,
     refreshBriefing,
-    upcomingMilestonesAndPrep,
-    milestonePhrases,
   }
 }

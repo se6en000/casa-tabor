@@ -10,11 +10,9 @@ import {
   ChevronUp,
   Check,
   Zap,
-  Sparkles,
   Calendar,
   CheckCircle2,
   ArrowRight,
-  RotateCw,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useCalmKioskPresenter } from '../../hooks/useCalmKioskPresenter'
@@ -31,6 +29,7 @@ import { useHeroIntelligence } from '../../hooks/useHeroIntelligence'
 import MorningLaunchpadWidget from './widgets/MorningLaunchpadWidget'
 import MiddayLogisticsWidget from './widgets/MiddayLogisticsWidget'
 import GmailSyncStatusIndicator from '../shared/GmailSyncStatusIndicator'
+import HouseholdDispatchCard from './widgets/HouseholdDispatchCard'
 interface CalmKioskViewProps {
   onOpenEvent: (event: EventWithDetails) => void
 }
@@ -145,7 +144,9 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
   const {
     now,
     greeting,
-    dailyBriefing,
+    dispatchHeadline,
+    dispatchWeekDays,
+    dispatchHorizon,
     timeHorizonLabel,
     weather,
     setSelectedHeroEventId,
@@ -453,38 +454,16 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
             )}
           </AnimatePresence>
 
-                    {/* Stylized Ambient Daily Briefing Prose */}
-          {dailyBriefing && (
-            <div className="px-1 py-1 flex items-start gap-3">
-              <div className="p-1.5 rounded-xl bg-amber-500/15 text-casa-gold shrink-0 mt-0.5 border border-amber-500/20">
-                <Sparkles size={16} className="text-casa-gold animate-pulse" />
-              </div>
-              <div className="space-y-1 min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-2xs uppercase tracking-widest font-sans font-bold text-amber-700">
-                    {timeHorizonLabel}
-                  </span>
-                  <IconButton
-                    variant="ghost"
-                    size="sm"
-                    aria-label="Refresh daily brief"
-                    title="Refresh daily brief on demand"
-                    onClick={() => void refreshBriefing()}
-                    className="min-h-[44px] min-w-[44px] -my-2 -mr-2 text-amber-700/70 hover:text-amber-900 hover:bg-amber-500/10 transition-colors"
-                    icon={
-                      <RotateCw
-                        size={13}
-                        className={cn('transition-transform duration-500', isRefreshing && 'animate-spin')}
-                      />
-                    }
-                  />
-                </div>
-                <p className="font-display text-body-lg sm:text-heading text-casa-navy font-medium leading-relaxed">
-                  {dailyBriefing}
-                </p>
-              </div>
-            </div>
-          )}
+          {/* Household Dispatch: week ribbon + 30-day milestone horizon */}
+          <HouseholdDispatchCard
+            timeHorizonLabel={timeHorizonLabel}
+            headline={dispatchHeadline}
+            weatherLabel={weather ? `${weather.temp}°F` : null}
+            weekDays={dispatchWeekDays}
+            horizon={dispatchHorizon}
+            isRefreshing={isRefreshing}
+            onRefresh={() => void refreshBriefing()}
+          />
         </div>
 
         {/* Right Side (5 cols): Today's Schedule Stream (Top) + Tonight's Kitchen (Bottom) */}
