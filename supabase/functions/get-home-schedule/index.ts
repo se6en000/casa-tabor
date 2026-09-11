@@ -6,7 +6,7 @@
 // GET  /functions/v1/get-home-schedule?days=5&tz=America/New_York
 // POST /functions/v1/get-home-schedule  { days?: number, tz?: string }
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'npm:@supabase/supabase-js@2'
 import { requireEnv } from '../_shared/env.ts'
 
 const CORS = {

@@ -1,7 +1,7 @@
 // send-push-notification
 // Sends a web push to all subscribed devices
 // Body: { title, body, url?, tag? }
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'npm:@supabase/supabase-js@2'
 import webpush from 'npm:web-push'
 
 const supabase = createClient(

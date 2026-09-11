@@ -1,7 +1,7 @@
 // notify-upcoming-events
 // Called by pg_cron every 5 minutes.
 // Sends push-first reminders at ~30m and ~5m before event start.
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'npm:@supabase/supabase-js@2'
 import { getCorrelationId, withCorrelationHeaders } from '../_shared/correlation.ts'
 import { requireEnv } from '../_shared/env.ts'
 
