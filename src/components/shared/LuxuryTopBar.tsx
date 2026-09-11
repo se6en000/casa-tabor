@@ -95,7 +95,7 @@ function NavRail({
 
   return (
     <nav
-      className="hidden md:inline-flex items-center gap-0.5 relative font-sans h-full self-stretch"
+      className="hidden md:inline-flex items-center gap-0.5 relative font-sans h-full self-stretch min-w-0"
       aria-label="Main navigation"
     >
       {NAV_TABS.map((tab) => {
@@ -116,7 +116,7 @@ function NavRail({
               }
             }}
             className={cn(
-              'relative px-3.5 h-full inline-flex items-center justify-center text-body-sm font-medium transition-colors leading-none tracking-[0.01em]',
+              'relative px-3.5 h-full min-w-0 inline-flex items-center justify-center text-body-sm font-medium transition-colors leading-none tracking-[0.01em] truncate',
               isActive
                 ? isWarm
                   ? 'text-casa-navy font-semibold'
@@ -203,9 +203,13 @@ function AmbientInfo({ isWarm, showEvents }: { isWarm: boolean; showEvents: bool
             className="text-casa-gold"
           />
           <span className="tabular-nums font-semibold">{weather.temp}°</span>
+          {/* City name is the single biggest contributor to the row running
+              out of room at ordinary desktop width (confirmed: this row has
+              no shrink/wrap mechanism at all, so anything over-width collides
+              rather than truncating) -- reserve it for genuine kiosk width. */}
           <span
             className={cn(
-              'hidden lg:inline',
+              'hidden 2xl:inline',
               isWarm ? 'text-casa-text-tertiary' : 'text-white/40',
             )}
           >
@@ -512,11 +516,11 @@ export default function LuxuryTopBar() {
       aria-label="Casa Tabor main navigation"
     >
       {/* ── Left cluster: Brand + Nav + Mode ────────────── */}
-      <div className="flex items-center gap-3.5 min-w-0 h-full">
+      <div className="flex items-center gap-3.5 min-w-0 shrink h-full">
         <BrandZone isWarm={isWarm} />
 
         {/* Gold divider between brand and nav */}
-        <span className="topbar-gold-divider hidden md:block" />
+        <span className="topbar-gold-divider hidden md:block shrink-0" />
 
         {/* Navigation Rail — ALWAYS FIRST so nav buttons NEVER shift position */}
         <NavRail isWarm={isWarm} isCanvas={isCanvas} />
