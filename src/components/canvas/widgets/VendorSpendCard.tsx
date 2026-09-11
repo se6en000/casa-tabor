@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { DollarSign, ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
+import { ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
 import { format } from 'date-fns'
 import { Button, SegmentedControl } from '../../ui'
 import { cn } from '../../../utils/cn'
@@ -77,39 +77,34 @@ export default function VendorSpendCard() {
   const totalCents = rows.reduce((sum, row) => sum + row.totalCents, 0)
   const hasAnyEstimated = rows.some((row) => row.hasEstimated)
 
+  const rangeLabel = range === 'month' ? 'this month' : 'in the trailing 12 months'
+  const summaryText = isLoading
+    ? 'Loading spend…'
+    : totalCents === 0
+      ? `No tracked spend yet ${rangeLabel}`
+      : `${hasAnyEstimated ? '~' : ''}${formatCents(totalCents)} spent ${rangeLabel}`
+
   return (
-    <div className="rounded-2xl border border-casa-border/60 bg-casa-bg/60 shrink-0 mb-3.5 overflow-hidden">
+    <div className="shrink-0 mb-2.5">
       <Button
         variant="ghost"
         onClick={() => setExpanded((v) => !v)}
-        className="w-full flex items-center justify-between gap-3 px-4 py-3 min-h-[52px] rounded-none text-left hover:bg-casa-bg transition-colors font-normal"
+        className="w-full flex items-center justify-between gap-2 px-1 py-1.5 min-h-[36px] rounded-lg text-left hover:bg-casa-bg transition-colors font-normal"
         aria-expanded={expanded}
       >
-        <div className="flex items-center gap-2.5 min-w-0">
-          <span className="flex items-center justify-center w-8 h-8 rounded-full bg-casa-gold/15 text-casa-gold shrink-0">
-            <DollarSign size={16} strokeWidth={2.5} />
-          </span>
-          <div className="min-w-0">
-            <p className="text-caption font-bold text-casa-navy leading-tight">
-              {isLoading ? 'Loading…' : formatCents(totalCents)}
-              {!isLoading && hasAnyEstimated && (
-                <span className="ml-1.5 text-3xs font-semibold text-casa-muted align-middle">approx.</span>
-              )}
-            </p>
-            <p className="text-3xs text-casa-muted truncate">
-              {RANGE_OPTIONS.find((o) => o.value === range)?.label} · {rows.length} vendor{rows.length === 1 ? '' : 's'}
-            </p>
-          </div>
-        </div>
+        <span className="text-caption text-casa-muted truncate">
+          {summaryText}
+          <span className="text-casa-muted/70"> · tap for details</span>
+        </span>
         {expanded ? (
-          <ChevronUp size={16} className="text-casa-muted shrink-0" />
+          <ChevronUp size={14} className="text-casa-muted shrink-0" />
         ) : (
-          <ChevronDown size={16} className="text-casa-muted shrink-0" />
+          <ChevronDown size={14} className="text-casa-muted shrink-0" />
         )}
       </Button>
 
       {expanded && (
-        <div className="px-4 pb-4 pt-1 border-t border-casa-border/50">
+        <div className="px-1 pb-3 pt-1 mt-1 border-t border-casa-border/50">
           <div className="pt-3 pb-2">
             <SegmentedControl
               aria-label="Spend time range"

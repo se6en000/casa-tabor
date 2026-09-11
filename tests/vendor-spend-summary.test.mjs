@@ -53,6 +53,12 @@ test('VendorSpendCard offers a This Month / Trailing 12 Months toggle and per-ve
   assert.match(vendorSpendCard, /expandedVendor/)
 })
 
+test('VendorSpendCard collapses to a plain text line, not a bordered card with an icon -- too heavy-handed for secondary info, per live user feedback 2026-09-11', () => {
+  assert.doesNotMatch(vendorSpendCard, /DollarSign/)
+  assert.doesNotMatch(vendorSpendCard, /rounded-2xl border border-casa-border\/60 bg-casa-bg\/60/)
+  assert.match(vendorSpendCard, /tap for details/)
+})
+
 test('VendorSpendCard marks estimated/backfilled totals distinctly from precisely-extracted ones', () => {
   assert.match(vendorSpendCard, /hasEstimated/)
   assert.match(vendorSpendCard, /amountEstimated/)
