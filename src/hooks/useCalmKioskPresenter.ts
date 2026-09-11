@@ -675,11 +675,10 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
   const isEvening = hour >= 18
   const isDinnerPast = hour >= 20
 
-  const timeHorizonLabel = useMemo(() => {
-    if (hour < 12) return 'Morning Briefing'
-    if (hour < 17) return 'Afternoon Dispatch'
-    return 'Evening Digest'
-  }, [hour])
+  // Plain word, not a time-of-day flourish ("Morning Briefing" / "Afternoon
+  // Dispatch" / "Evening Digest") -- the clock already lives in the top bar,
+  // and a household doesn't need three fancy names for the same card.
+  const timeHorizonLabel = 'Ahead'
 
   const pickupsCount = useMemo(() => {
     return effectiveTodayEvents.filter((e) => {
