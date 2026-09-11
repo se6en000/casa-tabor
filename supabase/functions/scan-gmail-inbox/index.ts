@@ -405,6 +405,7 @@ export interface InboxActionItem {
   priority?: 1 | 2 | 3
   agency_level?: number // 0 = passive tracking/logistics, 1 = low, 2 = standard, 3 = urgent
   vendor?: string
+  amount?: string
   transaction_id?: string
   transaction_status?: string
   policy_disclaimer?: string
@@ -566,6 +567,7 @@ Respond ONLY JSON:
       "priority": 1,
       "agency_level": 2,
       "vendor": "merchant or courier name only if delivery/purchase, or empty",
+      "amount": "the exact dollar total actually charged/owed for THIS transaction (e.g. \"42.50\"), or empty. Only a real settled charge or amount due counts -- leave empty for: a price merely mentioned in passing (a show, an ad, an unrelated figure), a FAILED/declined/reversed payment, money added/deposited/received (a credit, not something spent), or any amount you are not confident is this transaction's actual total.",
       "transaction_id": "exact transaction identifier, or empty",
       "transaction_status": "confirmed|payment|shipped|out_for_delivery|delivered|problem, or empty",
       "policy_disclaimer": "standard return/claim policy footnote if present, or empty",
@@ -583,6 +585,20 @@ If no actionable task exists, return {"actions":[]}.`
   } catch {
     return []
   }
+}
+
+// Converts the LLM's extracted dollar-amount string to integer cents, or null
+// when absent/unparseable/non-positive. Kept deliberately conservative -- a
+// wrong amount is worse than a missing one for a spend total the household
+// will trust, so anything that doesn't cleanly parse as a real dollar figure
+// is dropped rather than guessed at.
+function parseAmountCents(amount?: string): number | null {
+  if (!amount) return null
+  const cleaned = amount.replace(/[^0-9.]/g, '')
+  if (!cleaned) return null
+  const numeric = Number(cleaned)
+  if (!Number.isFinite(numeric) || numeric <= 0) return null
+  return Math.round(numeric * 100)
 }
 
 function normalizeTransactionKeyPart(value: string): string {
@@ -728,6 +744,7 @@ async function persistInboxActions(
     const normalizedPriority: 1 | 2 | 3 = a.priority === 3 ? 3 : a.priority === 1 ? 1 : 2
     const sourceRef = `gmail:${sourceOwnerMemberId ?? 'household'}:${messageId}`
     const transaction = transactionIdentity(a, sourceRef)
+    const amountCents = parseAmountCents(a.amount)
 
     const rowData = {
       event_id: eventId,
@@ -750,13 +767,14 @@ async function persistInboxActions(
       agency_level: typeof a.agency_level === 'number' ? a.agency_level : (a.type === 'delivery' ? 0 : 2),
       policy_disclaimer: a.policy_disclaimer || null,
       source_origin: a.source_origin || 'email_body',
+      amount_cents: amountCents,
     }
 
     // Idempotent state progression: If transaction thread already exists in active prep items, update it
     if (transaction.threadKey && !transaction.threadKey.includes(':message:')) {
       const { data: existing } = await sb
         .from('prep_items')
-        .select('id, attention_stage, type, description')
+        .select('id, attention_stage, type, description, amount_cents')
         .eq('attention_thread_key', transaction.threadKey)
         .eq('dismissed', false)
         .limit(1)
@@ -777,6 +795,10 @@ async function persistInboxActions(
               event_title: rowData.event_title,
               source_ref: sourceRef,
               due_by: dueBy ?? undefined,
+              // A later email in the same thread (e.g. "shipped") often doesn't
+              // restate the order total the confirmation email had -- never let
+              // a later, amount-less update erase an already-known real amount.
+              amount_cents: amountCents ?? existing.amount_cents,
             })
             .eq('id', existing.id)
           persistedCount++

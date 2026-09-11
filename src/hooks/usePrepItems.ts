@@ -403,6 +403,103 @@ export function useSetPrepItemAssignee() {
   }
 }
 
+// ── Vendor spend summary (Inbound Manifest) ────────────────────────────────
+// amount_cents is only populated where a real transaction total is known (see
+// migration 20260911181708_prep_item_vendor_spend.sql) -- items with no
+// monetary value (forms, RSVPs, reminders) are excluded server-side by the
+// get_vendor_spend_summary/transactions RPCs, not filtered here.
+
+export type VendorSpendRange = 'month' | 'year'
+
+export function vendorSpendSinceIso(range: VendorSpendRange): string {
+  const now = new Date()
+  if (range === 'month') {
+    return new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+  }
+  const since = new Date(now)
+  since.setFullYear(since.getFullYear() - 1)
+  return since.toISOString()
+}
+
+export interface VendorSpendSummaryRow {
+  vendor: string
+  totalCents: number
+  transactionCount: number
+  hasEstimated: boolean
+}
+
+interface RawVendorSpendSummaryRow {
+  vendor: string
+  total_cents: number | string
+  transaction_count: number | string
+  has_estimated: boolean
+}
+
+/** Per-vendor spend totals for the given range, highest spend first (server-sorted). */
+export function useVendorSpendSummary(range: VendorSpendRange) {
+  return useQuery({
+    queryKey: ['vendor-spend-summary', range],
+    queryFn: async (): Promise<VendorSpendSummaryRow[]> => {
+      const { data, error } = await supabase.rpc('get_vendor_spend_summary', {
+        p_since: vendorSpendSinceIso(range),
+      })
+      if (error) throw error
+      return ((data ?? []) as RawVendorSpendSummaryRow[]).map((row) => ({
+        vendor: row.vendor,
+        totalCents: Number(row.total_cents),
+        transactionCount: Number(row.transaction_count),
+        hasEstimated: row.has_estimated,
+      }))
+    },
+    staleTime: 5 * 60_000,
+  })
+}
+
+export interface VendorSpendTransaction {
+  id: string
+  description: string | null
+  eventTitle: string | null
+  amountCents: number
+  amountEstimated: boolean
+  createdAt: string
+  sourceType: string | null
+}
+
+interface RawVendorSpendTransaction {
+  id: string
+  description: string | null
+  event_title: string | null
+  amount_cents: number | string
+  amount_estimated: boolean
+  created_at: string
+  source_type: string | null
+}
+
+/** Individual transactions for one vendor within the given range (drill-down), most recent first. */
+export function useVendorSpendTransactions(vendor: string | null, range: VendorSpendRange) {
+  return useQuery({
+    queryKey: ['vendor-spend-transactions', vendor, range],
+    enabled: Boolean(vendor),
+    queryFn: async (): Promise<VendorSpendTransaction[]> => {
+      const { data, error } = await supabase.rpc('get_vendor_spend_transactions', {
+        p_vendor: vendor as string,
+        p_since: vendorSpendSinceIso(range),
+      })
+      if (error) throw error
+      return ((data ?? []) as RawVendorSpendTransaction[]).map((row) => ({
+        id: row.id,
+        description: row.description,
+        eventTitle: row.event_title,
+        amountCents: Number(row.amount_cents),
+        amountEstimated: row.amount_estimated,
+        createdAt: row.created_at,
+        sourceType: row.source_type,
+      }))
+    },
+    staleTime: 5 * 60_000,
+  })
+}
+
 /** Updates only this prep item's own due_by — never cascades to a linked calendar event's start time. */
 export function useUpdatePrepItemDueBy() {
   const qc = useQueryClient()

@@ -33,6 +33,7 @@ import { buildGmailWebUrl } from '../../../utils/prepItemClusters'
 import { useAppStore } from '../../../stores/appStore'
 import { useLiveClock } from '../../../hooks/useLiveClock'
 import { format } from 'date-fns'
+import VendorSpendCard from './VendorSpendCard'
 
 export type LogisticsFilterTab = 'all' | 'physical' | 'preorder' | 'digital' | 'delivered'
 
@@ -280,6 +281,8 @@ export default function EstateLogisticsWidget({
           )}
         </div>
       </div>
+
+      <VendorSpendCard />
 
       {/* ── Filter Capsules Strip (Touch-Optimized >= 44px) ── */}
       <div className="flex items-center gap-2 py-3 border-b border-casa-border/40 overflow-x-auto no-scrollbar shrink-0">
