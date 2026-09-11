@@ -487,23 +487,35 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
         } as Record<number, string>,
       })
 
-      // Sync driver(s) to event_members
-      const relevantDriverIds = [
+      // Sync driver(s) to event_members. "none" means no drive at all, so
+      // neither leg has a relevant driver -- previously only pickup_only/
+      // dropoff_only excluded a leg, leaving both drivers "relevant" (and
+      // therefore never cleaned up) even when the event needed no ride.
+      const relevantDriverIds = newBehavior === 'none' ? [] : [
         (newBehavior !== 'pickup_only' && driver1Member?.id) ? driver1Member.id : null,
         (newBehavior !== 'dropoff_only' && driver2Member?.id) ? driver2Member.id : null,
       ].filter((id): id is string => Boolean(id))
 
       const existingMembers = currentEvent.members || []
-      const nextMembers = [...existingMembers]
+      const relevantDriverIdSet = new Set(relevantDriverIds)
+      // A driver role no longer among relevantDriverIds (e.g. behavior just
+      // switched to "At Home / No Drive") is stale -- without removing it,
+      // event_members keeps reporting a driver for an event the app itself
+      // now confirms needs no ride, so anything reading members directly
+      // (not just the transportation_plan) stays wrong.
+      const staleDriverMembers = existingMembers.filter(
+        m => m.role === 'driver' && !relevantDriverIdSet.has(m.family_member?.id || m.id)
+      )
+      let nextMembers = existingMembers.filter(m => !staleDriverMembers.includes(m))
       if (relevantDriverIds.length > 0) {
         for (const drvId of relevantDriverIds) {
           const matchedMember = familyMembers.find(m => m.id === drvId)
           if (matchedMember && !nextMembers.some(m => (m.family_member?.id || m.id) === drvId)) {
-            nextMembers.push({
+            nextMembers = [...nextMembers, {
               id: crypto.randomUUID(),
               role: 'driver',
               family_member: matchedMember,
-            })
+            }]
           }
         }
       }
@@ -516,6 +528,20 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
       publishEventAggregatePatch(queryClient, currentEvent.id, {
         members: nextMembers,
       })
+
+      // event_members rows are looked up by (event_id, family_member_id, role)
+      // rather than the client-generated member.id, since a freshly-added
+      // optimistic member here never had a real row id to begin with.
+      for (const stale of staleDriverMembers) {
+        const familyMemberId = stale.family_member?.id
+        if (!familyMemberId) continue
+        await supabase
+          .from('event_members')
+          .delete()
+          .eq('event_id', currentEvent.id)
+          .eq('family_member_id', familyMemberId)
+          .eq('role', 'driver')
+      }
 
       if (relevantDriverIds.length > 0) {
         const existingMemberIds = new Set(existingMembers.map(m => m.family_member?.id || m.id))
