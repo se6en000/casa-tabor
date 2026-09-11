@@ -148,7 +148,6 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
     dispatchWeekDays,
     dispatchHorizon,
     timeHorizonLabel,
-    weather,
     setSelectedHeroEventId,
     pastEvents,
     upcomingAppointments,
@@ -182,16 +181,11 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
 
       {/* ── Top Section: 12-Col Grid Alignment (7 cols Greeting, 5 cols Tonight's Kitchen + Intake) ── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 xl:gap-10 pb-5 sm:pb-6 border-b border-casa-border/40 shrink-0 items-center">
-        <div className="lg:col-span-7">
-          <h1 className="font-display text-display-lg sm:text-display-xl text-casa-navy font-semibold tracking-tight leading-none">
+        <div className="lg:col-span-7 flex flex-wrap items-center gap-2">
+          <h1 className="font-display text-heading text-casa-navy font-semibold tracking-tight leading-none">
             {greeting}, <span className="italic font-normal">Tabor Family</span>
           </h1>
-          <div className="flex flex-wrap items-center gap-2 mt-2">
-            <p className="text-body text-casa-text-secondary font-medium">
-              {format(now, 'EEEE, MMMM d, yyyy')}
-              {weather && ` · ${weather.condition || 'Clear'}, ${weather.temp}°F`}
-            </p>
-            {ambientRoutineStatuses.map((status, idx) => {
+          {ambientRoutineStatuses.map((status, idx) => {
               const childMember = familyMembers.find((m) => m.name.toLowerCase() === status.childName.toLowerCase())
               const childDotColor = getDisplayMemberColor(childMember?.color_hex)
               return (
@@ -207,7 +201,6 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                 </span>
               )
             })}
-          </div>
         </div>
 
         {/* ── Luxury Tonight's Kitchen Showcase (Sole Header Card, 5 cols) ── */}
