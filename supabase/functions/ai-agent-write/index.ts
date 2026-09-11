@@ -4,9 +4,11 @@ import { evaluateAgentToolCall } from '../_shared/assistant-agent-policy.mjs'
 import {
   hardenExplicitCalendarRangeTurn,
   hardenExplicitCalendarTemporalTurn,
+  resolveCalendarBatchCreate,
   resolveCalendarSemanticTurn,
   shouldPreferActiveCalendarEntity,
 } from '../_shared/assistant-calendar-agent.mjs'
+import { enrichBatchCandidates } from '../_shared/assistant-calendar-batch-create.mjs'
 import {
   adaptAgentGroceryUpdate,
   findAgentCalendarDuplicates,
@@ -250,6 +252,94 @@ Deno.serve(async (req) => {
         })
       }
       plan = resolved
+    }
+    if (plan?.kind === 'calendar_batch_create') {
+      // Each item in the batch is resolved and gated exactly the way a single
+      // calendar.create proposal is -- same duplicate check, same policy
+      // evaluation -- just run once per item instead of once per request. No
+      // item is auto-executed here; this endpoint only ever proposes (see
+      // "agent write endpoint never directly executes mutations").
+      const resolvedTurns = resolveCalendarBatchCreate(plan.turns, {
+        currentDate: body?.context?.currentDate,
+        utcOffset: body?.context?.utcOffset,
+      })
+      // Informational only, for the curation card -- not a safety gate (the
+      // exact-duplicate policy check below already gates that).
+      const duplicateHints = enrichBatchCandidates(
+        resolvedTurns.map((resolvedTurn: { status: string; args?: Record<string, unknown> }) =>
+          resolvedTurn.status === 'resolved'
+            ? {
+                title: resolvedTurn.args?.title,
+                start: resolvedTurn.args?.start,
+                end: resolvedTurn.args?.end,
+                eventType: resolvedTurn.args?.event_type === 'reminder' ? 'reminder' : 'event',
+              }
+            : { title: '', start: '', end: '' }
+        ),
+        events,
+      )
+      const actions = resolvedTurns.map((resolvedTurn: { status: string; args?: Record<string, unknown>; code?: string; text?: string; slot?: string; patch?: Record<string, unknown> }, index: number) => {
+        if (resolvedTurn.status !== 'resolved') {
+          return {
+            status: resolvedTurn.status === 'needs_input' ? 'needs_input' : 'rejected',
+            text: resolvedTurn.status === 'needs_input'
+              ? resolvedTurn.text
+              : writeRejectionText(resolvedTurn.code),
+            slot: resolvedTurn.slot ?? null,
+            patch: resolvedTurn.patch ?? {},
+          }
+        }
+        const args = resolvedTurn.args as Record<string, unknown>
+        const duplicateCandidates = findAgentCalendarDuplicates(events, args)
+        const itemActionId = `${actionId}:${index}`
+        const policy = evaluateAgentToolCall({
+          toolName: 'calendar.create',
+          args,
+          household: {
+            id: optionalText(body?.household_id, 120) ?? 'default',
+            authorized: true,
+          },
+          callIndex: index,
+          retryCount: 0,
+          actionId: itemActionId,
+          confirmedActionId: null,
+          idempotencyKey: `${correlationId}:${itemActionId}`,
+          agentState: body?.agent_state,
+          authoritativeEntities,
+          activeEntity: null,
+          duplicateCandidates,
+          expectedUtcOffset: optionalText(body?.context?.utcOffset, 12),
+          authorizedMemberNames: Array.isArray(body?.context?.family)
+            ? body.context.family.flatMap((member: { name?: unknown }) =>
+                typeof member?.name === 'string' ? [member.name] : []
+              )
+            : [],
+          recurrenceScopeExplicit: false,
+        })
+        if (policy.decision !== 'execute' || policy.allowed !== true) {
+          return {
+            status: 'rejected',
+            text: writeRejectionText(policy.code, policy),
+            code: policy.code,
+            args,
+          }
+        }
+        return {
+          status: 'proposed',
+          tool: legacyToolNameFor('calendar.create'),
+          args,
+          action_id: itemActionId,
+          idempotency_key: `${correlationId}:${itemActionId}`,
+          policy,
+          duplicateHint: duplicateHints[index]?.duplicate ?? null,
+        }
+      })
+      return result({
+        supported: true,
+        type: 'tool_action_batch',
+        actions,
+        plan,
+      })
     }
     if (plan?.kind === 'tool' && plan.toolName === 'grocery.add_items') {
       plan = { ...plan, args: normalizeAgentGroceryAddArgs(plan.args) }
@@ -502,6 +592,9 @@ function writeRejectionText(code: unknown, detail?: Record<string, unknown>) {
   }
   if (code === 'duplicate_calendar_start') {
     return 'There is already an event at that time. Tell me whether you want a different time. Nothing was saved.'
+  }
+  if (code === 'possible_duplicate') {
+    return "That looks like it matches an event already on the calendar. Tell me if you'd like to add it anyway. Nothing was saved."
   }
   if (code === 'stale_authoritative_target') {
     return 'That item changed before I could prepare the update. Please try again with the latest version. Nothing was changed.'

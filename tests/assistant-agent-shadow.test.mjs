@@ -656,3 +656,103 @@ test('shadow telemetry contains no raw conversation text or tool arguments', () 
   assert.equal(telemetry.plan_code, null)
   assert.equal(telemetry.finish_reason, null)
 })
+
+// Multi-event create (phase 3 of the 2026-09-11 design discussion): a
+// narrowly-scoped case of "compound" requests -- several DISTINCT calendar
+// events proposed in one message, all creates, no other domain mixed in.
+// True general compound-intent handling stays out of scope/deferred; this is
+// deliberately just the one well-defined subset of it.
+
+test('the bounded-write schema exposes create_multiple and a calendar_turns array for it', () => {
+  const request = buildAgentShadowRequest({
+    messages: [{ role: 'user', content: 'Add soccer Tuesday, piano Thursday, and the dentist Monday.' }],
+    plannerMode: 'additive_write',
+  })
+  const declaration = request.tools[0].function_declarations.find(
+    (tool) => tool.name === 'assistant_interpret_write',
+  )
+  assert.ok(declaration.parameters.properties.requested_outcome.enum.includes('create_multiple'))
+  assert.equal(declaration.parameters.properties.calendar_turns.type, 'ARRAY')
+
+  const instruction = request.system_instruction.parts[0].text
+  assert.match(instruction, /create_multiple/)
+  assert.match(instruction, /calendar_turns/)
+})
+
+test('parses a create_multiple response into a calendar_batch_create plan with one normalized patch per turn', () => {
+  const result = parseAgentShadowResponse({
+    candidates: [{
+      content: {
+        parts: [{
+          functionCall: {
+            name: 'assistant_interpret_write',
+            args: {
+              requested_domain: 'calendar',
+              requested_outcome: 'create_multiple',
+              calendar_turns: [
+                {
+                  title: 'Soccer Practice',
+                  date_reference: { kind: 'weekday', weekday: 'tuesday' },
+                  time: { hour: 4, period: 'pm' },
+                },
+                {
+                  title: 'Piano Lesson',
+                  date_reference: { kind: 'weekday', weekday: 'thursday' },
+                  time: { hour: 3, period: 'pm' },
+                },
+              ],
+            },
+          },
+        }],
+      },
+    }],
+  })
+
+  assert.equal(result.kind, 'calendar_batch_create')
+  assert.equal(result.turns.length, 2)
+  assert.equal(result.turns[0].patch.title, 'Soccer Practice')
+  assert.deepEqual(result.turns[0].patch.date_reference, { kind: 'weekday', weekday: 'tuesday' })
+  assert.equal(result.turns[1].patch.title, 'Piano Lesson')
+})
+
+test('the bounded-write instruction explicitly calls out noon/midnight as period-determining, not just illustrative examples like lunch/tonight', () => {
+  // Found live 2026-09-11: "birthday lunch sunday at noon" came back with
+  // period=ambiguous, which downstream resolves an unresolved 12 o'clock to
+  // midnight (hour % 12). The existing instruction's example list (breakfast,
+  // school morning, lunch, dinner, tonight) never named noon or midnight --
+  // unlike those vaguer dayparts, noon/midnight are fixed, unambiguous words,
+  // and deserve an explicit, unconditional rule rather than being just one
+  // more contextual example the model might not weight as decisive. This
+  // matters most for batch (calendar_turns) items, where a per-item
+  // deterministic harden pass isn't safe (see assistant-calendar-agent.mjs's
+  // hardenExplicitCalendarTemporalTurn comment) -- so the prompt itself has
+  // to carry this rule reliably.
+  const request = buildAgentShadowRequest({
+    messages: [{ role: 'user', content: 'Add a birthday lunch Sunday at noon.' }],
+    plannerMode: 'additive_write',
+  })
+  const instruction = request.system_instruction.parts[0].text
+  assert.match(instruction, /\bnoon\b.*\bpm\b/i)
+  assert.match(instruction, /\bmidnight\b.*\bam\b/i)
+})
+
+test('a create_multiple response with fewer than two turns is not treated as a batch (falls through to defer)', () => {
+  const result = parseAgentShadowResponse({
+    candidates: [{
+      content: {
+        parts: [{
+          functionCall: {
+            name: 'assistant_interpret_write',
+            args: {
+              requested_domain: 'calendar',
+              requested_outcome: 'create_multiple',
+              calendar_turns: [{ title: 'Soccer Practice' }],
+            },
+          },
+        }],
+      },
+    }],
+  })
+
+  assert.notEqual(result.kind, 'calendar_batch_create')
+})

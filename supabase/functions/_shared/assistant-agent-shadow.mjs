@@ -103,6 +103,21 @@ export function parseAgentShadowResponse(payload) {
           },
         }
       }
+      if (
+        args.requested_domain === 'calendar' &&
+        args.requested_outcome === 'create_multiple' &&
+        Array.isArray(args.calendar_turns) &&
+        args.calendar_turns.length >= 2
+      ) {
+        return {
+          kind: 'calendar_batch_create',
+          turns: args.calendar_turns.slice(0, 10).map((patch) => ({
+            version: 'calendar-semantic-turn-v1',
+            action: 'create',
+            patch: normalizeCalendarSemanticPatch(patch),
+          })),
+        }
+      }
       if (args.requested_domain === 'grocery') {
         const tool = getAgentToolByGeminiName(
           String(args.grocery_tool_name ?? '').replace('.', '_'),
@@ -403,7 +418,9 @@ BOUNDED WRITE MODE:
 - If the user says "change this", "update this", or otherwise corrects the current calendar item, use revise for a pending create or update for ACTIVE ENTITY. Never create a duplicate.
 - When the user names a business or venue with a locality, preserve the complete destination identity in patch.location (for example, "Sky Zone Palm Springs"), while keeping patch.title concise (for example, "Sky Zone"). Never reduce an expressed venue plus locality to the locality alone.
 - Resolve conversational identity clarifications against FAMILY. When the user explains that a relationship label refers to an exact family member (for example, that Mom is Kelly), include that exact family name in members_add while preserving the pending title and every unrelated field.
-- Every spoken clock time must include period=am, period=pm, or period=ambiguous. Use ordinary human context such as breakfast, school morning, lunch, dinner, or tonight when it clearly implies a period. Use ambiguous for a bare follow-up time when the active/pending event context should decide.
+- Every spoken clock time must include period=am, period=pm, or period=ambiguous. Use ordinary human context such as breakfast, school morning, lunch, dinner, or tonight when it clearly implies a period. "Noon" or "midday" always means hour=12, period=pm. "Midnight" always means hour=12, period=am. These are fixed words with one meaning each, not contextual hints -- never mark them ambiguous. Use ambiguous for a bare follow-up time when the active/pending event context should decide.
+- When the user describes two or more DISTINCT calendar events to create in one request (for example "add soccer Tuesday, piano Thursday, and the dentist Monday"), set requested_domain=calendar, requested_outcome=create_multiple, and provide calendar_turns as an array with one patch per event, using the exact same patch rules as a single create (including event_type=reminder and all_day where they apply per item). Never use create_multiple for a single event that merely has multiple details (recurrence, a duration, several attendees) -- that is still one calendar_turn.
+- Only use create_multiple when every proposed item is itself a plain calendar create. If the request mixes creates with any other action (an update, a delete, a grocery item, a non-calendar domain), that is still compound -- use requested_domain=other with reason=compound for the whole request rather than pulling out just the creatable parts.
 - For grocery writes, set requested_domain=grocery and provide one declared grocery capability and its arguments.
 - Set requested_domain=other with a reason for reads, compound requests, cooking, or unsupported domains.
 - Never convert an update or destructive request into a create/add action.
@@ -697,9 +714,14 @@ function buildSemanticWriteDeclaration() {
         },
         requested_outcome: {
           type: 'string',
-          enum: ['create', 'revise', 'update', 'delete', 'complete', 'add_items', 'update_item', 'remove_item', 'read', 'compound', 'unsupported'],
+          enum: ['create', 'create_multiple', 'revise', 'update', 'delete', 'complete', 'add_items', 'update_item', 'remove_item', 'read', 'compound', 'unsupported'],
         },
         calendar_turn: calendarSchema,
+        calendar_turns: {
+          type: 'array',
+          items: calendarSchema.properties.patch,
+          description: 'Only for requested_outcome=create_multiple: one patch per distinct calendar event, same fields and rules as a single calendar_turn.patch create.',
+        },
         grocery_tool_name: {
           type: 'string',
           enum: groceryTools.map((tool) => tool.name),

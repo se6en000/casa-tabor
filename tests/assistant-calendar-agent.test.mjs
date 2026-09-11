@@ -533,6 +533,57 @@ test('explicit temporal words harden semantic create turns before bounded resolu
   assert.deepEqual(hardenedTonight.patch.date_reference, { kind: 'today' })
 })
 
+// Found live 2026-09-11 while verifying the new multi-event batch-create
+// feature: "birthday lunch sunday at noon" resolved to the planner emitting
+// hour:12, period:'ambiguous' -- and resolveClock's ambiguous-period math is
+// `hour % 12`, which sends 12 to 0 (midnight) instead of noon. This isn't
+// batch-specific: resolveClock is shared by every create, single or batch --
+// a single-turn "at noon" create with no other am/pm cue hits the exact same
+// bug. Unlike vaguer dayparts (afternoon/evening), "noon" and "midnight" are
+// fixed, unambiguous English words, so hardening them deterministically here
+// (the same pattern already used for "tonight" above) is correct rather than
+// leaving it to the model to infer reliably.
+test('"noon" and "midnight" harden an ambiguous 12 o\'clock to the correct period deterministically', () => {
+  const hardenedNoon = hardenExplicitCalendarTemporalTurn(turn('create', {
+    title: 'Birthday lunch',
+    time: { hour: 12, minute: 0, period: 'ambiguous' },
+  }), 'birthday lunch sunday at noon')
+  assert.equal(hardenedNoon.patch.time.period, 'pm')
+  assert.equal(hardenedNoon.patch.time.hour, 12)
+
+  const hardenedMidday = hardenExplicitCalendarTemporalTurn(turn('create', {
+    title: 'Lunch meeting',
+    time: { hour: 12, minute: 0, period: 'ambiguous' },
+  }), 'lunch meeting at midday')
+  assert.equal(hardenedMidday.patch.time.period, 'pm')
+
+  const hardenedMidnight = hardenExplicitCalendarTemporalTurn(turn('create', {
+    title: 'Release deploy',
+    time: { hour: 12, minute: 0, period: 'ambiguous' },
+  }), 'schedule the release deploy at midnight')
+  assert.equal(hardenedMidnight.patch.time.period, 'am')
+  assert.equal(hardenedMidnight.patch.time.hour, 12)
+
+  // Explicit am/pm from the model is never overridden -- only genuine ambiguity is hardened.
+  const alreadyExplicit = hardenExplicitCalendarTemporalTurn(turn('create', {
+    title: 'Weird but explicit',
+    time: { hour: 12, minute: 0, period: 'am' },
+  }), 'thing at noon')
+  assert.equal(alreadyExplicit.patch.time.period, 'am')
+})
+
+test('resolving a hardened noon turn actually produces a 12:00 PM start, not midnight', () => {
+  const hardened = hardenExplicitCalendarTemporalTurn(turn('create', {
+    title: 'Birthday lunch',
+    date_reference: { kind: 'weekday', weekday: 'sunday' },
+    time: { hour: 12, minute: 0, period: 'ambiguous' },
+  }), 'birthday lunch sunday at noon')
+  const result = resolveCalendarSemanticTurn(hardened, context)
+
+  assert.equal(result.kind, 'tool')
+  assert.match(result.args.start, /T12:00:00/)
+})
+
 test('explicit spoken clock survives provider omission and defaults to today AM', () => {
   const hardened = hardenExplicitCalendarTemporalTurn(turn('create', {
     title: 'Sky Zone',

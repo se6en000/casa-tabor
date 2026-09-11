@@ -34,7 +34,16 @@ export function hardenExplicitCalendarTemporalTurn(turn, text) {
   const inferredTime = spokenClock
     ?? (patch.time?.period === 'ambiguous' && /\btonight\b/.test(input)
       ? { ...patch.time, period: 'pm' }
-      : null)
+      // "Noon" and "midnight" are fixed, unambiguous words (unlike vaguer
+      // dayparts such as "afternoon"), so hardening them deterministically
+      // -- rather than trusting the model's period classification -- avoids
+      // resolveClock's ambiguous-period math (`hour % 12`) silently sending
+      // an unresolved 12 o'clock to midnight when the person meant noon.
+      : patch.time?.period === 'ambiguous' && /\bnoon\b|\bmidday\b/.test(input)
+        ? { ...patch.time, hour: 12, period: 'pm' }
+        : patch.time?.period === 'ambiguous' && /\bmidnight\b/.test(input)
+          ? { ...patch.time, hour: 12, period: 'am' }
+          : null)
   if (!inferredDate && !inferredTime) return turn
   return {
     ...turn,
@@ -118,6 +127,29 @@ export function resolveCalendarSemanticTurn(turn, context = {}) {
     }
   }
   return resolveUpdate(turn, target.entity, context)
+}
+
+// Resolves several independent create turns (a multi-event text request, or
+// eventually flyer-extraction candidates -- see the 2026-09-11 design
+// discussion) through the exact same date/time/timezone resolution a single
+// create uses, one item at a time. One item's missing detail or rejection
+// never discards the rest of the batch, except the offset check: every item
+// needs the household's UTC offset to resolve anything at all, so a missing
+// offset is a genuine whole-batch failure, not a per-item one.
+export function resolveCalendarBatchCreate(turns, context = {}) {
+  return (Array.isArray(turns) ? turns : []).map((turn) => {
+    const normalizedTurn = {
+      version: CALENDAR_SEMANTIC_TURN_VERSION,
+      action: 'create',
+      patch: turn?.patch && typeof turn.patch === 'object' ? turn.patch : {},
+    }
+    const resolved = resolveCreate(normalizedTurn, null, context)
+    if (resolved.kind === 'tool') return { status: 'resolved', args: resolved.args }
+    if (resolved.kind === 'clarify') {
+      return { status: 'needs_input', slot: resolved.slot, text: resolved.text, patch: normalizedTurn.patch }
+    }
+    return { status: 'rejected', code: resolved.code, patch: normalizedTurn.patch }
+  })
 }
 
 function resolveCreate(turn, baseArgs, context) {
