@@ -509,7 +509,12 @@ function writeRejectionText(code: unknown, detail?: Record<string, unknown>) {
   if (code === 'recurring_scope_unsupported') {
     return 'Should I change only this event, this and following events, or the entire series? Nothing was changed.'
   }
-  return `I understood this as a change, but I couldn't prepare it safely. Nothing was saved.`
+  // Deliberately doesn't claim a specific interpretation: this fallback covers
+  // several unrelated codes (a plain provider timeout, an unsupported plan
+  // shape, a pending-create-required rejection, etc.), not just an ambiguous
+  // "change" -- the old text ("I understood this as a change...") was flatly
+  // wrong for e.g. a plain timeout on a fresh create request.
+  return `I wasn't able to prepare that safely just now. Please try again in a moment. Nothing was saved.`
 }
 
 function planName(payload: Record<string, unknown>) {

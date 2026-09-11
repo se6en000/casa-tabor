@@ -142,8 +142,13 @@ Deno.serve(async (req) => {
       return result({
         supported: false,
         handled: handledMutation,
+        // Deliberately doesn't claim a specific interpretation (create/update/
+        // delete) -- this lane only knows the request isn't a read, not which
+        // kind of change it actually is. The old text ("I understood this as a
+        // change...") was flatly wrong for e.g. a plain new-event request, which
+        // this lane can't fulfill itself but is not a "change" to anything.
         text: handledMutation
-          ? `I understood this as a change, but I couldn't prepare it safely. Nothing was saved.`
+          ? `That sounds like it needs to add or change something rather than just answer a question. Try phrasing it as a direct request, like "Add [event] on [day] at [time]." Nothing was saved.`
           : null,
         code: 'non_read_or_unapproved_plan',
         planKind: plan?.kind ?? 'error',
