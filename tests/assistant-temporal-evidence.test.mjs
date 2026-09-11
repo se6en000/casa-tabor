@@ -147,6 +147,38 @@ test('typo-correction for weekday names does not misfire on unrelated real words
   assert.equal(night, null)
 })
 
+test('a mealtime/bedtime phrase does not override an explicit weekday mentioned in the same message', () => {
+  // Bug: relativeRange checked "at noon/lunch/dinner/bedtime" before ever
+  // checking for an explicit weekday, so "Saturday at noon" (or any weekday
+  // combined with a mealtime word) resolved to TODAY instead of the stated
+  // weekday -- even with perfectly correct spelling, unrelated to the typo fix
+  // above. Confirmed live: this caused a real request ("vet visit for next
+  // Tuesday at noon") to have its correctly-resolved date rejected as a
+  // "mismatch" against evidence that had silently collapsed to today.
+  const now = { now: new Date('2026-09-10T23:55:00.000Z'), utcOffset: '-04:00' } // Thursday
+  const cases = [
+    ['Book a vet visit for Saturday at noon.', '2026-09-12'],
+    ['Schedule lunch with Sarah on Monday at lunchtime.', '2026-09-14'],
+    // "next Tuesday" here means the Tuesday after the nearest one (Sep 22, not
+    // Sep 15) -- this file's existing, consistent convention for "next X"
+    // elsewhere (always +7 on top of the nearest occurrence), unrelated to this
+    // fix; not asserting a stance on whether that convention itself is ideal.
+    ['Put dinner on for next Tuesday at dinnertime.', '2026-09-22'],
+  ]
+  for (const [text, expectedDate] of cases) {
+    const evidence = extractUserTemporalEvidence({ id: 'u1', role: 'user', content: text }, now)
+    assert.ok(evidence, text)
+    assert.equal(evidence.rangeStart, expectedDate, text)
+  }
+  // The mealtime/bedtime fallback must still work as a last resort when there's
+  // truly no other day reference -- "let's do lunch at noon" alone means today.
+  const noOtherSignal = extractUserTemporalEvidence(
+    { id: 'u2', role: 'user', content: "Let's do lunch at noon." },
+    now,
+  )
+  assert.equal(noOtherSignal.rangeStart, '2026-09-10')
+})
+
 test('a relative "today" resolution whose time has already passed rolls to the next day', () => {
   // Bug: "Schedule a call with the bank today at 8am." asked at 7pm the same day
   // passed the date-evidence check fine (the DATE really is today, matching the

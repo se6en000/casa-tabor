@@ -175,8 +175,7 @@ function relativeRange(text, nowParts) {
   const today = isoDate(nowParts.year, nowParts.month, nowParts.day)
   if (
     /\btoday\b/i.test(text) ||
-    /\b(?:this\s+(?:morning|afternoon|evening)|tonight)\b/i.test(text) ||
-    /\b(?:at|around)\s+(?:lunch(?:time)?|noon|midday|dinner(?:time)?|bedtime)\b/i.test(text)
+    /\b(?:this\s+(?:morning|afternoon|evening)|tonight)\b/i.test(text)
   ) return { start: today, end: today }
   if (/\btomorrow\b/i.test(text)) {
     const tomorrow = dateAfter(today, 1)
@@ -222,13 +221,25 @@ function relativeRange(text, nowParts) {
   }
 
   const weekday = WEEKDAYS.findIndex((day) => new RegExp(`\\b(?:this\\s+|next\\s+)?${day}\\b`, 'i').test(text))
-  if (weekday < 0) return null
-  const modifier = text.match(new RegExp(`\\b(this|next)\\s+${WEEKDAYS[weekday]}\\b`, 'i'))?.[1]?.toLowerCase()
-  let daysAhead = weekday - nowParts.weekday
-  if (daysAhead <= 0) daysAhead += 7
-  if (modifier === 'next') daysAhead += 7
-  const date = dateAfter(today, daysAhead)
-  return { start: date, end: date }
+  if (weekday >= 0) {
+    const modifier = text.match(new RegExp(`\\b(this|next)\\s+${WEEKDAYS[weekday]}\\b`, 'i'))?.[1]?.toLowerCase()
+    let daysAhead = weekday - nowParts.weekday
+    if (daysAhead <= 0) daysAhead += 7
+    if (modifier === 'next') daysAhead += 7
+    const date = dateAfter(today, daysAhead)
+    return { start: date, end: date }
+  }
+
+  // Checked last, deliberately: a mealtime/bedtime word only means "today" when
+  // there's no more specific day reference elsewhere in the message. Checking
+  // this first (as the code used to) meant "Saturday at noon" silently ignored
+  // "Saturday" and resolved to today, even with correct spelling -- unrelated to
+  // and found alongside the typo-tolerance fix above.
+  if (/\b(?:at|around)\s+(?:lunch(?:time)?|noon|midday|dinner(?:time)?|bedtime)\b/i.test(text)) {
+    return { start: today, end: today }
+  }
+
+  return null
 }
 
 export function extractUserTemporalEvidence(message, options = {}) {
