@@ -6,6 +6,7 @@ import { format } from 'date-fns'
 import { useNavigate } from 'react-router-dom'
 import { cn } from '../../utils/cn'
 import { useAIAssistant, type AIMessage, type GroceryAssistantContext, type ActionAiContext } from '../../hooks/useAIAssistant'
+import { IDLE_TIMEOUT_MS, isSessionStale } from '../../hooks/useAISession'
 import type { PrivateConversation } from '../../hooks/useAIConversationHistory'
 import {
   useSpeechInput,
@@ -942,6 +943,28 @@ export default function AIChatDrawer({
       appendSyntheticMessage(defaultChefMsg)
     }
   }, [open, focusedEvent, loading, launchContext?.agent, launchContext?.launchId, launchContext?.source, sessionLoading, messages.length, primeMessages, appendSyntheticMessage])
+
+  // Auto-reset a general (non-scoped) session that's gone stale since it was
+  // last actually used -- e.g. reopening the assistant after walking away for
+  // a while. Event/action/chef entry already get their own dedicated handling
+  // above; this only covers the default entry point (header tap, voice wake
+  // with no specific launch context), which previously had no time-based
+  // reset at all and would silently resume a conversation from hours earlier.
+  // Checked once per "open", not continuously, to avoid resetting mid-use.
+  const checkedStalenessOnOpenRef = useRef(false)
+  useEffect(() => {
+    if (!open) {
+      checkedStalenessOnOpenRef.current = false
+      return
+    }
+    if (focusedEvent || focusedAction || launchContext?.agent === 'chef') return
+    if (sessionLoading || loading) return
+    if (checkedStalenessOnOpenRef.current) return
+    checkedStalenessOnOpenRef.current = true
+    if (session && isSessionStale(session, Date.now(), IDLE_TIMEOUT_MS)) {
+      startFresh()
+    }
+  }, [open, focusedEvent, focusedAction, launchContext?.agent, sessionLoading, loading, session, startFresh])
 
   // While AI is thinking, suppress new voice input (don't stop the mic — avoids fade/blue flicker)
   useEffect(() => {

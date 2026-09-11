@@ -108,13 +108,37 @@ export interface AIMessage {
 export interface AISession {
   id: string
   created_at: string
+  last_activity_at?: string
   ended_at?: string
   experienceMode: AssistantExperienceMode
   messages: AIMessage[]
 }
 
 const STORAGE_KEY = 'casa_tabor_ai_session'
-const IDLE_TIMEOUT_MS = 12 * 60 * 60 * 1000 // 12 hours
+// This is a shared, wall-mounted household kiosk multiple family members use
+// throughout the day for unrelated things, not a single-user sustained-task
+// tool -- a ChatGPT-style "keep everything until you manually start a new
+// chat" default is the wrong shape here. 10 minutes survives a real,
+// brief mid-conversation interruption (someone gets pulled away, comes back
+// to finish a thought) without letting an unrelated request from hours
+// earlier silently bleed into a later, unrelated one -- see the git history
+// around 2026-09-11 for the specific bug this was designed to prevent.
+export const IDLE_TIMEOUT_MS = 10 * 60 * 1000
+
+// Pure and exported for testing: was previously inlined and checked
+// created_at instead of last-activity time, so a session used continuously
+// for hours never looked "idle" (correct), but one created at 9am and never
+// touched again also didn't look idle until a full 12 hours had passed
+// (wrong) -- created_at alone can't distinguish those two cases.
+export function isSessionStale(
+  session: Pick<AISession, 'created_at'> & Partial<Pick<AISession, 'last_activity_at' | 'ended_at'>>,
+  nowMs: number,
+  idleTimeoutMs: number,
+): boolean {
+  if (session.ended_at) return true
+  const lastActivityMs = new Date(session.last_activity_at ?? session.created_at).getTime()
+  return nowMs - lastActivityMs > idleTimeoutMs
+}
 
 function normalizeInterruptedMessages(messages: AIMessage[]): { messages: AIMessage[]; changed: boolean } {
   let changed = false
@@ -184,8 +208,7 @@ export function useAISession() {
   useEffect(() => {
     const stored = readStorage()
     if (stored && !stored.ended_at) {
-      const age = Date.now() - new Date(stored.created_at).getTime()
-      if (age > IDLE_TIMEOUT_MS) {
+      if (isSessionStale(stored, Date.now(), IDLE_TIMEOUT_MS)) {
         writeStorage(null)
         setSessionState(null)
       } else {
@@ -201,9 +224,11 @@ export function useAISession() {
   }, [])
 
   const startNewSession = useCallback((): AISession => {
+    const now = new Date().toISOString()
     const newSession: AISession = {
       id: genId(),
-      created_at: new Date().toISOString(),
+      created_at: now,
+      last_activity_at: now,
       experienceMode: 'do',
       messages: [],
     }
@@ -228,7 +253,7 @@ export function useAISession() {
           // keep tool action state so user can see history of what was done
         } : undefined,
       }))
-      const updated = { ...prev, messages: toSave }
+      const updated = { ...prev, messages: toSave, last_activity_at: new Date().toISOString() }
       writeStorage(updated)
       return updated
     })
