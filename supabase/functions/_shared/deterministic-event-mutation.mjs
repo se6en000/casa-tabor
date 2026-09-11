@@ -167,7 +167,10 @@ export function resolveDeterministicEventMutation(text, events, options = {}) {
   const naturalEventPattern = /^(?:create|add|book|schedule)\s+(?:an?\s+)?(.+?)(?=\s+(?:for|on\s+)?(?:20\d{2}-\d{2}-\d{2}|today|tomorrow|sunday|monday|tuesday|wednesday|thursday|friday|saturday|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b|\s+at\s+\d)/i
   const standAlonePattern = /^(.+?)\s+(?:for|on\s+)?(?:20\d{2}-\d{2}-\d{2}|today|tomorrow|sunday|monday|tuesday|wednesday|thursday|friday|saturday|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+.*at\s+\d/i
 
-  if (createPrefix.test(input) || (standAlonePattern.test(input) && /\b(?:event|appointment|appt|apt|reservation|dinner|lunch|breakfast|practice|meeting|party|tour|doctor|dr\b|dentist)\b/i.test(input))) {
+  if (
+    !options.skipCompoundCreate &&
+    (createPrefix.test(input) || (standAlonePattern.test(input) && /\b(?:event|appointment|appt|apt|reservation|dinner|lunch|breakfast|practice|meeting|party|tour|doctor|dr\b|dentist)\b/i.test(input)))
+  ) {
     const namedTitle = input.match(/\b(?:called|named)\s+(.+?)(?=\s+(?:for|on\s+)?(?:20\d{2}-\d{2}-\d{2}|today|tomorrow|sunday|monday|tuesday|wednesday|thursday|friday|saturday|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b|\s+at\s+\d|$)/i)?.[1]
     const naturalTitleMatch = input.match(naturalEventPattern)
     const naturalTitle = naturalTitleMatch?.[1]?.replace(/^(?:calendar\s+)?(?:event|appointment|apt|reminder)\s+(?:called|named)\s+/i, '')

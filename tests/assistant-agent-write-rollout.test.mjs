@@ -42,6 +42,18 @@ test('bounded write rejections cannot fall through to legacy execution', () => {
   assert.match(assistant, /'agent\.write\.blocked'/)
 })
 
+test('a compound-looking message is not excluded from the write planner just because it also contains reminder language', () => {
+  // Found live 2026-09-11 via real user bug reports: shouldUseAgentWritePlanner
+  // hard-excludes any message containing reminder language (by design, for a
+  // genuine single-reminder request -- see the "reminder vocabulary cannot
+  // enter the generic agent write lane" test above). But a message that ALSO
+  // looks compound (2+ distinct day references) needs the general planner's
+  // calendar_batch_create, not the reminder-only deterministic fallback that
+  // has no notion of compound requests. The exclusion must be conditioned on
+  // looksLikeCompoundCalendarRequest, not applied unconditionally.
+  assert.match(assistant, /reminderDomainLanguage: reminderDomainLanguage && !looksLikeCompoundCalendarRequest/)
+})
+
 test('write rollout forwards a calendar_batch_create proposal to the client as its own batch type, normalized the same way single tool actions are', () => {
   assert.match(assistant, /agentWriteData\.type === 'tool_action_batch'/)
   const batchSection = assistant.slice(assistant.indexOf("'tool_action_batch'"))

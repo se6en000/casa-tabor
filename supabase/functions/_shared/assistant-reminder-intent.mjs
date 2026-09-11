@@ -59,6 +59,36 @@ export function hasReminderLanguage(text) {
   return /\b(?:remind|reminded|reminding|reminder|reminders)\b/i.test(String(text ?? ''))
 }
 
+const DAY_REFERENCE_PATTERN = /\b(sunday|monday|tuesday|wednesday|thursday|friday|saturday|today|tomorrow)\b/gi
+const RANGE_CONNECTOR_PATTERN = /\b(?:through|to|until|thru)\s+(?:sunday|monday|tuesday|wednesday|thursday|friday|saturday|today|tomorrow)\b/i
+
+// Deterministic GATING signal only (per this repo's architecture principle:
+// determinism is for validation/safety, never for interpreting open-ended
+// language) -- used to decide whether a single-item deterministic fast path
+// should trust itself on this message, or back off and let the general
+// planner (which understands genuinely compound requests, including
+// calendar_batch_create) handle it instead. Never used to interpret WHAT the
+// separate items are, only whether there might be more than one.
+//
+// Found live 2026-09-11: the explicit-reminder deterministic fast path
+// claimed an entire 3-item message ("add soccer Tuesday..., piano
+// Thursday..., and remind me about the dentist Monday...") because it only
+// checked for reminder LANGUAGE anywhere in the text, silently dropping the
+// non-reminder items. Two or more DISTINCT day references is a cheap, fairly
+// reliable signal that a message describes more than one calendar item --
+// deliberately conservative (a single multi-day range like "Friday through
+// Monday" is excluded) since a false positive here only costs a slightly
+// slower LLM round-trip, while a false negative reproduces the exact bug
+// this exists to prevent.
+export function looksLikeCompoundCalendarRequest(text) {
+  const value = String(text ?? '')
+  const matches = [...value.matchAll(DAY_REFERENCE_PATTERN)].map((m) => m[1].toLowerCase())
+  const distinctDays = new Set(matches)
+  if (distinctDays.size < 2) return false
+  if (RANGE_CONNECTOR_PATTERN.test(value)) return false
+  return true
+}
+
 export function explicitReminderCreateRequestForMessages(messages) {
   const normalizedMessages = Array.isArray(messages) ? messages : []
   const latestUserIndex = normalizedMessages.findLastIndex((message) =>

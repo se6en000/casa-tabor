@@ -12,6 +12,7 @@ import {
   isReminderCompletionFollowUp,
   explicitReminderSearchForMessages,
   explicitReminderSearchOverride,
+  looksLikeCompoundCalendarRequest,
   parseExplicitReminderDurationMinutes,
   reminderCreateClarification,
   resolveExplicitReminderDaypartRange,
@@ -389,4 +390,46 @@ test('reminders default to a 15-minute duration unless an explicit duration is r
 
 test('resolveStructuredReminderDueBy returns null when no structured "Due:" field is present', () => {
   assert.equal(resolveStructuredReminderDueBy('Remind me tomorrow morning to call the dentist', { utcOffset: '-04:00' }), null)
+})
+
+// Found live 2026-09-11 via two real user bug reports, both testing the
+// exact multi-event phrasing suggested to them: "add soccer Tuesday at 4,
+// piano Thursday at 3, and remind me about the dentist Monday morning".
+// ai-assistant/index.ts's deterministic explicit-reminder fast path (gated
+// on explicitReminderCreate, which only checks whether reminder LANGUAGE is
+// present anywhere in the message) claimed the whole message, silently
+// dropping soccer and piano and producing a single garbled reminder
+// proposal (the reminder subject grafted onto a start/end time actually
+// extracted from the SOCCER clause by the separate, older
+// resolveDeterministicEventMutation regex parser -- an internally
+// inconsistent result caught only by luck via the date-mismatch safety
+// check, not because anything recognized the request as compound).
+// looksLikeCompoundCalendarRequest is a deterministic GATING signal (per
+// this repo's architecture principle: determinism is for validation/safety,
+// not for interpreting open-ended language) used only to decide whether the
+// single-item reminder fast path should trust itself, or back off and let
+// the general planner (which now has calendar_batch_create) handle it.
+test('looksLikeCompoundCalendarRequest is false for an ordinary single-item reminder request', () => {
+  assert.equal(looksLikeCompoundCalendarRequest('remind me to call the dentist on Monday at 9am'), false)
+  assert.equal(looksLikeCompoundCalendarRequest('remind me to take out the trash tomorrow night'), false)
+})
+
+test('looksLikeCompoundCalendarRequest is true for the exact reported multi-item phrasing', () => {
+  assert.equal(
+    looksLikeCompoundCalendarRequest('add soccer Tuesday at 4, piano Thursday at 3, and remind me about the dentist Monday morning'),
+    true,
+  )
+  assert.equal(
+    looksLikeCompoundCalendarRequest('Add soccer on Tuesday at 4:00 p.m. At piano at 3:00 p.m. On Thursday and remind me about the dentist on Monday'),
+    true,
+  )
+})
+
+test('looksLikeCompoundCalendarRequest does not false-positive on a single multi-day date RANGE', () => {
+  assert.equal(looksLikeCompoundCalendarRequest('remind me the trip runs from Friday through Monday'), false)
+  assert.equal(looksLikeCompoundCalendarRequest('remind me the sale goes from Monday to Wednesday'), false)
+})
+
+test('looksLikeCompoundCalendarRequest requires at least two distinct day references, not just a comma', () => {
+  assert.equal(looksLikeCompoundCalendarRequest('remind me, please, to call the dentist Monday'), false)
 })

@@ -213,3 +213,32 @@ test('regression: structured Title:/Due: draft prompts must not reach the naive 
     60,
   )
 })
+
+test('regression: a compound multi-item request must not reach the naive create-command matcher', () => {
+  // Found live 2026-09-11 via real user bug reports: "add soccer Tuesday at
+  // 4, piano Thursday at 3, and remind me about the dentist Monday morning"
+  // reached this matcher, whose non-greedy title extraction stops at the
+  // FIRST weekday token ("soccer" only) while parseRequestedTime grabs the
+  // LAST am/pm-marked time in the whole string (piano's 3pm) -- silently
+  // grafting an unrelated item's time onto a different item's title, with
+  // piano and the dentist reminder dropped entirely and no indication
+  // anything was lost. Same shape as the structured-draft regression above:
+  // proves the naive matcher DOES fire and DOES get it wrong, so the
+  // caller-supplied skipCompoundCreate guard is load-bearing.
+  const compoundText = 'Add soccer on Tuesday at 4:00 p.m. At piano at 3:00 p.m. On Thursday and remind me about the dentist on Monday'
+  const withoutGuard = resolveDeterministicEventMutation(compoundText, events, options)
+  assert.equal(withoutGuard?.tool, 'create_event')
+  assert.equal(withoutGuard?.args.title, 'soccer')
+
+  const withGuard = resolveDeterministicEventMutation(compoundText, events, { ...options, skipCompoundCreate: true })
+  assert.equal(withGuard, null)
+})
+
+test('skipCompoundCreate does not affect move/delete matching against real events', () => {
+  const move = resolveDeterministicEventMutation(
+    'Move the ABA therapy on Monday to 2pm',
+    events,
+    { ...options, skipCompoundCreate: true },
+  )
+  assert.equal(move?.tool, 'update_event')
+})

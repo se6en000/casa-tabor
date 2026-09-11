@@ -153,6 +153,7 @@ import {
   isExplicitReminderCompletion,
   isExplicitReminderRequest,
   isReminderCompletionFollowUp,
+  looksLikeCompoundCalendarRequest,
   parseExplicitReminderDurationMinutes,
   reminderCreateClarification,
   resolveExplicitReminderDaypartRange,
@@ -514,7 +515,15 @@ Deno.serve(async (req) => {
   const explicitReminderCreate = Boolean(
     reminderCreateRequestText &&
     isExplicitReminderRequest(reminderCreateRequestText) &&
-    !isExplicitReminderCompletion(reminderCreateRequestText)
+    !isExplicitReminderCompletion(reminderCreateRequestText) &&
+    // A message that also names 2+ distinct days likely describes more than
+    // one calendar item (e.g. "add soccer Tuesday..., piano Thursday..., and
+    // remind me about the dentist Monday..."), which this deterministic
+    // single-reminder fast path has no way to notice -- back off and let the
+    // general planner (calendar_batch_create) handle it instead. See
+    // looksLikeCompoundCalendarRequest's own comment for the live bug this
+    // closes.
+    !looksLikeCompoundCalendarRequest(reminderCreateRequestText)
   )
   const reminderClarification = explicitReminderCreate
     ? reminderCreateClarification(reminderCreateRequestText)
@@ -2149,7 +2158,16 @@ Deno.serve(async (req) => {
     agentWriteEnabled: agentWriteConfig?.enabled === true,
     agentWriteRate,
     isCalendarSemanticRead,
-    reminderDomainLanguage,
+    // reminderDomainLanguage ordinarily routes a message to the specialized,
+    // deterministic reminder pipeline further below instead of this general
+    // planner -- correct for a genuine single-reminder request, but that
+    // deterministic pipeline has no notion of compound requests and silently
+    // claimed (and mangled) an entire multi-item message purely because it
+    // contained reminder language anywhere in it (see the live bug
+    // looksLikeCompoundCalendarRequest's own comment documents). When the
+    // message looks compound, let it through to the general planner instead,
+    // which now has calendar_batch_create.
+    reminderDomainLanguage: reminderDomainLanguage && !looksLikeCompoundCalendarRequest(latestUserText),
     explicitReminderCreate,
     hasGroceryFrame: Boolean(groceryFrame),
     pageEligible: AGENT_GENERAL_PAGES.has(String(context?.page ?? '')),
@@ -6231,6 +6249,15 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           now,
           utcOffset,
           familyNames: (familyMembers as { name: string }[]).map((member) => member.name),
+          // Defense in depth: shouldRunAgentWrite should already route a
+          // compound-looking message to the general planner before this
+          // fallback is ever reached, but if it isn't reached for any reason
+          // (feature flag, ineligible page, etc.), this naive matcher must
+          // still not silently collapse a multi-item message into one
+          // mangled item -- see looksLikeCompoundCalendarRequest's comment
+          // for the live bug this closes. Move/delete matching (keyed to a
+          // real existing event) is unaffected.
+          skipCompoundCreate: looksLikeCompoundCalendarRequest(latestUserText),
         },
       )
       const deterministicMutation = rawDeterministicMutation?.event
