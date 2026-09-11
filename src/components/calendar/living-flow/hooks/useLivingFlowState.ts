@@ -280,6 +280,13 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
   const currentEventIdRef = useRef(initialEvent?.id)
   const activeEventRef = useRef<EventWithDetails | null>(initialEvent)
   const lastEventUpdatedAtRef = useRef(initialEvent?.updated_at)
+  // Rapid back-to-back travel-behavior toggles otherwise fire overlapping
+  // persistDriverAndTravel calls that each snapshot activeEventRef at click
+  // time -- a later call can start before an earlier one has finished
+  // updating that ref, so it acts on stale membership data. Chaining every
+  // call onto this promise makes them run strictly one at a time, each
+  // reading activeEventRef only once the previous call has fully settled.
+  const persistDriverAndTravelQueueRef = useRef<Promise<void>>(Promise.resolve())
 
   // Sync state whenever event prop changes
   useEffect(() => {
@@ -422,7 +429,7 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     }
   }, [queryClient, initialEvent?.id])
 
-  const persistDriverAndTravel = useCallback(async (
+  const persistDriverAndTravelTask = useCallback(async (
     newDriverLeg1: string,
     newDriverLeg2: string,
     newBehavior: TravelBehavior,
@@ -544,16 +551,21 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
       }
 
       if (relevantDriverIds.length > 0) {
-        const existingMemberIds = new Set(existingMembers.map(m => m.family_member?.id || m.id))
+        // event_members has a unique (event_id, family_member_id) constraint
+        // regardless of role, so a plain insert 409s ("duplicate key") the
+        // moment a row already exists for this member on this event -- which
+        // happened live on rapid back-and-forth toggling (the pre-fetched
+        // existingMemberIds snapshot doesn't see a row an overlapping call is
+        // still writing). Upserting is unconditionally safe here: whether the
+        // row is brand new or already exists under a different role, the
+        // desired end state is the same -- this member is now a driver.
         for (const drvId of relevantDriverIds) {
-          if (!existingMemberIds.has(drvId)) {
-            await supabase.from('event_members').insert({
-              event_id: currentEvent.id,
-              family_member_id: drvId,
-              role: 'driver',
-              rsvp_status: 'accepted',
-            })
-          }
+          await supabase.from('event_members').upsert({
+            event_id: currentEvent.id,
+            family_member_id: drvId,
+            role: 'driver',
+            rsvp_status: 'accepted',
+          }, { onConflict: 'event_id,family_member_id' })
         }
       }
 
@@ -599,6 +611,17 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
       console.error('[LivingFlow] Failed to persist driver and travel:', err)
     }
   }, [initialEvent, familyMembers, queryClient, invalidateCalendar])
+
+  const persistDriverAndTravel = useCallback((
+    newDriverLeg1: string,
+    newDriverLeg2: string,
+    newBehavior: TravelBehavior,
+  ) => {
+    const run = () => persistDriverAndTravelTask(newDriverLeg1, newDriverLeg2, newBehavior)
+    const next = persistDriverAndTravelQueueRef.current.then(run, run)
+    persistDriverAndTravelQueueRef.current = next
+    return next
+  }, [persistDriverAndTravelTask])
 
   // Scoped recurring field mutation helper
   const persistRecurringFieldMutation = useCallback(async (

@@ -53,3 +53,22 @@ test('"none" (no drive at all) excludes BOTH driver legs from relevantDriverIds,
   // above never actually fired for the one mode where it matters most.
   assert.match(livingFlowState, /const relevantDriverIds = newBehavior === 'none' \? \[\] : \[/)
 })
+
+test('rapid back-and-forth toggles are serialized, not fired as overlapping concurrent writes', () => {
+  // Live-reproduced 2026-09-11: clicking "Needs Family Ride" / "At Home" several
+  // times quickly threw a real 23505 "duplicate key" 409 from event_members
+  // (unique on event_id+family_member_id) -- an unqueued insert racing another
+  // in-flight call's insert of the same row. The whole persist function aborted
+  // silently on that exception, which is exactly how a toggle could end up
+  // "stuck" on whichever behavior happened to win the race, ignoring later clicks.
+  assert.match(livingFlowState, /const persistDriverAndTravelQueueRef = useRef<Promise<void>>\(Promise\.resolve\(\)\)/)
+  assert.match(livingFlowState, /const next = persistDriverAndTravelQueueRef\.current\.then\(run, run\)/)
+})
+
+test('the driver upsert is unconditionally idempotent instead of check-then-insert', () => {
+  // The old "look up existingMemberIds, insert only if missing" pattern is
+  // exactly what raced under rapid toggling -- upsert makes the same call safe
+  // regardless of ordering or whether a row already exists.
+  assert.match(livingFlowState, /\.from\('event_members'\)\.upsert\(\{/)
+  assert.match(livingFlowState, /\{ onConflict: 'event_id,family_member_id' \}/)
+})
