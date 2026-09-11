@@ -5,6 +5,7 @@ import {
   calendarMutationClarification,
   answerPendingSelectiveClear,
   calendarDeleteAmbiguityClarification,
+  findTargetEventFromText,
   isCalendarMutationDisambiguationFollowUp,
   resolveCalendarDeleteDisambiguation,
   resolveClarifiedCalendarCreate,
@@ -26,6 +27,31 @@ const event = {
 // routing calendar.create requests through the ai-agent-write LLM planner (see
 // ai-assistant/index.ts and git history). It kept accumulating narrow regex bugs
 // that the planner's existing temporal-evidence safety net doesn't have.
+
+test('findTargetEventFromText does not substring-match a connector word inside an unrelated event title', () => {
+  // Bug: token matching used `eventTitle.includes(token)` (substring, not
+  // whole-word), so the bare word "and" -- pure sentence glue joining the two
+  // halves of a compound request -- matched inside "GrANDpa Carl's Birthday
+  // Celebration", making that totally unrelated real event become the ambient
+  // "active conversation event" for the turn. This function runs unconditionally
+  // on every message with no existing active entity (to ground pronouns like
+  // "move it"), so this silently made "cancel my Sunday appointment" and "move
+  // my Tuesday meeting" resolve against someone's birthday party instead.
+  const events = [
+    { id: 'birthday', title: "Grandpa Carl's Birthday Celebration" },
+    { id: 'wellbeing', title: "Pega's Global Well-Being Day" },
+  ]
+  const compound1 = 'Schedule lunch with Sarah Monday at noon and move my Tuesday meeting to 3pm.'
+  const compound2 = 'Put dinner on for Saturday at 10 and cancel my Sunday appointment.'
+  assert.equal(findTargetEventFromText(compound1, events), null, compound1)
+  assert.equal(findTargetEventFromText(compound2, events), null, compound2)
+  // Sanity: real whole-word content matches must still work.
+  const real = findTargetEventFromText('Move the haircut to 4pm instead.', [
+    ...events,
+    { id: 'haircut-real', title: 'Haircut with Dana' },
+  ])
+  assert.equal(real?.id, 'haircut-real')
+})
 
 test('active event shifts preserve duration and support relational scheduling', () => {
   const shifted = resolveActiveCalendarMutation('Move that trip back two days.', event, [event], { utcOffset: '-04:00' })

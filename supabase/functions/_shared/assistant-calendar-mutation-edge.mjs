@@ -137,7 +137,12 @@ export function findTargetEventFromText(text, events, options = {}) {
   if (tokens.length > 0) {
     const tokenMatches = events.filter((e) => {
       const eTitle = String(e.title ?? '').toLowerCase()
-      return tokens.some((token) => eTitle.includes(token))
+      // Whole-word match, not substring: a bare connector word like "and" (real
+      // sentence glue in a compound request, not an identifying word) must not
+      // match merely because it appears inside an unrelated word, e.g. "and" inside
+      // "Grandpa" -- tokens only ever contain \w characters (see the replace/split
+      // above), so no escaping is needed to embed them in a RegExp safely.
+      return tokens.some((token) => new RegExp(`\\b${token}\\b`, 'i').test(eTitle))
     })
     if (tokenMatches.length === 1) return tokenMatches[0]
   }
