@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
-import { Home, Calendar, ShoppingCart, Sun, Settings, Music, MoreHorizontal, ChefHat, Sparkles } from 'lucide-react'
+import { Home, Calendar, ShoppingCart, Sun, Settings, MoreHorizontal, ChefHat, Sparkles } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useCalendarStore } from '../../stores/calendarStore'
@@ -113,16 +113,6 @@ export default function NavBar() {
                     <Sparkles size={18} strokeWidth={1.8} className="text-blue-600" />
                   </div>
                   <span className="text-body-md font-medium text-casa-navy">Action Queue</span>
-                </Button>
-
-                <Button variant="ghost"
-                  className="w-full flex items-center gap-4 px-5 py-3.5 hover:bg-casa-bg active:bg-casa-bg transition-colors"
-                  onClick={() => { navigate('/music'); setMoreOpen(false) }}
-                >
-                  <div className="w-9 h-9 rounded-xl bg-casa-gold/15 flex items-center justify-center flex-shrink-0">
-                    <Music size={18} strokeWidth={1.8} className="text-casa-gold" />
-                  </div>
-                  <span className="text-body-md font-medium text-casa-navy">Music</span>
                 </Button>
 
                 <Button variant="ghost"
