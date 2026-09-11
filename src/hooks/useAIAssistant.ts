@@ -18,6 +18,7 @@ import {
 import { assistantErrorMessage } from '../lib/assistantErrors.mjs'
 import { useProfileSession } from '../contexts/useProfileSession'
 import { resolveFocusedEventDeterministicAnswer, deriveEventTransportation } from '../lib/focusedEventDeterministicAnswer'
+import { derivePendingBatchAction } from '../lib/assistantPendingBatch.mjs'
 
 export type { AIMessage }
 
@@ -178,6 +179,7 @@ function buildContext(ctx: AssistantContext, messages: AIMessage[], experienceMo
       message.toolAction.tool !== 'confirm_talk_plan_action_intent'
     )
     ?.toolAction
+  const pendingBatchAction = derivePendingBatchAction(messages)
 
   return {
     page: ctx.page,
@@ -193,6 +195,7 @@ function buildContext(ctx: AssistantContext, messages: AIMessage[], experienceMo
       tool: pendingAction.tool,
       args: pendingAction.args,
     } : undefined,
+    pendingBatchAction,
     focusedAction: ctx.focusedAction ? {
       id: ctx.focusedAction.actionId,
       title: ctx.focusedAction.title,

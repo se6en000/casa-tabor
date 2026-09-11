@@ -448,6 +448,7 @@ FAMILY: ${context.family.join(', ') || 'not supplied'}
 AUTHORITATIVE ENTITIES: ${JSON.stringify(context.authoritativeEntities)}
 ACTIVE ENTITY: ${JSON.stringify(context.activeEntity)}
 PENDING ACTION: ${JSON.stringify(context.pendingAction)}
+${context.pendingBatchAction ? `PENDING BATCH PROPOSAL: ${context.pendingBatchAction.count} events awaiting the user's own explicit confirmation tap: ${context.pendingBatchAction.titles.join(', ')}` : ''}
 COMPLETED TOOL CALLS: ${JSON.stringify(context.completedToolCalls)}
 
 STATE RULES:
@@ -456,6 +457,7 @@ STATE RULES:
 - If AUTHORITATIVE ENTITIES contains exactly one matching target, use its exact ID and version without searching again.
 - If multiple authoritative entities plausibly match a destructive request, ask which one; never choose.
 - PENDING ACTION is a proposal, not a stored entity. A correction to it MUST call the same pending capability with revised arguments. For example, revise calendar.create with calendar.create, never calendar.update.
+- A PENDING BATCH PROPOSAL is already fully displayed to the user with its own confirm button and its own checkboxes; you never re-propose, recreate, resend, or edit it, even partially. There is no way to edit one field of an already-proposed item -- the user selects which of the listed items to keep with the checkboxes and confirms, or asks again with full details for a genuinely new, separate request. If the latest user turn is a remark with no new request, OR mentions one of the listed titles in any way (a correction, an added detail, a field to change), classify requested_domain=other with reason=unsupported and do nothing -- never reconstruct or modify the batch from earlier turns.
 - COMPLETED TOOL CALLS contain authoritative results already gathered during this turn. Continue the original user goal without repeating those reads.
 - A completed calendar.check_conflicts result with count 0 means the proposed time is clear; proceed to calendar.create or calendar.update and never check the same range again.
 - When that completed conflict result has count 0, calling calendar.check_conflicts again is forbidden and the function is no longer available. Continue to the requested calendar write.
@@ -772,6 +774,18 @@ function normalizeContext(value) {
       : null,
     pendingAction: context.pendingAction && typeof context.pendingAction === 'object'
       ? context.pendingAction
+      : null,
+    pendingBatchAction: context.pendingBatchAction &&
+      typeof context.pendingBatchAction === 'object' &&
+      Number.isSafeInteger(context.pendingBatchAction.count) &&
+      Array.isArray(context.pendingBatchAction.titles)
+      ? {
+          count: context.pendingBatchAction.count,
+          titles: context.pendingBatchAction.titles
+            .filter((title) => typeof title === 'string')
+            .slice(0, 10)
+            .map((title) => title.slice(0, 120)),
+        }
       : null,
     completedToolCalls: Array.isArray(context.completedToolCalls)
       ? context.completedToolCalls.slice(0, 2)

@@ -2459,6 +2459,7 @@ Deno.serve(async (req) => {
                 }
               : null,
           pendingAction: context?.pendingAction,
+          pendingBatchAction: context?.pendingBatchAction,
         },
         authoritative_data: {
           events: allEvents ?? [],

@@ -736,6 +736,52 @@ test('the bounded-write instruction explicitly calls out noon/midnight as period
   assert.match(instruction, /\bmidnight\b.*\bam\b/i)
 })
 
+test('a pending batch proposal is exposed to the planner and instructs it not to reconstruct an unconfirmed batch from a non-actionable follow-up', () => {
+  // Found live 2026-09-11 via a real user bug report: with a 3-item batch
+  // proposed but not yet confirmed (the user hadn't tapped "Add N events"
+  // yet), replying "great job." -- not a real instruction, just a remark --
+  // caused the planner to re-derive and re-propose the ENTIRE batch from
+  // conversation history, since additive_write mode's mode:ANY forces some
+  // function call every turn and nothing told the model a batch was already
+  // sitting there awaiting the user's own explicit confirm tap. Confirmed
+  // via a parallel test: a PENDING ACTION (single-item) in the same
+  // situation correctly makes the model defer instead of reconstructing --
+  // this gives batch proposals the same signal.
+  const request = buildAgentShadowRequest({
+    messages: [{ role: 'user', content: 'great job.' }],
+    context: {
+      pendingBatchAction: {
+        count: 3,
+        titles: ['Soccer Practice', 'Piano', 'Bring Sheet Music'],
+      },
+    },
+    plannerMode: 'additive_write',
+  })
+  const instruction = request.system_instruction.parts[0].text
+  assert.match(instruction, /PENDING BATCH PROPOSAL/)
+  assert.match(instruction, /Soccer Practice/)
+  assert.match(instruction, /awaiting the user's own explicit confirmation/)
+})
+
+test('the pending-batch instruction also covers a message that references one of the pending titles, not just an unrelated remark', () => {
+  // Same live bug report, a second symptom of the same root cause: "add
+  // lake lytal as the location for soccer practice" DOES reference a
+  // pending title ("soccer practice"), so it isn't a pure no-content remark
+  // -- but v1 has no way to edit one field of an already-proposed item
+  // (checkbox-select or fully re-ask are the only supported actions), so
+  // this must still be declined, not silently reconstructed into a fresh
+  // 3-item batch with the location grafted on.
+  const request = buildAgentShadowRequest({
+    messages: [{ role: 'user', content: 'add lake lytal as the location for soccer practice' }],
+    context: {
+      pendingBatchAction: { count: 3, titles: ['Soccer Practice', 'Piano', 'Bring Sheet Music'] },
+    },
+    plannerMode: 'additive_write',
+  })
+  const instruction = request.system_instruction.parts[0].text
+  assert.match(instruction, /no way to edit one field of an already-proposed/i)
+})
+
 test('a create_multiple response with fewer than two turns is not treated as a batch (falls through to defer)', () => {
   const result = parseAgentShadowResponse({
     candidates: [{

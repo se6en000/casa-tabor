@@ -424,7 +424,10 @@ export default function AIChatDrawer({
 
   const activePendingToolMessage = [...messages]
     .reverse()
-    .find(message => message.toolAction?.status === 'pending')
+    .find(message =>
+      message.toolAction?.status === 'pending' ||
+      message.toolActionBatch?.actions.some((action) => action.status === 'proposed')
+    )
   const hasPendingToolAction = Boolean(activePendingToolMessage)
   const activePendingToolMessageId = activePendingToolMessage?.id
 

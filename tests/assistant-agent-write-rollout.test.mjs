@@ -54,6 +54,10 @@ test('a compound-looking message is not excluded from the write planner just bec
   assert.match(assistant, /reminderDomainLanguage: reminderDomainLanguage && !looksLikeCompoundCalendarRequest/)
 })
 
+test('a pending batch proposal from the client is forwarded to ai-agent-write, mirroring how a single pendingAction already is', () => {
+  assert.match(assistant, /pendingBatchAction: context\?\.pendingBatchAction/)
+})
+
 test('write rollout forwards a calendar_batch_create proposal to the client as its own batch type, normalized the same way single tool actions are', () => {
   assert.match(assistant, /agentWriteData\.type === 'tool_action_batch'/)
   const batchSection = assistant.slice(assistant.indexOf("'tool_action_batch'"))
