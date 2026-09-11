@@ -13,6 +13,7 @@ export const APPEARANCE_PRESETS = [
     description: 'Dark umber, parchment, and burnished cognac',
     colors: {
       'casa-gold': '#C69A6B',
+      'casa-gold-hover': '#75402E',
       'casa-navy': '#4A2F20',
       'casa-bg': '#EDE5D8',
       'casa-bg-2': '#E4D9CA',
@@ -48,6 +49,7 @@ export const APPEARANCE_PRESETS = [
     description: 'Dusty rose, soft plaster, and smoked berry',
     colors: {
       'casa-gold': '#D8A6AF',
+      'casa-gold-hover': '#6D4651',
       'casa-navy': '#50343D',
       'casa-bg': '#F8F1F0',
       'casa-bg-2': '#EFE3E2',
@@ -83,6 +85,7 @@ export const APPEARANCE_PRESETS = [
     description: 'Glazed teal, limestone, and unlacquered brass',
     colors: {
       'casa-gold': '#C8B28A',
+      'casa-gold-hover': '#58674B',
       'casa-navy': '#1F4744',
       'casa-bg': '#F1F3EE',
       'casa-bg-2': '#E5E9E2',
@@ -118,6 +121,7 @@ export const APPEARANCE_PRESETS = [
     description: 'Flax, smoked plum, and sun-washed clay',
     colors: {
       'casa-gold': '#D09A8B',
+      'casa-gold-hover': '#76554F',
       'casa-navy': '#49343E',
       'casa-bg': '#F3F0EA',
       'casa-bg-2': '#E8E3DA',
@@ -153,6 +157,7 @@ export const APPEARANCE_PRESETS = [
     description: 'Moss, bone, and antique celadon',
     colors: {
       'casa-gold': '#B8AD7E',
+      'casa-gold-hover': '#66704A',
       'casa-navy': '#35422F',
       'casa-bg': '#F1F1E9',
       'casa-bg-2': '#E5E6DA',
@@ -188,6 +193,7 @@ export const APPEARANCE_PRESETS = [
     description: 'Blue slate, chalk, and oxidized pewter',
     colors: {
       'casa-gold': '#A9B9BD',
+      'casa-gold-hover': '#536A70',
       'casa-navy': '#344852',
       'casa-bg': '#EEF0EE',
       'casa-bg-2': '#E1E5E3',

@@ -2,6 +2,7 @@
 
 @theme static {
   --color-casa-gold: #C9A96E;
+  --color-casa-gold-hover: #8A5A1E;
   --color-casa-navy: #1B2A4A;
   --color-casa-bg: #FAF8F5;
   --color-casa-bg-2: #F2EEE7;
@@ -191,6 +192,7 @@ html[data-density="kiosk"] {
 
 html.midnight-gallery {
   --color-casa-gold: #9F8658;
+  --color-casa-gold-hover: #F0C98F;
   --color-casa-navy: #0E1218;
   --color-casa-bg: #090C11;
   --color-casa-bg-2: #070A0F;

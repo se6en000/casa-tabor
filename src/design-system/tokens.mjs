@@ -1,5 +1,6 @@
 export const THEME_COLOR_KEYS = [
   'casa-gold',
+  'casa-gold-hover',
   'casa-navy',
   'casa-bg',
   'casa-bg-2',
@@ -35,6 +36,11 @@ export const MAX_FONT_SCALE = 1.3
 
 export const DEFAULT_THEME_COLORS = {
   'casa-gold': '#C9A96E',
+  // A deepened gold for hover/emphasis text on light surfaces (base casa-gold
+  // is too pale for good body-text contrast on white/cream). Was referenced
+  // as `text-casa-gold-hover` in ~20 places across the app without ever being
+  // defined here -- a silent no-op that just never rendered any color.
+  'casa-gold-hover': '#8A5A1E',
   'casa-navy': '#1B2A4A',
   'casa-bg': '#FAF8F5',
   'casa-bg-2': '#F2EEE7',
@@ -66,6 +72,8 @@ export const DEFAULT_THEME_COLORS = {
 
 export const MIDNIGHT_THEME_COLORS = {
   'casa-gold': '#9F8658',
+  // On dark surfaces, hover/emphasis brightens rather than deepens.
+  'casa-gold-hover': '#F0C98F',
   'casa-navy': '#0E1218',
   'casa-bg': '#090C11',
   'casa-bg-2': '#070A0F',
