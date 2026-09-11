@@ -44,6 +44,17 @@ if [ -n "$(git status --porcelain)" ]; then
   git add -A
   git commit -m "${COMMIT_MSG:-Deploy $(date -u +%Y-%m-%dT%H:%M:%SZ)}" >>"$LOG" 2>&1
   ok "committed"
+  # vite.config.ts bakes `git rev-parse HEAD` into version.json at build time --
+  # but the build in step 2 ran BEFORE this commit existed, so that file has
+  # the PREVIOUS commit's SHA, one behind what's about to be pushed/deployed.
+  # Patch just this tiny manifest post-commit instead of repeating the whole
+  # build (this is exactly what the "prebuilt" step 5 relies on being cheap).
+  NEW_SHA=$(git rev-parse HEAD)
+  BUILT_AT=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
+  VERSION_JSON="{\"version\":\"$NEW_SHA\",\"builtAt\":\"$BUILT_AT\"}"
+  for f in dist/version.json .vercel/output/static/version.json; do
+    [ -f "$f" ] && printf '%s' "$VERSION_JSON" > "$f"
+  done
 else
   ok "working tree already clean"
 fi
