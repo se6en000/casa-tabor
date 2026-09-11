@@ -270,7 +270,17 @@ export function parseCalendarLanguage(text, options = {}) {
     /\b(add|create|book|schedule)\b/.test(input) &&
     /\b(event|appointment|meeting|reminder|practice|party|dinner|trip|vacation)\b/.test(input)
   )
-  const attendeeUpdate = /\badd\s+[\w'-]+(?:\s+too|\s+to\s+(?:the\s+)?(?:calendar\s+)?(?:event|appointment|meeting|dinner|party|practice))\b/.test(input)
+  // The generic-noun match below ("add X to the event/appointment/...") only
+  // covers a bare generic reference. Real phrasing almost always names the
+  // active event by its own specific title instead ("add Liv to soccer
+  // practice", "add Owen to piano lesson") -- without a scope word attached,
+  // adding someone "to" an active event is a real distinguishing signal
+  // (a genuine new-event request almost always names a day/time), so the
+  // fixed noun list would otherwise miss most everyday phrasing.
+  const attendeeUpdate = Boolean(
+    /\badd\s+[\w'-]+(?:\s+too|\s+to\s+(?:the\s+)?(?:calendar\s+)?(?:event|appointment|meeting|dinner|party|practice))\b/.test(input) ||
+    (activeEvent && !scope && /\badd\s+[\w'-]+(?:\s+[\w'-]+){0,2}\s+to\s+[\w'-]+(?:\s+[\w'-]+){0,4}\b/.test(input))
+  )
   const activeEditLanguage = activeEvent &&
     /\b(set|put|adjust|make|rename|call|include|exclude|extend|shorten)\b/.test(input)
   // "Schedule" is deliberately kept out of the bare add/create/book/... verb list

@@ -153,6 +153,46 @@ test('active-event mutation verbs cannot be mistaken for grounded read follow-up
   }
 })
 
+test('adding a person to a SPECIFICALLY NAMED active event (not a generic "the event") is an edit, not a new create', () => {
+  // Found live 2026-09-11 via a real user bug report: attendeeUpdate's regex
+  // only matched "add X to (the) (calendar) event/appointment/meeting/..."
+  // -- the fixed generic noun list -- so "add Liv to soccer practice" (the
+  // far more natural, common phrasing: a person's name plus the event's own
+  // specific title) fell through to the generic add/create/book pattern and
+  // was wrongly classified event.create. Downstream, isAgentWriteCompatible's
+  // event.create allowlist only permits create_event, so the shadow
+  // planner's correctly-resolved calendar.update plan was silently discarded
+  // as "incompatible" even though it was exactly right -- a deterministic
+  // GATING misclassification overriding a correct LLM interpretation.
+  const active = { activeEntityType: 'event' }
+  for (const text of [
+    'add Liv to soccer practice',
+    'add Liv to that apt',
+    'Add Owen to piano lesson',
+    'add Kelly to book club',
+  ]) {
+    assert.equal(parseCalendarLanguage(text, active)?.intent, 'event.edit', text)
+  }
+})
+
+test('adding a person to a specifically named event is NOT reclassified as edit when there is no active event at all', () => {
+  // The broadened match is deliberately scoped to activeEvent context only --
+  // without an active/focused event, there's nothing to edit, so this must
+  // still fall through normally (matches this file's existing "no active
+  // entity" coverage elsewhere).
+  const result = parseCalendarLanguage('add Liv to soccer practice')
+  assert.notEqual(result?.intent, 'event.edit')
+})
+
+test('a genuine new-event create request is NOT reclassified as an edit just because an event happens to be active', () => {
+  // The distinguishing signal is a temporal scope (a day/time), which a real
+  // new-event request almost always carries and a person/attribute edit to
+  // the active event almost never does.
+  const active = { activeEntityType: 'event' }
+  assert.equal(parseCalendarLanguage('add soccer practice tuesday at 4', active)?.intent, 'event.create')
+  assert.equal(parseCalendarLanguage('add a dentist appointment friday at 2pm', active)?.intent, 'event.create')
+})
+
 test('household afternoon agenda scope includes early-evening activities', () => {
   const range = calendarRangeForScope({
     kind: 'weekday',
