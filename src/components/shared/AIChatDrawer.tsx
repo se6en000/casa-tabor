@@ -2964,14 +2964,18 @@ function BatchProposalCard({ msg, onOpenEventDetails, sessionId, getTraceContext
               {status === 'loading' && <Loader2 size={16} className="animate-spin text-casa-muted shrink-0 mt-1" />}
             </div>
             {status === 'done' && rowResultEventId[row.index] && (
-              <Button
-                variant="ghost"
-                type="button"
-                onClick={() => onOpenEventDetails?.(rowResultEventId[row.index])}
-                className="min-h-11 px-0 pl-8 text-caption font-semibold text-casa-gold underline underline-offset-2 hover:text-casa-navy"
-              >
-                Open details
-              </Button>
+              <div className="pl-8 space-y-1">
+                <p className="text-caption text-casa-muted">Visible on your calendar now</p>
+                <p className="text-caption text-casa-muted">Finalizing address, contact, and driving-plan details in the background — check back shortly</p>
+                <Button
+                  variant="ghost"
+                  type="button"
+                  onClick={() => onOpenEventDetails?.(rowResultEventId[row.index])}
+                  className="min-h-11 px-0 text-caption font-semibold text-casa-gold underline underline-offset-2 hover:text-casa-navy"
+                >
+                  Open appointment details
+                </Button>
+              </div>
             )}
             {status !== 'done' && (
               <div className="flex gap-1.5 pl-8">
