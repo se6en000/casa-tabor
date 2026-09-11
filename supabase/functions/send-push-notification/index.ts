@@ -2,7 +2,7 @@
 // Sends a web push to all subscribed devices
 // Body: { title, body, url?, tag? }
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import webpush from 'npm:web-push'
+import webpush from 'npm:web-push@3.6.7'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
