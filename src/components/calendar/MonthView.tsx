@@ -643,7 +643,9 @@ export default function MonthView() {
     }
   }, [selectedDate, months, scrollToMonth])
 
-  // Continuous infinite scroll: auto-load future/past months on scroll
+  // Continuous infinite scroll: auto-load future/past months on scroll.
+  // Only reads already-computed scroll geometry -- no layout queries here,
+  // so this stays cheap on every scroll event.
   const handleScroll = useCallback(() => {
     const container = scrollContainerRef.current
     if (!container) return
@@ -659,28 +661,44 @@ export default function MonthView() {
         return [...prev, next1, next2]
       })
     }
+  }, [])
 
-    // Top-bar synchronization: detect which month is currently visible near the top
-    if (!isProgrammaticScroll.current) {
-      const monthSections = container.querySelectorAll<HTMLElement>('.month-section')
-      const containerRect = container.getBoundingClientRect()
-      
-      for (const section of monthSections) {
-        const rect = section.getBoundingClientRect()
-        // If the top of the month section is within the upper viewport area
-        if (rect.top <= containerRect.top + 120 && rect.bottom >= containerRect.top + 80) {
-          const key = section.getAttribute('data-month-key')
-          if (key && key !== lastObservedMonth.current) {
-            lastObservedMonth.current = key
-            const [yearStr, monthStr] = key.split('-')
-            const newDate = new Date(parseInt(yearStr, 10), parseInt(monthStr, 10) - 1, 1)
-            setSelectedDate(newDate)
-          }
-          break
+  // Top-bar synchronization: detect which month is currently visible near the
+  // top, via IntersectionObserver instead of a scroll-tied getBoundingClientRect
+  // loop over every mounted month section. That loop forced a synchronous
+  // layout recalculation on every single scroll event (main thread work
+  // fighting the touch-scroll compositor for the same frame budget) and grew
+  // more expensive the longer a scroll session ran, since months only ever
+  // accumulate -- root-caused as the reason the calendar scrolled noticeably
+  // choppier than pages with no scroll-tied JS (2026-09-12).
+  useEffect(() => {
+    const container = scrollContainerRef.current
+    if (!container) return
+
+    const sections = container.querySelectorAll<HTMLElement>('.month-section')
+    if (sections.length === 0) return
+
+    const observer = new IntersectionObserver(
+      entries => {
+        if (isProgrammaticScroll.current) return
+        const visible = entries.filter(e => e.isIntersecting)
+        if (visible.length === 0) return
+        visible.sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)
+        const key = visible[0].target.getAttribute('data-month-key')
+        if (key && key !== lastObservedMonth.current) {
+          lastObservedMonth.current = key
+          const [yearStr, monthStr] = key.split('-')
+          const newDate = new Date(parseInt(yearStr, 10), parseInt(monthStr, 10) - 1, 1)
+          setSelectedDate(newDate)
         }
-      }
-    }
-  }, [setSelectedDate])
+      },
+      // Treat only the top ~20% of the container as the "currently viewing" band.
+      { root: container, rootMargin: '0px 0px -80% 0px', threshold: 0 }
+    )
+    sections.forEach(section => observer.observe(section))
+
+    return () => observer.disconnect()
+  }, [months, setSelectedDate])
 
   return (
     <div

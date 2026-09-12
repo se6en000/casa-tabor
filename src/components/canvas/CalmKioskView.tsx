@@ -170,7 +170,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
   const heroIntel = useHeroIntelligence(now, upcomingAppointments, familyMembers, heroManualView || 'today')
 
   return (
-    <div className="w-full h-full flex flex-col justify-start px-4 sm:px-6 lg:px-8 xl:px-10 pt-5 sm:pt-6 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-8 overflow-y-auto scrollbar-hide">
+    <div className="w-full h-full flex flex-col justify-start px-4 sm:px-6 lg:px-8 xl:px-10 pt-5 sm:pt-6 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-8 overflow-y-auto overscroll-contain touch-pan-y scrollbar-hide">
       {/* ── Gmail Sync Health Warning Banner ── */}
       <GmailSyncStatusIndicator variant="banner" className="mb-5 shrink-0" />
 
