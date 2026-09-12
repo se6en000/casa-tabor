@@ -195,30 +195,33 @@ export const DESIGN_TOKENS = {
     pill: '9999px',
   },
   shadow: {
-    // Deepened from a near-invisible 1-3px hairline -- the old value gave
-    // every card almost no real lift off the page ("washed out" feedback
-    // 2026-09-12). Kept the navy tint (rgba(27,42,74,...)) rather than pure
-    // black so the shadow still reads as warm, not a generic UI drop-shadow.
-    card: '0 10px 24px rgba(27,42,74,0.10), 0 2px 6px rgba(27,42,74,0.06)',
-    'card-hover': '0 16px 36px rgba(27,42,74,0.14)',
-    widget: '0 8px 20px rgba(27,42,74,0.08), 0 2px 6px rgba(27,42,74,0.05)',
-    'glow-gold': '0 0 20px rgba(201,169,110,0.25)',
-    'glow-amber': '0 0 18px rgba(245,158,11,0.25)',
-    'glow-emerald': '0 0 18px rgba(16,185,129,0.25)',
-    'hero-dark': '0 20px 40px -15px rgba(15,23,42,0.4), 0 0 0 1px rgba(255,255,255,0.08)',
-    modal: '0 8px 30px rgba(27,42,74,0.12)',
-    fab: '0 4px 14px rgba(201,169,110,0.3)',
+    // Blur radius drives GPU raster cost (wider sample kernel + wider paint
+    // bounds), and these run on every card on screen at once. Deepened from
+    // a near-invisible hairline for the "washed out" feedback (2026-09-12),
+    // then re-tuned here for the Pi 5's VideoCore GPU after "staggered"
+    // touch-scroll was traced to shadow blur cost, not fill-rate alone
+    // (2026-09-12): same navy-tinted depth, roughly half the blur radius,
+    // opacity raised to compensate so the lift still reads at a glance.
+    card: '0 4px 10px rgba(27,42,74,0.14), 0 1px 2px rgba(27,42,74,0.08)',
+    'card-hover': '0 8px 18px rgba(27,42,74,0.18)',
+    widget: '0 3px 8px rgba(27,42,74,0.10), 0 1px 2px rgba(27,42,74,0.06)',
+    'glow-gold': '0 0 10px rgba(201,169,110,0.30)',
+    'glow-amber': '0 0 9px rgba(245,158,11,0.30)',
+    'glow-emerald': '0 0 9px rgba(16,185,129,0.30)',
+    'hero-dark': '0 10px 22px -10px rgba(15,23,42,0.45), 0 0 0 1px rgba(255,255,255,0.08)',
+    modal: '0 6px 16px rgba(27,42,74,0.16)',
+    fab: '0 3px 10px rgba(201,169,110,0.35)',
   },
   midnightShadow: {
-    card: '0 1px 3px rgba(0,0,0,0.45), 0 1px 2px rgba(0,0,0,0.35)',
-    'card-hover': '0 6px 18px rgba(0,0,0,0.55)',
-    widget: '0 4px 16px rgba(0,0,0,0.45)',
-    'glow-gold': '0 0 24px rgba(159,134,88,0.35)',
-    'glow-amber': '0 0 20px rgba(210,164,101,0.30)',
-    'glow-emerald': '0 0 20px rgba(74,165,106,0.30)',
-    'hero-dark': '0 24px 48px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.12)',
-    modal: '0 12px 36px rgba(0,0,0,0.65)',
-    fab: '0 6px 18px rgba(159,134,88,0.40)',
+    card: '0 1px 2px rgba(0,0,0,0.5), 0 1px 1px rgba(0,0,0,0.35)',
+    'card-hover': '0 4px 10px rgba(0,0,0,0.6)',
+    widget: '0 3px 8px rgba(0,0,0,0.5)',
+    'glow-gold': '0 0 12px rgba(159,134,88,0.40)',
+    'glow-amber': '0 0 10px rgba(210,164,101,0.35)',
+    'glow-emerald': '0 0 10px rgba(74,165,106,0.35)',
+    'hero-dark': '0 12px 26px rgba(0,0,0,0.75), 0 0 0 1px rgba(255,255,255,0.12)',
+    modal: '0 8px 20px rgba(0,0,0,0.7)',
+    fab: '0 4px 12px rgba(159,134,88,0.45)',
   },
   motion: {
     fast: '120ms',
