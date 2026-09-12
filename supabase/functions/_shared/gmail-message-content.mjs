@@ -12,14 +12,35 @@ function decodeHtmlEntities(value) {
     .replace(/&#39;/g, "'")
 }
 
+// Converts email HTML to lightweight Markdown instead of flattening
+// everything to plain text. Two problems drove this (live feedback,
+// 2026-09-12): (1) only p/div/tr/li/br/h1-6 were turned into whitespace, so
+// any other tag (span, td, font, a, ...) was deleted with nothing put in its
+// place -- adjacent inline runs like "<strong>Message</strong><p>Please..."
+// rendered as the words glommed together ("MessagePlease"); (2) collapsing
+// every run of blank lines down to a single '\n' destroyed paragraph breaks
+// entirely. Markdown output both fixes the readability bug (headings/bold/
+// links/paragraphs survive) and is what the Reader Mode panel now renders.
 function htmlToText(value) {
-  return decodeHtmlEntities(value
+  const withMarkdown = value
     .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, '')
-    .replace(/<\/?(?:p|div|tr|li|br|h[1-6])[^>]*>/gi, '\n')
-    .replace(/<[^>]+>/g, ''))
+    .replace(/<h([1-6])[^>]*>([\s\S]*?)<\/h\1>/gi, (_m, level, inner) => `\n${'#'.repeat(Number(level))} ${inner}\n`)
+    .replace(/<a\s+[^>]*href=["']([^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi, (_m, href, text) => `[${text}](${href})`)
+    .replace(/<(strong|b)[^>]*>([\s\S]*?)<\/\1>/gi, '**$2**')
+    .replace(/<(em|i)[^>]*>([\s\S]*?)<\/\1>/gi, '*$2*')
+    .replace(/<li[^>]*>/gi, '\n- ')
+    .replace(/<\/li>/gi, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/?(?:p|div|tr|table|ul|ol|blockquote|section|article|header|footer|thead|tbody)[^>]*>/gi, '\n\n')
+    // Any tag that survives (span, td, font, img, ...) becomes a space, not
+    // nothing -- the defensive fix for the word-glomming bug above.
+    .replace(/<[^>]+>/g, ' ')
+
+  return decodeHtmlEntities(withMarkdown)
     .replace(/\r/g, '')
-    .replace(/[ \t]+\n/g, '\n')
-    .replace(/\n{2,}/g, '\n')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/ *\n */g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
     .trim()
 }
 

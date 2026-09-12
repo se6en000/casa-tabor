@@ -135,6 +135,7 @@ interface ActionInspectionSidecarProps {
 import { DaySchedulePeekTray } from './DaySchedulePeekTray'
 import { AssigneePicker } from './AssigneePicker'
 import { useActionAssigneeLearning } from '../../../hooks/useActionAssigneeLearning'
+import EmailMarkdownView from '../../shared/EmailMarkdownView'
 
 export default function ActionInspectionSidecar({
   actionId,
@@ -1574,9 +1575,10 @@ export default function ActionInspectionSidecar({
                 )}
               </div>
             ) : (
-              <div className="text-body-sm leading-relaxed space-y-3 text-casa-text whitespace-pre-line">
-                {detailedItem?.gmailContext?.email_body || analysis.emailBody}
-              </div>
+              <EmailMarkdownView
+                markdown={detailedItem?.gmailContext?.email_body || analysis.emailBody || ''}
+                className="text-body-sm leading-relaxed text-casa-text"
+              />
             )}
 
             {activeItem && (activeItem.source_type === 'gmail' || activeItem.source_ref?.startsWith('gmail:')) && (

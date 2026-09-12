@@ -10,7 +10,7 @@ function base64Url(value) {
   return Buffer.from(value).toString('base64url')
 }
 
-test('uses sanitized HTML when no plain-text MIME part is present', () => {
+test('converts sanitized HTML to Markdown when no plain-text MIME part is present', () => {
   const content = extractGmailMessageContent({
     mimeType: 'multipart/alternative',
     parts: [{
@@ -21,8 +21,46 @@ test('uses sanitized HTML when no plain-text MIME part is present', () => {
     }],
   })
 
-  assert.equal(content.text, 'SchoolCash\nFees are available for purchase.')
+  assert.equal(content.text, '# SchoolCash\n\nFees are **available** for purchase.')
   assert.equal(content.format, 'html')
+})
+
+test('never glues adjacent inline runs together when stripping non-block tags (live bug, 2026-09-12)', () => {
+  // Real-world shape: a bold lead-in immediately followed by a paragraph,
+  // with no whitespace in the source HTML between the closing and opening
+  // tags. The old converter only inserted whitespace for a fixed tag list
+  // (p/div/tr/li/br/h1-6) and deleted everything else outright, so this
+  // rendered as "MessagePlease see the attached..." -- words glommed
+  // together with no space at all.
+  const content = extractGmailMessageContent({
+    mimeType: 'multipart/alternative',
+    parts: [{
+      mimeType: 'text/html',
+      body: {
+        data: base64Url(
+          '<span><strong>Message</strong></span><p>Please see the attached documents.</p>' +
+          '<span>Ms. Schwab</span><span>Principal</span>'
+        ),
+      },
+    }],
+  })
+
+  assert.doesNotMatch(content.text, /MessagePlease|SchwabPrincipal/)
+  assert.equal(content.text, '**Message**\n\nPlease see the attached documents.\n\nMs. Schwab Principal')
+})
+
+test('converts a link to Markdown syntax', () => {
+  const content = extractGmailMessageContent({
+    mimeType: 'multipart/alternative',
+    parts: [{
+      mimeType: 'text/html',
+      body: {
+        data: base64Url('<p>Please <a href="https://example.com/pay">pay your balance</a> today.</p>'),
+      },
+    }],
+  })
+
+  assert.equal(content.text, 'Please [pay your balance](https://example.com/pay) today.')
 })
 
 test('prefers plain text over an equivalent HTML MIME part', () => {

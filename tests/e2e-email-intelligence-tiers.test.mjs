@@ -862,7 +862,10 @@ describe('Tier 2: Boundary & Corner Cases', () => {
       const extracted = extractGmailMessageContent(payload)
       assert.doesNotMatch(extracted.text, /<script>/)
       assert.doesNotMatch(extracted.text, /alert/)
-      assert.match(extracted.text, /Meeting on Monday & Tuesday/i)
+      // Markdown-ified since 2026-09-12 -- bold/italic survive as **/*
+      // instead of being flattened to plain text; the entity decode and
+      // script-stripping safety properties above are what this test guards.
+      assert.match(extracted.text, /Meeting on \*\*Monday\*\* & \*Tuesday\*/i)
     })
 
     it('T2.1.4: Payload with attachment metadata extracts correct structure', () => {
