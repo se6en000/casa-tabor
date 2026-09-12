@@ -15,7 +15,7 @@ import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { useAppStore } from '../../stores/appStore'
 import { useCalendarStore } from '../../stores/calendarStore'
 import { cn } from '../../utils/cn'
-import { Button } from '../ui'
+import { Button, WidgetContainer } from '../ui'
 import { getDisplayMemberColor } from '../../design-system/memberColors'
 import TomorrowPrepWidget from './widgets/TomorrowPrepWidget'
 import ImminentTransitWidget from './widgets/ImminentTransitWidget'
@@ -139,7 +139,6 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
 
   const {
     now,
-    greeting,
     dispatchHeadline,
     dispatchWeekDays,
     dispatchHorizon,
@@ -175,121 +174,30 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
       {/* ── Gmail Sync Health Warning Banner ── */}
       <GmailSyncStatusIndicator variant="banner" className="mb-5 shrink-0" />
 
-      {/* ── Top Section: 12-Col Grid Alignment (7 cols Greeting, 5 cols Tonight's Kitchen + Intake) ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 xl:gap-10 pb-5 sm:pb-6 border-b border-casa-border/40 shrink-0 items-center">
-        <div className="lg:col-span-7 flex flex-wrap items-center gap-2">
-          <h1 className="font-display text-heading text-casa-navy font-semibold tracking-tight leading-none">
-            {greeting}, <span className="italic font-normal">Tabor Family</span>
-          </h1>
+      {/* ── Ambient status strip: only the real-time child-location badges,
+          no greeting text/heading -- removed per live feedback 2026-09-12
+          ("remove Good Morning, move everything up"). Renders nothing when
+          there's no live status to show. ── */}
+      {ambientRoutineStatuses.length > 0 && (
+        <div className="hidden lg:flex flex-wrap items-center gap-2 pb-4 shrink-0">
           {ambientRoutineStatuses.map((status, idx) => {
-              const childMember = familyMembers.find((m) => m.name.toLowerCase() === status.childName.toLowerCase())
-              const childDotColor = getDisplayMemberColor(childMember?.color_hex)
-              return (
-                <span
-                  key={idx}
-                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-casa-surface-subtle border border-casa-border/50 text-casa-navy text-caption font-medium shadow-2xs"
-                >
-                  <span
-                    className="w-2 h-2 rounded-full shrink-0"
-                    style={{ backgroundColor: childDotColor }}
-                  />
-                  <span>{status.text}</span>
-                </span>
-              )
-            })}
-        </div>
-
-        {/* ── Luxury Tonight's Kitchen Showcase (Sole Header Card, 5 cols) ── */}
-        <div className="hidden lg:flex lg:col-span-5 flex-col justify-center">
-          <div className="w-full flex items-center justify-between gap-3 px-4 py-2.5 rounded-2xl material-ambient border border-casa-gold/35 transition-all hover:border-casa-gold/60">
-            <div className="flex items-center gap-3 min-w-0 flex-1">
-              <div className="w-9 h-9 rounded-xl bg-casa-gold/20 text-casa-gold-hover flex items-center justify-center font-bold shadow-2xs border border-casa-gold/30 shrink-0">
-                {dinnerPlan.mode === 'takeout' ? (
-                  <ShoppingBag size={17} />
-                ) : dinnerPlan.mode === 'leftovers' ? (
-                  <Clock size={17} />
-                ) : (
-                  <Utensils size={17} />
-                )}
-              </div>
-
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5 mb-0.5 flex-nowrap overflow-hidden">
-                  <span className="font-sans text-3xs sm:text-2xs font-bold uppercase tracking-wider text-casa-gold-hover whitespace-nowrap shrink-0">
-                    {dinnerPlan.mode === 'takeout'
-                      ? "Tonight's Takeout"
-                      : dinnerPlan.mode === 'leftovers'
-                      ? "Tonight's Leftovers"
-                      : "Tonight's Kitchen"}
-                  </span>
-                  <span className="text-casa-muted/60 text-3xs shrink-0">·</span>
-                  <span className="text-3xs sm:text-2xs font-medium text-casa-text-secondary truncate shrink-0">
-                    {isDinnerPast ? 'Dinner Completed' : dinnerPlan.targetTime || '6:30 PM Target'}
-                  </span>
-                </div>
-                <h3
-                  onClick={() => {
-                    if (dinnerPlan.mode === 'cook') {
-                      if (dinnerPlan.recipeId) {
-                        navigateTo(`/cook?recipe=${encodeURIComponent(dinnerPlan.recipeId)}&autocook=true`)
-                      } else {
-                        navigateTo('/cook')
-                      }
-                    }
-                  }}
-                  className={cn(
-                    'font-display text-heading sm:text-body-lg lg:text-heading font-semibold text-casa-navy truncate leading-tight',
-                    dinnerPlan.mode === 'cook' && 'cursor-pointer hover:text-casa-gold-hover transition-colors'
-                  )}
-                >
-                  {dinnerPlan.title}
-                </h3>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-1 shrink-0">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  document.dispatchEvent(
-                    new CustomEvent('open-ai-chat', {
-                      detail: {
-                        launchId: crypto.randomUUID(),
-                        agent: 'chef',
-                        source: 'tonights-kitchen',
-                        prompt: undefined,
-                        autoSend: false,
-                      },
-                    })
-                  )
-                }}
-                className="text-caption font-medium text-casa-muted hover:text-casa-navy transition-colors h-7 min-h-0 px-2 rounded-lg"
+            const childMember = familyMembers.find((m) => m.name.toLowerCase() === status.childName.toLowerCase())
+            const childDotColor = getDisplayMemberColor(childMember?.color_hex)
+            return (
+              <span
+                key={idx}
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-casa-surface-subtle border border-casa-border/50 text-casa-navy text-caption font-medium shadow-2xs"
               >
-                <span>Change</span>
-              </Button>
-              {dinnerPlan.mode === 'cook' && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    if (dinnerPlan.recipeId) {
-                      navigateTo(`/cook?recipe=${encodeURIComponent(dinnerPlan.recipeId)}&autocook=true`)
-                    } else {
-                      navigateTo('/cook')
-                    }
-                  }}
-                  className="text-caption font-semibold text-casa-navy hover:text-casa-gold transition-colors h-7 min-h-0 px-2 rounded-lg flex items-center gap-1 group/recipe"
-                >
-                  <span>Recipe</span>
-                  <ChevronRight size={13} className="text-casa-muted group-hover/recipe:text-casa-gold transition-colors" />
-                </Button>
-              )}
-            </div>
-          </div>
+                <span
+                  className="w-2 h-2 rounded-full shrink-0"
+                  style={{ backgroundColor: childDotColor }}
+                />
+                <span>{status.text}</span>
+              </span>
+            )
+          })}
         </div>
-      </div>
+      )}
 
       {/* ── Mobile View Switcher (Only visible on small screens < lg) ── */}
       <div className="lg:hidden flex items-center justify-between pb-3 mb-1 border-b border-casa-border/40 shrink-0">
@@ -648,8 +556,91 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
             </div>
           )}
 
-      {/* ── Row 2: To-Dos, Ahead, and Tomorrow — quiet, secondary cards ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6 pb-6 items-start">
+      {/* ── Row 2: Tonight's Kitchen, To-Dos, Ahead, and Tomorrow — quiet, secondary cards ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mt-6 pb-6 items-start">
+        <div className={cn(mobileSubTab === 'schedule' ? 'flex flex-col' : 'hidden lg:flex lg:flex-col')}>
+          <WidgetContainer
+            tier="ambient"
+            eyebrow={
+              dinnerPlan.mode === 'takeout'
+                ? "Tonight's Takeout"
+                : dinnerPlan.mode === 'leftovers'
+                ? "Tonight's Leftovers"
+                : "Tonight's Kitchen"
+            }
+            icon={
+              dinnerPlan.mode === 'takeout' ? (
+                <ShoppingBag size={15} />
+              ) : dinnerPlan.mode === 'leftovers' ? (
+                <Clock size={15} />
+              ) : (
+                <Utensils size={15} />
+              )
+            }
+            title={
+              <span
+                onClick={() => {
+                  if (dinnerPlan.mode === 'cook') {
+                    if (dinnerPlan.recipeId) {
+                      navigateTo(`/cook?recipe=${encodeURIComponent(dinnerPlan.recipeId)}&autocook=true`)
+                    } else {
+                      navigateTo('/cook')
+                    }
+                  }
+                }}
+                className={cn(dinnerPlan.mode === 'cook' && 'cursor-pointer hover:text-casa-gold-hover transition-colors')}
+              >
+                {dinnerPlan.title}
+              </span>
+            }
+            badge={
+              <span className="text-3xs font-medium text-casa-text-secondary whitespace-nowrap">
+                {isDinnerPast ? 'Completed' : dinnerPlan.targetTime || '6:30 PM'}
+              </span>
+            }
+          >
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  document.dispatchEvent(
+                    new CustomEvent('open-ai-chat', {
+                      detail: {
+                        launchId: crypto.randomUUID(),
+                        agent: 'chef',
+                        source: 'tonights-kitchen',
+                        prompt: undefined,
+                        autoSend: false,
+                      },
+                    })
+                  )
+                }}
+                className="text-caption font-medium text-casa-muted hover:text-casa-navy transition-colors h-7 min-h-0 px-2 rounded-lg"
+              >
+                <span>Change</span>
+              </Button>
+              {dinnerPlan.mode === 'cook' && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    if (dinnerPlan.recipeId) {
+                      navigateTo(`/cook?recipe=${encodeURIComponent(dinnerPlan.recipeId)}&autocook=true`)
+                    } else {
+                      navigateTo('/cook')
+                    }
+                  }}
+                  className="text-caption font-semibold text-casa-navy hover:text-casa-gold transition-colors h-7 min-h-0 px-2 rounded-lg flex items-center gap-1 group/recipe"
+                >
+                  <span>Recipe</span>
+                  <ChevronRight size={13} className="text-casa-muted group-hover/recipe:text-casa-gold transition-colors" />
+                </Button>
+              )}
+            </div>
+          </WidgetContainer>
+        </div>
+
         <div className={cn(mobileSubTab === 'schedule' ? 'flex flex-col' : 'hidden lg:flex lg:flex-col')}>
           <TodaysTodosWidget
             now={now}

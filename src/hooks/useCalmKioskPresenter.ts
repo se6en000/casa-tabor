@@ -14,7 +14,7 @@ import {
 } from 'date-fns'
 import { getEventStartDate } from '../utils/eventTime'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useLiveClock, greetingFor } from './useLiveClock'
+import { useLiveClock } from './useLiveClock'
 import { useTodayEvents, useTomorrowEvents, useRollingEvents, type EventWithDetails } from './useCalendarEvents'
 import { useWeekConflicts, useResolveConflict } from './useConflicts'
 import { usePrepItems, useCompletePrepItem } from './usePrepItems'
@@ -145,7 +145,6 @@ export interface DispatchHorizonItem {
 
 export interface CalmKioskPresenterState {
   now: Date
-  greeting: string
   dispatchHeadline: string
   dispatchWeekDays: DispatchDay[]
   dispatchHorizon: DispatchHorizonItem[]
@@ -973,11 +972,8 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     return `${locName} · ${addr}`
   }, [nextEvent])
 
-  const greeting = greetingFor(now)
-
   return {
     now,
-    greeting,
     dispatchHeadline,
     dispatchWeekDays,
     dispatchHorizon,
