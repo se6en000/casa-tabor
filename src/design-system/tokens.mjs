@@ -42,17 +42,25 @@ export const DEFAULT_THEME_COLORS = {
   // defined here -- a silent no-op that just never rendered any color.
   'casa-gold-hover': '#8A5A1E',
   'casa-navy': '#1B2A4A',
-  'casa-bg': '#FAF8F5',
-  'casa-bg-2': '#F2EEE7',
+  // Deepened from #FAF8F5 -- against a white (#FFFFFF) casa-surface the old
+  // value was only 5 RGB levels darker, so cards barely lifted off the page
+  // ("washed out" per live feedback 2026-09-12). This is the old casa-bg-2.
+  'casa-bg': '#F2EEE7',
+  // Deepened one further step below the new casa-bg so the two-tier page
+  // background still reads as two distinct levels, not one flat wash.
+  'casa-bg-2': '#EAE0CC',
   'casa-surface': '#FFFFFF',
   'casa-text': '#2D2D2D',
-  'casa-border': '#E8E2D9',
+  // Deepened from #E8E2D9 -- at the low opacities most components apply
+  // (border-casa-border/40 through /80) the old value was nearly invisible
+  // against casa-bg, so hairline dividers/card edges disappeared entirely.
+  'casa-border': '#D9CFBE',
   'casa-error': '#C0392B',
   'casa-success': '#27AE60',
   'casa-warning': '#E67E22',
   'casa-surface-subtle': '#FAF6EE',
   'casa-control-border': '#EADBC3',
-  'casa-divider-strong': '#E4DBCB',
+  'casa-divider-strong': '#CDBFA4',
   'casa-text-secondary': '#5C5D66',
   'casa-text-tertiary': '#8D8E99',
   'casa-text-faint': '#A9A398',
@@ -176,9 +184,13 @@ export const DESIGN_TOKENS = {
     pill: '9999px',
   },
   shadow: {
-    card: '0 1px 3px rgba(27,42,74,0.06), 0 1px 2px rgba(27,42,74,0.04)',
-    'card-hover': '0 4px 12px rgba(27,42,74,0.08)',
-    widget: '0 2px 8px rgba(27,42,74,0.04), 0 1px 2px rgba(27,42,74,0.02)',
+    // Deepened from a near-invisible 1-3px hairline -- the old value gave
+    // every card almost no real lift off the page ("washed out" feedback
+    // 2026-09-12). Kept the navy tint (rgba(27,42,74,...)) rather than pure
+    // black so the shadow still reads as warm, not a generic UI drop-shadow.
+    card: '0 10px 24px rgba(27,42,74,0.10), 0 2px 6px rgba(27,42,74,0.06)',
+    'card-hover': '0 16px 36px rgba(27,42,74,0.14)',
+    widget: '0 8px 20px rgba(27,42,74,0.08), 0 2px 6px rgba(27,42,74,0.05)',
     'glow-gold': '0 0 20px rgba(201,169,110,0.25)',
     'glow-amber': '0 0 18px rgba(245,158,11,0.25)',
     'glow-emerald': '0 0 18px rgba(16,185,129,0.25)',

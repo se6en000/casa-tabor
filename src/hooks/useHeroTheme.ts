@@ -4,7 +4,11 @@ export type HeroTheme = 'navy' | 'linen'
 export type HeroThemePreference = 'auto' | 'navy' | 'linen'
 
 const STORAGE_PREFERENCE = 'casa-hero-theme-preference'
-const STORAGE_DAY_THEME = 'casa-hero-day-theme'
+// Bumped from 'casa-hero-day-theme' when the day default flipped from
+// 'linen' to 'navy' (2026-09-12, "washed out" feedback) -- a new key
+// guarantees the new default actually takes effect instead of being
+// silently overridden by whatever's already sitting in a browser's storage.
+const STORAGE_DAY_THEME = 'casa-hero-day-theme-v2'
 const STORAGE_NIGHT_THEME = 'casa-hero-night-theme'
 const STORAGE_MANUAL_OVERRIDE = 'casa-hero-manual-override'
 
@@ -24,7 +28,7 @@ function getStoredDayTheme(): HeroTheme {
     const val = localStorage.getItem(STORAGE_DAY_THEME)
     if (val === 'navy' || val === 'linen') return val
   } catch { /* ignore — best-effort, non-critical */ }
-  return 'linen'
+  return 'navy'
 }
 
 function getStoredNightTheme(): HeroTheme {
