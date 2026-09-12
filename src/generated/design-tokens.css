@@ -12,6 +12,8 @@
   --color-casa-error: #C0392B;
   --color-casa-success: #27AE60;
   --color-casa-warning: #E67E22;
+  --color-casa-warning-strong: #B4581C;
+  --color-casa-warning-soft: #FBE7D3;
   --color-casa-surface-subtle: #FAF6EE;
   --color-casa-control-border: #EADBC3;
   --color-casa-divider-strong: #CDBFA4;
@@ -202,6 +204,8 @@ html.midnight-gallery {
   --color-casa-error: #C96A5E;
   --color-casa-success: #4AA56A;
   --color-casa-warning: #D2A465;
+  --color-casa-warning-strong: #F2B673;
+  --color-casa-warning-soft: #3D2A16;
   --color-casa-surface-subtle: #171F2C;
   --color-casa-control-border: #324157;
   --color-casa-divider-strong: #2B374C;

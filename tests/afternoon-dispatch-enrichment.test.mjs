@@ -62,11 +62,17 @@ test('HouseholdDispatchCard renders the week ribbon and horizon ledger, and only
   assert.match(cardSource, /This Week/)
   assert.match(cardSource, /On the Horizon/)
   assert.match(cardSource, /aria-label="Refresh daily brief"/)
-  // casa-gold-hover / casa-gold-soft are not real tokens anywhere in this
-  // design system (verified against src/generated/design-tokens.css) -- a
-  // couple of older components reference them as a latent no-op bug; this
-  // new component must not repeat that mistake.
-  assert.doesNotMatch(cardSource, /casa-gold-hover/)
+  // casa-gold-hover was a latent no-op bug (referenced but never defined in
+  // design-tokens.css) when this test was written -- fixed 2026-09-12, it's
+  // now a real token, and this component deliberately uses it. Verify it
+  // actually resolves to a real value instead of banning the name outright.
+  const tokensSource = await readFile(
+    new URL('../src/generated/design-tokens.css', import.meta.url),
+    'utf8'
+  )
+  assert.match(tokensSource, /--color-casa-gold-hover:/)
+  // casa-gold-soft still isn't a real token anywhere in the design system --
+  // a genuinely undefined name must still be caught.
   assert.doesNotMatch(cardSource, /casa-gold-soft/)
 })
 

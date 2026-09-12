@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { cn } from '../../../utils/cn'
 import { getEventStartDate } from '../../../utils/eventTime'
 import { Button, IconButton, PersonAvatarStack } from '../../ui'
+import { TIER_CARD, TIER_ICON_CHIP, TIER_TITLE } from '../../ui/WidgetContainer'
 import type { EventWithDetails } from '../../../hooks/useCalendarEvents'
 
 interface TodaysTodosWidgetProps {
@@ -52,7 +53,7 @@ export default function TodaysTodosWidget({
   if (todayReminders.length === 0) return null
 
   return (
-    <div className="rounded-3xl bg-casa-surface border border-casa-border/80 shadow-card px-5 py-4">
+    <div className={cn('rounded-container px-5 py-4', TIER_CARD.structural)}>
       <div
         role="button"
         tabIndex={0}
@@ -67,13 +68,13 @@ export default function TodaysTodosWidget({
         aria-expanded={!collapsed}
       >
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-lg bg-amber-500/15 text-amber-800 flex items-center justify-center font-bold shrink-0">
-            <Check size={13} strokeWidth={2.5} className="text-amber-700" />
+          <div className={cn('w-6 h-6 rounded-lg flex items-center justify-center shrink-0', TIER_ICON_CHIP.structural)}>
+            <Check size={13} strokeWidth={2.5} />
           </div>
-          <h3 className="font-sans text-body-sm font-bold text-casa-navy tracking-tight group-hover:text-amber-900 transition-colors">
+          <h3 className={cn('font-sans text-body-sm font-bold tracking-tight group-hover:text-casa-gold transition-colors', TIER_TITLE.structural)}>
             Today's To-Dos
           </h3>
-          <span className="px-1.5 py-0.5 rounded-full text-3xs font-semibold bg-amber-500/10 text-amber-900 border border-amber-500/20">
+          <span className="px-1.5 py-0.5 rounded-full text-3xs font-semibold bg-casa-gold/15 text-casa-navy border border-casa-gold/30">
             {completedReminders.length > 0
               ? `${openReminders.length} left · ${completedReminders.length} done`
               : `${todayReminders.length}`}
@@ -108,17 +109,17 @@ export default function TodaysTodosWidget({
                     fullWidth
                     align="between"
                     onClick={onToggleOverdue}
-                    className="min-h-[32px] h-8 py-0.5 px-2.5 rounded-lg bg-amber-500/[0.08] hover:bg-amber-500/[0.14] text-caption text-amber-900 border border-amber-500/25 transition-colors shadow-2xs"
+                    className="min-h-[32px] h-8 py-0.5 px-2.5 rounded-lg bg-casa-warning-soft hover:bg-casa-warning/20 text-caption text-casa-warning-strong border border-casa-warning/30 transition-colors shadow-2xs"
                   >
-                    <span className="inline-flex items-center gap-1.5 font-semibold text-caption text-amber-900">
-                      <Clock size={12} className="text-amber-700 shrink-0" />
+                    <span className="inline-flex items-center gap-1.5 font-semibold text-caption text-casa-warning-strong">
+                      <Clock size={12} className="text-casa-warning-strong shrink-0" />
                       <span>
                         {hasPastDayOverdue
                           ? `${overdueReminders.length} overdue ${overdueReminders.length === 1 ? 'item' : 'items'} pending`
                           : `${overdueReminders.length} ${overdueReminders.length === 1 ? 'item' : 'items'} pending from earlier today`}
                       </span>
                     </span>
-                    {showOverdue ? <ChevronUp size={12} className="text-amber-800 shrink-0" /> : <ChevronDown size={12} className="text-amber-800 shrink-0" />}
+                    {showOverdue ? <ChevronUp size={12} className="text-casa-warning-strong shrink-0" /> : <ChevronDown size={12} className="text-casa-warning-strong shrink-0" />}
                   </Button>
 
                   <AnimatePresence initial={false}>
@@ -155,7 +156,7 @@ export default function TodaysTodosWidget({
                                   onOpenEvent(evt)
                                 }
                               }}
-                              className="w-full flex items-center justify-between py-1.5 px-2.5 rounded-xl transition-all duration-150 cursor-pointer group gap-2.5 select-none active:scale-[0.99] min-h-[38px] bg-amber-500/[0.06] border border-amber-500/25 hover:bg-amber-500/[0.12] hover:border-amber-500/40 shadow-2xs"
+                              className="w-full flex items-center justify-between py-1.5 px-2.5 rounded-xl transition-all duration-150 cursor-pointer group gap-2.5 select-none active:scale-[0.99] min-h-[38px] bg-casa-warning-soft border border-casa-warning/25 hover:bg-casa-warning/15 hover:border-casa-warning/40 shadow-2xs"
                             >
                               <div className="flex items-center gap-2.5 min-w-0 flex-1">
                                 <IconButton
@@ -173,16 +174,16 @@ export default function TodaysTodosWidget({
                                   className="rounded-full shrink-0 transition-all duration-150 text-casa-muted hover:text-casa-navy hover:bg-casa-surface-subtle h-6 w-6 min-h-0 p-0"
                                   aria-label={`Mark ${evt.title} done`}
                                   icon={
-                                    <div className="w-4.5 h-4.5 rounded-full border-[1.5px] border-amber-600 hover:border-casa-navy bg-white shadow-2xs group-hover:scale-105 transition-transform" />
+                                    <div className="w-4.5 h-4.5 rounded-full border-[1.5px] border-casa-warning hover:border-casa-navy bg-white shadow-2xs group-hover:scale-105 transition-transform" />
                                   }
                                 />
 
                                 {isPastDay ? (
-                                  <span className="font-mono text-caption font-bold text-amber-950 shrink-0 tabular-nums">
+                                  <span className="font-mono text-caption font-bold text-casa-warning-strong shrink-0 tabular-nums">
                                     {evt.all_day ? format(startDate, 'MMM d') : format(startDate, 'MMM d · h:mm a')}
                                   </span>
                                 ) : (
-                                  <span className="font-mono text-caption font-bold text-amber-950 shrink-0 tabular-nums">
+                                  <span className="font-mono text-caption font-bold text-casa-warning-strong shrink-0 tabular-nums">
                                     {format(parseISO(evt.start_time), 'h:mm a')}
                                   </span>
                                 )}
@@ -191,12 +192,12 @@ export default function TodaysTodosWidget({
                                   'px-1.5 py-0.5 rounded text-3xs font-bold uppercase tracking-wider shrink-0',
                                   isPastDay
                                     ? 'bg-rose-500/20 text-rose-950 border border-rose-500/30'
-                                    : 'bg-amber-500/25 text-amber-950 border border-amber-500/35'
+                                    : 'bg-casa-warning/20 text-casa-warning-strong border border-casa-warning/40'
                                 )}>
                                   {isPastDay ? 'Missed' : 'Overdue'}
                                 </span>
 
-                                <span className="text-body-sm font-semibold text-casa-navy truncate transition-colors flex-1 group-hover:text-amber-950">
+                                <span className="text-body-sm font-semibold text-casa-navy truncate transition-colors flex-1 group-hover:text-casa-warning-strong">
                                   {evt.title}
                                 </span>
                               </div>

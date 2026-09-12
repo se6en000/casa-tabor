@@ -26,7 +26,7 @@ export { DisclosureSection, type DisclosureSectionProps } from './DisclosureSect
 export { StatusDot, type StatusDotProps } from './StatusDot'
 export { HeroCard, type HeroCardProps } from './HeroCard'
 export { JourneyProgressBar, type JourneyProgressBarProps } from './JourneyProgressBar'
-export { WidgetContainer, type WidgetContainerProps } from './WidgetContainer'
+export { WidgetContainer, type WidgetContainerProps, type WidgetTier } from './WidgetContainer'
 export { ScheduleStreamItem, type ScheduleStreamItemProps } from './ScheduleStreamItem'
 export { ActionCard, type ActionCardProps, type ActionCardTone } from './ActionCard'
 export { FormSummaryCard, type FormSummaryCardProps } from './FormSummaryCard'

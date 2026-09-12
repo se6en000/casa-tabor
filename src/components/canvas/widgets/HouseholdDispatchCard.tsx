@@ -1,6 +1,7 @@
 import { Sparkles, RotateCw } from 'lucide-react'
 import { cn } from '../../../utils/cn'
 import { IconButton } from '../../ui'
+import { TIER_CARD } from '../../ui/WidgetContainer'
 import type { DispatchBucket, DispatchDay, DispatchHorizonItem } from '../../../hooks/useCalmKioskPresenter'
 
 interface HouseholdDispatchCardProps {
@@ -23,7 +24,7 @@ const BUCKET_DOT: Record<DispatchBucket, string> = {
 const BUCKET_TAG: Record<DispatchBucket, string> = {
   sports: 'bg-casa-success-soft text-casa-success-strong',
   school: 'bg-casa-info-soft text-casa-info-strong',
-  social: 'bg-casa-gold/15 text-amber-800',
+  social: 'bg-casa-gold/15 text-casa-gold-hover',
   travel: 'bg-casa-bg-2 text-casa-muted',
   other: 'bg-casa-bg-2 text-casa-muted',
 }
@@ -62,9 +63,9 @@ export default function HouseholdDispatchCard({
   )
 
   return (
-    <div className="rounded-3xl bg-casa-surface border border-casa-border/80 shadow-card px-5 py-4 sm:px-6 sm:py-5">
+    <div className={cn('rounded-container px-5 py-4 sm:px-6 sm:py-5', TIER_CARD.structural)}>
       <div className="flex items-center justify-between gap-2 mb-3">
-        <span className="text-2xs uppercase tracking-widest font-sans font-bold text-amber-700 flex items-center gap-1.5">
+        <span className="text-2xs uppercase tracking-widest font-sans font-bold text-casa-gold-hover flex items-center gap-1.5">
           <Sparkles size={13} className="text-casa-gold" />
           {timeHorizonLabel}
         </span>
@@ -103,7 +104,7 @@ export default function HouseholdDispatchCard({
                   : 'bg-casa-bg-2 border-transparent'
               )}
             >
-              <span className={cn('font-mono text-3xs uppercase tracking-wide', day.isToday ? 'text-amber-700 font-bold' : 'text-casa-text-tertiary')}>
+              <span className={cn('font-mono text-3xs uppercase tracking-wide', day.isToday ? 'text-casa-gold-hover font-bold' : 'text-casa-text-tertiary')}>
                 {day.dayName}
               </span>
               <span className="font-mono text-body-sm font-semibold text-casa-navy tabular-nums">{day.dayNum}</span>
@@ -137,7 +138,7 @@ export default function HouseholdDispatchCard({
                 key={item.id}
                 className={cn('grid grid-cols-[48px_1fr] gap-3 py-2.5', idx > 0 && 'border-t border-casa-border/60')}
               >
-                <span className="font-mono text-caption font-bold text-amber-700 leading-tight pt-0.5">
+                <span className="font-mono text-caption font-bold text-casa-gold-hover leading-tight pt-0.5">
                   {item.daysAway}d
                   <span className="block text-3xs font-medium uppercase tracking-wide text-casa-text-tertiary">{item.dateLabel}</span>
                 </span>

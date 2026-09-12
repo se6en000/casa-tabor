@@ -202,21 +202,21 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
 
         {/* ── Luxury Tonight's Kitchen Showcase (Sole Header Card, 5 cols) ── */}
         <div className="hidden lg:flex lg:col-span-5 flex-col justify-center">
-          <div className="w-full flex items-center justify-between gap-3 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-casa-surface to-amber-500/[0.08] border border-casa-gold/35 shadow-2xs transition-all hover:border-casa-gold/60">
+          <div className="w-full flex items-center justify-between gap-3 px-4 py-2.5 rounded-2xl material-ambient border border-casa-gold/35 transition-all hover:border-casa-gold/60">
             <div className="flex items-center gap-3 min-w-0 flex-1">
-              <div className="w-9 h-9 rounded-xl bg-casa-gold/20 text-casa-navy flex items-center justify-center font-bold shadow-2xs border border-casa-gold/30 shrink-0">
+              <div className="w-9 h-9 rounded-xl bg-casa-gold/20 text-casa-gold-hover flex items-center justify-center font-bold shadow-2xs border border-casa-gold/30 shrink-0">
                 {dinnerPlan.mode === 'takeout' ? (
-                  <ShoppingBag size={17} className="text-amber-800" />
+                  <ShoppingBag size={17} />
                 ) : dinnerPlan.mode === 'leftovers' ? (
-                  <Clock size={17} className="text-amber-800" />
+                  <Clock size={17} />
                 ) : (
-                  <Utensils size={17} className="text-amber-800" />
+                  <Utensils size={17} />
                 )}
               </div>
 
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5 mb-0.5 flex-nowrap overflow-hidden">
-                  <span className="font-sans text-3xs sm:text-2xs font-bold uppercase tracking-wider text-amber-900 whitespace-nowrap shrink-0">
+                  <span className="font-sans text-3xs sm:text-2xs font-bold uppercase tracking-wider text-casa-gold-hover whitespace-nowrap shrink-0">
                     {dinnerPlan.mode === 'takeout'
                       ? "Tonight's Takeout"
                       : dinnerPlan.mode === 'leftovers'
@@ -240,7 +240,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                   }}
                   className={cn(
                     'font-display text-heading sm:text-body-lg lg:text-heading font-semibold text-casa-navy truncate leading-tight',
-                    dinnerPlan.mode === 'cook' && 'cursor-pointer hover:text-amber-900 transition-colors'
+                    dinnerPlan.mode === 'cook' && 'cursor-pointer hover:text-casa-gold-hover transition-colors'
                   )}
                 >
                   {dinnerPlan.title}

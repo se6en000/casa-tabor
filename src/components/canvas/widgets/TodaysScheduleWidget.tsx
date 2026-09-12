@@ -3,6 +3,7 @@ import { Calendar, ChevronDown, ChevronUp, ChevronRight, CheckCircle2, Check } f
 import { AnimatePresence, motion } from 'framer-motion'
 import { cn } from '../../../utils/cn'
 import { Button, PersonAvatarStack } from '../../ui'
+import { TIER_CARD, TIER_ICON_CHIP, TIER_TITLE } from '../../ui/WidgetContainer'
 import type { EventWithDetails } from '../../../hooks/useCalendarEvents'
 
 interface TodaysScheduleWidgetProps {
@@ -36,7 +37,7 @@ export default function TodaysScheduleWidget({
   if (upcomingAppointments.length === 0 && pastEvents.length === 0) return null
 
   return (
-    <div className="rounded-3xl bg-casa-surface border border-casa-border shadow-card px-5 py-4 sm:px-6 sm:py-5">
+    <div className={cn('rounded-container px-5 py-4 sm:px-6 sm:py-5', TIER_CARD.structural)}>
       <div
         role="button"
         tabIndex={0}
@@ -51,10 +52,10 @@ export default function TodaysScheduleWidget({
         aria-expanded={!collapsed}
       >
         <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-casa-gold/20 text-casa-navy flex items-center justify-center font-bold shrink-0">
-            <Calendar size={15} className="text-casa-gold" />
+          <div className={cn('w-7 h-7 rounded-lg flex items-center justify-center shrink-0', TIER_ICON_CHIP.structural)}>
+            <Calendar size={15} />
           </div>
-          <h3 className="font-display text-heading font-semibold text-casa-navy tracking-tight group-hover:text-casa-gold transition-colors">
+          <h3 className={cn('font-display text-heading font-semibold tracking-tight group-hover:text-casa-gold transition-colors', TIER_TITLE.structural)}>
             Today's Schedule
           </h3>
           {upcomingAppointments.length > 0 ? (

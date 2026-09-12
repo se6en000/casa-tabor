@@ -1,7 +1,9 @@
 import { format, parseISO } from 'date-fns'
 import { Calendar, ChevronDown, ChevronUp, ChevronRight, Car } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
+import { cn } from '../../../utils/cn'
 import { Button, PersonAvatarStack } from '../../ui'
+import { TIER_CARD, TIER_ICON_CHIP, TIER_TITLE } from '../../ui/WidgetContainer'
 import type { EventWithDetails } from '../../../hooks/useCalendarEvents'
 
 interface TomorrowPreviewWidgetProps {
@@ -25,7 +27,7 @@ export default function TomorrowPreviewWidget({
   onOpenEvent,
 }: TomorrowPreviewWidgetProps) {
   return (
-    <div className="rounded-3xl bg-casa-surface border border-casa-border/80 shadow-card px-5 py-4">
+    <div className={cn('rounded-container px-5 py-4', TIER_CARD.structural)}>
       <div
         role="button"
         tabIndex={0}
@@ -40,13 +42,13 @@ export default function TomorrowPreviewWidget({
         aria-expanded={!collapsed}
       >
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-lg bg-slate-500/10 text-slate-800 flex items-center justify-center font-bold shrink-0">
-            <Calendar size={13} className="text-slate-700" />
+          <div className={cn('w-6 h-6 rounded-lg flex items-center justify-center shrink-0', TIER_ICON_CHIP.structural)}>
+            <Calendar size={13} />
           </div>
-          <h3 className="font-sans text-body-sm font-bold text-casa-navy tracking-tight group-hover:text-casa-navy transition-colors">
+          <h3 className={cn('font-sans text-body-sm font-bold tracking-tight', TIER_TITLE.structural)}>
             Tomorrow's Schedule
           </h3>
-          <span className="px-1.5 py-0.5 rounded-full text-3xs font-semibold bg-slate-500/10 text-slate-800 border border-slate-500/20">
+          <span className="px-1.5 py-0.5 rounded-full text-3xs font-semibold bg-casa-gold/15 text-casa-navy border border-casa-gold/30">
             {tomorrowEvents.length}
           </span>
         </div>
@@ -136,8 +138,8 @@ export default function TomorrowPreviewWidget({
 
                       <div className="flex items-center gap-1.5 shrink-0">
                         {driverMember?.family_member?.name && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-semibold bg-amber-500/10 text-amber-900 border border-amber-500/20 hidden sm:inline-flex">
-                            <Car size={11} className="text-amber-800 shrink-0" />
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-semibold bg-white text-casa-navy border border-casa-border/60 shadow-2xs hidden sm:inline-flex">
+                            <Car size={11} className="text-casa-gold-hover shrink-0" />
                             <span>{driverMember.family_member.name} drives</span>
                           </span>
                         )}

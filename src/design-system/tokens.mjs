@@ -10,6 +10,8 @@ export const THEME_COLOR_KEYS = [
   'casa-error',
   'casa-success',
   'casa-warning',
+  'casa-warning-strong',
+  'casa-warning-soft',
   'casa-surface-subtle',
   'casa-control-border',
   'casa-divider-strong',
@@ -58,6 +60,13 @@ export const DEFAULT_THEME_COLORS = {
   'casa-error': '#C0392B',
   'casa-success': '#27AE60',
   'casa-warning': '#E67E22',
+  // Strong/soft siblings, matching the existing casa-success-strong/-soft and
+  // casa-info-strong/-soft pattern -- added so real urgency states (overdue,
+  // needs-a-decision) can use a proper token pair instead of raw Tailwind
+  // amber-*, which sits too close to casa-gold's hue to read as a distinct
+  // signal (see the gold-vs-orange rules approved 2026-09-12).
+  'casa-warning-strong': '#B4581C',
+  'casa-warning-soft': '#FBE7D3',
   'casa-surface-subtle': '#FAF6EE',
   'casa-control-border': '#EADBC3',
   'casa-divider-strong': '#CDBFA4',
@@ -91,6 +100,8 @@ export const MIDNIGHT_THEME_COLORS = {
   'casa-error': '#C96A5E',
   'casa-success': '#4AA56A',
   'casa-warning': '#D2A465',
+  'casa-warning-strong': '#F2B673',
+  'casa-warning-soft': '#3D2A16',
   'casa-surface-subtle': '#171F2C',
   'casa-control-border': '#324157',
   'casa-divider-strong': '#2B374C',
