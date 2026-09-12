@@ -153,6 +153,27 @@ test('routine assistant profiles disable thinking and use bounded output', () =>
   assert.doesNotMatch(analyzePrep, /maxOutputTokens: 8192/)
 })
 
+test('home-weather caches the household address geocode instead of re-billing Places on every fetch', () => {
+  // Confirmed root cause of a live cost incident: 5,863 Places Text Search
+  // calls in a single day (2026-09-11, via maps_provider_calls) because
+  // home-weather geocoded the (essentially static) home address fresh on
+  // every single invocation. The 10-minute client-side staleTime only
+  // protects one continuous browser session -- every full page reload
+  // during testing started a fresh client cache and re-hit the endpoint,
+  // and each hit paid for a live geocode. The fix caches the geocode on
+  // the same settings row, keyed by the address itself, so it self-
+  // invalidates only when the household actually edits their address.
+  const homeWeather = source('supabase/functions/home-weather/index.ts')
+  const geocodeCall = homeWeather.indexOf('await geocodeCity(city, apiKey)')
+  const cacheRead = homeWeather.indexOf('settingsRow?.value?.geocode_cache')
+  const cacheWrite = homeWeather.indexOf('geocode_cache: { cacheKey, lat: loc.lat, lng: loc.lng }')
+
+  assert.ok(cacheRead >= 0, 'must read a cached geocode before calling Google')
+  assert.ok(cacheRead < geocodeCall, 'cache check must happen before the Places call')
+  assert.ok(cacheWrite > geocodeCall, 'a fresh geocode must be persisted back to settings')
+  assert.match(homeWeather, /cache\.cacheKey === cacheKey/)
+})
+
 test('event geocoding exits before Google when coordinates already exist or can be reused', () => {
   const existingCoordinates = geocodeEvent.indexOf("skipped: 'existing_coordinates'")
   const eventCache = geocodeEvent.indexOf("cached: true")

@@ -106,7 +106,35 @@ Deno.serve(async (req) => {
     })
   }
 
-  const loc = await geocodeCity(city, apiKey)
+  // The home address is essentially static -- it only changes if the
+  // household edits their address in settings -- so its geocode is cached
+  // on the same settings row and reused indefinitely, invalidating itself
+  // automatically whenever `city` no longer matches the cached value.
+  // Before this, every single weather fetch re-geocoded from scratch (a
+  // paid Places Text Search call): with no server cache, the 10-minute
+  // client-side staleTime only protected one continuous browser session --
+  // every full page reload during testing started a fresh client cache and
+  // re-hit this endpoint, which is how one day of testing generated 5,863
+  // live Places calls (confirmed via maps_provider_calls, 2026-09-11).
+  const cache = settingsRow?.value?.geocode_cache
+  const cacheKey = city.trim().toLowerCase()
+  let loc: { lat: number; lng: number } | null =
+    cache && cache.cacheKey === cacheKey && typeof cache.lat === 'number' && typeof cache.lng === 'number'
+      ? { lat: cache.lat, lng: cache.lng }
+      : null
+
+  if (!loc) {
+    loc = await geocodeCity(city, apiKey)
+    if (loc) {
+      await sb
+        .from('settings')
+        .update({
+          value: { ...settingsRow?.value, geocode_cache: { cacheKey, lat: loc.lat, lng: loc.lng } },
+        })
+        .eq('key', 'home_config')
+    }
+  }
+
   if (!loc) {
     return new Response(JSON.stringify({ error: `Could not geocode: ${city}` }), {
       status: 400,
