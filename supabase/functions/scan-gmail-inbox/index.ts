@@ -1123,6 +1123,50 @@ async function handleGmailScan(req: Request): Promise<Response> {
   }
 
   const body = await req.json().catch(() => ({}))
+
+  // ── Read-only preview: re-extract specific already-processed messages
+  // through the current extractGmailMessageContent() without touching
+  // gmail_processed_messages, canonical_inbox_emails, or prep_items --
+  // no classification, no writes. Added 2026-09-12 so live-feedback ("does
+  // this look right") can be answered without reprocessing production data.
+  const previewIds: string[] = Array.isArray(body.preview_message_ids)
+    ? body.preview_message_ids.filter((x: unknown): x is string => typeof x === 'string')
+    : []
+  if (previewIds.length > 0) {
+    const { data: allTokens } = await sb.from('google_tokens')
+      .select('family_member_id, google_email, refresh_token, access_token, expires_at')
+      .eq('gmail_scan_enabled', true)
+
+    const previews: Record<string, { subject: string; markdown: string } | { error: string }> = {}
+    for (const msgId of previewIds) {
+      let found = false
+      for (const tok of (allTokens ?? [])) {
+        try {
+          let accessToken = tok.access_token
+          if (!accessToken || !tok.expires_at || new Date(tok.expires_at) < new Date(Date.now() + 60_000)) {
+            const refreshed = await refreshToken(tok.refresh_token, clientId, clientSecret)
+            if (!refreshed) continue
+            accessToken = refreshed.access_token
+            await sb.from('google_tokens').update({
+              access_token: refreshed.access_token,
+              expires_at: new Date(Date.now() + refreshed.expires_in * 1000).toISOString(),
+            }).eq('family_member_id', tok.family_member_id)
+          }
+          const details = await getMessageDetails(msgId, accessToken)
+          if (details) {
+            previews[msgId] = { subject: details.subject, markdown: details.body }
+            found = true
+            break
+          }
+        } catch {
+          // try the next connected account's token
+        }
+      }
+      if (!found) previews[msgId] = { error: 'Message not found on any connected Gmail account' }
+    }
+    return new Response(JSON.stringify({ previews }), { headers: { ...CORS, 'content-type': 'application/json' } })
+  }
+
   const targetMemberId: string | null = body.family_member_id ?? null
   const backfillSince = typeof body.backfill_since === 'string' ? body.backfill_since : null
   const backfillBefore = typeof body.backfill_before === 'string' ? body.backfill_before : null
