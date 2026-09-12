@@ -34,7 +34,6 @@ interface CalmKioskViewProps {
 export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
   const dinnerPlan = useAppStore((s) => s.dinnerPlan)
   const setActiveView = useCalendarStore((s) => s.setActiveView)
-  const [showPastEvents, setShowPastEvents] = useState(false)
   const [showOverdueTodos, setShowOverdueTodos] = useState<boolean>(() => {
     try {
       const stored = localStorage.getItem('casa:calm:overdue-collapsed')
@@ -454,8 +453,6 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
             now={now}
             pastEvents={pastEvents}
             upcomingAppointments={upcomingAppointments}
-            showPastEvents={showPastEvents}
-            onTogglePastEvents={() => setShowPastEvents(!showPastEvents)}
             collapsed={scheduleSectionCollapsed}
             onToggleCollapsed={toggleScheduleSection}
             onExpandAll={() => setCanvasSubmode('turbo')}

@@ -156,7 +156,7 @@ export default function TodaysTodosWidget({
                                   onOpenEvent(evt)
                                 }
                               }}
-                              className="w-full flex items-center justify-between py-1.5 px-2.5 rounded-xl transition-all duration-150 cursor-pointer group gap-2.5 select-none active:scale-[0.99] min-h-[38px] bg-casa-warning-soft border border-casa-warning/25 hover:bg-casa-warning/15 hover:border-casa-warning/40 shadow-2xs"
+                              className="w-full flex items-center justify-between py-1.5 px-2.5 rounded-xl transition-all duration-150 cursor-pointer group gap-2.5 select-none active:scale-[0.99] min-h-[38px] hover:bg-casa-surface-subtle"
                             >
                               <div className="flex items-center gap-2.5 min-w-0 flex-1">
                                 <IconButton
@@ -189,15 +189,13 @@ export default function TodaysTodosWidget({
                                 )}
 
                                 <span className={cn(
-                                  'px-1.5 py-0.5 rounded text-3xs font-bold uppercase tracking-wider shrink-0',
-                                  isPastDay
-                                    ? 'bg-rose-500/20 text-rose-950 border border-rose-500/30'
-                                    : 'bg-casa-warning/20 text-casa-warning-strong border border-casa-warning/40'
+                                  'text-3xs font-bold uppercase tracking-wider shrink-0',
+                                  isPastDay ? 'text-rose-700' : 'text-casa-warning-strong'
                                 )}>
                                   {isPastDay ? 'Missed' : 'Overdue'}
                                 </span>
 
-                                <span className="text-body-sm font-semibold text-casa-navy truncate transition-colors flex-1 group-hover:text-casa-warning-strong">
+                                <span className="text-body-sm font-semibold text-casa-navy truncate transition-colors flex-1">
                                   {evt.title}
                                 </span>
                               </div>
