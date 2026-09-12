@@ -556,8 +556,12 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
             </div>
           )}
 
-      {/* ── Row 2: Tonight's Kitchen, To-Dos, Ahead, and Tomorrow — quiet, secondary cards ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mt-6 pb-6 items-start">
+      {/* ── Row 2: Tonight's Kitchen, To-Dos, Ahead, and Tomorrow — quiet, secondary cards.
+          2x2, not 4-across: these cards were built dense with small text at
+          1/3 width: squeezing to 1/4 width when Kitchen joined made them hard
+          to read (live feedback 2026-09-12) -- 2x2 gives each card back the
+          width it needs instead of shrinking any of that text further. ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6 pb-6 items-start">
         <div className={cn(mobileSubTab === 'schedule' ? 'flex flex-col' : 'hidden lg:flex lg:flex-col')}>
           <WidgetContainer
             tier="ambient"
