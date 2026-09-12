@@ -358,9 +358,9 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
 
       {/* ── Row 1: Hero + Today's Schedule, equal-weight split (home-hierarchy mock approved 2026-09-11) ── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-4 items-start">
-        {/* Hero Next Up Card (5 cols) */}
+        {/* Hero Next Up Card (6 cols -- true 50/50 with Today's Schedule, per live feedback 2026-09-12) */}
         <div className={cn(
-          'lg:col-span-5 flex-col justify-start',
+          'lg:col-span-6 flex-col justify-start',
           mobileSubTab === 'triage' ? 'hidden lg:flex' : 'flex'
         )}>
           <AnimatePresence mode="wait" initial={false}>
@@ -445,9 +445,9 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
           </AnimatePresence>
         </div>
 
-        {/* Today's Schedule — promoted to a full-width timeline, equal billing with the Hero card (7 cols) */}
+        {/* Today's Schedule — promoted to a full-width timeline, true 50/50 with the Hero card (6 cols) */}
         <div className={cn(
-          'lg:col-span-7',
+          'lg:col-span-6',
           mobileSubTab === 'schedule' ? 'flex flex-col' : 'hidden lg:flex lg:flex-col'
         )}>
           <TodaysScheduleWidget
