@@ -74,6 +74,10 @@
         "reason": "Family-member avatar colors and indicators are selected from runtime household data."
       },
       {
+        "path": "src/components/canvas/widgets/TodaysScheduleWidget.tsx",
+        "reason": "Family-member avatar colors and indicators are selected from runtime household data."
+      },
+      {
         "path": "src/components/canvas/TurboCanvasView.tsx",
         "reason": "Family-member avatar colors and indicators are selected from runtime household data."
       },

@@ -34,12 +34,15 @@ test('code integrity: useFamilyRoutineIntelligence integrates todo sync and boun
   assert.ok(file.includes('refetchInterval: false'), 'Uses zero polling with pure sync pipeline')
 })
 
-test('code integrity: CalmKioskView and useCalmKioskPresenter wire Option B Completed Today fold and toggle sync', () => {
+test('code integrity: TodaysTodosWidget and useCalmKioskPresenter wire Option B Completed Today fold and toggle sync', () => {
   const presenterFile = readFileSync('src/hooks/useCalmKioskPresenter.ts', 'utf-8')
   assert.ok(presenterFile.includes('completedReminders'), 'Presenter exposes completedReminders')
   assert.ok(presenterFile.includes('handleToggleReminder'), 'Presenter exposes handleToggleReminder')
 
   const kioskViewFile = readFileSync('src/components/canvas/CalmKioskView.tsx', 'utf-8')
-  assert.ok(kioskViewFile.includes('handleToggleReminder(evt.id)'), 'Kiosk view calls handleToggleReminder on button tap')
-  assert.ok(kioskViewFile.includes('Completed Today'), 'Kiosk view renders Option B Completed Today section')
+  assert.ok(kioskViewFile.includes('onToggleReminder={handleToggleReminder}'), 'Kiosk view wires handleToggleReminder into TodaysTodosWidget')
+
+  const widgetFile = readFileSync('src/components/canvas/widgets/TodaysTodosWidget.tsx', 'utf-8')
+  assert.ok(widgetFile.includes('onToggleReminder(evt.id)'), 'Widget calls onToggleReminder on button tap')
+  assert.ok(widgetFile.includes('Completed Today'), 'Widget renders Option B Completed Today section')
 })

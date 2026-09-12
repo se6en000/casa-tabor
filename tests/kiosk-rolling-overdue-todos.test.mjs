@@ -32,27 +32,27 @@ test('useCalmKioskPresenter derives todayReminders and overdueReminders from 7-d
   )
 })
 
-test('CalmKioskView renders dynamic overdue banner and distinguishes Missed vs Overdue items', () => {
-  const kioskFilePath = path.resolve('src/components/canvas/CalmKioskView.tsx')
-  const kioskContent = fs.readFileSync(kioskFilePath, 'utf8')
+test('TodaysTodosWidget renders dynamic overdue banner and distinguishes Missed vs Overdue items', () => {
+  const widgetFilePath = path.resolve('src/components/canvas/widgets/TodaysTodosWidget.tsx')
+  const widgetContent = fs.readFileSync(widgetFilePath, 'utf8')
 
   // Verify hasPastDayOverdue detection
   assert.match(
-    kioskContent,
+    widgetContent,
     /const hasPastDayOverdue = overdueReminders\.some\(/,
-    'CalmKioskView must detect if overdueReminders includes items from past days'
+    'TodaysTodosWidget must detect if overdueReminders includes items from past days'
   )
 
   // Verify banner label accounts for missed items
   assert.match(
-    kioskContent,
+    widgetContent,
     /\$\{overdueReminders\.length\} overdue \$\{overdueReminders\.length === 1 \? 'item' : 'items'\} pending/,
     'Banner label must indicate overdue items pending'
   )
 
   // Verify Missed vs Overdue badge rendering
   assert.match(
-    kioskContent,
+    widgetContent,
     /isPastDay \? 'Missed' : 'Overdue'/,
     'Must label past-day items as Missed and today items as Overdue'
   )
