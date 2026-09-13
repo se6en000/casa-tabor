@@ -46,11 +46,15 @@ test('initDisablePinchZoom attaches and cleans up gesture prevention handlers', 
 
     const cleanup = initDisablePinchZoom()
 
-    // Verify all necessary listeners are attached
+    // Verify all necessary listeners are attached. No `touchmove` listener --
+    // a non-passive one here would force every touch-scroll gesture app-wide
+    // onto the slow, main-thread-gated path (root-caused 2026-09-13); pinch
+    // itself is already blocked declaratively by the touch-action CSS rule
+    // asserted below.
     assert.ok(listeners.get('gesturestart')?.length, 'gesturestart listener attached')
     assert.ok(listeners.get('gesturechange')?.length, 'gesturechange listener attached')
     assert.ok(listeners.get('gestureend')?.length, 'gestureend listener attached')
-    assert.ok(listeners.get('touchmove')?.length, 'touchmove listener attached')
+    assert.ok(!listeners.get('touchmove')?.length, 'no touchmove listener attached')
     assert.ok(listeners.get('wheel')?.length, 'wheel listener attached')
 
     // Test gesturestart preventDefault
@@ -58,24 +62,6 @@ test('initDisablePinchZoom attaches and cleans up gesture prevention handlers', 
     const gestureEvent = { preventDefault() { gesturePrevented = true } }
     listeners.get('gesturestart')[0].handler(gestureEvent)
     assert.equal(gesturePrevented, true, 'gesturestart calls preventDefault')
-
-    // Test touchmove with multi-touch (pinch)
-    let multiTouchPrevented = false
-    const multiTouchEvent = {
-      touches: [{ clientX: 10 }, { clientX: 20 }],
-      preventDefault() { multiTouchPrevented = true },
-    }
-    listeners.get('touchmove')[0].handler(multiTouchEvent)
-    assert.equal(multiTouchPrevented, true, 'multi-touch touchmove calls preventDefault')
-
-    // Test single-touch touchmove does not preventDefault
-    let singleTouchPrevented = false
-    const singleTouchEvent = {
-      touches: [{ clientX: 10 }],
-      preventDefault() { singleTouchPrevented = true },
-    }
-    listeners.get('touchmove')[0].handler(singleTouchEvent)
-    assert.equal(singleTouchPrevented, false, 'single touch does not preventDefault')
 
     // Test Ctrl + wheel zoom (trackpad pinch)
     let ctrlWheelPrevented = false
@@ -100,7 +86,6 @@ test('initDisablePinchZoom attaches and cleans up gesture prevention handlers', 
     assert.equal(listeners.get('gesturestart').length, 0)
     assert.equal(listeners.get('gesturechange').length, 0)
     assert.equal(listeners.get('gestureend').length, 0)
-    assert.equal(listeners.get('touchmove').length, 0)
     assert.equal(listeners.get('wheel').length, 0)
   } finally {
     globalThis.document = originalDoc
