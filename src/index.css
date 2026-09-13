@@ -117,7 +117,18 @@
 /* ── Touch-first: hover only on devices that support it ───────── */
 /* Redefines hover: variant so it NEVER fires on touchscreens.    */
 /* On mouse devices it works normally. Zero component changes.    */
-@custom-variant hover (@media (hover: hover) { &:hover });
+/* The @media (hover: hover) condition alone isn't reliable on every
+   deployment target: the kiosk's Chromium-on-X11 setup reports
+   `(hover: hover)` and `(pointer: fine)` as true for its touchscreen (an
+   X11/XInput2 quirk exposing a "virtual core pointer"), so that media
+   query never actually caught it there and every hover: style stayed
+   live -- responding to the synthetic mouse-move events touch drags
+   generate, which forced real style recalculation on every interactive
+   row a scroll gesture crossed (root-caused via a Chrome DevTools
+   Protocol trace, 2026-09-13; see src/lib/touchDeviceFlag.ts). The
+   `html[data-touch-device]` guard is the actually-reliable signal:
+   `navigator.maxTouchPoints` isn't fooled by the same quirk. */
+@custom-variant hover (&:hover:not(html[data-touch-device] *));
 /* Canonical design tokens are generated from src/design-system/tokens.mjs. */
 
 /* ── Shared modal backdrop dim ─────────────────────────────────────
