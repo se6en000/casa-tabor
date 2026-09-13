@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import {
   Utensils,
   ShoppingBag,
@@ -125,7 +125,9 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
     })
   }
 
-  const toggleTomorrowSection = () => {
+  // useCallback so TomorrowPreviewWidget's React.memo actually skips
+  // re-rendering on the home screen's every-10-second clock tick (2026-09-13).
+  const toggleTomorrowSection = useCallback(() => {
     setTomorrowSectionCollapsed((prev) => {
       const next = !prev
       try {
@@ -135,7 +137,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
       }
       return next
     })
-  }
+  }, [])
 
   const {
     now,
@@ -166,6 +168,16 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
     isRefreshing,
     refreshBriefing,
   } = useCalmKioskPresenter()
+
+  // Stable references so HouseholdDispatchCard/TomorrowPreviewWidget's
+  // React.memo can actually skip re-rendering (2026-09-13).
+  const handleViewFullCalendar = useCallback(() => {
+    setActiveView('stacked')
+    navigateTo('/calendar')
+  }, [setActiveView, navigateTo])
+  const handleRefreshDispatch = useCallback(() => {
+    void refreshBriefing()
+  }, [refreshBriefing])
 
   const heroIntel = useHeroIntelligence(now, upcomingAppointments, familyMembers, heroManualView || 'today')
 
@@ -673,7 +685,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
             weekDays={dispatchWeekDays}
             horizon={dispatchHorizon}
             isRefreshing={isRefreshing}
-            onRefresh={() => void refreshBriefing()}
+            onRefresh={handleRefreshDispatch}
           />
         </div>
 
@@ -682,10 +694,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
             tomorrowEvents={tomorrowEvents}
             collapsed={tomorrowSectionCollapsed}
             onToggleCollapsed={toggleTomorrowSection}
-            onViewFullCalendar={() => {
-              setActiveView('stacked')
-              navigateTo('/calendar')
-            }}
+            onViewFullCalendar={handleViewFullCalendar}
             onOpenEvent={onOpenEvent}
           />
         </div>

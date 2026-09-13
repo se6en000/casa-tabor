@@ -205,6 +205,15 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
   const queryClient = useQueryClient()
   const { setCanvasSubmode } = useAppStore()
   const now = useLiveClock(10_000)
+  // Collapses `now`'s every-10-seconds ticking down to day granularity for
+  // memos that only ever care which calendar day it is (the Ahead card's
+  // week ribbon and horizon list) -- without this they were rebuilding a
+  // fresh array on every tick even though their actual output only changes
+  // once a day, forcing an unmemoized HouseholdDispatchCard/TomorrowPreviewWidget
+  // to re-render every 10s along with the rest of the page. Found chasing
+  // residual (post-hover-fix) touch-scroll roughness on the kiosk home
+  // screen (2026-09-13).
+  const todayKey = format(now, 'yyyy-MM-dd')
   const [isRefreshing, setIsRefreshing] = useState(false)
   const { data: todayEvents = [] } = useTodayEvents(now)
   const { data: tomorrowEvents = [] } = useTomorrowEvents(now)
@@ -690,7 +699,7 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
   // Signal, not noise: only events isDispatchNotable() flags get a dot, so a
   // routine errand-filled day doesn't drown out the days that actually matter.
   const dispatchWeekDays = useMemo<DispatchDay[]>(() => {
-    const todayStart = startOfDay(now)
+    const todayStart = startOfDay(parseISO(todayKey))
     return Array.from({ length: 7 }, (_, i) => {
       const dayStart = addDays(todayStart, i)
       const dayEnd = addDays(dayStart, 1)
@@ -715,14 +724,14 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
         categories: Array.from(buckets),
       }
     })
-  }, [rollingEvents, prepItems, now])
+  }, [rollingEvents, prepItems, todayKey])
 
   // ── Household Dispatch: On the Horizon (7–30 day lookahead) ──
   // Deliberately a higher bar than the week ribbon -- only milestone-grade
   // events (a real celebration or trip) earn a named line on this ledger;
   // routine prep-heavy events already showed up as a dot in the week above.
   const dispatchHorizon = useMemo<DispatchHorizonItem[]>(() => {
-    const todayStart = startOfDay(now)
+    const todayStart = startOfDay(parseISO(todayKey))
     const candidates = rollingEvents.filter((e: EventWithDetails) => {
       if (isMealEvent(e)) return false
       try {
@@ -755,7 +764,7 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
           prepPhrase: dispatchPrepPhrase(e),
         }
       })
-  }, [rollingEvents, now])
+  }, [rollingEvents, todayKey])
 
   // ── Household Dispatch: one-line headline (weather + tomorrow's first move) ──
   // Open reminders/to-dos already have their own dedicated section on this

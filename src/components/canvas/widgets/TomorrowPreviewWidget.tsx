@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { format, parseISO } from 'date-fns'
 import { Calendar, ChevronDown, ChevronUp, ChevronRight, Car } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -19,7 +20,7 @@ interface TomorrowPreviewWidgetProps {
  * To-Dos and Ahead (see the "Equal-Weight Split" home-hierarchy mock,
  * 2026-09-11).
  */
-export default function TomorrowPreviewWidget({
+function TomorrowPreviewWidget({
   tomorrowEvents,
   collapsed,
   onToggleCollapsed,
@@ -164,3 +165,9 @@ export default function TomorrowPreviewWidget({
     </div>
   )
 }
+
+// tomorrowEvents only changes when tomorrow's actual data changes, not on
+// the home screen's every-10-second clock tick -- memoized so it doesn't
+// re-render along with everything else on ticks that don't touch it
+// (2026-09-13; see the matching HouseholdDispatchCard change).
+export default memo(TomorrowPreviewWidget)

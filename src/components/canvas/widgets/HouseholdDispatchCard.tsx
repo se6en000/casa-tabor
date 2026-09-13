@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { Sparkles, RotateCw } from 'lucide-react'
 import { cn } from '../../../utils/cn'
 import { IconButton } from '../../ui'
@@ -45,7 +46,7 @@ const LEGEND: Array<{ bucket: DispatchBucket; label: string }> = [
  * to be legible at rest, no tap required — see design concept approved
  * 2026-09-11 (household-dispatch mockup).
  */
-export default function HouseholdDispatchCard({
+function HouseholdDispatchCard({
   timeHorizonLabel,
   headline,
   weekDays,
@@ -161,3 +162,9 @@ export default function HouseholdDispatchCard({
     </div>
   )
 }
+
+// weekDays/horizon only get new array references once a day (see the
+// todayKey memo dependency in useCalmKioskPresenter), so this now actually
+// skips re-rendering across most of the home screen's every-10-second clock
+// ticks instead of recomputing along with everything else (2026-09-13).
+export default memo(HouseholdDispatchCard)
