@@ -283,15 +283,21 @@ html.midnight-gallery .floating-dock-glass {
    of two independently-eyeballed approximations of it. See the "Card
    Material Tiers" reference approved 2026-09-12. */
 :root {
-  /* Flat tint instead of a diagonal gradient, and shadow dropped to none --
-     scroll-perf experiment (2026-09-12): a linear-gradient fill and a
-     blurred shadow both cost real GPU raster time on every scroll frame
-     they're visible for; a single solid color costs effectively none.
-     color-mix() itself is cheap -- it resolves to one flat value, it's the
-     gradient interpolation across the surface that was expensive. */
-  --ambient-gradient: color-mix(in srgb, var(--color-casa-gold) 8%, var(--color-casa-surface));
+  /* Restored 2026-09-13: flattened to a solid tint + no shadow chasing the
+     kiosk's touch-scroll stutter, but a CDP investigation that day proved
+     neither gradients nor shadows were the cause (an incremental test added
+     both back onto a proven-smooth page with no measurable cost) -- the
+     real culprit was the Hero widget. Back to the diagonal gradient + the
+     halved-blur shadow from tokens.mjs's `shadow.card`. */
+  --ambient-gradient: linear-gradient(
+    135deg,
+    var(--color-casa-surface) 0%,
+    color-mix(in srgb, var(--color-casa-gold) 14%, var(--color-casa-surface)) 100%
+  );
   --ambient-border: color-mix(in srgb, var(--color-casa-gold) 40%, transparent);
-  --ambient-shadow: none;
+  --ambient-shadow:
+    0 5px 12px color-mix(in srgb, var(--color-casa-gold-hover) 16%, transparent),
+    0 1px 2px rgba(27, 42, 74, 0.06);
 }
 
 .material-ambient {

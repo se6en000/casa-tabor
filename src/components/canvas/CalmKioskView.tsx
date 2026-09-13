@@ -276,7 +276,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
       </div>
 
       {/* ── Row 1: Hero + Today's Schedule, equal-weight split (home-hierarchy mock approved 2026-09-11) ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-4 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mt-4 items-stretch">
         {/* Hero Next Up Card (6 cols -- true 50/50 with Today's Schedule, per live feedback 2026-09-12) */}
         <div className={cn(
           'lg:col-span-6 flex-col justify-start',
@@ -573,7 +573,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
           1/3 width: squeezing to 1/4 width when Kitchen joined made them hard
           to read (live feedback 2026-09-12) -- 2x2 gives each card back the
           width it needs instead of shrinking any of that text further. ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6 pb-6 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8 pb-6 items-stretch">
         <div className={cn(mobileSubTab === 'schedule' ? 'flex flex-col' : 'hidden lg:flex lg:flex-col')}>
           <WidgetContainer
             tier="ambient"

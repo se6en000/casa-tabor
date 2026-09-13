@@ -53,7 +53,7 @@ export default function TodaysTodosWidget({
   if (todayReminders.length === 0) return null
 
   return (
-    <div className={cn('rounded-container px-5 py-4', TIER_CARD.structural)}>
+    <div className={cn('h-full rounded-container px-5 py-4', TIER_CARD.structural)}>
       <div
         role="button"
         tabIndex={0}

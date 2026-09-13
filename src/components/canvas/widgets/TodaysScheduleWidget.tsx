@@ -37,7 +37,7 @@ export default function TodaysScheduleWidget({
   if (upcomingAppointments.length === 0 && pastEvents.length === 0) return null
 
   return (
-    <div className={cn('rounded-container px-5 py-4 sm:px-6 sm:py-5', TIER_CARD.structural)}>
+    <div className={cn('h-full rounded-container px-5 py-4 sm:px-6 sm:py-5', TIER_CARD.structural)}>
       <div
         role="button"
         tabIndex={0}
