@@ -64,7 +64,7 @@ function HouseholdDispatchCard({
   )
 
   return (
-    <div className={cn('h-full rounded-container px-5 py-4 sm:px-6 sm:py-5', TIER_CARD.structural)}>
+    <div className={cn('rounded-container px-5 py-4 sm:px-6 sm:py-5', TIER_CARD.structural)}>
       <div className="flex items-center justify-between gap-2 mb-3">
         <span className="text-2xs uppercase tracking-widest font-sans font-bold text-casa-gold-hover flex items-center gap-1.5">
           <Sparkles size={13} className="text-casa-gold" />

@@ -76,7 +76,7 @@ export const WidgetContainer = forwardRef<HTMLDivElement, WidgetContainerProps>(
       <div
         ref={ref}
         className={cn(
-          'h-full flex flex-col rounded-container p-5 overflow-hidden',
+          'flex flex-col rounded-container p-5 overflow-hidden',
           TIER_CARD[tier],
           className,
         )}

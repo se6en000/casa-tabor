@@ -28,7 +28,7 @@ function TomorrowPreviewWidget({
   onOpenEvent,
 }: TomorrowPreviewWidgetProps) {
   return (
-    <div className={cn('h-full rounded-container px-5 py-4', TIER_CARD.structural)}>
+    <div className={cn('rounded-container px-5 py-4', TIER_CARD.structural)}>
       <div
         role="button"
         tabIndex={0}

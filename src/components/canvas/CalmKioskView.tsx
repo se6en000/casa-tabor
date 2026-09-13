@@ -275,11 +275,21 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
         </div>
       </div>
 
-      {/* ── Row 1: Hero + Today's Schedule, equal-weight split (home-hierarchy mock approved 2026-09-11) ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mt-4 items-stretch">
-        {/* Hero Next Up Card (6 cols -- true 50/50 with Today's Schedule, per live feedback 2026-09-12) */}
+      {/* ── Two independent columns, not a shared-row grid (2026-09-13): a card's
+          height should hug its own content, never stretch to match whatever's
+          taller in the same row -- CSS Grid's shared row-track height does
+          exactly that (and `items-stretch`/`items-start` both suffer it, since
+          row height is set by the tallest occupant either way), so each side
+          gets its own flex column instead. Every card keeps the same gap-8
+          to whatever comes next in ITS column, regardless of the other
+          column's total height. Left: Hero, Kitchen, Ahead. Right: Schedule,
+          To-Dos, Tomorrow -- Hero and Schedule still land side by side at the
+          top since each leads its own column. ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-4 items-start">
+        <div className="flex flex-col gap-8">
+        {/* Hero Next Up Card */}
         <div className={cn(
-          'lg:col-span-6 flex-col justify-start',
+          'flex-col justify-start',
           mobileSubTab === 'triage' ? 'hidden lg:flex' : 'flex'
         )}>
           <AnimatePresence mode="wait" initial={false}>
@@ -364,9 +374,104 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
           </AnimatePresence>
         </div>
 
-        {/* Today's Schedule — promoted to a full-width timeline, true 50/50 with the Hero card (6 cols) */}
+        <div className={cn(mobileSubTab === 'schedule' ? 'flex flex-col' : 'hidden lg:flex lg:flex-col')}>
+          <WidgetContainer
+            tier="ambient"
+            eyebrow={
+              dinnerPlan.mode === 'takeout'
+                ? "Tonight's Takeout"
+                : dinnerPlan.mode === 'leftovers'
+                ? "Tonight's Leftovers"
+                : "Tonight's Kitchen"
+            }
+            icon={
+              dinnerPlan.mode === 'takeout' ? (
+                <ShoppingBag size={15} />
+              ) : dinnerPlan.mode === 'leftovers' ? (
+                <Clock size={15} />
+              ) : (
+                <Utensils size={15} />
+              )
+            }
+            title={
+              <span
+                onClick={() => {
+                  if (dinnerPlan.mode === 'cook') {
+                    if (dinnerPlan.recipeId) {
+                      navigateTo(`/cook?recipe=${encodeURIComponent(dinnerPlan.recipeId)}&autocook=true`)
+                    } else {
+                      navigateTo('/cook')
+                    }
+                  }
+                }}
+                className={cn(dinnerPlan.mode === 'cook' && 'cursor-pointer hover:text-casa-gold-hover transition-colors')}
+              >
+                {dinnerPlan.title}
+              </span>
+            }
+            badge={
+              <span className="text-3xs font-medium text-casa-text-secondary whitespace-nowrap">
+                {isDinnerPast ? 'Completed' : dinnerPlan.targetTime || '6:30 PM'}
+              </span>
+            }
+          >
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  document.dispatchEvent(
+                    new CustomEvent('open-ai-chat', {
+                      detail: {
+                        launchId: crypto.randomUUID(),
+                        agent: 'chef',
+                        source: 'tonights-kitchen',
+                        prompt: undefined,
+                        autoSend: false,
+                      },
+                    })
+                  )
+                }}
+                className="text-caption font-medium text-casa-muted hover:text-casa-navy transition-colors h-7 min-h-0 px-2 rounded-lg"
+              >
+                <span>Change</span>
+              </Button>
+              {dinnerPlan.mode === 'cook' && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    if (dinnerPlan.recipeId) {
+                      navigateTo(`/cook?recipe=${encodeURIComponent(dinnerPlan.recipeId)}&autocook=true`)
+                    } else {
+                      navigateTo('/cook')
+                    }
+                  }}
+                  className="text-caption font-semibold text-casa-navy hover:text-casa-gold transition-colors h-7 min-h-0 px-2 rounded-lg flex items-center gap-1 group/recipe"
+                >
+                  <span>Recipe</span>
+                  <ChevronRight size={13} className="text-casa-muted group-hover/recipe:text-casa-gold transition-colors" />
+                </Button>
+              )}
+            </div>
+          </WidgetContainer>
+        </div>
+
+        <div className={cn('flex-col', mobileSubTab === 'triage' ? 'hidden lg:flex' : 'flex')}>
+          <HouseholdDispatchCard
+            timeHorizonLabel={timeHorizonLabel}
+            headline={dispatchHeadline}
+            weekDays={dispatchWeekDays}
+            horizon={dispatchHorizon}
+            isRefreshing={isRefreshing}
+            onRefresh={handleRefreshDispatch}
+          />
+        </div>
+        </div>
+
+        <div className="flex flex-col gap-8">
+        {/* Today's Schedule — leads the right column, side by side with Hero at the top */}
         <div className={cn(
-          'lg:col-span-6',
           mobileSubTab === 'schedule' ? 'flex flex-col' : 'hidden lg:flex lg:flex-col'
         )}>
           <TodaysScheduleWidget
@@ -378,6 +483,38 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
             onExpandAll={() => setCanvasSubmode('turbo')}
             onOpenEvent={onOpenEvent}
           />
+        </div>
+
+        <div className={cn(mobileSubTab === 'schedule' ? 'flex flex-col' : 'hidden lg:flex lg:flex-col')}>
+          <TodaysTodosWidget
+            now={now}
+            todayReminders={todayReminders}
+            openReminders={openReminders}
+            overdueReminders={overdueReminders}
+            activeReminders={activeReminders}
+            completedReminders={completedReminders}
+            collapsed={todosSectionCollapsed}
+            onToggleCollapsed={toggleTodosSection}
+            showOverdue={showOverdueTodos}
+            onToggleOverdue={toggleOverdueTodos}
+            expanded={todosExpanded}
+            onToggleExpanded={() => setTodosExpanded(!todosExpanded)}
+            completedCollapsed={completedSectionCollapsed}
+            onToggleCompleted={toggleCompletedSection}
+            onToggleReminder={handleToggleReminder}
+            onOpenEvent={onOpenEvent}
+          />
+        </div>
+
+        <div className={cn(mobileSubTab === 'schedule' ? 'flex flex-col' : 'hidden lg:flex lg:flex-col')}>
+          <TomorrowPreviewWidget
+            tomorrowEvents={tomorrowEvents}
+            collapsed={tomorrowSectionCollapsed}
+            onToggleCollapsed={toggleTomorrowSection}
+            onViewFullCalendar={handleViewFullCalendar}
+            onOpenEvent={onOpenEvent}
+          />
+        </div>
         </div>
       </div>
 
@@ -568,137 +705,6 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
             </div>
           )}
 
-      {/* ── Row 2: Tonight's Kitchen, To-Dos, Ahead, and Tomorrow — quiet, secondary cards.
-          2x2, not 4-across: these cards were built dense with small text at
-          1/3 width: squeezing to 1/4 width when Kitchen joined made them hard
-          to read (live feedback 2026-09-12) -- 2x2 gives each card back the
-          width it needs instead of shrinking any of that text further. ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8 pb-6 items-stretch">
-        <div className={cn(mobileSubTab === 'schedule' ? 'flex flex-col' : 'hidden lg:flex lg:flex-col')}>
-          <WidgetContainer
-            tier="ambient"
-            eyebrow={
-              dinnerPlan.mode === 'takeout'
-                ? "Tonight's Takeout"
-                : dinnerPlan.mode === 'leftovers'
-                ? "Tonight's Leftovers"
-                : "Tonight's Kitchen"
-            }
-            icon={
-              dinnerPlan.mode === 'takeout' ? (
-                <ShoppingBag size={15} />
-              ) : dinnerPlan.mode === 'leftovers' ? (
-                <Clock size={15} />
-              ) : (
-                <Utensils size={15} />
-              )
-            }
-            title={
-              <span
-                onClick={() => {
-                  if (dinnerPlan.mode === 'cook') {
-                    if (dinnerPlan.recipeId) {
-                      navigateTo(`/cook?recipe=${encodeURIComponent(dinnerPlan.recipeId)}&autocook=true`)
-                    } else {
-                      navigateTo('/cook')
-                    }
-                  }
-                }}
-                className={cn(dinnerPlan.mode === 'cook' && 'cursor-pointer hover:text-casa-gold-hover transition-colors')}
-              >
-                {dinnerPlan.title}
-              </span>
-            }
-            badge={
-              <span className="text-3xs font-medium text-casa-text-secondary whitespace-nowrap">
-                {isDinnerPast ? 'Completed' : dinnerPlan.targetTime || '6:30 PM'}
-              </span>
-            }
-          >
-            <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  document.dispatchEvent(
-                    new CustomEvent('open-ai-chat', {
-                      detail: {
-                        launchId: crypto.randomUUID(),
-                        agent: 'chef',
-                        source: 'tonights-kitchen',
-                        prompt: undefined,
-                        autoSend: false,
-                      },
-                    })
-                  )
-                }}
-                className="text-caption font-medium text-casa-muted hover:text-casa-navy transition-colors h-7 min-h-0 px-2 rounded-lg"
-              >
-                <span>Change</span>
-              </Button>
-              {dinnerPlan.mode === 'cook' && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    if (dinnerPlan.recipeId) {
-                      navigateTo(`/cook?recipe=${encodeURIComponent(dinnerPlan.recipeId)}&autocook=true`)
-                    } else {
-                      navigateTo('/cook')
-                    }
-                  }}
-                  className="text-caption font-semibold text-casa-navy hover:text-casa-gold transition-colors h-7 min-h-0 px-2 rounded-lg flex items-center gap-1 group/recipe"
-                >
-                  <span>Recipe</span>
-                  <ChevronRight size={13} className="text-casa-muted group-hover/recipe:text-casa-gold transition-colors" />
-                </Button>
-              )}
-            </div>
-          </WidgetContainer>
-        </div>
-
-        <div className={cn(mobileSubTab === 'schedule' ? 'flex flex-col' : 'hidden lg:flex lg:flex-col')}>
-          <TodaysTodosWidget
-            now={now}
-            todayReminders={todayReminders}
-            openReminders={openReminders}
-            overdueReminders={overdueReminders}
-            activeReminders={activeReminders}
-            completedReminders={completedReminders}
-            collapsed={todosSectionCollapsed}
-            onToggleCollapsed={toggleTodosSection}
-            showOverdue={showOverdueTodos}
-            onToggleOverdue={toggleOverdueTodos}
-            expanded={todosExpanded}
-            onToggleExpanded={() => setTodosExpanded(!todosExpanded)}
-            completedCollapsed={completedSectionCollapsed}
-            onToggleCompleted={toggleCompletedSection}
-            onToggleReminder={handleToggleReminder}
-            onOpenEvent={onOpenEvent}
-          />
-        </div>
-
-        <div className={cn('flex-col', mobileSubTab === 'triage' ? 'hidden lg:flex' : 'flex')}>
-          <HouseholdDispatchCard
-            timeHorizonLabel={timeHorizonLabel}
-            headline={dispatchHeadline}
-            weekDays={dispatchWeekDays}
-            horizon={dispatchHorizon}
-            isRefreshing={isRefreshing}
-            onRefresh={handleRefreshDispatch}
-          />
-        </div>
-
-        <div className={cn(mobileSubTab === 'schedule' ? 'flex flex-col' : 'hidden lg:flex lg:flex-col')}>
-          <TomorrowPreviewWidget
-            tomorrowEvents={tomorrowEvents}
-            collapsed={tomorrowSectionCollapsed}
-            onToggleCollapsed={toggleTomorrowSection}
-            onViewFullCalendar={handleViewFullCalendar}
-            onOpenEvent={onOpenEvent}
-          />
-        </div>
-      </div>
     </div>
   )
 }
