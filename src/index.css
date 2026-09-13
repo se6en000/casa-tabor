@@ -272,17 +272,15 @@ html.midnight-gallery .floating-dock-glass {
    of two independently-eyeballed approximations of it. See the "Card
    Material Tiers" reference approved 2026-09-12. */
 :root {
-  --ambient-gradient: linear-gradient(
-    135deg,
-    var(--color-casa-surface) 0%,
-    color-mix(in srgb, var(--color-casa-gold) 14%, var(--color-casa-surface)) 100%
-  );
+  /* Flat tint instead of a diagonal gradient, and shadow dropped to none --
+     scroll-perf experiment (2026-09-12): a linear-gradient fill and a
+     blurred shadow both cost real GPU raster time on every scroll frame
+     they're visible for; a single solid color costs effectively none.
+     color-mix() itself is cheap -- it resolves to one flat value, it's the
+     gradient interpolation across the surface that was expensive. */
+  --ambient-gradient: color-mix(in srgb, var(--color-casa-gold) 8%, var(--color-casa-surface));
   --ambient-border: color-mix(in srgb, var(--color-casa-gold) 40%, transparent);
-  /* Blur radius roughly halved vs. the first pass -- see the shadow.card
-     comment in tokens.mjs for why (Pi kiosk touch-scroll GPU cost, 2026-09-12). */
-  --ambient-shadow:
-    0 5px 12px color-mix(in srgb, var(--color-casa-gold-hover) 16%, transparent),
-    0 1px 2px rgba(27, 42, 74, 0.06);
+  --ambient-shadow: none;
 }
 
 .material-ambient {

@@ -195,31 +195,32 @@ export const DESIGN_TOKENS = {
     pill: '9999px',
   },
   shadow: {
-    // Blur radius drives GPU raster cost (wider sample kernel + wider paint
-    // bounds), and these run on every card on screen at once. Deepened from
-    // a near-invisible hairline for the "washed out" feedback (2026-09-12),
-    // then re-tuned here for the Pi 5's VideoCore GPU after "staggered"
-    // touch-scroll was traced to shadow blur cost, not fill-rate alone
-    // (2026-09-12): same navy-tinted depth, roughly half the blur radius,
-    // opacity raised to compensate so the lift still reads at a glance.
-    card: '0 4px 10px rgba(27,42,74,0.14), 0 1px 2px rgba(27,42,74,0.08)',
-    'card-hover': '0 8px 18px rgba(27,42,74,0.18)',
-    widget: '0 3px 8px rgba(27,42,74,0.10), 0 1px 2px rgba(27,42,74,0.06)',
-    'glow-gold': '0 0 10px rgba(201,169,110,0.30)',
-    'glow-amber': '0 0 9px rgba(245,158,11,0.30)',
-    'glow-emerald': '0 0 9px rgba(16,185,129,0.30)',
-    'hero-dark': '0 10px 22px -10px rgba(15,23,42,0.45), 0 0 0 1px rgba(255,255,255,0.08)',
+    // Scroll-perf experiment (2026-09-12): every blurred box-shadow here
+    // costs real GPU raster time on the Pi 5's VideoCore GPU, every frame
+    // it's on screen -- card/widget/glow are zeroed out entirely (edge
+    // definition now comes from the plain 1px borders already on every
+    // TIER_CARD), and hero-dark keeps only its solid 1px ring (no blur)
+    // since a Spotlight card still needs to read as lifted off a dark page.
+    // First pass (2026-09-12, same day) had halved the blur radii instead
+    // of removing it; this is the "how far can we push it" follow-up.
+    card: 'none',
+    'card-hover': 'none',
+    widget: 'none',
+    'glow-gold': 'none',
+    'glow-amber': 'none',
+    'glow-emerald': 'none',
+    'hero-dark': '0 0 0 1px rgba(255,255,255,0.08)',
     modal: '0 6px 16px rgba(27,42,74,0.16)',
     fab: '0 3px 10px rgba(201,169,110,0.35)',
   },
   midnightShadow: {
-    card: '0 1px 2px rgba(0,0,0,0.5), 0 1px 1px rgba(0,0,0,0.35)',
-    'card-hover': '0 4px 10px rgba(0,0,0,0.6)',
-    widget: '0 3px 8px rgba(0,0,0,0.5)',
-    'glow-gold': '0 0 12px rgba(159,134,88,0.40)',
-    'glow-amber': '0 0 10px rgba(210,164,101,0.35)',
-    'glow-emerald': '0 0 10px rgba(74,165,106,0.35)',
-    'hero-dark': '0 12px 26px rgba(0,0,0,0.75), 0 0 0 1px rgba(255,255,255,0.12)',
+    card: 'none',
+    'card-hover': 'none',
+    widget: 'none',
+    'glow-gold': 'none',
+    'glow-amber': 'none',
+    'glow-emerald': 'none',
+    'hero-dark': '0 0 0 1px rgba(255,255,255,0.12)',
     modal: '0 8px 20px rgba(0,0,0,0.7)',
     fab: '0 4px 12px rgba(159,134,88,0.45)',
   },

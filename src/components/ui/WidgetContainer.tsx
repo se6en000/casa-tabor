@@ -30,7 +30,11 @@ export interface WidgetContainerProps extends Omit<HTMLAttributes<HTMLDivElement
 export const TIER_CARD: Record<WidgetTier, string> = {
   structural: 'bg-casa-surface border border-casa-border shadow-card',
   ambient: 'material-ambient border border-casa-gold/40',
-  spotlight: 'bg-gradient-to-br from-casa-navy via-slate-900 to-slate-950 border border-white/10 shadow-hero-dark text-white',
+  // Flat navy instead of a gradient -- part of the "strip GPU-heavy CSS"
+  // scroll-perf experiment on the Pi kiosk (2026-09-12): a gradient fill
+  // costs real GPU raster time on every scroll frame it's visible for,
+  // a flat color costs effectively none.
+  spotlight: 'bg-casa-navy border border-white/10 shadow-hero-dark text-white',
 }
 
 export const TIER_ICON_CHIP: Record<WidgetTier, string> = {
