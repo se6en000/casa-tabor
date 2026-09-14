@@ -1,5 +1,5 @@
-export const DESIGN_SYSTEM_VERSION = '2.0.0'
-export const DESIGN_SYSTEM_RELEASE_DATE = '2026-08-14'
+export const DESIGN_SYSTEM_VERSION = '2.1.0'
+export const DESIGN_SYSTEM_RELEASE_DATE = '2026-09-13'
 export const DESIGN_SYSTEM_SCHEMA_VERSION = 1
 
 const component = ({
@@ -631,6 +631,18 @@ export const COMPONENT_MANIFEST = [
 
 export const DESIGN_SYSTEM_CHANGELOG = [
   {
+    version: '2.1.0',
+    date: '2026-09-13',
+    changes: [
+      'Unified card typography roles across the kiosk home screen (Card Title, Eyebrow, Primary Row Text, Secondary/Meta Text, Time/Number) -- see the rewritten TYPOGRAPHY_ARCHETYPES below. Every Home card had independently invented its own combination of font-family/size/weight for the same role; fixed to one rule per role.',
+      'Retired text-2xs/text-3xs (fixed 9-11px, not density-aware -- bypassed the kiosk density system entirely) from every Home card in favor of text-caption, which correctly scales with density (18px kiosk baseline, now 21px after the 2026-09-13 legibility bump below).',
+      'Bumped every named type role\'s kiosk-density size ~15-18% (e.g. caption 18px->21px, body-lg 26px->30px, display-sm 38px->44px) after live feedback that the previous kiosk scale read too small from normal wall-mounted viewing distance, even though it cleared the certification floor. touch/compact tiers are unchanged.',
+      'Fixed two silently-broken classes that don\'t exist in this system (text-heading-lg, text-title, font-serif) which fell back to unstyled browser defaults instead of the intended scale/font -- a static grep for a class name is not enough to catch this; verify against the real generated token list.',
+      'Adopted wrap-not-truncate as the default for row/list item text (event titles, to-do text, milestone titles): truncation hides information a household member has to tap into an item to recover, which defeats a kiosk\'s "read it from across the room" purpose -- especially now that larger type truncates MORE aggressively per line, not less. Primary row text uses line-clamp-2 (wraps, caps at two lines so one unusually long title can\'t blow out a whole card); secondary/meta text wraps freely with no clamp.',
+      'Gave HouseholdDispatchCard ("Ahead") a real title matching every other card\'s header pattern -- it previously had only a small eyebrow-style label standing in for one.',
+    ],
+  },
+  {
     version: '2.0.0',
     date: '2026-08-14',
     changes: [
@@ -805,42 +817,63 @@ ${release.changes.map((change) => `- ${change}`).join('\n')}`).join('\n\n')}
 `
 }
 
+// Rewritten 2026-09-13 to match the actual, audited implementation rather
+// than an earlier aspirational draft -- the previous version of this object
+// is *why* the kiosk home screen's cards each invented their own type combo:
+// it documented "18px-20px" for card titles when the shared WidgetContainer
+// component actually shipped text-body-lg (26px, now 30px), and it explicitly
+// sanctioned an 11-12px eyebrow (text-2xs/text-3xs) -- both fixed sizes that
+// never scaled with the kiosk density system at all. Every value below is
+// the real class combination now used on every Home card; when adding a new
+// card or row, copy the classes verbatim rather than inventing a new size.
 export const TYPOGRAPHY_ARCHETYPES = {
-  hero: {
-    role: 'Display Hero (H1)',
-    fontFamily: 'Cormorant Garamond',
+  heroHeadline: {
+    role: 'Hero Headline (Spotlight tier, H2/H3 -- the one big-format card)',
+    classes: 'font-display text-display-sm sm:text-display-md font-bold leading-tight',
+    fontFamily: 'Cormorant Garamond (font-display)',
     weight: 'bold',
-    casing: 'Title Case',
-    desktopSize: '24px–28px (text-heading to text-display-xs)',
-    kioskSize: '28px–34px (text-display-xs to text-display-sm)',
-    lineHeight: '1.2–1.25',
-    usage: 'Singular featured entity or centerpiece display per primary visual pane.',
+    kioskSize: '44px (sm) / 54px (md, used above the sm: breakpoint)',
+    usage: 'The single most prominent line on whichever Hero widget is active (ImminentTransitWidget/MiddayLogisticsWidget/MorningLaunchpadWidget/TomorrowPrepWidget all share this exact treatment now -- previously ranged 23px-46px depending on which one happened to render, a "roll of the dice" fixed 2026-09-13).',
   },
-  sectionAnchor: {
-    role: 'Section Anchor (H2)',
-    fontFamily: 'Cormorant Garamond (Editorial) / DM Sans (Operational)',
+  cardTitle: {
+    role: 'Card Title (H2/H3 -- the name of a Structural/Ambient tier card, e.g. "Today\'s Schedule", "To-Dos", "Ahead")',
+    classes: 'font-display text-body-lg font-bold tracking-tight',
+    fontFamily: 'Cormorant Garamond (font-display)',
     weight: 'bold',
-    casing: 'Title Case',
-    size: '18px–20px (text-lg to text-xl / text-body-lg)',
-    layout: 'Header with left title/subtitle and right action slot (e.g. Shuffle, AI Plan, counts).',
-    usage: 'Major functional sections, side-rail widgets, and workbench panels.',
-  },
-  entityTitle: {
-    role: 'Entity Title (H3)',
-    fontFamily: 'Cormorant Garamond / DM Sans',
-    weight: 'bold / semi-bold',
-    casing: 'Strictly Title Case (normalized via formatRecipeTitle or Title Case standard)',
-    size: '15px–16px (text-body)',
-    glanceability: 'Legible from 3–5 feet in kitchen or kiosk environments.',
-    usage: 'Primary interactive item titles in list rows, cards, drawers, and grids.',
+    kioskSize: '30px',
+    usage: 'WidgetContainer\'s own <h2> already renders exactly this; every hand-rolled card header (TodaysScheduleWidget, TodaysTodosWidget, HouseholdDispatchCard, TomorrowPreviewWidget) matches it now instead of each choosing its own family/size/weight.',
   },
   eyebrow: {
-    role: 'Eyebrow / Overline & Status Badges',
-    fontFamily: 'JetBrains Mono / DM Sans',
+    role: 'Eyebrow / Overline & count badges/status pills',
+    classes: 'text-caption font-bold uppercase tracking-widest (or tracking-wider for pills)',
+    fontFamily: 'DM Sans (font-sans, the default body font)',
     weight: 'bold',
-    casing: 'ALL-CAPS with tracking (uppercase tracking-wider)',
-    size: '11px–12px (text-caption / text-2xs)',
-    usage: 'Category markers, date capsules, status pills, and active session indicators.',
+    kioskSize: '21px -- NEVER text-2xs/text-3xs (fixed 9px/11px, do not scale with density and read as unreadably small on the kiosk from normal distance).',
+    usage: 'Small-caps card labels ("TONIGHT\'S KITCHEN"), the "Now"/"Overdue"/"Missed" markers, count badges, day-of-week abbreviations in the Ahead ribbon.',
+  },
+  primaryRowText: {
+    role: 'Primary Row/Item Text (the actual event title, to-do text, or milestone name inside a card)',
+    classes: 'font-sans text-body-sm font-semibold, wrapped with line-clamp-2 (never truncate)',
+    fontFamily: 'DM Sans (font-sans) -- not font-display: serif reads slower for repeated, scanned list rows',
+    weight: 'semibold',
+    kioskSize: '24px',
+    usage: 'Event names in Today\'s Schedule/Tomorrow\'s Schedule, to-do text, Ahead\'s horizon milestone titles. Wraps up to two lines instead of truncating with an ellipsis -- a household member reading this from across the room should never need to tap an item just to see the rest of its title.',
+  },
+  secondaryMetaText: {
+    role: 'Secondary/Meta Text (location, subtitle, byline)',
+    classes: 'font-sans text-caption text-casa-muted, wraps freely (no clamp)',
+    fontFamily: 'DM Sans (font-sans)',
+    weight: 'normal/medium',
+    kioskSize: '21px',
+    usage: 'Location names, "for {event}" bylines, short descriptive sub-lines under a primary row title.',
+  },
+  timeAndNumber: {
+    role: 'Time/Number readouts',
+    classes: 'font-mono font-bold tabular-nums, text-caption for list rows (a genuinely de-emphasized/past state may go smaller; an actively-happening-now row may go one step larger for emphasis -- that is a deliberate in-card hierarchy choice, not a role change)',
+    fontFamily: 'JetBrains Mono (font-mono)',
+    weight: 'bold',
+    kioskSize: '21px baseline',
+    usage: 'Event start times, to-do due times/dates, "Xd" countdowns on Ahead\'s horizon list. font-mono + tabular-nums keeps digits aligned in a column of rows.',
   },
 }
 

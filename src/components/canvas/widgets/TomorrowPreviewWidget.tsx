@@ -127,11 +127,11 @@ function TomorrowPreviewWidget({
                             {format(parseISO(evt.start_time), 'h:mm a')}
                           </span>
                         )}
-                        <span className="font-sans text-body-sm font-semibold text-casa-navy truncate group-hover:text-casa-navy transition-colors">
+                        <span className="font-sans text-body-sm font-semibold text-casa-navy line-clamp-2 group-hover:text-casa-navy transition-colors">
                           {evt.title}
                         </span>
                         {evt.location_name && (
-                          <span className="text-caption text-casa-muted font-normal truncate hidden md:inline">
+                          <span className="text-caption text-casa-muted font-normal hidden md:inline">
                             · {evt.location_name}
                           </span>
                         )}

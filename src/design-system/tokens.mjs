@@ -152,15 +152,20 @@ export const DESIGN_TOKENS = {
     mono: "'JetBrains Mono', monospace",
   },
   type: {
-    'display-xl': { touch: 'clamp(52px, calc(46px + 1.45vw), 72px)', compact: '52px', kiosk: '76px', lineHeight: '1.1' },
-    'display-lg': { touch: 'clamp(40px, calc(36px + 1.1vw), 58px)', compact: '40px', kiosk: '60px', lineHeight: '1.15' },
-    'display-md': { touch: 'clamp(32px, calc(28px + 0.82vw), 44px)', compact: '32px', kiosk: '46px', lineHeight: '1.2' },
-    'display-sm': { touch: 'clamp(26px, calc(23px + 0.65vw), 36px)', compact: '26px', kiosk: '38px', lineHeight: '1.25' },
-    heading: { touch: 'clamp(23px, calc(21px + 0.5vw), 30px)', compact: '23px', kiosk: '32px', lineHeight: '1.3' },
-    'body-lg': { touch: 'clamp(19px, calc(18px + 0.4vw), 24px)', compact: '19px', kiosk: '26px', lineHeight: '1.5' },
-    body: { touch: 'clamp(17px, calc(16px + 0.34vw), 21px)', compact: '17px', kiosk: '23px', lineHeight: '1.5' },
-    'body-sm': { touch: 'clamp(15px, calc(14px + 0.3vw), 19px)', compact: '15px', kiosk: '21px', lineHeight: '1.45' },
-    caption: { touch: 'clamp(14px, calc(13px + 0.24vw), 17px)', compact: '14px', kiosk: '18px', lineHeight: '1.4' },
+    // Kiosk tier bumped ~15-18% across the board (2026-09-13, live-feedback
+    // "the font is too small" after the card-typography unification pass) --
+    // touch/compact are untouched since the complaint was specifically about
+    // the wall display. caption moves well clear of the 18px certification
+    // floor (now 21px) rather than sitting right on it.
+    'display-xl': { touch: 'clamp(52px, calc(46px + 1.45vw), 72px)', compact: '52px', kiosk: '88px', lineHeight: '1.1' },
+    'display-lg': { touch: 'clamp(40px, calc(36px + 1.1vw), 58px)', compact: '40px', kiosk: '70px', lineHeight: '1.15' },
+    'display-md': { touch: 'clamp(32px, calc(28px + 0.82vw), 44px)', compact: '32px', kiosk: '54px', lineHeight: '1.2' },
+    'display-sm': { touch: 'clamp(26px, calc(23px + 0.65vw), 36px)', compact: '26px', kiosk: '44px', lineHeight: '1.25' },
+    heading: { touch: 'clamp(23px, calc(21px + 0.5vw), 30px)', compact: '23px', kiosk: '38px', lineHeight: '1.3' },
+    'body-lg': { touch: 'clamp(19px, calc(18px + 0.4vw), 24px)', compact: '19px', kiosk: '30px', lineHeight: '1.5' },
+    body: { touch: 'clamp(17px, calc(16px + 0.34vw), 21px)', compact: '17px', kiosk: '27px', lineHeight: '1.5' },
+    'body-sm': { touch: 'clamp(15px, calc(14px + 0.3vw), 19px)', compact: '15px', kiosk: '24px', lineHeight: '1.45' },
+    caption: { touch: 'clamp(14px, calc(13px + 0.24vw), 17px)', compact: '14px', kiosk: '21px', lineHeight: '1.4' },
   },
   spacing: {
     'nav-height': '4.5rem',

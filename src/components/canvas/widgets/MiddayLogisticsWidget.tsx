@@ -512,7 +512,7 @@ export default function MiddayLogisticsWidget({
                 )}
               >
                 <Sun size={13} />
-                <span>Today's Flow</span>
+                <span>Today</span>
               </Button>
               <Button
                 variant={isTomorrowActive ? 'primary' : 'ghost'}
@@ -882,7 +882,7 @@ export default function MiddayLogisticsWidget({
                 </div>
 
                 <div>
-                  <div className={cn('font-sans font-bold text-body truncate', isNavy ? 'text-white' : 'text-casa-navy')}>
+                  <div className={cn('font-sans font-bold text-body line-clamp-2', isNavy ? 'text-white' : 'text-casa-navy')}>
                     {dismissal.venueName}
                   </div>
                   <div className={cn('text-caption font-medium', isNavy ? 'text-white/70' : 'text-casa-text-secondary')}>
@@ -928,12 +928,12 @@ export default function MiddayLogisticsWidget({
             <ShieldCheck size={24} />
           </div>
           <div className="space-y-1 min-w-0 flex-1">
-            <div className={cn('text-body font-serif font-bold text-body-lg', isNavy ? 'text-white' : 'text-casa-navy')}>
-              {routineIntel.isTodayWeekend ? 'Weekend Flow Clear · Casa Tabor in Rhythm' : 'Afternoon Logistics Clear'}
+            <div className={cn('font-display text-body-lg font-bold', isNavy ? 'text-white' : 'text-casa-navy')}>
+              {routineIntel.isTodayWeekend ? 'Weekend Schedule Clear' : 'Afternoon Logistics Clear'}
             </div>
             <div className={cn('text-caption leading-relaxed', isNavy ? 'text-white/70' : 'text-casa-text-secondary')}>
               {openReminders.length === 0
-                ? 'All daily household routines and tasks are complete. Enjoy the afternoon flow.'
+                ? 'All daily household routines and tasks are complete.'
                 : `${openReminders.length} tasks remain open for today with no conflicting commitments.`}
             </div>
           </div>
@@ -964,11 +964,11 @@ export default function MiddayLogisticsWidget({
                 <span className="text-caption font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-amber-500/25 border border-amber-500/35 text-amber-950">
                   Today's Active Focus & Tasks
                 </span>
-                <span className="text-caption font-bold truncate">
+                <span className="text-caption font-bold">
                   {priorityFocusReminder.title}
                 </span>
               </div>
-              <p className={cn('text-caption mt-0.5 truncate', isNavy ? 'text-white/70' : 'text-casa-muted')}>
+              <p className={cn('text-caption mt-0.5', isNavy ? 'text-white/70' : 'text-casa-muted')}>
                 {openReminders.length === 1
                   ? completedReminders.length > 0
                     ? `1 task active · ${completedReminders.length} completed`
@@ -1053,12 +1053,12 @@ export default function MiddayLogisticsWidget({
                     <div className="flex items-center gap-1.5 mb-0.5">
                       <span className="text-caption font-mono font-bold">{formattedTime}</span>
                       {evt.location_name && (
-                        <span className={cn('text-caption truncate text-caption', isNavy ? 'text-white/60' : 'text-casa-muted')}>
+                        <span className={cn('text-caption', isNavy ? 'text-white/60' : 'text-casa-muted')}>
                           · {evt.location_name}
                         </span>
                       )}
                     </div>
-                    <div className={cn('font-display font-bold text-body-sm truncate', isNavy ? 'text-white' : 'text-casa-navy')}>
+                    <div className={cn('font-sans font-semibold text-body-sm line-clamp-2', isNavy ? 'text-white' : 'text-casa-navy')}>
                       {evt.title}
                     </div>
                   </div>

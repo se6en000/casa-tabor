@@ -121,11 +121,11 @@ export default function TodaysScheduleWidget({
                         {format(parseISO(evt.start_time), 'h:mm a')}
                       </span>
                     )}
-                    <span className="font-sans text-body-sm font-semibold truncate text-casa-muted group-hover:text-casa-navy transition-colors">
+                    <span className="font-sans text-body-sm font-semibold line-clamp-2 text-casa-muted group-hover:text-casa-navy transition-colors">
                       {evt.title}
                     </span>
                     {evt.location_name && (
-                      <span className="text-caption text-casa-muted truncate hidden md:inline">
+                      <span className="text-caption text-casa-muted hidden md:inline">
                         · {evt.location_name}
                       </span>
                     )}
@@ -211,7 +211,7 @@ export default function TodaysScheduleWidget({
                       )}
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-sans text-body-sm font-semibold text-casa-navy truncate">
+                          <span className="font-sans text-body-sm font-semibold text-casa-navy line-clamp-2">
                             {evt.title}
                           </span>
                           {isNow && (

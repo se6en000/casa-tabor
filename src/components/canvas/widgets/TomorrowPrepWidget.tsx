@@ -174,7 +174,7 @@ export default function TomorrowPrepWidget({
                 )}
               >
                 <Sun size={13} />
-                <span>Today's Flow</span>
+                <span>Today</span>
               </Button>
               <Button
                 variant="primary"
@@ -334,7 +334,7 @@ export default function TomorrowPrepWidget({
                   </div>
                   <div
                     className={cn(
-                      'text-body-sm font-semibold truncate',
+                      'text-body-sm font-semibold line-clamp-2',
                       isNavy ? 'text-white' : 'text-casa-navy',
                     )}
                   >
@@ -342,7 +342,7 @@ export default function TomorrowPrepWidget({
                   </div>
                   <div
                     className={cn(
-                      'text-caption truncate',
+                      'text-caption',
                       isNavy ? 'text-white/60' : 'text-casa-muted',
                     )}
                   >

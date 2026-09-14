@@ -593,11 +593,11 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                       <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
                       <span>{prep.type || 'Prep Item'}</span>
                     </div>
-                    <p className="text-body-sm font-semibold text-casa-navy truncate mt-0.5">
+                    <p className="text-body-sm font-semibold text-casa-navy line-clamp-2 mt-0.5">
                       {prep.description}
                     </p>
                     {prep.event_title && (
-                      <p className="text-2xs text-casa-muted truncate">For {prep.event_title}</p>
+                      <p className="text-caption text-casa-muted">For {prep.event_title}</p>
                     )}
                   </div>
                   <Button
@@ -654,10 +654,10 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
 
               <div className="flex items-center justify-between gap-4 px-1">
                 <div className="min-w-0 flex-1">
-                  <h4 className="font-display text-body-lg font-bold text-casa-navy truncate">
+                  <h4 className="font-display text-body-lg font-bold text-casa-navy line-clamp-2">
                     {dinnerPlan.title}
                   </h4>
-                  <p className="text-caption text-casa-text-secondary truncate mt-0.5">
+                  <p className="text-caption text-casa-text-secondary mt-0.5">
                     {isDinnerPast ? 'Dinner served · Kitchen closed' : dinnerPlan.subtitle}
                   </p>
                 </div>

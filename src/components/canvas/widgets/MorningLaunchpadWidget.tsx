@@ -308,7 +308,7 @@ export default function MorningLaunchpadWidget({
                 </div>
                 <div
                   className={cn(
-                    'text-body-sm font-semibold truncate',
+                    'text-body-sm font-semibold line-clamp-2',
                     isNavy ? 'text-white' : 'text-casa-navy',
                   )}
                 >
@@ -316,7 +316,7 @@ export default function MorningLaunchpadWidget({
                 </div>
                 <div
                   className={cn(
-                    'text-caption truncate',
+                    'text-caption',
                     isNavy ? 'text-white/60' : 'text-casa-muted',
                   )}
                 >

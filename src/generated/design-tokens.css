@@ -177,15 +177,15 @@ html[data-density="compact"] {
 }
 
 html[data-density="kiosk"] {
-  --ds-type-display-xl: calc(76px * var(--ds-font-scale));
-  --ds-type-display-lg: calc(60px * var(--ds-font-scale));
-  --ds-type-display-md: calc(46px * var(--ds-font-scale));
-  --ds-type-display-sm: calc(38px * var(--ds-font-scale));
-  --ds-type-heading: calc(32px * var(--ds-font-scale));
-  --ds-type-body-lg: calc(26px * var(--ds-font-scale));
-  --ds-type-body: calc(23px * var(--ds-font-scale));
-  --ds-type-body-sm: calc(21px * var(--ds-font-scale));
-  --ds-type-caption: calc(18px * var(--ds-font-scale));
+  --ds-type-display-xl: calc(88px * var(--ds-font-scale));
+  --ds-type-display-lg: calc(70px * var(--ds-font-scale));
+  --ds-type-display-md: calc(54px * var(--ds-font-scale));
+  --ds-type-display-sm: calc(44px * var(--ds-font-scale));
+  --ds-type-heading: calc(38px * var(--ds-font-scale));
+  --ds-type-body-lg: calc(30px * var(--ds-font-scale));
+  --ds-type-body: calc(27px * var(--ds-font-scale));
+  --ds-type-body-sm: calc(24px * var(--ds-font-scale));
+  --ds-type-caption: calc(21px * var(--ds-font-scale));
   --ds-control-target: 48px;
   --ds-control-sm: 44px;
   --ds-control-md: 48px;

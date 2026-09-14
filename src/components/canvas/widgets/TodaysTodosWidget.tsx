@@ -195,7 +195,7 @@ export default function TodaysTodosWidget({
                                   {isPastDay ? 'Missed' : 'Overdue'}
                                 </span>
 
-                                <span className="text-body-sm font-semibold text-casa-navy truncate transition-colors flex-1">
+                                <span className="text-body-sm font-semibold text-casa-navy line-clamp-2 transition-colors flex-1">
                                   {evt.title}
                                 </span>
                               </div>
@@ -274,7 +274,7 @@ export default function TodaysTodosWidget({
                           </span>
                         )}
 
-                        <span className="text-body-sm font-semibold text-casa-navy group-hover:text-casa-navy truncate transition-colors flex-1">
+                        <span className="text-body-sm font-semibold text-casa-navy group-hover:text-casa-navy line-clamp-2 transition-colors flex-1">
                           {evt.title}
                         </span>
                       </div>
@@ -401,7 +401,7 @@ export default function TodaysTodosWidget({
                                 </span>
                               )}
 
-                              <span className="text-body-sm truncate transition-colors flex-1 line-through text-casa-muted/70">
+                              <span className="text-body-sm line-clamp-2 transition-colors flex-1 line-through text-casa-muted/70">
                                 {evt.title}
                               </span>
                             </div>

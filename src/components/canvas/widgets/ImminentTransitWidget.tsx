@@ -260,7 +260,7 @@ export default function ImminentTransitWidget({
             )}
           >
             <MapPin size={15} className="text-casa-gold shrink-0" />
-            <span className="truncate">{locationDisplayText}</span>
+            <span>{locationDisplayText}</span>
           </div>
         )}
 
@@ -275,7 +275,7 @@ export default function ImminentTransitWidget({
             <span className={cn('font-semibold shrink-0', isHeroNavy ? 'text-white/90' : 'text-casa-navy')}>
               Bring:
             </span>
-            <span className={cn('truncate', isHeroNavy ? 'text-white/75' : 'text-casa-navy/80')}>
+            <span className={cn(isHeroNavy ? 'text-white/75' : 'text-casa-navy/80')}>
               {prepSummaryText}
             </span>
           </div>
@@ -509,7 +509,7 @@ export default function ImminentTransitWidget({
 
                     <h4
                       className={cn(
-                        'text-caption font-semibold truncate transition-colors group-hover/item:text-casa-gold',
+                        'text-caption font-semibold line-clamp-2 transition-colors group-hover/item:text-casa-gold',
                         isHeroNavy ? 'text-white' : 'text-casa-navy',
                       )}
                     >
@@ -594,7 +594,7 @@ export default function ImminentTransitWidget({
               <span className="text-caption font-bold uppercase tracking-wider text-indigo-400 block">
                 Tomorrow at a Glance
               </span>
-              <span className={cn('text-caption font-medium truncate block', isHeroNavy ? 'text-white/80' : 'text-casa-text-secondary')}>
+              <span className={cn('text-caption font-medium block', isHeroNavy ? 'text-white/80' : 'text-casa-text-secondary')}>
                 {tomorrowSummary.eventCount} {tomorrowSummary.eventCount === 1 ? 'event' : 'events'} · Prep: {tomorrowSummary.prepItemsReady} of {tomorrowSummary.totalPrepItems} ready
               </span>
             </div>
@@ -614,7 +614,7 @@ export default function ImminentTransitWidget({
                   : 'bg-casa-surface-subtle hover:bg-casa-surface-subtle/80 border-casa-border text-casa-navy',
               )}
             >
-              <span>Tomorrow Flow</span>
+              <span>Tomorrow</span>
               <ChevronRight size={13} />
             </button>
           )}

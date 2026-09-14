@@ -471,8 +471,8 @@ test('Appearance owns persistent theme controls while the Design System referenc
   assert.match(theme, /localStorage\.setItem\(STORAGE_FONT_SCALE/)
   assert.match(theme, /const applyDayPreset[\s\S]*?setDayColors\(nextDay\)[\s\S]*?setActiveTarget\('day'\)[\s\S]*?persistPalettes\(nextDay, midnightColors\)/)
   assert.match(theme, /--ds-font-scale: \$\{fontScale\}/)
-  assert.match(generatedTokens, /calc\(76px \* var\(--ds-font-scale\)\)/)
-  assert.match(generatedTokens, /calc\(18px \* var\(--ds-font-scale\)\)/)
+  assert.match(generatedTokens, /calc\(88px \* var\(--ds-font-scale\)\)/)
+  assert.match(generatedTokens, /calc\(21px \* var\(--ds-font-scale\)\)/)
 })
 
 test('Cook mode, unit, and quantity selectors use shared toggle controls', () => {
