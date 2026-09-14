@@ -1044,4 +1044,21 @@ html.midnight-gallery .category-picker-item.selected {
   color: var(--color-casa-gold-hover, #F0C98F);
 }
 
+/* .gold-active / -summary / -suggestion all read casa-gold-light and
+   casa-gold-dark, which are not real theme keys (see tokens.mjs) -- they
+   always resolve to their light-mode fallback, so these badges stayed a
+   glaring cream-white pill regardless of theme. Give them an explicit
+   dark treatment: a muted warm-brown fill with bright gold text. */
+html.midnight-gallery .living-action-chip.gold-active,
+html.midnight-gallery .living-recurrence-summary-card,
+html.midnight-gallery .living-prep-suggestion-pill {
+  background: var(--color-casa-accent-soft, #5A4A33);
+}
+
+html.midnight-gallery .living-action-chip.gold-active,
+html.midnight-gallery .living-recurrence-summary-icon,
+html.midnight-gallery .living-prep-suggestion-pill {
+  color: var(--color-casa-gold-hover, #F0C98F);
+}
+
 
