@@ -140,7 +140,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--color-casa-navy, #1B2A4A);
+  color: var(--color-casa-text, #2D2D2D);
   cursor: pointer;
   font-size: 14px;
   transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s cubic-bezier(0.16, 1, 0.3, 1), color 0.18s cubic-bezier(0.16, 1, 0.3, 1);
@@ -170,7 +170,7 @@
 }
 .living-footer-action-btn:hover {
   border-color: var(--color-casa-gold, #C9A96E);
-  color: var(--color-casa-navy, #1B2A4A);
+  color: var(--color-casa-text, #2D2D2D);
   transform: translateY(-1px);
 }
 .living-footer-action-btn:active {
@@ -234,7 +234,7 @@
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.7px;
-  color: var(--color-casa-navy, #1B2A4A);
+  color: var(--color-casa-text, #2D2D2D);
 }
 
 /* Title Card */
@@ -255,7 +255,7 @@
   font-family: var(--font-display, 'Cormorant Garamond', serif);
   font-size: 32px;
   font-weight: 600;
-  color: var(--color-casa-navy, #1B2A4A);
+  color: var(--color-casa-text, #2D2D2D);
   line-height: 1.15;
   outline: none;
   border: none;
@@ -282,7 +282,7 @@
   border-radius: 20px;
   font-size: 12px;
   font-weight: 600;
-  color: var(--color-casa-navy, #1B2A4A);
+  color: var(--color-casa-text, #2D2D2D);
   border: 1.5px solid var(--color-casa-border, #E8E2D9);
   display: inline-flex;
   align-items: center;
@@ -366,7 +366,7 @@
 .living-member-name {
   font-size: 14px;
   font-weight: 700;
-  color: var(--color-casa-navy, #1B2A4A);
+  color: var(--color-casa-text, #2D2D2D);
   line-height: 1.2;
 }
 
@@ -390,7 +390,7 @@
 .living-recur-label {
   font-size: 12.5px;
   font-weight: 600;
-  color: var(--color-casa-navy, #1B2A4A);
+  color: var(--color-casa-text, #2D2D2D);
 }
 
 .living-recur-pill {
@@ -400,7 +400,7 @@
   font-weight: 700;
   border: 1px solid var(--color-casa-border, #E8E2D9);
   background: #FFFFFF;
-  color: var(--color-casa-navy, #1B2A4A);
+  color: var(--color-casa-text, #2D2D2D);
   cursor: pointer;
   transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s cubic-bezier(0.16, 1, 0.3, 1), color 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -434,7 +434,7 @@
   cursor: pointer;
   font-size: 12px;
   font-weight: 700;
-  color: var(--color-casa-navy, #1B2A4A);
+  color: var(--color-casa-text, #2D2D2D);
   transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s cubic-bezier(0.16, 1, 0.3, 1), color 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .day-select-pill-btn:hover {
@@ -488,7 +488,7 @@
   font-family: var(--font-mono, monospace);
   font-size: 24px;
   font-weight: 800;
-  color: var(--color-casa-navy, #1B2A4A);
+  color: var(--color-casa-text, #2D2D2D);
   background: #FFFFFF;
   border: 1.5px solid var(--color-casa-border, #E8E2D9);
   padding: 4px 8px;
@@ -513,7 +513,7 @@
   background: #FFFFFF;
   font-size: 16px;
   font-weight: 800;
-  color: var(--color-casa-navy, #1B2A4A);
+  color: var(--color-casa-text, #2D2D2D);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -540,7 +540,7 @@
   background: #FFFFFF;
   font-size: 12.5px;
   font-weight: 800;
-  color: var(--color-casa-navy, #1B2A4A);
+  color: var(--color-casa-text, #2D2D2D);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -569,7 +569,7 @@
   background: var(--color-casa-bg, #FAF8F5);
   font-size: 11.5px;
   font-weight: 700;
-  color: var(--color-casa-navy, #1B2A4A);
+  color: var(--color-casa-text, #2D2D2D);
   cursor: pointer;
   transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s cubic-bezier(0.16, 1, 0.3, 1), color 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -618,7 +618,7 @@
 }
 .living-mode-btn.active {
   background: #FFFFFF;
-  color: var(--color-casa-navy, #1B2A4A);
+  color: var(--color-casa-text, #2D2D2D);
   box-shadow: 0 2px 8px rgba(27, 42, 74, 0.08);
 }
 
@@ -638,7 +638,7 @@
   background: var(--color-casa-bg, #FAF8F5);
   font-size: 12px;
   font-weight: 700;
-  color: var(--color-casa-navy, #1B2A4A);
+  color: var(--color-casa-text, #2D2D2D);
   cursor: pointer;
   transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s cubic-bezier(0.16, 1, 0.3, 1), color 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -702,7 +702,7 @@
   border-radius: 18px;
   font-size: 11.5px;
   font-weight: 700;
-  color: var(--color-casa-navy, #1B2A4A);
+  color: var(--color-casa-text, #2D2D2D);
   cursor: pointer;
   width: fit-content;
   margin-top: 4px;
@@ -827,7 +827,7 @@
 .living-prep-suggestion-pill:hover {
   background: #FFFFFF;
   border-color: var(--color-casa-navy, #1B2A4A);
-  color: var(--color-casa-navy, #1B2A4A);
+  color: var(--color-casa-text, #2D2D2D);
   transform: translateY(-1px);
   box-shadow: 0 2px 6px rgba(27, 42, 74, 0.12);
 }
@@ -882,7 +882,7 @@
   background: var(--color-casa-bg, #FAF8F5);
   font-size: 12px;
   font-weight: 700;
-  color: var(--color-casa-navy, #1B2A4A);
+  color: var(--color-casa-text, #2D2D2D);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -921,7 +921,7 @@
   background: var(--color-casa-bg, #FAF8F5);
   font-size: 12px;
   font-weight: 700;
-  color: var(--color-casa-navy, #1B2A4A);
+  color: var(--color-casa-text, #2D2D2D);
   cursor: pointer;
   display: flex;
   flex-direction: column;
@@ -978,9 +978,70 @@
 
 .recur-end-tab-btn.active {
   background: #FFFFFF;
-  color: var(--color-casa-navy, #1B2A4A);
+  color: var(--color-casa-text, #2D2D2D);
   box-shadow: 0 2px 6px rgba(27, 42, 74, 0.08);
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   MIDNIGHT GALLERY OVERRIDES
+   Every rule above reaches for the themed --color-casa-* variables, which
+   already resolve to dark values under html.midnight-gallery -- except the
+   literal #FFFFFF / white / #FFFDF9 / #F3EFE8 swatches below, which were
+   authored against the light palette only and never had a dark counterpart.
+   Left alone those render as bright white islands on the night theme (the
+   reported "chips are unreadable" / stray white buttons). Resting surfaces
+   go to casa-surface, hover/lift states to casa-surface-subtle (a touch
+   lighter, matching the app's existing dark hover convention), and the two
+   segmented-tab tracks follow the same track/thumb pairing already used by
+   the shared SegmentedControl component: casa-toggle-track for the track,
+   casa-surface for the selected thumb.
+   ═══════════════════════════════════════════════════════════════════════════ */
+html.midnight-gallery .living-attendee-capsule,
+html.midnight-gallery .living-header-action-btn,
+html.midnight-gallery .living-footer-action-btn,
+html.midnight-gallery .living-recur-pill,
+html.midnight-gallery .stepper-number-display,
+html.midnight-gallery .stepper-arrow-btn,
+html.midnight-gallery .ampm-toggle-btn,
+html.midnight-gallery .living-driver-pill,
+html.midnight-gallery .living-prep-card.living-prep-card-empty,
+html.midnight-gallery .living-prep-checkbox-box,
+html.midnight-gallery .living-recurrence-summary-icon {
+  background: var(--color-casa-surface, #121923);
+}
+
+html.midnight-gallery .living-attendee-capsule:hover,
+html.midnight-gallery .living-header-action-btn:hover,
+html.midnight-gallery .living-action-chip:hover,
+html.midnight-gallery .living-member-card:hover,
+html.midnight-gallery .day-select-pill-btn:hover,
+html.midnight-gallery .dur-chip-btn:hover,
+html.midnight-gallery .category-picker-item:hover,
+html.midnight-gallery .living-driver-pill:hover,
+html.midnight-gallery .living-prep-item-row:hover,
+html.midnight-gallery .living-prep-suggestion-pill:hover,
+html.midnight-gallery .recur-preset-pill:hover,
+html.midnight-gallery .recur-day-circle-btn:hover {
+  background: var(--color-casa-surface-subtle, #171F2C);
+}
+
+html.midnight-gallery .living-member-card.selected,
+html.midnight-gallery .category-picker-item.selected {
+  background: var(--color-casa-accent-subtle, #342C23);
+}
+
+html.midnight-gallery .living-mode-switcher,
+html.midnight-gallery .recur-end-tabs-grid {
+  background: var(--color-casa-toggle-track, #303B4E);
+}
+
+html.midnight-gallery .living-mode-btn.active,
+html.midnight-gallery .recur-end-tab-btn.active {
+  background: var(--color-casa-surface, #121923);
+}
+
+html.midnight-gallery .category-picker-item.selected {
+  color: var(--color-casa-gold-hover, #F0C98F);
+}
 
 

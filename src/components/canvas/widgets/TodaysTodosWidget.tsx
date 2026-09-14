@@ -171,10 +171,10 @@ export default function TodaysTodosWidget({
                                     }
                                     await onToggleReminder(evt.id)
                                   }}
-                                  className="rounded-full shrink-0 transition-all duration-150 text-casa-muted hover:text-casa-navy hover:bg-casa-surface-subtle h-6 w-6 min-h-0 p-0"
+                                  className="rounded-full shrink-0 transition-all duration-150 text-casa-muted hover:text-casa-navy hover:dark:text-casa-text hover:bg-casa-surface-subtle h-6 w-6 min-h-0 p-0"
                                   aria-label={`Mark ${evt.title} done`}
                                   icon={
-                                    <div className="w-4.5 h-4.5 rounded-full border-[1.5px] border-casa-warning hover:border-casa-navy bg-white shadow-2xs group-hover:scale-105 transition-transform" />
+                                    <div className="w-4.5 h-4.5 rounded-full border-[1.5px] border-casa-warning hover:border-casa-navy hover:dark:border-casa-text bg-white dark:bg-casa-surface shadow-2xs group-hover:scale-105 transition-transform" />
                                   }
                                 />
 
@@ -257,10 +257,10 @@ export default function TodaysTodosWidget({
                             }
                             await onToggleReminder(evt.id)
                           }}
-                          className="rounded-full shrink-0 transition-all duration-150 h-6 w-6 min-h-0 p-0 text-casa-muted hover:text-casa-navy hover:bg-casa-surface-subtle"
+                          className="rounded-full shrink-0 transition-all duration-150 h-6 w-6 min-h-0 p-0 text-casa-muted hover:text-casa-navy hover:dark:text-casa-text hover:bg-casa-surface-subtle"
                           aria-label={`Mark ${evt.title} done`}
                           icon={
-                            <div className="w-4.5 h-4.5 rounded-full border-[1.5px] border-slate-300 hover:border-casa-navy bg-white shadow-2xs transition-colors" />
+                            <div className="w-4.5 h-4.5 rounded-full border-[1.5px] border-slate-300 dark:border-slate-700 hover:border-casa-navy hover:dark:border-casa-text bg-white dark:bg-casa-surface shadow-2xs transition-colors" />
                           }
                         />
 

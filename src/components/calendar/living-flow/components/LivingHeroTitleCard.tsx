@@ -599,7 +599,7 @@ export default function LivingHeroTitleCard({
           </div>
 
           {/* Mode Switcher: Single Day vs Multi-Day / Stay */}
-          <div className="grid grid-cols-2 bg-slate-100 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800/50 rounded-full p-0.5 mb-3 gap-0.5">
+          <div className="grid grid-cols-2 bg-casa-toggle-track border border-casa-control-border rounded-full p-0.5 mb-3 gap-0.5">
             <button
               type="button"
               onClick={() => {
@@ -617,8 +617,8 @@ export default function LivingHeroTitleCard({
               }}
               className={`py-1.5 px-3 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
                 scheduleTab === 'single'
-                  ? 'bg-slate-900 text-white shadow-sm'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 hover:dark:text-slate-300 hover:bg-white/60 dark:bg-casa-surface'
+                  ? 'bg-casa-gold text-casa-navy shadow-sm'
+                  : 'text-casa-muted hover:text-casa-text hover:bg-casa-surface/60'
               }`}
             >
               <Clock size={13} />
@@ -634,8 +634,8 @@ export default function LivingHeroTitleCard({
               }}
               className={`py-1.5 px-3 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
                 scheduleTab === 'multiday'
-                  ? 'bg-slate-900 text-white shadow-sm'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 hover:dark:text-slate-300 hover:bg-white/60 dark:bg-casa-surface'
+                  ? 'bg-casa-gold text-casa-navy shadow-sm'
+                  : 'text-casa-muted hover:text-casa-text hover:bg-casa-surface/60'
               }`}
             >
               <Bed size={13} />
@@ -1108,7 +1108,7 @@ export default function LivingHeroTitleCard({
                         className={`py-2 px-1 rounded-lg text-2xs font-bold capitalize transition-all border text-center cursor-pointer ${
                           localRecur.freq === unit
                             ? 'bg-slate-900 border-slate-900 text-white shadow-2xs'
-                            : 'bg-slate-50 dark:bg-slate-950/20 border-slate-200 dark:border-slate-800/50 text-slate-600 dark:text-slate-400 hover:bg-white dark:bg-casa-surface'
+                            : 'bg-slate-50 dark:bg-slate-950/20 border-slate-200 dark:border-slate-800/50 text-slate-600 dark:text-slate-400 hover:bg-white hover:dark:bg-casa-surface'
                         }`}
                       >
                         {unit === 'daily' ? 'Days' : unit === 'weekly' ? 'Weeks' : unit === 'monthly' ? 'Months' : 'Years'}
@@ -1240,7 +1240,7 @@ export default function LivingHeroTitleCard({
                             className={`px-2 py-1 rounded-md text-2xs font-bold transition-all border whitespace-nowrap cursor-pointer ${
                               isPresetActive
                                 ? 'bg-amber-100 dark:bg-amber-900/50 border-amber-400 dark:border-amber-600 text-amber-900 dark:text-amber-300'
-                                : 'bg-slate-50 dark:bg-slate-950/20 border-slate-200 dark:border-slate-800/50 text-slate-600 dark:text-slate-400 hover:bg-white dark:bg-casa-surface'
+                                : 'bg-slate-50 dark:bg-slate-950/20 border-slate-200 dark:border-slate-800/50 text-slate-600 dark:text-slate-400 hover:bg-white hover:dark:bg-casa-surface'
                             }`}
                           >
                             {preset.label}

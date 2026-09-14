@@ -104,7 +104,7 @@ export default function LivingRouteTimeline({
           </span>
         </div>
 
-        <div className="grid grid-cols-5 bg-slate-100 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800/50 rounded-full p-0.5 gap-0.5">
+        <div className="grid grid-cols-5 bg-casa-toggle-track border border-casa-control-border rounded-full p-0.5 gap-0.5">
           {LOGISTICS_MODE_OPTIONS.map(({ mode, shortLabel, icon: IconComponent }) => {
             const isSelected = activeMode === mode
             return (
@@ -114,8 +114,8 @@ export default function LivingRouteTimeline({
                 onClick={() => onSetTravelBehavior(mode)}
                 className={`py-1.5 px-1 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1 ${
                   isSelected
-                    ? 'bg-slate-900 text-white shadow-sm'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 hover:dark:text-slate-300 hover:bg-white/60 dark:bg-casa-surface'
+                    ? 'bg-casa-gold text-casa-navy shadow-sm'
+                    : 'text-casa-muted hover:text-casa-text hover:bg-casa-surface/60'
                 }`}
                 title={mode}
               >

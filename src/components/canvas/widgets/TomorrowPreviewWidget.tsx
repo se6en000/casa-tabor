@@ -139,7 +139,7 @@ function TomorrowPreviewWidget({
 
                       <div className="flex items-center gap-1.5 shrink-0">
                         {driverMember?.family_member?.name && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-caption font-semibold bg-white text-casa-navy border border-casa-border/60 shadow-2xs hidden sm:inline-flex">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-caption font-semibold bg-white dark:bg-casa-surface text-casa-navy dark:text-casa-text border border-casa-border/60 shadow-2xs hidden sm:inline-flex">
                             <Car size={11} className="text-casa-gold-hover shrink-0" />
                             <span>{driverMember.family_member.name} drives</span>
                           </span>
