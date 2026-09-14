@@ -120,7 +120,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2px solid white;
+  border: 2px solid var(--color-casa-surface, #FFFFFF);
   margin-left: -6px;
   background-color: var(--color-casa-navy, #1B2A4A);
   box-shadow: 0 1px 3px rgba(0,0,0,0.12);
