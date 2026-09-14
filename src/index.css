@@ -129,6 +129,17 @@
    `html[data-touch-device]` guard is the actually-reliable signal:
    `navigator.maxTouchPoints` isn't fooled by the same quirk. */
 @custom-variant hover (&:hover:not(html[data-touch-device] *));
+
+/* ── Dark mode: wire the standard dark: variant to the app's real toggle ──
+   The app's actual dark mode is the `html.midnight-gallery` class (set by
+   ThemeContext, driving the --color-casa-* CSS variable swap) -- NOT
+   Tailwind's default `.dark` class or `prefers-color-scheme`. Several
+   components (GmailSyncStatusIndicator, ArtModeSettingsPage,
+   MobileDocumentScanSheet, MobileCookingView, ArtScreensaver, AIChatDrawer,
+   ImminentTransitWidget) already had correctly-authored dark: classes that
+   were silently inert because nothing mapped dark: to that class -- this
+   activates them along with any new dark: usage (2026-09-13). */
+@custom-variant dark (&:where(html.midnight-gallery, html.midnight-gallery *));
 /* Canonical design tokens are generated from src/design-system/tokens.mjs. */
 
 /* ── Shared modal backdrop dim ─────────────────────────────────────

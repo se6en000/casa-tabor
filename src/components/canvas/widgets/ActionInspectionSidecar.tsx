@@ -471,11 +471,11 @@ export default function ActionInspectionSidecar({
           }}
           className="p-3.5 rounded-xl bg-casa-surface border border-casa-gold/60 hover:border-casa-gold hover:bg-casa-gold/10 transition-all text-left flex items-start gap-3 group shadow-2xs cursor-pointer min-h-[52px]"
         >
-          <div className="w-9 h-9 rounded-lg bg-casa-gold/15 text-casa-navy flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+          <div className="w-9 h-9 rounded-lg bg-casa-gold/15 text-casa-navy dark:text-casa-text flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
             <PenTool size={16} className="text-casa-gold" />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="text-body-sm font-bold text-casa-navy group-hover:text-casa-gold-hover truncate">
+            <div className="text-body-sm font-bold text-casa-navy dark:text-casa-text group-hover:text-casa-gold-hover truncate">
               {signedSuccess ? '✓ Waiver Signed' : doc.title}
             </div>
             <div className="text-2xs text-casa-muted">{doc.subtitle}</div>
@@ -500,11 +500,11 @@ export default function ActionInspectionSidecar({
           }}
           className="p-3.5 rounded-xl bg-casa-surface border border-casa-gold/60 hover:border-casa-gold hover:bg-casa-gold/10 transition-all text-left flex items-start gap-3 group shadow-2xs no-underline min-h-[52px] cursor-pointer"
         >
-          <div className="w-9 h-9 rounded-lg bg-casa-gold/15 text-casa-navy flex items-center justify-center shrink-0">
+          <div className="w-9 h-9 rounded-lg bg-casa-gold/15 text-casa-navy dark:text-casa-text flex items-center justify-center shrink-0">
             <CreditCard size={16} className="text-casa-gold" />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="text-body-sm font-bold text-casa-navy group-hover:text-casa-gold-hover truncate">
+            <div className="text-body-sm font-bold text-casa-navy dark:text-casa-text group-hover:text-casa-gold-hover truncate">
               {doc.title}
             </div>
             <div className="text-2xs text-casa-muted font-mono font-medium">{doc.subtitle}</div>
@@ -530,11 +530,11 @@ export default function ActionInspectionSidecar({
           }}
           className="p-3.5 rounded-xl bg-casa-surface border border-casa-gold/60 hover:border-casa-gold hover:bg-casa-gold/10 transition-all text-left flex items-start gap-3 group shadow-2xs no-underline min-h-[52px] cursor-pointer"
         >
-          <div className="w-9 h-9 rounded-lg bg-casa-gold/15 text-casa-navy flex items-center justify-center shrink-0">
+          <div className="w-9 h-9 rounded-lg bg-casa-gold/15 text-casa-navy dark:text-casa-text flex items-center justify-center shrink-0">
             <ShoppingCart size={16} className="text-casa-gold" />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="text-body-sm font-bold text-casa-navy group-hover:text-casa-gold-hover truncate">
+            <div className="text-body-sm font-bold text-casa-navy dark:text-casa-text group-hover:text-casa-gold-hover truncate">
               {doc.title}
             </div>
             <div className="text-2xs text-casa-muted font-medium">{doc.subtitle}</div>
@@ -555,11 +555,11 @@ export default function ActionInspectionSidecar({
         }}
         className="p-3.5 rounded-xl bg-casa-surface border border-casa-border hover:border-casa-gold/60 hover:bg-casa-gold/10 transition-all text-left flex items-start gap-3 group shadow-2xs no-underline min-h-[52px] cursor-pointer"
       >
-        <div className="w-9 h-9 rounded-lg bg-casa-gold/15 text-casa-navy flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+        <div className="w-9 h-9 rounded-lg bg-casa-gold/15 text-casa-navy dark:text-casa-text flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
           <FileText size={16} className="text-casa-gold" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-body-sm font-bold text-casa-navy group-hover:text-casa-gold-hover truncate">{doc.title}</div>
+          <div className="text-body-sm font-bold text-casa-navy dark:text-casa-text group-hover:text-casa-gold-hover truncate">{doc.title}</div>
           <div className="text-2xs text-casa-muted">{doc.subtitle}</div>
         </div>
         <ExternalLink size={14} className="text-casa-gold mt-1 shrink-0" />
@@ -613,7 +613,7 @@ export default function ActionInspectionSidecar({
                 title="Previous item"
                 disabled={queueIndex === 0}
                 onClick={handlePrev}
-                className="min-h-[26px] min-w-[26px] p-0 hover:text-casa-navy disabled:opacity-30"
+                className="min-h-[26px] min-w-[26px] p-0 hover:text-casa-navy dark:text-casa-text disabled:opacity-30"
                 icon={<ChevronLeft size={13} />}
               />
               <IconButton
@@ -623,7 +623,7 @@ export default function ActionInspectionSidecar({
                 title="Next item"
                 disabled={queueIndex === queueItems.length - 1}
                 onClick={handleNext}
-                className="min-h-[26px] min-w-[26px] p-0 hover:text-casa-navy disabled:opacity-30"
+                className="min-h-[26px] min-w-[26px] p-0 hover:text-casa-navy dark:text-casa-text disabled:opacity-30"
                 icon={<ChevronRight size={13} />}
               />
             </div>
@@ -648,7 +648,7 @@ export default function ActionInspectionSidecar({
             className="living-header-action-btn group"
             title="Flip to Copilot (✨)"
             aria-label="Flip to Copilot"
-            icon={<Rotate3d size={16} className="text-amber-700 transition-transform duration-300 group-hover:rotate-180" />}
+            icon={<Rotate3d size={16} className="text-amber-700 dark:text-amber-400 transition-transform duration-300 group-hover:rotate-180" />}
           />
 
           {/* Close sidecar */}
@@ -658,7 +658,7 @@ export default function ActionInspectionSidecar({
             aria-label="Close details"
             title="Close details"
             className="living-header-action-btn"
-            icon={<X size={16} className="text-slate-800" />}
+            icon={<X size={16} className="text-slate-800 dark:text-slate-300" />}
           />
         </div>
       </div>
@@ -670,7 +670,7 @@ export default function ActionInspectionSidecar({
         
         {/* Title & Subject Hero */}
         <div className="space-y-2">
-          <h2 className="font-display text-display-sm sm:text-display-md font-bold text-casa-navy leading-tight tracking-tight">
+          <h2 className="font-display text-display-sm sm:text-display-md font-bold text-casa-navy dark:text-casa-text leading-tight tracking-tight">
             {extractSmartActionTitle(activeItem) || (!isGenericNewsletterOrFragment(activeItem?.event_title) ? activeItem?.event_title : null) || activeItem?.description || analysis.subject}
           </h2>
 
@@ -681,7 +681,7 @@ export default function ActionInspectionSidecar({
             {activeItem?.is_user_labeled && (
               <>
                 <span>·</span>
-                <span className="px-2 py-0.5 rounded-full text-2xs font-mono font-bold bg-purple-100 text-purple-900 border border-purple-200 inline-flex items-center gap-1">
+                <span className="px-2 py-0.5 rounded-full text-2xs font-mono font-bold bg-purple-100 dark:bg-purple-900/50 text-purple-900 dark:text-purple-300 border border-purple-200 dark:border-purple-800/50 inline-flex items-center gap-1">
                   <Tag size={10} />
                   Gmail 'Casa' Labeled
                 </span>
@@ -700,11 +700,11 @@ export default function ActionInspectionSidecar({
                   href={buildGmailWebUrl(activeItem, detailedItem?.gmailContext, familyMembers)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-2xs font-bold text-red-900 bg-red-50 hover:bg-red-100 border border-red-200 shadow-2xs transition-colors no-underline min-h-[32px]"
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-2xs font-bold text-red-900 dark:text-red-300 bg-red-50 dark:bg-red-950/20 hover:bg-red-100 dark:bg-red-900/50 border border-red-200 dark:border-red-800/50 shadow-2xs transition-colors no-underline min-h-[32px]"
                   title="Open original thread in Gmail"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <Mail size={12} className="text-red-600 shrink-0" />
+                  <Mail size={12} className="text-red-600 dark:text-red-400 shrink-0" />
                   <span>Open in Gmail</span>
                   <ExternalLink size={10} className="text-red-500 shrink-0" />
                 </a>
@@ -720,29 +720,29 @@ export default function ActionInspectionSidecar({
           const dueDateBadge = computeDueDateBadge(activeItem?.due_by || activeItem?.event_date)
 
           return (
-            <div className="p-4 sm:p-5 rounded-2xl bg-amber-50/70 border border-amber-200/90 shadow-xs space-y-3">
+            <div className="p-4 sm:p-5 rounded-2xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/90 dark:border-amber-800/50 shadow-xs space-y-3">
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div className="flex items-center gap-2 flex-wrap min-w-0">
-                  <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-900 flex items-center justify-center shrink-0">
-                    <BillIcon size={16} className="text-amber-700" />
+                  <div className="w-8 h-8 rounded-xl bg-amber-100 dark:bg-amber-900/50 text-amber-900 dark:text-amber-300 flex items-center justify-center shrink-0">
+                    <BillIcon size={16} className="text-amber-700 dark:text-amber-400" />
                   </div>
-                  <span className="text-body-sm font-bold text-casa-navy">
+                  <span className="text-body-sm font-bold text-casa-navy dark:text-casa-text">
                     {analysis.senderLabel || activeItem?.attention_vendor || 'Household Statement'}
                   </span>
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-2xs font-bold bg-amber-100 text-amber-950 border border-amber-300">
-                    <Receipt size={11} className="text-amber-700" />
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-2xs font-bold bg-amber-100 dark:bg-amber-900/50 text-amber-950 dark:text-amber-200 border border-amber-300 dark:border-amber-700">
+                    <Receipt size={11} className="text-amber-700 dark:text-amber-400" />
                     <span>{dueDateBadge ? `Due ${dueDateBadge.label}` : 'Action / Payment Required'}</span>
                   </span>
                 </div>
                 {amount && (
-                  <span className="font-mono text-body-sm sm:text-body font-bold text-amber-950 px-2.5 py-0.5 rounded-lg bg-white border border-amber-200 shadow-2xs">
+                  <span className="font-mono text-body-sm sm:text-body font-bold text-amber-950 dark:text-amber-200 px-2.5 py-0.5 rounded-lg bg-white dark:bg-casa-surface border border-amber-200 dark:border-amber-800/50 shadow-2xs">
                     {amount}
                   </span>
                 )}
               </div>
 
               <div className="space-y-1">
-                <p className="text-body sm:text-body-lg font-bold text-casa-navy leading-snug">
+                <p className="text-body sm:text-body-lg font-bold text-casa-navy dark:text-casa-text leading-snug">
                   {analysis.subject}
                 </p>
                 <p className="text-body-sm text-casa-text leading-relaxed">
@@ -763,36 +763,36 @@ export default function ActionInspectionSidecar({
           const isScheduledLater = isItemScheduledLater(deliveryTransit, now)
 
           return (
-            <div className="p-4 sm:p-5 rounded-2xl bg-sky-50/70 border border-sky-200/90 shadow-xs space-y-4">
+            <div className="p-4 sm:p-5 rounded-2xl bg-sky-50/70 dark:bg-sky-950/20 border border-sky-200/90 dark:border-sky-800/50 shadow-xs space-y-4">
               {/* Top line: Vendor, Stage Badge, Price */}
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div className="flex items-center gap-2 flex-wrap min-w-0">
-                  <div className="w-8 h-8 rounded-xl bg-casa-gold/20 text-casa-navy flex items-center justify-center shrink-0">
+                  <div className="w-8 h-8 rounded-xl bg-casa-gold/20 text-casa-navy dark:text-casa-text flex items-center justify-center shrink-0">
                     <DeliveryIcon size={16} className="text-casa-gold" />
                   </div>
 
-                  <span className="text-body-sm font-bold text-casa-navy">
+                  <span className="text-body-sm font-bold text-casa-navy dark:text-casa-text">
                     {deliveryTransit.vendor}
                   </span>
 
                   {isDelivered ? (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-2xs font-bold bg-emerald-100 text-emerald-950 border border-emerald-300">
-                      <CheckCircle2 size={11} className="text-emerald-700" />
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-2xs font-bold bg-emerald-100 dark:bg-emerald-900/50 text-emerald-950 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-700">
+                      <CheckCircle2 size={11} className="text-emerald-700 dark:text-emerald-400" />
                       <span>Delivered</span>
                     </span>
                   ) : isOutForDelivery && isArrivingToday ? (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-2xs font-bold bg-amber-100 text-amber-950 border border-amber-300">
-                      <Clock size={11} className="text-amber-700 animate-pulse" />
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-2xs font-bold bg-amber-100 dark:bg-amber-900/50 text-amber-950 dark:text-amber-200 border border-amber-300 dark:border-amber-700">
+                      <Clock size={11} className="text-amber-700 dark:text-amber-400 animate-pulse" />
                       <span>Out for Delivery Today</span>
                     </span>
                   ) : isScheduledLater ? (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-2xs font-bold bg-sky-100 text-sky-950 border border-sky-300">
-                      <Truck size={11} className="text-sky-700" />
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-2xs font-bold bg-sky-100 dark:bg-sky-900/50 text-sky-950 dark:text-sky-200 border border-sky-300 dark:border-sky-700">
+                      <Truck size={11} className="text-sky-700 dark:text-sky-400" />
                       <span>In Transit · Arriving {deliveryTransit.etaDisplay}</span>
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-2xs font-bold bg-sky-100 text-sky-950 border border-sky-300">
-                      <Package size={11} className="text-sky-700" />
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-2xs font-bold bg-sky-100 dark:bg-sky-900/50 text-sky-950 dark:text-sky-200 border border-sky-300 dark:border-sky-700">
+                      <Package size={11} className="text-sky-700 dark:text-sky-400" />
                       <span>
                         {deliveryTransit.stage === 'confirmed'
                           ? (/\b(?:being prepared|preparing|add more|last minute|edit your order)\b/i.test(`${deliveryTransit.title} ${deliveryTransit.itemSummary ?? ''} ${deliveryTransit.rawItem?.description ?? ''}`)
@@ -804,15 +804,15 @@ export default function ActionInspectionSidecar({
                   )}
 
                   {deliveryTransit.isPerishable && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-3xs font-bold bg-emerald-100 text-emerald-950 border border-emerald-300">
-                      <ShoppingCart size={10} className="text-emerald-700" />
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-3xs font-bold bg-emerald-100 dark:bg-emerald-900/50 text-emerald-950 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-700">
+                      <ShoppingCart size={10} className="text-emerald-700 dark:text-emerald-400" />
                       <span>Perishable Grocery</span>
                     </span>
                   )}
                 </div>
 
                 {deliveryTransit.cost && (
-                  <span className="font-mono text-body-sm font-bold text-casa-navy px-2.5 py-0.5 rounded-lg bg-white border border-casa-border/80 shadow-2xs">
+                  <span className="font-mono text-body-sm font-bold text-casa-navy dark:text-casa-text px-2.5 py-0.5 rounded-lg bg-white dark:bg-casa-surface border border-casa-border/80 shadow-2xs">
                     {deliveryTransit.cost}
                   </span>
                 )}
@@ -820,25 +820,25 @@ export default function ActionInspectionSidecar({
 
               {/* Item Summary & ETA */}
               <div className="space-y-1">
-                <p className="text-body sm:text-body-lg font-bold text-casa-navy leading-snug">
+                <p className="text-body sm:text-body-lg font-bold text-casa-navy dark:text-casa-text leading-snug">
                   {deliveryTransit.itemSummary || deliveryTransit.title}
                 </p>
                 {deliveryTransit.etaDisplay && (
                   <div className="flex items-center gap-1.5 text-caption font-semibold text-casa-muted">
                     <Clock size={13} className="text-casa-gold shrink-0" />
-                    <span>Estimated Arrival: <strong className="text-casa-navy">{deliveryTransit.etaDisplay}</strong></span>
+                    <span>Estimated Arrival: <strong className="text-casa-navy dark:text-casa-text">{deliveryTransit.etaDisplay}</strong></span>
                   </div>
                 )}
                 {deliveryTransit.policyDisclaimer && (
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-100/70 border border-sky-200/90 text-2xs font-medium text-sky-950 max-w-full">
-                    <ShieldAlert size={12} className="text-sky-700 shrink-0" />
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-100/70 dark:bg-sky-900/50 border border-sky-200/90 dark:border-sky-800/50 text-2xs font-medium text-sky-950 dark:text-sky-200 max-w-full">
+                    <ShieldAlert size={12} className="text-sky-700 dark:text-sky-400 shrink-0" />
                     <span>{deliveryTransit.policyDisclaimer}</span>
                   </div>
                 )}
               </div>
 
               {/* 4-Stage Stepper Rail */}
-              <div className="pt-2 border-t border-sky-200/70">
+              <div className="pt-2 border-t border-sky-200/70 dark:border-sky-800/50">
                 <div className="grid grid-cols-4 gap-1 text-center items-center">
                   {[
                     { label: 'Confirmed', index: 0 },
@@ -854,7 +854,7 @@ export default function ActionInspectionSidecar({
                           <div
                             className={cn(
                               'absolute -left-1/2 top-1.5 w-full h-[2px] -translate-y-1/2 -z-0 transition-colors',
-                              (step >= st.index || isDelivered) ? (isDelivered ? 'bg-emerald-600' : 'bg-casa-gold') : 'bg-casa-border/70'
+                              (step >= st.index || isDelivered) ? (isDelivered ? 'bg-emerald-600 dark:bg-emerald-600/25' : 'bg-casa-gold') : 'bg-casa-border/70'
                             )}
                           />
                         )}
@@ -866,19 +866,19 @@ export default function ActionInspectionSidecar({
                               ? (isDelivered ? 'bg-emerald-700 text-white ring-4 ring-emerald-700/20 scale-110 shadow-xs' : 'bg-casa-gold text-white ring-4 ring-casa-gold/20 scale-110 shadow-xs')
                               : isPast
                               ? (isDelivered ? 'bg-emerald-700 text-white' : 'bg-casa-navy text-white')
-                              : 'bg-white border-2 border-casa-border text-transparent'
+                              : 'bg-white dark:bg-casa-surface border-2 border-casa-border text-transparent'
                           )}
                         >
-                          {isPast && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                          {isPast && <div className="w-1.5 h-1.5 rounded-full bg-white dark:bg-casa-surface" />}
                         </div>
 
                         <span
                           className={cn(
                             'text-3xs font-bold uppercase tracking-wider',
                             isCurrent
-                              ? (isDelivered ? 'text-emerald-700' : 'text-casa-gold')
+                              ? (isDelivered ? 'text-emerald-700 dark:text-emerald-400' : 'text-casa-gold')
                               : isPast
-                              ? (isDelivered ? 'text-emerald-900' : 'text-casa-navy')
+                              ? (isDelivered ? 'text-emerald-900 dark:text-emerald-300' : 'text-casa-navy dark:text-casa-text')
                               : 'text-casa-muted/70'
                           )}
                         >
@@ -892,15 +892,15 @@ export default function ActionInspectionSidecar({
 
               {/* Multi-Email Lineage / Update History */}
               {deliveryTransit.updateHistory && deliveryTransit.updateHistory.length > 1 && (
-                <div className="pt-3 border-t border-sky-200/70 space-y-2">
+                <div className="pt-3 border-t border-sky-200/70 dark:border-sky-800/50 space-y-2">
                   <div className="text-3xs font-bold uppercase tracking-widest text-casa-muted">
                     Order Update Trail ({deliveryTransit.updateHistory.length} updates)
                   </div>
                   <div className="space-y-1.5">
                     {deliveryTransit.updateHistory.map((h, i) => (
-                      <div key={h.id || i} className="p-2 rounded-xl bg-white/80 border border-sky-200/60 text-2xs flex items-center justify-between gap-2">
+                      <div key={h.id || i} className="p-2 rounded-xl bg-white/80 dark:bg-casa-surface border border-sky-200/60 dark:border-sky-800/50 text-2xs flex items-center justify-between gap-2">
                         <div className="min-w-0 flex-1 flex items-center gap-1.5">
-                          <span className="font-bold text-casa-navy capitalize">{h.stage.replace('_', ' ')}:</span>
+                          <span className="font-bold text-casa-navy dark:text-casa-text capitalize">{h.stage.replace('_', ' ')}:</span>
                           <span className="text-casa-muted truncate">{h.title || h.description}</span>
                         </div>
                         <span className="text-3xs font-mono text-casa-muted shrink-0">
@@ -916,32 +916,32 @@ export default function ActionInspectionSidecar({
         })()}
 
         {/* ══════ 1. AI EXECUTIVE BRIEF (First Thing Glanceable in 3 Seconds) ══════ */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-amber-50/70 border border-amber-300/80 shadow-xs space-y-3.5">
+        <div className="p-4 sm:p-5 rounded-2xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-300/80 dark:border-amber-700 shadow-xs space-y-3.5">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-amber-950 font-bold text-caption uppercase tracking-wider">
-              <Sparkles size={14} className="text-amber-600" />
+            <div className="flex items-center gap-2 text-amber-950 dark:text-amber-200 font-bold text-caption uppercase tracking-wider">
+              <Sparkles size={14} className="text-amber-600 dark:text-amber-400" />
               <span>AI Executive Brief</span>
             </div>
-            <span className="text-2xs font-mono font-semibold px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-900">
+            <span className="text-2xs font-mono font-semibold px-2 py-0.5 rounded-full bg-amber-200/80 dark:bg-amber-900/80 text-amber-900 dark:text-amber-300">
               Verified by Copilot
             </span>
           </div>
 
-          <ul className="space-y-2.5 text-body-sm text-amber-950 font-medium leading-snug">
+          <ul className="space-y-2.5 text-body-sm text-amber-950 dark:text-amber-200 font-medium leading-snug">
             <li className="flex items-start gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0" />
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 dark:bg-amber-500/20 mt-1.5 shrink-0" />
               <span>
                 <strong>Urgency:</strong> {analysis.urgency}
               </span>
             </li>
             <li className="flex items-start gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0" />
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 dark:bg-amber-500/20 mt-1.5 shrink-0" />
               <span>
                 <strong>Required Action:</strong> {analysis.requiredAction}
               </span>
             </li>
             <li className="flex items-start gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0" />
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 dark:bg-amber-500/20 mt-1.5 shrink-0" />
               <span>
                 <strong>Household Impact:</strong> {analysis.householdImpact}
               </span>
@@ -985,13 +985,13 @@ export default function ActionInspectionSidecar({
               }
 
               return (
-                <div className="pt-3 border-t border-amber-200/90 flex flex-col gap-2.5">
+                <div className="pt-3 border-t border-amber-200/90 dark:border-amber-800/50 flex flex-col gap-2.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-caption font-bold text-amber-950 flex items-center gap-1.5">
-                      <Sparkles size={13} className="text-amber-700" />
+                    <span className="text-caption font-bold text-amber-950 dark:text-amber-200 flex items-center gap-1.5">
+                      <Sparkles size={13} className="text-amber-700 dark:text-amber-400" />
                       <span>Suggested Action Plan ({bundle.actions.length})</span>
                     </span>
-                    <span className="text-3xs font-mono font-bold px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-900">
+                    <span className="text-3xs font-mono font-bold px-2 py-0.5 rounded-full bg-amber-200/80 dark:bg-amber-900/80 text-amber-900 dark:text-amber-300">
                       {selectedIds.length} of {bundle.actions.length} Selected
                     </span>
                   </div>
@@ -1016,10 +1016,10 @@ export default function ActionInspectionSidecar({
                           className={cn(
                             'p-3.5 sm:p-4 rounded-2xl border transition-all flex flex-col gap-2.5 text-left',
                             isLink
-                              ? 'bg-white/95 border-casa-border/70 shadow-2xs'
+                              ? 'bg-white/95 dark:bg-casa-surface border-casa-border/70 shadow-2xs'
                               : (isSelected
-                                ? 'bg-white/95 border-amber-400 ring-2 ring-amber-400/20 shadow-2xs cursor-pointer'
-                                : 'bg-white/60 border-casa-border/60 opacity-65 hover:opacity-85 cursor-pointer')
+                                ? 'bg-white/95 dark:bg-casa-surface border-amber-400 dark:border-amber-600 ring-2 ring-amber-400/20 shadow-2xs cursor-pointer'
+                                : 'bg-white/60 dark:bg-casa-surface border-casa-border/60 opacity-65 hover:opacity-85 cursor-pointer')
                           )}
                         >
                           <div className="flex items-start justify-between gap-3">
@@ -1034,17 +1034,17 @@ export default function ActionInspectionSidecar({
                                   }}
                                   className={cn(
                                     'min-w-[36px] min-h-[36px] -m-1 flex items-center justify-center rounded-lg transition-colors shrink-0',
-                                    isSelected ? 'text-amber-600' : 'text-casa-muted hover:text-casa-navy'
+                                    isSelected ? 'text-amber-600 dark:text-amber-400' : 'text-casa-muted hover:text-casa-navy dark:text-casa-text'
                                   )}
                                 >
                                   {isSelected ? (
-                                    <CheckSquare size={18} className="text-amber-600 shrink-0" />
+                                    <CheckSquare size={18} className="text-amber-600 dark:text-amber-400 shrink-0" />
                                   ) : (
                                     <Square size={18} className="text-casa-muted/60 shrink-0" />
                                   )}
                                 </button>
                               ) : (
-                                <div className="w-5 h-5 flex items-center justify-center text-purple-700 shrink-0 mt-0.5">
+                                <div className="w-5 h-5 flex items-center justify-center text-purple-700 dark:text-purple-400 shrink-0 mt-0.5">
                                   <ExternalLink size={14} />
                                 </div>
                               )}
@@ -1055,10 +1055,10 @@ export default function ActionInspectionSidecar({
                                     className={cn(
                                       'text-3xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border',
                                       isReminder
-                                        ? 'bg-sky-100 text-sky-900 border-sky-200'
+                                        ? 'bg-sky-100 dark:bg-sky-900/50 text-sky-900 dark:text-sky-300 border-sky-200 dark:border-sky-800/50'
                                         : isLink
-                                        ? 'bg-purple-100 text-purple-900 border-purple-200'
-                                        : 'bg-amber-100 text-amber-950 border-amber-300'
+                                        ? 'bg-purple-100 dark:bg-purple-900/50 text-purple-900 dark:text-purple-300 border-purple-200 dark:border-purple-800/50'
+                                        : 'bg-amber-100 dark:bg-amber-900/50 text-amber-950 dark:text-amber-200 border-amber-300 dark:border-amber-700'
                                     )}
                                   >
                                     {act.badgeLabel || (isReminder ? 'PREP TASK' : 'CALENDAR EVENT')}
@@ -1069,17 +1069,17 @@ export default function ActionInspectionSidecar({
                                       className={cn(
                                         'text-3xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border',
                                         act.sourceOrigin === 'attachment'
-                                          ? 'bg-purple-100/90 text-purple-900 border-purple-300'
+                                          ? 'bg-purple-100/90 dark:bg-purple-900/50 text-purple-900 dark:text-purple-300 border-purple-300 dark:border-purple-700'
                                           : act.sourceOrigin === 'compound'
-                                          ? 'bg-emerald-100/90 text-emerald-950 border-emerald-300'
-                                          : 'bg-slate-100 text-slate-800 border-slate-200'
+                                          ? 'bg-emerald-100/90 dark:bg-emerald-900/50 text-emerald-950 dark:text-emerald-200 border-emerald-300 dark:border-emerald-700'
+                                          : 'bg-slate-100 dark:bg-slate-900/50 text-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-800/50'
                                       )}
                                     >
                                       {act.sourceOrigin === 'attachment' ? 'From Attachment' : act.sourceOrigin === 'compound' ? 'Email & Attachment' : 'From Email'}
                                     </span>
                                   )}
 
-                                  <span className="text-caption font-bold text-casa-navy">
+                                  <span className="text-caption font-bold text-casa-navy dark:text-casa-text">
                                     {act.displayDate}
                                   </span>
 
@@ -1104,11 +1104,11 @@ export default function ActionInspectionSidecar({
                                       className={cn(
                                         'text-3xs font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1 transition-all cursor-pointer border h-auto min-h-0',
                                         activePeekActionId === act.id
-                                          ? 'bg-amber-500 text-white border-amber-600 shadow-2xs'
-                                          : 'bg-amber-100/90 hover:bg-amber-200/90 text-amber-950 border-amber-300/80'
+                                          ? 'bg-amber-500 text-white border-amber-600 dark:border-amber-500 shadow-2xs'
+                                          : 'bg-amber-100/90 dark:bg-amber-900/50 hover:bg-amber-200/90 dark:bg-amber-900/80 text-amber-950 dark:text-amber-200 border-amber-300/80 dark:border-amber-700'
                                       )}
                                     >
-                                      <Eye size={10} className={activePeekActionId === act.id ? 'text-white' : 'text-amber-700'} />
+                                      <Eye size={10} className={activePeekActionId === act.id ? 'text-white' : 'text-amber-700 dark:text-amber-400'} />
                                       <span>{activePeekActionId === act.id ? 'Hide Schedule' : 'Day Schedule'}</span>
                                     </Button>
                                   )}
@@ -1129,7 +1129,7 @@ export default function ActionInspectionSidecar({
                                         setEditingTitleId(null)
                                       }
                                     }}
-                                    className="w-full text-body-sm font-bold text-casa-navy bg-white/95 border border-amber-400 rounded-lg px-2 py-0.5 outline-none ring-2 ring-amber-400/30 shadow-2xs leading-snug"
+                                    className="w-full text-body-sm font-bold text-casa-navy dark:text-casa-text bg-white/95 dark:bg-casa-surface border border-amber-400 dark:border-amber-600 rounded-lg px-2 py-0.5 outline-none ring-2 ring-amber-400/30 shadow-2xs leading-snug"
                                   />
                                 ) : (
                                   <h5
@@ -1138,10 +1138,10 @@ export default function ActionInspectionSidecar({
                                       setEditingTitleId(act.id)
                                     }}
                                     title="Click to edit title"
-                                    className="text-body-sm font-bold text-casa-navy leading-snug cursor-text hover:text-amber-900 group inline-flex items-center gap-1.5 rounded hover:bg-amber-100/50 px-1 -mx-1 transition-colors"
+                                    className="text-body-sm font-bold text-casa-navy dark:text-casa-text leading-snug cursor-text hover:text-amber-900 dark:text-amber-300 group inline-flex items-center gap-1.5 rounded hover:bg-amber-100/50 dark:bg-amber-900/50 px-1 -mx-1 transition-colors"
                                   >
                                     <span>{effectiveTitle}</span>
-                                    <Pencil size={11} className="text-casa-muted/40 group-hover:text-amber-700 transition-opacity" />
+                                    <Pencil size={11} className="text-casa-muted/40 group-hover:text-amber-700 dark:text-amber-400 transition-opacity" />
                                   </h5>
                                 )}
 
@@ -1159,7 +1159,7 @@ export default function ActionInspectionSidecar({
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 onClick={(e) => e.stopPropagation()}
-                                className="px-2.5 py-1.5 rounded-lg bg-casa-surface border border-casa-border hover:border-casa-navy text-casa-navy text-caption font-bold shadow-2xs inline-flex items-center gap-1 shrink-0 no-underline min-h-[38px]"
+                                className="px-2.5 py-1.5 rounded-lg bg-casa-surface border border-casa-border hover:border-casa-navy text-casa-navy dark:text-casa-text text-caption font-bold shadow-2xs inline-flex items-center gap-1 shrink-0 no-underline min-h-[38px]"
                               >
                                 <span>Open</span>
                                 <ExternalLink size={11} className="text-casa-muted" />
@@ -1193,8 +1193,8 @@ export default function ActionInspectionSidecar({
                   </div>
 
                   {bundleSuccess ? (
-                    <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-800 font-bold text-body-sm flex items-center justify-center gap-2 shadow-2xs">
-                      <Check size={16} className="text-emerald-600" />
+                    <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-300 font-bold text-body-sm flex items-center justify-center gap-2 shadow-2xs">
+                      <Check size={16} className="text-emerald-600 dark:text-emerald-400" />
                       <span>Plan Added to Schedule &amp; Calendar</span>
                     </div>
                   ) : (
@@ -1228,18 +1228,18 @@ export default function ActionInspectionSidecar({
               )
             })()
           ) : analysis.suggestedEvent ? (
-            <div className="pt-3 border-t border-amber-200/90 flex flex-col gap-2.5">
+            <div className="pt-3 border-t border-amber-200/90 dark:border-amber-800/50 flex flex-col gap-2.5">
               <div className="flex items-center justify-between">
-                <span className="text-caption font-bold text-amber-950 flex items-center gap-1.5">
-                  <Calendar size={13} className="text-amber-700" />
+                <span className="text-caption font-bold text-amber-950 dark:text-amber-200 flex items-center gap-1.5">
+                  <Calendar size={13} className="text-amber-700 dark:text-amber-400" />
                   <span>Suggested Event Action Plan</span>
                 </span>
-                <span className="text-3xs uppercase font-mono font-bold px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-900">
+                <span className="text-3xs uppercase font-mono font-bold px-2 py-0.5 rounded-full bg-amber-200/80 dark:bg-amber-900/80 text-amber-900 dark:text-amber-300">
                   Ready to Schedule
                 </span>
               </div>
 
-              <div className="p-3.5 rounded-xl bg-white/90 border border-amber-300/80 flex flex-col gap-2.5 shadow-2xs">
+              <div className="p-3.5 rounded-xl bg-white/90 dark:bg-casa-surface border border-amber-300/80 dark:border-amber-700 flex flex-col gap-2.5 shadow-2xs">
                 <div className="space-y-1">
                   <div className="flex items-start justify-between gap-2 flex-wrap">
                     {/* ── Click-to-Edit Title ── */}
@@ -1257,7 +1257,7 @@ export default function ActionInspectionSidecar({
                             setIsEditingSingleEventTitle(false)
                           }
                         }}
-                        className="flex-1 min-w-[200px] text-body-sm font-bold text-casa-navy bg-white/95 border border-amber-400 rounded-lg px-2 py-0.5 outline-none ring-2 ring-amber-400/30 shadow-2xs leading-snug"
+                        className="flex-1 min-w-[200px] text-body-sm font-bold text-casa-navy dark:text-casa-text bg-white/95 dark:bg-casa-surface border border-amber-400 dark:border-amber-600 rounded-lg px-2 py-0.5 outline-none ring-2 ring-amber-400/30 shadow-2xs leading-snug"
                       />
                     ) : (
                       <div
@@ -1266,10 +1266,10 @@ export default function ActionInspectionSidecar({
                           setIsEditingSingleEventTitle(true)
                         }}
                         title="Click to edit title"
-                        className="text-body-sm font-bold text-casa-navy leading-snug cursor-text hover:text-amber-900 group inline-flex items-center gap-1.5 rounded hover:bg-amber-100/50 px-1 -mx-1 transition-colors"
+                        className="text-body-sm font-bold text-casa-navy dark:text-casa-text leading-snug cursor-text hover:text-amber-900 dark:text-amber-300 group inline-flex items-center gap-1.5 rounded hover:bg-amber-100/50 dark:bg-amber-900/50 px-1 -mx-1 transition-colors"
                       >
                         <span>{singleEventTitle ?? analysis.suggestedEvent.title}</span>
-                        <Pencil size={11} className="text-casa-muted/40 group-hover:text-amber-700 transition-opacity" />
+                        <Pencil size={11} className="text-casa-muted/40 group-hover:text-amber-700 dark:text-amber-400 transition-opacity" />
                       </div>
                     )}
 
@@ -1284,17 +1284,17 @@ export default function ActionInspectionSidecar({
                       className={cn(
                         'text-3xs font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1 transition-all cursor-pointer border h-auto min-h-0',
                         activePeekActionId === 'suggested-single-event'
-                          ? 'bg-amber-500 text-white border-amber-600 shadow-2xs'
-                          : 'bg-amber-100/90 hover:bg-amber-200/90 text-amber-950 border-amber-300/80'
+                          ? 'bg-amber-500 text-white border-amber-600 dark:border-amber-500 shadow-2xs'
+                          : 'bg-amber-100/90 dark:bg-amber-900/50 hover:bg-amber-200/90 dark:bg-amber-900/80 text-amber-950 dark:text-amber-200 border-amber-300/80 dark:border-amber-700'
                       )}
                     >
-                      <Eye size={10} className={activePeekActionId === 'suggested-single-event' ? 'text-white' : 'text-amber-700'} />
+                      <Eye size={10} className={activePeekActionId === 'suggested-single-event' ? 'text-white' : 'text-amber-700 dark:text-amber-400'} />
                       <span>{activePeekActionId === 'suggested-single-event' ? 'Hide Schedule' : 'Day Schedule'}</span>
                     </Button>
                   </div>
 
                   <div className="flex items-center gap-2 text-2xs text-casa-muted flex-wrap font-medium">
-                    <span className="inline-flex items-center gap-1 text-casa-navy font-semibold">
+                    <span className="inline-flex items-center gap-1 text-casa-navy dark:text-casa-text font-semibold">
                       <Calendar size={11} className="text-casa-gold" />
                       {analysis.suggestedEvent.displayDate}
                       {analysis.suggestedEvent.allDay ? ' · All Day' : ''}
@@ -1353,9 +1353,9 @@ export default function ActionInspectionSidecar({
                     size="sm"
                     variant="ghost"
                     onClick={() => handleOpenEventInSidecar(matchedCalendarEvent.id)}
-                    className="w-full min-h-[44px] sm:min-h-[48px] rounded-xl bg-emerald-50 hover:bg-emerald-100/90 border border-emerald-300/90 text-emerald-800 font-bold text-body-sm flex items-center justify-center gap-2 transition-all shadow-2xs"
+                    className="w-full min-h-[44px] sm:min-h-[48px] rounded-xl bg-emerald-50 dark:bg-emerald-950/20 hover:bg-emerald-100/90 dark:bg-emerald-900/50 border border-emerald-300/90 dark:border-emerald-700 text-emerald-800 dark:text-emerald-300 font-bold text-body-sm flex items-center justify-center gap-2 transition-all shadow-2xs"
                   >
-                    <CalendarCheck size={16} className="text-emerald-600 shrink-0" />
+                    <CalendarCheck size={16} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
                     <span>Scheduled ({analysis.suggestedEvent.displayDate}) · View in Calendar</span>
                   </Button>
                 ) : (
@@ -1395,8 +1395,8 @@ export default function ActionInspectionSidecar({
 
         {/* ══════ SIBLING CLUSTER ITEMS (Extracted from Same Email) ══════ */}
         {siblingItems.length > 0 && (
-          <div className="p-3.5 rounded-2xl bg-white border border-casa-border/80 shadow-2xs space-y-2">
-            <div className="text-caption font-bold text-casa-navy flex items-center justify-between">
+          <div className="p-3.5 rounded-2xl bg-white dark:bg-casa-surface border border-casa-border/80 shadow-2xs space-y-2">
+            <div className="text-caption font-bold text-casa-navy dark:text-casa-text flex items-center justify-between">
               <span className="flex items-center gap-1.5">
                 <Sparkles size={13} className="text-casa-gold" />
                 <span>Other Actions from this Email ({siblingItems.length})</span>
@@ -1419,34 +1419,34 @@ export default function ActionInspectionSidecar({
         )}
 
         {/* ══════ TEACH CASA / TRAINING FEEDBACK SECTION ══════ */}
-        <div className="p-4 rounded-2xl bg-purple-50/70 border border-purple-200/80 space-y-3">
+        <div className="p-4 rounded-2xl bg-purple-50/70 dark:bg-purple-950/20 border border-purple-200/80 dark:border-purple-800/50 space-y-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-purple-950 font-bold text-caption uppercase tracking-wider">
-              <Tag size={14} className="text-purple-600" />
+            <div className="flex items-center gap-2 text-purple-950 dark:text-purple-200 font-bold text-caption uppercase tracking-wider">
+              <Tag size={14} className="text-purple-600 dark:text-purple-400" />
               <span>Teach Casa &amp; Training</span>
             </div>
             {activeItem?.is_user_labeled ? (
-              <span className="text-2xs font-mono font-semibold px-2 py-0.5 rounded-full bg-purple-200 text-purple-900 flex items-center gap-1">
+              <span className="text-2xs font-mono font-semibold px-2 py-0.5 rounded-full bg-purple-200 dark:bg-purple-900/80 text-purple-900 dark:text-purple-300 flex items-center gap-1">
                 <Check size={11} />
                 Gmail Label: Casa
               </span>
             ) : isAlreadyTrained ? (
-              <span className="text-2xs font-mono font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 flex items-center gap-1">
+              <span className="text-2xs font-mono font-semibold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 flex items-center gap-1">
                 <Check size={11} />
                 Rule Active
               </span>
             ) : null}
           </div>
 
-          <p className="text-body-sm text-purple-950/80 leading-snug">
+          <p className="text-body-sm text-purple-950/80 dark:text-purple-200 leading-snug">
             {isAlreadyTrained
               ? `Casa has learned to automatically capture and structure incoming emails from @${senderDomain || analysis.senderLabel}.`
               : `Teach Casa how to handle emails from @${senderDomain || analysis.senderLabel}. Fine-tune categories without losing critical school or medical forms.`}
           </p>
 
           {trainedSuccess ? (
-            <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-caption font-semibold flex items-center gap-2 animate-in fade-in">
-              <CheckCheck size={16} className="text-emerald-600 shrink-0" />
+            <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/50 text-emerald-800 dark:text-emerald-300 text-caption font-semibold flex items-center gap-2 animate-in fade-in">
+              <CheckCheck size={16} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
               <span>{trainedSuccess}</span>
             </div>
           ) : (
@@ -1457,9 +1457,9 @@ export default function ActionInspectionSidecar({
                 variant="secondary"
                 disabled={isSavingRule}
                 onClick={() => setTunePolicyModalOpen(true)}
-                className="min-h-[44px] sm:min-h-[48px] rounded-xl bg-white hover:bg-purple-100/60 border border-purple-300 text-purple-900 font-bold text-caption flex items-center gap-1.5 shadow-2xs"
+                className="min-h-[44px] sm:min-h-[48px] rounded-xl bg-white dark:bg-casa-surface hover:bg-purple-100/60 dark:bg-purple-900/50 border border-purple-300 dark:border-purple-700 text-purple-900 dark:text-purple-300 font-bold text-caption flex items-center gap-1.5 shadow-2xs"
               >
-                <Sliders size={14} className="text-purple-600" />
+                <Sliders size={14} className="text-purple-600 dark:text-purple-400" />
                 <span>Fine-Tune Policy for @{senderDomain || analysis.senderLabel}</span>
               </Button>
 
@@ -1480,9 +1480,9 @@ export default function ActionInspectionSidecar({
                     setTrainedSuccess(`Learned: Always scan @${senderDomain}`)
                     setTimeout(() => setTrainedSuccess(null), 5000)
                   }}
-                  className="min-h-[44px] sm:min-h-[48px] rounded-xl bg-white hover:bg-purple-100/60 border border-purple-300 text-purple-900 font-bold text-caption flex items-center gap-1.5 shadow-2xs"
+                  className="min-h-[44px] sm:min-h-[48px] rounded-xl bg-white dark:bg-casa-surface hover:bg-purple-100/60 dark:bg-purple-900/50 border border-purple-300 dark:border-purple-700 text-purple-900 dark:text-purple-300 font-bold text-caption flex items-center gap-1.5 shadow-2xs"
                 >
-                  <BookmarkPlus size={14} className="text-purple-600" />
+                  <BookmarkPlus size={14} className="text-purple-600 dark:text-purple-400" />
                   <span>Always Capture from @{senderDomain}</span>
                 </Button>
               )}
@@ -1504,9 +1504,9 @@ export default function ActionInspectionSidecar({
                     setTrainedSuccess(`Untrained: Removed capture rules for @${senderDomain || analysis.senderLabel}`)
                     setTimeout(() => setTrainedSuccess(null), 5000)
                   }}
-                  className="min-h-[44px] sm:min-h-[48px] rounded-xl bg-white hover:bg-rose-50 border border-rose-200 text-rose-800 font-bold text-caption flex items-center gap-1.5 shadow-2xs"
+                  className="min-h-[44px] sm:min-h-[48px] rounded-xl bg-white dark:bg-casa-surface hover:bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-800/50 text-rose-800 dark:text-rose-300 font-bold text-caption flex items-center gap-1.5 shadow-2xs"
                 >
-                  <Undo2 size={14} className="text-rose-600" />
+                  <Undo2 size={14} className="text-rose-600 dark:text-rose-400" />
                   <span>Untrain @{senderDomain || analysis.senderLabel}</span>
                 </Button>
               ) : (
@@ -1515,9 +1515,9 @@ export default function ActionInspectionSidecar({
                   variant="secondary"
                   disabled={isSavingRule}
                   onClick={() => setTunePolicyModalOpen(true)}
-                  className="min-h-[44px] sm:min-h-[48px] rounded-xl bg-white hover:bg-rose-50 border border-rose-200 text-rose-800 font-bold text-caption flex items-center gap-1.5 shadow-2xs"
+                  className="min-h-[44px] sm:min-h-[48px] rounded-xl bg-white dark:bg-casa-surface hover:bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-800/50 text-rose-800 dark:text-rose-300 font-bold text-caption flex items-center gap-1.5 shadow-2xs"
                 >
-                  <ThumbsDown size={14} className="text-rose-600" />
+                  <ThumbsDown size={14} className="text-rose-600 dark:text-rose-400" />
                   <span>Not Relevant / Adjust</span>
                 </Button>
               )}
@@ -1543,20 +1543,20 @@ export default function ActionInspectionSidecar({
         <div className="space-y-2.5">
           <div className="flex items-center justify-between">
             <div className="text-caption font-bold uppercase tracking-wider text-casa-muted flex items-center gap-1.5">
-              <Mail size={13} className="text-casa-navy" />
+              <Mail size={13} className="text-casa-navy dark:text-casa-text" />
               <span>Source Email · Reader Mode</span>
             </div>
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setShowRawSource((v) => !v)}
-              className="text-caption text-casa-muted hover:text-casa-navy underline underline-offset-2 h-auto p-0 min-h-0 hover:bg-transparent"
+              className="text-caption text-casa-muted hover:text-casa-navy dark:text-casa-text underline underline-offset-2 h-auto p-0 min-h-0 hover:bg-transparent"
             >
               {showRawSource ? 'Show Reader Mode' : 'View Raw Text'}
             </Button>
           </div>
 
-          <div className="p-4 sm:p-5 rounded-2xl bg-casa-bg border border-casa-border/80 text-casa-navy space-y-3 font-body">
+          <div className="p-4 sm:p-5 rounded-2xl bg-casa-bg border border-casa-border/80 text-casa-navy dark:text-casa-text space-y-3 font-body">
             <div className="border-b border-casa-border/60 pb-3 text-caption text-casa-muted space-y-1">
               <div><strong>Subject:</strong> {analysis.subject}</div>
               <div><strong>From:</strong> {analysis.senderLabel} &lt;{analysis.senderEmail}&gt;</div>
@@ -1565,7 +1565,7 @@ export default function ActionInspectionSidecar({
 
             {showRawSource ? (
               <div className="space-y-2">
-                <pre className="font-mono text-2xs p-3.5 bg-white rounded-xl border border-casa-border overflow-x-auto whitespace-pre-wrap text-casa-text leading-relaxed">
+                <pre className="font-mono text-2xs p-3.5 bg-white dark:bg-casa-surface rounded-xl border border-casa-border overflow-x-auto whitespace-pre-wrap text-casa-text leading-relaxed">
                   {detailedItem?.gmailContext?.email_body || analysis.emailBody}
                 </pre>
                 {activeItem?.source_ref && (
@@ -1587,9 +1587,9 @@ export default function ActionInspectionSidecar({
                   href={buildGmailWebUrl(activeItem, detailedItem?.gmailContext, familyMembers)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full min-h-[48px] rounded-xl bg-white hover:bg-red-50/70 border border-red-200 text-red-950 font-bold text-body-sm flex items-center justify-center gap-2 shadow-2xs transition-all no-underline"
+                  className="w-full min-h-[48px] rounded-xl bg-white dark:bg-casa-surface hover:bg-red-50/70 dark:bg-red-950/20 border border-red-200 dark:border-red-800/50 text-red-950 dark:text-red-200 font-bold text-body-sm flex items-center justify-center gap-2 shadow-2xs transition-all no-underline"
                 >
-                  <Mail size={16} className="text-red-600" />
+                  <Mail size={16} className="text-red-600 dark:text-red-400" />
                   <span>Open Full Thread in Gmail</span>
                   <ExternalLink size={14} className="text-red-500" />
                 </a>
@@ -1632,7 +1632,7 @@ export default function ActionInspectionSidecar({
               variant="ghost"
               disabled={isResolving}
               onClick={() => handleActionSnooze('tomorrow')}
-              className="px-4 text-body-sm font-semibold text-casa-navy hover:text-casa-gold-hover transition-colors min-h-[48px] sm:min-h-[52px] rounded-l-full rounded-r-none border-none flex items-center gap-2"
+              className="px-4 text-body-sm font-semibold text-casa-navy dark:text-casa-text hover:text-casa-gold-hover transition-colors min-h-[48px] sm:min-h-[52px] rounded-l-full rounded-r-none border-none flex items-center gap-2"
               title="Snooze to tomorrow morning"
               leadingIcon={<Clock size={15} className="text-casa-gold" />}
             >
@@ -1646,7 +1646,7 @@ export default function ActionInspectionSidecar({
               onClick={() => setSnoozeOpen((v) => !v)}
               aria-label="More snooze options"
               title="More snooze options"
-              className="px-3 border-l border-casa-border/70 text-casa-muted hover:text-casa-navy hover:bg-casa-gold/10 transition-colors rounded-r-full rounded-l-none min-h-[48px] sm:min-h-[52px] min-w-[44px]"
+              className="px-3 border-l border-casa-border/70 text-casa-muted hover:text-casa-navy dark:text-casa-text hover:bg-casa-gold/10 transition-colors rounded-r-full rounded-l-none min-h-[48px] sm:min-h-[52px] min-w-[44px]"
               icon={
                 <ChevronDown
                   size={16}
@@ -1663,7 +1663,7 @@ export default function ActionInspectionSidecar({
                   size="sm"
                   align="start"
                   onClick={() => handleActionSnooze('3h')}
-                  className="w-full px-3 py-2.5 rounded-xl text-caption text-casa-navy hover:bg-casa-gold/15 font-semibold min-h-[44px]"
+                  className="w-full px-3 py-2.5 rounded-xl text-caption text-casa-navy dark:text-casa-text hover:bg-casa-gold/15 font-semibold min-h-[44px]"
                   leadingIcon={<Moon size={14} className="text-casa-gold" />}
                 >
                   <span>Tonight (+3h)</span>
@@ -1673,7 +1673,7 @@ export default function ActionInspectionSidecar({
                   size="sm"
                   align="start"
                   onClick={() => handleActionSnooze('tomorrow')}
-                  className="w-full px-3 py-2.5 rounded-xl text-caption text-casa-navy hover:bg-casa-gold/15 font-semibold min-h-[44px]"
+                  className="w-full px-3 py-2.5 rounded-xl text-caption text-casa-navy dark:text-casa-text hover:bg-casa-gold/15 font-semibold min-h-[44px]"
                   leadingIcon={<Sun size={14} className="text-casa-gold" />}
                 >
                   <span>Tomorrow Morning (9 AM)</span>
@@ -1683,7 +1683,7 @@ export default function ActionInspectionSidecar({
                   size="sm"
                   align="start"
                   onClick={() => handleActionSnooze('1d')}
-                  className="w-full px-3 py-2.5 rounded-xl text-caption text-casa-navy hover:bg-casa-gold/15 font-semibold min-h-[44px]"
+                  className="w-full px-3 py-2.5 rounded-xl text-caption text-casa-navy dark:text-casa-text hover:bg-casa-gold/15 font-semibold min-h-[44px]"
                   leadingIcon={<Clock size={14} className="text-casa-gold" />}
                 >
                   <span>In 24 Hours</span>
@@ -1702,7 +1702,7 @@ export default function ActionInspectionSidecar({
             onClick={handleActionDismiss}
             aria-label="Dismiss (not actionable)"
             title="Dismiss -- not actionable, just FYI"
-            className="shrink-0 min-h-[48px] sm:min-h-[52px] min-w-[48px] rounded-full border border-casa-border text-casa-muted hover:text-casa-navy hover:bg-casa-bg transition-colors"
+            className="shrink-0 min-h-[48px] sm:min-h-[52px] min-w-[48px] rounded-full border border-casa-border text-casa-muted hover:text-casa-navy dark:text-casa-text hover:bg-casa-bg transition-colors"
             icon={<X size={18} />}
           />
         </div>
@@ -1713,7 +1713,7 @@ export default function ActionInspectionSidecar({
         <div className="fixed inset-0 z-modal bg-casa-navy/40 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-casa-surface rounded-3xl border border-casa-gold/40 shadow-modal max-w-lg w-full p-6 space-y-4 animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between">
-              <h3 className="font-display text-body-lg font-bold text-casa-navy">
+              <h3 className="font-display text-body-lg font-bold text-casa-navy dark:text-casa-text">
                 Digital Authorization
               </h3>
               <IconButton
@@ -1730,7 +1730,7 @@ export default function ActionInspectionSidecar({
             </p>
 
             <div className="h-32 border-2 border-dashed border-casa-border rounded-2xl flex flex-col items-center justify-center bg-casa-bg text-casa-muted cursor-crosshair">
-              <span className="font-display text-display-xs italic text-casa-navy/80">Jake Tabor</span>
+              <span className="font-display text-display-xs italic text-casa-navy dark:text-casa-text/80">Jake Tabor</span>
               <span className="text-2xs text-casa-muted mt-1">Digital signature confirmed · 8/15/2026</span>
             </div>
 
@@ -1767,7 +1767,7 @@ export default function ActionInspectionSidecar({
             <div className="flex items-center justify-between pb-2 border-b border-casa-border/60">
               <div className="flex items-center gap-2">
                 <Sliders size={18} className="text-casa-gold" />
-                <h3 className="font-display text-body-lg font-bold text-casa-navy">
+                <h3 className="font-display text-body-lg font-bold text-casa-navy dark:text-casa-text">
                   Tune Capture Policy: @{senderDomain || analysis.senderLabel}
                 </h3>
               </div>
@@ -1789,7 +1789,7 @@ export default function ActionInspectionSidecar({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Wand2 size={16} className="text-casa-gold" />
-                  <span className="text-body-sm font-bold text-casa-navy">
+                  <span className="text-body-sm font-bold text-casa-navy dark:text-casa-text">
                     Custom Voice / Text Directive
                   </span>
                 </div>
@@ -1801,7 +1801,7 @@ export default function ActionInspectionSidecar({
                     'rounded-full px-3 py-1 text-3xs font-bold flex items-center gap-1.5 min-h-[36px] transition-all cursor-pointer',
                     isDictatingPolicy
                       ? 'bg-rose-600 text-white animate-pulse'
-                      : 'bg-white text-casa-navy hover:bg-casa-gold/20 border border-casa-gold/40'
+                      : 'bg-white dark:bg-casa-surface text-casa-navy dark:text-casa-text hover:bg-casa-gold/20 border border-casa-gold/40'
                   )}
                   title="Speak to dictate custom learning rule"
                 >
@@ -1814,7 +1814,7 @@ export default function ActionInspectionSidecar({
                 value={customPolicyText}
                 onChange={(e) => setCustomPolicyText(e.target.value)}
                 placeholder="e.g. Mute routine newsletters from Bak, but always extract field trip permission slips, doctor forms, and sports dates."
-                className="w-full text-body-sm p-3 rounded-xl bg-white border border-casa-border/80 text-casa-navy placeholder:text-casa-muted/70 focus:outline-none focus:ring-2 focus:ring-casa-gold/40 min-h-[64px] resize-none leading-snug"
+                className="w-full text-body-sm p-3 rounded-xl bg-white dark:bg-casa-surface border border-casa-border/80 text-casa-navy dark:text-casa-text placeholder:text-casa-muted/70 focus:outline-none focus:ring-2 focus:ring-casa-gold/40 min-h-[64px] resize-none leading-snug"
               />
 
               {/* Quick suggestion prompt chips */}
@@ -1899,15 +1899,15 @@ export default function ActionInspectionSidecar({
                 }}
                 className="w-full text-left p-3.5 rounded-2xl bg-casa-bg hover:bg-casa-gold/10 border border-casa-border/80 hover:border-casa-gold transition-all flex items-start gap-3.5 group shadow-2xs cursor-pointer min-h-[56px]"
               >
-                <div className="w-9 h-9 rounded-xl bg-casa-gold/15 text-casa-navy flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform mt-0.5">
+                <div className="w-9 h-9 rounded-xl bg-casa-gold/15 text-casa-navy dark:text-casa-text flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform mt-0.5">
                   <FileSignature size={18} className="text-casa-gold" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-body-sm font-bold text-casa-navy group-hover:text-casa-gold-hover">
+                    <span className="text-body-sm font-bold text-casa-navy dark:text-casa-text group-hover:text-casa-gold-hover">
                       Keep Waivers &amp; Events Only
                     </span>
-                    <span className="text-3xs font-bold px-2 py-0.5 rounded-full bg-casa-gold/20 text-casa-navy border border-casa-gold/40">
+                    <span className="text-3xs font-bold px-2 py-0.5 rounded-full bg-casa-gold/20 text-casa-navy dark:text-casa-text border border-casa-gold/40">
                       Recommended
                     </span>
                   </div>
@@ -1935,13 +1935,13 @@ export default function ActionInspectionSidecar({
                   setTrainedSuccess(`Policy Updated: Tracking @${senderDomain || analysis.senderLabel} in Logistics Radar`)
                   setTimeout(() => setTrainedSuccess(null), 5000)
                 }}
-                className="w-full text-left p-3.5 rounded-2xl bg-casa-bg hover:bg-sky-50 border border-casa-border/80 hover:border-sky-300 transition-all flex items-start gap-3.5 group shadow-2xs cursor-pointer min-h-[56px]"
+                className="w-full text-left p-3.5 rounded-2xl bg-casa-bg hover:bg-sky-50 dark:bg-sky-950/20 border border-casa-border/80 hover:border-sky-300 dark:border-sky-700 transition-all flex items-start gap-3.5 group shadow-2xs cursor-pointer min-h-[56px]"
               >
-                <div className="w-9 h-9 rounded-xl bg-sky-100 text-sky-900 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform mt-0.5">
-                  <Truck size={18} className="text-sky-700" />
+                <div className="w-9 h-9 rounded-xl bg-sky-100 dark:bg-sky-900/50 text-sky-900 dark:text-sky-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform mt-0.5">
+                  <Truck size={18} className="text-sky-700 dark:text-sky-400" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <span className="text-body-sm font-bold text-casa-navy group-hover:text-sky-900">
+                  <span className="text-body-sm font-bold text-casa-navy dark:text-casa-text group-hover:text-sky-900 dark:text-sky-300">
                     Quiet Logistics &amp; Parcel Radar
                   </span>
                   <p className="text-caption text-casa-muted mt-0.5 leading-snug">
@@ -1968,13 +1968,13 @@ export default function ActionInspectionSidecar({
                   setTrainedSuccess(`Policy Updated: Only alert on signatures and urgent deadlines from @${senderDomain || analysis.senderLabel}`)
                   setTimeout(() => setTrainedSuccess(null), 5000)
                 }}
-                className="w-full text-left p-3.5 rounded-2xl bg-casa-bg hover:bg-amber-50 border border-casa-border/80 hover:border-amber-300 transition-all flex items-start gap-3.5 group shadow-2xs cursor-pointer min-h-[56px]"
+                className="w-full text-left p-3.5 rounded-2xl bg-casa-bg hover:bg-amber-50 dark:bg-amber-950/20 border border-casa-border/80 hover:border-amber-300 dark:border-amber-700 transition-all flex items-start gap-3.5 group shadow-2xs cursor-pointer min-h-[56px]"
               >
-                <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-950 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform mt-0.5">
-                  <CheckCircle2 size={18} className="text-amber-700" />
+                <div className="w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-900/50 text-amber-950 dark:text-amber-200 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform mt-0.5">
+                  <CheckCircle2 size={18} className="text-amber-700 dark:text-amber-400" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <span className="text-body-sm font-bold text-casa-navy group-hover:text-amber-950">
+                  <span className="text-body-sm font-bold text-casa-navy dark:text-casa-text group-hover:text-amber-950 dark:text-amber-200">
                     Only Urgent Deadlines &amp; Signatures
                   </span>
                   <p className="text-caption text-casa-muted mt-0.5 leading-snug">
@@ -2004,16 +2004,16 @@ export default function ActionInspectionSidecar({
                     onClose()
                   }, 1800)
                 }}
-                className="w-full text-left p-3.5 rounded-2xl bg-casa-bg hover:bg-rose-50 border border-casa-border/80 hover:border-rose-200 transition-all flex items-start gap-3.5 group shadow-2xs cursor-pointer min-h-[56px]"
+                className="w-full text-left p-3.5 rounded-2xl bg-casa-bg hover:bg-rose-50 dark:bg-rose-950/20 border border-casa-border/80 hover:border-rose-200 dark:border-rose-800/50 transition-all flex items-start gap-3.5 group shadow-2xs cursor-pointer min-h-[56px]"
               >
-                <div className="w-9 h-9 rounded-xl bg-rose-100 text-rose-800 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform mt-0.5">
-                  <ShieldAlert size={18} className="text-rose-600" />
+                <div className="w-9 h-9 rounded-xl bg-rose-100 dark:bg-rose-900/50 text-rose-800 dark:text-rose-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform mt-0.5">
+                  <ShieldAlert size={18} className="text-rose-600 dark:text-rose-400" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <span className="text-body-sm font-bold text-rose-900">
+                  <span className="text-body-sm font-bold text-rose-900 dark:text-rose-300">
                     Mute All Emails from this Sender
                   </span>
-                  <p className="text-caption text-rose-800/80 mt-0.5 leading-snug">
+                  <p className="text-caption text-rose-800/80 dark:text-rose-300 mt-0.5 leading-snug">
                     Completely ignore all incoming emails and suggestions from @{senderDomain || analysis.senderLabel}.
                   </p>
                 </div>
@@ -2040,17 +2040,17 @@ export default function ActionInspectionSidecar({
           <div className="bg-casa-surface rounded-3xl border border-casa-gold/40 shadow-modal max-w-2xl w-full p-6 space-y-5 animate-in fade-in zoom-in-95 max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between pb-3 border-b border-casa-border/80 shrink-0">
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-10 h-10 rounded-xl bg-casa-gold/15 text-casa-navy flex items-center justify-center shrink-0">
+                <div className="w-10 h-10 rounded-xl bg-casa-gold/15 text-casa-navy dark:text-casa-text flex items-center justify-center shrink-0">
                   <FileText size={20} className="text-casa-gold" />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="font-display text-body-lg font-bold text-casa-navy truncate">
+                  <h3 className="font-display text-body-lg font-bold text-casa-navy dark:text-casa-text truncate">
                     {inspectingDocument?.title || analysis.extractedDocumentPreview?.title || 'Extracted Document'}
                   </h3>
                   <div className="flex items-center gap-2 text-2xs text-casa-muted mt-0.5">
                     <span>{inspectingDocument?.subtitle || analysis.extractedDocumentPreview?.subtitle || 'Official Attachment'}</span>
                     <span>·</span>
-                    <span className="font-mono text-casa-navy font-semibold">Gemini Extracted</span>
+                    <span className="font-mono text-casa-navy dark:text-casa-text font-semibold">Gemini Extracted</span>
                   </div>
                 </div>
               </div>
@@ -2066,12 +2066,12 @@ export default function ActionInspectionSidecar({
             <div className="flex-1 overflow-y-auto space-y-4 pr-1">
               {/* AI Key Directives / Highlights */}
               {analysis.extractedDocumentPreview?.keyPoints && analysis.extractedDocumentPreview.keyPoints.length > 0 && (
-                <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 space-y-2.5">
-                  <div className="flex items-center gap-1.5 text-amber-900 font-bold text-caption uppercase tracking-wider">
-                    <Sparkles size={14} className="text-amber-700" />
+                <div className="p-4 rounded-2xl bg-amber-500/10 dark:bg-amber-500/20 border border-amber-500/20 dark:border-amber-500/40 space-y-2.5">
+                  <div className="flex items-center gap-1.5 text-amber-900 dark:text-amber-300 font-bold text-caption uppercase tracking-wider">
+                    <Sparkles size={14} className="text-amber-700 dark:text-amber-400" />
                     <span>AI Document Extraction &amp; Key Directives</span>
                   </div>
-                  <ul className="space-y-1.5 text-body-sm text-casa-navy list-disc list-inside">
+                  <ul className="space-y-1.5 text-body-sm text-casa-navy dark:text-casa-text list-disc list-inside">
                     {analysis.extractedDocumentPreview.keyPoints.map((point, idx) => (
                       <li key={idx} className="leading-snug">
                         <strong>{point.split(':')[0]}:</strong>{point.includes(':') ? point.substring(point.indexOf(':') + 1) : ''}
@@ -2099,7 +2099,7 @@ export default function ActionInspectionSidecar({
                 href={buildGmailWebUrl(activeItem, detailedItem?.gmailContext, familyMembers)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-white hover:bg-casa-bg border border-casa-border text-casa-navy font-bold text-caption no-underline shadow-2xs min-h-[44px]"
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-white dark:bg-casa-surface hover:bg-casa-bg border border-casa-border text-casa-navy dark:text-casa-text font-bold text-caption no-underline shadow-2xs min-h-[44px]"
               >
                 <ExternalLink size={14} />
                 <span>Open in Gmail</span>
