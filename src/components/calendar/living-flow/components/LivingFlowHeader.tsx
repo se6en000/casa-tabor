@@ -38,14 +38,14 @@ export default function LivingFlowHeader({
 
 
   return (
-    <div className="flex flex-col border-b border-slate-200 bg-white shrink-0 relative z-20">
+    <div className="flex flex-col border-b border-slate-200 dark:border-slate-800/50 bg-white dark:bg-casa-surface shrink-0 relative z-20">
       {/* Main Header Bar */}
       <div className="py-3.5 px-5 flex items-center justify-between">
         {/* 1-Tap Attendee Trigger Capsule */}
         <div
           onClick={() => setAttendeesExpanded(prev => !prev)}
           title="Tap to manage attendees"
-          className={`living-attendee-capsule ${attendeesExpanded ? 'bg-amber-50/50 shadow-sm' : ''}`}
+          className={`living-attendee-capsule ${attendeesExpanded ? 'bg-amber-50/50 dark:bg-amber-950/20 shadow-sm' : ''}`}
         >
           <div className="flex items-center">
             {activeMembers.slice(0, 3).map((m) => (
@@ -58,7 +58,7 @@ export default function LivingFlowHeader({
               </div>
             ))}
           </div>
-          <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+          <span className="text-xs font-bold text-slate-900 dark:text-slate-300 uppercase tracking-wider">
             {attendeeNames}
           </span>
           <ChevronDown size={13} className={`text-slate-400 ${attendeesExpanded ? 'rotate-180 transition-transform' : ''}`} />
@@ -71,7 +71,7 @@ export default function LivingFlowHeader({
               variant="ghost"
               type="button"
               onClick={onSwitchToAi}
-              className="min-h-[34px] px-3 py-1 flex items-center gap-1.5 rounded-full text-2xs font-bold text-casa-navy bg-casa-accent-subtle hover:bg-casa-accent-soft border border-casa-gold/40 shadow-2xs transition-all active:scale-95 group shrink-0"
+              className="min-h-[34px] px-3 py-1 flex items-center gap-1.5 rounded-full text-2xs font-bold text-casa-navy dark:text-casa-text bg-casa-accent-subtle hover:bg-casa-accent-soft border border-casa-gold/40 shadow-2xs transition-all active:scale-95 group shrink-0"
               title="Flip to Copilot"
               aria-label="Flip to Copilot"
             >
@@ -80,7 +80,7 @@ export default function LivingFlowHeader({
             </Button>
           )}
           <IconButton
-            icon={<Link2 size={16} className="text-slate-800" />}
+            icon={<Link2 size={16} className="text-slate-800 dark:text-slate-300" />}
             onClick={() => {
               navigator.clipboard?.writeText(window.location.href)
               alert('Event link copied to clipboard!')
@@ -90,7 +90,7 @@ export default function LivingFlowHeader({
             title="Share event link"
           />
           <IconButton
-            icon={<X size={16} className="text-slate-800" />}
+            icon={<X size={16} className="text-slate-800 dark:text-slate-300" />}
             onClick={onClose}
             className="living-header-action-btn"
             aria-label="Close sidecar"
@@ -101,9 +101,9 @@ export default function LivingFlowHeader({
 
       {/* Recurrence Banner & Scope Controls */}
       {isRecurring && (
-        <div className="px-5 py-2 flex items-center justify-between border-t border-amber-200/60 bg-amber-50/50">
-          <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900">
-            <Repeat size={13} className="text-amber-700 shrink-0" />
+        <div className="px-5 py-2 flex items-center justify-between border-t border-amber-200/60 dark:border-amber-800/50 bg-amber-50/50 dark:bg-amber-950/20">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900 dark:text-amber-300">
+            <Repeat size={13} className="text-amber-700 dark:text-amber-400 shrink-0" />
             <span>Repeating Event</span>
           </div>
           <div className="flex items-center gap-1.5">
@@ -130,23 +130,23 @@ export default function LivingFlowHeader({
 
       {/* Caution Banner when Editing All Repeating Events */}
       {isRecurring && recurScope === 'all' && (
-        <div className="px-5 py-2 flex items-center gap-2 bg-amber-500/15 border-t border-amber-300/80 text-amber-950 text-xs font-semibold">
-          <AlertTriangle size={14} className="text-amber-700 shrink-0" />
+        <div className="px-5 py-2 flex items-center gap-2 bg-amber-500/15 dark:bg-amber-500/20 border-t border-amber-300/80 dark:border-amber-700 text-amber-950 dark:text-amber-200 text-xs font-semibold">
+          <AlertTriangle size={14} className="text-amber-700 dark:text-amber-400 shrink-0" />
           <span>Caution: Changes will apply to all repeating events in this series.</span>
         </div>
       )}
 
       {/* ══════ INLINE ATTENDEES DRAWER ══════ */}
       {attendeesExpanded && (
-        <div className="p-4 bg-amber-50/30 border-t border-dashed border-amber-300 flex flex-col gap-3">
+        <div className="p-4 bg-amber-50/30 dark:bg-amber-950/20 border-t border-dashed border-amber-300 dark:border-amber-700 flex flex-col gap-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-extrabold uppercase text-slate-900 tracking-wider flex items-center gap-1.5">
-              <Users size={14} className="text-amber-700" />
+            <span className="text-xs font-extrabold uppercase text-slate-900 dark:text-slate-300 tracking-wider flex items-center gap-1.5">
+              <Users size={14} className="text-amber-700 dark:text-amber-400" />
               <span>Family Attendees</span>
             </span>
             <button
               onClick={() => setAttendeesExpanded(false)}
-              className="text-xs text-slate-500 hover:text-slate-900 font-bold flex items-center gap-0.5"
+              className="text-xs text-slate-500 hover:text-slate-900 hover:dark:text-slate-300 font-bold flex items-center gap-0.5"
             >
               <span>Done</span>
               <X size={13} />
@@ -189,7 +189,7 @@ export default function LivingFlowHeader({
                       isPrimary ? (
                         <Star size={16} className="text-amber-500 fill-amber-400" />
                       ) : (
-                        <Check size={16} className="text-emerald-600 stroke-[2.5]" />
+                        <Check size={16} className="text-emerald-600 dark:text-emerald-400 stroke-[2.5]" />
                       )
                     ) : (
                       <Plus size={16} className="text-slate-400" />

@@ -700,7 +700,7 @@ export default function ActionInspectionSidecar({
                   href={buildGmailWebUrl(activeItem, detailedItem?.gmailContext, familyMembers)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-2xs font-bold text-red-900 dark:text-red-300 bg-red-50 dark:bg-red-950/20 hover:bg-red-100 dark:bg-red-900/50 border border-red-200 dark:border-red-800/50 shadow-2xs transition-colors no-underline min-h-[32px]"
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-2xs font-bold text-red-900 dark:text-red-300 bg-red-50 dark:bg-red-950/20 hover:bg-red-100 hover:dark:bg-red-900/50 border border-red-200 dark:border-red-800/50 shadow-2xs transition-colors no-underline min-h-[32px]"
                   title="Open original thread in Gmail"
                   onClick={(e) => e.stopPropagation()}
                 >
@@ -1105,7 +1105,7 @@ export default function ActionInspectionSidecar({
                                         'text-3xs font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1 transition-all cursor-pointer border h-auto min-h-0',
                                         activePeekActionId === act.id
                                           ? 'bg-amber-500 text-white border-amber-600 dark:border-amber-500 shadow-2xs'
-                                          : 'bg-amber-100/90 dark:bg-amber-900/50 hover:bg-amber-200/90 dark:bg-amber-900/80 text-amber-950 dark:text-amber-200 border-amber-300/80 dark:border-amber-700'
+                                          : 'bg-amber-100/90 dark:bg-amber-900/50 hover:bg-amber-200/90 hover:dark:bg-amber-900/80 text-amber-950 dark:text-amber-200 border-amber-300/80 dark:border-amber-700'
                                       )}
                                     >
                                       <Eye size={10} className={activePeekActionId === act.id ? 'text-white' : 'text-amber-700 dark:text-amber-400'} />
@@ -1138,10 +1138,10 @@ export default function ActionInspectionSidecar({
                                       setEditingTitleId(act.id)
                                     }}
                                     title="Click to edit title"
-                                    className="text-body-sm font-bold text-casa-navy dark:text-casa-text leading-snug cursor-text hover:text-amber-900 dark:text-amber-300 group inline-flex items-center gap-1.5 rounded hover:bg-amber-100/50 dark:bg-amber-900/50 px-1 -mx-1 transition-colors"
+                                    className="text-body-sm font-bold text-casa-navy dark:text-casa-text leading-snug cursor-text hover:text-amber-900 hover:dark:text-amber-300 group inline-flex items-center gap-1.5 rounded hover:bg-amber-100/50 hover:dark:bg-amber-900/50 px-1 -mx-1 transition-colors"
                                   >
                                     <span>{effectiveTitle}</span>
-                                    <Pencil size={11} className="text-casa-muted/40 group-hover:text-amber-700 dark:text-amber-400 transition-opacity" />
+                                    <Pencil size={11} className="text-casa-muted/40 group-hover:text-amber-700 group-hover:dark:text-amber-400 transition-opacity" />
                                   </h5>
                                 )}
 
@@ -1266,10 +1266,10 @@ export default function ActionInspectionSidecar({
                           setIsEditingSingleEventTitle(true)
                         }}
                         title="Click to edit title"
-                        className="text-body-sm font-bold text-casa-navy dark:text-casa-text leading-snug cursor-text hover:text-amber-900 dark:text-amber-300 group inline-flex items-center gap-1.5 rounded hover:bg-amber-100/50 dark:bg-amber-900/50 px-1 -mx-1 transition-colors"
+                        className="text-body-sm font-bold text-casa-navy dark:text-casa-text leading-snug cursor-text hover:text-amber-900 hover:dark:text-amber-300 group inline-flex items-center gap-1.5 rounded hover:bg-amber-100/50 hover:dark:bg-amber-900/50 px-1 -mx-1 transition-colors"
                       >
                         <span>{singleEventTitle ?? analysis.suggestedEvent.title}</span>
-                        <Pencil size={11} className="text-casa-muted/40 group-hover:text-amber-700 dark:text-amber-400 transition-opacity" />
+                        <Pencil size={11} className="text-casa-muted/40 group-hover:text-amber-700 group-hover:dark:text-amber-400 transition-opacity" />
                       </div>
                     )}
 
@@ -1285,7 +1285,7 @@ export default function ActionInspectionSidecar({
                         'text-3xs font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1 transition-all cursor-pointer border h-auto min-h-0',
                         activePeekActionId === 'suggested-single-event'
                           ? 'bg-amber-500 text-white border-amber-600 dark:border-amber-500 shadow-2xs'
-                          : 'bg-amber-100/90 dark:bg-amber-900/50 hover:bg-amber-200/90 dark:bg-amber-900/80 text-amber-950 dark:text-amber-200 border-amber-300/80 dark:border-amber-700'
+                          : 'bg-amber-100/90 dark:bg-amber-900/50 hover:bg-amber-200/90 hover:dark:bg-amber-900/80 text-amber-950 dark:text-amber-200 border-amber-300/80 dark:border-amber-700'
                       )}
                     >
                       <Eye size={10} className={activePeekActionId === 'suggested-single-event' ? 'text-white' : 'text-amber-700 dark:text-amber-400'} />
@@ -1353,7 +1353,7 @@ export default function ActionInspectionSidecar({
                     size="sm"
                     variant="ghost"
                     onClick={() => handleOpenEventInSidecar(matchedCalendarEvent.id)}
-                    className="w-full min-h-[44px] sm:min-h-[48px] rounded-xl bg-emerald-50 dark:bg-emerald-950/20 hover:bg-emerald-100/90 dark:bg-emerald-900/50 border border-emerald-300/90 dark:border-emerald-700 text-emerald-800 dark:text-emerald-300 font-bold text-body-sm flex items-center justify-center gap-2 transition-all shadow-2xs"
+                    className="w-full min-h-[44px] sm:min-h-[48px] rounded-xl bg-emerald-50 dark:bg-emerald-950/20 hover:bg-emerald-100/90 hover:dark:bg-emerald-900/50 border border-emerald-300/90 dark:border-emerald-700 text-emerald-800 dark:text-emerald-300 font-bold text-body-sm flex items-center justify-center gap-2 transition-all shadow-2xs"
                   >
                     <CalendarCheck size={16} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
                     <span>Scheduled ({analysis.suggestedEvent.displayDate}) · View in Calendar</span>
@@ -1457,7 +1457,7 @@ export default function ActionInspectionSidecar({
                 variant="secondary"
                 disabled={isSavingRule}
                 onClick={() => setTunePolicyModalOpen(true)}
-                className="min-h-[44px] sm:min-h-[48px] rounded-xl bg-white dark:bg-casa-surface hover:bg-purple-100/60 dark:bg-purple-900/50 border border-purple-300 dark:border-purple-700 text-purple-900 dark:text-purple-300 font-bold text-caption flex items-center gap-1.5 shadow-2xs"
+                className="min-h-[44px] sm:min-h-[48px] rounded-xl bg-white dark:bg-casa-surface hover:bg-purple-100/60 hover:dark:bg-purple-900/50 border border-purple-300 dark:border-purple-700 text-purple-900 dark:text-purple-300 font-bold text-caption flex items-center gap-1.5 shadow-2xs"
               >
                 <Sliders size={14} className="text-purple-600 dark:text-purple-400" />
                 <span>Fine-Tune Policy for @{senderDomain || analysis.senderLabel}</span>
@@ -1480,7 +1480,7 @@ export default function ActionInspectionSidecar({
                     setTrainedSuccess(`Learned: Always scan @${senderDomain}`)
                     setTimeout(() => setTrainedSuccess(null), 5000)
                   }}
-                  className="min-h-[44px] sm:min-h-[48px] rounded-xl bg-white dark:bg-casa-surface hover:bg-purple-100/60 dark:bg-purple-900/50 border border-purple-300 dark:border-purple-700 text-purple-900 dark:text-purple-300 font-bold text-caption flex items-center gap-1.5 shadow-2xs"
+                  className="min-h-[44px] sm:min-h-[48px] rounded-xl bg-white dark:bg-casa-surface hover:bg-purple-100/60 hover:dark:bg-purple-900/50 border border-purple-300 dark:border-purple-700 text-purple-900 dark:text-purple-300 font-bold text-caption flex items-center gap-1.5 shadow-2xs"
                 >
                   <BookmarkPlus size={14} className="text-purple-600 dark:text-purple-400" />
                   <span>Always Capture from @{senderDomain}</span>
@@ -1504,7 +1504,7 @@ export default function ActionInspectionSidecar({
                     setTrainedSuccess(`Untrained: Removed capture rules for @${senderDomain || analysis.senderLabel}`)
                     setTimeout(() => setTrainedSuccess(null), 5000)
                   }}
-                  className="min-h-[44px] sm:min-h-[48px] rounded-xl bg-white dark:bg-casa-surface hover:bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-800/50 text-rose-800 dark:text-rose-300 font-bold text-caption flex items-center gap-1.5 shadow-2xs"
+                  className="min-h-[44px] sm:min-h-[48px] rounded-xl bg-white dark:bg-casa-surface hover:bg-rose-50 hover:dark:bg-rose-950/20 border border-rose-200 dark:border-rose-800/50 text-rose-800 dark:text-rose-300 font-bold text-caption flex items-center gap-1.5 shadow-2xs"
                 >
                   <Undo2 size={14} className="text-rose-600 dark:text-rose-400" />
                   <span>Untrain @{senderDomain || analysis.senderLabel}</span>
@@ -1515,7 +1515,7 @@ export default function ActionInspectionSidecar({
                   variant="secondary"
                   disabled={isSavingRule}
                   onClick={() => setTunePolicyModalOpen(true)}
-                  className="min-h-[44px] sm:min-h-[48px] rounded-xl bg-white dark:bg-casa-surface hover:bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-800/50 text-rose-800 dark:text-rose-300 font-bold text-caption flex items-center gap-1.5 shadow-2xs"
+                  className="min-h-[44px] sm:min-h-[48px] rounded-xl bg-white dark:bg-casa-surface hover:bg-rose-50 hover:dark:bg-rose-950/20 border border-rose-200 dark:border-rose-800/50 text-rose-800 dark:text-rose-300 font-bold text-caption flex items-center gap-1.5 shadow-2xs"
                 >
                   <ThumbsDown size={14} className="text-rose-600 dark:text-rose-400" />
                   <span>Not Relevant / Adjust</span>
@@ -1587,7 +1587,7 @@ export default function ActionInspectionSidecar({
                   href={buildGmailWebUrl(activeItem, detailedItem?.gmailContext, familyMembers)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full min-h-[48px] rounded-xl bg-white dark:bg-casa-surface hover:bg-red-50/70 dark:bg-red-950/20 border border-red-200 dark:border-red-800/50 text-red-950 dark:text-red-200 font-bold text-body-sm flex items-center justify-center gap-2 shadow-2xs transition-all no-underline"
+                  className="w-full min-h-[48px] rounded-xl bg-white dark:bg-casa-surface hover:bg-red-50/70 hover:dark:bg-red-950/20 border border-red-200 dark:border-red-800/50 text-red-950 dark:text-red-200 font-bold text-body-sm flex items-center justify-center gap-2 shadow-2xs transition-all no-underline"
                 >
                   <Mail size={16} className="text-red-600 dark:text-red-400" />
                   <span>Open Full Thread in Gmail</span>
@@ -1935,13 +1935,13 @@ export default function ActionInspectionSidecar({
                   setTrainedSuccess(`Policy Updated: Tracking @${senderDomain || analysis.senderLabel} in Logistics Radar`)
                   setTimeout(() => setTrainedSuccess(null), 5000)
                 }}
-                className="w-full text-left p-3.5 rounded-2xl bg-casa-bg hover:bg-sky-50 dark:bg-sky-950/20 border border-casa-border/80 hover:border-sky-300 dark:border-sky-700 transition-all flex items-start gap-3.5 group shadow-2xs cursor-pointer min-h-[56px]"
+                className="w-full text-left p-3.5 rounded-2xl bg-casa-bg hover:bg-sky-50 hover:dark:bg-sky-950/20 border border-casa-border/80 hover:border-sky-300 hover:dark:border-sky-700 transition-all flex items-start gap-3.5 group shadow-2xs cursor-pointer min-h-[56px]"
               >
                 <div className="w-9 h-9 rounded-xl bg-sky-100 dark:bg-sky-900/50 text-sky-900 dark:text-sky-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform mt-0.5">
                   <Truck size={18} className="text-sky-700 dark:text-sky-400" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <span className="text-body-sm font-bold text-casa-navy dark:text-casa-text group-hover:text-sky-900 dark:text-sky-300">
+                  <span className="text-body-sm font-bold text-casa-navy dark:text-casa-text group-hover:text-sky-900 group-hover:dark:text-sky-300">
                     Quiet Logistics &amp; Parcel Radar
                   </span>
                   <p className="text-caption text-casa-muted mt-0.5 leading-snug">
@@ -1968,13 +1968,13 @@ export default function ActionInspectionSidecar({
                   setTrainedSuccess(`Policy Updated: Only alert on signatures and urgent deadlines from @${senderDomain || analysis.senderLabel}`)
                   setTimeout(() => setTrainedSuccess(null), 5000)
                 }}
-                className="w-full text-left p-3.5 rounded-2xl bg-casa-bg hover:bg-amber-50 dark:bg-amber-950/20 border border-casa-border/80 hover:border-amber-300 dark:border-amber-700 transition-all flex items-start gap-3.5 group shadow-2xs cursor-pointer min-h-[56px]"
+                className="w-full text-left p-3.5 rounded-2xl bg-casa-bg hover:bg-amber-50 hover:dark:bg-amber-950/20 border border-casa-border/80 hover:border-amber-300 hover:dark:border-amber-700 transition-all flex items-start gap-3.5 group shadow-2xs cursor-pointer min-h-[56px]"
               >
                 <div className="w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-900/50 text-amber-950 dark:text-amber-200 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform mt-0.5">
                   <CheckCircle2 size={18} className="text-amber-700 dark:text-amber-400" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <span className="text-body-sm font-bold text-casa-navy dark:text-casa-text group-hover:text-amber-950 dark:text-amber-200">
+                  <span className="text-body-sm font-bold text-casa-navy dark:text-casa-text group-hover:text-amber-950 group-hover:dark:text-amber-200">
                     Only Urgent Deadlines &amp; Signatures
                   </span>
                   <p className="text-caption text-casa-muted mt-0.5 leading-snug">
@@ -2004,7 +2004,7 @@ export default function ActionInspectionSidecar({
                     onClose()
                   }, 1800)
                 }}
-                className="w-full text-left p-3.5 rounded-2xl bg-casa-bg hover:bg-rose-50 dark:bg-rose-950/20 border border-casa-border/80 hover:border-rose-200 dark:border-rose-800/50 transition-all flex items-start gap-3.5 group shadow-2xs cursor-pointer min-h-[56px]"
+                className="w-full text-left p-3.5 rounded-2xl bg-casa-bg hover:bg-rose-50 hover:dark:bg-rose-950/20 border border-casa-border/80 hover:border-rose-200 hover:dark:border-rose-800/50 transition-all flex items-start gap-3.5 group shadow-2xs cursor-pointer min-h-[56px]"
               >
                 <div className="w-9 h-9 rounded-xl bg-rose-100 dark:bg-rose-900/50 text-rose-800 dark:text-rose-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform mt-0.5">
                   <ShieldAlert size={18} className="text-rose-600 dark:text-rose-400" />

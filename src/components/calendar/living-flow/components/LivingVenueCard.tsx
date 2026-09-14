@@ -260,11 +260,11 @@ export default function LivingVenueCard({
   const hasSavedMatches = filteredHousehold.length > 0
 
   return (
-    <div className={`living-venue-card ${isChanging ? 'border-amber-400 shadow-md' : ''}`}>
+    <div className={`living-venue-card ${isChanging ? 'border-amber-400 dark:border-amber-600 shadow-md' : ''}`}>
       {/* Top Header Row */}
       <div className="flex items-center justify-between">
         <div className="min-w-0 flex-1 mr-2">
-          <div className="text-base font-bold text-slate-900 truncate">
+          <div className="text-base font-bold text-slate-900 dark:text-slate-300 truncate">
             {venue.name}
           </div>
           <div className="text-xs text-slate-500 mt-0.5 truncate">
@@ -274,13 +274,13 @@ export default function LivingVenueCard({
 
         <div className="flex items-center gap-1.5 shrink-0">
           {hasAddress ? (
-            <span className="bg-emerald-50 text-emerald-800 border border-emerald-300 text-xs font-bold py-1 px-2.5 rounded-xl inline-flex items-center gap-1">
-              <MapPin size={12} className="text-emerald-700" />
+            <span className="bg-emerald-50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 text-xs font-bold py-1 px-2.5 rounded-xl inline-flex items-center gap-1">
+              <MapPin size={12} className="text-emerald-700 dark:text-emerald-400" />
               <span>Mapped</span>
             </span>
           ) : (
-            <span className="bg-amber-50 text-amber-800 border border-amber-300 text-xs font-bold py-1 px-2.5 rounded-xl inline-flex items-center gap-1">
-              <Compass size={12} className="text-amber-700" />
+            <span className="bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700 text-xs font-bold py-1 px-2.5 rounded-xl inline-flex items-center gap-1">
+              <Compass size={12} className="text-amber-700 dark:text-amber-400" />
               <span>Address Needed</span>
             </span>
           )}
@@ -291,10 +291,10 @@ export default function LivingVenueCard({
             className={`text-xs font-bold py-1 px-2.5 rounded-xl border transition-all inline-flex items-center gap-1 min-h-[32px] ${
               isChanging
                 ? 'bg-slate-900 text-white border-slate-900'
-                : 'bg-white text-slate-800 border-slate-200 hover:border-amber-400'
+                : 'bg-white dark:bg-casa-surface text-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-800/50 hover:border-amber-400 hover:dark:border-amber-600'
             }`}
           >
-            <Pencil size={12} className={isChanging ? 'text-white' : 'text-slate-600'} />
+            <Pencil size={12} className={isChanging ? 'text-white' : 'text-slate-600 dark:text-slate-400'} />
             <span>{isChanging ? 'Done' : 'Change'}</span>
           </button>
         </div>
@@ -304,9 +304,9 @@ export default function LivingVenueCard({
       {isChanging && (
         <div className="living-inline-drawer flex flex-col gap-3 pt-1">
           {/* Search Box with Proximity Cue and Live Indicator */}
-          <div className="flex items-center gap-2 bg-white border-2 border-amber-400 p-2.5 rounded-xl shadow-inner min-h-[48px]">
+          <div className="flex items-center gap-2 bg-white dark:bg-casa-surface border-2 border-amber-400 dark:border-amber-600 p-2.5 rounded-xl shadow-inner min-h-[48px]">
             {isLoading ? (
-              <Loader2 size={16} className="text-amber-600 animate-spin shrink-0" />
+              <Loader2 size={16} className="text-amber-600 dark:text-amber-400 animate-spin shrink-0" />
             ) : (
               <Search size={16} className="text-slate-500 shrink-0" />
             )}
@@ -317,7 +317,7 @@ export default function LivingVenueCard({
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search places or addresses nearby…"
-              className="flex-1 bg-transparent border-none text-xs sm:text-sm font-semibold text-slate-900 outline-none placeholder:text-slate-400"
+              className="flex-1 bg-transparent border-none text-xs sm:text-sm font-semibold text-slate-900 dark:text-slate-300 outline-none placeholder:text-slate-400"
             />
             {searchTerm && (
               <button
@@ -326,7 +326,7 @@ export default function LivingVenueCard({
                   setSearchTerm('')
                   searchInputRef.current?.focus()
                 }}
-                className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 active:bg-slate-200 p-1 min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg transition-colors cursor-pointer"
+                className="text-slate-400 hover:text-slate-700 hover:dark:text-slate-400 hover:bg-slate-100 hover:dark:bg-slate-900/50 active:bg-slate-200 active:dark:bg-slate-900/80 p-1 min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg transition-colors cursor-pointer"
                 aria-label="Clear destination search query"
               >
                 <X size={16} />
@@ -338,7 +338,7 @@ export default function LivingVenueCard({
           {hasSavedMatches && (
             <div className="flex flex-col gap-1.5">
               <span className="text-xs font-extrabold uppercase text-slate-500 tracking-wider flex items-center gap-1">
-                <Star size={12} className="text-amber-600 fill-amber-500" />
+                <Star size={12} className="text-amber-600 dark:text-amber-400 fill-amber-500" />
                 <span>{searchTerm.trim() ? 'Matching Saved Places' : 'Household Shortcuts'}</span>
               </span>
               {filteredHousehold.slice(0, searchTerm.trim() ? 5 : 4).map((place) => {
@@ -351,16 +351,16 @@ export default function LivingVenueCard({
                     aria-label={`Select saved place ${place.name}`}
                     className={`flex items-center justify-between p-2.5 rounded-xl border text-left cursor-pointer transition-all min-h-[48px] w-full ${
                       isSelected
-                        ? 'bg-amber-50/80 border-amber-400 shadow-sm'
-                        : 'bg-white border-slate-200 hover:border-amber-400 hover:bg-amber-50/30'
+                        ? 'bg-amber-50/80 dark:bg-amber-950/20 border-amber-400 dark:border-amber-600 shadow-sm'
+                        : 'bg-white dark:bg-casa-surface border-slate-200 dark:border-slate-800/50 hover:border-amber-400 hover:dark:border-amber-600 hover:bg-amber-50/30 hover:dark:bg-amber-950/20'
                     }`}
                   >
                     <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                      <div className="w-8 h-8 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 shrink-0">
+                      <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/50 flex items-center justify-center text-amber-600 dark:text-amber-400 shrink-0">
                         <Star size={14} className="fill-amber-500" />
                       </div>
                       <div className="min-w-0 flex-1 truncate">
-                        <div className="text-xs sm:text-sm font-bold text-slate-900 truncate">
+                        <div className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-300 truncate">
                           {place.name}
                         </div>
                         <div className="text-xs text-slate-500 truncate">
@@ -371,11 +371,11 @@ export default function LivingVenueCard({
 
                     <div className="flex items-center gap-1.5 shrink-0 ml-2">
                       {place.formattedDistance && (
-                        <span className="text-xs font-bold text-slate-600 bg-slate-100 border border-slate-200 py-0.5 px-2 rounded-lg">
+                        <span className="text-xs font-bold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800/50 py-0.5 px-2 rounded-lg">
                           {place.formattedDistance}
                         </span>
                       )}
-                      <span className="text-xs font-bold text-amber-800 bg-amber-100 border border-amber-300 py-0.5 px-2 rounded-lg">
+                      <span className="text-xs font-bold text-amber-800 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/50 border border-amber-300 dark:border-amber-700 py-0.5 px-2 rounded-lg">
                         Saved
                       </span>
                     </div>
@@ -389,7 +389,7 @@ export default function LivingVenueCard({
           {googleResults.length > 0 && (
             <div className="flex flex-col gap-1.5">
               <span className="text-xs font-extrabold uppercase text-slate-500 tracking-wider flex items-center gap-1">
-                <MapPin size={12} className="text-amber-600" />
+                <MapPin size={12} className="text-amber-600 dark:text-amber-400" />
                 <span>Nearby Google Places</span>
               </span>
               {googleResults.map((item) => (
@@ -398,14 +398,14 @@ export default function LivingVenueCard({
                   key={item.place_id}
                   onClick={() => handleSelectGooglePlace(item)}
                   aria-label={`Select place ${item.name}`}
-                  className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200 bg-white hover:border-amber-400 hover:bg-amber-50/40 text-left cursor-pointer transition-all shadow-sm min-h-[48px] w-full"
+                  className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200 dark:border-slate-800/50 bg-white dark:bg-casa-surface hover:border-amber-400 hover:dark:border-amber-600 hover:bg-amber-50/40 hover:dark:bg-amber-950/20 text-left cursor-pointer transition-all shadow-sm min-h-[48px] w-full"
                 >
                   <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                    <div className="w-8 h-8 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-700 shrink-0">
+                    <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/50 flex items-center justify-center text-amber-700 dark:text-amber-400 shrink-0">
                       <MapPin size={15} />
                     </div>
                     <div className="min-w-0 flex-1 truncate">
-                      <div className="text-xs sm:text-sm font-bold text-slate-900 truncate">
+                      <div className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-300 truncate">
                         {item.name}
                       </div>
                       <div className="text-xs text-slate-500 truncate">
@@ -416,11 +416,11 @@ export default function LivingVenueCard({
 
                   <div className="flex items-center gap-1.5 shrink-0 ml-2">
                     {item.distanceText && (
-                      <span className="text-xs font-bold text-slate-600 bg-slate-100 border border-slate-200 py-0.5 px-2 rounded-lg">
+                      <span className="text-xs font-bold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800/50 py-0.5 px-2 rounded-lg">
                         {item.distanceText}
                       </span>
                     )}
-                    <span className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 py-0.5 px-2 rounded-lg">
+                    <span className="text-xs font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/50 py-0.5 px-2 rounded-lg">
                       Select
                     </span>
                   </div>
@@ -435,15 +435,15 @@ export default function LivingVenueCard({
               type="button"
               onClick={handleSelectCustom}
               aria-label={`Use ${searchTerm.trim()} as custom location`}
-              className="flex items-center gap-2.5 p-2.5 rounded-xl border border-dashed border-slate-300 bg-slate-50/60 hover:bg-amber-50/50 hover:border-amber-300 text-left transition-all min-h-[44px] w-full mt-1"
+              className="flex items-center gap-2.5 p-2.5 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-950/20 hover:bg-amber-50/50 hover:dark:bg-amber-950/20 hover:border-amber-300 hover:dark:border-amber-700 text-left transition-all min-h-[44px] w-full mt-1"
             >
-              <div className="w-7 h-7 rounded-lg bg-slate-200/70 flex items-center justify-center text-slate-600 shrink-0">
+              <div className="w-7 h-7 rounded-lg bg-slate-200/70 dark:bg-slate-900/80 flex items-center justify-center text-slate-600 dark:text-slate-400 shrink-0">
                 <Plus size={14} />
               </div>
               <div className="min-w-0 flex-1">
-                <span className="text-xs text-slate-600">Use </span>
-                <span className="text-xs font-bold text-slate-900">"{searchTerm.trim()}"</span>
-                <span className="text-xs text-slate-600"> as custom address</span>
+                <span className="text-xs text-slate-600 dark:text-slate-400">Use </span>
+                <span className="text-xs font-bold text-slate-900 dark:text-slate-300">"{searchTerm.trim()}"</span>
+                <span className="text-xs text-slate-600 dark:text-slate-400"> as custom address</span>
               </div>
             </button>
           )}

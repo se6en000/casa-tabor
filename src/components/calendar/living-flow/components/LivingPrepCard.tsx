@@ -244,7 +244,7 @@ export default function LivingPrepCard({ event }: LivingPrepCardProps) {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <PackageCheck size={16} className="text-casa-gold" />
-            <span className="text-2xs font-extrabold uppercase tracking-wider text-casa-navy font-sans">
+            <span className="text-2xs font-extrabold uppercase tracking-wider text-casa-navy dark:text-casa-text font-sans">
               Prep & What to Bring
             </span>
           </div>
@@ -309,7 +309,7 @@ export default function LivingPrepCard({ event }: LivingPrepCardProps) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <PackageCheck size={16} className="text-casa-gold" />
-          <span className="text-2xs font-extrabold uppercase tracking-wider text-casa-navy font-sans">
+          <span className="text-2xs font-extrabold uppercase tracking-wider text-casa-navy dark:text-casa-text font-sans">
             Prep & What to Bring
           </span>
         </div>
@@ -319,11 +319,11 @@ export default function LivingPrepCard({ event }: LivingPrepCardProps) {
             className={cn(
               'px-2.5 py-0.5 rounded-full text-2xs font-extrabold tracking-wide font-sans transition-all flex items-center gap-1',
               allPacked
-                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300/60'
+                ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 border border-emerald-300/60 dark:border-emerald-700'
                 : 'bg-casa-gold-light text-casa-gold-dark border border-casa-gold/40'
             )}
           >
-            {allPacked && <Check size={11} className="text-emerald-700 stroke-[3]" />}
+            {allPacked && <Check size={11} className="text-emerald-700 dark:text-emerald-400 stroke-[3]" />}
             <span>
               {allPacked ? 'All Packed' : `${packedCount}/${totalCount} Packed`}
             </span>
@@ -366,7 +366,7 @@ export default function LivingPrepCard({ event }: LivingPrepCardProps) {
                   'flex-1 text-body-sm font-semibold transition-all select-none',
                   checked
                     ? 'text-casa-muted line-through opacity-70 font-normal'
-                    : 'text-casa-navy'
+                    : 'text-casa-navy dark:text-casa-text'
                 )}
               >
                 {item.label}
@@ -383,7 +383,7 @@ export default function LivingPrepCard({ event }: LivingPrepCardProps) {
                 }}
                 aria-label={`Remove "${item.label}"`}
                 title={`Remove "${item.label}"`}
-                className="text-casa-muted/60 hover:text-casa-error hover:bg-red-50 shrink-0"
+                className="text-casa-muted/60 hover:text-casa-error hover:bg-red-50 hover:dark:bg-red-950/20 shrink-0"
               />
             </div>
           )

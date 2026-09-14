@@ -168,19 +168,19 @@ export default function LivingFlowSidecar({
 
             {/* Explicit Location & Transit Status Card (When at Home or Local) */}
             {!isDrivingOuting && (
-              <div className="p-3.5 sm:p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-2.5">
+              <div className="p-3.5 sm:p-4 rounded-2xl bg-white dark:bg-casa-surface border border-slate-200 dark:border-slate-800/50 shadow-2xs space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase text-slate-800 tracking-wider flex items-center gap-1.5">
-                    <House size={14} className="text-amber-600" />
+                  <span className="text-xs font-bold uppercase text-slate-800 dark:text-slate-300 tracking-wider flex items-center gap-1.5">
+                    <House size={14} className="text-amber-600 dark:text-amber-400" />
                     <span>Location & Logistics</span>
                   </span>
-                  <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300 inline-flex items-center gap-1">
-                    <ShieldCheck size={12} className="text-emerald-700" />
+                  <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 inline-flex items-center gap-1">
+                    <ShieldCheck size={12} className="text-emerald-700 dark:text-emerald-400" />
                     <span>At Home</span>
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-slate-100 border border-slate-200">
+                <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800/50">
                   <Button
                     variant={state.travelBehavior === 'none' ? 'primary' : 'ghost'}
                     size="sm"
@@ -188,7 +188,7 @@ export default function LivingFlowSidecar({
                     className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 min-h-[44px] cursor-pointer ${
                       state.travelBehavior === 'none'
                         ? 'bg-slate-900 text-white shadow-2xs'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 hover:dark:text-slate-300 hover:bg-white/60 dark:bg-casa-surface'
                     }`}
                   >
                     <House size={14} />
@@ -201,7 +201,7 @@ export default function LivingFlowSidecar({
                     className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 min-h-[44px] cursor-pointer ${
                       state.travelBehavior !== 'none'
                         ? 'bg-slate-900 text-white shadow-2xs'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 hover:dark:text-slate-300 hover:bg-white/60 dark:bg-casa-surface'
                     }`}
                   >
                     <Car size={14} />
@@ -211,7 +211,7 @@ export default function LivingFlowSidecar({
 
                 {state.travelBehavior === 'none' ? (
                   <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium pt-0.5">
-                    <ShieldCheck size={14} className="text-emerald-600 shrink-0" />
+                    <ShieldCheck size={14} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
                     <span>0m transit buffer · No driver locked into transit</span>
                   </div>
                 ) : (
@@ -259,7 +259,7 @@ export default function LivingFlowSidecar({
       </div>
 
       {/* Action Footer: Delete on Left, Directions in Center (if offsite), Copilot on Right */}
-      <footer className="p-3 bg-white border-t border-slate-200 flex items-center gap-2 shrink-0 z-20">
+      <footer className="p-3 bg-white dark:bg-casa-surface border-t border-slate-200 dark:border-slate-800/50 flex items-center gap-2 shrink-0 z-20">
         <IconButton
           variant="secondary"
           size="md"
@@ -268,16 +268,16 @@ export default function LivingFlowSidecar({
           disabled={deleting}
           aria-label="Delete this event"
           title="Delete this event"
-          className="text-casa-muted hover:text-casa-error hover:border-red-300 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+          className="text-casa-muted hover:text-casa-error hover:border-red-300 hover:dark:border-red-700 hover:bg-red-50 hover:dark:bg-red-950/20 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
         />
 
         {state.mode === 'event' && hasOffsiteDestination && (
           <Button
             variant="secondary"
             size="md"
-            leadingIcon={<Navigation size={15} className="text-casa-navy" />}
+            leadingIcon={<Navigation size={15} className="text-casa-navy dark:text-casa-text" />}
             onClick={handleOpenDirections}
-            className="flex-1 text-casa-navy font-bold text-caption shadow-xs"
+            className="flex-1 text-casa-navy dark:text-casa-text font-bold text-caption shadow-xs"
           >
             Directions
           </Button>
@@ -291,7 +291,7 @@ export default function LivingFlowSidecar({
             if (onSwitchToAi) onSwitchToAi()
             else onAskAi?.()
           }}
-          className="flex-1 text-casa-navy font-bold text-caption shadow-xs"
+          className="flex-1 text-casa-navy dark:text-casa-text font-bold text-caption shadow-xs"
           aria-label="Ask Copilot about this…"
         >
           Ask Copilot about this…

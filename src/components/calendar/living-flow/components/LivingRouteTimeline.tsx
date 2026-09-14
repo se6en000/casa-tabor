@@ -25,12 +25,12 @@ interface LivingRouteTimelineProps {
 }
 
 const DRIVER_OPTIONS = [
-  { name: 'Kelly', role: 'Mom · Primary', initial: 'K', colorClass: 'bg-amber-700' },
+  { name: 'Kelly', role: 'Mom · Primary', initial: 'K', colorClass: 'bg-amber-700 dark:bg-amber-700/40' },
   { name: 'Jake', role: 'Dad · Driver', initial: 'J', colorClass: 'bg-slate-900' },
-  { name: 'Both Parents', role: 'Ride Together', initial: '👥', colorClass: 'bg-amber-500' },
-  { name: 'Giselle', role: 'Caregiver / Nanny', initial: 'G', colorClass: 'bg-purple-700' },
-  { name: 'Grandma', role: 'Family Helper', initial: 'S', colorClass: 'bg-orange-600' },
-  { name: 'Carpool', role: 'Team / Friend', initial: 'C', colorClass: 'bg-slate-600' },
+  { name: 'Both Parents', role: 'Ride Together', initial: '👥', colorClass: 'bg-amber-500 dark:bg-amber-500/20' },
+  { name: 'Giselle', role: 'Caregiver / Nanny', initial: 'G', colorClass: 'bg-purple-700 dark:bg-purple-700/40' },
+  { name: 'Grandma', role: 'Family Helper', initial: 'S', colorClass: 'bg-orange-600 dark:bg-orange-600/25' },
+  { name: 'Carpool', role: 'Team / Friend', initial: 'C', colorClass: 'bg-slate-600 dark:bg-slate-600/25' },
 ]
 
 const LOGISTICS_MODE_OPTIONS: Array<{
@@ -98,13 +98,13 @@ export default function LivingRouteTimeline({
       {/* Header Row with 5-Mode Segmented Selector */}
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-bold uppercase text-slate-900 tracking-wider flex items-center gap-1.5">
-            <Car size={14} className="text-slate-600" />
+          <span className="text-xs font-bold uppercase text-slate-900 dark:text-slate-300 tracking-wider flex items-center gap-1.5">
+            <Car size={14} className="text-slate-600 dark:text-slate-400" />
             <span>Route & Logistics</span>
           </span>
         </div>
 
-        <div className="grid grid-cols-5 bg-slate-100 border border-slate-200 rounded-full p-0.5 gap-0.5">
+        <div className="grid grid-cols-5 bg-slate-100 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800/50 rounded-full p-0.5 gap-0.5">
           {LOGISTICS_MODE_OPTIONS.map(({ mode, shortLabel, icon: IconComponent }) => {
             const isSelected = activeMode === mode
             return (
@@ -115,7 +115,7 @@ export default function LivingRouteTimeline({
                 className={`py-1.5 px-1 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1 ${
                   isSelected
                     ? 'bg-slate-900 text-white shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 hover:dark:text-slate-300 hover:bg-white/60 dark:bg-casa-surface'
                 }`}
                 title={mode}
               >
@@ -129,12 +129,12 @@ export default function LivingRouteTimeline({
 
       {/* ══════ MODE: NONE (NO RIDE) ══════ */}
       {activeMode === 'none' && (
-        <div className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-600">
-          <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 shrink-0">
+        <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-950/20 border border-slate-200 dark:border-slate-800/50 rounded-xl text-slate-600 dark:text-slate-400">
+          <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-900/80 flex items-center justify-center text-slate-600 dark:text-slate-400 shrink-0">
             <Footprints size={15} />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-bold text-slate-900">No Family Ride Needed</p>
+            <p className="text-xs font-bold text-slate-900 dark:text-slate-300">No Family Ride Needed</p>
             <p className="text-xs text-slate-500">Attending via bus, walking, or friend carpool.</p>
           </div>
         </div>
@@ -148,10 +148,10 @@ export default function LivingRouteTimeline({
             <div className="w-8 h-8 rounded-full bg-slate-900 border-2 border-slate-900 flex items-center justify-center text-white shrink-0 shadow-sm">
               <House size={15} />
             </div>
-            <div className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col gap-1">
+            <div className="flex-1 bg-slate-50 dark:bg-slate-950/20 border border-slate-200 dark:border-slate-800/50 rounded-xl p-3 flex flex-col gap-1">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-bold text-slate-900">Leg 1: Drop Off Drive</span>
-                <span className="font-mono text-xs font-bold text-slate-900">{formattedDepart}</span>
+                <span className="text-sm font-bold text-slate-900 dark:text-slate-300">Leg 1: Drop Off Drive</span>
+                <span className="font-mono text-xs font-bold text-slate-900 dark:text-slate-300">{formattedDepart}</span>
               </div>
               <span className="text-xs text-slate-500">
                 {venue.driveMinutes > 0
@@ -161,9 +161,9 @@ export default function LivingRouteTimeline({
 
               <div
                 onClick={() => setExpandedLeg((prev) => (prev === 1 ? null : 1))}
-                className={`living-driver-pill ${expandedLeg === 1 ? 'bg-amber-50 border-amber-400 text-amber-900' : ''}`}
+                className={`living-driver-pill ${expandedLeg === 1 ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-400 dark:border-amber-600 text-amber-900 dark:text-amber-300' : ''}`}
               >
-                <div className="w-2 h-2 rounded-full bg-amber-600" />
+                <div className="w-2 h-2 rounded-full bg-amber-600 dark:bg-amber-600/25" />
                 <span>Drop Driver: <strong>{driverLeg1}</strong></span>
                 <ChevronDown size={12} className={`text-slate-400 ${expandedLeg === 1 ? 'rotate-180 transition-transform' : ''}`} />
               </div>
@@ -175,7 +175,7 @@ export default function LivingRouteTimeline({
                     <button
                       type="button"
                       onClick={() => setExpandedLeg(null)}
-                      className="text-xs text-slate-500 hover:text-slate-900 font-bold flex items-center gap-0.5"
+                      className="text-xs text-slate-500 hover:text-slate-900 hover:dark:text-slate-300 font-bold flex items-center gap-0.5"
                     >
                       <span>Done</span>
                       <X size={13} />
@@ -193,17 +193,17 @@ export default function LivingRouteTimeline({
                           }}
                           className={`flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all border ${
                             isSelected
-                              ? 'bg-amber-50 border-amber-400 shadow-sm'
-                              : 'bg-white border-slate-200 hover:border-amber-400'
+                              ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-400 dark:border-amber-600 shadow-sm'
+                              : 'bg-white dark:bg-casa-surface border-slate-200 dark:border-slate-800/50 hover:border-amber-400 hover:dark:border-amber-600'
                           }`}
                         >
                           <div className="flex items-center gap-2 min-w-0">
                             <div className={`w-7 h-7 rounded-full text-white font-bold text-xs flex items-center justify-center shrink-0 ${drv.colorClass}`}>
                               {drv.name === 'Both Parents' ? <Users size={13} /> : drv.initial}
                             </div>
-                            <span className="text-xs font-bold text-slate-900 truncate">{drv.name}</span>
+                            <span className="text-xs font-bold text-slate-900 dark:text-slate-300 truncate">{drv.name}</span>
                           </div>
-                          {isSelected ? <Check size={14} className="text-emerald-600" /> : <Plus size={14} className="text-slate-400" />}
+                          {isSelected ? <Check size={14} className="text-emerald-600 dark:text-emerald-400" /> : <Plus size={14} className="text-slate-400" />}
                         </div>
                       )
                     })}
@@ -215,16 +215,16 @@ export default function LivingRouteTimeline({
 
           {/* Step 2: Venue Arrival */}
           <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-full bg-white border-2 border-amber-400 flex items-center justify-center text-amber-700 shrink-0 shadow-sm">
+            <div className="w-8 h-8 rounded-full bg-white dark:bg-casa-surface border-2 border-amber-400 dark:border-amber-600 flex items-center justify-center text-amber-700 dark:text-amber-400 shrink-0 shadow-sm">
               <MapPin size={15} />
             </div>
-            <div className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col gap-1">
+            <div className="flex-1 bg-slate-50 dark:bg-slate-950/20 border border-slate-200 dark:border-slate-800/50 rounded-xl p-3 flex flex-col gap-1">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-bold text-slate-900">{venue.name}</span>
-                <span className="font-mono text-xs font-bold text-slate-900">{formattedArrive}</span>
+                <span className="text-sm font-bold text-slate-900 dark:text-slate-300">{venue.name}</span>
+                <span className="font-mono text-xs font-bold text-slate-900 dark:text-slate-300">{formattedArrive}</span>
               </div>
-              <span className="text-xs text-slate-900 font-semibold flex items-center gap-1">
-                <Clock size={13} className="text-slate-600 shrink-0" />
+              <span className="text-xs text-slate-900 dark:text-slate-300 font-semibold flex items-center gap-1">
+                <Clock size={13} className="text-slate-600 dark:text-slate-400 shrink-0" />
                 <span>{activeAttendees} at venue · Driver departs after drop-off</span>
               </span>
             </div>
@@ -240,10 +240,10 @@ export default function LivingRouteTimeline({
             <div className="w-8 h-8 rounded-full bg-slate-900 border-2 border-slate-900 flex items-center justify-center text-white shrink-0 shadow-sm">
               <House size={15} />
             </div>
-            <div className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col gap-1">
+            <div className="flex-1 bg-slate-50 dark:bg-slate-950/20 border border-slate-200 dark:border-slate-800/50 rounded-xl p-3 flex flex-col gap-1">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-bold text-slate-900">Leg 1: Pickup Departure Drive</span>
-                <span className="font-mono text-xs font-bold text-slate-900">{formattedPickupDepart}</span>
+                <span className="text-sm font-bold text-slate-900 dark:text-slate-300">Leg 1: Pickup Departure Drive</span>
+                <span className="font-mono text-xs font-bold text-slate-900 dark:text-slate-300">{formattedPickupDepart}</span>
               </div>
               <span className="text-xs text-slate-500">
                 {venue.driveMinutes > 0
@@ -253,9 +253,9 @@ export default function LivingRouteTimeline({
 
               <div
                 onClick={() => setExpandedLeg((prev) => (prev === 2 ? null : 2))}
-                className={`living-driver-pill ${expandedLeg === 2 ? 'bg-amber-50 border-amber-400 text-amber-900' : ''}`}
+                className={`living-driver-pill ${expandedLeg === 2 ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-400 dark:border-amber-600 text-amber-900 dark:text-amber-300' : ''}`}
               >
-                <div className="w-2 h-2 rounded-full bg-amber-600" />
+                <div className="w-2 h-2 rounded-full bg-amber-600 dark:bg-amber-600/25" />
                 <span>Pickup Driver: <strong>{driverLeg2}</strong></span>
                 <ChevronDown size={12} className={`text-slate-400 ${expandedLeg === 2 ? 'rotate-180 transition-transform' : ''}`} />
               </div>
@@ -267,7 +267,7 @@ export default function LivingRouteTimeline({
                     <button
                       type="button"
                       onClick={() => setExpandedLeg(null)}
-                      className="text-xs text-slate-500 hover:text-slate-900 font-bold flex items-center gap-0.5"
+                      className="text-xs text-slate-500 hover:text-slate-900 hover:dark:text-slate-300 font-bold flex items-center gap-0.5"
                     >
                       <span>Done</span>
                       <X size={13} />
@@ -285,17 +285,17 @@ export default function LivingRouteTimeline({
                           }}
                           className={`flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all border ${
                             isSelected
-                              ? 'bg-amber-50 border-amber-400 shadow-sm'
-                              : 'bg-white border-slate-200 hover:border-amber-400'
+                              ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-400 dark:border-amber-600 shadow-sm'
+                              : 'bg-white dark:bg-casa-surface border-slate-200 dark:border-slate-800/50 hover:border-amber-400 hover:dark:border-amber-600'
                           }`}
                         >
                           <div className="flex items-center gap-2 min-w-0">
                             <div className={`w-7 h-7 rounded-full text-white font-bold text-xs flex items-center justify-center shrink-0 ${drv.colorClass}`}>
                               {drv.name === 'Both Parents' ? <Users size={13} /> : drv.initial}
                             </div>
-                            <span className="text-xs font-bold text-slate-900 truncate">{drv.name}</span>
+                            <span className="text-xs font-bold text-slate-900 dark:text-slate-300 truncate">{drv.name}</span>
                           </div>
-                          {isSelected ? <Check size={14} className="text-emerald-600" /> : <Plus size={14} className="text-slate-400" />}
+                          {isSelected ? <Check size={14} className="text-emerald-600 dark:text-emerald-400" /> : <Plus size={14} className="text-slate-400" />}
                         </div>
                       )
                     })}
@@ -310,10 +310,10 @@ export default function LivingRouteTimeline({
             <div className="w-8 h-8 rounded-full bg-slate-900 border-2 border-slate-900 flex items-center justify-center text-white shrink-0 shadow-sm">
               <House size={15} />
             </div>
-            <div className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col gap-1">
+            <div className="flex-1 bg-slate-50 dark:bg-slate-950/20 border border-slate-200 dark:border-slate-800/50 rounded-xl p-3 flex flex-col gap-1">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-bold text-slate-900">Return Home with {activeAttendees}</span>
-                <span className="font-mono text-xs font-bold text-slate-900">{formattedReturn} Arrival</span>
+                <span className="text-sm font-bold text-slate-900 dark:text-slate-300">Return Home with {activeAttendees}</span>
+                <span className="font-mono text-xs font-bold text-slate-900 dark:text-slate-300">{formattedReturn} Arrival</span>
               </div>
               <span className="text-xs text-slate-500">
                 {venue.driveMinutes > 0
@@ -333,10 +333,10 @@ export default function LivingRouteTimeline({
             <div className="w-8 h-8 rounded-full bg-slate-900 border-2 border-slate-900 flex items-center justify-center text-white shrink-0 shadow-sm">
               <House size={15} />
             </div>
-            <div className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col gap-1">
+            <div className="flex-1 bg-slate-50 dark:bg-slate-950/20 border border-slate-200 dark:border-slate-800/50 rounded-xl p-3 flex flex-col gap-1">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-bold text-slate-900">Depart Home Together</span>
-                <span className="font-mono text-xs font-bold text-slate-900">{formattedDepart}</span>
+                <span className="text-sm font-bold text-slate-900 dark:text-slate-300">Depart Home Together</span>
+                <span className="font-mono text-xs font-bold text-slate-900 dark:text-slate-300">{formattedDepart}</span>
               </div>
               <span className="text-xs text-slate-500">
                 {venue.driveMinutes > 0
@@ -346,9 +346,9 @@ export default function LivingRouteTimeline({
 
               <div
                 onClick={() => setExpandedLeg((prev) => (prev === 1 ? null : 1))}
-                className={`living-driver-pill ${expandedLeg === 1 ? 'bg-amber-50 border-amber-400 text-amber-900' : ''}`}
+                className={`living-driver-pill ${expandedLeg === 1 ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-400 dark:border-amber-600 text-amber-900 dark:text-amber-300' : ''}`}
               >
-                <div className="w-2 h-2 rounded-full bg-amber-600" />
+                <div className="w-2 h-2 rounded-full bg-amber-600 dark:bg-amber-600/25" />
                 <span>Driver: <strong>{driverLeg1}</strong></span>
                 <ChevronDown size={12} className={`text-slate-400 ${expandedLeg === 1 ? 'rotate-180 transition-transform' : ''}`} />
               </div>
@@ -360,7 +360,7 @@ export default function LivingRouteTimeline({
                     <button
                       type="button"
                       onClick={() => setExpandedLeg(null)}
-                      className="text-xs text-slate-500 hover:text-slate-900 font-bold flex items-center gap-0.5"
+                      className="text-xs text-slate-500 hover:text-slate-900 hover:dark:text-slate-300 font-bold flex items-center gap-0.5"
                     >
                       <span>Done</span>
                       <X size={13} />
@@ -378,17 +378,17 @@ export default function LivingRouteTimeline({
                           }}
                           className={`flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all border ${
                             isSelected
-                              ? 'bg-amber-50 border-amber-400 shadow-sm'
-                              : 'bg-white border-slate-200 hover:border-amber-400'
+                              ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-400 dark:border-amber-600 shadow-sm'
+                              : 'bg-white dark:bg-casa-surface border-slate-200 dark:border-slate-800/50 hover:border-amber-400 hover:dark:border-amber-600'
                           }`}
                         >
                           <div className="flex items-center gap-2 min-w-0">
                             <div className={`w-7 h-7 rounded-full text-white font-bold text-xs flex items-center justify-center shrink-0 ${drv.colorClass}`}>
                               {drv.name === 'Both Parents' ? <Users size={13} /> : drv.initial}
                             </div>
-                            <span className="text-xs font-bold text-slate-900 truncate">{drv.name}</span>
+                            <span className="text-xs font-bold text-slate-900 dark:text-slate-300 truncate">{drv.name}</span>
                           </div>
-                          {isSelected ? <Check size={14} className="text-emerald-600" /> : <Plus size={14} className="text-slate-400" />}
+                          {isSelected ? <Check size={14} className="text-emerald-600 dark:text-emerald-400" /> : <Plus size={14} className="text-slate-400" />}
                         </div>
                       )
                     })}
@@ -400,18 +400,18 @@ export default function LivingRouteTimeline({
 
           {/* Step 2: Middle Venue Node (Stay) */}
           <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-full bg-white border-2 border-amber-400 flex items-center justify-center text-amber-700 shrink-0 shadow-sm">
+            <div className="w-8 h-8 rounded-full bg-white dark:bg-casa-surface border-2 border-amber-400 dark:border-amber-600 flex items-center justify-center text-amber-700 dark:text-amber-400 shrink-0 shadow-sm">
               <MapPin size={15} />
             </div>
-            <div className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col gap-1">
+            <div className="flex-1 bg-slate-50 dark:bg-slate-950/20 border border-slate-200 dark:border-slate-800/50 rounded-xl p-3 flex flex-col gap-1">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-bold text-slate-900">{venue.name}</span>
-                <span className="font-mono text-xs font-bold text-slate-900">
+                <span className="text-sm font-bold text-slate-900 dark:text-slate-300">{venue.name}</span>
+                <span className="font-mono text-xs font-bold text-slate-900 dark:text-slate-300">
                   {staySpanLabel}
                 </span>
               </div>
-              <span className="text-xs text-slate-900 font-semibold flex items-center gap-1">
-                <Coffee size={13} className="text-amber-700 shrink-0" />
+              <span className="text-xs text-slate-900 dark:text-slate-300 font-semibold flex items-center gap-1">
+                <Coffee size={13} className="text-amber-700 dark:text-amber-400 shrink-0" />
                 <span>
                   {driverLeg1} stays on site with {activeAttendees} {isMultiDayStay
                     ? `(${stayNightsCount} night${stayNightsCount > 1 ? 's' : ''} · ${Math.round(durationMinutes / 60)}h stay)`
@@ -426,10 +426,10 @@ export default function LivingRouteTimeline({
             <div className="w-8 h-8 rounded-full bg-slate-900 border-2 border-slate-900 flex items-center justify-center text-white shrink-0 shadow-sm">
               <House size={15} />
             </div>
-            <div className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col gap-1">
+            <div className="flex-1 bg-slate-50 dark:bg-slate-950/20 border border-slate-200 dark:border-slate-800/50 rounded-xl p-3 flex flex-col gap-1">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-bold text-slate-900">Return Home Together</span>
-                <span className="font-mono text-xs font-bold text-slate-900">{formattedReturn} Arrival</span>
+                <span className="text-sm font-bold text-slate-900 dark:text-slate-300">Return Home Together</span>
+                <span className="font-mono text-xs font-bold text-slate-900 dark:text-slate-300">{formattedReturn} Arrival</span>
               </div>
               <span className="text-xs text-slate-500">
                 {venue.driveMinutes > 0
@@ -449,10 +449,10 @@ export default function LivingRouteTimeline({
             <div className="w-8 h-8 rounded-full bg-slate-900 border-2 border-slate-900 flex items-center justify-center text-white shrink-0 shadow-sm">
               <House size={15} />
             </div>
-            <div className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col gap-1">
+            <div className="flex-1 bg-slate-50 dark:bg-slate-950/20 border border-slate-200 dark:border-slate-800/50 rounded-xl p-3 flex flex-col gap-1">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-bold text-slate-900">Leg 1: Drop Off Drive</span>
-                <span className="font-mono text-xs font-bold text-slate-900">{formattedDepart}</span>
+                <span className="text-sm font-bold text-slate-900 dark:text-slate-300">Leg 1: Drop Off Drive</span>
+                <span className="font-mono text-xs font-bold text-slate-900 dark:text-slate-300">{formattedDepart}</span>
               </div>
               <span className="text-xs text-slate-500">
                 {venue.driveMinutes > 0
@@ -462,9 +462,9 @@ export default function LivingRouteTimeline({
 
               <div
                 onClick={() => setExpandedLeg((prev) => (prev === 1 ? null : 1))}
-                className={`living-driver-pill ${expandedLeg === 1 ? 'bg-amber-50 border-amber-400 text-amber-900' : ''}`}
+                className={`living-driver-pill ${expandedLeg === 1 ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-400 dark:border-amber-600 text-amber-900 dark:text-amber-300' : ''}`}
               >
-                <div className="w-2 h-2 rounded-full bg-amber-600" />
+                <div className="w-2 h-2 rounded-full bg-amber-600 dark:bg-amber-600/25" />
                 <span>Drop Driver: <strong>{driverLeg1}</strong></span>
                 <ChevronDown size={12} className={`text-slate-400 ${expandedLeg === 1 ? 'rotate-180 transition-transform' : ''}`} />
               </div>
@@ -478,7 +478,7 @@ export default function LivingRouteTimeline({
                       variant="ghost"
                       size="sm"
                       onClick={() => setExpandedLeg(null)}
-                      className="h-6 px-2 text-xs text-slate-500 hover:text-slate-900 font-bold flex items-center gap-0.5"
+                      className="h-6 px-2 text-xs text-slate-500 hover:text-slate-900 hover:dark:text-slate-300 font-bold flex items-center gap-0.5"
                     >
                       <span>Done</span>
                       <X size={13} />
@@ -496,17 +496,17 @@ export default function LivingRouteTimeline({
                           }}
                           className={`flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all border ${
                             isSelected
-                              ? 'bg-amber-50 border-amber-400 shadow-sm'
-                              : 'bg-white border-slate-200 hover:border-amber-400'
+                              ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-400 dark:border-amber-600 shadow-sm'
+                              : 'bg-white dark:bg-casa-surface border-slate-200 dark:border-slate-800/50 hover:border-amber-400 hover:dark:border-amber-600'
                           }`}
                         >
                           <div className="flex items-center gap-2 min-w-0">
                             <div className={`w-7 h-7 rounded-full text-white font-bold text-xs flex items-center justify-center shrink-0 ${drv.colorClass}`}>
                               {drv.name === 'Both Parents' ? <Users size={13} /> : drv.initial}
                             </div>
-                            <span className="text-xs font-bold text-slate-900 truncate">{drv.name}</span>
+                            <span className="text-xs font-bold text-slate-900 dark:text-slate-300 truncate">{drv.name}</span>
                           </div>
-                          {isSelected ? <Check size={14} className="text-emerald-600" /> : <Plus size={14} className="text-slate-400" />}
+                          {isSelected ? <Check size={14} className="text-emerald-600 dark:text-emerald-400" /> : <Plus size={14} className="text-slate-400" />}
                         </div>
                       )
                     })}
@@ -518,18 +518,18 @@ export default function LivingRouteTimeline({
 
           {/* Step 2: Middle Venue Node */}
           <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-full bg-white border-2 border-amber-400 flex items-center justify-center text-amber-700 shrink-0 shadow-sm">
+            <div className="w-8 h-8 rounded-full bg-white dark:bg-casa-surface border-2 border-amber-400 dark:border-amber-600 flex items-center justify-center text-amber-700 dark:text-amber-400 shrink-0 shadow-sm">
               <MapPin size={15} />
             </div>
-            <div className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col gap-1">
+            <div className="flex-1 bg-slate-50 dark:bg-slate-950/20 border border-slate-200 dark:border-slate-800/50 rounded-xl p-3 flex flex-col gap-1">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-bold text-slate-900">{venue.name}</span>
-                <span className="font-mono text-xs font-bold text-slate-900">
+                <span className="text-sm font-bold text-slate-900 dark:text-slate-300">{venue.name}</span>
+                <span className="font-mono text-xs font-bold text-slate-900 dark:text-slate-300">
                   {formattedArrive} – {formattedStayEnd}
                 </span>
               </div>
-              <span className="text-xs text-slate-900 font-semibold flex items-center gap-1">
-                <Clock size={13} className="text-slate-600 shrink-0" />
+              <span className="text-xs text-slate-900 dark:text-slate-300 font-semibold flex items-center gap-1">
+                <Clock size={13} className="text-slate-600 dark:text-slate-400 shrink-0" />
                 <span>Kids at venue · Pickup scheduled at {formattedStayEnd}</span>
               </span>
             </div>
@@ -540,10 +540,10 @@ export default function LivingRouteTimeline({
             <div className="w-8 h-8 rounded-full bg-slate-900 border-2 border-slate-900 flex items-center justify-center text-white shrink-0 shadow-sm">
               <House size={15} />
             </div>
-            <div className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col gap-1">
+            <div className="flex-1 bg-slate-50 dark:bg-slate-950/20 border border-slate-200 dark:border-slate-800/50 rounded-xl p-3 flex flex-col gap-1">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-bold text-slate-900">Leg 2: Return Pickup Drive</span>
-                <span className="font-mono text-xs font-bold text-slate-900">{formattedReturn} Arrival</span>
+                <span className="text-sm font-bold text-slate-900 dark:text-slate-300">Leg 2: Return Pickup Drive</span>
+                <span className="font-mono text-xs font-bold text-slate-900 dark:text-slate-300">{formattedReturn} Arrival</span>
               </div>
               <span className="text-xs text-slate-500">
                 {venue.driveMinutes > 0
@@ -553,9 +553,9 @@ export default function LivingRouteTimeline({
 
               <div
                 onClick={() => setExpandedLeg((prev) => (prev === 2 ? null : 2))}
-                className={`living-driver-pill ${expandedLeg === 2 ? 'bg-amber-50 border-amber-400 text-amber-900' : ''}`}
+                className={`living-driver-pill ${expandedLeg === 2 ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-400 dark:border-amber-600 text-amber-900 dark:text-amber-300' : ''}`}
               >
-                <div className="w-2 h-2 rounded-full bg-amber-600" />
+                <div className="w-2 h-2 rounded-full bg-amber-600 dark:bg-amber-600/25" />
                 <span>Pickup Driver: <strong>{driverLeg2}</strong></span>
                 <ChevronDown size={12} className={`text-slate-400 ${expandedLeg === 2 ? 'rotate-180 transition-transform' : ''}`} />
               </div>
@@ -569,7 +569,7 @@ export default function LivingRouteTimeline({
                       variant="ghost"
                       size="sm"
                       onClick={() => setExpandedLeg(null)}
-                      className="h-6 px-2 text-xs text-slate-500 hover:text-slate-900 font-bold flex items-center gap-0.5"
+                      className="h-6 px-2 text-xs text-slate-500 hover:text-slate-900 hover:dark:text-slate-300 font-bold flex items-center gap-0.5"
                     >
                       <span>Done</span>
                       <X size={13} />
@@ -587,17 +587,17 @@ export default function LivingRouteTimeline({
                           }}
                           className={`flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all border ${
                             isSelected
-                              ? 'bg-amber-50 border-amber-400 shadow-sm'
-                              : 'bg-white border-slate-200 hover:border-amber-400'
+                              ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-400 dark:border-amber-600 shadow-sm'
+                              : 'bg-white dark:bg-casa-surface border-slate-200 dark:border-slate-800/50 hover:border-amber-400 hover:dark:border-amber-600'
                           }`}
                         >
                           <div className="flex items-center gap-2 min-w-0">
                             <div className={`w-7 h-7 rounded-full text-white font-bold text-xs flex items-center justify-center shrink-0 ${drv.colorClass}`}>
                               {drv.name === 'Both Parents' ? <Users size={13} /> : drv.initial}
                             </div>
-                            <span className="text-xs font-bold text-slate-900 truncate">{drv.name}</span>
+                            <span className="text-xs font-bold text-slate-900 dark:text-slate-300 truncate">{drv.name}</span>
                           </div>
-                          {isSelected ? <Check size={14} className="text-emerald-600" /> : <Plus size={14} className="text-slate-400" />}
+                          {isSelected ? <Check size={14} className="text-emerald-600 dark:text-emerald-400" /> : <Plus size={14} className="text-slate-400" />}
                         </div>
                       )
                     })}

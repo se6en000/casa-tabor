@@ -505,7 +505,7 @@ export default function LivingHeroTitleCard({
             }}
             placeholder="Event title…"
             aria-label="Event title"
-            className="col-start-1 row-start-1 living-event-title cursor-text hover:bg-slate-50/70 focus:bg-amber-50/40 rounded px-1.5 -mx-1.5 transition-all resize-none overflow-hidden pr-7 select-text"
+            className="col-start-1 row-start-1 living-event-title cursor-text hover:bg-slate-50/70 hover:dark:bg-slate-950/20 focus:bg-amber-50/40 focus:dark:bg-amber-950/20 rounded px-1.5 -mx-1.5 transition-all resize-none overflow-hidden pr-7 select-text"
           />
 
           <div className="absolute right-0 top-1.5 opacity-40 hover:opacity-100 transition-opacity pointer-events-none flex items-center gap-1 text-slate-400">
@@ -553,28 +553,28 @@ export default function LivingHeroTitleCard({
           className={`living-action-chip ${expandedSection === 'recurrence' ? 'active' : isRecurringActive ? 'gold-active shadow-sm' : ''}`}
           aria-label="Repeat schedule"
         >
-          <Repeat size={13} className={expandedSection === 'recurrence' ? 'text-white' : isRecurringActive ? 'text-amber-800' : 'text-slate-500'} />
+          <Repeat size={13} className={expandedSection === 'recurrence' ? 'text-white' : isRecurringActive ? 'text-amber-800 dark:text-amber-300' : 'text-slate-500'} />
           <span className="truncate max-w-[170px]">{recurrencePillLabel}</span>
-          <ChevronDown size={12} className={expandedSection === 'recurrence' ? 'rotate-180 transition-transform' : isRecurringActive ? 'text-amber-700' : 'text-slate-400'} />
+          <ChevronDown size={12} className={expandedSection === 'recurrence' ? 'rotate-180 transition-transform' : isRecurringActive ? 'text-amber-700 dark:text-amber-400' : 'text-slate-400'} />
         </button>
 
         {/* Micro Steppers */}
-        <div className="flex items-center bg-white border border-slate-200 rounded-full p-0.5 shadow-sm">
+        <div className="flex items-center bg-white dark:bg-casa-surface border border-slate-200 dark:border-slate-800/50 rounded-full p-0.5 shadow-sm">
           <button
             onClick={() => onNudgeTime(-15)}
-            className="text-xs font-bold text-slate-500 py-1 px-2 hover:text-slate-900 transition-colors"
+            className="text-xs font-bold text-slate-500 py-1 px-2 hover:text-slate-900 hover:dark:text-slate-300 transition-colors"
           >
             -15m
           </button>
           <button
             onClick={() => onNudgeTime(15)}
-            className="text-xs font-bold text-slate-500 py-1 px-2 hover:text-slate-900 transition-colors"
+            className="text-xs font-bold text-slate-500 py-1 px-2 hover:text-slate-900 hover:dark:text-slate-300 transition-colors"
           >
             +15m
           </button>
           <button
             onClick={() => onNudgeTime(30)}
-            className="text-xs font-bold text-slate-500 py-1 px-2 hover:text-slate-900 transition-colors"
+            className="text-xs font-bold text-slate-500 py-1 px-2 hover:text-slate-900 hover:dark:text-slate-300 transition-colors"
           >
             +30m
           </button>
@@ -586,12 +586,12 @@ export default function LivingHeroTitleCard({
         <div className="living-inline-drawer">
           <div className="living-inline-drawer-header">
             <span className="flex items-center gap-1.5">
-              <Clock size={14} className="text-amber-700" />
+              <Clock size={14} className="text-amber-700 dark:text-amber-400" />
               <span>Schedule & Timing</span>
             </span>
             <button
               onClick={() => setExpandedSection(null)}
-              className="text-xs text-slate-500 hover:text-slate-900 font-bold flex items-center gap-0.5"
+              className="text-xs text-slate-500 hover:text-slate-900 hover:dark:text-slate-300 font-bold flex items-center gap-0.5"
             >
               <span>Done</span>
               <X size={13} />
@@ -599,7 +599,7 @@ export default function LivingHeroTitleCard({
           </div>
 
           {/* Mode Switcher: Single Day vs Multi-Day / Stay */}
-          <div className="grid grid-cols-2 bg-slate-100 border border-slate-200 rounded-full p-0.5 mb-3 gap-0.5">
+          <div className="grid grid-cols-2 bg-slate-100 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800/50 rounded-full p-0.5 mb-3 gap-0.5">
             <button
               type="button"
               onClick={() => {
@@ -618,7 +618,7 @@ export default function LivingHeroTitleCard({
               className={`py-1.5 px-3 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
                 scheduleTab === 'single'
                   ? 'bg-slate-900 text-white shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 hover:dark:text-slate-300 hover:bg-white/60 dark:bg-casa-surface'
               }`}
             >
               <Clock size={13} />
@@ -635,7 +635,7 @@ export default function LivingHeroTitleCard({
               className={`py-1.5 px-3 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
                 scheduleTab === 'multiday'
                   ? 'bg-slate-900 text-white shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 hover:dark:text-slate-300 hover:bg-white/60 dark:bg-casa-surface'
               }`}
             >
               <Bed size={13} />
@@ -679,12 +679,12 @@ export default function LivingHeroTitleCard({
 
               {/* Touch Stepper Wheels (or All-Day Active Banner) */}
               {localIsAllDay ? (
-                <div className="p-3.5 bg-amber-50/70 border border-amber-200/90 rounded-2xl text-center flex flex-col items-center justify-center gap-1">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-amber-950">
-                    <Sun size={15} className="text-amber-600 shrink-0" />
+                <div className="p-3.5 bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/90 dark:border-amber-800/50 rounded-2xl text-center flex flex-col items-center justify-center gap-1">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-amber-950 dark:text-amber-200">
+                    <Sun size={15} className="text-amber-600 dark:text-amber-400 shrink-0" />
                     <span>All-Day Event</span>
                   </div>
-                  <span className="text-3xs font-medium text-amber-800/80">
+                  <span className="text-3xs font-medium text-amber-800/80 dark:text-amber-300">
                     Scheduled for the full day on {format(currentStartDate, 'EEEE, MMMM d')}
                   </span>
                 </div>
@@ -767,11 +767,11 @@ export default function LivingHeroTitleCard({
                       onClick={() => selectNightsPreset(preset.nights)}
                       className={`py-1.5 px-2.5 rounded-xl text-xs font-bold transition-all border shrink-0 flex items-center gap-1 ${
                         isPresetActive
-                          ? 'bg-amber-50 border-amber-400 text-amber-900 shadow-2xs'
-                          : 'bg-white border-slate-200 text-slate-700 hover:border-amber-300'
+                          ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-400 dark:border-amber-600 text-amber-900 dark:text-amber-300 shadow-2xs'
+                          : 'bg-white dark:bg-casa-surface border-slate-200 dark:border-slate-800/50 text-slate-700 dark:text-slate-400 hover:border-amber-300 hover:dark:border-amber-700'
                       }`}
                     >
-                      <Moon size={11} className={isPresetActive ? 'text-amber-600' : 'text-slate-400'} />
+                      <Moon size={11} className={isPresetActive ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400'} />
                       <span>{preset.label}</span>
                     </button>
                   )
@@ -779,15 +779,15 @@ export default function LivingHeroTitleCard({
               </div>
 
               {/* Check-In / Start Card */}
-              <div className="bg-white border border-slate-200 rounded-xl p-2.5 space-y-2">
+              <div className="bg-white dark:bg-casa-surface border border-slate-200 dark:border-slate-800/50 rounded-xl p-2.5 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-900 uppercase tracking-wide flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  <span className="text-xs font-bold text-slate-900 dark:text-slate-300 uppercase tracking-wide flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 dark:bg-emerald-500/20" />
                     Check-in / Start
                   </span>
                   <label
                     onClick={handleOpenStartDatePicker}
-                    className="text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg border border-amber-300/80 cursor-pointer flex items-center gap-1"
+                    className="text-xs font-bold text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/20 hover:bg-amber-100 hover:dark:bg-amber-900/50 px-2.5 py-1 rounded-lg border border-amber-300/80 dark:border-amber-700 cursor-pointer flex items-center gap-1"
                   >
                     <input
                       ref={startDateInputRef}
@@ -841,15 +841,15 @@ export default function LivingHeroTitleCard({
               </div>
 
               {/* Check-Out / End Card */}
-              <div className="bg-white border border-slate-200 rounded-xl p-2.5 space-y-2">
+              <div className="bg-white dark:bg-casa-surface border border-slate-200 dark:border-slate-800/50 rounded-xl p-2.5 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-900 uppercase tracking-wide flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-amber-500" />
+                  <span className="text-xs font-bold text-slate-900 dark:text-slate-300 uppercase tracking-wide flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 dark:bg-amber-500/20" />
                     Check-out / End
                   </span>
                   <label
                     onClick={handleOpenEndDatePicker}
-                    className="text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg border border-amber-300/80 cursor-pointer flex items-center gap-1"
+                    className="text-xs font-bold text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/20 hover:bg-amber-100 hover:dark:bg-amber-900/50 px-2.5 py-1 rounded-lg border border-amber-300/80 dark:border-amber-700 cursor-pointer flex items-center gap-1"
                   >
                     <input
                       ref={endDateInputRef}
@@ -911,12 +911,12 @@ export default function LivingHeroTitleCard({
         <div className="living-inline-drawer">
           <div className="living-inline-drawer-header">
             <span className="flex items-center gap-1.5">
-              <Tag size={14} className="text-amber-700" />
+              <Tag size={14} className="text-amber-700 dark:text-amber-400" />
               <span>Schedule Type & Category</span>
             </span>
             <button
               onClick={() => setExpandedSection(null)}
-              className="text-xs text-slate-500 hover:text-slate-900 font-bold flex items-center gap-0.5"
+              className="text-xs text-slate-500 hover:text-slate-900 hover:dark:text-slate-300 font-bold flex items-center gap-0.5"
             >
               <span>Done</span>
               <X size={13} />
@@ -956,11 +956,11 @@ export default function LivingHeroTitleCard({
                   className={`category-picker-item ${isSelected ? 'selected' : ''}`}
                 >
                   <div className="flex items-center gap-2 min-w-0">
-                    <IconComp size={14} className={isSelected ? 'text-amber-800' : 'text-slate-600'} />
+                    <IconComp size={14} className={isSelected ? 'text-amber-800 dark:text-amber-300' : 'text-slate-600 dark:text-slate-400'} />
                     <span className="truncate">{cat.label}</span>
                   </div>
                   {isSelected ? (
-                    <Check size={14} className="text-amber-800 shrink-0 ml-1" />
+                    <Check size={14} className="text-amber-800 dark:text-amber-300 shrink-0 ml-1" />
                   ) : (
                     <Plus size={14} className="text-slate-400 shrink-0 ml-1" />
                   )}
@@ -976,7 +976,7 @@ export default function LivingHeroTitleCard({
         <div className="living-inline-drawer">
           <div className="living-inline-drawer-header">
             <span className="flex items-center gap-1.5">
-              <Repeat size={14} className="text-amber-700" />
+              <Repeat size={14} className="text-amber-700 dark:text-amber-400" />
               <span>Repeat & Recurrence</span>
             </span>
             <button
@@ -984,7 +984,7 @@ export default function LivingHeroTitleCard({
                 commitRecurrenceChange(localRecur, true)
                 setExpandedSection(null)
               }}
-              className="text-xs text-slate-500 hover:text-slate-900 font-bold flex items-center gap-0.5 cursor-pointer"
+              className="text-xs text-slate-500 hover:text-slate-900 hover:dark:text-slate-300 font-bold flex items-center gap-0.5 cursor-pointer"
             >
               <span>Done</span>
               <X size={13} />
@@ -997,10 +997,10 @@ export default function LivingHeroTitleCard({
               <Repeat size={16} />
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-2xs font-extrabold uppercase tracking-wider text-amber-800/80">
+              <div className="text-2xs font-extrabold uppercase tracking-wider text-amber-800/80 dark:text-amber-300">
                 Current Repeat Schedule
               </div>
-              <div className="text-xs font-bold text-slate-900 truncate">
+              <div className="text-xs font-bold text-slate-900 dark:text-slate-300 truncate">
                 {recurrenceSummary}
               </div>
             </div>
@@ -1061,37 +1061,37 @@ export default function LivingHeroTitleCard({
           {localRecur.freq !== 'none' && (
             <div className="space-y-3 pt-1">
               {/* Interval Stepper Box */}
-              <div className="bg-white border border-slate-200 rounded-xl p-2.5 space-y-2">
+              <div className="bg-white dark:bg-casa-surface border border-slate-200 dark:border-slate-800/50 rounded-xl p-2.5 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+                  <span className="text-xs font-bold text-slate-700 dark:text-slate-400 uppercase tracking-wide">
                     Repeat Every
                   </span>
                   <div className="flex items-center gap-1">
-                    <span className="text-xs font-bold text-amber-900 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
+                    <span className="text-xs font-bold text-amber-900 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/50 px-2 py-0.5 rounded-md">
                       {localRecur.interval} {localRecur.freq === 'daily' ? (localRecur.interval === 1 ? 'day' : 'days') : localRecur.freq === 'weekly' ? (localRecur.interval === 1 ? 'week' : 'weeks') : localRecur.freq === 'monthly' ? (localRecur.interval === 1 ? 'month' : 'months') : (localRecur.interval === 1 ? 'year' : 'years')}
                     </span>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <div className="flex items-center bg-slate-50 border border-slate-200 rounded-xl p-1 gap-1">
+                  <div className="flex items-center bg-slate-50 dark:bg-slate-950/20 border border-slate-200 dark:border-slate-800/50 rounded-xl p-1 gap-1">
                     <button
                       type="button"
                       onClick={() => handleStepInterval(-1)}
                       disabled={localRecur.interval <= 1}
-                      className="min-w-[44px] min-h-[44px] rounded-lg bg-white border border-slate-200 text-slate-800 font-bold flex items-center justify-center hover:bg-amber-50 hover:border-amber-300 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all active:scale-95 shadow-2xs"
+                      className="min-w-[44px] min-h-[44px] rounded-lg bg-white dark:bg-casa-surface border border-slate-200 dark:border-slate-800/50 text-slate-800 dark:text-slate-300 font-bold flex items-center justify-center hover:bg-amber-50 hover:dark:bg-amber-950/20 hover:border-amber-300 hover:dark:border-amber-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all active:scale-95 shadow-2xs"
                       aria-label="Decrease interval"
                     >
                       <Minus size={16} />
                     </button>
-                    <span className="w-12 text-center font-mono font-extrabold text-base text-slate-900">
+                    <span className="w-12 text-center font-mono font-extrabold text-base text-slate-900 dark:text-slate-300">
                       {localRecur.interval}
                     </span>
                     <button
                       type="button"
                       onClick={() => handleStepInterval(1)}
                       disabled={localRecur.interval >= 99}
-                      className="min-w-[44px] min-h-[44px] rounded-lg bg-white border border-slate-200 text-slate-800 font-bold flex items-center justify-center hover:bg-amber-50 hover:border-amber-300 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all active:scale-95 shadow-2xs"
+                      className="min-w-[44px] min-h-[44px] rounded-lg bg-white dark:bg-casa-surface border border-slate-200 dark:border-slate-800/50 text-slate-800 dark:text-slate-300 font-bold flex items-center justify-center hover:bg-amber-50 hover:dark:bg-amber-950/20 hover:border-amber-300 hover:dark:border-amber-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all active:scale-95 shadow-2xs"
                       aria-label="Increase interval"
                     >
                       <Plus size={16} />
@@ -1108,7 +1108,7 @@ export default function LivingHeroTitleCard({
                         className={`py-2 px-1 rounded-lg text-2xs font-bold capitalize transition-all border text-center cursor-pointer ${
                           localRecur.freq === unit
                             ? 'bg-slate-900 border-slate-900 text-white shadow-2xs'
-                            : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-white'
+                            : 'bg-slate-50 dark:bg-slate-950/20 border-slate-200 dark:border-slate-800/50 text-slate-600 dark:text-slate-400 hover:bg-white dark:bg-casa-surface'
                         }`}
                       >
                         {unit === 'daily' ? 'Days' : unit === 'weekly' ? 'Weeks' : unit === 'monthly' ? 'Months' : 'Years'}
@@ -1120,9 +1120,9 @@ export default function LivingHeroTitleCard({
 
               {/* Day of Week Selector for Weekly */}
               {localRecur.freq === 'weekly' && (
-                <div className="bg-white border border-slate-200 rounded-xl p-2.5 space-y-2">
+                <div className="bg-white dark:bg-casa-surface border border-slate-200 dark:border-slate-800/50 rounded-xl p-2.5 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-400 uppercase tracking-wide">
                       Repeat on Days
                     </span>
                     {/* Quick Day Presets */}
@@ -1130,14 +1130,14 @@ export default function LivingHeroTitleCard({
                       <button
                         type="button"
                         onClick={() => commitRecurrenceChange({ ...localRecur, byDay: [1, 2, 3, 4, 5] })}
-                        className="text-2xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 px-2 py-0.5 rounded border border-amber-200 cursor-pointer transition-colors"
+                        className="text-2xs font-bold text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/20 hover:bg-amber-100 hover:dark:bg-amber-900/50 px-2 py-0.5 rounded border border-amber-200 dark:border-amber-800/50 cursor-pointer transition-colors"
                       >
                         Weekdays
                       </button>
                       <button
                         type="button"
                         onClick={() => commitRecurrenceChange({ ...localRecur, byDay: [0, 6] })}
-                        className="text-2xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 px-2 py-0.5 rounded border border-amber-200 cursor-pointer transition-colors"
+                        className="text-2xs font-bold text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/20 hover:bg-amber-100 hover:dark:bg-amber-900/50 px-2 py-0.5 rounded border border-amber-200 dark:border-amber-800/50 cursor-pointer transition-colors"
                       >
                         Weekends
                       </button>
@@ -1164,8 +1164,8 @@ export default function LivingHeroTitleCard({
               )}
 
               {/* End Condition Box */}
-              <div className="bg-white border border-slate-200 rounded-xl p-2.5 space-y-2">
-                <div className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+              <div className="bg-white dark:bg-casa-surface border border-slate-200 dark:border-slate-800/50 rounded-xl p-2.5 space-y-2">
+                <div className="text-xs font-bold text-slate-700 dark:text-slate-400 uppercase tracking-wide">
                   End Condition
                 </div>
 
@@ -1199,7 +1199,7 @@ export default function LivingHeroTitleCard({
                     <div className="flex items-center gap-2">
                       <label
                         onClick={handleOpenRecurrenceEndDatePicker}
-                        className="flex-1 text-xs font-bold text-slate-800 bg-slate-50 hover:bg-amber-50/60 px-3 py-2 rounded-lg border border-slate-200 hover:border-amber-300 cursor-pointer flex items-center justify-between transition-colors"
+                        className="flex-1 text-xs font-bold text-slate-800 dark:text-slate-300 bg-slate-50 dark:bg-slate-950/20 hover:bg-amber-50/60 hover:dark:bg-amber-950/20 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800/50 hover:border-amber-300 hover:dark:border-amber-700 cursor-pointer flex items-center justify-between transition-colors"
                       >
                         <input
                           ref={recurrenceEndDateInputRef}
@@ -1211,7 +1211,7 @@ export default function LivingHeroTitleCard({
                           tabIndex={-1}
                         />
                         <span className="flex items-center gap-1.5">
-                          <Calendar size={13} className="text-amber-700" />
+                          <Calendar size={13} className="text-amber-700 dark:text-amber-400" />
                           <span>
                             {localRecur.endDate
                               ? format(new Date(localRecur.endDate + 'T12:00:00'), 'EEE, MMM d, yyyy')
@@ -1239,8 +1239,8 @@ export default function LivingHeroTitleCard({
                             onClick={() => handleSetEndDate(targetDateStr)}
                             className={`px-2 py-1 rounded-md text-2xs font-bold transition-all border whitespace-nowrap cursor-pointer ${
                               isPresetActive
-                                ? 'bg-amber-100 border-amber-400 text-amber-900'
-                                : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-white'
+                                ? 'bg-amber-100 dark:bg-amber-900/50 border-amber-400 dark:border-amber-600 text-amber-900 dark:text-amber-300'
+                                : 'bg-slate-50 dark:bg-slate-950/20 border-slate-200 dark:border-slate-800/50 text-slate-600 dark:text-slate-400 hover:bg-white dark:bg-casa-surface'
                             }`}
                           >
                             {preset.label}
@@ -1254,27 +1254,27 @@ export default function LivingHeroTitleCard({
                 {/* Sub-controls for After Count */}
                 {localRecur.endType === 'count' && (
                   <div className="flex items-center justify-between pt-1">
-                    <span className="text-xs font-semibold text-slate-600">
+                    <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">
                       Total Occurrences
                     </span>
-                    <div className="flex items-center bg-slate-50 border border-slate-200 rounded-xl p-1 gap-1">
+                    <div className="flex items-center bg-slate-50 dark:bg-slate-950/20 border border-slate-200 dark:border-slate-800/50 rounded-xl p-1 gap-1">
                       <button
                         type="button"
                         onClick={() => handleStepCount(-1)}
                         disabled={(localRecur.count || 10) <= 1}
-                        className="min-w-[44px] min-h-[44px] rounded-lg bg-white border border-slate-200 text-slate-800 font-bold flex items-center justify-center hover:bg-amber-50 hover:border-amber-300 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all active:scale-95 shadow-2xs"
+                        className="min-w-[44px] min-h-[44px] rounded-lg bg-white dark:bg-casa-surface border border-slate-200 dark:border-slate-800/50 text-slate-800 dark:text-slate-300 font-bold flex items-center justify-center hover:bg-amber-50 hover:dark:bg-amber-950/20 hover:border-amber-300 hover:dark:border-amber-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all active:scale-95 shadow-2xs"
                         aria-label="Decrease occurrences"
                       >
                         <Minus size={14} />
                       </button>
-                      <span className="w-10 text-center font-mono font-extrabold text-sm text-slate-900">
+                      <span className="w-10 text-center font-mono font-extrabold text-sm text-slate-900 dark:text-slate-300">
                         {localRecur.count || 10}
                       </span>
                       <button
                         type="button"
                         onClick={() => handleStepCount(1)}
                         disabled={(localRecur.count || 10) >= 999}
-                        className="min-w-[44px] min-h-[44px] rounded-lg bg-white border border-slate-200 text-slate-800 font-bold flex items-center justify-center hover:bg-amber-50 hover:border-amber-300 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all active:scale-95 shadow-2xs"
+                        className="min-w-[44px] min-h-[44px] rounded-lg bg-white dark:bg-casa-surface border border-slate-200 dark:border-slate-800/50 text-slate-800 dark:text-slate-300 font-bold flex items-center justify-center hover:bg-amber-50 hover:dark:bg-amber-950/20 hover:border-amber-300 hover:dark:border-amber-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all active:scale-95 shadow-2xs"
                         aria-label="Increase occurrences"
                       >
                         <Plus size={14} />

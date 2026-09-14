@@ -36,11 +36,11 @@ export default function LivingReminderCard({
   }
 
   return (
-    <div className="bg-white border-2 border-amber-400 rounded-2xl p-7 flex flex-col items-center text-center gap-4 shadow-sm transition-all">
+    <div className="bg-white dark:bg-casa-surface border-2 border-amber-400 dark:border-amber-600 rounded-2xl p-7 flex flex-col items-center text-center gap-4 shadow-sm transition-all">
       <div className={`w-16 h-16 rounded-full border-2 flex items-center justify-center shadow-sm transition-all duration-300 ${
         actionState === 'completing'
-          ? 'bg-emerald-50 border-emerald-500 text-emerald-600 scale-105'
-          : 'bg-amber-50 border-amber-400 text-amber-700'
+          ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-500 dark:border-emerald-500/40 text-emerald-600 dark:text-emerald-400 scale-105'
+          : 'bg-amber-50 dark:bg-amber-950/20 border-amber-400 dark:border-amber-600 text-amber-700 dark:text-amber-400'
       }`}>
         {actionState === 'completing' ? (
           <Check size={32} className="animate-in zoom-in-50 duration-200" />
@@ -50,11 +50,11 @@ export default function LivingReminderCard({
       </div>
 
       <div>
-        <span className="bg-amber-50 text-amber-900 border border-amber-300 text-xs font-bold py-1 px-3 rounded-full inline-flex items-center gap-1.5 mb-1.5 shadow-sm">
-          <Bell size={12} className="text-amber-700" />
+        <span className="bg-amber-50 dark:bg-amber-950/20 text-amber-900 dark:text-amber-300 border border-amber-300 dark:border-amber-700 text-xs font-bold py-1 px-3 rounded-full inline-flex items-center gap-1.5 mb-1.5 shadow-sm">
+          <Bell size={12} className="text-amber-700 dark:text-amber-400" />
           <span>Household Task Reminder</span>
         </span>
-        <h3 className="font-serif text-2xl font-semibold text-slate-900 leading-tight">
+        <h3 className="font-serif text-2xl font-semibold text-slate-900 dark:text-slate-300 leading-tight">
           {title}
         </h3>
         <p className="text-xs text-slate-500 mt-1">
@@ -68,8 +68,8 @@ export default function LivingReminderCard({
           disabled={actionState !== 'idle'}
           className={`p-3.5 rounded-2xl text-white text-sm font-bold flex flex-col items-center gap-1 transition-all shadow-sm ${
             actionState === 'completing'
-              ? 'bg-emerald-700 scale-95 opacity-90'
-              : 'bg-emerald-600 hover:-translate-y-0.5 active:scale-95'
+              ? 'bg-emerald-700 dark:bg-emerald-700/40 scale-95 opacity-90'
+              : 'bg-emerald-600 dark:bg-emerald-600/25 hover:-translate-y-0.5 active:scale-95'
           }`}
         >
           {actionState === 'completing' ? <Loader2 size={20} className="animate-spin" /> : <Check size={20} />}
@@ -78,13 +78,13 @@ export default function LivingReminderCard({
         <button
           onClick={handleSnooze}
           disabled={actionState !== 'idle'}
-          className={`p-3.5 rounded-2xl bg-slate-100 text-slate-800 border border-slate-200 text-sm font-bold flex flex-col items-center gap-1 transition-all hover:border-amber-400 ${
+          className={`p-3.5 rounded-2xl bg-slate-100 dark:bg-slate-900/50 text-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-800/50 text-sm font-bold flex flex-col items-center gap-1 transition-all hover:border-amber-400 hover:dark:border-amber-600 ${
             actionState === 'snoozing'
-              ? 'bg-amber-50 border-amber-400 scale-95 opacity-90'
+              ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-400 dark:border-amber-600 scale-95 opacity-90'
               : 'hover:-translate-y-0.5 active:scale-95'
           }`}
         >
-          {actionState === 'snoozing' ? <Loader2 size={20} className="animate-spin text-amber-700" /> : <TimerReset size={20} />}
+          {actionState === 'snoozing' ? <Loader2 size={20} className="animate-spin text-amber-700 dark:text-amber-400" /> : <TimerReset size={20} />}
           <span>{actionState === 'snoozing' ? 'Snoozing…' : 'Snooze (1h)'}</span>
         </button>
       </div>
