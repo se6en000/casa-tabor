@@ -410,7 +410,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
               </span>
             }
             badge={
-              <span className="text-3xs font-medium text-casa-text-secondary whitespace-nowrap">
+              <span className="text-caption font-medium text-casa-text-secondary whitespace-nowrap">
                 {isDinnerPast ? 'Completed' : dinnerPlan.targetTime || '6:30 PM'}
               </span>
             }

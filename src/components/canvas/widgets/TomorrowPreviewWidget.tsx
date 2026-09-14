@@ -46,10 +46,10 @@ function TomorrowPreviewWidget({
           <div className={cn('w-6 h-6 rounded-lg flex items-center justify-center shrink-0', TIER_ICON_CHIP.structural)}>
             <Calendar size={13} />
           </div>
-          <h3 className={cn('font-sans text-body-sm font-bold tracking-tight', TIER_TITLE.structural)}>
+          <h3 className={cn('font-display text-body-lg font-bold tracking-tight', TIER_TITLE.structural)}>
             Tomorrow's Schedule
           </h3>
-          <span className="px-1.5 py-0.5 rounded-full text-3xs font-semibold bg-casa-gold/15 text-casa-navy border border-casa-gold/30">
+          <span className="px-1.5 py-0.5 rounded-full text-caption font-semibold bg-casa-gold/15 text-casa-navy border border-casa-gold/30">
             {tomorrowEvents.length}
           </span>
         </div>
@@ -62,7 +62,7 @@ function TomorrowPreviewWidget({
                 e.stopPropagation()
                 onViewFullCalendar()
               }}
-              className="text-3xs font-semibold text-casa-gold uppercase tracking-wider hover:underline min-h-[30px] h-7 px-1.5"
+              className="text-caption font-semibold text-casa-gold uppercase tracking-wider hover:underline min-h-[30px] h-7 px-1.5"
             >
               Full Calendar
             </Button>
@@ -127,7 +127,7 @@ function TomorrowPreviewWidget({
                             {format(parseISO(evt.start_time), 'h:mm a')}
                           </span>
                         )}
-                        <span className="text-body-sm font-normal text-casa-navy truncate group-hover:text-casa-navy transition-colors">
+                        <span className="font-sans text-body-sm font-semibold text-casa-navy truncate group-hover:text-casa-navy transition-colors">
                           {evt.title}
                         </span>
                         {evt.location_name && (
@@ -139,7 +139,7 @@ function TomorrowPreviewWidget({
 
                       <div className="flex items-center gap-1.5 shrink-0">
                         {driverMember?.family_member?.name && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-semibold bg-white text-casa-navy border border-casa-border/60 shadow-2xs hidden sm:inline-flex">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-caption font-semibold bg-white text-casa-navy border border-casa-border/60 shadow-2xs hidden sm:inline-flex">
                             <Car size={11} className="text-casa-gold-hover shrink-0" />
                             <span>{driverMember.family_member.name} drives</span>
                           </span>

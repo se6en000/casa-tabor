@@ -2,7 +2,7 @@ import { memo } from 'react'
 import { Sparkles, RotateCw } from 'lucide-react'
 import { cn } from '../../../utils/cn'
 import { IconButton } from '../../ui'
-import { TIER_CARD } from '../../ui/WidgetContainer'
+import { TIER_CARD, TIER_ICON_CHIP, TIER_TITLE } from '../../ui/WidgetContainer'
 import type { DispatchBucket, DispatchDay, DispatchHorizonItem } from '../../../hooks/useCalmKioskPresenter'
 
 interface HouseholdDispatchCardProps {
@@ -66,10 +66,14 @@ function HouseholdDispatchCard({
   return (
     <div className={cn('rounded-container px-5 py-4 sm:px-6 sm:py-5', TIER_CARD.structural)}>
       <div className="flex items-center justify-between gap-2 mb-3">
-        <span className="text-2xs uppercase tracking-widest font-sans font-bold text-casa-gold-hover flex items-center gap-1.5">
-          <Sparkles size={13} className="text-casa-gold" />
-          {timeHorizonLabel}
-        </span>
+        <div className="flex items-center gap-2">
+          <div className={cn('w-7 h-7 rounded-lg flex items-center justify-center shrink-0', TIER_ICON_CHIP.structural)}>
+            <Sparkles size={15} />
+          </div>
+          <h3 className={cn('font-display text-body-lg font-bold tracking-tight', TIER_TITLE.structural)}>
+            {timeHorizonLabel}
+          </h3>
+        </div>
         <div className="flex items-center gap-2">
           <IconButton
             variant="ghost"
@@ -91,7 +95,7 @@ function HouseholdDispatchCard({
 
       <hr className="border-casa-border/60 mb-4" />
 
-      <p className="text-2xs uppercase tracking-widest font-sans font-bold text-casa-muted mb-2.5">This Week</p>
+      <p className="text-caption uppercase tracking-widest font-sans font-bold text-casa-muted mb-2.5">This Week</p>
       <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
         {weekDays.map((day) => {
           const orderedCategories = BUCKET_ORDER.filter((b) => day.categories.includes(b))
@@ -105,7 +109,7 @@ function HouseholdDispatchCard({
                   : 'bg-casa-bg-2 border-transparent'
               )}
             >
-              <span className={cn('font-mono text-3xs uppercase tracking-wide', day.isToday ? 'text-casa-gold-hover font-bold' : 'text-casa-text-tertiary')}>
+              <span className={cn('font-mono text-caption uppercase tracking-wide', day.isToday ? 'text-casa-gold-hover font-bold' : 'text-casa-text-tertiary')}>
                 {day.dayName}
               </span>
               <span className="font-mono text-body-sm font-semibold text-casa-navy tabular-nums">{day.dayNum}</span>
@@ -132,7 +136,7 @@ function HouseholdDispatchCard({
       {horizon.length > 0 && (
         <>
           <hr className="border-casa-border/60 my-4" />
-          <p className="text-2xs uppercase tracking-widest font-sans font-bold text-casa-muted mb-1">On the Horizon</p>
+          <p className="text-caption uppercase tracking-widest font-sans font-bold text-casa-muted mb-1">On the Horizon</p>
           <div className="flex flex-col">
             {horizon.map((item, idx) => (
               <div
@@ -141,12 +145,12 @@ function HouseholdDispatchCard({
               >
                 <span className="font-mono text-caption font-bold text-casa-gold-hover leading-tight pt-0.5">
                   {item.daysAway}d
-                  <span className="block text-3xs font-medium uppercase tracking-wide text-casa-text-tertiary">{item.dateLabel}</span>
+                  <span className="block text-caption font-medium uppercase tracking-wide text-casa-text-tertiary">{item.dateLabel}</span>
                 </span>
                 <div className="min-w-0">
                   <div className="flex items-baseline gap-2 flex-wrap">
-                    <span className="font-display text-body font-semibold text-casa-navy">{item.title}</span>
-                    <span className={cn('text-3xs font-bold uppercase tracking-wide px-2 py-0.5 rounded-full whitespace-nowrap', BUCKET_TAG[item.bucket])}>
+                    <span className="font-sans text-body-sm font-semibold text-casa-navy">{item.title}</span>
+                    <span className={cn('text-caption font-bold uppercase tracking-wide px-2 py-0.5 rounded-full whitespace-nowrap', BUCKET_TAG[item.bucket])}>
                       {item.categoryLabel}
                     </span>
                   </div>

@@ -55,16 +55,16 @@ export default function TodaysScheduleWidget({
           <div className={cn('w-7 h-7 rounded-lg flex items-center justify-center shrink-0', TIER_ICON_CHIP.structural)}>
             <Calendar size={15} />
           </div>
-          <h3 className={cn('font-display text-heading font-semibold tracking-tight group-hover:text-casa-gold transition-colors', TIER_TITLE.structural)}>
+          <h3 className={cn('font-display text-body-lg font-bold tracking-tight group-hover:text-casa-gold transition-colors', TIER_TITLE.structural)}>
             Today's Schedule
           </h3>
           {upcomingAppointments.length > 0 ? (
-            <span className="px-2 py-0.5 rounded-full text-3xs font-semibold bg-casa-gold/15 text-casa-navy border border-casa-gold/30">
+            <span className="px-2 py-0.5 rounded-full text-caption font-semibold bg-casa-gold/15 text-casa-navy border border-casa-gold/30">
               {upcomingAppointments.length}
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-3xs font-semibold uppercase tracking-wider bg-emerald-500/15 text-emerald-800 border border-emerald-500/25">
-              <Check size={9} className="stroke-[3]" />
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-caption font-semibold uppercase tracking-wider bg-emerald-500/15 text-emerald-800 border border-emerald-500/25">
+              <Check size={11} className="stroke-[3]" />
               <span>Completed</span>
             </span>
           )}
@@ -78,7 +78,7 @@ export default function TodaysScheduleWidget({
                 e.stopPropagation()
                 onExpandAll()
               }}
-              className="text-3xs font-semibold text-casa-gold uppercase tracking-wider hover:underline min-h-[30px] h-7 px-1.5"
+              className="text-caption font-semibold text-casa-gold uppercase tracking-wider hover:underline min-h-[30px] h-7 px-1.5"
             >
               Expand All
             </Button>
@@ -121,7 +121,7 @@ export default function TodaysScheduleWidget({
                         {format(parseISO(evt.start_time), 'h:mm a')}
                       </span>
                     )}
-                    <span className="text-body-sm truncate text-casa-muted group-hover:text-casa-navy transition-colors">
+                    <span className="font-sans text-body-sm font-semibold truncate text-casa-muted group-hover:text-casa-navy transition-colors">
                       {evt.title}
                     </span>
                     {evt.location_name && (
@@ -146,7 +146,7 @@ export default function TodaysScheduleWidget({
               {pastEvents.length > 0 && (
                 <div className="relative flex items-center gap-2.5 py-2 pl-6 -ml-7" aria-hidden="true">
                   <span className="absolute left-[7px] top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-casa-gold border-2 border-casa-surface" />
-                  <span className="text-3xs font-bold uppercase tracking-widest text-casa-gold-hover shrink-0">Now</span>
+                  <span className="text-caption font-bold uppercase tracking-widest text-casa-gold-hover shrink-0">Now</span>
                   <span className="flex-1 h-px bg-casa-gold/40" />
                 </div>
               )}
@@ -211,11 +211,11 @@ export default function TodaysScheduleWidget({
                       )}
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-display text-body-lg font-semibold text-casa-navy truncate">
+                          <span className="font-sans text-body-sm font-semibold text-casa-navy truncate">
                             {evt.title}
                           </span>
                           {isNow && (
-                            <span className="text-3xs font-bold uppercase tracking-wider text-casa-success-strong shrink-0">
+                            <span className="text-caption font-bold uppercase tracking-wider text-casa-success-strong shrink-0">
                               Now
                             </span>
                           )}

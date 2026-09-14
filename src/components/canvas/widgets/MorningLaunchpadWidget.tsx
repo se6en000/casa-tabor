@@ -182,7 +182,7 @@ export default function MorningLaunchpadWidget({
               {nextTodayDeparture.isException && (
                 <span
                   className={cn(
-                    'text-3xs uppercase font-bold px-2 py-0.5 rounded border',
+                    'text-caption uppercase font-bold px-2 py-0.5 rounded border',
                     isNavy
                       ? 'bg-amber-400/20 text-amber-300 border-amber-400/30'
                       : 'bg-amber-500/15 text-amber-800 border-amber-500/25',
@@ -208,7 +208,7 @@ export default function MorningLaunchpadWidget({
             <div>
               <div
                 className={cn(
-                  'text-heading font-semibold leading-tight',
+                  'font-display text-display-sm sm:text-display-md font-bold leading-tight',
                   isNavy ? 'text-white' : 'text-casa-navy',
                 )}
               >
@@ -227,7 +227,7 @@ export default function MorningLaunchpadWidget({
             <div className="text-right shrink-0">
               <div
                 className={cn(
-                  'text-caption text-3xs uppercase font-bold',
+                  'text-caption text-caption uppercase font-bold',
                   isNavy ? 'text-white/50' : 'text-casa-muted',
                 )}
               >
@@ -327,7 +327,7 @@ export default function MorningLaunchpadWidget({
               <div className="text-right shrink-0">
                 <div
                   className={cn(
-                    'text-3xs uppercase font-semibold mb-0.5',
+                    'text-caption uppercase font-semibold mb-0.5',
                     isNavy ? 'text-white/50' : 'text-casa-muted',
                   )}
                 >

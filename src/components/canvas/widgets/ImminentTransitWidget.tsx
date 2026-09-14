@@ -331,7 +331,7 @@ export default function ImminentTransitWidget({
                   {driveTimeMins ? (
                     <span
                       className={cn(
-                        'text-2xs font-mono font-bold px-2 py-0.5 rounded-full border',
+                        'text-caption font-mono font-bold px-2 py-0.5 rounded-full border',
                         isHeroNavy
                           ? 'bg-white/10 text-casa-gold border-white/10'
                           : 'bg-casa-gold/15 text-casa-gold border-casa-gold/30',
@@ -343,7 +343,7 @@ export default function ImminentTransitWidget({
                 </div>
                 <div
                   className={cn(
-                    'flex items-center gap-1.5 text-2xs font-medium',
+                    'flex items-center gap-1.5 text-caption font-medium',
                     isHeroNavy ? 'text-white/50' : 'text-casa-muted',
                   )}
                 >
@@ -424,14 +424,14 @@ export default function ImminentTransitWidget({
           <div className="flex items-center justify-between gap-2 mb-2.5">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-              <span className="text-3xs font-bold uppercase tracking-widest text-casa-gold flex items-center gap-1.5">
+              <span className="text-caption font-bold uppercase tracking-widest text-casa-gold flex items-center gap-1.5">
                 <Layers size={12} className="text-casa-gold" />
                 <span>Simultaneous Family Logistics ({concurrentEvents.length} Active)</span>
               </span>
             </div>
             <span
               className={cn(
-                'text-3xs font-medium',
+                'text-caption font-medium',
                 isHeroNavy ? 'text-white/50' : 'text-casa-muted',
               )}
             >
@@ -481,7 +481,7 @@ export default function ImminentTransitWidget({
                       {evtMember && (
                         <span
                           className={cn(
-                            'inline-flex items-center px-2 py-0.5 rounded-full text-3xs font-bold',
+                            'inline-flex items-center px-2 py-0.5 rounded-full text-caption font-bold',
                             isHeroNavy ? 'text-white bg-white/15' : 'text-casa-navy bg-white border border-casa-border',
                           )}
                           style={{
@@ -493,14 +493,14 @@ export default function ImminentTransitWidget({
                       )}
                       <span
                         className={cn(
-                          'text-3xs font-mono',
+                          'text-caption font-mono',
                           isHeroNavy ? 'text-white/60' : 'text-casa-muted',
                         )}
                       >
                         {evt.all_day ? 'All Day' : `${format(parseISO(evt.start_time), 'h:mm a')}`}
                       </span>
                       {isUnderway && (
-                        <span className="inline-flex items-center gap-1 text-3xs font-bold text-emerald-600 dark:text-emerald-400">
+                        <span className="inline-flex items-center gap-1 text-caption font-bold text-emerald-600 dark:text-emerald-400">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                           Now
                         </span>
@@ -518,7 +518,7 @@ export default function ImminentTransitWidget({
                   </div>
 
                   <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-casa-gold/15 group-hover/item:bg-casa-gold/25 text-casa-gold text-caption font-bold shrink-0 transition-all border border-casa-gold/30">
-                    <span className="text-2xs">Focus</span>
+                    <span className="text-caption">Focus</span>
                     <ChevronRight size={13} className="group-hover/item:translate-x-0.5 transition-transform" />
                   </div>
                 </div>
@@ -546,7 +546,7 @@ export default function ImminentTransitWidget({
               <Car size={14} className="text-casa-gold" />
             </div>
             <div className="min-w-0">
-              <span className="text-3xs font-bold uppercase tracking-wider text-casa-gold block">
+              <span className="text-caption font-bold uppercase tracking-wider text-casa-gold block">
                 School Launchpad Ahead
               </span>
               <div className="flex items-center gap-2 mt-0.5 flex-wrap">
@@ -564,7 +564,7 @@ export default function ImminentTransitWidget({
                   >
                     <span>{d.shortVenueName || d.venueName}</span>
                     <span className="opacity-40">·</span>
-                    <span className="font-mono text-3xs opacity-90">{d.driverName ? `${d.driverName} drives` : d.leaveByTimeFormatted}</span>
+                    <span className="font-mono text-caption opacity-90">{d.driverName ? `${d.driverName} drives` : d.leaveByTimeFormatted}</span>
                   </span>
                 ))}
               </div>
@@ -591,7 +591,7 @@ export default function ImminentTransitWidget({
               <Moon size={14} className={isHeroNavy ? 'text-indigo-300' : 'text-indigo-600'} />
             </div>
             <div className="min-w-0">
-              <span className="text-3xs font-bold uppercase tracking-wider text-indigo-400 block">
+              <span className="text-caption font-bold uppercase tracking-wider text-indigo-400 block">
                 Tomorrow at a Glance
               </span>
               <span className={cn('text-caption font-medium truncate block', isHeroNavy ? 'text-white/80' : 'text-casa-text-secondary')}>

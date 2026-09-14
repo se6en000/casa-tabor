@@ -86,7 +86,7 @@ export const WidgetContainer = forwardRef<HTMLDivElement, WidgetContainerProps>(
           <div className={cn('flex items-center justify-between pb-3 mb-3 border-b shrink-0 gap-2', TIER_DIVIDER[tier])}>
             <div className="flex flex-col min-w-0 gap-1">
               {eyebrow && (
-                <span className={cn('text-3xs font-bold uppercase tracking-widest', TIER_EYEBROW[tier])}>
+                <span className={cn('text-caption font-bold uppercase tracking-widest', TIER_EYEBROW[tier])}>
                   {eyebrow}
                 </span>
               )}

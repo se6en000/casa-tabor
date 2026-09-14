@@ -71,10 +71,10 @@ export default function TodaysTodosWidget({
           <div className={cn('w-6 h-6 rounded-lg flex items-center justify-center shrink-0', TIER_ICON_CHIP.structural)}>
             <Check size={13} strokeWidth={2.5} />
           </div>
-          <h3 className={cn('font-sans text-body-sm font-bold tracking-tight group-hover:text-casa-gold transition-colors', TIER_TITLE.structural)}>
+          <h3 className={cn('font-display text-body-lg font-bold tracking-tight group-hover:text-casa-gold transition-colors', TIER_TITLE.structural)}>
             Today's To-Dos
           </h3>
-          <span className="px-1.5 py-0.5 rounded-full text-3xs font-semibold bg-casa-gold/15 text-casa-navy border border-casa-gold/30">
+          <span className="px-1.5 py-0.5 rounded-full text-caption font-semibold bg-casa-gold/15 text-casa-navy border border-casa-gold/30">
             {completedReminders.length > 0
               ? `${openReminders.length} left · ${completedReminders.length} done`
               : `${todayReminders.length}`}
@@ -82,7 +82,7 @@ export default function TodaysTodosWidget({
         </div>
         <div className="flex items-center gap-2">
           {!collapsed && (
-            <span className="text-3xs text-casa-muted/80 font-medium uppercase tracking-wider hidden sm:inline">1-tap to complete</span>
+            <span className="text-caption text-casa-muted/80 font-medium uppercase tracking-wider hidden sm:inline">1-tap to complete</span>
           )}
           <div className="w-6 h-6 rounded-lg flex items-center justify-center text-casa-muted group-hover:text-casa-navy transition-transform">
             {collapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
@@ -189,7 +189,7 @@ export default function TodaysTodosWidget({
                                 )}
 
                                 <span className={cn(
-                                  'text-3xs font-bold uppercase tracking-wider shrink-0',
+                                  'text-caption font-bold uppercase tracking-wider shrink-0',
                                   isPastDay ? 'text-rose-700' : 'text-casa-warning-strong'
                                 )}>
                                   {isPastDay ? 'Missed' : 'Overdue'}
@@ -274,7 +274,7 @@ export default function TodaysTodosWidget({
                           </span>
                         )}
 
-                        <span className="text-body-sm font-normal text-casa-navy group-hover:text-casa-navy truncate transition-colors flex-1">
+                        <span className="text-body-sm font-semibold text-casa-navy group-hover:text-casa-navy truncate transition-colors flex-1">
                           {evt.title}
                         </span>
                       </div>

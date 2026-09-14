@@ -585,7 +585,7 @@ export default function MiddayLogisticsWidget({
           >
             <span
               className={cn(
-                'text-caption font-bold uppercase tracking-wider text-2xs mr-1',
+                'text-caption font-bold uppercase tracking-wider text-caption mr-1',
                 isNavy ? 'text-amber-300/90' : 'text-amber-900/80',
               )}
             >
@@ -737,7 +737,7 @@ export default function MiddayLogisticsWidget({
                 <h3
                   onClick={() => handleOpenMilestone(primaryMilestone)}
                   className={cn(
-                    'font-display text-heading-lg sm:text-title font-bold leading-tight cursor-pointer hover:underline',
+                    'font-display text-display-sm sm:text-display-md font-bold leading-tight cursor-pointer hover:underline',
                     isNavy ? 'text-white' : 'text-casa-navy',
                   )}
                 >
@@ -961,7 +961,7 @@ export default function MiddayLogisticsWidget({
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-3xs font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-amber-500/25 border border-amber-500/35 text-amber-950">
+                <span className="text-caption font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-amber-500/25 border border-amber-500/35 text-amber-950">
                   Today's Active Focus & Tasks
                 </span>
                 <span className="text-caption font-bold truncate">
@@ -1053,7 +1053,7 @@ export default function MiddayLogisticsWidget({
                     <div className="flex items-center gap-1.5 mb-0.5">
                       <span className="text-caption font-mono font-bold">{formattedTime}</span>
                       {evt.location_name && (
-                        <span className={cn('text-caption truncate text-2xs', isNavy ? 'text-white/60' : 'text-casa-muted')}>
+                        <span className={cn('text-caption truncate text-caption', isNavy ? 'text-white/60' : 'text-casa-muted')}>
                           · {evt.location_name}
                         </span>
                       )}

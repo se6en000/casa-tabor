@@ -106,7 +106,7 @@ export default function TomorrowPrepWidget({
               </span>
               <span
                 className={cn(
-                  'text-3xs uppercase font-bold px-2 py-0.5 rounded-full border',
+                  'text-caption uppercase font-bold px-2 py-0.5 rounded-full border',
                   isTomorrowWeekend
                     ? isNavy
                       ? 'bg-amber-400/10 border-amber-400/25 text-amber-300'
@@ -121,7 +121,7 @@ export default function TomorrowPrepWidget({
             </div>
             <div
               className={cn(
-                'text-body font-serif font-semibold mt-0.5',
+                'font-display text-display-sm sm:text-display-md font-bold leading-tight mt-0.5',
                 isNavy ? 'text-white' : 'text-casa-navy',
               )}
             >
@@ -355,7 +355,7 @@ export default function TomorrowPrepWidget({
                 <div className="text-right shrink-0">
                   <div
                     className={cn(
-                      'text-3xs uppercase font-medium mb-0.5',
+                      'text-caption uppercase font-medium mb-0.5',
                       isNavy ? 'text-white/50' : 'text-casa-muted',
                     )}
                   >
