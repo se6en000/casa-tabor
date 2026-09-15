@@ -266,7 +266,7 @@ export default function LivingFlowSidecar({
       </div>
 
       {/* Action Footer: Delete on Left, Directions in Center (if offsite), Copilot on Right */}
-      <footer className="p-3 pt-2 bg-casa-bg flex items-center gap-2">
+      <footer className="p-3 pt-2 bg-[var(--living-sidecar-bg)] flex items-center gap-2">
         <IconButton
           variant="secondary"
           size="md"
