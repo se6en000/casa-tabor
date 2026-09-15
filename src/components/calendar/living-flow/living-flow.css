@@ -66,12 +66,13 @@
 .living-flow-sidecar {
   width: 100%;
   height: 100%;
-  /* Experiment (2026-09-15): mixing in 50% black darkens the page's own
-     --color-casa-bg by roughly half regardless of which theme is active,
-     rather than hardcoding a second light/dark pair -- exposed as a custom
-     property so the header/footer (rendered by sibling components) can
-     match it exactly instead of sitting on the plain, lighter casa-bg. */
-  --living-sidecar-bg: color-mix(in srgb, var(--color-casa-bg, #FAF8F5) 50%, black 50%);
+  /* Experiment (2026-09-15): mixing in a little black darkens the page's own
+     --color-casa-bg regardless of which theme is active, rather than
+     hardcoding a second light/dark pair -- exposed as a custom property so
+     the header/footer (rendered by sibling components) can match it exactly
+     instead of sitting on the plain, lighter casa-bg. 50% read as too dark
+     on first look; dialed back to 10%. */
+  --living-sidecar-bg: color-mix(in srgb, var(--color-casa-bg, #FAF8F5) 90%, black 10%);
   background: var(--living-sidecar-bg);
   border-left: 3px solid var(--color-casa-gold, #C9A96E);
   display: flex;
