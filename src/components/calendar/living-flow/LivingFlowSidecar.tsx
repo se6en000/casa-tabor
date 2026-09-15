@@ -188,7 +188,7 @@ export default function LivingFlowSidecar({
                     className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 min-h-[44px] cursor-pointer ${
                       state.travelBehavior === 'none'
                         ? 'bg-slate-900 text-white shadow-2xs'
-                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 hover:dark:text-slate-300 hover:bg-white/60 dark:bg-casa-surface'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 hover:dark:text-slate-300 hover:bg-white/60 hover:dark:bg-casa-surface'
                     }`}
                   >
                     <House size={14} />
@@ -201,7 +201,7 @@ export default function LivingFlowSidecar({
                     className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 min-h-[44px] cursor-pointer ${
                       state.travelBehavior !== 'none'
                         ? 'bg-slate-900 text-white shadow-2xs'
-                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 hover:dark:text-slate-300 hover:bg-white/60 dark:bg-casa-surface'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 hover:dark:text-slate-300 hover:bg-white/60 hover:dark:bg-casa-surface'
                     }`}
                   >
                     <Car size={14} />
@@ -259,7 +259,7 @@ export default function LivingFlowSidecar({
       </div>
 
       {/* Action Footer: Delete on Left, Directions in Center (if offsite), Copilot on Right */}
-      <footer className="p-3 bg-white dark:bg-casa-surface border-t border-slate-200 dark:border-slate-800/50 flex items-center gap-2 shrink-0 z-20">
+      <footer className="p-3 pt-2 bg-casa-bg flex items-center gap-2 shrink-0 z-20">
         <IconButton
           variant="secondary"
           size="md"

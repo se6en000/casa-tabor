@@ -38,9 +38,9 @@ export default function LivingFlowHeader({
 
 
   return (
-    <div className="flex flex-col border-b border-slate-200 dark:border-slate-800/50 bg-white dark:bg-casa-surface shrink-0 relative z-20">
+    <div className="flex flex-col bg-casa-bg shrink-0 relative z-20">
       {/* Main Header Bar */}
-      <div className="py-3.5 px-5 flex items-center justify-between">
+      <div className="pt-4 pb-2 px-5 flex items-center justify-between">
         {/* 1-Tap Attendee Trigger Capsule */}
         <div
           onClick={() => setAttendeesExpanded(prev => !prev)}
