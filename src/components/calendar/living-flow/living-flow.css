@@ -242,7 +242,13 @@
   border-radius: var(--radius-container, 1.5rem);
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: var(--shadow-hero-dark, 0 10px 22px -10px rgba(15,23,42,0.45), 0 0 0 1px rgba(255,255,255,0.08));
-  position: relative;
+  /* Pinned so the title, attendees, close and Flip-to-Copilot controls stay
+     reachable no matter how far the route/venue/prep cards below are
+     scrolled -- matches .living-sidecar-body's own 18px top padding so it
+     doesn't jump when it starts sticking (2026-09-15). */
+  position: sticky;
+  top: 18px;
+  z-index: 30;
   overflow: hidden;
   transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.25s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1), color 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
