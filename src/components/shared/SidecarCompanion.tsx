@@ -509,10 +509,27 @@ export default function SidecarCompanion({
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: '100%', opacity: 0.9 }}
       transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+      drag="x"
+      dragConstraints={{ left: 0, right: 0 }}
+      dragElastic={{ left: 0, right: 0.5 }}
+      dragMomentum={false}
+      onDragEnd={(_e, info) => {
+        if (info.offset.x > 120 || info.velocity.x > 400) {
+          closeSidecar()
+        }
+      }}
       className="hidden sm:flex flex-col flex-shrink-0 h-full overflow-hidden border-l border-casa-border bg-casa-surface relative z-10 shadow-lg w-[var(--ai-sidecar-width,420px)] [will-change:transform]"
       data-panel-overlay
       data-touch-keyboard="ignore"
     >
+      {/* Drag/swipe-right-to-close grab handle -- mirrors the mobile sheet's
+          drag-down handle, mounted on this axis instead (2026-09-15). */}
+      <div
+        className="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 w-11 h-16 flex items-center justify-center cursor-grab active:cursor-grabbing touch-none z-20"
+        aria-hidden="true"
+      >
+        <div className="w-1.5 h-12 rounded-full bg-casa-gold shadow-2xs" />
+      </div>
       <div className="h-full w-full flex flex-col flex-shrink-0" data-sidecar-content="true">
         {sidecarContent}
       </div>

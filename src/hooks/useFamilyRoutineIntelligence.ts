@@ -21,6 +21,14 @@ import {
   saveTodoToggle,
   subscribeToTodoSync,
 } from '../utils/todoCompletionsSync'
+import {
+  type CustomPrepItem,
+  fetchCustomPrepItems,
+  getStoredCustomPrepItems,
+  addCustomPrepItem,
+  removeCustomPrepItem,
+  subscribeToCustomPrepItemsSync,
+} from '../utils/prepCustomItemsSync'
 
 export { resolveDayTypeForDate, type RoutineDayType }
 
@@ -78,6 +86,7 @@ export interface FamilyRoutineIntelligence {
   isMorningActionActive: boolean
   nextTodayDeparture: DepartureItem | null
   todayPrepChecklist: BedtimePrepItem[]
+  todayPrepSuggestions: BedtimePrepItem[]
   toggleTodayPrepItem: (id: string) => void
   tomorrowDate: Date
   tomorrowDayName: string
@@ -86,7 +95,12 @@ export interface FamilyRoutineIntelligence {
   hasTomorrowExceptions: boolean
   primaryTomorrowException: DepartureItem | null
   prepChecklist: BedtimePrepItem[]
+  prepSuggestions: BedtimePrepItem[]
   togglePrepItem: (id: string) => void
+  addPrepItem: (dateKey: string, label: string) => Promise<void>
+  removePrepItem: (dateKey: string, itemId: string) => Promise<void>
+  todayKey: string
+  tomorrowKey: string
   completedCount: number
   totalPrepCount: number
   allPrepCompleted: boolean
@@ -513,45 +527,28 @@ function derivePrepChecklist(
   dateKey: string,
   completedMap: Record<string, boolean>,
   calendarEvents: EventWithDetails[] = [],
-): BedtimePrepItem[] {
+  customItems: CustomPrepItem[] = [],
+): { items: BedtimePrepItem[]; suggestions: BedtimePrepItem[] } {
   const items: BedtimePrepItem[] = []
+  // Keyword-detected items (violin/sports, and the weekend-events scan
+  // below) are SUGGESTIONS, not auto-added -- 2026-09-15, per live feedback
+  // that backpacks/lunch/water were noise ("that stuff happens everyday, no
+  // need to be reminded") while genuinely irregular things (an instrument
+  // day twice a week) are worth a one-tap suggestion, not a silent add.
+  const suggestions: BedtimePrepItem[] = []
 
   // ─────────────────────────────────────────────────────────────
   // 1. SCHOOL DAY PREP (Sun night → Thu night for Mon–Fri school)
   // ─────────────────────────────────────────────────────────────
   if (dayType === 'school_day') {
-    const idBackpacks = `item-backpacks-${dateKey}`
-    items.push({
-      id: idBackpacks,
-      label: 'Backpacks & homework folders packed',
-      completed: Boolean(completedMap[idBackpacks]),
-      iconType: 'backpack',
-    })
-
-    const idLunch = `item-lunch-${dateKey}`
-    items.push({
-      id: idLunch,
-      label: 'Lunchboxes & morning snacks staged',
-      completed: Boolean(completedMap[idLunch]),
-      iconType: 'lunch',
-    })
-
-    const idBottles = `item-bottles-${dateKey}`
-    items.push({
-      id: idBottles,
-      label: 'Water bottles filled & chilled',
-      completed: Boolean(completedMap[idBottles]),
-      iconType: 'bottle',
-    })
-
-    // Contextual conditional items: ONLY if tomorrow actually has music/sports/devices
+    // Contextual conditional suggestions: ONLY if tomorrow actually has music/sports/devices
     for (const dep of departures) {
       if (dep.isException && dep.exceptionLabel) {
         const text = dep.exceptionLabel.toLowerCase()
         if (text.includes('string') || text.includes('violin') || text.includes('instrument') || text.includes('orchestra')) {
           const id = `item-music-${dateKey}`
-          if (!items.some((i) => i.id === id)) {
-            items.push({
+          if (!suggestions.some((i) => i.id === id)) {
+            suggestions.push({
               id,
               label: `${dep.childNamesFormatted}: Pack instrument & sheet music folder`,
               completed: Boolean(completedMap[id]),
@@ -562,8 +559,8 @@ function derivePrepChecklist(
         }
         if (text.includes('sport') || text.includes('pe') || text.includes('gym') || text.includes('athletic')) {
           const id = `item-sports-${dateKey}`
-          if (!items.some((i) => i.id === id)) {
-            items.push({
+          if (!suggestions.some((i) => i.id === id)) {
+            suggestions.push({
               id,
               label: `${dep.childNamesFormatted}: Stage athletic uniform & shoes`,
               completed: Boolean(completedMap[id]),
@@ -725,7 +722,18 @@ function derivePrepChecklist(
     })
   }
 
-  return items
+  // User-typed additions for this specific day (e.g. "Spirit Day t-shirt",
+  // "Field trip money") -- deliberately not tied to any event or reminder.
+  for (const custom of customItems) {
+    items.push({
+      id: custom.id,
+      label: custom.label,
+      completed: Boolean(completedMap[custom.id]),
+      iconType: 'general',
+    })
+  }
+
+  return { items, suggestions }
 }
 
 export function useFamilyRoutineIntelligence(now: Date = new Date()): FamilyRoutineIntelligence {
@@ -876,13 +884,57 @@ export function useFamilyRoutineIntelligence(now: Date = new Date()): FamilyRout
     })
   }, [tomorrowKey])
 
-  const todayPrepChecklist = useMemo<BedtimePrepItem[]>(() => {
-    return derivePrepChecklist(todayDayType, todayDepartures, todayKey, completedItems, todayEvents)
-  }, [todayDayType, todayDepartures, todayKey, completedItems, todayEvents])
+  // User-added prep items (see src/utils/prepCustomItemsSync.ts) -- mirrors
+  // the completedItems pattern above: local cache first, server query to
+  // backfill, realtime subscription for cross-device sync.
+  const { data: serverCustomItems } = useQuery({
+    queryKey: ['household-prep-custom-items'],
+    queryFn: fetchCustomPrepItems,
+    staleTime: 5 * 60_000,
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+  })
 
-  const prepChecklist = useMemo<BedtimePrepItem[]>(() => {
-    return derivePrepChecklist(tomorrowDayType, tomorrowDepartures, tomorrowKey, completedItems, tomorrowEvents)
-  }, [tomorrowDayType, tomorrowDepartures, tomorrowKey, completedItems, tomorrowEvents])
+  const [customItemsMap, setCustomItemsMap] = useState<Record<string, CustomPrepItem[]>>(() => getStoredCustomPrepItems())
+
+  useEffect(() => {
+    if (serverCustomItems && Object.keys(serverCustomItems).length > 0) {
+      setCustomItemsMap((prev) => ({ ...serverCustomItems, ...prev }))
+    }
+  }, [serverCustomItems])
+
+  useEffect(() => {
+    const unsubscribe = subscribeToCustomPrepItemsSync((map) => {
+      setCustomItemsMap(map)
+    })
+    return unsubscribe
+  }, [])
+
+  const addPrepItem = useCallback(async (dateKey: string, label: string) => {
+    const trimmed = label.trim()
+    if (!trimmed) return
+    const item = await addCustomPrepItem(dateKey, trimmed)
+    setCustomItemsMap((prev) => ({ ...prev, [dateKey]: [...(prev[dateKey] || []), item] }))
+  }, [])
+
+  const removePrepItem = useCallback(async (dateKey: string, itemId: string) => {
+    setCustomItemsMap((prev) => ({ ...prev, [dateKey]: (prev[dateKey] || []).filter((i) => i.id !== itemId) }))
+    await removeCustomPrepItem(dateKey, itemId)
+  }, [])
+
+  const todayPrepResult = useMemo(() => {
+    return derivePrepChecklist(todayDayType, todayDepartures, todayKey, completedItems, todayEvents, customItemsMap[todayKey] || [])
+  }, [todayDayType, todayDepartures, todayKey, completedItems, todayEvents, customItemsMap])
+  const todayPrepChecklist = todayPrepResult.items
+  const todayPrepSuggestions = todayPrepResult.suggestions
+
+  const prepResult = useMemo(() => {
+    return derivePrepChecklist(tomorrowDayType, tomorrowDepartures, tomorrowKey, completedItems, tomorrowEvents, customItemsMap[tomorrowKey] || [])
+  }, [tomorrowDayType, tomorrowDepartures, tomorrowKey, completedItems, tomorrowEvents, customItemsMap])
+  const prepChecklist = prepResult.items
+  const prepSuggestions = prepResult.suggestions
 
   const completedCount = useMemo(() => {
     return prepChecklist.filter((item) => item.completed).length
@@ -916,6 +968,7 @@ export function useFamilyRoutineIntelligence(now: Date = new Date()): FamilyRout
     isMorningActionActive,
     nextTodayDeparture,
     todayPrepChecklist,
+    todayPrepSuggestions,
     toggleTodayPrepItem,
     tomorrowDate,
     tomorrowDayName: format(tomorrowDate, 'EEEE'),
@@ -924,7 +977,18 @@ export function useFamilyRoutineIntelligence(now: Date = new Date()): FamilyRout
     hasTomorrowExceptions,
     primaryTomorrowException,
     prepChecklist,
+    prepSuggestions,
     togglePrepItem,
+    // NOTE (2026-09-15): addPrepItem/removePrepItem + the "generic checklist"
+    // architecture behind them are provisional -- under active discussion
+    // about switching to real, push-notifiable reminders instead (tagged
+    // e.g. morning_prep, auto-completing once the day's departures are
+    // done). Exposed but not yet wired into any UI; don't build on this
+    // without checking whether that pivot happened first.
+    addPrepItem,
+    removePrepItem,
+    todayKey,
+    tomorrowKey,
     completedCount,
     totalPrepCount,
     allPrepCompleted,
