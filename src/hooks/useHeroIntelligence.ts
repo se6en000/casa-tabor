@@ -266,17 +266,26 @@ export function useHeroIntelligence(
       return 'morning_launchpad'
     }
 
-    // 4. Weekend Flow & Household Rhythm (6:00 AM – 8:00 PM on weekends when no imminent event)
-    if (routineIntel.isTodayWeekend && decimalTime < 20.0) {
+    // 4. Weekend Flow & Household Rhythm (6:00 AM – 8:00 PM on weekends,
+    //    OR any time a real event is still pending today -- the clock cutoff
+    //    alone can't tell "day is over" from "next thing is just >45m away".
+    if (routineIntel.isTodayWeekend && (decimalTime < 20.0 || Boolean(imminentEvent))) {
       return 'weekend_flow'
     }
 
-    // 5. Weekday Daytime Logistics (After morning drop-offs / 8:30 AM – 5:30 PM)
-    if (!routineIntel.isTodayWeekend && decimalTime < 17.5) {
+    // 5. Weekday Daytime Logistics (After morning drop-offs / 8:30 AM – 5:30 PM,
+    //    OR any time a real event is still pending today). Fixed 2026-09-15:
+    //    a fixed 5:30 PM cutoff wrongly sent the Hero to 'tomorrow_readiness'
+    //    whenever the next same-day event was more than 45 minutes out but
+    //    still after 5:30 PM (e.g. a 7:00 PM gym class checked at 5:40 PM) --
+    //    imminentEvent is the actual "is today over" signal, the clock is
+    //    only a fallback once it's genuinely null.
+    if (!routineIntel.isTodayWeekend && (decimalTime < 17.5 || Boolean(imminentEvent))) {
       return 'daytime_logistics'
     }
 
-    // 6. Evening Wind-down & Tomorrow Readiness (Evening 5:30 PM+ or Night when no live event)
+    // 6. Evening Wind-down & Tomorrow Readiness -- only once nothing real is
+    //    left today (imminentEvent null falls through both branches above).
     return 'tomorrow_readiness'
   }, [
     manualView,

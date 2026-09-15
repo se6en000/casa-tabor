@@ -77,3 +77,18 @@ test('Hero intelligence provides clean weekend flow and daytime logistics fallba
   assert.match(heroIntelSource, /return 'daytime_logistics'/)
   assert.match(heroIntelSource, /return 'tomorrow_readiness'/)
 })
+
+// Real bug, 2026-09-15: checked at 5:40 PM with a 7:00 PM event (KT Gym)
+// still pending -- 80 minutes out, so not yet "imminent" (<=45m), but past
+// the hardcoded 5:30 PM daytime_logistics cutoff -- fell all the way through
+// to 'tomorrow_readiness' even though today wasn't over. A same-day event
+// that hasn't reached its imminent window yet must never lose to a fixed
+// clock cutoff; only a genuinely empty day (imminentEvent null) may.
+test('Hero does not jump to tomorrow_readiness while a same-day event is still pending past the daytime/weekend clock cutoffs', () => {
+  const daytimeIdx = heroIntelSource.indexOf("!routineIntel.isTodayWeekend && (decimalTime < 17.5")
+  const weekendIdx = heroIntelSource.indexOf('routineIntel.isTodayWeekend && (decimalTime < 20.0')
+  assert.ok(daytimeIdx !== -1, 'daytime_logistics must stay active whenever imminentEvent is still set, not just before 5:30 PM')
+  assert.ok(weekendIdx !== -1, 'weekend_flow must stay active whenever imminentEvent is still set, not just before 8:00 PM')
+  assert.match(heroIntelSource.slice(daytimeIdx, daytimeIdx + 200), /Boolean\(imminentEvent\)/)
+  assert.match(heroIntelSource.slice(weekendIdx, weekendIdx + 200), /Boolean\(imminentEvent\)/)
+})
