@@ -61,9 +61,12 @@ test("MiddayLogisticsWidget code integrity: no hardcoded school dismissal fallba
   // Must only render school dismissals section when schoolDismissals.length > 0
   assert.ok(widgetCode.includes("schoolDismissals.length > 0"), "Widget must conditionally render school dismissals only when length > 0")
 
-  // Must integrate openReminders to show active household focus & tasks
-  assert.ok(widgetCode.includes("openReminders.length > 0"), "Widget must support openReminders display")
-  assert.ok(widgetCode.includes("Today's Active Focus & Tasks"), "Widget must render active tasks section")
+  // "Today's Active Focus & Tasks" (the Household Focus & Tasks Companion
+  // Ribbon) was intentionally removed 2026-09-15 -- it duplicated the
+  // Today's To-Dos panel already on the home page. openReminders.length is
+  // still read for the "Afternoon Logistics Clear" summary's task count.
+  assert.ok(!widgetCode.includes("Today's Active Focus & Tasks"), "Widget must not re-introduce the removed duplicate tasks ribbon")
+  assert.ok(widgetCode.includes("openReminders.length === 0"), "Widget must still reference openReminders for its all-clear summary")
 
   // Must integrate tomorrow's weekend schedule preview
   assert.ok(widgetCode.includes("Tomorrow's Weekend Schedule"), "Widget must render tomorrow weekend schedule preview")

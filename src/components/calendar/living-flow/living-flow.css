@@ -815,7 +815,7 @@
   gap: 12px;
   padding: 8px 12px;
   border-radius: 12px;
-  background: var(--color-casa-bg, #FAF8F5);
+  background: transparent;
   border: 1.5px solid transparent;
   cursor: pointer;
   min-height: 48px;
@@ -823,10 +823,8 @@
 }
 
 .living-prep-item-row:hover {
-  background: #FFFDF9;
   border-color: var(--color-casa-gold, #C9A96E);
   transform: translateY(-0.5px);
-  box-shadow: 0 2px 6px rgba(201, 169, 110, 0.12);
 }
 
 .living-prep-item-row:active {
@@ -834,12 +832,10 @@
 }
 
 .living-prep-item-row.is-checked {
-  background: rgba(240, 234, 225, 0.45);
   border-color: transparent;
 }
 
 .living-prep-item-row.is-checked:hover {
-  background: rgba(240, 234, 225, 0.7);
   border-color: var(--color-casa-border, #E8E2D9);
 }
 

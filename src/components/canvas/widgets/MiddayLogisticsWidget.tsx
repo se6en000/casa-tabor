@@ -14,7 +14,6 @@ import {
   ExternalLink,
   Sparkles,
   Calendar,
-  ListTodo,
   Navigation,
 } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
@@ -35,15 +34,13 @@ import { saveEventTransportationOverride } from '../../../lib/eventPlanOverrides
 import { applyEventAggregatePatch } from '../../../lib/eventAggregateCache'
 import { openEventDetails } from '../../../utils/openEventDetails'
 
-import { Button, IconButton } from '../../ui'
+import { Button } from '../../ui'
 
 interface MiddayLogisticsWidgetProps {
   now?: Date
   todayEvents?: EventWithDetails[]
   openReminders?: EventWithDetails[]
   todayReminders?: EventWithDetails[]
-  completedReminders?: EventWithDetails[]
-  onToggleReminder?: (id: string) => void
   tomorrowEvents?: EventWithDetails[]
   familyMembers?: FamilyMember[]
   nextEvent?: EventWithDetails | null
@@ -68,8 +65,6 @@ export default function MiddayLogisticsWidget({
   now = new Date(),
   todayEvents = [],
   openReminders = [],
-  completedReminders = [],
-  onToggleReminder,
   tomorrowEvents = [],
   familyMembers = [],
   onOpenEvent,
@@ -308,25 +303,6 @@ export default function MiddayLogisticsWidget({
 
   // Primary Milestone Spotlight (First upcoming commitment today)
   const primaryMilestone = middayCommitments[0] || null
-
-  // Split open reminders into overdue vs upcoming today
-  const overdueReminders = useMemo(() => {
-    const startOfTodayMs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
-    const nowMs = now.getTime()
-    return openReminders.filter((evt) => {
-      try {
-        const startMs = parseISO(evt.start_time).getTime()
-        const isPastDay = startMs < startOfTodayMs
-        const isEarlierToday = !evt.all_day && startMs < nowMs
-        return isPastDay || isEarlierToday
-      } catch {
-        return false
-      }
-    })
-  }, [openReminders, now])
-
-  // Top priority focus item (overdue first, then first open task)
-  const priorityFocusReminder = overdueReminders[0] || openReminders[0] || null
 
   // Tomorrow's highlighted events for weekend preview
   const tomorrowHighlightEvents = useMemo(() => {
@@ -939,74 +915,6 @@ export default function MiddayLogisticsWidget({
           </div>
         </div>
       )}
-
-      {/* ── Household Focus & Tasks Companion Ribbon ── */}
-      {openReminders.length > 0 && priorityFocusReminder ? (
-        <div
-          className={cn(
-            'p-3.5 sm:p-4 rounded-2xl border shadow-2xs flex items-center justify-between gap-3 relative z-10 transition-all',
-            isNavy
-              ? 'bg-amber-500/10 border-amber-400/30 text-amber-200'
-              : 'bg-amber-500/8 border-amber-400/40 text-amber-950',
-          )}
-        >
-          <div className="flex items-center gap-3 min-w-0 flex-1">
-            <div
-              className={cn(
-                'w-9 h-9 rounded-xl flex items-center justify-center font-bold shrink-0',
-                isNavy ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-500/15 text-amber-800',
-              )}
-            >
-              <ListTodo size={17} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-caption font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-amber-500/25 border border-amber-500/35 text-amber-950">
-                  Today's Active Focus & Tasks
-                </span>
-                <span className="text-caption font-bold">
-                  {priorityFocusReminder.title}
-                </span>
-              </div>
-              <p className={cn('text-caption mt-0.5', isNavy ? 'text-white/70' : 'text-casa-muted')}>
-                {openReminders.length === 1
-                  ? completedReminders.length > 0
-                    ? `1 task active · ${completedReminders.length} completed`
-                    : '1 task active for today'
-                  : completedReminders.length > 0
-                    ? `${openReminders.length} tasks active · ${completedReminders.length} completed`
-                    : `${openReminders.length} tasks active for today`}
-              </p>
-            </div>
-          </div>
-
-          <IconButton
-            size="sm"
-            variant="ghost"
-            onClick={async (e) => {
-              e.stopPropagation()
-              if (onToggleReminder && priorityFocusReminder) {
-                try {
-                  navigator.vibrate?.(10)
-                } catch {
-                  // ignore — vibrate not supported
-                }
-                await onToggleReminder(priorityFocusReminder.id)
-              }
-            }}
-            className={cn(
-              'rounded-full shrink-0 transition-all min-h-[44px] min-w-[44px] p-0 flex items-center justify-center',
-              isNavy ? 'hover:bg-amber-400/20 text-amber-300' : 'hover:bg-emerald-100 text-slate-500 hover:text-emerald-700',
-            )}
-            aria-label={`Mark ${priorityFocusReminder.title} complete`}
-            icon={
-              <div className="w-6 h-6 rounded-full border-2 border-amber-600/80 hover:border-emerald-600 bg-white/10 flex items-center justify-center transition-colors shadow-2xs">
-                <div className="w-3 h-3 rounded-full bg-current opacity-40 hover:opacity-100 transition-opacity" />
-              </div>
-            }
-          />
-        </div>
-      ) : null}
 
       {/* ── Tomorrow's Weekend Schedule Companion Ribbon ── */}
       {routineIntel.isTodayWeekend && tomorrowHighlightEvents.length > 0 && (

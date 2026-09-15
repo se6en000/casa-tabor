@@ -372,8 +372,6 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                   todayEvents={upcomingAppointments}
                   openReminders={openReminders}
                   todayReminders={todayReminders}
-                  completedReminders={completedReminders}
-                  onToggleReminder={handleToggleReminder}
                   tomorrowEvents={tomorrowEvents}
                   familyMembers={familyMembers}
                   nextEvent={heroIntel.imminentEvent}
