@@ -38,7 +38,7 @@ export default function LivingFlowHeader({
 
 
   return (
-    <div className="flex flex-col bg-casa-bg shrink-0 relative z-20">
+    <div className="flex flex-col bg-casa-bg">
       {/* Main Header Bar */}
       <div className="pt-4 pb-2 px-5 flex items-center justify-between">
         {/* 1-Tap Attendee Trigger Capsule */}
