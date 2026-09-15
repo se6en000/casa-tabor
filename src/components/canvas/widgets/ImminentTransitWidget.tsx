@@ -7,7 +7,6 @@ import {
   Navigation,
   ChevronRight,
   Moon,
-  Layers,
 } from 'lucide-react'
 import type { DepartureItem } from '../../../hooks/useFamilyRoutineIntelligence' 
 import { motion } from 'framer-motion'
@@ -28,8 +27,6 @@ interface ImminentTransitWidgetProps {
   isTravelEvent?: boolean
   isLeaveNow?: boolean
   isPrepUrgent?: boolean
-  concurrentEvents?: EventWithDetails[]
-  onSelectHeroEventId?: (eventId: string) => void
   schoolDropoffs?: DepartureItem[]
   tomorrowSummary?: { eventCount: number; prepItemsReady: number; totalPrepItems: number } | null
   onToggleTomorrowView?: () => void
@@ -55,8 +52,6 @@ export default function ImminentTransitWidget({
   isTravelEvent = false,
   isLeaveNow = false,
   isPrepUrgent = false,
-  concurrentEvents = [],
-  onSelectHeroEventId,
   schoolDropoffs = [],
   tomorrowSummary = null,
   onToggleTomorrowView,
@@ -412,121 +407,6 @@ export default function ImminentTransitWidget({
           <ChevronRight size={16} />
         </div>
       </div>
-
-      {/* ── Multi-Track Concurrent Events (1-to-Many Simultaneous Family Logistics) ── */}
-      {concurrentEvents.length > 0 && (
-        <div
-          className={cn(
-            'mt-5 pt-4 border-t',
-            isHeroNavy ? 'border-white/10' : 'border-casa-divider/60',
-          )}
-        >
-          <div className="flex items-center justify-between gap-2 mb-2.5">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-              <span className="text-caption font-bold uppercase tracking-widest text-casa-gold flex items-center gap-1.5">
-                <Layers size={12} className="text-casa-gold" />
-                <span>Simultaneous Family Logistics ({concurrentEvents.length} Active)</span>
-              </span>
-            </div>
-            <span
-              className={cn(
-                'text-caption font-medium',
-                isHeroNavy ? 'text-white/50' : 'text-casa-muted',
-              )}
-            >
-              1-Tap to switch spotlight
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            {concurrentEvents.map((evt) => {
-              let isUnderway = false
-              try {
-                const start = parseISO(evt.start_time).getTime()
-                const end = parseISO(evt.end_time).getTime()
-                isUnderway = !evt.all_day && now.getTime() >= start && now.getTime() <= end
-              } catch {
-                // ignore — invalid event times, isUnderway stays false
-              }
-
-              const evtMember = evt.members?.[0]?.family_member
-
-              return (
-                <div
-                  key={evt.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    if (onSelectHeroEventId) onSelectHeroEventId(evt.id)
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      if (onSelectHeroEventId) onSelectHeroEventId(evt.id)
-                    }
-                  }}
-                  className={cn(
-                    'group/item flex items-center justify-between gap-3 p-3 rounded-2xl border transition-all cursor-pointer shadow-2xs active:scale-[0.98]',
-                    isHeroNavy
-                      ? 'bg-white/5 hover:bg-white/10 border-white/10 hover:border-casa-gold/50 text-white'
-                      : 'bg-casa-surface-subtle hover:bg-casa-surface-subtle/80 border-casa-border hover:border-casa-gold/50 text-casa-navy',
-                  )}
-                  title={`Switch spotlight to ${evt.title}`}
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-                      {evtMember && (
-                        <span
-                          className={cn(
-                            'inline-flex items-center px-2 py-0.5 rounded-full text-caption font-bold',
-                            isHeroNavy ? 'text-white bg-white/15' : 'text-casa-navy bg-white border border-casa-border',
-                          )}
-                          style={{
-                            borderLeft: `3px solid ${evtMember.color_hex || 'var(--color-casa-gold)'}`,
-                          }}
-                        >
-                          {evtMember.name}
-                        </span>
-                      )}
-                      <span
-                        className={cn(
-                          'text-caption font-mono',
-                          isHeroNavy ? 'text-white/60' : 'text-casa-muted',
-                        )}
-                      >
-                        {evt.all_day ? 'All Day' : `${format(parseISO(evt.start_time), 'h:mm a')}`}
-                      </span>
-                      {isUnderway && (
-                        <span className="inline-flex items-center gap-1 text-caption font-bold text-emerald-600 dark:text-emerald-400">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                          Now
-                        </span>
-                      )}
-                    </div>
-
-                    <h4
-                      className={cn(
-                        'text-caption font-semibold line-clamp-2 transition-colors group-hover/item:text-casa-gold',
-                        isHeroNavy ? 'text-white' : 'text-casa-navy',
-                      )}
-                    >
-                      {evt.title}
-                    </h4>
-                  </div>
-
-                  <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-casa-gold/15 group-hover/item:bg-casa-gold/25 text-casa-gold text-caption font-bold shrink-0 transition-all border border-casa-gold/30">
-                    <span className="text-caption">Focus</span>
-                    <ChevronRight size={13} className="group-hover/item:translate-x-0.5 transition-transform" />
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
 
       {/* ── Early Morning Companion: School Drop-offs Ahead ── */}
       {schoolDropoffs && schoolDropoffs.length > 0 && (

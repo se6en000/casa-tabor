@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react'
 import {
   Utensils,
   ShoppingBag,
@@ -9,13 +9,13 @@ import {
   CheckCircle2,
   ArrowRight,
 } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, useMotionValue, animate } from 'framer-motion'
 import { useCalmKioskPresenter } from '../../hooks/useCalmKioskPresenter'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { useAppStore } from '../../stores/appStore'
 import { useCalendarStore } from '../../stores/calendarStore'
 import { cn } from '../../utils/cn'
-import { Button, WidgetContainer } from '../ui'
+import { Button, IconButton, WidgetContainer } from '../ui'
 import { getDisplayMemberColor } from '../../design-system/memberColors'
 import TomorrowPrepWidget from './widgets/TomorrowPrepWidget'
 import ImminentTransitWidget from './widgets/ImminentTransitWidget'
@@ -27,6 +27,7 @@ import HouseholdDispatchCard from './widgets/HouseholdDispatchCard'
 import TodaysScheduleWidget from './widgets/TodaysScheduleWidget'
 import TodaysTodosWidget from './widgets/TodaysTodosWidget'
 import TomorrowPreviewWidget from './widgets/TomorrowPreviewWidget'
+import HeroFlybyCard from './widgets/HeroFlybyCard'
 interface CalmKioskViewProps {
   onOpenEvent: (event: EventWithDetails) => void
 }
@@ -145,7 +146,6 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
     dispatchWeekDays,
     dispatchHorizon,
     timeHorizonLabel,
-    setSelectedHeroEventId,
     pastEvents,
     upcomingAppointments,
     todayReminders,
@@ -180,6 +180,14 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
   }, [refreshBriefing])
 
   const heroIntel = useHeroIntelligence(now, upcomingAppointments, familyMembers, heroManualView || 'today')
+
+  // Today's remaining events the Hero swipe deck can page through, beyond
+  // whichever one the archetype system is already spotlighting as slide one.
+  const heroFlybyEvents = useMemo(
+    () => upcomingAppointments.filter((e) => e.id !== heroIntel.imminentEvent?.id),
+    [upcomingAppointments, heroIntel.imminentEvent],
+  )
+  const heroPrimaryKey = `${heroIntel.archetype}-${heroIntel.imminentEvent?.id ?? ''}`
 
   return (
     <div className="w-full h-full flex flex-col justify-start px-4 sm:px-6 lg:px-8 xl:px-10 pt-5 sm:pt-6 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-8 overflow-y-auto overscroll-contain touch-pan-y scrollbar-hide">
@@ -292,6 +300,12 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
           'flex-col justify-start',
           mobileSubTab === 'triage' ? 'hidden lg:flex' : 'flex'
         )}>
+          <HeroSwipeDeck
+            now={now}
+            primaryKey={heroPrimaryKey}
+            flybyEvents={heroFlybyEvents}
+            onOpenEvent={onOpenEvent}
+            primarySlide={
           <AnimatePresence mode="wait" initial={false}>
             {heroIntel.archetype === 'tomorrow_readiness' ? (
               <motion.div
@@ -339,8 +353,6 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                   isTravelEvent={heroIntel.isTravelEvent}
                   isLeaveNow={heroIntel.isLeaveNow}
                   isPrepUrgent={heroIntel.isPrepUrgent}
-                  concurrentEvents={heroIntel.concurrentEvents}
-                  onSelectHeroEventId={(id) => setSelectedHeroEventId(id)}
                   schoolDropoffs={heroIntel.pendingSchoolDropoffs}
                   tomorrowSummary={heroIntel.tomorrowSummary}
                   onToggleTomorrowView={() => setHeroManualView('tomorrow')}
@@ -372,6 +384,8 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
               </motion.div>
             )}
           </AnimatePresence>
+            }
+          />
         </div>
 
         <div className={cn(mobileSubTab === 'schedule' ? 'flex flex-col' : 'hidden lg:flex lg:flex-col')}>
@@ -705,6 +719,160 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
             </div>
           )}
 
+    </div>
+  )
+}
+
+// How long the hero waits after the user swipes away before snapping back to
+// the algorithmically-chosen "live" slide (slide zero). Matches the resting
+// pattern already proven on the classic Home page's own hero carousel.
+const HERO_IDLE_REVERT_MS = 9000
+const HERO_SLIDE_GAP = 20
+
+/**
+ * Wraps the existing archetype-selected Hero (unchanged, always slide zero)
+ * in a horizontal swipe deck so the rest of today's events can be paged
+ * through as HeroFlybyCard slides. Ports the drag/spring/resting-index
+ * mechanics from HomePage.tsx's HeroCarousel rather than reinventing them.
+ */
+function HeroSwipeDeck({
+  now,
+  primaryKey,
+  primarySlide,
+  flybyEvents,
+  onOpenEvent,
+}: {
+  now: Date
+  primaryKey: string
+  primarySlide: ReactNode
+  flybyEvents: EventWithDetails[]
+  onOpenEvent: (event: EventWithDetails) => void
+}) {
+  const slideCount = 1 + flybyEvents.length
+  const multi = slideCount > 1
+
+  // `override` holds the user's manually-swiped-to slide. While null, the
+  // deck simply rests on slide zero (the live archetype view). A debounced
+  // timer clears the override so an idle kiosk always drifts back to truth.
+  const [override, setOverride] = useState<number | null>(null)
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const effectiveIndex = Math.max(0, Math.min(slideCount - 1, override ?? 0))
+
+  useEffect(() => () => {
+    if (idleTimerRef.current) clearTimeout(idleTimerRef.current)
+  }, [])
+
+  // The "live" slide changed identity (a new event became imminent, the
+  // archetype flipped, the day rolled over) -- drop any stale swipe position
+  // rather than stranding the user on a slide that no longer makes sense.
+  useEffect(() => {
+    setOverride(null)
+    if (idleTimerRef.current) clearTimeout(idleTimerRef.current)
+  }, [primaryKey])
+
+  const [viewportWidth, setViewportWidth] = useState(0)
+  const roRef = useRef<ResizeObserver | null>(null)
+  const setViewportEl = useCallback((el: HTMLDivElement | null) => {
+    if (roRef.current) {
+      roRef.current.disconnect()
+      roRef.current = null
+    }
+    if (!el) return
+    setViewportWidth(el.offsetWidth)
+    const ro = new ResizeObserver(() => setViewportWidth(el.offsetWidth))
+    ro.observe(el)
+    roRef.current = ro
+  }, [])
+
+  const x = useMotionValue(0)
+  const hasPositionedRef = useRef(false)
+
+  const goTo = useCallback(
+    (next: number) => {
+      const clamped = Math.max(0, Math.min(slideCount - 1, next))
+      setOverride(clamped)
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current)
+      idleTimerRef.current = setTimeout(() => setOverride(null), HERO_IDLE_REVERT_MS)
+    },
+    [slideCount],
+  )
+
+  const springTo = useCallback(
+    (index: number) => {
+      if (viewportWidth === 0) return
+      const target = -index * (viewportWidth + HERO_SLIDE_GAP)
+      if (!hasPositionedRef.current) {
+        hasPositionedRef.current = true
+        x.set(target)
+        return
+      }
+      return animate(x, target, { type: 'spring', stiffness: 300, damping: 34, mass: 0.9 })
+    },
+    [x, viewportWidth],
+  )
+
+  useEffect(() => {
+    const controls = springTo(effectiveIndex)
+    return () => controls?.stop()
+  }, [effectiveIndex, springTo])
+
+  return (
+    <div className="relative w-full">
+      <div ref={setViewportEl} className="overflow-hidden">
+        <motion.div
+          className="flex items-stretch"
+          style={{ x, gap: HERO_SLIDE_GAP }}
+          drag={multi && viewportWidth > 0 ? 'x' : false}
+          dragConstraints={{ left: -(slideCount - 1) * (viewportWidth + HERO_SLIDE_GAP), right: 0 }}
+          dragElastic={0.14}
+          dragMomentum={false}
+          onDragEnd={(_e, info) => {
+            if (!multi) return
+            const threshold = Math.max(60, viewportWidth * 0.18)
+            const flung = Math.abs(info.velocity.x) > 520
+            let target = effectiveIndex
+            if ((info.offset.x < -threshold || (flung && info.velocity.x < 0)) && effectiveIndex < slideCount - 1) {
+              target = effectiveIndex + 1
+            } else if ((info.offset.x > threshold || (flung && info.velocity.x > 0)) && effectiveIndex > 0) {
+              target = effectiveIndex - 1
+            }
+            springTo(target)
+            goTo(target)
+          }}
+        >
+          <div className="shrink-0 grow-0 basis-full">{primarySlide}</div>
+          {flybyEvents.map((evt) => (
+            <div key={evt.id} className="shrink-0 grow-0 basis-full">
+              <HeroFlybyCard now={now} event={evt} onOpenEvent={onOpenEvent} />
+            </div>
+          ))}
+        </motion.div>
+      </div>
+
+      {multi && (
+        <div className="flex items-center justify-center gap-1 mt-3">
+          {Array.from({ length: slideCount }).map((_, i) => (
+            <IconButton
+              key={i}
+              type="button"
+              onClick={() => goTo(i)}
+              aria-label={`Go to hero slide ${i + 1} of ${slideCount}`}
+              aria-current={i === effectiveIndex}
+              size="sm"
+              variant="ghost"
+              className="rounded-full"
+              icon={
+                <span
+                  className={cn(
+                    'mx-auto block h-1.5 rounded-full transition-all',
+                    i === effectiveIndex ? 'w-6 bg-casa-gold' : 'w-1.5 bg-casa-text/25',
+                  )}
+                />
+              }
+            />
+          ))}
+        </div>
+      )}
     </div>
   )
 }

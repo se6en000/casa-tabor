@@ -69,6 +69,15 @@ xrandr --newmode "2560x1440_60" 241.50 2560 2608 2640 2720 1440 1443 1448 1481 -
 xrandr --addmode HDMI-2 "2560x1440_60" 2>/dev/null || true
 xrandr --output HDMI-2 --mode "2560x1440_60" 2>/dev/null || true
 
+# Force full RGB range (0-255) instead of "Automatic", which this panel
+# negotiates down to limited/TV range (16-235) -- washed-out blacks and
+# duller colors versus a real full-range signal (2026-09-15). A live
+# --set alone doesn't always force the driver to resend the HDMI
+# infoframe, so toggle the output off/on to make it stick.
+xrandr --output HDMI-2 --off 2>/dev/null || true
+sleep 1
+xrandr --output HDMI-2 --mode "2560x1440_60" --set "Broadcast RGB" "Full" 2>/dev/null || true
+
 # Disable screen blanking and DPMS power management AFTER display is ready
 xset s off
 xset s noblank

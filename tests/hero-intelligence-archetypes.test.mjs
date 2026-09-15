@@ -49,11 +49,16 @@ test('Hero intelligence terminates morning school routine immediately at school 
   )
 })
 
-test('Hero ImminentTransitWidget renders Multi-Track Concurrent Events and Companion Ribbons', () => {
-  assert.match(
+// "Simultaneous Family Logistics" (multi-track concurrent events) was
+// intentionally removed 2026-09-15 -- it duplicated the Today's To-Dos
+// panel's job on the home page, per live user feedback ("we have a todos
+// on the right, we dont need two areas for todos"). The Hero's own swipe
+// deck (CalmKioskView's HeroSwipeDeck) now covers browsing other events.
+test('Hero ImminentTransitWidget renders Companion Ribbons', () => {
+  assert.doesNotMatch(
     imminentWidgetSource,
     /Simultaneous Family Logistics/,
-    'ImminentTransitWidget must support simultaneous family logistics with multi-event tracking',
+    'ImminentTransitWidget should no longer render the removed concurrent-events section',
   )
   assert.match(
     imminentWidgetSource,
