@@ -5,10 +5,14 @@ import {
   ShoppingBag, Trophy, Stethoscope, PartyPopper,
   GraduationCap, Utensils, Plane, Church, Pill,
   ShoppingCart, BookOpen, Wrench, PawPrint, ClipboardList,
-  Check, Bell, X, Pencil, Bed, Moon, Repeat, Sun
+  Check, Bell, X, Pencil, Bed, Moon, Repeat, Sun,
+  Link2, Rotate3d,
 } from 'lucide-react'
 import type { LivingFlowMode } from '../types'
+import type { FamilyMember } from '../../../../types'
 import { EventProvenanceBadge } from '../../EventProvenanceBadge'
+import { getDisplayMemberColor } from '../../../../design-system/memberColors'
+import { Button, IconButton } from '../../../ui'
 import {
   parseRrule,
   buildRrule,
@@ -29,6 +33,12 @@ interface LivingHeroTitleCardProps {
   isAllDay?: boolean
   rrule?: string | null
   sourceType?: string | null
+  familyMembers: FamilyMember[]
+  selectedMemberIds: string[]
+  attendeesExpanded: boolean
+  onToggleAttendees: () => void
+  onClose: () => void
+  onSwitchToAi?: () => void
   onUpdateTitle: (newTitle: string) => void
   onSetStartAndDuration: (startDate: Date, durationMinutes: number, isAllDay?: boolean) => void
   onSetStartAndEnd?: (startDate: Date, endDate: Date, isAllDay?: boolean) => void
@@ -67,6 +77,12 @@ export default function LivingHeroTitleCard({
   isAllDay,
   rrule,
   sourceType,
+  familyMembers,
+  selectedMemberIds,
+  attendeesExpanded,
+  onToggleAttendees,
+  onClose,
+  onSwitchToAi,
   onUpdateTitle,
   onSetStartAndDuration,
   onSetStartAndEnd,
@@ -74,6 +90,8 @@ export default function LivingHeroTitleCard({
   onNudgeTime,
   onUpdateRecurrence,
 }: LivingHeroTitleCardProps) {
+  const activeMembers = familyMembers.filter((m) => selectedMemberIds.includes(m.id))
+  const attendeeNames = activeMembers.map((m) => m.name).join(' + ') || 'No Attendees'
   const safeStartDate = !startDate || isNaN(new Date(startDate).getTime()) ? new Date() : new Date(startDate)
   const safeEndDate = !endDate || isNaN(new Date(endDate).getTime())
     ? new Date(safeStartDate.getTime() + Math.max(15, durationMinutes) * 60000)
@@ -470,6 +488,66 @@ export default function LivingHeroTitleCard({
 
   return (
     <div className={`living-hero-title-card flex flex-col ${expandedSection ? 'has-expanded' : ''}`}>
+      <div className="glow-decoration" aria-hidden="true" />
+
+      {/* Attendee Pill + Action Buttons -- combined into the micro-hero (2026-09-15) */}
+      <div className="flex items-center justify-between mb-3">
+        <div
+          onClick={onToggleAttendees}
+          title="Tap to manage attendees"
+          className={`living-attendee-capsule ${attendeesExpanded ? 'bg-white/16' : ''}`}
+        >
+          <div className="flex items-center">
+            {activeMembers.slice(0, 3).map((m) => (
+              <div
+                key={m.id}
+                className="living-avatar-ring"
+                style={{ backgroundColor: getDisplayMemberColor(m.color_hex) }}
+              >
+                {m.name.charAt(0).toUpperCase()}
+              </div>
+            ))}
+          </div>
+          <span className="text-xs font-bold text-white uppercase tracking-wider">
+            {attendeeNames}
+          </span>
+          <ChevronDown size={13} className={`text-white/60 ${attendeesExpanded ? 'rotate-180 transition-transform' : ''}`} />
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          {onSwitchToAi && (
+            <Button
+              variant="ghost"
+              type="button"
+              onClick={onSwitchToAi}
+              className="min-h-[34px] px-3 py-1 flex items-center gap-1.5 rounded-full text-2xs font-bold text-white bg-white/10 hover:bg-white/16 border border-white/20 shadow-2xs transition-all active:scale-95 group shrink-0"
+              title="Flip to Copilot"
+              aria-label="Flip to Copilot"
+            >
+              <Rotate3d size={14} className="text-casa-gold transition-transform duration-300 group-hover:rotate-180" />
+              <span>Flip to Copilot</span>
+            </Button>
+          )}
+          <IconButton
+            icon={<Link2 size={16} className="text-white/85" />}
+            onClick={() => {
+              navigator.clipboard?.writeText(window.location.href)
+              alert('Event link copied to clipboard!')
+            }}
+            className="living-header-action-btn"
+            aria-label="Share event link"
+            title="Share event link"
+          />
+          <IconButton
+            icon={<X size={16} className="text-white/85" />}
+            onClick={onClose}
+            className="living-header-action-btn"
+            aria-label="Close sidecar"
+            title="Close sidecar"
+          />
+        </div>
+      </div>
+
       {/* In-Place Controlled Editable Title via Zero-Lag CSS Grid Auto-Sizing */}
       <div className="group relative w-full">
         <div className="grid grid-cols-1 grid-rows-1 relative w-full">
@@ -505,10 +583,10 @@ export default function LivingHeroTitleCard({
             }}
             placeholder="Event title…"
             aria-label="Event title"
-            className="col-start-1 row-start-1 living-event-title cursor-text hover:bg-slate-50/70 hover:dark:bg-slate-950/20 focus:bg-amber-50/40 focus:dark:bg-amber-950/20 rounded px-1.5 -mx-1.5 transition-all resize-none overflow-hidden pr-7 select-text"
+            className="col-start-1 row-start-1 living-event-title cursor-text hover:bg-white/10 focus:bg-white/10 rounded px-1.5 -mx-1.5 transition-all resize-none overflow-hidden pr-7 select-text"
           />
 
-          <div className="absolute right-0 top-1.5 opacity-40 hover:opacity-100 transition-opacity pointer-events-none flex items-center gap-1 text-slate-400">
+          <div className="absolute right-0 top-1.5 opacity-40 hover:opacity-100 transition-opacity pointer-events-none flex items-center gap-1 text-white/70">
             <Pencil size={13} />
           </div>
         </div>
@@ -516,7 +594,7 @@ export default function LivingHeroTitleCard({
 
       {/* Meta Pills Cluster */}
       <div className="flex flex-wrap items-center gap-1.5 mt-3">
-        {sourceType && <EventProvenanceBadge sourceType={sourceType} />}
+        {sourceType && <EventProvenanceBadge sourceType={sourceType} isHeroState />}
 
         {/* Category Pill */}
         <button
@@ -532,9 +610,9 @@ export default function LivingHeroTitleCard({
           onClick={() => setExpandedSection(prev => prev === 'datetime' ? null : 'datetime')}
           className={`living-action-chip ${expandedSection === 'datetime' ? 'active' : ''}`}
         >
-          <Calendar size={13} className={expandedSection === 'datetime' ? 'text-white' : 'text-slate-500'} />
+          <Calendar size={13} className={expandedSection === 'datetime' ? 'text-white' : 'text-white/70'} />
           <span className="truncate max-w-[200px]">{headerDateLabel}</span>
-          <ChevronDown size={12} className={expandedSection === 'datetime' ? 'rotate-180 transition-transform' : 'text-slate-400'} />
+          <ChevronDown size={12} className={expandedSection === 'datetime' ? 'rotate-180 transition-transform' : 'text-white/50'} />
         </button>
 
         {/* Time Pill (Adaptive Multi-Day) */}
@@ -542,9 +620,9 @@ export default function LivingHeroTitleCard({
           onClick={() => setExpandedSection(prev => prev === 'datetime' ? null : 'datetime')}
           className={`living-action-chip ${expandedSection === 'datetime' ? 'active' : ''}`}
         >
-          <Clock size={13} className={expandedSection === 'datetime' ? 'text-white' : 'text-slate-500'} />
+          <Clock size={13} className={expandedSection === 'datetime' ? 'text-white' : 'text-white/70'} />
           <span className="truncate max-w-[190px]">{headerTimeLabel}</span>
-          <ChevronDown size={12} className={expandedSection === 'datetime' ? 'rotate-180 transition-transform' : 'text-slate-400'} />
+          <ChevronDown size={12} className={expandedSection === 'datetime' ? 'rotate-180 transition-transform' : 'text-white/50'} />
         </button>
 
         {/* Repeat / Recurrence Pill */}
@@ -553,28 +631,28 @@ export default function LivingHeroTitleCard({
           className={`living-action-chip ${expandedSection === 'recurrence' ? 'active' : isRecurringActive ? 'gold-active shadow-sm' : ''}`}
           aria-label="Repeat schedule"
         >
-          <Repeat size={13} className={expandedSection === 'recurrence' ? 'text-white' : isRecurringActive ? 'text-amber-800 dark:text-amber-300' : 'text-slate-500'} />
+          <Repeat size={13} className={expandedSection === 'recurrence' ? 'text-white' : isRecurringActive ? 'text-casa-navy' : 'text-white/70'} />
           <span className="truncate max-w-[170px]">{recurrencePillLabel}</span>
-          <ChevronDown size={12} className={expandedSection === 'recurrence' ? 'rotate-180 transition-transform' : isRecurringActive ? 'text-amber-700 dark:text-amber-400' : 'text-slate-400'} />
+          <ChevronDown size={12} className={expandedSection === 'recurrence' ? 'rotate-180 transition-transform' : isRecurringActive ? 'text-casa-navy' : 'text-white/50'} />
         </button>
 
         {/* Micro Steppers */}
-        <div className="flex items-center bg-white dark:bg-casa-surface border border-slate-200 dark:border-slate-800/50 rounded-full p-0.5 shadow-sm">
+        <div className="flex items-center bg-white/10 border border-white/20 rounded-full p-0.5">
           <button
             onClick={() => onNudgeTime(-15)}
-            className="text-xs font-bold text-slate-500 py-1 px-2 hover:text-slate-900 hover:dark:text-slate-300 transition-colors"
+            className="text-xs font-bold text-white/70 py-1 px-2 hover:text-white transition-colors"
           >
             -15m
           </button>
           <button
             onClick={() => onNudgeTime(15)}
-            className="text-xs font-bold text-slate-500 py-1 px-2 hover:text-slate-900 hover:dark:text-slate-300 transition-colors"
+            className="text-xs font-bold text-white/70 py-1 px-2 hover:text-white transition-colors"
           >
             +15m
           </button>
           <button
             onClick={() => onNudgeTime(30)}
-            className="text-xs font-bold text-slate-500 py-1 px-2 hover:text-slate-900 hover:dark:text-slate-300 transition-colors"
+            className="text-xs font-bold text-white/70 py-1 px-2 hover:text-white transition-colors"
           >
             +30m
           </button>

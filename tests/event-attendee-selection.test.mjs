@@ -10,6 +10,12 @@ const headerSource = readFileSync(
   new URL('../src/components/calendar/living-flow/components/LivingFlowHeader.tsx', import.meta.url),
   'utf8',
 )
+// The attendee-pill trigger moved into the navy micro-hero (LivingHeroTitleCard)
+// 2026-09-15; LivingFlowHeader kept only the drawer/grid it toggles open.
+const heroTitleCardSource = readFileSync(
+  new URL('../src/components/calendar/living-flow/components/LivingHeroTitleCard.tsx', import.meta.url),
+  'utf8',
+)
 const stateHook = readFileSync(
   new URL('../src/components/calendar/living-flow/hooks/useLivingFlowState.ts', import.meta.url),
   'utf8',
@@ -23,7 +29,7 @@ test('event attendee editors use binary attending or not-attending selection', (
 })
 
 test('Living Flow attendee editing reveals the member selector in the header capsule', () => {
-  assert.match(headerSource, /living-attendee-capsule/)
+  assert.match(heroTitleCardSource, /living-attendee-capsule/)
   assert.match(headerSource, /living-member-grid/)
   assert.match(headerSource, /onToggleMember/)
   assert.match(stateHook, /toggleMember = useCallback\(async/)

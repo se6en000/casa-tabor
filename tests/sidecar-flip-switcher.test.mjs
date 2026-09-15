@@ -34,13 +34,15 @@ test('appStore: sidecarTab switching operations', () => {
   assert.equal(useAppStore.getState().aiDrawerOpen, true)
 })
 
-test('LivingFlowHeader component source contract: Rotate3d icon and onSwitchToAi support', () => {
-  const filePath = path.resolve(process.cwd(), 'src/components/calendar/living-flow/components/LivingFlowHeader.tsx')
+// The Flip-to-Copilot button moved from LivingFlowHeader into the navy
+// micro-hero (LivingHeroTitleCard) alongside the attendee pill, 2026-09-15.
+test('LivingHeroTitleCard component source contract: Rotate3d icon and onSwitchToAi support', () => {
+  const filePath = path.resolve(process.cwd(), 'src/components/calendar/living-flow/components/LivingHeroTitleCard.tsx')
   const content = fs.readFileSync(filePath, 'utf-8')
 
-  assert.match(content, /Rotate3d/, 'LivingFlowHeader must import and render Rotate3d icon')
-  assert.match(content, /onSwitchToAi/, 'LivingFlowHeader must accept onSwitchToAi prop')
-  assert.match(content, /Flip to (Copilot|Casa AI)|Switch to (Copilot|Casa AI)/i, 'LivingFlowHeader must have accessible label/title for the flip button')
+  assert.match(content, /Rotate3d/, 'LivingHeroTitleCard must import and render Rotate3d icon')
+  assert.match(content, /onSwitchToAi/, 'LivingHeroTitleCard must accept onSwitchToAi prop')
+  assert.match(content, /Flip to (Copilot|Casa AI)|Switch to (Copilot|Casa AI)/i, 'LivingHeroTitleCard must have accessible label/title for the flip button')
 })
 
 test('AIChatDrawer component source contract: Rotate3d icon and onSwitchToEvent support', () => {
@@ -59,7 +61,7 @@ test('LivingFlowSidecar and types contract: forwards onSwitchToAi', () => {
 
   const sidecarPath = path.resolve(process.cwd(), 'src/components/calendar/living-flow/LivingFlowSidecar.tsx')
   const sidecarContent = fs.readFileSync(sidecarPath, 'utf-8')
-  assert.match(sidecarContent, /onSwitchToAi/, 'LivingFlowSidecar must forward onSwitchToAi prop to LivingFlowHeader')
+  assert.match(sidecarContent, /onSwitchToAi/, 'LivingFlowSidecar must forward onSwitchToAi prop to LivingHeroTitleCard')
 })
 
 test('SidecarCompanion 3D Flip Card architecture contract', () => {

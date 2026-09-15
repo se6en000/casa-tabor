@@ -6,6 +6,12 @@ const header = readFileSync(
   new URL('../src/components/calendar/living-flow/components/LivingFlowHeader.tsx', import.meta.url),
   'utf8',
 )
+// The attendee-pill trigger moved into the navy micro-hero (LivingHeroTitleCard)
+// 2026-09-15; LivingFlowHeader kept only the drawer/grid it toggles open.
+const heroTitleCard = readFileSync(
+  new URL('../src/components/calendar/living-flow/components/LivingHeroTitleCard.tsx', import.meta.url),
+  'utf8',
+)
 const stateHook = readFileSync(
   new URL('../src/components/calendar/living-flow/hooks/useLivingFlowState.ts', import.meta.url),
   'utf8',
@@ -17,7 +23,7 @@ const eventMutations = readFileSync(
 )
 
 test('member editor uses the inline attendee capsule and drawer expansion', () => {
-  assert.match(header, /living-attendee-capsule/)
+  assert.match(heroTitleCard, /living-attendee-capsule/)
   assert.match(header, /living-member-grid/)
   assert.match(header, /onToggleMember/)
 })

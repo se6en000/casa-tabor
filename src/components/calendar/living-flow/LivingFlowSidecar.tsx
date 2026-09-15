@@ -23,6 +23,7 @@ export default function LivingFlowSidecar({
   onSwitchToAi,
 }: LivingFlowProps) {
   const [isClosing, setIsClosing] = useState(false)
+  const [attendeesExpanded, setAttendeesExpanded] = useState(false)
 
   const handleAnimatedClose = () => {
     if (isClosing) return
@@ -96,23 +97,10 @@ export default function LivingFlowSidecar({
       onClick={(e) => e.stopPropagation()}
     >
       
-      {/* ══════ TOP HEADER (With Inline Attendees Drawer) ══════ */}
-      <LivingFlowHeader
-        familyMembers={familyMembers}
-        selectedMemberIds={state.selectedMemberIds}
-        primaryMemberId={state.primaryMemberId}
-        recurScope={state.recurScope}
-        isRecurring={isRecurring}
-        onToggleMember={toggleMember}
-        onSetRecurScope={setRecurScope}
-        onClose={handleAnimatedClose}
-        onSwitchToAi={onSwitchToAi}
-      />
-
       {/* ══════ SCROLLABLE CONTENT BODY ══════ */}
       <div className="living-sidecar-body">
-        
-        {/* Hero Title Block (With Inline Date/Time, Recurrence & Category Steppers) */}
+
+        {/* Micro Hero: attendee pill + close/link actions + title + chips, combined */}
         <LivingHeroTitleCard
           title={state.title}
           category={state.category}
@@ -123,12 +111,31 @@ export default function LivingFlowSidecar({
           isAllDay={state.isAllDay}
           rrule={state.rrule}
           sourceType={event?.source_type}
+          familyMembers={familyMembers}
+          selectedMemberIds={state.selectedMemberIds}
+          attendeesExpanded={attendeesExpanded}
+          onToggleAttendees={() => setAttendeesExpanded((prev) => !prev)}
+          onClose={handleAnimatedClose}
+          onSwitchToAi={onSwitchToAi}
           onUpdateTitle={updateTitle}
           onSetStartAndDuration={setStartAndDuration}
           onSetStartAndEnd={setStartAndEnd}
           onSelectCategory={setCategory}
           onNudgeTime={nudgeMinutes}
           onUpdateRecurrence={setRecurrenceRule}
+        />
+
+        {/* Recurrence banners + attendee-picker drawer -- stay in normal light/dark styling below the navy micro-hero */}
+        <LivingFlowHeader
+          familyMembers={familyMembers}
+          selectedMemberIds={state.selectedMemberIds}
+          primaryMemberId={state.primaryMemberId}
+          recurScope={state.recurScope}
+          isRecurring={isRecurring}
+          attendeesExpanded={attendeesExpanded}
+          onCloseAttendees={() => setAttendeesExpanded(false)}
+          onToggleMember={toggleMember}
+          onSetRecurScope={setRecurScope}
         />
 
         {/* Dynamic Mode: Calendar Event vs Task Reminder */}

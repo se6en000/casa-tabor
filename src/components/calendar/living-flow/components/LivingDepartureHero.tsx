@@ -48,17 +48,17 @@ export default function LivingDepartureHero({
       {/* Top Badge Row */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         {venue.trafficDelayMinutes && venue.trafficDelayMinutes > 0 ? (
-          <span className="bg-amber-500/25 dark:bg-amber-500/20 border border-amber-500/60 dark:border-amber-500/40 text-amber-300 text-xs font-extrabold uppercase tracking-wider py-0.5 px-2 rounded-full flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+          <span className="bg-amber-50 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-300 text-xs font-extrabold uppercase tracking-wider py-0.5 px-2 rounded-full flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
             <span>+{venue.trafficDelayMinutes}m Traffic Delay</span>
           </span>
         ) : (
-          <span className="bg-emerald-500/25 dark:bg-emerald-500/20 border border-emerald-500/60 dark:border-emerald-500/40 text-emerald-300 text-xs font-extrabold uppercase tracking-wider py-0.5 px-2 rounded-full flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-300 text-xs font-extrabold uppercase tracking-wider py-0.5 px-2 rounded-full flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             <span>{venue.driveMinutes > 0 ? 'Live Traffic Clear' : 'Calculating Route…'}</span>
           </span>
         )}
-        <span className="font-mono text-xs font-bold text-amber-300 bg-amber-300/20 dark:bg-amber-800/70 py-0.5 px-2 rounded-full">
+        <span className="font-mono text-xs font-bold text-casa-gold-hover bg-casa-gold/15 py-0.5 px-2 rounded-full">
           {countdownText}
         </span>
       </div>
@@ -66,7 +66,7 @@ export default function LivingDepartureHero({
       {/* Main Metric Row */}
       <div className="flex items-baseline justify-between gap-2">
         <div>
-          <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
+          <div className="text-xs font-bold uppercase tracking-wider text-casa-muted">
             {activeMode === 'pickup_only' ? 'Leave For Venue By' : 'Leave Home By'}
           </div>
           <div className="living-dep-time-huge">
@@ -75,32 +75,32 @@ export default function LivingDepartureHero({
         </div>
 
         <div className="text-right">
-          <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
+          <div className="text-xs font-bold uppercase tracking-wider text-casa-muted">
             {activeMode === 'dropoff_only' ? 'Drop Off By' : 'Arrive By'}
           </div>
-          <div className="font-mono text-xl font-bold text-slate-200 mt-1">
+          <div className="font-mono text-xl font-bold text-casa-text mt-1">
             {formattedArrive}
           </div>
         </div>
       </div>
 
       {/* Sub Metrics */}
-      <div className="flex items-center gap-2 text-xs text-slate-300 flex-wrap mt-0.5">
+      <div className="flex items-center gap-2 text-xs text-casa-muted flex-wrap mt-0.5">
         <span className="inline-flex items-center gap-1">
-          <Car size={13} className="text-slate-400" />
+          <Car size={13} className="text-casa-muted" />
           <span>{venue.driveMinutes}m drive</span>
         </span>
         <span>•</span>
         <span className="inline-flex items-center gap-1">
-          <MapPin size={13} className="text-slate-400" />
+          <MapPin size={13} className="text-casa-muted" />
           <span>{venue.distanceMiles} mi</span>
         </span>
         <span>•</span>
         <span className="inline-flex items-center gap-1">
-          <Clock3 size={13} className="text-slate-400" />
+          <Clock3 size={13} className="text-casa-muted" />
           <span>+{bufferMinutes}m buffer</span>
         </span>
-        <span className="ml-auto text-xs text-amber-300 font-medium inline-flex items-center gap-1">
+        <span className="ml-auto text-xs text-casa-gold-hover font-medium inline-flex items-center gap-1">
           {activeMode === 'stay' && (
             <>
               <span>Parent Stays on Site</span>
