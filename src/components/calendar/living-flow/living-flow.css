@@ -67,6 +67,7 @@
   width: 100%;
   height: 100%;
   background: var(--color-casa-surface, #FFFFFF);
+  border-left: 3px solid var(--color-casa-gold, #C9A96E);
   display: flex;
   flex-direction: column;
   position: relative;
@@ -241,9 +242,9 @@
 .living-hero-title-card {
   background: var(--color-casa-surface, #FFFFFF);
   padding: 18px 20px;
-  border-radius: 18px;
+  border-radius: var(--radius-container, 1.5rem);
   border: 1px solid var(--color-casa-border, #E8E2D9);
-  box-shadow: 0 2px 12px rgba(27, 42, 74, 0.04);
+  box-shadow: var(--shadow-card, 0 4px 10px rgba(27,42,74,0.14), 0 1px 2px rgba(27,42,74,0.08));
   transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.25s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1), color 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .living-hero-title-card.has-expanded {
@@ -661,7 +662,7 @@
 .living-departure-hero {
   background: linear-gradient(135deg, #1B2A4A 0%, #283C66 100%);
   color: white;
-  border-radius: 18px;
+  border-radius: var(--radius-container, 1.5rem);
   padding: 18px 20px;
   box-shadow: 0 6px 22px -3px rgba(27, 42, 74, 0.25);
   display: flex;
@@ -683,13 +684,13 @@
 /* Timeline Route */
 .living-journey-timeline {
   background: var(--color-casa-surface, #FFFFFF);
-  border-radius: 18px;
+  border-radius: var(--radius-container, 1.5rem);
   border: 1px solid var(--color-casa-border, #E8E2D9);
   padding: 18px 20px;
   display: flex;
   flex-direction: column;
   gap: 14px;
-  box-shadow: 0 2px 12px rgba(27, 42, 74, 0.04);
+  box-shadow: var(--shadow-card, 0 4px 10px rgba(27,42,74,0.14), 0 1px 2px rgba(27,42,74,0.08));
 }
 
 .living-driver-pill {
@@ -721,13 +722,13 @@
 /* Venue Card */
 .living-venue-card {
   background: var(--color-casa-surface, #FFFFFF);
-  border-radius: 18px;
+  border-radius: var(--radius-container, 1.5rem);
   border: 1.5px solid var(--color-casa-gold, #C9A96E);
   padding: 16px 18px;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  box-shadow: 0 2px 12px rgba(27, 42, 74, 0.04);
+  box-shadow: var(--shadow-card, 0 4px 10px rgba(27,42,74,0.14), 0 1px 2px rgba(27,42,74,0.08));
   transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -736,12 +737,12 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 .living-prep-card {
   background: var(--color-casa-surface, #FFFFFF);
-  border-radius: 18px;
+  border-radius: var(--radius-container, 1.5rem);
   border: 1px solid var(--color-casa-border, #E8E2D9);
   padding: 16px 18px;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 2px 12px rgba(27, 42, 74, 0.04);
+  box-shadow: var(--shadow-card, 0 4px 10px rgba(27,42,74,0.14), 0 1px 2px rgba(27,42,74,0.08));
   transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
