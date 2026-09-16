@@ -66,13 +66,9 @@
 .living-flow-sidecar {
   width: 100%;
   height: 100%;
-  /* Experiment (2026-09-15): mixing in black desaturated the warm linen tone
-     toward flat gray -- landed on something between the page's own linen
-     background and the panel's own gold border instead, so the deepened
-     background stays in the same warm family as the accent that already
-     marks the panel's edge. Both --color-casa-bg and --color-casa-gold are
-     already theme-aware, so this one formula holds for day and night. */
-  --living-sidecar-bg: color-mix(in srgb, var(--color-casa-bg, #FAF8F5) 75%, var(--color-casa-gold, #C9A96E) 25%);
+  /* Preview (2026-09-16): trying a flat warm off-white instead of the
+     linen/gold color-mix, per direct request. */
+  --living-sidecar-bg: oklch(0.94 0.008 85);
   background: var(--living-sidecar-bg);
   border-left: 3px solid var(--color-casa-gold, #C9A96E);
   display: flex;
