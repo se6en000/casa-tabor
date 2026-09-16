@@ -1,16 +1,19 @@
+import { useState } from 'react'
 import {
   Moon,
   Sun,
   Music,
   Check,
   Sparkles,
+  Plus,
+  Trash2,
 } from 'lucide-react'
 import { cn } from '../../../utils/cn'
 import { useFamilyRoutineIntelligence, type DepartureItem } from '../../../hooks/useFamilyRoutineIntelligence'
 import type { EventWithDetails } from '../../../hooks/useCalendarEvents'
 import { useHeroTheme } from '../../../hooks/useHeroTheme'
 import { openEventDetails } from '../../../utils/openEventDetails'
-import { Button } from '../../ui'
+import { Button, IconButton, Chip } from '../../ui'
 
 interface TomorrowPrepWidgetProps {
   now?: Date
@@ -35,7 +38,12 @@ export default function TomorrowPrepWidget({
     hasTomorrowExceptions,
     primaryTomorrowException,
     prepChecklist,
+    prepSuggestions,
     togglePrepItem,
+    addPrepItem,
+    removePrepItem,
+    completePrepItem,
+    tomorrowKey,
     completedCount,
     totalPrepCount,
     allPrepCompleted,
@@ -43,6 +51,21 @@ export default function TomorrowPrepWidget({
 
   const { heroTheme } = useHeroTheme(now)
   const isNavy = heroTheme === 'navy'
+
+  const [newItemText, setNewItemText] = useState('')
+  const [isAddingItem, setIsAddingItem] = useState(false)
+
+  const handleAddItem = async () => {
+    const label = newItemText.trim()
+    if (!label || isAddingItem) return
+    setIsAddingItem(true)
+    try {
+      await addPrepItem(tomorrowKey, label)
+      setNewItemText('')
+    } finally {
+      setIsAddingItem(false)
+    }
+  }
 
   const handleOpenDeparture = (dep: DepartureItem) => {
     if (onOpenEvent && dep.rawEvent) {
@@ -417,7 +440,7 @@ export default function TomorrowPrepWidget({
       </div>
 
       {/* ── Interactive Bedtime & Weekend Prep Checklist ── */}
-      {prepChecklist.length > 0 && (
+      {(prepChecklist.length > 0 || !isTomorrowWeekend) && (
         <div className="space-y-2 pt-1 relative z-10">
           <div
             className={cn(
@@ -428,54 +451,130 @@ export default function TomorrowPrepWidget({
             {isTomorrowWeekend ? 'Weekend Readiness Checklist' : 'Bedtime Prep Checklist'}
           </div>
           <div className="space-y-1.5">
-            {prepChecklist.map((item) => (
-              <div
-                key={item.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => togglePrepItem(item.id)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    togglePrepItem(item.id)
-                  }
-                }}
-                className={cn(
-                  'w-full flex items-center gap-3 p-3 rounded-2xl border text-left transition-all duration-150 cursor-pointer select-none active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-casa-gold',
-                  isNavy
-                    ? item.completed
-                      ? 'bg-emerald-950/30 border-emerald-500/30 text-white/60'
-                      : 'bg-white/5 border-white/10 text-white hover:border-casa-gold/50'
-                    : item.completed
-                    ? 'bg-emerald-50/50 border-emerald-500/30 text-casa-muted'
-                    : 'bg-casa-surface-subtle border-casa-border text-casa-navy hover:border-casa-gold/50',
-                )}
-              >
+            {prepChecklist.map((item) => {
+              const handleToggle = () => {
+                if (item.isReminder) {
+                  void completePrepItem(item.id)
+                } else {
+                  togglePrepItem(item.id)
+                }
+              }
+              return (
                 <div
+                  key={item.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={handleToggle}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      handleToggle()
+                    }
+                  }}
                   className={cn(
-                    'w-5 h-5 rounded-full border flex items-center justify-center shrink-0 transition-colors',
+                    'w-full flex items-center gap-3 p-3 rounded-2xl border text-left transition-all duration-150 cursor-pointer select-none active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-casa-gold',
                     isNavy
                       ? item.completed
-                        ? 'bg-emerald-500 border-emerald-500 text-white'
-                        : 'border-white/30 bg-transparent text-transparent'
+                        ? 'bg-emerald-950/30 border-emerald-500/30 text-white/60'
+                        : 'bg-white/5 border-white/10 text-white hover:border-casa-gold/50'
                       : item.completed
-                      ? 'bg-emerald-600 border-emerald-600 text-white'
-                      : 'border-casa-border bg-white text-transparent',
+                      ? 'bg-emerald-50/50 border-emerald-500/30 text-casa-muted'
+                      : 'bg-casa-surface-subtle border-casa-border text-casa-navy hover:border-casa-gold/50',
                   )}
                 >
-                  <Check size={12} strokeWidth={3} />
+                  <div
+                    className={cn(
+                      'w-5 h-5 rounded-full border flex items-center justify-center shrink-0 transition-colors',
+                      isNavy
+                        ? item.completed
+                          ? 'bg-emerald-500 border-emerald-500 text-white'
+                          : 'border-white/30 bg-transparent text-transparent'
+                        : item.completed
+                        ? 'bg-emerald-600 border-emerald-600 text-white'
+                        : 'border-casa-border bg-white text-transparent',
+                    )}
+                  >
+                    <Check size={12} strokeWidth={3} />
+                  </div>
+                  <span
+                    className={cn(
+                      'text-body-sm font-medium leading-tight flex-1',
+                      item.completed && (isNavy ? 'line-through text-white/50' : 'line-through text-casa-muted'),
+                    )}
+                  >
+                    {item.label}
+                  </span>
+                  {item.isReminder && (
+                    <IconButton
+                      size="sm"
+                      variant="ghost"
+                      aria-label={`Remove ${item.label}`}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        void removePrepItem(item.id)
+                      }}
+                      className={cn(
+                        'shrink-0 min-h-[44px] min-w-[44px]',
+                        isNavy ? 'text-white/40 hover:text-white hover:bg-white/10' : 'text-casa-muted hover:text-casa-error hover:bg-red-50',
+                      )}
+                      icon={<Trash2 size={14} />}
+                    />
+                  )}
                 </div>
-                <span
+              )
+            })}
+          </div>
+
+          {!isTomorrowWeekend && prepSuggestions.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 pt-0.5">
+              {prepSuggestions.map((suggestion) => (
+                <Chip
+                  key={suggestion.id}
+                  tone="accent"
+                  icon={<Plus size={12} />}
+                  onClick={() => void addPrepItem(tomorrowKey, suggestion.label)}
                   className={cn(
-                    'text-body-sm font-medium leading-tight flex-1',
-                    item.completed && (isNavy ? 'line-through text-white/50' : 'line-through text-casa-muted'),
+                    'border-dashed min-h-[36px]',
+                    isNavy && 'border-casa-gold/40 text-casa-gold bg-transparent hover:bg-casa-gold/10',
                   )}
                 >
-                  {item.label}
-                </span>
-              </div>
-            ))}
-          </div>
+                  {suggestion.label}
+                </Chip>
+              ))}
+            </div>
+          )}
+
+          {!isTomorrowWeekend && (
+            <div className="flex items-center gap-2 pt-0.5">
+              <input
+                type="text"
+                value={newItemText}
+                onChange={(e) => setNewItemText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    void handleAddItem()
+                  }
+                }}
+                placeholder="Add a reminder for tomorrow morning…"
+                className={cn(
+                  'flex-1 min-h-[44px] rounded-xl border px-3 text-body-sm',
+                  isNavy
+                    ? 'bg-white/5 border-white/15 text-white placeholder:text-white/40'
+                    : 'bg-casa-surface border-casa-border text-casa-navy placeholder:text-casa-muted',
+                )}
+              />
+              <Button
+                variant={isNavy ? 'secondary' : 'primary'}
+                size="sm"
+                disabled={!newItemText.trim() || isAddingItem}
+                onClick={() => void handleAddItem()}
+                className="min-h-[44px] shrink-0"
+              >
+                Add
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </div>

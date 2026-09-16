@@ -883,6 +883,84 @@ export async function snoozeEventOrReminder(
   invalidateAllCalendarQueries(queryClient, event.id)
 }
 
+export const MORNING_PREP_CATEGORY = 'morning_prep'
+
+/**
+ * Creates a real, push-notifiable reminder for the home screen's Bedtime
+ * Prep Checklist (2026-09-15) -- deliberately a plain events+event_enrichments
+ * insert, not a route through the AI assistant, so a quick "give Liv lunch
+ * money" typed on the Hero card lands in under a second with no LLM round
+ * trip. Tagging it MORNING_PREP_CATEGORY is what lets the checklist widget
+ * find it again, lets a future server-side sweep auto-complete it once the
+ * day's drop-offs are done, and is otherwise a completely ordinary reminder
+ * -- it rides the existing notify-upcoming-events push cron, shows in
+ * Today's To-Dos, and is editable/deletable exactly like any other reminder.
+ */
+export interface MorningPrepReminder {
+  id: string
+  title: string
+  start_time: string
+  end_time: string
+  status: string
+}
+
+export async function createMorningPrepReminder(
+  supabase: SupabaseClient,
+  queryClient: QueryClient,
+  dateKey: string, // yyyy-MM-dd, household-local
+  label: string,
+): Promise<MorningPrepReminder> {
+  const trimmed = label.trim()
+  if (!trimmed) throw new Error('createMorningPrepReminder: label is required')
+
+  const [year, month, day] = dateKey.split('-').map(Number)
+  const startLocal = new Date(year, month - 1, day, 6, 45, 0, 0)
+  const endLocal = new Date(startLocal.getTime() + 15 * 60000)
+  const startTime = serializeToZonedIso(startLocal)
+  const endTime = serializeToZonedIso(endLocal)
+
+  const newEventId = crypto.randomUUID()
+  const nowIso = new Date().toISOString()
+
+  const { error: evErr } = await supabase.from('events').insert({
+    id: newEventId,
+    title: trimmed,
+    start_time: startTime,
+    end_time: endTime,
+    all_day: false,
+    event_type: 'reminder',
+    status: 'confirmed',
+    is_enriched: true,
+    record_kind: 'single',
+    created_at: nowIso,
+    updated_at: nowIso,
+  })
+  if (evErr) throw evErr
+
+  const { error: enrErr } = await supabase.from('event_enrichments').insert({
+    id: crypto.randomUUID(),
+    event_id: newEventId,
+    category: MORNING_PREP_CATEGORY,
+    category_locked: true,
+    confidence: 'high',
+    enriched_by: 'user_manual',
+    enriched_at: nowIso,
+    created_at: nowIso,
+    updated_at: nowIso,
+  })
+  if (enrErr) console.warn('[createMorningPrepReminder] event_enrichments error:', enrErr)
+
+  invalidateAllCalendarQueries(queryClient, newEventId)
+
+  return {
+    id: newEventId,
+    title: trimmed,
+    start_time: startTime,
+    end_time: endTime,
+    status: 'confirmed',
+  }
+}
+
 export async function completeEventOrReminder(
   supabase: SupabaseClient,
   queryClient: QueryClient,

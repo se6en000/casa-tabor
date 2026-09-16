@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useCallback } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { format, addDays, parseISO } from 'date-fns'
 import type { FamilyMember, MemberAvailabilityException } from '../types'
 import { useFamilyMembers } from './useFamilyMembers'
@@ -21,14 +21,13 @@ import {
   saveTodoToggle,
   subscribeToTodoSync,
 } from '../utils/todoCompletionsSync'
+import { supabase } from '../lib/supabase'
 import {
-  type CustomPrepItem,
-  fetchCustomPrepItems,
-  getStoredCustomPrepItems,
-  addCustomPrepItem,
-  removeCustomPrepItem,
-  subscribeToCustomPrepItemsSync,
-} from '../utils/prepCustomItemsSync'
+  createMorningPrepReminder,
+  completeEventOrReminder,
+  deleteCalendarEvent,
+  type MorningPrepReminder,
+} from '../lib/eventMutations'
 
 export { resolveDayTypeForDate, type RoutineDayType }
 
@@ -64,6 +63,11 @@ export interface BedtimePrepItem {
   completed: boolean
   childName?: string
   iconType?: 'backpack' | 'bottle' | 'lunch' | 'music' | 'sports' | 'gift' | 'general'
+  // True for a real, user-added morning_prep reminder (createMorningPrepReminder) --
+  // these are deletable/completable via real reminder mutations (delete/complete
+  // everywhere, incl. Today's To-Dos and push notifications), unlike the
+  // synthetic day-keyed items below which only toggle a local completion flag.
+  isReminder?: boolean
 }
 
 export interface FamilyRoutineIntelligence {
@@ -98,7 +102,8 @@ export interface FamilyRoutineIntelligence {
   prepSuggestions: BedtimePrepItem[]
   togglePrepItem: (id: string) => void
   addPrepItem: (dateKey: string, label: string) => Promise<void>
-  removePrepItem: (dateKey: string, itemId: string) => Promise<void>
+  removePrepItem: (reminderId: string) => Promise<void>
+  completePrepItem: (reminderId: string) => Promise<void>
   todayKey: string
   tomorrowKey: string
   completedCount: number
@@ -527,7 +532,7 @@ function derivePrepChecklist(
   dateKey: string,
   completedMap: Record<string, boolean>,
   calendarEvents: EventWithDetails[] = [],
-  customItems: CustomPrepItem[] = [],
+  morningPrepReminders: MorningPrepReminder[] = [],
 ): { items: BedtimePrepItem[]; suggestions: BedtimePrepItem[] } {
   const items: BedtimePrepItem[] = []
   // Keyword-detected items (violin/sports, and the weekend-events scan
@@ -722,14 +727,16 @@ function derivePrepChecklist(
     })
   }
 
-  // User-typed additions for this specific day (e.g. "Spirit Day t-shirt",
-  // "Field trip money") -- deliberately not tied to any event or reminder.
-  for (const custom of customItems) {
+  // User-added morning_prep reminders for this specific day (e.g. "Spirit
+  // Day t-shirt", "Field trip money") -- real, push-notifiable reminders
+  // (createMorningPrepReminder), not a synthetic local-only item.
+  for (const reminder of morningPrepReminders) {
     items.push({
-      id: custom.id,
-      label: custom.label,
-      completed: Boolean(completedMap[custom.id]),
+      id: reminder.id,
+      label: reminder.title,
+      completed: reminder.status === 'cancelled',
       iconType: 'general',
+      isReminder: true,
     })
   }
 
@@ -884,55 +891,82 @@ export function useFamilyRoutineIntelligence(now: Date = new Date()): FamilyRout
     })
   }, [tomorrowKey])
 
-  // User-added prep items (see src/utils/prepCustomItemsSync.ts) -- mirrors
-  // the completedItems pattern above: local cache first, server query to
-  // backfill, realtime subscription for cross-device sync.
-  const { data: serverCustomItems } = useQuery({
-    queryKey: ['household-prep-custom-items'],
-    queryFn: fetchCustomPrepItems,
-    staleTime: 5 * 60_000,
-    refetchInterval: false,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    refetchOnMount: false,
+  // User-added morning_prep reminders for the Bedtime Prep Checklist --
+  // real events rows (createMorningPrepReminder), fetched via a plain query
+  // cross-device sync is just "everyone queries the same table", no
+  // bespoke local-storage/broadcast sync layer needed (2026-09-15).
+  const queryClient = useQueryClient()
+
+  const { data: morningPrepReminders = [] } = useQuery({
+    queryKey: ['morning-prep-reminders', todayKey, tomorrowKey],
+    queryFn: async (): Promise<MorningPrepReminder[]> => {
+      const rangeStart = format(addDays(now, -1), 'yyyy-MM-dd')
+      const rangeEnd = format(addDays(now, 2), 'yyyy-MM-dd')
+      const { data, error } = await supabase.rpc('get_morning_prep_reminders', {
+        p_range_start: rangeStart,
+        p_range_end: rangeEnd,
+      })
+      if (error) {
+        console.warn('[useFamilyRoutineIntelligence] Failed to fetch morning prep reminders:', error.message)
+        return []
+      }
+      return ((data || []) as MorningPrepReminder[]).map((row) => ({
+        id: row.id,
+        title: row.title,
+        start_time: row.start_time,
+        end_time: row.end_time,
+        status: row.status,
+      }))
+    },
+    staleTime: 60_000,
+    refetchOnWindowFocus: true,
   })
 
-  const [customItemsMap, setCustomItemsMap] = useState<Record<string, CustomPrepItem[]>>(() => getStoredCustomPrepItems())
-
   useEffect(() => {
-    if (serverCustomItems && Object.keys(serverCustomItems).length > 0) {
-      setCustomItemsMap((prev) => ({ ...serverCustomItems, ...prev }))
+    const channel = supabase
+      .channel('casa-morning-prep-sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, () => {
+        void queryClient.invalidateQueries({ queryKey: ['morning-prep-reminders'] })
+      })
+      .subscribe()
+    return () => {
+      void supabase.removeChannel(channel)
     }
-  }, [serverCustomItems])
+  }, [queryClient])
 
-  useEffect(() => {
-    const unsubscribe = subscribeToCustomPrepItemsSync((map) => {
-      setCustomItemsMap(map)
-    })
-    return unsubscribe
-  }, [])
+  const todayMorningPrepReminders = useMemo(
+    () => morningPrepReminders.filter((r) => format(parseISO(r.start_time), 'yyyy-MM-dd') === todayKey),
+    [morningPrepReminders, todayKey],
+  )
+  const tomorrowMorningPrepReminders = useMemo(
+    () => morningPrepReminders.filter((r) => format(parseISO(r.start_time), 'yyyy-MM-dd') === tomorrowKey),
+    [morningPrepReminders, tomorrowKey],
+  )
 
   const addPrepItem = useCallback(async (dateKey: string, label: string) => {
-    const trimmed = label.trim()
-    if (!trimmed) return
-    const item = await addCustomPrepItem(dateKey, trimmed)
-    setCustomItemsMap((prev) => ({ ...prev, [dateKey]: [...(prev[dateKey] || []), item] }))
-  }, [])
+    await createMorningPrepReminder(supabase, queryClient, dateKey, label)
+    void queryClient.invalidateQueries({ queryKey: ['morning-prep-reminders'] })
+  }, [queryClient])
 
-  const removePrepItem = useCallback(async (dateKey: string, itemId: string) => {
-    setCustomItemsMap((prev) => ({ ...prev, [dateKey]: (prev[dateKey] || []).filter((i) => i.id !== itemId) }))
-    await removeCustomPrepItem(dateKey, itemId)
-  }, [])
+  const removePrepItem = useCallback(async (reminderId: string) => {
+    await deleteCalendarEvent(supabase, queryClient, reminderId)
+    void queryClient.invalidateQueries({ queryKey: ['morning-prep-reminders'] })
+  }, [queryClient])
+
+  const completePrepItem = useCallback(async (reminderId: string) => {
+    await completeEventOrReminder(supabase, queryClient, { id: reminderId, event_type: 'reminder' } as EventWithDetails)
+    void queryClient.invalidateQueries({ queryKey: ['morning-prep-reminders'] })
+  }, [queryClient])
 
   const todayPrepResult = useMemo(() => {
-    return derivePrepChecklist(todayDayType, todayDepartures, todayKey, completedItems, todayEvents, customItemsMap[todayKey] || [])
-  }, [todayDayType, todayDepartures, todayKey, completedItems, todayEvents, customItemsMap])
+    return derivePrepChecklist(todayDayType, todayDepartures, todayKey, completedItems, todayEvents, todayMorningPrepReminders)
+  }, [todayDayType, todayDepartures, todayKey, completedItems, todayEvents, todayMorningPrepReminders])
   const todayPrepChecklist = todayPrepResult.items
   const todayPrepSuggestions = todayPrepResult.suggestions
 
   const prepResult = useMemo(() => {
-    return derivePrepChecklist(tomorrowDayType, tomorrowDepartures, tomorrowKey, completedItems, tomorrowEvents, customItemsMap[tomorrowKey] || [])
-  }, [tomorrowDayType, tomorrowDepartures, tomorrowKey, completedItems, tomorrowEvents, customItemsMap])
+    return derivePrepChecklist(tomorrowDayType, tomorrowDepartures, tomorrowKey, completedItems, tomorrowEvents, tomorrowMorningPrepReminders)
+  }, [tomorrowDayType, tomorrowDepartures, tomorrowKey, completedItems, tomorrowEvents, tomorrowMorningPrepReminders])
   const prepChecklist = prepResult.items
   const prepSuggestions = prepResult.suggestions
 
@@ -979,14 +1013,9 @@ export function useFamilyRoutineIntelligence(now: Date = new Date()): FamilyRout
     prepChecklist,
     prepSuggestions,
     togglePrepItem,
-    // NOTE (2026-09-15): addPrepItem/removePrepItem + the "generic checklist"
-    // architecture behind them are provisional -- under active discussion
-    // about switching to real, push-notifiable reminders instead (tagged
-    // e.g. morning_prep, auto-completing once the day's departures are
-    // done). Exposed but not yet wired into any UI; don't build on this
-    // without checking whether that pivot happened first.
     addPrepItem,
     removePrepItem,
+    completePrepItem,
     todayKey,
     tomorrowKey,
     completedCount,
