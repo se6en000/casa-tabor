@@ -31,6 +31,35 @@ import {
 
 export { resolveDayTypeForDate, type RoutineDayType }
 
+// Module-level singleton: useFamilyRoutineIntelligence mounts from several
+// widgets at once (Hero, TomorrowPrepWidget, MiddayLogisticsWidget,
+// MorningLaunchpadWidget), and each of those creating its own
+// supabase.channel('casa-morning-prep-sync') crashed the whole app in
+// production ("cannot add postgres_changes callbacks ... after
+// subscribe()") -- realtime subscriptions here must be a single shared
+// channel, not one per component (see GUARDRAILS.md).
+let morningPrepSyncChannel: ReturnType<typeof supabase.channel> | null = null
+let morningPrepSyncListeners = new Set<() => void>()
+
+function subscribeToMorningPrepSync(onChange: () => void): () => void {
+  if (!morningPrepSyncChannel) {
+    morningPrepSyncChannel = supabase
+      .channel('casa-morning-prep-sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, () => {
+        morningPrepSyncListeners.forEach((listener) => listener())
+      })
+      .subscribe()
+  }
+  morningPrepSyncListeners.add(onChange)
+  return () => {
+    morningPrepSyncListeners.delete(onChange)
+    if (morningPrepSyncListeners.size === 0 && morningPrepSyncChannel) {
+      void supabase.removeChannel(morningPrepSyncChannel)
+      morningPrepSyncChannel = null
+    }
+  }
+}
+
 export interface DepartureItem {
   id: string
   eventId?: string
@@ -922,17 +951,9 @@ export function useFamilyRoutineIntelligence(now: Date = new Date()): FamilyRout
     refetchOnWindowFocus: true,
   })
 
-  useEffect(() => {
-    const channel = supabase
-      .channel('casa-morning-prep-sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, () => {
-        void queryClient.invalidateQueries({ queryKey: ['morning-prep-reminders'] })
-      })
-      .subscribe()
-    return () => {
-      void supabase.removeChannel(channel)
-    }
-  }, [queryClient])
+  useEffect(() => subscribeToMorningPrepSync(() => {
+    void queryClient.invalidateQueries({ queryKey: ['morning-prep-reminders'] })
+  }), [queryClient])
 
   const todayMorningPrepReminders = useMemo(
     () => morningPrepReminders.filter((r) => format(parseISO(r.start_time), 'yyyy-MM-dd') === todayKey),
