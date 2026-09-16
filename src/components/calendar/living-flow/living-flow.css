@@ -68,7 +68,7 @@
   height: 100%;
   /* Preview (2026-09-16): trying a flat warm off-white instead of the
      linen/gold color-mix, per direct request. */
-  --living-sidecar-bg: oklch(0.94 0.008 85);
+  --living-sidecar-bg: oklch(0.95 0.02 85);
   background: var(--living-sidecar-bg);
   border-left: 3px solid var(--color-casa-gold, #C9A96E);
   display: flex;
