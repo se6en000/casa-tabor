@@ -74,6 +74,19 @@ Deno.serve(async (req) => {
       return true
     })
 
+    // Best-effort heartbeat: the Mac's Casa->iOS poller calls this endpoint on every tick
+    // regardless of whether anything changed, so a fresh row here is a reliable "poller is
+    // alive" signal for the app to surface -- but it must never break the real sync response.
+    try {
+      await sb.from('sync_heartbeats').upsert({
+        job_name: 'sync-casa-to-ios',
+        last_seen_at: new Date().toISOString(),
+        meta: { since: parsedSince, returned: rows.length },
+      })
+    } catch (_heartbeatError) {
+      // Observability only -- swallow.
+    }
+
     return new Response(
       JSON.stringify({
         success: true,

@@ -27,6 +27,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { cn } from '../utils/cn'
 import { useGroceryList, GROCERY_CATEGORIES, type GroceryItem } from '../hooks/useGroceryList'
+import { useGrocerySyncHealth } from '../hooks/useGrocerySyncHealth'
 import { inferCategoryFromName } from '../utils/groceryCategorization'
 import { parseGroceryVoiceBatch, type ParsedVoiceGroceryItem } from '../utils/groceryBatchVoiceParser.ts'
 import { useFieldDictation } from '../hooks/useFieldDictation'
@@ -399,6 +400,8 @@ export default function GroceryPage() {
     updateItemCategory,
     clearChecked,
   } = useGroceryList()
+
+  const { isStale: isReminderSyncStale, lastSeenAt: reminderSyncLastSeenAt } = useGrocerySyncHealth()
 
   const { data: historyRows = [] } = useQuery({
     queryKey: ['grocery-history'],
@@ -1797,6 +1800,11 @@ export default function GroceryPage() {
           />
 
           {syncError && <Alert tone="danger" title="Grocery sync failed" className="mb-3">{syncError}</Alert>}
+          {isReminderSyncStale && reminderSyncLastSeenAt && (
+            <Alert tone="warning" title="Reminders sync hasn't checked in recently" className="mb-3">
+              Last confirmed {reminderSyncLastSeenAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} — check that your Mac is on and the sync jobs are running.
+            </Alert>
+          )}
           {pantryReconcileError && <Alert tone="danger" title="Pantry restock failed" className="mb-3">{pantryReconcileError}</Alert>}
           {!pantryReconcileError && pantryReconcileMessage && (
             <Alert tone="success" title="Pantry restock updated" className="mb-3">{pantryReconcileMessage}</Alert>
