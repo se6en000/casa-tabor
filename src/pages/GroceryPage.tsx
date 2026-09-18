@@ -27,7 +27,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { cn } from '../utils/cn'
 import { useGroceryList, GROCERY_CATEGORIES, type GroceryItem } from '../hooks/useGroceryList'
-import { useGrocerySyncHealth } from '../hooks/useGrocerySyncHealth'
+import { useSyncHealth } from '../hooks/useSyncHealth'
 import { inferCategoryFromName } from '../utils/groceryCategorization'
 import { parseGroceryVoiceBatch, type ParsedVoiceGroceryItem } from '../utils/groceryBatchVoiceParser.ts'
 import { useFieldDictation } from '../hooks/useFieldDictation'
@@ -401,7 +401,7 @@ export default function GroceryPage() {
     clearChecked,
   } = useGroceryList()
 
-  const { isStale: isReminderSyncStale, lastSeenAt: reminderSyncLastSeenAt } = useGrocerySyncHealth()
+  const { isStale: isReminderSyncStale, staleJobs: staleSyncJobs } = useSyncHealth()
 
   const { data: historyRows = [] } = useQuery({
     queryKey: ['grocery-history'],
@@ -1800,9 +1800,14 @@ export default function GroceryPage() {
           />
 
           {syncError && <Alert tone="danger" title="Grocery sync failed" className="mb-3">{syncError}</Alert>}
-          {isReminderSyncStale && reminderSyncLastSeenAt && (
-            <Alert tone="warning" title="Reminders sync hasn't checked in recently" className="mb-3">
-              Last confirmed {reminderSyncLastSeenAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} — check that your Mac is on and the sync jobs are running.
+          {isReminderSyncStale && (
+            <Alert tone="warning" title="iOS sync hasn't checked in recently" className="mb-3">
+              {staleSyncJobs.map((job) => (
+                <div key={job.jobName}>
+                  {job.label}: last confirmed {job.lastSeenAt ? job.lastSeenAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : 'unknown'}
+                </div>
+              ))}
+              <div>Check that your Mac is on and the sync jobs are running.</div>
             </Alert>
           )}
           {pantryReconcileError && <Alert tone="danger" title="Pantry restock failed" className="mb-3">{pantryReconcileError}</Alert>}
