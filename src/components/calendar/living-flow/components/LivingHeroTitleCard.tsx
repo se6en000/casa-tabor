@@ -110,6 +110,16 @@ export default function LivingHeroTitleCard({
   const [currentEndDate, setCurrentEndDate] = useState<Date>(safeEndDate)
   const [duration, setDuration] = useState<number>(durationMinutes)
   const [localIsAllDay, setLocalIsAllDay] = useState<boolean>(Boolean(isAllDay))
+  // Local, not derived straight from the hasDueDate prop: switching this ON
+  // (from a date-less reminder) just reveals the day/time picker below --
+  // nothing persists until the user actually picks a day/time, which is what
+  // calls onSetStartAndDuration/onSetStartAndEnd (already wired to flip
+  // has_due_date back to true). Switching it OFF persists immediately via
+  // onClearDueDate. Resynced below if the underlying event's real state changes.
+  const [dueDateEnabled, setDueDateEnabled] = useState<boolean>(hasDueDate)
+  useEffect(() => {
+    setDueDateEnabled(hasDueDate)
+  }, [hasDueDate])
   const [localRecur, setLocalRecur] = useState<RecurrenceConfig>(() => parseRrule(rrule))
   const [activeMode, setActiveMode] = useState<LivingFlowMode>(mode)
   const isEditingRef = useRef(false)
@@ -609,58 +619,73 @@ export default function LivingHeroTitleCard({
           <ChevronDown size={12} className={expandedSection === 'category' ? 'rotate-180 transition-transform' : ''} />
         </button>
 
-        {/* Date Pill (Adaptive Multi-Day) */}
-        <button
-          onClick={() => setExpandedSection(prev => prev === 'datetime' ? null : 'datetime')}
-          className={`living-action-chip ${expandedSection === 'datetime' ? 'active' : ''}`}
-        >
-          <Calendar size={13} className={expandedSection === 'datetime' ? 'text-white' : 'text-white/70'} />
-          <span className="truncate max-w-[200px]">{headerDateLabel}</span>
-          <ChevronDown size={12} className={expandedSection === 'datetime' ? 'rotate-180 transition-transform' : 'text-white/50'} />
-        </button>
-
-        {/* Time Pill (Adaptive Multi-Day) */}
-        <button
-          onClick={() => setExpandedSection(prev => prev === 'datetime' ? null : 'datetime')}
-          className={`living-action-chip ${expandedSection === 'datetime' ? 'active' : ''}`}
-        >
-          <Clock size={13} className={expandedSection === 'datetime' ? 'text-white' : 'text-white/70'} />
-          <span className="truncate max-w-[190px]">{headerTimeLabel}</span>
-          <ChevronDown size={12} className={expandedSection === 'datetime' ? 'rotate-180 transition-transform' : 'text-white/50'} />
-        </button>
-
-        {/* Repeat / Recurrence Pill */}
-        <button
-          onClick={() => setExpandedSection(prev => prev === 'recurrence' ? null : 'recurrence')}
-          className={`living-action-chip ${expandedSection === 'recurrence' ? 'active' : isRecurringActive ? 'gold-active shadow-sm' : ''}`}
-          aria-label="Repeat schedule"
-        >
-          <Repeat size={13} className={expandedSection === 'recurrence' ? 'text-white' : isRecurringActive ? 'text-casa-navy' : 'text-white/70'} />
-          <span className="truncate max-w-[170px]">{recurrencePillLabel}</span>
-          <ChevronDown size={12} className={expandedSection === 'recurrence' ? 'rotate-180 transition-transform' : isRecurringActive ? 'text-casa-navy' : 'text-white/50'} />
-        </button>
-
-        {/* Micro Steppers */}
-        <div className="flex items-center bg-white/10 border border-white/20 rounded-full p-0.5">
+        {!dueDateEnabled ? (
+          /* Date-less reminder: one clear chip instead of a date + time pair
+             that would otherwise show a stale-looking placeholder date. */
           <button
-            onClick={() => onNudgeTime(-15)}
-            className="text-xs font-bold text-white/70 py-1 px-2 hover:text-white transition-colors"
+            onClick={() => setExpandedSection(prev => prev === 'datetime' ? null : 'datetime')}
+            className={`living-action-chip ${expandedSection === 'datetime' ? 'active' : 'gold-active shadow-sm'}`}
           >
-            -15m
+            <Bell size={13} className={expandedSection === 'datetime' ? 'text-white' : 'text-casa-navy'} />
+            <span>No due date</span>
+            <ChevronDown size={12} className={expandedSection === 'datetime' ? 'rotate-180 transition-transform' : 'text-casa-navy/60'} />
           </button>
-          <button
-            onClick={() => onNudgeTime(15)}
-            className="text-xs font-bold text-white/70 py-1 px-2 hover:text-white transition-colors"
-          >
-            +15m
-          </button>
-          <button
-            onClick={() => onNudgeTime(30)}
-            className="text-xs font-bold text-white/70 py-1 px-2 hover:text-white transition-colors"
-          >
-            +30m
-          </button>
-        </div>
+        ) : (
+          <>
+            {/* Date Pill (Adaptive Multi-Day) */}
+            <button
+              onClick={() => setExpandedSection(prev => prev === 'datetime' ? null : 'datetime')}
+              className={`living-action-chip ${expandedSection === 'datetime' ? 'active' : ''}`}
+            >
+              <Calendar size={13} className={expandedSection === 'datetime' ? 'text-white' : 'text-white/70'} />
+              <span className="truncate max-w-[200px]">{headerDateLabel}</span>
+              <ChevronDown size={12} className={expandedSection === 'datetime' ? 'rotate-180 transition-transform' : 'text-white/50'} />
+            </button>
+
+            {/* Time Pill (Adaptive Multi-Day) */}
+            <button
+              onClick={() => setExpandedSection(prev => prev === 'datetime' ? null : 'datetime')}
+              className={`living-action-chip ${expandedSection === 'datetime' ? 'active' : ''}`}
+            >
+              <Clock size={13} className={expandedSection === 'datetime' ? 'text-white' : 'text-white/70'} />
+              <span className="truncate max-w-[190px]">{headerTimeLabel}</span>
+              <ChevronDown size={12} className={expandedSection === 'datetime' ? 'rotate-180 transition-transform' : 'text-white/50'} />
+            </button>
+
+            {/* Repeat / Recurrence Pill -- meaningless without a due date */}
+            <button
+              onClick={() => setExpandedSection(prev => prev === 'recurrence' ? null : 'recurrence')}
+              className={`living-action-chip ${expandedSection === 'recurrence' ? 'active' : isRecurringActive ? 'gold-active shadow-sm' : ''}`}
+              aria-label="Repeat schedule"
+            >
+              <Repeat size={13} className={expandedSection === 'recurrence' ? 'text-white' : isRecurringActive ? 'text-casa-navy' : 'text-white/70'} />
+              <span className="truncate max-w-[170px]">{recurrencePillLabel}</span>
+              <ChevronDown size={12} className={expandedSection === 'recurrence' ? 'rotate-180 transition-transform' : isRecurringActive ? 'text-casa-navy' : 'text-white/50'} />
+            </button>
+
+            {/* Micro Steppers -- meaningless without a due date */}
+            <div className="flex items-center bg-white/10 border border-white/20 rounded-full p-0.5">
+              <button
+                onClick={() => onNudgeTime(-15)}
+                className="text-xs font-bold text-white/70 py-1 px-2 hover:text-white transition-colors"
+              >
+                -15m
+              </button>
+              <button
+                onClick={() => onNudgeTime(15)}
+                className="text-xs font-bold text-white/70 py-1 px-2 hover:text-white transition-colors"
+              >
+                +15m
+              </button>
+              <button
+                onClick={() => onNudgeTime(30)}
+                className="text-xs font-bold text-white/70 py-1 px-2 hover:text-white transition-colors"
+              >
+                +30m
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       {/* ══════ INLINE DATE / TIME EXPANSION DRAWER ══════ */}
@@ -681,23 +706,48 @@ export default function LivingHeroTitleCard({
           </div>
 
           {/* Events always need a real date/time; reminders can be genuinely
-              date-less priorities -- this is the only way to remove a due
-              date once assigned (previously you could only reassign a new
-              one, never clear it). */}
-          {mode === 'reminder' && onClearDueDate && hasDueDate && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                onClearDueDate()
-                setExpandedSection(null)
-              }}
-              className="mb-3 w-full justify-center text-xs font-bold text-casa-muted hover:text-casa-text"
-            >
-              Remove due date — make this a priority to-do
-            </Button>
+              date-less ("just get this done" priorities, not time-anchored
+              tasks) -- this toggle is the only way to remove a due date once
+              assigned (previously you could only reassign a new one, never
+              clear it), and to see at a glance that it's actually gone. */}
+          {mode === 'reminder' && onClearDueDate && (
+            <div className="grid grid-cols-2 bg-casa-toggle-track border border-casa-control-border rounded-full p-0.5 mb-3 gap-0.5">
+              <button
+                type="button"
+                onClick={() => setDueDateEnabled(true)}
+                className={`py-1.5 px-3 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                  dueDateEnabled
+                    ? 'bg-casa-gold text-casa-navy shadow-sm'
+                    : 'text-casa-muted hover:text-casa-text hover:bg-casa-surface/60'
+                }`}
+              >
+                <Calendar size={13} />
+                <span>Has Due Date</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDueDateEnabled(false)
+                  onClearDueDate()
+                }}
+                className={`py-1.5 px-3 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                  !dueDateEnabled
+                    ? 'bg-casa-gold text-casa-navy shadow-sm'
+                    : 'text-casa-muted hover:text-casa-text hover:bg-casa-surface/60'
+                }`}
+              >
+                <Bell size={13} />
+                <span>No Due Date</span>
+              </button>
+            </div>
           )}
 
+          {!dueDateEnabled ? (
+            <p className="text-xs text-casa-muted px-1 py-2">
+              This to-do has no due date — it'll stay on your list until you mark it done.
+            </p>
+          ) : (
+          <>
           {/* Mode Switcher: Single Day vs Multi-Day / Stay */}
           <div className="grid grid-cols-2 bg-casa-toggle-track border border-casa-control-border rounded-full p-0.5 mb-3 gap-0.5">
             <button
@@ -1002,6 +1052,8 @@ export default function LivingHeroTitleCard({
                 </div>
               </div>
             </div>
+          )}
+          </>
           )}
         </div>
       )}

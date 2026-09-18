@@ -70,12 +70,27 @@ test('clearReminderDueDate exists and only touches has_due_date, not the placeho
   assert.doesNotMatch(block, /start_time:/)
 })
 
-test('sidecar exposes a way to remove a reminder due date, gated to reminders only', () => {
+// 2026-09-18: the first cut of this UI shipped two real bugs, found live by
+// the user -- (1) the header date/time chips never checked hasDueDate at all,
+// so clearing a due date looked like nothing happened; (2) the copy claimed
+// this "makes it a priority", which it never did. Fixed with a proper
+// Has-Due-Date/No-Due-Date toggle (not a single misleadingly-labeled button)
+// that also swaps the header chips, and copy that just says what happened.
+test('sidecar has a due-date toggle, gated to reminders only, with accurate (non-"priority") copy', () => {
   assert.match(heroTitleCardSource, /onClearDueDate/)
-  assert.match(heroTitleCardSource, /mode === 'reminder' && onClearDueDate && hasDueDate/)
+  assert.match(heroTitleCardSource, /mode === 'reminder' && onClearDueDate/)
+  assert.match(heroTitleCardSource, /Has Due Date/)
+  assert.match(heroTitleCardSource, /No Due Date/)
+  assert.doesNotMatch(heroTitleCardSource, /priority to-do/i)
 })
 
-test('LivingReminderCard hides the due line and shows a priority-todo label when date-less', () => {
+test('header chips reflect hasDueDate -- a single "No due date" chip replaces the date+time pair', () => {
+  assert.match(heroTitleCardSource, /!dueDateEnabled \? \(/)
+  assert.match(heroTitleCardSource, /No due date<\/span>/)
+})
+
+test('LivingReminderCard hides the due line when date-less, with accurate (non-"priority") copy', () => {
   assert.match(reminderCardSource, /hasDueDate/)
   assert.match(reminderCardSource, /No due date/)
+  assert.doesNotMatch(reminderCardSource, /priority to-do/i)
 })

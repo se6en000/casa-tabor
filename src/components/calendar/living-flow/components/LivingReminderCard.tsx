@@ -60,7 +60,7 @@ export default function LivingReminderCard({
           {title}
         </h3>
         <p className="text-xs text-slate-500 mt-1">
-          Assigned to: {assignedAttendees}{formattedDue ? ` · Due ${formattedDue}` : ' · No due date — priority to-do'}
+          Assigned to: {assignedAttendees}{formattedDue ? ` · Due ${formattedDue}` : ' · No due date'}
         </p>
       </div>
 
