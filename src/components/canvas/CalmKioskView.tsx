@@ -15,7 +15,7 @@ import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { useAppStore } from '../../stores/appStore'
 import { useCalendarStore } from '../../stores/calendarStore'
 import { cn } from '../../utils/cn'
-import { Button, IconButton, WidgetContainer } from '../ui'
+import { Button, IconButton } from '../ui'
 import { getDisplayMemberColor } from '../../design-system/memberColors'
 import TomorrowPrepWidget from './widgets/TomorrowPrepWidget'
 import ImminentTransitWidget from './widgets/ImminentTransitWidget'
@@ -290,9 +290,11 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
           row height is set by the tallest occupant either way), so each side
           gets its own flex column instead. Every card keeps the same gap-8
           to whatever comes next in ITS column, regardless of the other
-          column's total height. Left: Hero, Kitchen, Ahead. Right: Schedule,
+          column's total height. Left: Hero, Ahead. Right: Schedule,
           To-Dos, Tomorrow -- Hero and Schedule still land side by side at the
-          top since each leads its own column. ── */}
+          top since each leads its own column. (Tonight's Kitchen removed
+          from this column 2026-09-18, per direct request -- the flex-col
+          gap-8 column closes up automatically with nothing else needed.) ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-4 items-start">
         <div className="flex flex-col gap-8">
         {/* Hero Next Up Card */}
@@ -384,89 +386,6 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
           </AnimatePresence>
             }
           />
-        </div>
-
-        <div className={cn(mobileSubTab === 'schedule' ? 'flex flex-col' : 'hidden lg:flex lg:flex-col')}>
-          <WidgetContainer
-            tier="ambient"
-            eyebrow={
-              dinnerPlan.mode === 'takeout'
-                ? "Tonight's Takeout"
-                : dinnerPlan.mode === 'leftovers'
-                ? "Tonight's Leftovers"
-                : "Tonight's Kitchen"
-            }
-            icon={
-              dinnerPlan.mode === 'takeout' ? (
-                <ShoppingBag size={15} />
-              ) : dinnerPlan.mode === 'leftovers' ? (
-                <Clock size={15} />
-              ) : (
-                <Utensils size={15} />
-              )
-            }
-            title={
-              <span
-                onClick={() => {
-                  if (dinnerPlan.mode === 'cook') {
-                    if (dinnerPlan.recipeId) {
-                      navigateTo(`/cook?recipe=${encodeURIComponent(dinnerPlan.recipeId)}&autocook=true`)
-                    } else {
-                      navigateTo('/cook')
-                    }
-                  }
-                }}
-                className={cn(dinnerPlan.mode === 'cook' && 'cursor-pointer hover:text-casa-gold-hover transition-colors')}
-              >
-                {dinnerPlan.title}
-              </span>
-            }
-            badge={
-              <span className="text-caption font-medium text-casa-text-secondary whitespace-nowrap">
-                {isDinnerPast ? 'Completed' : dinnerPlan.targetTime || '6:30 PM'}
-              </span>
-            }
-          >
-            <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  document.dispatchEvent(
-                    new CustomEvent('open-ai-chat', {
-                      detail: {
-                        launchId: crypto.randomUUID(),
-                        agent: 'chef',
-                        source: 'tonights-kitchen',
-                        prompt: undefined,
-                        autoSend: false,
-                      },
-                    })
-                  )
-                }}
-                className="text-caption font-medium text-casa-muted hover:text-casa-navy transition-colors h-7 min-h-0 px-2 rounded-lg"
-              >
-                <span>Change</span>
-              </Button>
-              {dinnerPlan.mode === 'cook' && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    if (dinnerPlan.recipeId) {
-                      navigateTo(`/cook?recipe=${encodeURIComponent(dinnerPlan.recipeId)}&autocook=true`)
-                    } else {
-                      navigateTo('/cook')
-                    }
-                  }}
-                  className="text-caption font-semibold text-casa-navy hover:text-casa-gold transition-colors h-7 min-h-0 px-2 rounded-lg flex items-center gap-1 group/recipe"
-                >
-                  <span>Recipe</span>
-                  <ChevronRight size={13} className="text-casa-muted group-hover/recipe:text-casa-gold transition-colors" />
-                </Button>
-              )}
-            </div>
-          </WidgetContainer>
         </div>
 
         <div className={cn('flex-col', mobileSubTab === 'triage' ? 'hidden lg:flex' : 'flex')}>
