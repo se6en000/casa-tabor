@@ -2228,7 +2228,7 @@ export default function AIChatDrawer({
             exit={{ x: '100%', opacity: 0.9 }}
             transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
             className={cn(
-              'hidden sm:flex flex-col flex-shrink-0 h-full overflow-hidden border-l border-casa-border bg-casa-surface relative z-10 shadow-lg w-[var(--ai-sidecar-width,420px)] [will-change:transform]',
+              'hidden sm:flex flex-col fixed top-0 bottom-0 right-0 overflow-hidden border-l border-casa-border bg-casa-surface z-modal shadow-lg w-[var(--ai-sidecar-width,420px)] [will-change:transform]',
               loading && 'ai-thinking',
             )}
             data-panel-overlay

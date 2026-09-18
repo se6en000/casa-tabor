@@ -244,7 +244,7 @@ function AppShell() {
 
       <div className="app-shell-main flex flex-1 min-h-0 relative overflow-hidden">
         {experienceMode === 'classic' && <TabletSidebar aiDrawerOpen={aiDrawerOpen} />}
-        <div className="flex-1 min-w-0 overflow-hidden h-full">
+        <div className="flex-1 min-w-0 overflow-hidden h-full pr-[var(--ai-sidecar-width,0px)] transition-[padding] duration-300 ease-out">
           <AnimatedRoutes />
         </div>
         {/* Unified non-blocking Sidecar Companion for Events & AI */}

@@ -518,7 +518,7 @@ export default function SidecarCompanion({
           closeSidecar()
         }
       }}
-      className="hidden sm:flex flex-col flex-shrink-0 h-full overflow-hidden border-l border-casa-border bg-casa-surface relative z-10 shadow-lg w-[var(--ai-sidecar-width,420px)] [will-change:transform]"
+      className="hidden sm:flex flex-col fixed top-0 bottom-0 right-0 overflow-hidden border-l border-casa-border bg-casa-surface z-modal shadow-lg w-[var(--ai-sidecar-width,420px)] [will-change:transform]"
       data-panel-overlay
       data-touch-keyboard="ignore"
     >
