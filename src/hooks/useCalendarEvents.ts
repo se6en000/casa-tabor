@@ -487,6 +487,42 @@ export function useRollingEvents(today: Date) {
   return useEventsForRange(['events', 'rolling', start.toISOString()], start, end)
 }
 
+/**
+ * All reminders, unbounded by date -- unlike calendar events (an unbounded
+ * fetch of every event ever would be a real, unbounded problem), reminders
+ * are a small, actively-managed set the user expects to see completely, the
+ * same way Apple's Reminders app shows every open item regardless of age
+ * (2026-09-18: Today's To-Dos was silently hiding anything overdue by more
+ * than 7 days -- real, synced-from-iOS reminders the user could no longer
+ * see in Casa at all). Bounded on the completed side (status = 'cancelled')
+ * to today only, so historical completions don't grow this query forever.
+ */
+export function useAllReminders() {
+  useRealtimeEventInvalidation()
+  const todayStartIso = startOfDay(new Date()).toISOString()
+
+  return useQuery({
+    queryKey: ['events', 'all-reminders'],
+    queryFn: async (): Promise<EventWithDetails[]> => {
+      const { data, error } = await supabase
+        .from('events')
+        .select(EVENT_SUMMARY_SELECT)
+        .eq('event_type', 'reminder')
+        .is('deleted_at', null)
+        .or(`status.neq.cancelled,updated_at.gte.${todayStartIso}`)
+        .order('start_time', { ascending: true })
+      if (error) throw error
+      // See fetchEventsForRange's fallback path above for why this goes through `unknown`.
+      return ((data ?? []) as unknown as RawEventRow[]).map(normalizeEventRow)
+    },
+    staleTime: 60_000,
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
+  })
+}
+
 export interface WeekEventIndexItem {
   id: string
   start_time: string

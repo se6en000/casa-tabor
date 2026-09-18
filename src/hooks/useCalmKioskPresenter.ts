@@ -6,16 +6,13 @@ import {
   differenceInMinutes,
   subMinutes,
   startOfDay,
-  endOfDay,
-  isBefore,
-  isSameDay,
   differenceInCalendarDays,
   addDays,
 } from 'date-fns'
 import { getEventStartDate } from '../utils/eventTime'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLiveClock } from './useLiveClock'
-import { useTodayEvents, useTomorrowEvents, useRollingEvents, type EventWithDetails } from './useCalendarEvents'
+import { useTodayEvents, useTomorrowEvents, useRollingEvents, useAllReminders, type EventWithDetails } from './useCalendarEvents'
 import { useWeekConflicts, useResolveConflict } from './useConflicts'
 import { usePrepItems, useCompletePrepItem } from './usePrepItems'
 import { useFamilyMembers } from './useFamilyMembers'
@@ -218,6 +215,7 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
   const { data: todayEvents = [] } = useTodayEvents(now)
   const { data: tomorrowEvents = [] } = useTomorrowEvents(now)
   const { data: rollingEvents = [] } = useRollingEvents(now)
+  const { data: allReminders = [] } = useAllReminders()
   const { data: conflicts = [] } = useWeekConflicts()
   const { data: prepItems = [] } = usePrepItems()
   const { data: familyMembers = [] } = useFamilyMembers()
@@ -574,27 +572,32 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
       })
   }, [effectiveTodayEvents, now])
 
-  // Rolling chores & reminders (past 7 days missed/overdue through end of today, plus items completed today)
+  // All reminders/chores, unbounded by date -- like Apple's Reminders app,
+  // every open reminder stays visible regardless of age (2026-09-18: this
+  // previously capped at "past 7 days through end of today", silently hiding
+  // real, synced-from-iOS reminders more than a week overdue -- confirmed
+  // live that the count genuinely diverged, e.g. 42 open on iOS vs. far fewer
+  // ever reaching this widget). Sourced from useAllReminders (unbounded
+  // query), not rollingEvents (which is windowed -7d/+15d for calendar
+  // events specifically, deliberately not widened for that larger dataset).
   const todayReminders = useMemo(() => {
-    const todayEnd = endOfDay(now)
-    return rollingEvents
+    return allReminders
       .filter((e) => {
         if (isMealEvent(e)) return false
         if (!isReminderOrChore(e) && e.event_type !== 'reminder') return false
         const startDate = getEventStartDate(e)
-        const isCompleted = Boolean(completedItems[e.id])
+        // A reminder completed via iOS (status: 'cancelled') has no entry in
+        // the app's own local completion-toggle tracking, so it correctly
+        // just disappears here (neither "open" nor "completed today") rather
+        // than showing as if it's still pending.
+        const isCompleted = Boolean(completedItems[e.id]) || e.status === 'cancelled'
         if (isCompleted) {
           return isTodoCompletedToday(e.id, startDate, now)
         }
-        // Date-less reminders ("just get this done" priorities, no due date/time
-        // set) always stay visible regardless of how long they've sat untouched --
-        // their stored start_time is just a NOT-NULL placeholder, not a real date.
-        if (e.has_due_date === false) return true
-        // Rolling: includes past 7 days (missed/overdue) up through end of today
-        return isBefore(startDate, todayEnd) || isSameDay(startDate, now)
+        return true
       })
       .sort((a, b) => getEventStartDate(a).getTime() - getEventStartDate(b).getTime())
-  }, [rollingEvents, completedItems, now])
+  }, [allReminders, completedItems, now])
 
   // Reminders breakdown (reactive to completedItems)
   const openReminders = useMemo(() => {

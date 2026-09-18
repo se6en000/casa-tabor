@@ -48,9 +48,13 @@ test('date-less reminders are never overdue and always show as an active to-do',
   const activeBlock = presenterSource.slice(activeIdx, activeIdx + 500)
   assert.match(activeBlock, /if \(evt\.has_due_date === false\) return true/)
 
+  // todayReminders itself no longer special-cases has_due_date at all --
+  // since 2026-09-18 it shows every open reminder unconditionally (see
+  // reminders-show-all-unbounded.test.mjs), which already subsumes the
+  // date-less case without a dedicated branch.
   const todayIdx = presenterSource.indexOf('const todayReminders')
   const todayBlock = presenterSource.slice(todayIdx, todayIdx + 1000)
-  assert.match(todayBlock, /if \(e\.has_due_date === false\) return true/)
+  assert.match(todayBlock, /return true/)
 })
 
 test('assigning a real schedule flips has_due_date back to true', () => {

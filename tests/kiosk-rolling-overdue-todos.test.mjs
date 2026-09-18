@@ -3,15 +3,18 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
 
-test('useCalmKioskPresenter derives todayReminders and overdueReminders from 7-day rollingEvents', () => {
+test('useCalmKioskPresenter derives todayReminders from the unbounded reminders query, and overdueReminders correctly', () => {
   const presenterFilePath = path.resolve('src/hooks/useCalmKioskPresenter.ts')
   const presenterContent = fs.readFileSync(presenterFilePath, 'utf8')
 
-  // Verify todayReminders filters from rollingEvents
+  // 2026-09-18: the 7-day rolling cutoff was removed after confirming live
+  // that it silently hid real, synced-from-iOS reminders overdue by more
+  // than a week -- todayReminders now sources from useAllReminders
+  // (unbounded by date), not the windowed rollingEvents.
   assert.match(
     presenterContent,
-    /const todayReminders = useMemo\(\(\) => \{[\s\S]*?return rollingEvents[\s\S]*?\.filter\(/m,
-    'todayReminders must filter across rollingEvents (past 7 days through end of today)'
+    /const todayReminders = useMemo\(\(\) => \{[\s\S]*?return allReminders[\s\S]*?\.filter\(/m,
+    'todayReminders must filter across allReminders (unbounded, not the 7-day rollingEvents window)'
   )
 
   // Verify overdueReminders captures past-day missed items and earlier-today timed items
