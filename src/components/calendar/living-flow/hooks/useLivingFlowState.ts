@@ -31,6 +31,7 @@ import {
   materializeSyntheticRoutineEvent,
   updateEventTitle,
   updateEventSchedule,
+  clearReminderDueDate,
   updateEventVenue,
   toggleEventAttendee,
   updateEventCategory,
@@ -199,6 +200,10 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     return Boolean(initialEvent?.all_day)
   }, [initialEvent?.all_day])
 
+  const initialHasDueDate = useMemo(() => {
+    return initialEvent?.has_due_date !== false
+  }, [initialEvent?.has_due_date])
+
   const initialRrule = useMemo(() => {
     return initialEvent?.rrule ?? null
   }, [initialEvent?.rrule])
@@ -220,6 +225,7 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     endDate: initialEndDate,
     durationMinutes: initialDuration,
     isAllDay: initialIsAllDay,
+    hasDueDate: initialHasDueDate,
     rrule: initialRrule,
     recurrenceConfig: initialRecurrenceConfig,
     bufferMinutes: 5,
@@ -322,6 +328,7 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
         endDate: isNewEvent || isServerUpdate ? initialEndDate : prev.endDate,
         durationMinutes: isNewEvent || isServerUpdate ? initialDuration : prev.durationMinutes,
         isAllDay: isNewEvent || isServerUpdate ? initialIsAllDay : (prev.isAllDay ?? initialIsAllDay),
+        hasDueDate: isNewEvent || isServerUpdate ? initialHasDueDate : (prev.hasDueDate ?? initialHasDueDate),
         venue: isNewEvent || isServerUpdate || venuePropChanged ? initialVenue : prev.venue,
         selectedMemberIds: isNewEvent || isServerUpdate ? initialMemberIds : prev.selectedMemberIds,
         primaryMemberId: isNewEvent || isServerUpdate ? initialPrimaryId : prev.primaryMemberId,
@@ -330,7 +337,7 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
         driverLeg2: isNewEvent || isServerUpdate ? initialDriverLeg2 : prev.driverLeg2,
       }
     })
-  }, [initialEvent, initialStartDate, initialEndDate, initialDuration, initialIsAllDay, initialVenue, initialMemberIds, initialPrimaryId, initialTravelBehavior, initialDriverLeg1, initialDriverLeg2])
+  }, [initialEvent, initialStartDate, initialEndDate, initialDuration, initialIsAllDay, initialHasDueDate, initialVenue, initialMemberIds, initialPrimaryId, initialTravelBehavior, initialDriverLeg1, initialDriverLeg2])
 
   // Resolve live route ETA if event has destination address but missing computed driving metrics
   useEffect(() => {
@@ -1239,6 +1246,23 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     }
   }, [initialEvent, queryClient, onClose])
 
+  // Remove a reminder's due date entirely (reminders only -- events always
+  // keep a real date/time). Stays open in the sidecar so the user sees it
+  // flip to "no due date" rather than closing like Mark Done/Snooze do.
+  const clearDueDate = useCallback(async () => {
+    setState(prev => ({ ...prev, hasDueDate: false }))
+    const currentEvent = activeEventRef.current || initialEvent
+    if (!currentEvent?.id) return
+    activeEventRef.current = { ...currentEvent, has_due_date: false }
+
+    try {
+      await clearReminderDueDate(supabase, queryClient, currentEvent.id)
+    } catch (err) {
+      console.error('[LivingFlow] Failed to clear due date:', err)
+      setState(prev => ({ ...prev, hasDueDate: true }))
+    }
+  }, [initialEvent, queryClient])
+
   // Snooze Reminder
   const snoozeReminder = useCallback(async (durationMinutes: number = 60) => {
     const currentEvent = activeEventRef.current || initialEvent
@@ -1456,6 +1480,7 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
     scopeImpacts,
     markCompleted,
     snoozeReminder,
+    clearDueDate,
     setRecurScope,
     isRecurring: isCanonicalOccurrence || Boolean(initialEvent?.recurrence_master_id) || Boolean(initialEvent?.rrule) || Boolean(state.rrule),
     isCanonicalOccurrence,

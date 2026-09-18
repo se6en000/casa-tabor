@@ -461,6 +461,7 @@ export async function updateEventSchedule(
     start_time: startIso,
     end_time: endIso,
     all_day: isAllDay,
+    has_due_date: true,
     enrichment: event.enrichment ? {
       ...event.enrichment,
       departure_time: isAllDay ? null : (newDepTimeIso ?? event.enrichment.departure_time),
@@ -493,6 +494,7 @@ export async function updateEventSchedule(
       start_time: startIso,
       end_time: endIso,
       all_day: isAllDay,
+      has_due_date: true,
       updated_at: new Date().toISOString(),
     })
     .eq('id', event.id)
@@ -516,6 +518,26 @@ export async function updateEventSchedule(
 
   invalidateAllCalendarQueries(queryClient, event.id)
   triggerGoogleEventSync(supabase, event.id)
+}
+
+// Reminders (unlike calendar events, which always need a real date/time) can be
+// genuinely date-less "just get this done" priorities. The sidecar previously
+// only let you reassign a date, never remove one -- this clears it. start_time/
+// end_time are left untouched (the column is NOT NULL) since every reminder-
+// bucketing consumer (useCalmKioskPresenter.ts) checks has_due_date first and
+// ignores the placeholder date entirely once it's false.
+export async function clearReminderDueDate(
+  supabase: SupabaseClient,
+  queryClient: QueryClient,
+  eventId: string,
+) {
+  publishEventAggregatePatch(queryClient, eventId, { has_due_date: false })
+  const { error } = await supabase
+    .from('events')
+    .update({ has_due_date: false, updated_at: new Date().toISOString() })
+    .eq('id', eventId)
+  if (error) throw error
+  invalidateAllCalendarQueries(queryClient, eventId)
 }
 
 export async function updateEventVenue(

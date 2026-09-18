@@ -31,6 +31,9 @@ export interface LivingFlowState {
   selectedMemberIds: string[]
   primaryMemberId: string | null
   isAllDay?: boolean
+  // Reminders only -- events always have a real date/time. Defaults true so
+  // existing calendar events and already-dated reminders behave unchanged.
+  hasDueDate?: boolean
   rrule?: string | null
   recurrenceConfig?: import('../../../utils/recurrenceUtils').RecurrenceConfig
 }

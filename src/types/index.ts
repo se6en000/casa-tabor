@@ -56,6 +56,12 @@ export interface CalendarEvent {
   start_time: string
   end_time: string
   all_day: boolean
+  // Events always have a real date/time; reminders can be genuinely date-less
+  // ("just get this done" priorities). start_time/end_time still hold a
+  // placeholder value when this is false (the column is NOT NULL) -- every
+  // reminder-bucketing consumer must check this flag first, never infer
+  // "no date" from the placeholder value itself.
+  has_due_date: boolean
   event_type: 'event' | 'reminder'
   location_name: string | null
   address: string | null

@@ -31,6 +31,8 @@ interface LivingHeroTitleCardProps {
   endDate?: Date
   durationMinutes: number
   isAllDay?: boolean
+  hasDueDate?: boolean
+  onClearDueDate?: () => void
   rrule?: string | null
   sourceType?: string | null
   familyMembers: FamilyMember[]
@@ -75,6 +77,8 @@ export default function LivingHeroTitleCard({
   endDate,
   durationMinutes,
   isAllDay,
+  hasDueDate = true,
+  onClearDueDate,
   rrule,
   sourceType,
   familyMembers,
@@ -675,6 +679,24 @@ export default function LivingHeroTitleCard({
               <X size={13} />
             </button>
           </div>
+
+          {/* Events always need a real date/time; reminders can be genuinely
+              date-less priorities -- this is the only way to remove a due
+              date once assigned (previously you could only reassign a new
+              one, never clear it). */}
+          {mode === 'reminder' && onClearDueDate && hasDueDate && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                onClearDueDate()
+                setExpandedSection(null)
+              }}
+              className="mb-3 w-full justify-center text-xs font-bold text-casa-muted hover:text-casa-text"
+            >
+              Remove due date — make this a priority to-do
+            </Button>
+          )}
 
           {/* Mode Switcher: Single Day vs Multi-Day / Stay */}
           <div className="grid grid-cols-2 bg-casa-toggle-track border border-casa-control-border rounded-full p-0.5 mb-3 gap-0.5">

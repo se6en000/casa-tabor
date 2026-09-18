@@ -463,6 +463,7 @@ function deriveDeparturesForDate(
       start_time: windowStart.toISOString(),
       end_time: new Date(windowStart.getTime() + 15 * 60000).toISOString(),
       all_day: false,
+      has_due_date: true,
       event_type: 'event',
       location_name: grp.venueName,
       address: grp.venueAddress,

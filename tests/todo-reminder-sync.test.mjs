@@ -6,6 +6,10 @@ const migrationSource = readFileSync(
   new URL('../supabase/migrations/20260917130000_todo_reminder_sync.sql', import.meta.url),
   'utf8',
 )
+const dueDateMigrationSource = readFileSync(
+  new URL('../supabase/migrations/20260917150000_todo_reminder_date_only_default_time.sql', import.meta.url),
+  'utf8',
+)
 const casaToIosSource = readFileSync(
   new URL('../supabase/functions/sync-casa-todos-to-ios/index.ts', import.meta.url),
   'utf8',
@@ -54,4 +58,19 @@ test('sync-ios-todos-to-casa accepts the real live wire shape (title/deleted, no
   assert.match(iosToCasaSource, /reminder\.title \?\? reminder\.name/)
   assert.match(iosToCasaSource, /reminder\.deleted/)
   assert.match(iosToCasaSource, /\.rpc\('upsert_todo_reminder_from_ios'/)
+})
+
+// 2026-09-17: the Mac script was confirmed (via its actual EKReminder loop) to
+// never read dueDateComponents at all, silently defaulting every to-do to
+// end-of-today even when the user set a real due date/time via Siri.
+test('due-date support: a real due date/time overrides the end-of-today default', () => {
+  assert.match(dueDateMigrationSource, /p_due_date timestamptz default null/)
+  assert.match(dueDateMigrationSource, /p_due_has_time boolean default false/)
+  assert.match(dueDateMigrationSource, /if p_due_has_time then/)
+  assert.match(dueDateMigrationSource, /v_start := p_due_date/)
+  // Date-only (no time) reminders default to 5pm household-local, not midnight
+  // (originally 9am, corrected to 5pm per direct user feedback).
+  assert.match(dueDateMigrationSource, /interval '17 hours'/)
+  assert.match(iosToCasaSource, /p_due_date: getDueDate\(reminder\)/)
+  assert.match(iosToCasaSource, /p_due_has_time: Boolean\(reminder\.due_has_time\)/)
 })

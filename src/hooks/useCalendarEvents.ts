@@ -53,6 +53,7 @@ const EVENT_SUMMARY_SELECT = `
   start_time,
   end_time,
   all_day,
+  has_due_date,
   event_type,
   location_name,
   address,

@@ -7,10 +7,10 @@
 // so duplicate/out-of-order entries in the same batch self-correct without
 // needing batch-level pre-collapsing the way the grocery ingest does.
 //
-// Wire contract confirmed against the actual live Mac script (2026-09-17),
-// not assumed: { reminder_id, title, completed, deleted, updated_at }. No
-// due-date field is ever sent -- upsert_todo_reminder_from_ios defaults a
-// missing due date to end-of-today itself.
+// Wire contract confirmed against the actual live Mac script (2026-09-17):
+// { reminder_id, title, completed, deleted, updated_at, due_date?, due_has_time? }.
+// due_date/due_has_time are optional -- upsert_todo_reminder_from_ios defaults
+// a missing due date to end-of-today itself (see 20260917140000_todo_reminder_due_date.sql).
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { requireEnv } from '../_shared/env.ts'
 
@@ -30,6 +30,8 @@ type IncomingTodoReminder = {
   deleted?: boolean
   updated_at?: string | null
   updatedAt?: string | null
+  due_date?: string | null
+  due_has_time?: boolean
 }
 
 function getReminderId(reminder: IncomingTodoReminder): string {
@@ -44,6 +46,12 @@ function getUpdatedAt(reminder: IncomingTodoReminder): string {
   const raw = reminder.updated_at ?? reminder.updatedAt ?? null
   const parsed = raw ? Date.parse(raw) : NaN
   return Number.isNaN(parsed) ? new Date().toISOString() : new Date(parsed).toISOString()
+}
+
+function getDueDate(reminder: IncomingTodoReminder): string | null {
+  if (!reminder.due_date) return null
+  const parsed = Date.parse(reminder.due_date)
+  return Number.isNaN(parsed) ? null : new Date(parsed).toISOString()
 }
 
 Deno.serve(async (req) => {
@@ -78,6 +86,8 @@ Deno.serve(async (req) => {
         p_completed: Boolean(reminder.completed),
         p_deleted: Boolean(reminder.deleted),
         p_ios_updated_at: getUpdatedAt(reminder),
+        p_due_date: getDueDate(reminder),
+        p_due_has_time: Boolean(reminder.due_has_time),
       })
       if (error) throw new Error(error.message)
 

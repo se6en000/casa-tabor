@@ -68,6 +68,7 @@ export default function LivingFlowSidecar({
     scopeImpacts,
     markCompleted,
     snoozeReminder,
+    clearDueDate,
     setRecurScope,
     setRecurrenceRule,
     isRecurring,
@@ -109,6 +110,8 @@ export default function LivingFlowSidecar({
           endDate={state.endDate}
           durationMinutes={state.durationMinutes}
           isAllDay={state.isAllDay}
+          hasDueDate={state.hasDueDate}
+          onClearDueDate={clearDueDate}
           rrule={state.rrule}
           sourceType={event?.source_type}
           familyMembers={familyMembers}
@@ -257,6 +260,7 @@ export default function LivingFlowSidecar({
           <LivingReminderCard
             title={state.title}
             dueDate={state.startDate}
+            hasDueDate={state.hasDueDate}
             assignedAttendees={activeAttendeesNames}
             onMarkDone={markCompleted}
             onSnooze={() => snoozeReminder(60)}

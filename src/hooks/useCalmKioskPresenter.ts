@@ -586,6 +586,10 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
         if (isCompleted) {
           return isTodoCompletedToday(e.id, startDate, now)
         }
+        // Date-less reminders ("just get this done" priorities, no due date/time
+        // set) always stay visible regardless of how long they've sat untouched --
+        // their stored start_time is just a NOT-NULL placeholder, not a real date.
+        if (e.has_due_date === false) return true
         // Rolling: includes past 7 days (missed/overdue) up through end of today
         return isBefore(startDate, todayEnd) || isSameDay(startDate, now)
       })
@@ -602,6 +606,8 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     const nowMs = now.getTime()
     return todayReminders.filter((evt) => {
       if (completedItems[evt.id]) return false
+      // A date-less reminder is never "overdue" -- there's no date to have missed.
+      if (evt.has_due_date === false) return false
       const startMs = getEventStartDate(evt).getTime()
       // Past days (missed) OR earlier today (past timed event)
       const isPastDay = startMs < startOfTodayMs
@@ -615,6 +621,8 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     const nowMs = now.getTime()
     return todayReminders.filter((evt) => {
       if (completedItems[evt.id]) return false
+      // A date-less reminder is an always-open priority to-do, not tied to "today".
+      if (evt.has_due_date === false) return true
       const startMs = getEventStartDate(evt).getTime()
       // Today only: either all-day or scheduled for now / in the future today
       const isToday = startMs >= startOfTodayMs

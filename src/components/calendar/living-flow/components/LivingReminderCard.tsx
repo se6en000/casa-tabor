@@ -6,6 +6,7 @@ interface LivingReminderCardProps {
   title: string
   categoryIcon?: string
   dueDate: Date
+  hasDueDate?: boolean
   assignedAttendees: string
   onMarkDone: () => void | Promise<void>
   onSnooze: () => void | Promise<void>
@@ -14,12 +15,13 @@ interface LivingReminderCardProps {
 export default function LivingReminderCard({
   title,
   dueDate,
+  hasDueDate = true,
   assignedAttendees,
   onMarkDone,
   onSnooze
 }: LivingReminderCardProps) {
   const [actionState, setActionState] = useState<'idle' | 'completing' | 'snoozing'>('idle')
-  const formattedDue = !dueDate || isNaN(new Date(dueDate).getTime()) ? '' : format(new Date(dueDate), 'EEE d · h:mm a')
+  const formattedDue = !hasDueDate || !dueDate || isNaN(new Date(dueDate).getTime()) ? '' : format(new Date(dueDate), 'EEE d · h:mm a')
 
   const handleMarkDone = async (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -58,7 +60,7 @@ export default function LivingReminderCard({
           {title}
         </h3>
         <p className="text-xs text-slate-500 mt-1">
-          Assigned to: {assignedAttendees} · Due {formattedDue}
+          Assigned to: {assignedAttendees}{formattedDue ? ` · Due ${formattedDue}` : ' · No due date — priority to-do'}
         </p>
       </div>
 
