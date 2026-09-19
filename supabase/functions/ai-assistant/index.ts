@@ -722,8 +722,21 @@ Deno.serve(async (req) => {
     ? imageContextRaw === 'conversation' ? 'conversation' : 'current_turn'
     : 'none'
   const isScheduleQuery = /\b(?:check|overlap|conflicts?|what time|who is driving|when is|schedule overlap|how far|tell me about)\b/i.test(latestUserText ?? '')
-  const userRequestedWriteIntent = !isScheduleQuery && /\b(move|resched|reschedule|change|update|edit|delete|remove|cancel|add|create|set|shift|push|book|drive|driving|driver|drop\s*off|dropoff|pick\s*up|pickup|stay|tag|bring|pack|rename|make|assign|switch|clear)\b/i
-    .test(latestUserText ?? '') && (!authoritativeCookingContext || cookingMutationIntent)
+  // A short reply continuing an already-established creation/edit flow (e.g. "Monday." answering
+  // "When should I remind you?") has none of the write-intent keywords below, but it's still part
+  // of a write flow -- the conversation state already tracks that via expectedFollowUp. Without
+  // this, such replies were misclassified as fresh family-data questions, triggering the full RAG
+  // evidence pipeline (Gemini embedding call + search_family_data) for a one-word date answer --
+  // the root cause of the 30-40s "confirm card" delays reported in ai_bug_reports a6f58eba.
+  const isActiveWriteFlowContinuation = Boolean(
+    !isScheduleQuery &&
+    incomingConversationState?.expectedFollowUp &&
+    incomingConversationState.expectedFollowUp !== 'none'
+  )
+  const userRequestedWriteIntent = !isScheduleQuery && (
+    /\b(move|resched|reschedule|change|update|edit|delete|remove|cancel|add|create|set|shift|push|book|drive|driving|driver|drop\s*off|dropoff|pick\s*up|pickup|stay|tag|bring|pack|rename|make|assign|switch|clear)\b/i
+      .test(latestUserText ?? '') || isActiveWriteFlowContinuation
+  ) && (!authoritativeCookingContext || cookingMutationIntent)
   appendServerTrace('server_ai_assistant_start', `messages=${Array.isArray(messages) ? messages.length : 0}`, {
     message_count: Array.isArray(messages) ? messages.length : 0,
     has_image: Boolean(image),

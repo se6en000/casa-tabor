@@ -29,6 +29,23 @@ const CORS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Runs `promise` after the response is sent instead of blocking on it, using the same
+// EdgeRuntime.waitUntil mechanism already used in ai-assistant/index.ts and
+// scan-gmail-inbox/index.ts -- this keeps the promise alive past the response in the real
+// Supabase Edge Functions runtime (unlike a bare floating promise, which Deno Deploy can and does
+// kill mid-flight once the response is returned). Falls back to awaiting when EdgeRuntime isn't
+// present (e.g. local dev), so the work is never silently dropped outside the production runtime.
+async function dispatchInBackground(promise: Promise<unknown>): Promise<void> {
+  const edgeRuntime = globalThis as unknown as {
+    EdgeRuntime?: { waitUntil(promise: Promise<unknown>): void }
+  }
+  if (edgeRuntime.EdgeRuntime?.waitUntil) {
+    edgeRuntime.EdgeRuntime.waitUntil(promise)
+  } else {
+    await promise
+  }
+}
+
 function normalizeOptionalText(value: unknown, maxLen = 300): string | null {
   if (typeof value !== 'string') return null
   const trimmed = value.trim()
@@ -842,8 +859,15 @@ Deno.serve(async (req) => {
       }
 
       if (normalizedEventType !== 'reminder') {
-        // Await Google sync for calendar events — fire-and-forget can be killed before completion in Deno Deploy.
-        await sb.functions.invoke('create-google-event', { body: { event_id: event.id } }).catch(() => {})
+        // Google sync used to be awaited here ("fire-and-forget can be killed before completion in
+        // Deno Deploy"), which meant every calendar-event creation blocked the response on a full
+        // external Google Calendar API round trip -- a major contributor to the multi-second
+        // "confirm card"/create latency reported in ai_bug_reports a6f58eba. dispatchInBackground
+        // solves the actual concern the old comment raised (the promise dying mid-flight) via
+        // EdgeRuntime.waitUntil, without making the user wait for it.
+        await dispatchInBackground(
+          sb.functions.invoke('create-google-event', { body: { event_id: event.id } }).catch(() => {}),
+        )
       }
 
       // The auto_enrich_on_insert DB trigger (see
@@ -854,15 +878,16 @@ Deno.serve(async (req) => {
       // this handler. Reminders are the one gap that trigger leaves open, so
       // only fire enrich-event here for reminders (avoids double-enriching,
       // i.e. double LLM calls, for every other AI-chat-created event).
-      // Fire-and-forget so the response stays fast; enrich-event's own
-      // content-hash guard makes this safe even if something re-triggers it.
-      // Pass every ENRICHMENT_FIELDS entry as target_fields (targeted mode) so
-      // contact resolution + logistics still run, but location/address is
-      // never silently overwritten by the LLM's own guess (the "executor
-      // reinterpretation" bug this handler's title/location contract guards
-      // against).
+      // Dispatched via dispatchInBackground (not a bare floating promise) so it stays fast for the
+      // user AND can't be silently killed mid-flight; enrich-event's own content-hash guard makes
+      // this safe even if something re-triggers it. Pass every ENRICHMENT_FIELDS entry as
+      // target_fields (targeted mode) so contact resolution + logistics still run, but
+      // location/address is never silently overwritten by the LLM's own guess (the "executor
+      // reinterpretation" bug this handler's title/location contract guards against).
       if (normalizedEventType === 'reminder') {
-        sb.functions.invoke('enrich-event', { body: { event_id: event.id, target_fields: ENRICHMENT_FIELDS } }).catch(() => {})
+        await dispatchInBackground(
+          sb.functions.invoke('enrich-event', { body: { event_id: event.id, target_fields: ENRICHMENT_FIELDS } }).catch(() => {}),
+        )
       }
 
       const draftPromoted = await promoteCalendarDraft(
