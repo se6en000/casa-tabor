@@ -808,8 +808,8 @@ describe('Tier 1: Feature Coverage', () => {
       ]
 
       const { actionableItems, deliveryTransitItems } = splitActionableAndTransitItems(schoolAndSportsItems)
-      assert.equal(actionableItems.length, 4, 'All 4 school/sports items must stay in Executive Action Queue')
-      assert.equal(deliveryTransitItems.length, 0, 'Zero leakage into Estate Inbound Manifest')
+      assert.equal(actionableItems.length, 4, 'All 4 school/sports items must stay in Household Tasks')
+      assert.equal(deliveryTransitItems.length, 0, 'Zero leakage into Deliveries')
     })
   })
 })
@@ -1392,7 +1392,7 @@ describe('Tier 4: Real-World Application Scenarios', () => {
     assert.equal(consolidated[0].cost, '$142.50')
 
     const { actionableItems, deliveryTransitItems } = splitActionableAndTransitItems([confirmation, outForDelivery, delivered])
-    assert.equal(actionableItems.length, 0, 'Zero noise in Executive Action Queue')
+    assert.equal(actionableItems.length, 0, 'Zero noise in Household Tasks')
     assert.equal(deliveryTransitItems.length, 1)
   })
 

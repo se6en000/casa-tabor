@@ -397,7 +397,7 @@ test('Jiffy order shipment with claims policy disclaimer consolidates into deliv
 
   // 2. Feed splitting must yield 0 Action Queue tasks and 1 consolidated delivery transit item
   const { actionableItems, deliveryTransitItems } = splitActionableAndTransitItems([shipmentItem, claimPolicyItem])
-  assert.equal(actionableItems.length, 0, 'No order policy items should leak into Executive Action Queue')
+  assert.equal(actionableItems.length, 0, 'No order policy items should leak into Household Tasks')
   assert.equal(deliveryTransitItems.length, 1, 'Both items must consolidate into 1 delivery entity')
 
   const delivery = deliveryTransitItems[0]

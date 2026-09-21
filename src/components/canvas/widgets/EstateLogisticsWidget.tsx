@@ -251,11 +251,11 @@ export default function EstateLogisticsWidget({
         <div>
           <div className="flex items-center gap-2">
             <h2 className="font-display text-display-sm font-bold text-casa-navy leading-none tracking-tight">
-              Estate Inbound Manifest
+              Deliveries
             </h2>
           </div>
           <p className="text-caption text-casa-muted mt-1 font-medium">
-            Inbound Deliveries, Pre-Orders &amp; Courier Ledger
+            Packages, groceries &amp; pre-orders on their way
           </p>
         </div>
 
@@ -266,7 +266,7 @@ export default function EstateLogisticsWidget({
               variant="ghost"
               onClick={handleSweepDelivered}
               className="text-3xs font-bold text-emerald-950 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100/90 border border-emerald-200 rounded-full px-2.5 py-1 min-h-[36px] flex items-center gap-1.5 transition-colors cursor-pointer"
-              title="Clean up all delivered parcels from the manifest"
+              title="Clean up all delivered parcels from the list"
             >
               <CheckCircle2 size={12} className="text-emerald-700" />
               <span>Clean Up Delivered ({deliveredItems.length})</span>

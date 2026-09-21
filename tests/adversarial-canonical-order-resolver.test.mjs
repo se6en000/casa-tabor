@@ -366,7 +366,7 @@ test('adversarial: policy disclaimers do not trigger problem state or leak to Ac
     priority: 1,
   }
   const { actionableItems, deliveryTransitItems } = splitActionableAndTransitItems([prepItem])
-  assert.equal(actionableItems.length, 0, 'Must not leak into Executive Action Queue')
+  assert.equal(actionableItems.length, 0, 'Must not leak into Household Tasks')
   assert.equal(deliveryTransitItems.length, 1)
 })
 

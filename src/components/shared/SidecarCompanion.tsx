@@ -80,7 +80,7 @@ export default function SidecarCompanion({
   // The sidecar's queue stepper/"advance to next item" is the Executive Action
   // Queue specifically -- it must never land on a passive delivery/transit item
   // (which renders the shipping-manifest panel instead of an actionable item).
-  // A delivery item opened directly from the Inbound Manifest still resolves
+  // A delivery item opened directly from Deliveries still resolves
   // correctly via `actionId` lookup against the full `allPrep` list inside
   // ActionInspectionSidecar, independent of this filtered queue.
   const actionQueueItems = useMemo(

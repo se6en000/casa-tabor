@@ -403,7 +403,7 @@ export function useSetPrepItemAssignee() {
   }
 }
 
-// ── Vendor spend summary (Inbound Manifest) ────────────────────────────────
+// ── Vendor spend summary (Deliveries) ───────────────────────────────────────
 // amount_cents is only populated where a real transaction total is known (see
 // migration 20260911181708_prep_item_vendor_spend.sql) -- items with no
 // monetary value (forms, RSVPs, reminders) are excluded server-side by the

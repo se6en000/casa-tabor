@@ -294,10 +294,10 @@ export default function ActionQueueWidget({
       <div className="flex items-start justify-between pb-3.5 border-b border-casa-border/60 shrink-0">
         <div>
           <h2 className="font-display text-display-sm font-bold text-casa-navy leading-none tracking-tight">
-            Executive Action Queue
+            Household Tasks
           </h2>
           <p className="text-caption text-casa-muted mt-1 font-medium">
-            Universal Done &amp; Snooze Engine
+            Permission slips, forms &amp; replies waiting on you
           </p>
         </div>
 
