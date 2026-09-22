@@ -24,10 +24,13 @@ test('QuickCreateSheet resolves the place selection to an existing or newly-crea
   assert.match(source, /action === 'link'/)
   // Address/lat/lng resolved from the matched place must flow onto the event
   // row so newly created events get a real address up front (driving plan).
-  const insertIndex = source.indexOf(".from('events').insert(")
-  const insertBlock = source.slice(insertIndex, insertIndex + 600)
+  const insertIndex = source.indexOf("rpc('upsert_event_bundle'")
+  assert.ok(insertIndex >= 0, 'quick-create must write through upsert_event_bundle')
+  const insertBlock = source.slice(insertIndex, insertIndex + 1200)
   assert.match(insertBlock, /location_name:/)
   assert.match(insertBlock, /address:/)
   assert.match(insertBlock, /lat:/)
   assert.match(insertBlock, /lng:/)
+  // a brand-new directory place travels in the same atomic payload as the event
+  assert.match(insertBlock, /saved_place:/)
 })

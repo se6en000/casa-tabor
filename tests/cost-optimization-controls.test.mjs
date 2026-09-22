@@ -30,7 +30,6 @@ const scanTravel = source('supabase/functions/scan-travel-emails/index.ts')
 const recipeEdit = source('supabase/functions/recipe-edit-assistant/index.ts')
 const recipeExtract = source('supabase/functions/extract-recipe-content/index.ts')
 const smsWebhook = source('supabase/functions/sms-webhook/index.ts')
-const geocodeEvent = source('supabase/functions/geocode-event-location/index.ts')
 const geocodeMigration = source('supabase/migrations/20260802130000_reuse_event_geocodes.sql')
 const routeEta = source('supabase/functions/route-eta/index.ts')
 const travelEta = source('supabase/functions/_shared/travel-eta.mjs')
@@ -174,18 +173,10 @@ test('home-weather caches the household address geocode instead of re-billing Pl
   assert.match(homeWeather, /cache\.cacheKey === cacheKey/)
 })
 
-test('event geocoding exits before Google when coordinates already exist or can be reused', () => {
-  const existingCoordinates = geocodeEvent.indexOf("skipped: 'existing_coordinates'")
-  const eventCache = geocodeEvent.indexOf("cached: true")
-  const googlePlaces = geocodeEvent.indexOf("'https://places.googleapis.com/v1/places:searchText'")
-
-  assert.ok(existingCoordinates >= 0)
-  assert.ok(eventCache > existingCoordinates)
-  assert.ok(googlePlaces > eventCache)
-  assert.match(geocodeEvent, /\.neq\('id', eventId\)/)
-  assert.match(geocodeEvent, /\.not\('lat', 'is', null\)/)
-  assert.match(geocodeEvent, /\.not\('lng', 'is', null\)/)
-})
+// The geocode-event-location edge function (dispatched only by the removed, dead
+// trigger_geocode_event_location) was deleted 2026-09-21; see
+// tests/family-index-worker-and-dead-triggers.test.mjs. Coordinate reuse below
+// still runs in the live BEFORE trigger reset_coords_on_event_location_change.
 
 test('database geocode triggers reuse matching event coordinates and suppress provider dispatch', () => {
   assert.match(geocodeMigration, /events_geocode_address_cache_idx/)

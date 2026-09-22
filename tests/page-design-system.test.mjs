@@ -324,7 +324,9 @@ test('quick create handles core household event context without exposing the ful
   assert.match(folioCard, /resolveDirectoryPlaceSave/)
   assert.match(folioCard, /useFieldDictation/)
   assert.match(folioCard, /supabase/)
-  assert.match(folioCard, /event_members'\)\.insert/)
+  // attendees are written with the event in one atomic upsert_event_bundle RPC (no separate event_members insert)
+  assert.match(folioCard, /rpc\('upsert_event_bundle'/)
+  assert.match(folioCard, /family_member_id: familyMemberId/)
   assert.match(folioCard, /triggerGoogleEventSync/)
 })
 

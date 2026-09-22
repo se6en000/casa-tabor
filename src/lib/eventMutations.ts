@@ -122,7 +122,9 @@ export function invalidateAllCalendarQueries(queryClient: QueryClient, eventId?:
   if (eventId) {
     void queryClient.invalidateQueries({ queryKey: ['event-details', eventId] })
   }
-  void queryClient.refetchQueries({ queryKey: ['events'], type: 'active' })
+  // No extra refetchQueries: invalidateQueries above already refetches active
+  // queries, and a second call cancels + restarts that fetch (cancelRefetch
+  // defaults to true) so the feed RPC would run twice per mutation.
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('casa-event-mutated', { detail: { eventId } }))
   }

@@ -170,3 +170,35 @@ export function evictEventFromAllCaches(
 
 
 
+
+type RangeMeta = { rangeStart?: string; rangeEnd?: string }
+
+/**
+ * Optimistically place a just-created event into every loaded range cache whose
+ * window it overlaps (window comes from the `meta` that useEventsForRange
+ * publishes on each query), so the calendar shows it immediately instead of
+ * after a blocking refetch. Idempotent by id; caches that are not loaded yet or
+ * do not overlap are left alone -- their next normal fetch will include the row.
+ */
+export function addEventToCaches(queryClient: QueryClient, event: EventWithDetails) {
+  const eventStart = new Date(event.start_time).getTime()
+  const eventEnd = new Date(event.end_time).getTime()
+  if (Number.isNaN(eventStart) || Number.isNaN(eventEnd)) return
+
+  for (const query of queryClient.getQueryCache().findAll({ queryKey: ['events'] })) {
+    const meta = query.meta as RangeMeta | undefined
+    if (!meta?.rangeStart || !meta.rangeEnd) continue
+    const rangeStart = new Date(meta.rangeStart).getTime()
+    const rangeEnd = new Date(meta.rangeEnd).getTime()
+    if (!(eventStart < rangeEnd && eventEnd > rangeStart)) continue
+    queryClient.setQueryData(query.queryKey, (current: unknown) => {
+      if (!isRecord(current) || !Array.isArray(current.active)) return current
+      if (current.active.some((entry) => isRecord(entry) && entry.id === event.id)) return current
+      const active = [...current.active, event].sort(
+        (a, b) => new Date((a as EventWithDetails).start_time).getTime() - new Date((b as EventWithDetails).start_time).getTime(),
+      )
+      return { ...current, active }
+    })
+  }
+  queryClient.setQueryData(['event-details', event.id], event)
+}

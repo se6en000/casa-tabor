@@ -11,7 +11,8 @@ test('executor validates AI create provenance before querying or inserting event
   assert.match(createBlock, /validateCalendarTemporalProvenance/)
   assert.match(createBlock, /assessCalendarCreatePreflight/)
   assert.match(createBlock, /allow_calendar_conflicts/)
-  assert.ok(createBlock.indexOf('validateCalendarTemporalProvenance') < createBlock.indexOf(".from('events').insert"))
+  // the write is now the atomic upsert_event_bundle RPC (2026-09-21 latency work); validation must still precede it
+  assert.ok(createBlock.indexOf('validateCalendarTemporalProvenance') < createBlock.indexOf("sb.rpc('upsert_event_bundle'"))
 })
 
 test('executor reruns authoritative preflight and audits event creates', () => {

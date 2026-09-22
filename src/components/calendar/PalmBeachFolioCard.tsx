@@ -16,6 +16,8 @@ import { useFieldDictation } from '../../hooks/useFieldDictation'
 import { parseCalendarNaturalLanguage } from '../../utils/calendarNaturalLanguageParser'
 import { supabase } from '../../lib/supabase'
 import { triggerGoogleEventSync } from '../../lib/eventMutations'
+import { addEventToCaches } from '../../lib/eventAggregateCache'
+import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { useQueryClient } from '@tanstack/react-query'
 import { Button, Chip, IconButton, PersonAvatarStack } from '../ui'
 
@@ -254,6 +256,7 @@ export default function PalmBeachFolioCard({
     let resolvedAddress: string | null = null
     let resolvedLat: number | null = null
     let resolvedLng: number | null = null
+    let newSavedPlace: Record<string, unknown> | null = null
 
     if (placeResolution.action === 'link') {
       const place = savedPlaces.find((p) => p.id === placeResolution.placeId)
@@ -263,9 +266,10 @@ export default function PalmBeachFolioCard({
       resolvedLng = place?.lng ?? null
     } else if (placeResolution.action === 'create-and-link') {
       const input = placeResolution.createInput
-      const { error: createPlaceError } = await supabase.from('saved_places').insert({
+      // The directory row is created inside the same RPC transaction as the
+      // event (best-effort there); the event keeps the location either way.
+      newSavedPlace = {
         name: input.name,
-        aliases: [],
         address: input.address ?? null,
         city: input.city ?? null,
         state: input.state ?? null,
@@ -273,24 +277,61 @@ export default function PalmBeachFolioCard({
         lat: input.lat ?? null,
         lng: input.lng ?? null,
         category: 'other',
-        confirmed: true,
-        source: 'manual',
-        occurrence_count: 1,
-      })
-      if (!createPlaceError) {
-        void qc.invalidateQueries({ queryKey: ['saved_places'] })
-        resolvedLocationName = input.name
-        resolvedAddress = [input.address, input.city, input.state, input.zip].filter(Boolean).join(', ') || null
-        resolvedLat = input.lat ?? null
-        resolvedLng = input.lng ?? null
       }
+      resolvedLocationName = input.name
+      resolvedAddress = [input.address, input.city, input.state, input.zip].filter(Boolean).join(', ') || null
+      resolvedLat = input.lat ?? null
+      resolvedLng = input.lng ?? null
     }
 
-    const { data: inserted, error } = await supabase.from('events').insert({
+    // Client-generated id: the write is idempotent on retry and the optimistic
+    // cache entry below already carries the row's real id.
+    const eventId = crypto.randomUUID()
+    const startISO = allDayRange?.start ?? start.toISOString()
+    const endISO = allDayRange?.end ?? end.toISOString()
+    const memberRows = selectedMemberIds.map((familyMemberId, index) => ({
+      family_member_id: familyMemberId,
+      role: index === 0 ? 'primary' : 'attendee',
+      rsvp_status: 'accepted',
+    }))
+
+    // ONE atomic round trip (place + event + members) instead of three
+    // sequential client calls -- each of which can hit a cold DB connection.
+    const { data: bundle, error } = await supabase.rpc('upsert_event_bundle', {
+      p_payload: {
+        id: eventId,
+        event: {
+          title: title.trim(),
+          description: notes.trim() || null,
+          start_time: startISO,
+          end_time: endISO,
+          all_day: allDay,
+          status: 'confirmed',
+          event_type: eventType,
+          location_name: resolvedLocationName,
+          address: resolvedAddress,
+          lat: resolvedLat,
+          lng: resolvedLng,
+          record_kind: 'single',
+        },
+        members: memberRows,
+        saved_place: newSavedPlace,
+      },
+    })
+
+    if (error || !bundle?.success) {
+      setSaveError(`Could not create entry: ${error?.message ?? 'no confirmation from server'}`)
+      setSaving(false)
+      return
+    }
+
+    const nowISO = new Date().toISOString()
+    const optimisticEvent = {
+      id: eventId,
       title: title.trim(),
       description: notes.trim() || null,
-      start_time: allDayRange?.start ?? start.toISOString(),
-      end_time: allDayRange?.end ?? end.toISOString(),
+      start_time: startISO,
+      end_time: endISO,
       all_day: allDay,
       status: 'confirmed',
       event_type: eventType,
@@ -299,32 +340,26 @@ export default function PalmBeachFolioCard({
       lat: resolvedLat,
       lng: resolvedLng,
       record_kind: 'single',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }).select('id').single()
+      created_at: bundle.created_at ?? nowISO,
+      updated_at: bundle.updated_at ?? nowISO,
+      members: memberRows.flatMap((row) => {
+        const familyMember = familyMembers.find((m) => m.id === row.family_member_id)
+        return familyMember ? [{ id: `optimistic-${row.family_member_id}`, role: row.role, family_member: familyMember }] : []
+      }),
+      enrichment: null,
+      plan_override: null,
+      logistics: [],
+      checklist: [],
+      actions: [],
+    } as unknown as EventWithDetails
 
-    if (error) {
-      setSaveError(`Could not create entry: ${error.message}`)
-      setSaving(false)
-      return
-    }
-
-    triggerGoogleEventSync(supabase, inserted.id)
-
-    if (inserted && selectedMemberIds.length > 0) {
-      await supabase.from('event_members').insert(
-        selectedMemberIds.map((familyMemberId, index) => ({
-          event_id: inserted.id,
-          family_member_id: familyMemberId,
-          role: index === 0 ? 'primary' : 'attendee',
-          rsvp_status: 'accepted',
-        })),
-      )
-    }
-
-    await qc.invalidateQueries({ queryKey: ['events'] })
+    // Show it immediately; do NOT await a refetch. The events realtime channel
+    // (debounced) reconciles server-side enrichment shortly after.
+    addEventToCaches(qc, optimisticEvent)
+    if (newSavedPlace) void qc.invalidateQueries({ queryKey: ['saved_places'] })
+    triggerGoogleEventSync(supabase, eventId)
     navigator.vibrate?.([12, 40, 20])
-    
+
     // Clear all fields and reset to ambient clean state
     setTitle('')
     setNotes('')
@@ -338,7 +373,7 @@ export default function PalmBeachFolioCard({
 
     setSaving(false)
     setSaveSuccess('Saved.')
-    onSaved?.(inserted.id)
+    onSaved?.(eventId)
     setTimeout(onClose, 250)
   }
 

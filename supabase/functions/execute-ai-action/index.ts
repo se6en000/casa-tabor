@@ -827,36 +827,47 @@ Deno.serve(async (req) => {
         }
       }
 
-      const { data: event, error } = await sb.from('events').insert({
-        title: normalizedTitle,
-        start_time: normalizedStart,
-        end_time: normalizedEnd,
-        location_name: resolvedLocationName ?? null,
-        address: resolvedAddress,
-        lat: resolvedLat,
-        lng: resolvedLng,
-        all_day: args.all_day ?? false,
-        description: args.notes ?? null,
-        status: 'confirmed',
-        is_enriched: false,
-        event_type: normalizedEventType,
-      }).select().single()
-
-      if (error) throw new Error(error.message)
-
-      // Add members
+      // Resolve attendee names -> ids (only lookup needed before the write).
+      let memberRows: Array<{ family_member_id: string; role: string }> = []
       if (args.members?.length > 0) {
         const { data: family } = await sb.from('family_members').select('id, name, full_name')
         const memberIds = (args.members as string[])
           .map((name: string) => resolveFamilyMemberByName(family, name)?.id)
-          .filter(Boolean)
-        if (memberIds.length > 0) {
-          const { error: memberInsertError } = await sb.from('event_members').insert(
-            memberIds.map((id, i) => ({ event_id: event.id, family_member_id: id, role: i === 0 ? 'primary' : 'attendee' }))
-          )
-          if (memberInsertError) throw new Error(memberInsertError.message)
-        }
+          .filter(Boolean) as string[]
+        memberRows = memberIds.map((id, i) => ({ family_member_id: id, role: i === 0 ? 'primary' : 'attendee' }))
       }
+
+      // Event + attendees in ONE atomic round trip (public.upsert_event_bundle):
+      // previously an events insert, a family_members lookup and an event_members
+      // insert ran back-to-back, each able to hit a cold DB connection, and a
+      // failed member insert left a member-less event behind. The id returned
+      // here is what the chat's "open event" link is built from, so the write
+      // stays synchronous; only the Google/enrichment side effects below are
+      // dispatched in the background.
+      const { data: bundle, error } = await sb.rpc('upsert_event_bundle', {
+        p_payload: {
+          event: {
+            title: normalizedTitle,
+            start_time: normalizedStart,
+            end_time: normalizedEnd,
+            location_name: resolvedLocationName ?? null,
+            address: resolvedAddress,
+            lat: resolvedLat,
+            lng: resolvedLng,
+            all_day: args.all_day ?? false,
+            description: args.notes ?? null,
+            status: 'confirmed',
+            is_enriched: false,
+            event_type: normalizedEventType,
+          },
+          members: memberRows,
+        },
+      })
+
+      if (error || !bundle?.success || !bundle?.event_id) {
+        throw new Error(error?.message ?? 'Event create was not confirmed by the database')
+      }
+      const event = { id: bundle.event_id as string, updated_at: bundle.updated_at as string }
 
       if (normalizedEventType !== 'reminder') {
         // Google sync used to be awaited here ("fire-and-forget can be killed before completion in

@@ -285,6 +285,9 @@ function useEventsForRange(queryKey: readonly unknown[], start: Date, end: Date)
   const eventsQuery = useQuery({
     queryKey,
     queryFn: () => fetchEventsForRange(start, end),
+    // Range window is published as meta so addEventToCaches can place an
+    // optimistic create into exactly the caches whose window it overlaps.
+    meta: { rangeStart: start.toISOString(), rangeEnd: end.toISOString() },
     staleTime: 10 * 60_000,
     refetchInterval: false,
     refetchIntervalInBackground: false,
@@ -667,9 +670,13 @@ function useRealtimeEventInvalidation() {
   const qc = useQueryClient()
   useEffect(() => {
     const cb = () => {
+      // invalidateQueries already refetches every ACTIVE matching query. A second
+      // refetchQueries here used TanStack's default cancelRefetch:true, which
+      // cancelled that in-flight fetch and restarted it -- the server still ran
+      // both, doubling get_calendar_feed load and forcing PostgREST to open extra
+      // (cold) DB connections on every realtime change on every open device.
       void qc.invalidateQueries({ queryKey: ['events'] })
       void qc.invalidateQueries({ queryKey: ['event-details'] })
-      void qc.refetchQueries({ queryKey: ['events'], type: 'active' })
     }
     const planCb = () => {
       void qc.invalidateQueries({ queryKey: ['event-transportation-plans'] })
