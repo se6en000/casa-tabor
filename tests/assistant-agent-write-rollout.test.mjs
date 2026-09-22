@@ -107,7 +107,18 @@ test('write rollout falls through to authoritative reads after non-write plans',
 })
 
 test('write planner budget accommodates nested cold starts within the request budget', () => {
-  assert.match(assistant, /agent_write_timeout[\s\S]{0,100}6500/)
+  // Previously this only checked that the literal "6500" appeared somewhere
+  // near "agent_write_timeout" -- true even while the timeout was a bare
+  // constant that ignored the actual remaining request budget entirely
+  // (confirmed live: 6500ms + agent-read's 4500ms could exceed the whole
+  // 9000ms NORMAL_REQUEST_HARD_TIMEOUT_MS by themselves, see
+  // tests/agent-plan-budget-floor.test.mjs). 6500 is still the ceiling for a
+  // full, uncontended budget -- but it's now actually capped by
+  // remainingRequestBudgetMs() too, which is what "within the request budget"
+  // was always meant to assert.
+  const idx = assistant.indexOf("resolve({ data: null, error: { message: 'agent_write_timeout' } })")
+  const block = assistant.slice(idx - 300, idx)
+  assert.match(block, /Math\.min\(6500, remainingRequestBudgetMs\(\)/)
 })
 
 test('agent write planner defers quantified multi-event deletes to the bulk-capable lane', () => {

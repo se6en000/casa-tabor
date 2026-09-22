@@ -52,6 +52,16 @@ export function normalizeConversationState(value, now = Date.now()) {
       establishedAt: new Date(establishedAt).toISOString(),
     }
   }
+  if (value.activeEntityType === 'calendar_date_needed') {
+    const pendingCreateArgs = value.pendingCreateArgs
+    if (!pendingCreateArgs || typeof pendingCreateArgs !== 'object' || Array.isArray(pendingCreateArgs)) return null
+    return {
+      activeEntityType: 'calendar_date_needed',
+      pendingCreateArgs: structuredClone(pendingCreateArgs),
+      expectedFollowUp: 'calendar_date_needed',
+      establishedAt: new Date(establishedAt).toISOString(),
+    }
+  }
   if (value.activeEntityType === 'calendar_range') {
     const range = normalizeCalendarRange(value.range)
     if (!range) return null
@@ -125,6 +135,24 @@ export function normalizeConversationState(value, now = Date.now()) {
     expectedFollowUp: 'event_follow_up',
     establishedAt: new Date(establishedAt).toISOString(),
     ...(pendingMutation ? { pendingMutation } : {}),
+  }
+}
+
+// A bare follow-up reply to "What date should I use?" (e.g. "today", "the
+// 15th") has none of userRequestedWriteIntent's keywords, so without this
+// state it was misclassified as a fresh family-data question -- triggering
+// the full RAG evidence pipeline (Gemini embedding call + search_family_data)
+// for a one-word date answer. Confirmed live in ai_bug_reports b2b9d06f: the
+// same class of latency the 2026-09-19 fix (2e7d8a51) targeted, but that fix
+// only works if expectedFollowUp is actually set on the clarification
+// question itself, which it wasn't for either date_clarification_required
+// response site until this state was added.
+export function calendarDateNeededConversationState(pendingCreateArgs, now = new Date()) {
+  return {
+    activeEntityType: 'calendar_date_needed',
+    pendingCreateArgs: structuredClone(pendingCreateArgs),
+    expectedFollowUp: 'calendar_date_needed',
+    establishedAt: now.toISOString(),
   }
 }
 

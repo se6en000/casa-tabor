@@ -69,6 +69,7 @@ import {
   answerGroundedEventFollowUp,
   answerGroundedEventSemanticFrame,
   calendarClarificationConversationState,
+  calendarDateNeededConversationState,
   calendarRangeConversationState,
   eventConversationState,
   groceryClarificationConversationState,
@@ -89,6 +90,7 @@ import {
 import { filterImmediateFamilyMembers } from '../_shared/immediate-family-scope.mjs'
 import {
   inheritCalendarReadScope,
+  isBareCalendarAddRequest,
   isCalendarLikeLanguage,
   parseCalendarLanguage,
 } from '../_shared/assistant-calendar-language.mjs'
@@ -447,6 +449,17 @@ Deno.serve(async (req) => {
   const IMAGE_PRIMARY_HARD_TIMEOUT_MS = 22000
   const SECONDARY_HARD_TIMEOUT_MS = 5000
   const FALLBACK_HARD_TIMEOUT_MS = 2200
+  // The agent-write/agent-read speculative plan calls used to race against
+  // hardcoded 6500ms/4500ms timeouts that ignored remainingRequestBudgetMs()
+  // entirely -- combined (11000ms) they could exceed the whole 9000ms normal
+  // budget by themselves, leaving the primary call 0ms to run (confirmed live
+  // in ai_bug_reports b2b9d06f: exactly this sequence on "add"/"add event").
+  // This reserve is subtracted from the remaining budget before capping each
+  // plan call's own race timeout, so context load + the primary call always
+  // keep a fair floor even when a plan call would otherwise be allowed to run
+  // right up to the wire. Sized from measured primary-call latency
+  // (ai_provider_calls: p50 ~940ms, p90 ~2169ms for ai-assistant generation).
+  const MIN_BUDGET_RESERVE_AFTER_AGENT_PLAN_MS = 3000
   const STAGE_SLO = {
     contextLoadMs: 1200,
     llmPrimaryMs: 4500,
@@ -878,6 +891,26 @@ Deno.serve(async (req) => {
           request_total_ms: Date.now() - requestStartMs,
           context_load_ms: 0,
         },
+      },
+    }
+  }
+  if (talkPlanCommandLane && isBareCalendarAddRequest(latestUserText)) {
+    const requestTotalMs = Date.now() - requestStartMs
+    appendServerTrace('server_ai_assistant_bare_add_fast_path', latestUserText ?? 'add', {
+      request_ms: requestTotalMs,
+      llm_calls: 0,
+    })
+    return {
+      status: 200,
+      payload: {
+        type: 'text',
+        text: 'What would you like to add, and for when?',
+        // `now` (the shared request-timestamp const) isn't declared until later
+        // in this scope -- this fast path runs before that point, so it uses
+        // its own Date() rather than hitting a temporal-dead-zone ReferenceError.
+        conversation_state: calendarDateNeededConversationState({}, new Date()),
+        correlation_id: cid,
+        telemetry: { llm_calls: 0, request_total_ms: requestTotalMs, context_load_ms: 0 },
       },
     }
   }
@@ -2486,8 +2519,9 @@ Deno.serve(async (req) => {
         model_override: agentWriteConfig?.model ?? DEFAULT_GEMINI_MODEL,
       },
     })
+    const agentWriteTimeoutMs = Math.max(0, Math.min(6500, remainingRequestBudgetMs() - MIN_BUDGET_RESERVE_AFTER_AGENT_PLAN_MS))
     const timeout = new Promise<{ data: null; error: { message: string } }>((resolve) => {
-      setTimeout(() => resolve({ data: null, error: { message: 'agent_write_timeout' } }), 6500)
+      setTimeout(() => resolve({ data: null, error: { message: 'agent_write_timeout' } }), agentWriteTimeoutMs)
     })
     const agentWriteResult = await Promise.race([agentWriteRequest, timeout])
     const agentWriteData = agentWriteResult.data as {
@@ -2611,6 +2645,7 @@ Deno.serve(async (req) => {
               text: experienceMode === 'talk_plan'
                 ? `I saved "${String(normalizedAgentWriteArgs.title ?? 'that idea')}" as an undated planning task. What date should it go on the calendar?`
                 : 'What exact date should I use? Nothing was added to the calendar.',
+              conversation_state: calendarDateNeededConversationState(normalizedAgentWriteArgs, now),
               correlation_id: cid,
             },
           }
@@ -2858,8 +2893,9 @@ Deno.serve(async (req) => {
         model_override: agentReadConfig?.model ?? DEFAULT_GEMINI_MODEL,
       },
     })
+    const agentReadTimeoutMs = Math.max(0, Math.min(4500, remainingRequestBudgetMs() - MIN_BUDGET_RESERVE_AFTER_AGENT_PLAN_MS))
     const timeout = new Promise<{ data: null; error: { message: string } }>((resolve) => {
-      setTimeout(() => resolve({ data: null, error: { message: 'agent_read_timeout' } }), 4500)
+      setTimeout(() => resolve({ data: null, error: { message: 'agent_read_timeout' } }), agentReadTimeoutMs)
     })
     const agentReadResult = await Promise.race([agentReadRequest, timeout])
     const agentReadData = agentReadResult.data as {
@@ -5628,6 +5664,7 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
               text: temporalEvidence.status === 'mismatch'
                 ? `I did not create "${title || 'that event'}" because the proposed date does not match the date range you provided. What exact date should I use?`
                 : `What date should I use for "${title || 'that event'}"? Nothing was added to the calendar.`,
+              conversation_state: calendarDateNeededConversationState(args, now),
             }
           }
           if (allowImageTemporalProvenance && !temporalEvidence.allowed) {

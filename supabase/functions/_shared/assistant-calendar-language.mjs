@@ -392,3 +392,24 @@ export function isCalendarLikeLanguage(text) {
   const input = normalize(text)
   return CALENDAR_NOUNS.test(input) || (TEMPORAL_WORDS.test(input) && /\b(?:have|doing|going on|free|busy|next)\b/.test(input))
 }
+
+// A bare "add"/"add event"/"add reminder" carries zero title/day/time signal
+// -- there is nothing to plan. Sending it through the full pipeline (agent
+// write-plan LLM call -> agent read-plan LLM call -> family-data context load
+// -> primary generation call) serially spends the entire request budget
+// before the primary call gets a fair shot, guaranteeing a 504 on a slow tick
+// (confirmed live in ai_bug_reports b2b9d06f: both agent plans returned
+// "unsupported"/deferred, context load alone took 2.8s, and the primary call
+// got 0ms of remaining budget). Answering immediately, with zero LLM calls,
+// is strictly correct here: no interpretation of "add" is possible without
+// more information, so there is no plan to lose by skipping straight to
+// asking for one.
+const BARE_ADD_NOUN = '(?:event|reminder|task|to-?do|appointment|item)s?'
+const BARE_ADD_RE = new RegExp(`^add(?:\\s+(?:a|an|the)?\\s*${BARE_ADD_NOUN})?$`, 'i')
+
+export function isBareCalendarAddRequest(text) {
+  if (typeof text !== 'string') return false
+  const trimmed = text.trim().replace(/[.!?]+$/, '')
+  if (!trimmed) return false
+  return BARE_ADD_RE.test(trimmed)
+}

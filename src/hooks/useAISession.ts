@@ -86,6 +86,12 @@ export interface AIMessage {
        establishedAt: string
      }
     | {
+        activeEntityType: 'calendar_date_needed'
+        pendingCreateArgs: Record<string, unknown>
+        expectedFollowUp: 'calendar_date_needed'
+        establishedAt: string
+      }
+    | {
         activeEntityType: 'none'
         expectedFollowUp: 'none'
         establishedAt: string
