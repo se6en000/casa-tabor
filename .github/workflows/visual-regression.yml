@@ -1,4 +1,4 @@
-name: Visual regression
+name: Visual regression & quality gates
 
 on:
   pull_request:

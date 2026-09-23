@@ -6,8 +6,12 @@ export function Skeleton({ className, ...rest }: HTMLAttributes<HTMLDivElement>)
 }
 
 export function SkeletonRow() {
+  // role="status": an aria-label on a bare <div> with no valid role is an
+  // ARIA spec violation (found live by the new automated a11y audit,
+  // visual-regression/accessibility-audit.spec.mjs) -- status is the
+  // conventional, correct role for a loading placeholder like this one.
   return (
-    <div className="flex min-h-control items-center gap-3" aria-label="Loading row">
+    <div role="status" className="flex min-h-control items-center gap-3" aria-label="Loading row">
       <Skeleton className="size-control rounded-full" />
       <div className="flex-1 space-y-2">
         <Skeleton className="h-5 w-2/3" />

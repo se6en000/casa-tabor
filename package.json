@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "npm run tokens:check && npm run style:check && npm run certify:experience && tsc -b && vite build",
+    "build": "npm run tokens:check && npm run style:check && npm run certify:experience && tsc -b && vite build && npm run check:bundle-size",
+    "check:bundle-size": "node scripts/check-bundle-size.mjs",
     "test": "node --test tests/*.test.mjs",
     "test:visual": "playwright test",
     "test:visual:update": "playwright test --update-snapshots=all",
@@ -60,6 +61,7 @@
     "zustand": "^5.0.13"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.61.1",
     "@tailwindcss/vite": "^4.3.0",
