@@ -11,7 +11,11 @@ export default function LivingCanvasHome() {
   const { canvasSubmode, openQuickCreate } = useAppStore()
 
   const handleOpenEvent = useCallback((event: EventWithDetails) => {
-    openEventDetails(event.id)
+    // Pass the object through, not just the id (2026-09-23 fix) -- several
+    // Hero-card sources (MorningLaunchpadWidget's routine drop-offs chief
+    // among them) synthesize this event locally when no real calendar row
+    // backs the milestone yet, and a synthetic id can't be re-fetched.
+    openEventDetails(event.id, event)
   }, [])
 
   return (

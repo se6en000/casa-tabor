@@ -30,7 +30,7 @@ import { Button } from './components/ui'
 import { useIdleTimer } from './hooks/useIdleTimer'
 import { useScreensaverSettings } from './hooks/useScreensaverSettings'
 import { useLiveClock } from './hooks/useLiveClock'
-import { useRollingEvents } from './hooks/useCalendarEvents'
+import { useRollingEvents, type EventWithDetails } from './hooks/useCalendarEvents'
 import { useAppStore } from './stores/appStore'
 import SidecarCompanion from './components/shared/SidecarCompanion'
 import OfflineBanner from './components/shared/OfflineBanner'
@@ -217,13 +217,24 @@ function AppShell() {
   // Global "open this event's details" primitive — opens non-blocking sidecar companion
   useEffect(() => {
     const onOpenEventById = (e: Event) => {
-      const eventId = (e as CustomEvent<{ eventId?: string }>).detail?.eventId
+      const detail = (e as CustomEvent<{ eventId?: string; event?: EventWithDetails }>).detail
+      const eventId = detail?.eventId
       if (!eventId) return
+      // Routine-computed cards (school-drop-off milestones synthesized by
+      // useFamilyRoutineIntelligence.ts when no real calendar row exists yet)
+      // carry a synthetic id the network fetch below can never resolve --
+      // seeding it here (2026-09-23 fix) lets SidecarCompanion's existing
+      // ['event-details', id] query find it immediately instead of coming up
+      // empty and auto-closing the drawer a beat later with no visible click
+      // feedback. Harmless for a real event too: it's already fresh data.
+      if (detail?.event) {
+        queryClient.setQueryData(['event-details', eventId], detail.event)
+      }
       openEventInSidecar(eventId)
     }
     document.addEventListener('casa:open-event-details', onOpenEventById)
     return () => document.removeEventListener('casa:open-event-details', onOpenEventById)
-  }, [openEventInSidecar])
+  }, [openEventInSidecar, queryClient])
 
   // Global "open this action's details" primitive — opens non-blocking sidecar companion
   useEffect(() => {

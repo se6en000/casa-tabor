@@ -397,7 +397,7 @@ export default function MiddayLogisticsWidget({
     if (onOpenEvent) {
       onOpenEvent(evt)
     }
-    openEventDetails(evt.id)
+    openEventDetails(evt.id, evt)
   }
 
   const mapsUrlForMilestone = (evt: EventWithDetails) => {

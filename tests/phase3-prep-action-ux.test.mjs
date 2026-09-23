@@ -16,9 +16,14 @@ test('App listens for a global casa:open-event-details event and opens the Event
   assert.match(appTsx, /openEventInSidecar\(eventId\)/)
 })
 
-test('openEventDetails helper dispatches the global custom event', () => {
-  assert.match(openEventDetailsUtil, /export function openEventDetails\(eventId: string\)/)
-  assert.match(openEventDetailsUtil, /new CustomEvent\('casa:open-event-details', \{ detail: \{ eventId \} \}\)/)
+test('openEventDetails helper dispatches the global custom event, with the full object for synthetic-id callers', () => {
+  // 2026-09-23: gained an optional `event` param so routine-computed cards
+  // (e.g. MorningLaunchpadWidget's school drop-offs) whose id isn't a real
+  // events-table row can seed App.tsx's query cache directly instead of a
+  // network re-fetch that can only come up empty -- see
+  // tests/open-event-details-synthetic-event.test.mjs for the behavioral test.
+  assert.match(openEventDetailsUtil, /export function openEventDetails\(eventId: string, event\?: EventWithDetails\)/)
+  assert.match(openEventDetailsUtil, /new CustomEvent\('casa:open-event-details', \{ detail: \{ eventId, event \} \}\)/)
 })
 
 test('ActionHubPage and ActionInspectionSidecar open an existing event instead of drafting a duplicate via AI', () => {

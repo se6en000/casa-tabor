@@ -15,7 +15,7 @@ import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { useAppStore } from '../../stores/appStore'
 import { useCalendarStore } from '../../stores/calendarStore'
 import { cn } from '../../utils/cn'
-import { Button, IconButton } from '../ui'
+import { Button, IconButton, Skeleton, SkeletonRow } from '../ui'
 import { getDisplayMemberColor } from '../../design-system/memberColors'
 import TomorrowPrepWidget from './widgets/TomorrowPrepWidget'
 import ImminentTransitWidget from './widgets/ImminentTransitWidget'
@@ -142,6 +142,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
 
   const {
     now,
+    isTodayEventsPending,
     dispatchHeadline,
     dispatchWeekDays,
     dispatchHorizon,
@@ -188,6 +189,37 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
     [upcomingAppointments, heroIntel.imminentEvent],
   )
   const heroPrimaryKey = `${heroIntel.archetype}-${heroIntel.imminentEvent?.id ?? ''}`
+
+  // Bug found 2026-09-23 while chasing a Playwright failure: an empty
+  // upcomingAppointments array looks identical whether the day is genuinely
+  // clear or the events query just hasn't resolved yet, and every widget
+  // below treats it as "clear". Confirmed live (Playwright clock pinned to a
+  // real departure window): at t=0 right after page load, this screen was
+  // confidently rendering "Afternoon Logistics Clear" for a day that in fact
+  // had a real appointment 24 minutes from its leave-by time -- for the
+  // single highest-stakes card in the app ("when do I need to leave"), a
+  // confident wrong answer is worse than a visible loading state. Gate on
+  // isPending (all hooks above have already run, so this early return is
+  // Rules-of-Hooks safe) rather than adding loading checks to every widget
+  // individually.
+  if (isTodayEventsPending) {
+    return (
+      <div className="w-full h-full flex flex-col justify-start px-4 sm:px-6 lg:px-8 xl:px-10 pt-5 sm:pt-6 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-8 overflow-hidden">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-4 items-start">
+          <div className="flex flex-col gap-8">
+            <Skeleton className="w-full h-72 rounded-3xl" />
+            <Skeleton className="w-full h-40 rounded-3xl" />
+          </div>
+          <div className="flex flex-col gap-3">
+            <Skeleton className="w-full h-10 rounded-2xl mb-2" />
+            <SkeletonRow />
+            <SkeletonRow />
+            <SkeletonRow />
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="w-full h-full flex flex-col justify-start px-4 sm:px-6 lg:px-8 xl:px-10 pt-5 sm:pt-6 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-8 overflow-y-auto overscroll-contain touch-pan-y scrollbar-hide">

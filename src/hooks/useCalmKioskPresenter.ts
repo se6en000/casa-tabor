@@ -142,6 +142,7 @@ export interface DispatchHorizonItem {
 
 export interface CalmKioskPresenterState {
   now: Date
+  isTodayEventsPending: boolean
   dispatchHeadline: string
   dispatchWeekDays: DispatchDay[]
   dispatchHorizon: DispatchHorizonItem[]
@@ -212,7 +213,15 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
   // screen (2026-09-13).
   const todayKey = format(now, 'yyyy-MM-dd')
   const [isRefreshing, setIsRefreshing] = useState(false)
-  const { data: todayEvents = [] } = useTodayEvents(now)
+  // isPending (2026-09-23 fix): an empty array is what a genuinely-clear day
+  // AND a not-yet-loaded day both look like -- without this, the very first
+  // paint after any fresh load falsely tells the user "Logistics Clear"
+  // before the real events have even arrived. Confirmed live with
+  // Playwright's clock pinned to a real departure window: at t=0 right after
+  // page.goto, CalmKioskView was rendering "Afternoon Logistics Clear" for a
+  // day that in fact had 3 real appointments, one of them 24 minutes from a
+  // departure deadline.
+  const { data: todayEvents = [], isPending: isTodayEventsPending } = useTodayEvents(now)
   const { data: tomorrowEvents = [] } = useTomorrowEvents(now)
   const { data: rollingEvents = [] } = useRollingEvents(now)
   const { data: allReminders = [] } = useAllReminders()
@@ -994,6 +1003,7 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
 
   return {
     now,
+    isTodayEventsPending,
     dispatchHeadline,
     dispatchWeekDays,
     dispatchHorizon,
