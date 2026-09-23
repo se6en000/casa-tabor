@@ -15,6 +15,7 @@ import MobileFloatingDock from './components/layout/MobileFloatingDock'
 import { useRoomTone } from './hooks/useRoomTone'
 import { usePushNotifications } from './hooks/usePushNotifications'
 import { useAppUpdater } from './hooks/useAppUpdater'
+import { useOfflineWriteQueue } from './hooks/useOfflineWriteQueue'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { useTheme } from './contexts/useTheme'
 import LuxuryTopBar from './components/shared/LuxuryTopBar'
@@ -85,6 +86,7 @@ function AppShell() {
   const { setRoomToneZone } = useTheme()
   usePushNotifications()
   useAppUpdater()
+  useOfflineWriteQueue()
   useTonightDinnerSync()
   useHouseholdTodoSync()
 

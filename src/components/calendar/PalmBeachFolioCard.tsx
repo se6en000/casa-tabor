@@ -17,6 +17,7 @@ import { parseCalendarNaturalLanguage } from '../../utils/calendarNaturalLanguag
 import { supabase } from '../../lib/supabase'
 import { triggerGoogleEventSync } from '../../lib/eventMutations'
 import { addEventToCaches } from '../../lib/eventAggregateCache'
+import { isConnectivityFailure, enqueueWrite } from '../../lib/offlineWriteQueue'
 import type { EventWithDetails } from '../../hooks/useCalendarEvents'
 import { useQueryClient } from '@tanstack/react-query'
 import { Button, Chip, IconButton, PersonAvatarStack } from '../ui'
@@ -297,29 +298,38 @@ export default function PalmBeachFolioCard({
 
     // ONE atomic round trip (place + event + members) instead of three
     // sequential client calls -- each of which can hit a cold DB connection.
-    const { data: bundle, error } = await supabase.rpc('upsert_event_bundle', {
-      p_payload: {
-        id: eventId,
-        event: {
-          title: title.trim(),
-          description: notes.trim() || null,
-          start_time: startISO,
-          end_time: endISO,
-          all_day: allDay,
-          status: 'confirmed',
-          event_type: eventType,
-          location_name: resolvedLocationName,
-          address: resolvedAddress,
-          lat: resolvedLat,
-          lng: resolvedLng,
-          record_kind: 'single',
-        },
-        members: memberRows,
-        saved_place: newSavedPlace,
+    const eventPayload = {
+      id: eventId,
+      event: {
+        title: title.trim(),
+        description: notes.trim() || null,
+        start_time: startISO,
+        end_time: endISO,
+        all_day: allDay,
+        status: 'confirmed',
+        event_type: eventType,
+        location_name: resolvedLocationName,
+        address: resolvedAddress,
+        lat: resolvedLat,
+        lng: resolvedLng,
+        record_kind: 'single',
       },
-    })
+      members: memberRows,
+      saved_place: newSavedPlace,
+    }
+    const { data: bundle, error } = await supabase.rpc('upsert_event_bundle', { p_payload: eventPayload })
 
-    if (error || !bundle?.success) {
+    // A genuine connectivity failure (offline, or the request never reached a
+    // server at all) is queued for automatic replay on reconnect instead of
+    // just failing -- see src/lib/offlineWriteQueue.ts and
+    // useOfflineWriteQueue (mounted once at the app shell). A real rejection
+    // from the server (a validation error, a constraint violation) is NOT
+    // queued -- retrying it later would never succeed, so it's shown as the
+    // error it is.
+    const queuedOffline = error && isConnectivityFailure(error, navigator.onLine)
+    if (queuedOffline) {
+      await enqueueWrite({ id: eventId, kind: 'upsert_event_bundle', payload: eventPayload, createdAt: Date.now() })
+    } else if (error || !bundle?.success) {
       setSaveError(`Could not create entry: ${error?.message ?? 'no confirmation from server'}`)
       setSaving(false)
       return
@@ -340,8 +350,8 @@ export default function PalmBeachFolioCard({
       lat: resolvedLat,
       lng: resolvedLng,
       record_kind: 'single',
-      created_at: bundle.created_at ?? nowISO,
-      updated_at: bundle.updated_at ?? nowISO,
+      created_at: bundle?.created_at ?? nowISO,
+      updated_at: bundle?.updated_at ?? nowISO,
       members: memberRows.flatMap((row) => {
         const familyMember = familyMembers.find((m) => m.id === row.family_member_id)
         return familyMember ? [{ id: `optimistic-${row.family_member_id}`, role: row.role, family_member: familyMember }] : []
@@ -354,10 +364,11 @@ export default function PalmBeachFolioCard({
     } as unknown as EventWithDetails
 
     // Show it immediately; do NOT await a refetch. The events realtime channel
-    // (debounced) reconciles server-side enrichment shortly after.
+    // (debounced) reconciles server-side enrichment shortly after (or, for a
+    // queued offline write, once it's actually replayed on reconnect).
     addEventToCaches(qc, optimisticEvent)
     if (newSavedPlace) void qc.invalidateQueries({ queryKey: ['saved_places'] })
-    triggerGoogleEventSync(supabase, eventId)
+    if (!queuedOffline) triggerGoogleEventSync(supabase, eventId)
     navigator.vibrate?.([12, 40, 20])
 
     // Clear all fields and reset to ambient clean state
@@ -372,7 +383,7 @@ export default function PalmBeachFolioCard({
     resetDictationBuffer()
 
     setSaving(false)
-    setSaveSuccess('Saved.')
+    setSaveSuccess(queuedOffline ? 'Saved offline — will sync when back online.' : 'Saved.')
     onSaved?.(eventId)
     setTimeout(onClose, 250)
   }
