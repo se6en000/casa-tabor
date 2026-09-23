@@ -8,6 +8,7 @@ import {
   EVENTS_CACHE_MAX_AGE_MS,
   shouldPersistQuery,
 } from './lib/eventsCachePersister'
+import { shouldRetryQuery } from './lib/queryRetryPolicy'
 import AnimatedRoutes from './components/shared/AnimatedRoutes'
 import TabletSidebar from './components/layout/TabletSidebar'
 import MobileFloatingDock from './components/layout/MobileFloatingDock'
@@ -30,6 +31,7 @@ import { useLiveClock } from './hooks/useLiveClock'
 import { useRollingEvents } from './hooks/useCalendarEvents'
 import { useAppStore } from './stores/appStore'
 import SidecarCompanion from './components/shared/SidecarCompanion'
+import OfflineBanner from './components/shared/OfflineBanner'
 import CanvasUndoToast from './components/canvas/CanvasUndoToast'
 import { useTonightDinnerSync } from './hooks/useTonightDinnerSync'
 import { useHouseholdTodoSync } from './hooks/useHouseholdTodoSync'
@@ -72,7 +74,7 @@ const queryClient = new QueryClient({
       refetchOnWindowFocus: false,
       refetchOnMount: false,
       refetchOnReconnect: false,
-      retry: 1,
+      retry: shouldRetryQuery,
     },
   },
 })
@@ -243,6 +245,8 @@ function AppShell() {
 
   return (
     <div className="app-shell flex flex-col overflow-hidden bg-casa-bg">
+      <OfflineBanner />
+
       {/* Full-width luxury top bar — adapts to experience mode (desktop >= lg) */}
       <LuxuryTopBar />
 

@@ -1,8 +1,86 @@
-// Casa Tabor Service Worker — handles push notifications
-const CACHE_NAME = 'casa-tabor-v1';
+// Casa Tabor Service Worker — push notifications + app-shell offline caching
+//
+// Bump CACHE_NAME whenever the CACHING STRATEGY below changes (not on every
+// deploy — deploys are handled correctly regardless, see below). Bumping
+// forces old cache generations to be cleared on the next activate.
+const CACHE_NAME = 'casa-tabor-shell-v1';
+
+// Correctness constraint (see tests/service-worker-offline-shell.test.mjs and
+// the reload-loop incident documented in scripts/ship.sh/CLAUDE.md): this
+// cache must never cause a stale app shell to persist after a real deploy.
+//   - Navigations (HTML): NETWORK-FIRST, cache is only a fallback for when the
+//     network fetch genuinely fails. Never cache-first — a live deploy must
+//     always have the chance to be fetched fresh so useAppUpdater's own
+//     reload-on-new-version logic keeps working exactly as before.
+//   - Hashed static assets (/assets/*): CACHE-FIRST is safe *because* Vite
+//     content-hashes these filenames — a given URL's bytes never change, so
+//     there's no staleness risk, and a new deploy naturally produces new
+//     URLs that simply miss the cache and get fetched fresh (the old ones
+//     just become unreferenced, cleaned up opportunistically below).
+//   - version.json: NEVER cached (network-only) — it's the one thing
+//     useAppUpdater polls to detect a new deploy; vercel.json already marks
+//     it no-store at the HTTP layer for the same reason, this just makes the
+//     service worker itself honor that too.
+//   - Cross-origin requests (all Supabase REST/RPC/Edge Function calls) and
+//     non-GET requests are passed through untouched — this service worker
+//     must never intercept, cache, or otherwise interfere with API traffic.
+//     React Query's own IndexedDB persister (src/lib/eventsCachePersister.ts)
+//     owns data-layer resilience at a more correct layer already.
+const NAVIGATION_CACHE_KEY = '/index.html';
 
 self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    (async () => {
+      const names = await caches.keys();
+      await Promise.all(names.filter((n) => n !== CACHE_NAME).map((n) => caches.delete(n)));
+      await self.clients.claim();
+    })()
+  );
+});
+
+self.addEventListener('fetch', (event) => {
+  const { request } = event;
+  if (request.method !== 'GET') return; // never cache/intercept writes
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) return; // never touch Supabase/API/cross-origin traffic
+  if (url.pathname === '/version.json') return; // always network-fresh, see above
+
+  const isNavigation = request.mode === 'navigate' || request.destination === 'document';
+  if (isNavigation) {
+    event.respondWith(
+      (async () => {
+        try {
+          const fresh = await fetch(request);
+          const cache = await caches.open(CACHE_NAME);
+          void cache.put(NAVIGATION_CACHE_KEY, fresh.clone());
+          return fresh;
+        } catch {
+          const cache = await caches.open(CACHE_NAME);
+          const cached = await cache.match(NAVIGATION_CACHE_KEY);
+          if (cached) return cached;
+          throw new Error('offline and nothing cached yet');
+        }
+      })()
+    );
+    return;
+  }
+
+  if (url.pathname.startsWith('/assets/')) {
+    event.respondWith(
+      (async () => {
+        const cache = await caches.open(CACHE_NAME);
+        const cached = await cache.match(request);
+        if (cached) return cached;
+        const fresh = await fetch(request);
+        void cache.put(request, fresh.clone());
+        return fresh;
+      })()
+    );
+  }
+  // Everything else (icons, manifest.json, etc.) passes through natively —
+  // small, low-traffic, and the browser's own HTTP cache already handles them.
+});
 
 // ── Push handler ─────────────────────────────────────────────────────────────
 self.addEventListener('push', function (event) {

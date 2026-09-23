@@ -20,7 +20,11 @@ export async function subscribeDeviceToPush(): Promise<{
   }
 
   try {
-    const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' })
+    // updateViaCache: 'none' — the service worker script itself must never be
+    // served from the browser's HTTP cache when the browser checks for
+    // updates, or a caching fix like the fetch handler above could take a
+    // long time (or a hard refresh) to actually reach a returning client.
+    const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' })
     await navigator.serviceWorker.ready
 
     const permission = await Notification.requestPermission()
