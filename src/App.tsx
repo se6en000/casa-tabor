@@ -1,6 +1,13 @@
 import { useState, useEffect, Component, type ReactNode } from 'react'
 import { BrowserRouter, useLocation } from 'react-router-dom'
-import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query'
+import { QueryClient, useQueryClient } from '@tanstack/react-query'
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
+import {
+  eventsCachePersister,
+  EVENTS_CACHE_BUSTER,
+  EVENTS_CACHE_MAX_AGE_MS,
+  shouldPersistQuery,
+} from './lib/eventsCachePersister'
 import AnimatedRoutes from './components/shared/AnimatedRoutes'
 import TabletSidebar from './components/layout/TabletSidebar'
 import MobileFloatingDock from './components/layout/MobileFloatingDock'
@@ -296,7 +303,15 @@ export default function App() {
   return (
     <AppErrorBoundary>
       <ThemeProvider>
-        <QueryClientProvider client={queryClient}>
+        <PersistQueryClientProvider
+          client={queryClient}
+          persistOptions={{
+            persister: eventsCachePersister,
+            buster: EVENTS_CACHE_BUSTER,
+            maxAge: EVENTS_CACHE_MAX_AGE_MS,
+            dehydrateOptions: { shouldDehydrateQuery: shouldPersistQuery },
+          }}
+        >
           <PinGate>
             <BrowserRouter>
               <AppErrorBoundary>
@@ -304,7 +319,7 @@ export default function App() {
               </AppErrorBoundary>
             </BrowserRouter>
           </PinGate>
-        </QueryClientProvider>
+        </PersistQueryClientProvider>
       </ThemeProvider>
     </AppErrorBoundary>
   )

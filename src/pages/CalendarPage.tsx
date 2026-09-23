@@ -10,6 +10,7 @@ import MonthView from '../components/calendar/MonthView'
 import PalmBeachFolioCard from '../components/calendar/PalmBeachFolioCard'
 import { Button, IconButton, SegmentedControl } from '../components/ui'
 import RecurringDeleteUndoHost from '../components/calendar/RecurringDeleteUndoHost'
+import { useEventsLastSynced } from '../hooks/useEventsLastSynced'
 
 const CALENDAR_VIEW_OPTIONS = [
   { value: 'today', label: 'Day' },
@@ -21,6 +22,7 @@ const CALENDAR_VIEW_OPTIONS = [
 export default function CalendarPage() {
   const { activeView, setActiveView, selectedDate, setSelectedDate } = useCalendarStore()
   const [folioOpen, setFolioOpen] = useState(false)
+  const lastSyncedLabel = useEventsLastSynced()
 
 
   // Track slide direction: 1 = forward (next), -1 = backward (prev), 0 = today jump
@@ -182,6 +184,12 @@ export default function CalendarPage() {
               className="shrink-0 hover:bg-casa-surface text-casa-text hover:text-casa-gold"
             />
           </div>
+
+          {lastSyncedLabel && (
+            <span className="hidden sm:inline text-caption text-casa-muted shrink-0 select-none" aria-live="polite">
+              {lastSyncedLabel}
+            </span>
+          )}
         </div>
 
         <div className="relative flex items-center gap-2 w-full sm:w-auto shrink-0 justify-end sm:justify-start">
