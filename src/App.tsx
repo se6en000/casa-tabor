@@ -9,6 +9,7 @@ import {
   shouldPersistQuery,
 } from './lib/eventsCachePersister'
 import { shouldRetryQuery } from './lib/queryRetryPolicy'
+import { reportClientError } from './lib/clientErrorReporter'
 import AnimatedRoutes from './components/shared/AnimatedRoutes'
 import TabletSidebar from './components/layout/TabletSidebar'
 import MobileFloatingDock from './components/layout/MobileFloatingDock'
@@ -46,6 +47,7 @@ const IS_SAFE_MODE = SAFE_MODE === '1' || SAFE_MODE === 'true' || SAFE_MODE === 
 class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null }
   static getDerivedStateFromError(error: Error) { return { error } }
+  componentDidCatch(error: Error) { reportClientError(error, 'react-error-boundary') }
   render() {
     if (this.state.error) {
       return (

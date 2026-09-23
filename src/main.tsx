@@ -8,12 +8,14 @@ import { initPointerGestures } from './lib/pointerGestures'
 import { initDensityProfile } from './lib/densityProfile.mjs'
 import { initDisablePinchZoom } from './lib/disablePinchZoom'
 import { initTouchDeviceFlag } from './lib/touchDeviceFlag'
+import { initGlobalErrorReporting } from './lib/clientErrorReporter'
 import VisualRegressionPage from './pages/VisualRegressionPage'
 
 initPointerGestures()
 initDensityProfile()
 initDisablePinchZoom()
 initTouchDeviceFlag()
+initGlobalErrorReporting()
 
 const visualRegressionMode = import.meta.env.VITE_VISUAL_TEST_MODE === 'true'
   && window.location.pathname === '/__visual-regression'
