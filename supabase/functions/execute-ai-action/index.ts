@@ -715,6 +715,15 @@ Deno.serve(async (req) => {
       if (!Number.isFinite(proposedStartMs) || !Number.isFinite(proposedEndMs) || proposedEndMs <= proposedStartMs) {
         throw new Error('create_event requires a valid end after start')
       }
+      // Kicked off here (before nearbyEvents is awaited) so the two run
+      // concurrently instead of stacking -- neither depends on the other's
+      // result. Measured live: this pair running sequentially was the bulk
+      // of a ~14.7s confirm-to-response round trip on "Kelly Workout"
+      // (the event insert itself only took ~1.1s). Not awaited until its
+      // actual use point in the location-resolution block below.
+      const similarPlacesPromise = normalizedLocation
+        ? sb.rpc('find_similar_places', { p_name: normalizedLocation, p_phone: null })
+        : null
       const { data: nearbyEvents, error: nearbyEventsError } = await sb
         .from('events')
         .select('id, title, start_time, end_time, event_type, event_members(family_members(name))')
@@ -809,8 +818,8 @@ Deno.serve(async (req) => {
       let resolvedAddress: string | null = null
       let resolvedLat: number | null = null
       let resolvedLng: number | null = null
-      if (normalizedLocation) {
-        const { data: similarPlaces } = await sb.rpc('find_similar_places', { p_name: normalizedLocation, p_phone: null })
+      if (normalizedLocation && similarPlacesPromise) {
+        const { data: similarPlaces } = await similarPlacesPromise
         const matchedPlace = pickBestDirectoryMatch(similarPlaces)
         if (matchedPlace) {
           const { data: fullPlace } = await sb
