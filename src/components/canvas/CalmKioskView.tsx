@@ -270,7 +270,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
             return (
               <span
                 key={idx}
-                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-casa-surface-subtle border border-casa-border/50 text-casa-navy text-caption font-medium shadow-2xs"
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-casa-surface-subtle border border-casa-border/50 text-casa-navy text-caption font-medium"
               >
                 <span
                   className="w-2 h-2 rounded-full shrink-0"
@@ -285,7 +285,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
 
       {/* ── Mobile View Switcher (Only visible on small screens < lg) ── */}
       <div className="lg:hidden flex items-center justify-between pb-3 mb-1 border-b border-casa-border/40 shrink-0">
-        <div className="inline-flex p-1 rounded-2xl bg-casa-surface border border-casa-border/60 w-full justify-center gap-1 shadow-2xs">
+        <div className="inline-flex p-1 rounded-2xl bg-casa-surface border border-casa-border/60 w-full justify-center gap-1">
           <Button
             size="sm"
             variant={mobileSubTab === 'schedule' ? 'primary' : 'ghost'}
@@ -293,7 +293,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
             className={cn(
               'flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-caption font-bold transition-all min-h-[42px]',
               mobileSubTab === 'schedule'
-                ? 'bg-casa-navy text-white shadow-2xs'
+                ? 'bg-casa-navy text-white'
                 : 'text-casa-muted hover:text-casa-navy'
             )}
           >
@@ -312,7 +312,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
             className={cn(
               'flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-caption font-bold transition-all min-h-[42px]',
               mobileSubTab === 'triage'
-                ? 'bg-amber-500 text-white shadow-2xs'
+                ? 'bg-amber-500 text-white'
                 : 'text-casa-muted hover:text-casa-navy'
             )}
           >
@@ -337,7 +337,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
             className={cn(
               'flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-caption font-bold transition-all min-h-[42px]',
               mobileSubTab === 'kitchen'
-                ? 'bg-casa-gold text-casa-navy shadow-2xs'
+                ? 'bg-casa-gold text-casa-navy'
                 : 'text-casa-muted hover:text-casa-navy'
             )}
           >
@@ -562,7 +562,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
           {mobileSubTab === 'triage' && (
             <div className="lg:hidden flex flex-col gap-3">
               {/* Header card */}
-              <div className="rounded-3xl p-5 bg-casa-surface border border-amber-500/30 shadow-sm flex items-center justify-between">
+              <div className="rounded-3xl p-5 bg-casa-surface border border-amber-500/30 flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-800 flex items-center justify-center font-bold">
                     <Zap size={18} className="text-amber-600" />
@@ -590,7 +590,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
               {activeConflicts.map((conflict) => (
                 <div
                   key={conflict.id}
-                  className="rounded-3xl p-4 bg-casa-surface border border-amber-500/30 shadow-sm flex flex-col gap-2.5"
+                  className="rounded-3xl p-4 bg-casa-surface border border-amber-500/30 flex flex-col gap-2.5"
                 >
                   <div className="flex items-center gap-1.5 text-amber-700 text-caption font-bold uppercase tracking-wider">
                     <Zap size={13} className="text-amber-600 shrink-0" />
@@ -626,7 +626,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
               {activePrep.map((prep) => (
                 <div
                   key={prep.id}
-                  className="rounded-3xl p-4 bg-casa-surface border border-emerald-500/30 shadow-sm flex items-center justify-between gap-3"
+                  className="rounded-3xl p-4 bg-casa-surface border border-emerald-500/30 flex items-center justify-between gap-3"
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 text-emerald-700 text-caption font-bold uppercase tracking-wider">
@@ -734,7 +734,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
                           navigateTo('/cook')
                         }
                       }}
-                      className="text-caption font-bold text-casa-navy hover:text-casa-gold min-h-[36px] px-3 shadow-2xs"
+                      className="text-caption font-bold text-casa-navy hover:text-casa-gold min-h-[36px] px-3"
                     >
                       <span>View Recipe</span>
                       <ChevronRight size={13} className="ml-0.5" />

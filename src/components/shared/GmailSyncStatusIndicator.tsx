@@ -54,7 +54,7 @@ export default function GmailSyncStatusIndicator({
       <Link
         to="/settings/google"
         className={cn(
-          'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-caption font-semibold transition-all shadow-2xs no-underline',
+          'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-caption font-semibold transition-all no-underline',
           isError
             ? 'border-casa-error/50 bg-casa-error/10 text-casa-error hover:bg-casa-error/15'
             : isStale
@@ -136,7 +136,7 @@ export default function GmailSyncStatusIndicator({
   return (
     <div
       className={cn(
-        'w-full rounded-2xl border p-4 sm:p-4.5 shadow-subtle transition-all duration-200',
+        'w-full rounded-2xl border p-4 sm:p-4.5 transition-all duration-200',
         isError
           ? 'bg-rose-50/90 border-rose-200/80 dark:bg-rose-950/20 dark:border-rose-800/50'
           : 'bg-amber-50/90 border-amber-200/80 dark:bg-amber-950/20 dark:border-amber-800/50',
@@ -235,7 +235,7 @@ export default function GmailSyncStatusIndicator({
           <Link
             to="/settings/google"
             className={cn(
-              'inline-flex items-center justify-center gap-1.5 min-h-[44px] px-4 rounded-xl text-body-sm font-bold shadow-xs transition-all no-underline',
+              'inline-flex items-center justify-center gap-1.5 min-h-[44px] px-4 rounded-xl text-body-sm font-bold transition-all no-underline',
               isError
                 ? 'bg-rose-600 hover:bg-rose-700 text-white'
                 : 'bg-amber-600 hover:bg-amber-700 text-white'

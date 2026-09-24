@@ -80,21 +80,14 @@ export default function TomorrowPrepWidget({
       className={cn(
         'w-full rounded-3xl p-6 sm:p-7 relative overflow-hidden flex flex-col justify-between space-y-5 transition-all duration-300',
         isNavy
-          ? 'bg-gradient-to-br from-casa-navy via-slate-900 to-slate-950 text-white border border-white/10 shadow-xl'
+          ? 'bg-gradient-to-br from-casa-navy via-slate-900 to-slate-950 text-white border border-white/10'
           : hasTomorrowExceptions
-          ? 'border border-casa-gold/40 bg-gradient-to-br from-casa-surface via-casa-surface to-amber-950/5 text-casa-navy shadow-card'
-          : 'border border-casa-border bg-casa-surface text-casa-navy shadow-card',
+          ? 'border border-casa-gold/40 bg-gradient-to-br from-casa-surface via-casa-surface to-amber-950/5 text-casa-navy'
+          : 'border border-casa-border bg-casa-surface text-casa-navy',
         hasTomorrowExceptions && isNavy && 'ring-1 ring-amber-400/40',
         className,
       )}
     >
-      {/* Background ambient glow */}
-      {isNavy ? (
-        <div className="absolute top-0 right-0 w-96 h-96 bg-casa-gold/10 rounded-full blur-3xl pointer-events-none" />
-      ) : hasTomorrowExceptions ? (
-        <div className="absolute top-0 right-0 w-80 h-80 bg-casa-gold/10 rounded-full blur-3xl pointer-events-none" />
-      ) : null}
-
       {/* ── Header ── */}
       <div
         className={cn(
@@ -157,7 +150,7 @@ export default function TomorrowPrepWidget({
           {totalPrepCount > 0 && (
             <span
               className={cn(
-                'hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-caption font-semibold shadow-2xs border',
+                'hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-caption font-semibold border',
                 isNavy
                   ? 'bg-white/10 border-white/10 text-white/80'
                   : 'bg-casa-surface-subtle border-casa-border/60 text-casa-text-secondary',
@@ -181,7 +174,7 @@ export default function TomorrowPrepWidget({
           {showViewToggle && onToggleTodayView && (
             <div
               className={cn(
-                'inline-flex items-center p-1 rounded-full border shadow-2xs',
+                'inline-flex items-center p-1 rounded-full border',
                 isNavy ? 'bg-white/5 border-white/10' : 'bg-casa-surface-subtle border-casa-border',
               )}
             >
@@ -205,8 +198,8 @@ export default function TomorrowPrepWidget({
                 className={cn(
                   'px-3.5 py-1.5 rounded-full text-caption font-bold transition-all min-h-[44px] flex items-center gap-1.5',
                   isNavy
-                    ? 'bg-casa-gold text-casa-navy shadow-2xs'
-                    : 'bg-casa-navy text-white shadow-2xs',
+                    ? 'bg-casa-gold text-casa-navy'
+                    : 'bg-casa-navy text-white',
                 )}
               >
                 <Moon size={13} />
@@ -236,8 +229,8 @@ export default function TomorrowPrepWidget({
           className={cn(
             'p-4 rounded-2xl border relative z-10 space-y-1.5 transition-all cursor-pointer select-none active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-casa-gold',
             isNavy
-              ? 'bg-amber-500/15 border-amber-400/40 text-white hover:bg-amber-500/25 hover:border-amber-400/60 hover:shadow-lg'
-              : 'bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border-amber-500/30 text-casa-navy hover:bg-white hover:border-casa-gold/60 hover:shadow-md',
+              ? 'bg-amber-500/15 border-amber-400/40 text-white hover:bg-amber-500/25 hover:border-amber-400/60'
+              : 'bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border-amber-500/30 text-casa-navy hover:bg-white hover:border-casa-gold/60',
           )}
         >
           <div className="flex items-center justify-between gap-2">
@@ -330,8 +323,8 @@ export default function TomorrowPrepWidget({
                       ? 'border-amber-400/40 bg-amber-500/10 text-white hover:bg-amber-500/20 hover:border-amber-400/60'
                       : 'border-white/10 bg-white/5 text-white hover:bg-white/10 hover:border-white/25'
                     : dep.isException
-                    ? 'border-amber-400/40 bg-amber-50/50 text-casa-navy hover:bg-white hover:border-casa-gold/60 hover:shadow-sm'
-                    : 'border-casa-border bg-casa-surface-subtle/80 text-casa-navy hover:bg-white hover:border-casa-gold/50 hover:shadow-sm',
+                    ? 'border-amber-400/40 bg-amber-50/50 text-casa-navy hover:bg-white hover:border-casa-gold/60'
+                    : 'border-casa-border bg-casa-surface-subtle/80 text-casa-navy hover:bg-white hover:border-casa-gold/50',
                 )}
               >
                 <div className="min-w-0">

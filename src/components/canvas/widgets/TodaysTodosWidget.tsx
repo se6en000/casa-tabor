@@ -109,7 +109,7 @@ export default function TodaysTodosWidget({
                     fullWidth
                     align="between"
                     onClick={onToggleOverdue}
-                    className="min-h-[32px] h-8 py-0.5 px-2.5 rounded-lg bg-casa-warning-soft hover:bg-casa-warning/20 text-caption text-casa-warning-strong border border-casa-warning/30 transition-colors shadow-2xs"
+                    className="min-h-[32px] h-8 py-0.5 px-2.5 rounded-lg bg-casa-warning-soft hover:bg-casa-warning/20 text-caption text-casa-warning-strong border border-casa-warning/30 transition-colors"
                   >
                     <span className="inline-flex items-center gap-1.5 font-semibold text-caption text-casa-warning-strong">
                       <Clock size={12} className="text-casa-warning-strong shrink-0" />
@@ -174,7 +174,7 @@ export default function TodaysTodosWidget({
                                   className="rounded-full shrink-0 transition-all duration-150 text-casa-muted hover:text-casa-navy hover:dark:text-casa-text hover:bg-casa-surface-subtle h-6 w-6 min-h-0 p-0"
                                   aria-label={`Mark ${evt.title} done`}
                                   icon={
-                                    <div className="w-4.5 h-4.5 rounded-full border-[1.5px] border-casa-warning hover:border-casa-navy hover:dark:border-casa-text bg-white dark:bg-casa-surface shadow-2xs group-hover:scale-105 transition-transform" />
+                                    <div className="w-4.5 h-4.5 rounded-full border-[1.5px] border-casa-warning hover:border-casa-navy hover:dark:border-casa-text bg-white dark:bg-casa-surface group-hover:scale-105 transition-transform" />
                                   }
                                 />
 
@@ -242,7 +242,7 @@ export default function TodaysTodosWidget({
                           onOpenEvent(evt)
                         }
                       }}
-                      className="w-full flex items-center justify-between py-1 px-2 rounded-xl transition-all duration-150 cursor-pointer group gap-2.5 select-none active:scale-[0.99] min-h-[36px] hover:bg-casa-surface hover:shadow-2xs"
+                      className="w-full flex items-center justify-between py-1 px-2 rounded-xl transition-all duration-150 cursor-pointer group gap-2.5 select-none active:scale-[0.99] min-h-[36px] hover:bg-casa-surface"
                     >
                       <div className="flex items-center gap-2.5 min-w-0 flex-1">
                         <IconButton
@@ -260,7 +260,7 @@ export default function TodaysTodosWidget({
                           className="rounded-full shrink-0 transition-all duration-150 h-6 w-6 min-h-0 p-0 text-casa-muted hover:text-casa-navy hover:dark:text-casa-text hover:bg-casa-surface-subtle"
                           aria-label={`Mark ${evt.title} done`}
                           icon={
-                            <div className="w-4.5 h-4.5 rounded-full border-[1.5px] border-slate-300 dark:border-slate-700 hover:border-casa-navy hover:dark:border-casa-text bg-white dark:bg-casa-surface shadow-2xs transition-colors" />
+                            <div className="w-4.5 h-4.5 rounded-full border-[1.5px] border-slate-300 dark:border-slate-700 hover:border-casa-navy hover:dark:border-casa-text bg-white dark:bg-casa-surface transition-colors" />
                           }
                         />
 

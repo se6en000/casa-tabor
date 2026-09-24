@@ -43,10 +43,10 @@ export default function CompactReminderCard({ event, now = new Date(), isHighlig
         role="button"
         tabIndex={0}
         className={cn(
-          'relative w-full rounded-xl border border-amber-300/60 bg-amber-50/40 shadow-xs cursor-pointer touch-pan-y overflow-hidden',
+          'relative w-full rounded-xl border border-amber-300/60 bg-amber-50/40 cursor-pointer touch-pan-y overflow-hidden',
           'hover:opacity-85 hover:border-amber-400/80 transition-all duration-200 min-h-[38px] px-2.5 py-1.5 flex items-center justify-between gap-2',
           'border-l-4 border-l-amber-400',
-          isHighlighted ? 'border-2 border-casa-gold shadow-md opacity-100 font-bold' : 'opacity-45'
+          isHighlighted ? 'border-2 border-casa-gold opacity-100 font-bold' : 'opacity-45'
         )}
         data-calendar-event
       >
@@ -88,8 +88,8 @@ export default function CompactReminderCard({ event, now = new Date(), isHighlig
         role="button"
         tabIndex={0}
         className={cn(
-          'relative w-full rounded-xl border bg-amber-50/30 shadow-2xs cursor-pointer touch-pan-y overflow-hidden transition-all duration-200 px-3 py-2.5 flex items-center justify-between gap-2.5 min-h-[44px]',
-          isHighlighted ? 'border-2 border-amber-400 shadow-md font-bold' : 'border-amber-200/70 hover:shadow-card-hover hover:border-amber-300',
+          'relative w-full rounded-xl border bg-amber-50/30 cursor-pointer touch-pan-y overflow-hidden transition-all duration-200 px-3 py-2.5 flex items-center justify-between gap-2.5 min-h-[44px]',
+          isHighlighted ? 'border-2 border-amber-400 font-bold' : 'border-amber-200/70 hover:border-amber-300',
         )}
         data-calendar-event
         data-sidecar-loadable="true"
@@ -122,10 +122,10 @@ export default function CompactReminderCard({ event, now = new Date(), isHighlig
       role="button"
       tabIndex={0}
       className={cn(
-        'relative w-full rounded-widget border bg-amber-50/40 shadow-card cursor-pointer touch-pan-x touch-pan-y overflow-hidden',
-        'hover:shadow-card-hover hover:border-amber-400/80 transition-[box-shadow,border-color,opacity] duration-150 min-h-control',
+        'relative w-full rounded-widget border bg-amber-50/40 cursor-pointer touch-pan-x touch-pan-y overflow-hidden',
+        'hover:border-amber-400/80 transition-[box-shadow,border-color,opacity] duration-150 min-h-control',
         'grid grid-cols-[5.75rem_1fr]',
-        isHighlighted ? 'border-2 border-casa-gold shadow-md' : 'border-amber-300/60',
+        isHighlighted ? 'border-2 border-casa-gold' : 'border-amber-300/60',
         past && !isHighlighted && 'opacity-45'
       )}
       data-calendar-event

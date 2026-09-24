@@ -411,16 +411,11 @@ export default function MiddayLogisticsWidget({
       className={cn(
         'w-full rounded-3xl p-6 sm:p-7 relative overflow-hidden flex flex-col justify-between space-y-5 transition-all duration-300',
         isNavy
-          ? 'bg-gradient-to-br from-casa-navy via-slate-900 to-slate-950 text-white border border-white/10 shadow-xl'
-          : 'bg-casa-surface text-casa-navy border border-casa-border shadow-card',
+          ? 'bg-gradient-to-br from-casa-navy via-slate-900 to-slate-950 text-white border border-white/10'
+          : 'bg-casa-surface text-casa-navy border border-casa-border',
         className,
       )}
     >
-      {/* Background ambient glow */}
-      {isNavy && (
-        <div className="absolute top-0 right-0 w-96 h-96 bg-casa-gold/10 rounded-full blur-3xl pointer-events-none" />
-      )}
-
       {/* ── Top Header Row with Status Badge & 1-Tap View Switcher ── */}
       <div
         className={cn(
@@ -468,7 +463,7 @@ export default function MiddayLogisticsWidget({
           {onToggleTomorrowView && (
             <div
               className={cn(
-                'inline-flex items-center p-1 rounded-full border shadow-2xs',
+                'inline-flex items-center p-1 rounded-full border',
                 isNavy ? 'bg-white/5 border-white/10' : 'bg-casa-surface-subtle border-casa-border',
               )}
             >
@@ -480,8 +475,8 @@ export default function MiddayLogisticsWidget({
                   'px-3.5 py-1.5 rounded-full text-caption font-bold transition-all min-h-[44px] flex items-center gap-1.5',
                   !isTomorrowActive
                     ? isNavy
-                      ? 'bg-casa-gold text-casa-navy shadow-2xs'
-                      : 'bg-casa-navy text-white shadow-2xs'
+                      ? 'bg-casa-gold text-casa-navy'
+                      : 'bg-casa-navy text-white'
                     : isNavy
                     ? 'text-white/60 hover:text-white'
                     : 'text-casa-muted hover:text-casa-navy',
@@ -498,8 +493,8 @@ export default function MiddayLogisticsWidget({
                   'px-3.5 py-1.5 rounded-full text-caption font-bold transition-all min-h-[44px] flex items-center gap-1.5',
                   isTomorrowActive
                     ? isNavy
-                      ? 'bg-casa-gold text-casa-navy shadow-2xs'
-                      : 'bg-casa-navy text-white shadow-2xs'
+                      ? 'bg-casa-gold text-casa-navy'
+                      : 'bg-casa-navy text-white'
                     : isNavy
                     ? 'text-white/60 hover:text-white'
                     : 'text-casa-muted hover:text-casa-navy',
@@ -577,7 +572,7 @@ export default function MiddayLogisticsWidget({
                 leadingIcon={<House size={13} className={isNavy ? 'text-amber-300' : 'text-amber-700'} />}
                 onClick={() => handleQuickMarkAtHome(primaryConflict.eventB.rawEvent)}
                 className={cn(
-                  'rounded-xl text-caption font-bold shadow-2xs min-h-[44px]',
+                  'rounded-xl text-caption font-bold min-h-[44px]',
                   isNavy
                     ? 'bg-slate-900 hover:bg-slate-800 border-amber-400/30 text-amber-100'
                     : 'bg-white hover:bg-amber-50 border-amber-300 text-amber-950',
@@ -601,7 +596,7 @@ export default function MiddayLogisticsWidget({
                   )
                 }
                 className={cn(
-                  'rounded-xl text-caption font-bold shadow-2xs min-h-[44px]',
+                  'rounded-xl text-caption font-bold min-h-[44px]',
                   isNavy
                     ? 'bg-slate-900 hover:bg-slate-800 border-amber-400/30 text-amber-100'
                     : 'bg-white hover:bg-amber-50 border-amber-300 text-amber-950',
@@ -658,7 +653,7 @@ export default function MiddayLogisticsWidget({
                 <div className="flex items-center gap-2">
                   <span
                     className={cn(
-                      'text-caption font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-lg border shadow-2xs',
+                      'text-caption font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-lg border',
                       isNavy
                         ? 'bg-amber-400/20 text-amber-300 border-amber-400/30'
                         : 'bg-amber-500/15 text-amber-800 border-amber-500/25',
@@ -668,7 +663,7 @@ export default function MiddayLogisticsWidget({
                   </span>
                   <span
                     className={cn(
-                      'inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-caption font-bold border shadow-2xs',
+                      'inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-caption font-bold border',
                       isNavy
                         ? 'bg-slate-900 border-white/15 text-white'
                         : 'bg-white border-casa-border/60 text-casa-navy',
@@ -682,7 +677,7 @@ export default function MiddayLogisticsWidget({
                 <div className="flex items-center gap-2">
                   <span
                     className={cn(
-                      'inline-flex items-center gap-1.5 text-caption font-mono font-bold px-3 py-1 rounded-lg border shadow-2xs',
+                      'inline-flex items-center gap-1.5 text-caption font-mono font-bold px-3 py-1 rounded-lg border',
                       isNavy
                         ? 'bg-slate-900 border-white/15 text-white'
                         : 'bg-white border-casa-border/60 text-casa-navy',
@@ -695,7 +690,7 @@ export default function MiddayLogisticsWidget({
                   {driverResolution.name && (
                     <span
                       className={cn(
-                        'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-caption font-bold border shadow-2xs',
+                        'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-caption font-bold border',
                         isNavy
                           ? 'bg-white/10 border-white/15 text-white/90'
                           : 'bg-white border-casa-border/60 text-casa-navy',
@@ -779,7 +774,7 @@ export default function MiddayLogisticsWidget({
                         size="sm"
                         leadingIcon={<Navigation size={13} />}
                         className={cn(
-                          'rounded-xl text-caption font-bold shadow-2xs min-h-[44px]',
+                          'rounded-xl text-caption font-bold min-h-[44px]',
                           isNavy
                             ? 'bg-white/10 hover:bg-white/20 border-white/20 text-white'
                             : 'bg-white hover:bg-casa-surface border-casa-border text-casa-navy',
@@ -827,7 +822,7 @@ export default function MiddayLogisticsWidget({
               <div
                 key={dismissal.id}
                 className={cn(
-                  'p-4 rounded-2xl border flex flex-col justify-between space-y-2.5 transition-all shadow-2xs',
+                  'p-4 rounded-2xl border flex flex-col justify-between space-y-2.5 transition-all',
                   isNavy
                     ? 'bg-white/5 border-white/10 hover:border-amber-400/40 text-white'
                     : 'bg-casa-surface-subtle/80 border-casa-border/80 hover:border-casa-gold/60 text-casa-navy',
@@ -836,7 +831,7 @@ export default function MiddayLogisticsWidget({
                 <div className="flex items-center justify-between gap-2">
                   <span
                     className={cn(
-                      'text-body-sm font-mono font-bold px-2.5 py-0.5 rounded-lg border shadow-2xs',
+                      'text-body-sm font-mono font-bold px-2.5 py-0.5 rounded-lg border',
                       isNavy
                         ? 'bg-slate-900 border-white/15 text-white'
                         : 'bg-white border-casa-border/60 text-casa-navy',
@@ -846,7 +841,7 @@ export default function MiddayLogisticsWidget({
                   </span>
                   <span
                     className={cn(
-                      'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-caption font-bold border shadow-2xs',
+                      'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-caption font-bold border',
                       isNavy
                         ? 'bg-slate-900 border-white/15 text-white'
                         : 'bg-white border-casa-border/60 text-casa-navy',
@@ -887,7 +882,7 @@ export default function MiddayLogisticsWidget({
         /* ── Serene Sanctuary State (When today is open & in rhythm) ── */
         <div
           className={cn(
-            'p-5 sm:p-6 rounded-2xl border flex items-center gap-4 shadow-2xs transition-all relative z-10',
+            'p-5 sm:p-6 rounded-2xl border flex items-center gap-4 transition-all relative z-10',
             isNavy
               ? 'bg-white/5 border-white/10 text-white'
               : 'bg-casa-surface-subtle/80 border-casa-border/80 text-casa-navy',
@@ -951,7 +946,7 @@ export default function MiddayLogisticsWidget({
                   key={evt.id}
                   onClick={() => onOpenEvent && onOpenEvent(evt)}
                   className={cn(
-                    'p-3 rounded-2xl border flex items-center justify-between gap-2 cursor-pointer transition-all shadow-2xs min-h-[44px]',
+                    'p-3 rounded-2xl border flex items-center justify-between gap-2 cursor-pointer transition-all min-h-[44px]',
                     isNavy
                       ? 'bg-white/5 border-white/10 hover:border-amber-400/40 text-white'
                       : 'bg-casa-surface-subtle/80 border-casa-border/80 hover:border-casa-gold/60 text-casa-navy',

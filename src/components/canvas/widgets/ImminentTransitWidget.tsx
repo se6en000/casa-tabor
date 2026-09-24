@@ -103,12 +103,12 @@ export default function ImminentTransitWidget({
       className={cn(
         'w-full rounded-3xl p-6 sm:p-7 relative overflow-hidden group cursor-pointer transition-all duration-300',
         isHeroNavy
-          ? 'bg-gradient-to-br from-casa-navy via-slate-900 to-slate-950 text-white border border-white/10 shadow-xl'
-          : 'bg-casa-surface text-casa-navy border border-casa-border shadow-card',
+          ? 'bg-gradient-to-br from-casa-navy via-slate-900 to-slate-950 text-white border border-white/10'
+          : 'bg-casa-surface text-casa-navy border border-casa-border',
         isLeaveNow
           ? isHeroNavy
-            ? 'ring-2 ring-amber-400/60 shadow-glow-gold'
-            : 'ring-2 ring-amber-500/80 shadow-glow-gold'
+            ? 'ring-2 ring-amber-400/60'
+            : 'ring-2 ring-amber-500/80'
           : isPrepUrgent
           ? isHeroNavy
             ? 'ring-1 ring-amber-400/30'
@@ -118,11 +118,6 @@ export default function ImminentTransitWidget({
       )}
       onClick={() => onOpenEvent && onOpenEvent(event)}
     >
-      {/* Background ambient glow */}
-      {isHeroNavy && (
-        <div className="absolute top-0 right-0 w-96 h-96 bg-casa-gold/10 rounded-full blur-3xl pointer-events-none" />
-      )}
-
       <div>
         <div
           className={cn(
@@ -438,7 +433,7 @@ export default function ImminentTransitWidget({
                       if (onOpenEvent && d.rawEvent) onOpenEvent(d.rawEvent)
                     }}
                     className={cn(
-                      'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-caption font-semibold border transition-all cursor-pointer shadow-2xs hover:scale-105 active:scale-95',
+                      'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-caption font-semibold border transition-all cursor-pointer hover:scale-105 active:scale-95',
                       isHeroNavy ? 'bg-white/10 border-white/15 text-white' : 'bg-casa-surface-subtle border-casa-border text-casa-navy',
                     )}
                   >
@@ -488,7 +483,7 @@ export default function ImminentTransitWidget({
                 onToggleTomorrowView()
               }}
               className={cn(
-                'px-3 py-1.5 rounded-xl text-caption font-bold border transition-all flex items-center gap-1 shrink-0 shadow-2xs hover:scale-105 active:scale-95',
+                'px-3 py-1.5 rounded-xl text-caption font-bold border transition-all flex items-center gap-1 shrink-0 hover:scale-105 active:scale-95',
                 isHeroNavy
                   ? 'bg-white/10 hover:bg-white/15 border-white/15 text-white'
                   : 'bg-casa-surface-subtle hover:bg-casa-surface-subtle/80 border-casa-border text-casa-navy',

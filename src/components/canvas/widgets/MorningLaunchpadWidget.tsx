@@ -54,24 +54,17 @@ export default function MorningLaunchpadWidget({
       className={cn(
         'w-full rounded-3xl p-6 sm:p-7 relative overflow-hidden flex flex-col justify-between space-y-5 transition-all duration-300',
         isNavy
-          ? 'bg-gradient-to-br from-casa-navy via-slate-900 to-slate-950 text-white border border-white/10 shadow-xl'
+          ? 'bg-gradient-to-br from-casa-navy via-slate-900 to-slate-950 text-white border border-white/10'
           : nextTodayDeparture?.isLeaveNow
-          ? 'border border-amber-500/60 bg-gradient-to-br from-casa-surface via-casa-surface to-amber-500/10 ring-1 ring-amber-400 text-casa-navy shadow-card'
+          ? 'border border-amber-500/60 bg-gradient-to-br from-casa-surface via-casa-surface to-amber-500/10 ring-1 ring-amber-400 text-casa-navy'
           : nextTodayDeparture?.isPrepUrgent
-          ? 'border border-amber-400/40 bg-gradient-to-br from-casa-surface via-casa-surface to-amber-500/5 text-casa-navy shadow-card'
-          : 'border border-casa-border bg-casa-surface text-casa-navy shadow-card',
-        isNavy && nextTodayDeparture?.isLeaveNow && 'ring-2 ring-amber-400/60 shadow-glow-gold',
+          ? 'border border-amber-400/40 bg-gradient-to-br from-casa-surface via-casa-surface to-amber-500/5 text-casa-navy'
+          : 'border border-casa-border bg-casa-surface text-casa-navy',
+        isNavy && nextTodayDeparture?.isLeaveNow && 'ring-2 ring-amber-400/60',
         isNavy && nextTodayDeparture?.isPrepUrgent && !nextTodayDeparture?.isLeaveNow && 'ring-1 ring-amber-400/40',
         className,
       )}
     >
-      {/* Background ambient glow */}
-      {isNavy ? (
-        <div className="absolute top-0 right-0 w-96 h-96 bg-casa-gold/10 rounded-full blur-3xl pointer-events-none" />
-      ) : isImminent ? (
-        <div className="absolute top-0 right-0 w-80 h-80 bg-amber-400/10 rounded-full blur-3xl pointer-events-none" />
-      ) : null}
-
       {/* ── Header ── */}
       <div
         className={cn(
@@ -165,8 +158,8 @@ export default function MorningLaunchpadWidget({
           className={cn(
             'p-4 rounded-2xl border relative z-10 space-y-2 transition-all cursor-pointer select-none active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-casa-gold',
             isNavy
-              ? 'bg-white/5 border-white/15 text-white hover:bg-white/10 hover:border-white/30 hover:shadow-lg'
-              : 'bg-casa-surface-subtle/80 border-casa-border text-casa-navy hover:bg-white hover:border-casa-gold/60 hover:shadow-md',
+              ? 'bg-white/5 border-white/15 text-white hover:bg-white/10 hover:border-white/30'
+              : 'bg-casa-surface-subtle/80 border-casa-border text-casa-navy hover:bg-white hover:border-casa-gold/60',
           )}
         >
           <div className="flex items-center justify-between gap-2">
@@ -281,8 +274,8 @@ export default function MorningLaunchpadWidget({
                     ? 'bg-white/10 border-white/20 ring-1 ring-casa-gold/30 text-white hover:bg-white/15 hover:border-white/30'
                     : 'bg-white/5 border-white/10 text-white hover:bg-white/10 hover:border-white/25'
                   : dep.id === nextTodayDeparture?.id
-                  ? 'bg-casa-surface border-casa-border ring-1 ring-casa-gold/40 text-casa-navy hover:bg-white hover:border-casa-gold/60 hover:shadow-sm'
-                  : 'bg-casa-surface-subtle/80 border-casa-border text-casa-navy hover:bg-white hover:border-casa-gold/50 hover:shadow-sm',
+                  ? 'bg-casa-surface border-casa-border ring-1 ring-casa-gold/40 text-casa-navy hover:bg-white hover:border-casa-gold/60'
+                  : 'bg-casa-surface-subtle/80 border-casa-border text-casa-navy hover:bg-white hover:border-casa-gold/50',
               )}
             >
               <div className="min-w-0">

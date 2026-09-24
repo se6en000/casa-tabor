@@ -108,9 +108,9 @@ export default function EventCard({ event, household, now = new Date(), isHighli
         role="button"
         tabIndex={0}
         className={cn(
-          'relative rounded-xl border bg-casa-surface/60 shadow-2xs cursor-pointer touch-pan-y overflow-hidden transition-all duration-200 px-3 py-2 flex items-center justify-between gap-2 min-h-[40px]',
+          'relative rounded-xl border bg-casa-surface/60 cursor-pointer touch-pan-y overflow-hidden transition-all duration-200 px-3 py-2 flex items-center justify-between gap-2 min-h-[40px]',
           'border-l-4',
-          isHighlighted ? 'border-2 border-casa-gold shadow-md opacity-100 font-bold' : 'border-casa-border/60 hover:opacity-85 hover:border-casa-gold/60 opacity-45'
+          isHighlighted ? 'border-2 border-casa-gold opacity-100 font-bold' : 'border-casa-border/60 hover:opacity-85 hover:border-casa-gold/60 opacity-45'
         )}
         style={{ borderLeftColor: color }}
         data-calendar-event
@@ -177,15 +177,15 @@ export default function EventCard({ event, household, now = new Date(), isHighli
       role="button"
       tabIndex={0}
       className={cn(
-        'relative rounded-widget border cursor-pointer touch-pan-x touch-pan-y shadow-card overflow-hidden transition-[box-shadow,border-color,opacity] duration-150 min-h-control',
+        'relative rounded-widget border cursor-pointer touch-pan-x touch-pan-y overflow-hidden transition-[box-shadow,border-color,opacity] duration-150 min-h-control',
         'grid grid-cols-[5.75rem_1fr]',
         isHighlighted
-          ? 'border-2 border-casa-gold shadow-md'
+          ? 'border-2 border-casa-gold'
           : isHeroState
-            ? 'bg-casa-navy text-white border-casa-navy shadow-card-hover'
+            ? 'bg-casa-navy text-white border-casa-navy'
             : isBirthday
-              ? 'bg-gradient-to-br from-casa-accent-subtle via-casa-surface to-casa-bg border-casa-border/80 hover:shadow-card-hover hover:border-casa-gold/50'
-              : 'bg-casa-surface text-casa-navy border-casa-border/70 hover:shadow-card-hover hover:border-casa-gold/50'
+              ? 'bg-gradient-to-br from-casa-accent-subtle via-casa-surface to-casa-bg border-casa-border/80 hover:border-casa-gold/50'
+              : 'bg-casa-surface text-casa-navy border-casa-border/70 hover:border-casa-gold/50'
       )}
       data-calendar-event
       data-sidecar-loadable="true"

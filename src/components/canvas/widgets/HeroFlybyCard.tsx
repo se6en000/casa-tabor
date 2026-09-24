@@ -96,17 +96,13 @@ export default function HeroFlybyCard({ now, event, onOpenEvent, className }: He
       className={cn(
         'w-full h-full rounded-3xl p-6 sm:p-7 relative overflow-hidden group cursor-pointer transition-all duration-300',
         isHeroNavy
-          ? 'bg-gradient-to-br from-casa-navy via-slate-900 to-slate-950 text-white border border-white/10 shadow-xl'
-          : 'bg-casa-surface text-casa-navy border border-casa-border shadow-card',
+          ? 'bg-gradient-to-br from-casa-navy via-slate-900 to-slate-950 text-white border border-white/10'
+          : 'bg-casa-surface text-casa-navy border border-casa-border',
         isPast && 'opacity-60',
         className,
       )}
       onClick={() => onOpenEvent?.(event)}
     >
-      {isHeroNavy && (
-        <div className="absolute top-0 right-0 w-96 h-96 bg-casa-gold/10 rounded-full blur-3xl pointer-events-none" />
-      )}
-
       <div
         className={cn(
           'flex items-center gap-2 mb-4 pb-3 border-b',
