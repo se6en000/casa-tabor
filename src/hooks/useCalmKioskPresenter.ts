@@ -285,23 +285,29 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
   // Now also fires the real completion/reopen mutation (same one the sidecar's
   // "Mark Done" and classic mode's own checkbox already correctly used) so the
   // instant local feel is unchanged but the completion is durable and actually
-  // propagates. Fire-and-forget, matching this function's existing pattern -- a
-  // failure here still leaves the optimistic local toggle in place; logged, not
-  // surfaced as an error, since to-do completion should never feel like it failed
-  // for what's normally a reliable write.
+  // propagates. No expected_updated_at guard -- every other completeReminder caller
+  // (HomePage, UnifiedScheduleWidget, ScheduleStreamWidget, DayView) omits it too;
+  // passing a snapshot from allReminders here caused a real, live bug: the RPC's
+  // optimistic-concurrency check raises when that snapshot is even slightly stale
+  // (routinely true right after any other write, e.g. re-checking within seconds of
+  // unchecking), which silently failed the completion while the optimistic cache
+  // eviction was never undone, leaving the item stuck invisible everywhere. Fire-and-
+  // forget, matching this function's existing pattern -- a failure here still leaves
+  // the optimistic local toggle in place; logged, not surfaced as an error, since
+  // to-do completion should never feel like it failed for what's normally a reliable
+  // write.
   const handleToggleReminder = useCallback(
     async (id: string) => {
-      const target = allReminders.find((r) => r.id === id)
       setCompletedItems((prev) => {
         const nextVal = !prev[id]
         void saveTodoToggle(id, nextVal)
-        void (nextVal ? completeReminder(id, target?.updated_at) : reopenReminder(id)).catch((err) => {
+        void (nextVal ? completeReminder(id) : reopenReminder(id)).catch((err) => {
           console.error('[useCalmKioskPresenter] Durable reminder toggle failed:', err)
         })
         return { ...prev, [id]: nextVal }
       })
     },
-    [allReminders, completeReminder, reopenReminder],
+    [completeReminder, reopenReminder],
   )
 
   const handleCompleteReminder = useCallback(
