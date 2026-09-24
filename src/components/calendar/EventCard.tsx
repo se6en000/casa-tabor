@@ -22,6 +22,22 @@ import { resolveEventMode } from '../../lib/eventPlanOverrides'
 // stay identical by construction instead of by two copies kept in sync by hand.
 export const SHARED_COLOR = 'var(--color-casa-gold)'
 
+// 2026-09-24 DIAGNOSTIC (see casa_tabor_pi_ux_lag_investigation memory): after
+// disabling HeroSwipeDeck's drag gesture measurably helped kiosk scroll
+// smoothness (user-confirmed "50% better") but didn't fully fix it, this is
+// the next candidate -- EventCard is the ONLY component anywhere in the
+// homepage's render tree using Framer Motion's `layout` prop (checked: no
+// other widget, and CompactReminderCard doesn't use framer-motion at all).
+// `layout` makes Framer Motion continuously measure and projection-track
+// this element's position/size, on EVERY EventCard mounted at once (Today's
+// + Tomorrow's Schedule can easily have several) -- a well-documented,
+// comparatively expensive feature, and one that specifically has to account
+// for its scrollable ancestor's position, unlike a plain enter/exit fade.
+// Forcing it off here (both `layout` occurrences, past and upcoming variants)
+// is a live test, same spirit/revert path as the Hero-drag flag: delete this
+// constant and restore the bare `layout` prop on both motion.div elements.
+const DIAGNOSTIC_DISABLE_CARD_LAYOUT_ANIMATION = true
+
 export function formatCompactDuration(minutes: number): string {
   if (minutes <= 0 || minutes >= 1440) return ''
   if (minutes < 60) return `${minutes}m`
@@ -94,7 +110,7 @@ export default function EventCard({ event, household, now = new Date(), isHighli
   if (past) {
     return (
       <motion.div
-        layout
+        layout={!DIAGNOSTIC_DISABLE_CARD_LAYOUT_ANIMATION}
         initial={{ opacity: 0, y: 4 }}
         animate={{ opacity: 0.45, y: 0 }}
         exit={{ opacity: 0, y: -4 }}
@@ -162,7 +178,7 @@ export default function EventCard({ event, household, now = new Date(), isHighli
 
   return (
     <motion.div
-      layout
+      layout={!DIAGNOSTIC_DISABLE_CARD_LAYOUT_ANIMATION}
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: past && !isHighlighted ? 0.45 : 1, y: 0 }}
       exit={{ opacity: 0, y: -4 }}
