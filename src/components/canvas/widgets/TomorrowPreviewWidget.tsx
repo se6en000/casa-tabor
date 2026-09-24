@@ -3,7 +3,7 @@ import { Calendar, ChevronDown, ChevronUp } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { cn } from '../../../utils/cn'
 import { Button } from '../../ui'
-import { TIER_CARD, TIER_ICON_CHIP, TIER_TITLE } from '../../ui/WidgetContainer'
+import { TIER_ICON_CHIP, TIER_TITLE } from '../../ui/WidgetContainer'
 import type { EventWithDetails } from '../../../hooks/useCalendarEvents'
 import type { FamilyMember } from '../../../types'
 import EventCard from '../../calendar/EventCard'
@@ -36,7 +36,9 @@ function TomorrowPreviewWidget({
   onOpenEvent,
 }: TomorrowPreviewWidgetProps) {
   return (
-    <div className={cn('rounded-container px-5 py-4', TIER_CARD.structural)}>
+    // No outer card background, on purpose -- see TodaysScheduleWidget's matching
+    // 2026-09-24 note.
+    <div>
       <div
         role="button"
         tabIndex={0}
@@ -47,7 +49,7 @@ function TomorrowPreviewWidget({
             onToggleCollapsed()
           }
         }}
-        className="w-full flex items-center justify-between px-1 py-1.5 -mx-1 rounded-xl hover:bg-casa-surface-subtle/70 transition-colors cursor-pointer select-none group min-h-[44px]"
+        className="w-full flex items-center justify-between px-1.5 py-1.5 -mx-1.5 rounded-xl hover:bg-casa-surface-subtle/70 transition-colors cursor-pointer select-none group min-h-[44px]"
         aria-expanded={!collapsed}
       >
         <div className="flex items-center gap-2">

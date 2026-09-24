@@ -2,7 +2,7 @@ import { Calendar, ChevronDown, ChevronUp, Check } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { cn } from '../../../utils/cn'
 import { Button } from '../../ui'
-import { TIER_CARD, TIER_ICON_CHIP, TIER_TITLE } from '../../ui/WidgetContainer'
+import { TIER_ICON_CHIP, TIER_TITLE } from '../../ui/WidgetContainer'
 import type { EventWithDetails } from '../../../hooks/useCalendarEvents'
 import type { FamilyMember } from '../../../types'
 import EventCard from '../../calendar/EventCard'
@@ -42,7 +42,10 @@ export default function TodaysScheduleWidget({
   if (upcomingAppointments.length === 0 && pastEvents.length === 0) return null
 
   return (
-    <div className={cn('rounded-container px-5 py-4 sm:px-6 sm:py-5', TIER_CARD.structural)}>
+    // No outer card background, on purpose -- with real per-event EventCards inside,
+    // a white section box around them just read as cards-within-a-card. The header
+    // floats directly on the page; see 2026-09-24 follow-up.
+    <div>
       <div
         role="button"
         tabIndex={0}
@@ -53,7 +56,7 @@ export default function TodaysScheduleWidget({
             onToggleCollapsed()
           }
         }}
-        className="w-full flex items-center justify-between px-1 py-1 -mx-1 rounded-xl hover:bg-casa-surface-subtle/70 transition-colors cursor-pointer select-none group min-h-[44px] mb-2"
+        className="w-full flex items-center justify-between px-1.5 py-1.5 -mx-1.5 rounded-xl hover:bg-casa-surface-subtle/70 transition-colors cursor-pointer select-none group min-h-[44px] mb-2.5"
         aria-expanded={!collapsed}
       >
         <div className="flex items-center gap-2.5">
