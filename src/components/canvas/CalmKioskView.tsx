@@ -57,15 +57,23 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
   // container per rail, not a shared-page-scroll sticky trick, so scrolling one
   // rail genuinely cannot move the other. Tracks its own scroll edges to fade a
   // top/bottom cue in and out as a scroll affordance.
+  //
+  // The functional setState form below is load-bearing, not stylistic: a
+  // native `scroll` event fires on essentially every frame during a touch-
+  // drag or momentum scroll, and `onScroll` -> setState with a fresh object
+  // every time would re-render this entire (large) component that many times
+  // per scroll gesture. Returning the SAME object reference when atTop/
+  // atBottom haven't actually changed lets React bail out of re-rendering for
+  // every one of those in-between ticks -- only the two real transitions
+  // (leaving top, reaching bottom) cause a render.
   const scheduleRailRef = useRef<HTMLDivElement | null>(null)
   const [scheduleRailEdge, setScheduleRailEdge] = useState({ atTop: true, atBottom: true })
   const handleScheduleRailScroll = useCallback(() => {
     const el = scheduleRailRef.current
     if (!el) return
-    setScheduleRailEdge({
-      atTop: el.scrollTop <= 2,
-      atBottom: el.scrollTop + el.clientHeight >= el.scrollHeight - 2,
-    })
+    const atTop = el.scrollTop <= 2
+    const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 2
+    setScheduleRailEdge((prev) => (prev.atTop === atTop && prev.atBottom === atBottom ? prev : { atTop, atBottom }))
   }, [])
   useEffect(() => {
     const el = scheduleRailRef.current
@@ -777,6 +785,21 @@ function HeroSwipeDeck({
   const slideCount = 1 + flybyEvents.length
   const multi = slideCount > 1
 
+  // 2026-09-24 DIAGNOSTIC (see casa_tabor_pi_ux_lag_investigation memory): the
+  // 2026-09-13 CDP investigation isolated THIS component specifically as the
+  // remaining source of kiosk touch-scroll jank after ruling out shadows/CPU
+  // load. Framer Motion's drag="x" below means a non-passive gesture listener
+  // is live on this surface any time there's more than one slide (nearly
+  // always) -- its mere presence, not any per-event cost, is a known cause of
+  // the browser falling off the compositor-thread scroll fast path onto the
+  // main thread, which matches the "~91% idle but still janky" profile from
+  // that investigation far better than a raw CPU cost would. Forcing drag off
+  // here is a live test of that theory, same spirit as the shadow-removal
+  // test just before it (revert by deleting this block and restoring the
+  // original `multi && viewportWidth > 0 ? 'x' : false` below) -- it does
+  // disable the flyby swipe gesture while this test is live.
+  const DIAGNOSTIC_DISABLE_HERO_DRAG = true
+
   // `override` holds the user's manually-swiped-to slide. While null, the
   // deck simply rests on slide zero (the live archetype view). A debounced
   // timer clears the override so an idle kiosk always drifts back to truth.
@@ -848,7 +871,7 @@ function HeroSwipeDeck({
         <motion.div
           className="flex items-stretch"
           style={{ x, gap: HERO_SLIDE_GAP }}
-          drag={multi && viewportWidth > 0 ? 'x' : false}
+          drag={DIAGNOSTIC_DISABLE_HERO_DRAG ? false : multi && viewportWidth > 0 ? 'x' : false}
           dragConstraints={{ left: -(slideCount - 1) * (viewportWidth + HERO_SLIDE_GAP), right: 0 }}
           dragElastic={0.14}
           dragMomentum={false}

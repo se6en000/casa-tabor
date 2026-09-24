@@ -55,3 +55,20 @@ test('top/bottom scroll-edge fade cues exist and are gated to lg: only', () => {
   assert.match(fadeBlock.slice(0, 900), /hidden lg:block pointer-events-none absolute inset-x-0 top-0/)
   assert.match(fadeBlock.slice(0, 900), /hidden lg:block pointer-events-none absolute inset-x-0 bottom-0/)
 })
+
+// 2026-09-24 follow-up: the first version called setScheduleRailEdge with a
+// fresh object on every native `scroll` event -- which fires on nearly every
+// frame during a touch-drag/momentum scroll -- forcing a re-render of this
+// entire large component that often per scroll gesture. Fixed to only
+// produce a new object (and therefore only re-render) on the two real
+// atTop/atBottom transitions.
+test('handleScheduleRailScroll bails out of re-rendering when atTop/atBottom have not actually changed', () => {
+  const fnBody = src.slice(
+    src.indexOf('const handleScheduleRailScroll = useCallback'),
+    src.indexOf('const handleScheduleRailScroll = useCallback') + 500,
+  )
+  assert.match(
+    fnBody,
+    /setScheduleRailEdge\(\(prev\) => \(prev\.atTop === atTop && prev\.atBottom === atBottom \? prev : \{ atTop, atBottom \}\)\)/,
+  )
+})
