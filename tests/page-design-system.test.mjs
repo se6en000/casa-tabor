@@ -352,27 +352,33 @@ test('all calendar views provide a non-conflicting quick-create gesture for thei
   assert.match(day, /data-calendar-event/)
 })
 
+// 2026-09-24: StackedView's own reminder/event card markup moved into two shared
+// files (CompactReminderCard.tsx, EventCard.tsx) so the calendar and the
+// living-canvas home widgets render identically instead of two copies drifting --
+// see [[casa_tabor_reminder_ux_todo]]. The touch/pill contracts these tests guard
+// still hold, just from the new files rather than StackedView.tsx's own source.
 test('calendar cards and event details use shared touch contracts', () => {
   const largeCard = readFileSync(resolve('src/components/calendar/LargeEventCard.tsx'), 'utf8')
   const reminderCard = readFileSync(resolve('src/components/calendar/ReminderEventCard.tsx'), 'utf8')
-  const stacked = readFileSync(resolve('src/components/calendar/StackedView.tsx'), 'utf8')
+  const compactReminderCard = readFileSync(resolve('src/components/calendar/CompactReminderCard.tsx'), 'utf8')
+  const eventCard = readFileSync(resolve('src/components/calendar/EventCard.tsx'), 'utf8')
   assert.match(largeCard, /<CalendarPill/)
   assert.match(reminderCard, /<Button/)
   assert.match(reminderCard, /role="button"/)
-  assert.match(stacked, /<CalendarPill/)
-  assert.match(stacked, /min-h-control/)
+  assert.match(compactReminderCard, /<CalendarPill/)
+  assert.match(eventCard, /min-h-control/)
 })
 
 test('dense calendar metadata uses the Day-view-sized read-only pill', () => {
   const pill = readFileSync(resolve('src/components/ui/CalendarPill.tsx'), 'utf8')
   const day = readFileSync(resolve('src/components/calendar/DayView.tsx'), 'utf8')
-  const stacked = readFileSync(resolve('src/components/calendar/StackedView.tsx'), 'utf8')
+  const compactReminderCard = readFileSync(resolve('src/components/calendar/CompactReminderCard.tsx'), 'utf8')
   const large = readFileSync(resolve('src/components/calendar/LargeEventCard.tsx'), 'utf8')
   assert.match(pill, /px-2 py-0\.5 text-caption/)
   assert.match(pill, /HTMLAttributes<HTMLSpanElement>/)
   assert.doesNotMatch(pill, /<button/)
   assert.match(day, /<CalendarPill/)
-  assert.match(stacked, /<CalendarPill/)
+  assert.match(compactReminderCard, /<CalendarPill/)
   assert.match(large, /<CalendarPill/)
 })
 

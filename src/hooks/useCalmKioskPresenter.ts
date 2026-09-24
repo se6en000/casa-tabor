@@ -8,8 +8,10 @@ import {
   startOfDay,
   differenceInCalendarDays,
   addDays,
+  isSameDay,
 } from 'date-fns'
 import { getEventStartDate } from '../utils/eventTime'
+import { isTimedReminder } from '../utils/holidays'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLiveClock } from './useLiveClock'
 import { useTodayEvents, useTomorrowEvents, useRollingEvents, useAllReminders, type EventWithDetails } from './useCalendarEvents'
@@ -161,6 +163,8 @@ export interface CalmKioskPresenterState {
   overdueReminders: EventWithDetails[]
   activeReminders: EventWithDetails[]
   completedReminders: EventWithDetails[]
+  todayTimedReminders: EventWithDetails[]
+  tomorrowTimedReminders: EventWithDetails[]
   completedItems: Record<string, boolean>
   setCompletedItems: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
   todayEvents: EventWithDetails[]
@@ -647,6 +651,25 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     return todayReminders.filter((evt) => Boolean(completedItems[evt.id]))
   }, [todayReminders, completedItems])
 
+  // Reminders with a real due date+time today/tomorrow -- shown inline in
+  // Today's Schedule / Tomorrow's Schedule (chronologically with real events,
+  // via the calendar's own CompactReminderCard), matching how StackedView
+  // already treats a timed reminder as part of the day's timeline rather than
+  // hiding it in the to-do list. A date-less or all-day reminder stays to-do
+  // list only -- see [[casa_tabor_reminder_ux_todo]] (2026-09-24).
+  const todayTimedReminders = useMemo(() => {
+    return todayReminders.filter((evt) =>
+      !completedItems[evt.id] && isTimedReminder(evt) && isSameDay(getEventStartDate(evt), now),
+    )
+  }, [todayReminders, completedItems, now])
+
+  const tomorrowTimedReminders = useMemo(() => {
+    const tomorrow = addDays(now, 1)
+    return allReminders.filter((evt) =>
+      evt.status !== 'cancelled' && isTimedReminder(evt) && isSameDay(getEventStartDate(evt), tomorrow),
+    )
+  }, [allReminders, now])
+
   const refreshBriefing = useCallback(async () => {
     setIsRefreshing(true)
     try {
@@ -685,6 +708,12 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
   const tomorrowEventsSorted = useMemo(() => {
     return tomorrowEvents
       .filter((e) => !isMealEvent(e))
+      // Real events only -- reminders due tomorrow render separately via
+      // tomorrowTimedReminders (a distinct, lighter-weight card), same split
+      // pastEvents/upcomingAppointments already apply for today. Without this,
+      // a reminder whose start_time falls in tomorrow's window would render as
+      // a full EventCard here, doubled up with its own reminder card below.
+      .filter((e) => !isReminderOrChore(e))
       .sort((a, b) => {
         if (a.all_day && !b.all_day) return -1
         if (!a.all_day && b.all_day) return 1
@@ -1022,6 +1051,8 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     overdueReminders,
     activeReminders,
     completedReminders,
+    todayTimedReminders,
+    tomorrowTimedReminders,
     completedItems,
     setCompletedItems,
     todayEvents: effectiveTodayEvents,

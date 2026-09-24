@@ -1,22 +1,35 @@
+import { useMemo } from 'react'
+import { isBefore } from 'date-fns'
 import { Calendar, ChevronDown, ChevronUp, Check } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { cn } from '../../../utils/cn'
 import { Button } from '../../ui'
 import { TIER_ICON_CHIP, TIER_TITLE } from '../../ui/WidgetContainer'
+import { getEventEndDate, getEventStartDate } from '../../../utils/eventTime'
 import type { EventWithDetails } from '../../../hooks/useCalendarEvents'
 import type { FamilyMember } from '../../../types'
 import EventCard from '../../calendar/EventCard'
+import CompactReminderCard from '../../calendar/CompactReminderCard'
 
 interface TodaysScheduleWidgetProps {
   now: Date
   pastEvents: EventWithDetails[]
   upcomingAppointments: EventWithDetails[]
+  /** Reminders with a real due time today -- rendered inline, chronologically
+   * with events, via the calendar's own (lighter-weight) reminder card. A
+   * date-less or all-day reminder never reaches this prop -- it stays in
+   * Today's To-Dos only. */
+  reminders: EventWithDetails[]
   household: FamilyMember[]
   activeEventId: string | null
   collapsed: boolean
   onToggleCollapsed: () => void
   onExpandAll: () => void
   onOpenEvent: (event: EventWithDetails) => void
+}
+
+function byStartTime(a: EventWithDetails, b: EventWithDetails) {
+  return getEventStartDate(a).getTime() - getEventStartDate(b).getTime()
 }
 
 /**
@@ -32,6 +45,7 @@ export default function TodaysScheduleWidget({
   now,
   pastEvents,
   upcomingAppointments,
+  reminders,
   household,
   activeEventId,
   collapsed,
@@ -39,7 +53,16 @@ export default function TodaysScheduleWidget({
   onExpandAll,
   onOpenEvent,
 }: TodaysScheduleWidgetProps) {
-  if (upcomingAppointments.length === 0 && pastEvents.length === 0) return null
+  const pastItems = useMemo(
+    () => [...pastEvents, ...reminders.filter((r) => isBefore(getEventEndDate(r), now))].sort(byStartTime),
+    [pastEvents, reminders, now],
+  )
+  const upcomingItems = useMemo(
+    () => [...upcomingAppointments, ...reminders.filter((r) => !isBefore(getEventEndDate(r), now))].sort(byStartTime),
+    [upcomingAppointments, reminders, now],
+  )
+
+  if (upcomingItems.length === 0 && pastItems.length === 0) return null
 
   return (
     // No outer card background, on purpose -- with real per-event EventCards inside,
@@ -66,9 +89,9 @@ export default function TodaysScheduleWidget({
           <h3 className={cn('font-display text-body-lg font-bold tracking-tight group-hover:text-casa-gold transition-colors', TIER_TITLE.structural)}>
             Today's Schedule
           </h3>
-          {upcomingAppointments.length > 0 ? (
+          {upcomingItems.length > 0 ? (
             <span className="px-2 py-0.5 rounded-full text-caption font-semibold bg-casa-gold/15 text-casa-navy border border-casa-gold/30">
-              {upcomingAppointments.length}
+              {upcomingItems.length}
             </span>
           ) : (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-caption font-semibold uppercase tracking-wider bg-emerald-500/15 text-emerald-800 border border-emerald-500/25">
@@ -78,7 +101,7 @@ export default function TodaysScheduleWidget({
           )}
         </div>
         <div className="flex items-center gap-2">
-          {upcomingAppointments.length > 0 && !collapsed && (
+          {upcomingItems.length > 0 && !collapsed && (
             <Button
               variant="ghost"
               size="sm"
@@ -114,19 +137,29 @@ export default function TodaysScheduleWidget({
                 it; EventCard is a plain vertical stack, same as StackedView. */}
             <div className="space-y-2">
               <AnimatePresence initial={false}>
-                {pastEvents.map((evt) => (
-                  <EventCard
-                    key={evt.id}
-                    event={evt}
-                    household={household}
-                    now={now}
-                    isHighlighted={activeEventId === evt.id}
-                    onClick={() => onOpenEvent(evt)}
-                  />
-                ))}
+                {pastItems.map((evt) =>
+                  evt.event_type === 'reminder' ? (
+                    <CompactReminderCard
+                      key={evt.id}
+                      event={evt}
+                      now={now}
+                      isHighlighted={activeEventId === evt.id}
+                      onClick={() => onOpenEvent(evt)}
+                    />
+                  ) : (
+                    <EventCard
+                      key={evt.id}
+                      event={evt}
+                      household={household}
+                      now={now}
+                      isHighlighted={activeEventId === evt.id}
+                      onClick={() => onOpenEvent(evt)}
+                    />
+                  )
+                )}
               </AnimatePresence>
 
-              {pastEvents.length > 0 && upcomingAppointments.length > 0 && (
+              {pastItems.length > 0 && upcomingItems.length > 0 && (
                 <div className="flex items-center gap-2.5 py-1" aria-hidden="true">
                   <span className="w-2 h-2 rounded-full bg-casa-gold shrink-0" />
                   <span className="text-caption font-bold uppercase tracking-widest text-casa-gold-hover shrink-0">Now</span>
@@ -135,16 +168,26 @@ export default function TodaysScheduleWidget({
               )}
 
               <AnimatePresence initial={false}>
-                {upcomingAppointments.map((evt) => (
-                  <EventCard
-                    key={evt.id}
-                    event={evt}
-                    household={household}
-                    now={now}
-                    isHighlighted={activeEventId === evt.id}
-                    onClick={() => onOpenEvent(evt)}
-                  />
-                ))}
+                {upcomingItems.map((evt) =>
+                  evt.event_type === 'reminder' ? (
+                    <CompactReminderCard
+                      key={evt.id}
+                      event={evt}
+                      now={now}
+                      isHighlighted={activeEventId === evt.id}
+                      onClick={() => onOpenEvent(evt)}
+                    />
+                  ) : (
+                    <EventCard
+                      key={evt.id}
+                      event={evt}
+                      household={household}
+                      now={now}
+                      isHighlighted={activeEventId === evt.id}
+                      onClick={() => onOpenEvent(evt)}
+                    />
+                  )
+                )}
               </AnimatePresence>
             </div>
           </motion.div>

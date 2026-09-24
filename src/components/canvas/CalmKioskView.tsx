@@ -159,6 +159,8 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
     overdueReminders,
     activeReminders,
     completedReminders,
+    todayTimedReminders,
+    tomorrowTimedReminders,
     tomorrowEvents,
     isDinnerPast,
     totalAttentionCount,
@@ -447,6 +449,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
             now={now}
             pastEvents={pastEvents}
             upcomingAppointments={upcomingAppointments}
+            reminders={todayTimedReminders}
             household={familyMembers}
             activeEventId={activeEventId}
             collapsed={scheduleSectionCollapsed}
@@ -481,6 +484,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
           <TomorrowPreviewWidget
             now={now}
             tomorrowEvents={tomorrowEvents}
+            reminders={tomorrowTimedReminders}
             household={familyMembers}
             activeEventId={activeEventId}
             collapsed={tomorrowSectionCollapsed}

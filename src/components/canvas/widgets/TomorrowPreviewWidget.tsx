@@ -1,16 +1,21 @@
-import { memo } from 'react'
+import { memo, useMemo } from 'react'
 import { Calendar, ChevronDown, ChevronUp } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { cn } from '../../../utils/cn'
 import { Button } from '../../ui'
 import { TIER_ICON_CHIP, TIER_TITLE } from '../../ui/WidgetContainer'
+import { getEventStartDate } from '../../../utils/eventTime'
 import type { EventWithDetails } from '../../../hooks/useCalendarEvents'
 import type { FamilyMember } from '../../../types'
 import EventCard from '../../calendar/EventCard'
+import CompactReminderCard from '../../calendar/CompactReminderCard'
 
 interface TomorrowPreviewWidgetProps {
   now: Date
   tomorrowEvents: EventWithDetails[]
+  /** Reminders due tomorrow with a real time -- rendered inline, chronologically
+   * with events, same as TodaysScheduleWidget. */
+  reminders: EventWithDetails[]
   household: FamilyMember[]
   activeEventId: string | null
   collapsed: boolean
@@ -22,12 +27,14 @@ interface TomorrowPreviewWidgetProps {
 /**
  * Tomorrow's schedule preview -- a quiet, secondary card beside Today's
  * To-Dos and Ahead (see the "Equal-Weight Split" home-hierarchy mock,
- * 2026-09-11). Real events render via the shared calendar EventCard, same as
- * TodaysScheduleWidget -- see 2026-09-24.
+ * 2026-09-11). Real events render via the shared calendar EventCard, timed
+ * reminders via CompactReminderCard, same as TodaysScheduleWidget --
+ * see 2026-09-24.
  */
 function TomorrowPreviewWidget({
   now,
   tomorrowEvents,
+  reminders,
   household,
   activeEventId,
   collapsed,
@@ -35,6 +42,12 @@ function TomorrowPreviewWidget({
   onViewFullCalendar,
   onOpenEvent,
 }: TomorrowPreviewWidgetProps) {
+  const items = useMemo(
+    () => [...tomorrowEvents, ...reminders].sort(
+      (a, b) => getEventStartDate(a).getTime() - getEventStartDate(b).getTime(),
+    ),
+    [tomorrowEvents, reminders],
+  )
   return (
     // No outer card background, on purpose -- see TodaysScheduleWidget's matching
     // 2026-09-24 note.
@@ -60,7 +73,7 @@ function TomorrowPreviewWidget({
             Tomorrow's Schedule
           </h3>
           <span className="px-1.5 py-0.5 rounded-full text-caption font-semibold bg-casa-gold/15 text-casa-navy border border-casa-gold/30">
-            {tomorrowEvents.length}
+            {items.length}
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -92,19 +105,29 @@ function TomorrowPreviewWidget({
             transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
             className="overflow-hidden space-y-1"
           >
-            {tomorrowEvents.length > 0 ? (
+            {items.length > 0 ? (
               <div className="space-y-2">
                 <AnimatePresence initial={false}>
-                  {tomorrowEvents.map((evt) => (
-                    <EventCard
-                      key={evt.id}
-                      event={evt}
-                      household={household}
-                      now={now}
-                      isHighlighted={activeEventId === evt.id}
-                      onClick={() => onOpenEvent(evt)}
-                    />
-                  ))}
+                  {items.map((evt) =>
+                    evt.event_type === 'reminder' ? (
+                      <CompactReminderCard
+                        key={evt.id}
+                        event={evt}
+                        now={now}
+                        isHighlighted={activeEventId === evt.id}
+                        onClick={() => onOpenEvent(evt)}
+                      />
+                    ) : (
+                      <EventCard
+                        key={evt.id}
+                        event={evt}
+                        household={household}
+                        now={now}
+                        isHighlighted={activeEventId === evt.id}
+                        onClick={() => onOpenEvent(evt)}
+                      />
+                    )
+                  )}
                 </AnimatePresence>
               </div>
             ) : (
