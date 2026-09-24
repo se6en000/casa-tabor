@@ -1058,24 +1058,26 @@ export async function deleteCalendarEvent(
     return
   }
 
-  // 3. Resolve Google sync info: extract from event or fetch from DB if needed
+  // 3. Resolve Google sync info + event_type: extract from event or fetch from DB if needed
   let googleEventId = event?.google_event_id
   let googleCalendarId = event?.google_calendar_id
   let googleConnectionId = event?.google_connection_id
   let sourceMemberId = event?.source_member_id
+  let eventType = event?.event_type
 
-  if (!googleEventId) {
+  if (!googleEventId || !eventType) {
     try {
       const { data: dbEvent } = await supabase
         .from('events')
-        .select('google_event_id, google_calendar_id, google_connection_id, source_member_id')
+        .select('google_event_id, google_calendar_id, google_connection_id, source_member_id, event_type')
         .eq('id', eventId)
         .maybeSingle()
       if (dbEvent) {
-        googleEventId = dbEvent.google_event_id
-        googleCalendarId = dbEvent.google_calendar_id
-        googleConnectionId = dbEvent.google_connection_id
-        sourceMemberId = dbEvent.source_member_id
+        googleEventId = googleEventId ?? dbEvent.google_event_id
+        googleCalendarId = googleCalendarId ?? dbEvent.google_calendar_id
+        googleConnectionId = googleConnectionId ?? dbEvent.google_connection_id
+        sourceMemberId = sourceMemberId ?? dbEvent.source_member_id
+        eventType = eventType ?? dbEvent.event_type
       }
     } catch (dbLookupErr) {
       console.warn('[eventMutations] DB lookup error for Google sync fields:', dbLookupErr)
@@ -1106,7 +1108,9 @@ export async function deleteCalendarEvent(
     }
   }
 
-  // 5. Clean up dependent child tables to prevent foreign key lock delays/timeouts
+  // 5. Clean up dependent child tables to prevent foreign key lock delays/timeouts.
+  // event_ios_reminder_links is deliberately never in this list -- a reminder that's
+  // ever synced to Apple Reminders needs to keep its ios_reminder_id (see step 6).
   await Promise.allSettled([
     supabase.from('event_members').delete().eq('event_id', eventId),
     supabase.from('event_enrichments').delete().eq('event_id', eventId),
@@ -1116,6 +1120,30 @@ export async function deleteCalendarEvent(
     supabase.from('event_checklist_items').delete().eq('event_id', eventId),
     supabase.from('event_action_items').delete().eq('event_id', eventId),
   ])
+
+  // 6. A reminder soft-deletes (a deleted_at tombstone) instead of hard-deleting.
+  // Hard-deleting left nothing for the iOS Reminders sync to find: no deleted_at
+  // for get_todo_reminder_deltas to report, and no event_ios_reminder_links row to
+  // carry the deletion out via ios_reminder_id. The Apple-side reminder stayed
+  // alive, and the next iOS->Casa poll saw it as unlinked/new and recreated it in
+  // Casa -- confirmed live 2026-09-24 (see the matching migration,
+  // 20260924210000_todo_reminder_delete_sync.sql, for the other half of this fix:
+  // the delta query no longer suppresses a deletion for an iOS-linked row). Every
+  // other event type is unaffected -- still hard-deleted below, unchanged.
+  if (eventType === 'reminder') {
+    const { error: tombstoneError } = await supabase
+      .from('events')
+      .update({
+        deleted_at: new Date().toISOString(),
+        status: 'cancelled',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', eventId)
+
+    if (tombstoneError) throw tombstoneError
+    invalidateAllCalendarQueries(queryClient, eventId)
+    return
+  }
 
   const { error } = await supabase
     .from('events')
