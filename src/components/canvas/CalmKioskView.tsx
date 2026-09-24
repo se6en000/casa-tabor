@@ -52,6 +52,30 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
   const [mobileSubTab, setMobileSubTab] = useState<'schedule' | 'triage' | 'kitchen'>('schedule')
   const [heroManualView, setHeroManualView] = useState<'today' | 'tomorrow' | null>(null)
 
+  // 2026-09-24: desktop/kiosk right rail (Schedule/To-Dos/Tomorrow) scrolls
+  // independently of the left rail (Hero/Ahead) -- a real separate overflow
+  // container per rail, not a shared-page-scroll sticky trick, so scrolling one
+  // rail genuinely cannot move the other. Tracks its own scroll edges to fade a
+  // top/bottom cue in and out as a scroll affordance.
+  const scheduleRailRef = useRef<HTMLDivElement | null>(null)
+  const [scheduleRailEdge, setScheduleRailEdge] = useState({ atTop: true, atBottom: true })
+  const handleScheduleRailScroll = useCallback(() => {
+    const el = scheduleRailRef.current
+    if (!el) return
+    setScheduleRailEdge({
+      atTop: el.scrollTop <= 2,
+      atBottom: el.scrollTop + el.clientHeight >= el.scrollHeight - 2,
+    })
+  }, [])
+  useEffect(() => {
+    const el = scheduleRailRef.current
+    if (!el) return
+    handleScheduleRailScroll()
+    const observer = new ResizeObserver(() => handleScheduleRailScroll())
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [handleScheduleRailScroll])
+
   // Collapsible section states with localStorage persistence
   const [todosSectionCollapsed, setTodosSectionCollapsed] = useState<boolean>(() => {
     try {
@@ -229,7 +253,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
   }
 
   return (
-    <div className="w-full h-full flex flex-col justify-start px-4 sm:px-6 lg:px-8 xl:px-10 pt-5 sm:pt-6 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-8 overflow-y-auto overscroll-contain touch-pan-y scrollbar-hide">
+    <div className="w-full h-full flex flex-col justify-start px-4 sm:px-6 lg:px-8 xl:px-10 pt-5 sm:pt-6 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-0 overflow-y-auto overscroll-contain touch-pan-y scrollbar-hide lg:overflow-hidden">
       {/* ── Gmail Sync Health Warning Banner ── */}
       <GmailSyncStatusIndicator variant="banner" className="mb-5 shrink-0" />
       <SystemHealthBanner className="mb-5 shrink-0" />
@@ -335,18 +359,22 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
           top since each leads its own column. (Tonight's Kitchen removed
           from this column 2026-09-18, per direct request -- the flex-col
           gap-8 column closes up automatically with nothing else needed.)
-          Left column is sticky at lg: (2026-09-24, per direct request) so Hero
-          + Ahead stay put while the right column's Schedule/To-Dos/Tomorrow
-          scroll past underneath -- this is a single page-scroll container
-          (not nested scroll regions), so `items-start` above is what makes
-          the left column's height its own content height rather than
-          stretched to match the taller right column, which is the actual
-          prerequisite for sticky to have anything to stick within. Mobile is
-          untouched -- it already renders a completely different single-
-          column tab layout via mobileSubTab, gated lg:hidden/lg:flex
+          At lg:, this row fills the remaining viewport height (flex-1 +
+          min-h-0 on the grid, itself inside the outer lg:overflow-hidden
+          container) and the two columns get genuinely SEPARATE scroll
+          contexts (2026-09-24, per direct request, replacing an earlier
+          position:sticky version): left column (Hero + Ahead) never
+          scrolls at all, right column (Schedule/To-Dos/Tomorrow) gets its
+          own `overflow-y-auto`. Scrolling one can never move the other --
+          they aren't sharing a scroll surface the way a sticky sidebar
+          would. `items-stretch` at lg: (the grid default) is what gives
+          both columns the full row height to work with; mobile keeps
+          `items-start` since it's a single stacked column there. Mobile is
+          otherwise untouched -- it already renders a completely different
+          single-column tab layout via mobileSubTab, gated lg:hidden/lg:flex
           throughout this block. ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-4 items-start">
-        <div className="flex flex-col gap-8 lg:sticky lg:top-0">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-4 items-start lg:items-stretch lg:flex-1 lg:min-h-0">
+        <div className="flex flex-col gap-8">
         {/* Hero Next Up Card */}
         <div className={cn(
           'flex-col justify-start',
@@ -450,7 +478,12 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
         </div>
         </div>
 
-        <div className="flex flex-col gap-8">
+        <div className="relative lg:min-h-0">
+        <div
+          ref={scheduleRailRef}
+          onScroll={handleScheduleRailScroll}
+          className="flex flex-col gap-8 lg:h-full lg:overflow-y-auto lg:overscroll-contain lg:touch-pan-y lg:pr-1 lg:pb-8 scrollbar-hide"
+        >
         {/* Today's Schedule — leads the right column, side by side with Hero at the top */}
         <div className={cn(
           mobileSubTab === 'schedule' ? 'flex flex-col' : 'hidden lg:flex lg:flex-col'
@@ -503,6 +536,25 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
             onOpenEvent={onOpenEvent}
           />
         </div>
+        </div>
+        {/* Top/bottom scroll-edge fades -- desktop/kiosk only, purely a scroll
+            affordance so it's obvious there's more above/below. Real gradient
+            overlays, not a scrollbar, to match the app's chrome-light feel
+            elsewhere (the outer page container hides its own scrollbar too). */}
+        <div
+          aria-hidden="true"
+          className={cn(
+            'hidden lg:block pointer-events-none absolute inset-x-0 top-0 h-10 bg-gradient-to-b from-casa-bg to-transparent transition-opacity duration-200',
+            scheduleRailEdge.atTop ? 'opacity-0' : 'opacity-100',
+          )}
+        />
+        <div
+          aria-hidden="true"
+          className={cn(
+            'hidden lg:block pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-casa-bg to-transparent transition-opacity duration-200',
+            scheduleRailEdge.atBottom ? 'opacity-0' : 'opacity-100',
+          )}
+        />
         </div>
       </div>
 
@@ -814,9 +866,16 @@ function HeroSwipeDeck({
             goTo(target)
           }}
         >
-          <div className="shrink-0 grow-0 basis-full">{primarySlide}</div>
+          {/* min-w-0 is load-bearing: without it, a flex item defaults to
+              min-width:auto, so any descendant text wide enough (e.g. a long
+              unwrapped location string) forces the slide wider than its own
+              basis-full -- the overflow-hidden viewport then hard-clips the
+              slide's right edge instead of the text wrapping inside it. Found
+              2026-09-24 live: the primary slide was rendering ~1400px wide
+              inside an 1182px viewport for exactly this reason. */}
+          <div className="shrink-0 grow-0 basis-full min-w-0">{primarySlide}</div>
           {flybyEvents.map((evt) => (
-            <div key={evt.id} className="shrink-0 grow-0 basis-full">
+            <div key={evt.id} className="shrink-0 grow-0 basis-full min-w-0">
               <HeroFlybyCard now={now} event={evt} onOpenEvent={onOpenEvent} />
             </div>
           ))}

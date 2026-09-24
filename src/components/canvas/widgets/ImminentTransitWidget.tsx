@@ -250,12 +250,12 @@ export default function ImminentTransitWidget({
         {locationDisplayText && (
           <div
             className={cn(
-              'flex items-center gap-2 mt-2.5 text-body-sm',
+              'flex items-center gap-2 mt-2.5 text-body-sm min-w-0',
               isHeroNavy ? 'text-white/80' : 'text-casa-muted',
             )}
           >
             <MapPin size={15} className="text-casa-gold shrink-0" />
-            <span>{locationDisplayText}</span>
+            <span className="min-w-0 break-words">{locationDisplayText}</span>
           </div>
         )}
 
