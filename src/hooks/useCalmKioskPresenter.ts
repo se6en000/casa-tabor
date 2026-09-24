@@ -238,7 +238,7 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
 
   const resolveConflict = useResolveConflict()
   const completePrep = useCompletePrepItem()
-  const { queueMissedReminders } = useReminderNeedsYouActions()
+  const { completeReminder, reopenReminder, queueMissedReminders } = useReminderNeedsYouActions()
 
   useEffect(() => {
     if (todayEvents.length > 0) {
@@ -277,15 +277,31 @@ export function useCalmKioskPresenter(): CalmKioskPresenterState {
     return unsubscribe
   }, [])
 
+  // 2026-09-24: checking a to-do off here used to only update the local/
+  // cross-device-broadcast tracker (saveTodoToggle) -- it never touched
+  // events.status, so it was invisible to anything reading the real reminder state,
+  // the iOS Reminders sync included. Confirmed live: "Prep KTBD Stuff", checked off
+  // here, still sat at status: 'confirmed' in the database, completely untouched.
+  // Now also fires the real completion/reopen mutation (same one the sidecar's
+  // "Mark Done" and classic mode's own checkbox already correctly used) so the
+  // instant local feel is unchanged but the completion is durable and actually
+  // propagates. Fire-and-forget, matching this function's existing pattern -- a
+  // failure here still leaves the optimistic local toggle in place; logged, not
+  // surfaced as an error, since to-do completion should never feel like it failed
+  // for what's normally a reliable write.
   const handleToggleReminder = useCallback(
     async (id: string) => {
+      const target = allReminders.find((r) => r.id === id)
       setCompletedItems((prev) => {
         const nextVal = !prev[id]
         void saveTodoToggle(id, nextVal)
+        void (nextVal ? completeReminder(id, target?.updated_at) : reopenReminder(id)).catch((err) => {
+          console.error('[useCalmKioskPresenter] Durable reminder toggle failed:', err)
+        })
         return { ...prev, [id]: nextVal }
       })
     },
-    [],
+    [allReminders, completeReminder, reopenReminder],
   )
 
   const handleCompleteReminder = useCallback(

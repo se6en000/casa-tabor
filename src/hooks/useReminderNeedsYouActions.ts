@@ -124,6 +124,25 @@ export function useReminderNeedsYouActions() {
     return data
   }, [qc, invalidateReminderSurfaces])
 
+  // The complement to completeReminder -- there's no dedicated RPC for this (nothing
+  // else needed the "linked prep items" bookkeeping completeReminder's RPC does), so
+  // a plain status update, same pattern as snoozeReminderByDuration just above. A
+  // real Casa-side status change (status is watched by the
+  // event_ios_link_casa_origin_on_update trigger) correctly flips the reminder's
+  // event_ios_reminder_links.last_modified_source back to 'casa', so an un-check
+  // here propagates out to the iOS sync exactly like a completion does.
+  const reopenReminder = useCallback(async (reminderId: string) => {
+    publishEventAggregatePatch(qc, reminderId, { status: 'confirmed' })
+
+    const { error } = await supabase
+      .from('events')
+      .update({ status: 'confirmed', updated_at: new Date().toISOString() })
+      .eq('id', reminderId)
+
+    if (error) throw error
+    await invalidateReminderSurfaces()
+  }, [qc, invalidateReminderSurfaces])
+
   const queueMissedReminders = useCallback(async (events: EventWithDetails[], now: Date) => {
     const nowMs = now.getTime()
     const missed = events.filter((event) => {
@@ -178,6 +197,7 @@ export function useReminderNeedsYouActions() {
 
   return {
     completeReminder,
+    reopenReminder,
     snoozeReminderByDuration,
     moveReminderToNeedsYou,
     queueMissedReminders,
