@@ -23,6 +23,8 @@ import { useHeroIntelligence } from '../../hooks/useHeroIntelligence'
 import MorningLaunchpadWidget from './widgets/MorningLaunchpadWidget'
 import MiddayLogisticsWidget from './widgets/MiddayLogisticsWidget'
 import GmailSyncStatusIndicator from '../shared/GmailSyncStatusIndicator'
+import BounceScroll from '../shared/BounceScroll'
+import { useMediaQuery } from '../../hooks/useMediaQuery'
 import SystemHealthBanner from '../shared/SystemHealthBanner'
 import HouseholdDispatchCard from './widgets/HouseholdDispatchCard'
 import TodaysScheduleWidget from './widgets/TodaysScheduleWidget'
@@ -66,6 +68,16 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
   // atBottom haven't actually changed lets React bail out of re-rendering for
   // every one of those in-between ticks -- only the two real transitions
   // (leaving top, reaching bottom) cause a render.
+  // 2026-09-24 follow-up: the rail's iOS-style rubber-band bounce (BounceScroll)
+  // only makes sense at the lg: breakpoint where this rail is actually its own
+  // scroll container -- at mobile widths it's a plain block participating in
+  // the page's own scroll (see the mobileSubTab tab layout below), and
+  // BounceScroll's own touch listeners would call preventDefault() on every
+  // touchmove there (its "cannotScroll" edge case is always true when nothing
+  // constrains this div's height), breaking native mobile scroll entirely.
+  // isDesktop gates which wrapper actually mounts, rather than trying to make
+  // BounceScroll itself responsive via CSS alone.
+  const isDesktop = useMediaQuery('(min-width: 1024px)')
   const scheduleRailRef = useRef<HTMLDivElement | null>(null)
   const [scheduleRailEdge, setScheduleRailEdge] = useState({ atTop: true, atBottom: true })
   const handleScheduleRailScroll = useCallback(() => {
@@ -259,6 +271,65 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
       </div>
     )
   }
+
+  // Shared between the desktop BounceScroll wrapper and the plain mobile
+  // wrapper below -- defined once so the two don't drift out of sync.
+  const scheduleRailItems = (
+    <>
+      {/* Today's Schedule — leads the right column, side by side with Hero at the top */}
+      <div className={cn(
+        mobileSubTab === 'schedule' ? 'flex flex-col' : 'hidden lg:flex lg:flex-col'
+      )}>
+        <TodaysScheduleWidget
+          now={now}
+          pastEvents={pastEvents}
+          upcomingAppointments={upcomingAppointments}
+          reminders={todayTimedReminders}
+          household={familyMembers}
+          activeEventId={activeEventId}
+          collapsed={scheduleSectionCollapsed}
+          onToggleCollapsed={toggleScheduleSection}
+          onExpandAll={() => setCanvasSubmode('turbo')}
+          onOpenEvent={onOpenEvent}
+        />
+      </div>
+
+      <div className={cn(mobileSubTab === 'schedule' ? 'flex flex-col' : 'hidden lg:flex lg:flex-col')}>
+        <TodaysTodosWidget
+          now={now}
+          todayReminders={todayReminders}
+          openReminders={openReminders}
+          overdueReminders={overdueReminders}
+          activeReminders={activeReminders}
+          completedReminders={completedReminders}
+          collapsed={todosSectionCollapsed}
+          onToggleCollapsed={toggleTodosSection}
+          showOverdue={showOverdueTodos}
+          onToggleOverdue={toggleOverdueTodos}
+          expanded={todosExpanded}
+          onToggleExpanded={() => setTodosExpanded(!todosExpanded)}
+          completedCollapsed={completedSectionCollapsed}
+          onToggleCompleted={toggleCompletedSection}
+          onToggleReminder={handleToggleReminder}
+          onOpenEvent={onOpenEvent}
+        />
+      </div>
+
+      <div className={cn(mobileSubTab === 'schedule' ? 'flex flex-col' : 'hidden lg:flex lg:flex-col')}>
+        <TomorrowPreviewWidget
+          now={now}
+          tomorrowEvents={tomorrowEvents}
+          reminders={tomorrowTimedReminders}
+          household={familyMembers}
+          activeEventId={activeEventId}
+          collapsed={tomorrowSectionCollapsed}
+          onToggleCollapsed={toggleTomorrowSection}
+          onViewFullCalendar={handleViewFullCalendar}
+          onOpenEvent={onOpenEvent}
+        />
+      </div>
+    </>
+  )
 
   return (
     <div className="w-full h-full flex flex-col justify-start px-4 sm:px-6 lg:px-8 xl:px-10 pt-5 sm:pt-6 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-0 overflow-y-auto overscroll-contain touch-pan-y scrollbar-hide lg:overflow-hidden">
@@ -487,64 +558,18 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
         </div>
 
         <div className="relative lg:min-h-0">
-        <div
-          ref={scheduleRailRef}
-          onScroll={handleScheduleRailScroll}
-          className="flex flex-col gap-8 lg:h-full lg:overflow-y-auto lg:overscroll-contain lg:touch-pan-y lg:pr-1 lg:pb-8 scrollbar-hide"
-        >
-        {/* Today's Schedule — leads the right column, side by side with Hero at the top */}
-        <div className={cn(
-          mobileSubTab === 'schedule' ? 'flex flex-col' : 'hidden lg:flex lg:flex-col'
-        )}>
-          <TodaysScheduleWidget
-            now={now}
-            pastEvents={pastEvents}
-            upcomingAppointments={upcomingAppointments}
-            reminders={todayTimedReminders}
-            household={familyMembers}
-            activeEventId={activeEventId}
-            collapsed={scheduleSectionCollapsed}
-            onToggleCollapsed={toggleScheduleSection}
-            onExpandAll={() => setCanvasSubmode('turbo')}
-            onOpenEvent={onOpenEvent}
-          />
-        </div>
-
-        <div className={cn(mobileSubTab === 'schedule' ? 'flex flex-col' : 'hidden lg:flex lg:flex-col')}>
-          <TodaysTodosWidget
-            now={now}
-            todayReminders={todayReminders}
-            openReminders={openReminders}
-            overdueReminders={overdueReminders}
-            activeReminders={activeReminders}
-            completedReminders={completedReminders}
-            collapsed={todosSectionCollapsed}
-            onToggleCollapsed={toggleTodosSection}
-            showOverdue={showOverdueTodos}
-            onToggleOverdue={toggleOverdueTodos}
-            expanded={todosExpanded}
-            onToggleExpanded={() => setTodosExpanded(!todosExpanded)}
-            completedCollapsed={completedSectionCollapsed}
-            onToggleCompleted={toggleCompletedSection}
-            onToggleReminder={handleToggleReminder}
-            onOpenEvent={onOpenEvent}
-          />
-        </div>
-
-        <div className={cn(mobileSubTab === 'schedule' ? 'flex flex-col' : 'hidden lg:flex lg:flex-col')}>
-          <TomorrowPreviewWidget
-            now={now}
-            tomorrowEvents={tomorrowEvents}
-            reminders={tomorrowTimedReminders}
-            household={familyMembers}
-            activeEventId={activeEventId}
-            collapsed={tomorrowSectionCollapsed}
-            onToggleCollapsed={toggleTomorrowSection}
-            onViewFullCalendar={handleViewFullCalendar}
-            onOpenEvent={onOpenEvent}
-          />
-        </div>
-        </div>
+        {isDesktop ? (
+          <BounceScroll
+            className="lg:h-full"
+            innerClassName="flex flex-col gap-8 lg:pr-1 lg:pb-8 scrollbar-hide"
+            innerRef={scheduleRailRef}
+            onScroll={handleScheduleRailScroll}
+          >
+            {scheduleRailItems}
+          </BounceScroll>
+        ) : (
+          <div className="flex flex-col gap-8">{scheduleRailItems}</div>
+        )}
         {/* Top/bottom scroll-edge fades -- desktop/kiosk only, purely a scroll
             affordance so it's obvious there's more above/below. Real gradient
             overlays, not a scrollbar, to match the app's chrome-light feel

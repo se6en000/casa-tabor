@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { motion, useMotionValue, useSpring } from 'framer-motion'
 import { cn } from '../../utils/cn'
 
@@ -14,6 +14,13 @@ interface BounceScrollProps {
   nativeScroll?: boolean
   /** Passed to the outer wrapper div */
   onClick?: React.MouseEventHandler<HTMLDivElement>
+  /** Access to the actual scrollable inner element -- e.g. to track scrollTop
+   * for a caller's own scroll-edge affordance. BounceScroll already owns a
+   * ref on this element internally (for the bounce math); this just also
+   * forwards it out, it doesn't replace the internal one. */
+  innerRef?: React.Ref<HTMLDivElement>
+  /** Native onScroll from the inner scrollable element. */
+  onScroll?: React.UIEventHandler<HTMLDivElement>
 }
 
 /**
@@ -32,8 +39,18 @@ export default function BounceScroll({
   maxBounce = 72,
   nativeScroll = false,
   onClick,
+  innerRef,
+  onScroll,
 }: BounceScrollProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
+  const setScrollRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      scrollRef.current = el
+      if (typeof innerRef === 'function') innerRef(el)
+      else if (innerRef) (innerRef as React.MutableRefObject<HTMLDivElement | null>).current = el
+    },
+    [innerRef],
+  )
   const y = useMotionValue(0)
   const springY = useSpring(y, { stiffness: 380, damping: 38, mass: 0.5 })
 
@@ -90,7 +107,7 @@ export default function BounceScroll({
   if (nativeScroll) {
     return (
       <div
-        ref={scrollRef}
+        ref={setScrollRef}
         className={cn(
           'relative min-h-0 overflow-y-auto overscroll-none touch-pan-y',
           className,
@@ -100,6 +117,7 @@ export default function BounceScroll({
         data-ptr-ignore
         style={{ overscrollBehaviorY: 'none', WebkitOverflowScrolling: 'touch' }}
         onClick={onClick}
+        onScroll={onScroll}
       >
         {children}
       </div>
@@ -110,7 +128,8 @@ export default function BounceScroll({
     <div className={cn('relative overflow-hidden', className)} onClick={onClick}>
       <motion.div style={{ y: springY }} className="h-full w-full">
         <div
-          ref={scrollRef}
+          ref={setScrollRef}
+          onScroll={onScroll}
           className={cn('overflow-y-auto overscroll-none touch-pan-y h-full w-full', innerClassName)}
           data-ptr-ignore
           style={{ overscrollBehaviorY: 'none', WebkitOverflowScrolling: 'touch' }}

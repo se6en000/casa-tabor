@@ -34,10 +34,14 @@ test('the left column (Hero + Ahead) has no scroll or sticky behavior of its own
 })
 
 test('the right column (Schedule/To-Dos/Tomorrow) is its own independent scroll container', () => {
-  assert.match(src, /ref=\{scheduleRailRef\}/, 'right column should be wired to its own scroll ref')
+  // 2026-09-24 follow-up: the right column's scroll box is now BounceScroll
+  // (desktop/kiosk only -- see homepage-bounce-scroll.test.mjs for the full
+  // desktop-vs-mobile wiring), which owns the actual overflow-y-auto/h-full
+  // classes internally; scheduleRailRef/handleScheduleRailScroll are threaded
+  // in via its innerRef/onScroll props rather than a bare div ref.
+  assert.match(src, /innerRef=\{scheduleRailRef\}/, 'right column should be wired to its own scroll ref')
   assert.match(src, /onScroll=\{handleScheduleRailScroll\}/, 'right column should track its own scroll position')
-  const railMatch = src.match(/className="flex flex-col gap-8 lg:h-full lg:overflow-y-auto[^"]*"/)
-  assert.ok(railMatch, 'expected the right column to declare its own lg:h-full lg:overflow-y-auto scroll box')
+  assert.match(src, /isDesktop \? \(\s*<BounceScroll/, 'right column should be an independent scroll box at lg: via BounceScroll')
 })
 
 test('scheduleRailRef/handleScheduleRailScroll/scheduleRailEdge are real hooks, not just referenced in JSX', () => {
