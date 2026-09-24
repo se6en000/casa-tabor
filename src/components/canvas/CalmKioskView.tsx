@@ -334,9 +334,19 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
           To-Dos, Tomorrow -- Hero and Schedule still land side by side at the
           top since each leads its own column. (Tonight's Kitchen removed
           from this column 2026-09-18, per direct request -- the flex-col
-          gap-8 column closes up automatically with nothing else needed.) ── */}
+          gap-8 column closes up automatically with nothing else needed.)
+          Left column is sticky at lg: (2026-09-24, per direct request) so Hero
+          + Ahead stay put while the right column's Schedule/To-Dos/Tomorrow
+          scroll past underneath -- this is a single page-scroll container
+          (not nested scroll regions), so `items-start` above is what makes
+          the left column's height its own content height rather than
+          stretched to match the taller right column, which is the actual
+          prerequisite for sticky to have anything to stick within. Mobile is
+          untouched -- it already renders a completely different single-
+          column tab layout via mobileSubTab, gated lg:hidden/lg:flex
+          throughout this block. ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-4 items-start">
-        <div className="flex flex-col gap-8">
+        <div className="flex flex-col gap-8 lg:sticky lg:top-0">
         {/* Hero Next Up Card */}
         <div className={cn(
           'flex-col justify-start',
