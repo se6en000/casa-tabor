@@ -260,9 +260,7 @@
         "reason": "Pull distance, Framer Motion position, and family-member colors are runtime-derived.",
         "snippets": [
           "style={{ height: refreshing ? 40 : pullDistance }}",
-          "style={{ x, gap: HERO_SLIDE_GAP }}",
-          "style={{ backgroundColor: color }}",
-          "style={{ backgroundColor: responsibility.responsible?.color"
+          "style={{ x, gap: HERO_SLIDE_GAP }}"
         ]
       },
       {
@@ -272,6 +270,10 @@
       {
         "path": "src/pages/TabletPrototypePage.tsx",
         "reason": "The prototype previews live event and household member colors."
+      },
+      {
+        "path": "src/components/calendar/EventCard.tsx",
+        "reason": "Event and family-member colors are runtime-derived (moved out of StackedView.tsx, same reason)."
       }
     ],
     "nativeControlRecreations": [

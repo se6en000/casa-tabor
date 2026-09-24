@@ -36,6 +36,10 @@ interface CalmKioskViewProps {
 export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
   const dinnerPlan = useAppStore((s) => s.dinnerPlan)
   const setActiveView = useCalendarStore((s) => s.setActiveView)
+  // Which event card should show the gold "open" ring -- mirrors StackedView's own
+  // derivation exactly, so a card looks identically selected wherever it's tapped from.
+  const { selectedSidecarEventId, aiDrawerOpen, sidecarTab } = useAppStore()
+  const activeEventId = aiDrawerOpen && sidecarTab === 'event' ? selectedSidecarEventId : null
   const [showOverdueTodos, setShowOverdueTodos] = useState<boolean>(() => {
     try {
       const stored = localStorage.getItem('casa:calm:overdue-collapsed')
@@ -443,6 +447,8 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
             now={now}
             pastEvents={pastEvents}
             upcomingAppointments={upcomingAppointments}
+            household={familyMembers}
+            activeEventId={activeEventId}
             collapsed={scheduleSectionCollapsed}
             onToggleCollapsed={toggleScheduleSection}
             onExpandAll={() => setCanvasSubmode('turbo')}
@@ -473,7 +479,10 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
 
         <div className={cn(mobileSubTab === 'schedule' ? 'flex flex-col' : 'hidden lg:flex lg:flex-col')}>
           <TomorrowPreviewWidget
+            now={now}
             tomorrowEvents={tomorrowEvents}
+            household={familyMembers}
+            activeEventId={activeEventId}
             collapsed={tomorrowSectionCollapsed}
             onToggleCollapsed={toggleTomorrowSection}
             onViewFullCalendar={handleViewFullCalendar}

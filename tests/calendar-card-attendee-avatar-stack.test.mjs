@@ -30,7 +30,14 @@ test('DayView renders event attendees with PersonAvatarStack, not CalendarPill n
   assert.match(src, /responsibility\.attendees[\s\S]{0,200}<PersonAvatarStack/, 'DayView attendee row should use PersonAvatarStack')
 })
 
-test('HomePage renders event attendees with PersonAvatarStack, not CalendarPill name lists', () => {
-  const src = read('src/pages/HomePage.tsx')
-  assert.match(src, /responsibility\.attendees[\s\S]{0,200}<PersonAvatarStack/, 'HomePage attendee row should use PersonAvatarStack')
+// Since 2026-09-24, HomePage no longer renders its own event card — real events go
+// through the shared calendar EventCard (src/components/calendar/EventCard.tsx),
+// which is what actually renders the attendee avatar stack now. Timed reminders
+// still use HomePage's own CalendarPill name-list row, which is correct: reminders
+// aren't "events" and the calendar's own CompactReminderCard does the same thing.
+test('HomePage renders events with the shared EventCard, which renders attendees with PersonAvatarStack', () => {
+  const home = read('src/pages/HomePage.tsx')
+  const eventCard = read('src/components/calendar/EventCard.tsx')
+  assert.match(home, /import EventCard from ['"]\.\.\/components\/calendar\/EventCard['"]/, 'HomePage should render real events via the shared EventCard')
+  assert.match(eventCard, /responsibility\.attendees[\s\S]{0,200}<PersonAvatarStack/, 'EventCard attendee row should use PersonAvatarStack')
 })

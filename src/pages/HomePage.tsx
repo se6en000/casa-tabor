@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { format, isAfter, isBefore, addDays } from 'date-fns'
 import { motion, AnimatePresence, useMotionValue, animate } from 'framer-motion'
-import { Check, CheckCircle2, ChevronLeft, ChevronRight, RefreshCw, MapPin, Clock, Navigation, Bell, Phone } from 'lucide-react'
+import { Check, CheckCircle2, ChevronLeft, ChevronRight, RefreshCw, Navigation, Bell, Phone } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { useFamilyMembers } from '../hooks/useFamilyMembers'
@@ -18,30 +18,23 @@ import HomeRightPanel from '../components/home/HomeRightPanel'
 import { isAllDayReminder, isTimedReminder } from '../utils/holidays'
 import SwipeableReminderPill from '../components/shared/SwipeableReminderPill'
 import { usePullToRefresh } from '../hooks/usePullToRefresh'
-import { WeatherIcon } from '../components/shared/WeatherIcon'
-import { LeaveByCard } from '../components/shared/LeaveByCard'
 import TomorrowPrepWidget from '../components/canvas/widgets/TomorrowPrepWidget'
 import MorningLaunchpadWidget from '../components/canvas/widgets/MorningLaunchpadWidget'
 import { BirthdayCardDecoration } from '../components/shared/BirthdayCardDecoration'
 import { useTravelEta, type TravelEtaResult } from '../hooks/useTravelEta'
 import { useReminderNeedsYouActions } from '../hooks/useReminderNeedsYouActions'
-import {
-  getPersistedPlanOverrides,
-  resolveEventMode,
-} from '../lib/eventPlanOverrides'
-import { derivePlan, type DerivedPerson } from '../lib/eventCommandCenter'
-import { projectHomeTransportation } from '../lib/homeTransportationProjection.mjs'
-import type { FamilyMember } from '../types'
+import { resolveEventMode } from '../lib/eventPlanOverrides'
 import { eventOverlapsDay, getEventEndDate, getEventStartDate } from '../utils/eventTime'
 import { formatDurationLabel, isReminderOrChore, pickActiveHeroEvent, resolveRestingIndex } from '../lib/heroFocus.mjs'
 import { cleanEventTitle, isBirthdayEvent } from '../utils/eventTitle'
 import { buttonClassName } from '../design-system/variants.mjs'
-import { Button, CalendarPill, Card, Chip, EmptyState, Heading, IconButton, PersonAvatarStack, PrimaryRail, Sheet, Text } from '../components/ui'
+import { Button, CalendarPill, Card, Chip, EmptyState, Heading, IconButton, PrimaryRail, Sheet, Text } from '../components/ui'
 import { EventCardSkeletonStack } from '../components/calendar/EventCardSkeleton'
 import SnoozeMenu from '../components/shared/SnoozeMenu'
 import type { SnoozeDuration } from '../utils/snoozeDuration'
 import GmailSyncStatusIndicator from '../components/shared/GmailSyncStatusIndicator'
 import SystemHealthBanner from '../components/shared/SystemHealthBanner'
+import EventCard from '../components/calendar/EventCard'
 
 const SHARED_GOLD = 'var(--color-casa-gold)'
 
@@ -52,145 +45,6 @@ function mapsUrlForEvent(event: EventWithDetails): string | null {
   return mapsQuery
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`
     : null
-}
-
-function eventColor(ev: EventWithDetails): string {
-  if (!ev.members || ev.members.length === 0) return SHARED_GOLD
-  if (ev.members.length >= 4) return SHARED_GOLD
-  return ev.members[0].family_member?.color_hex ?? SHARED_GOLD
-}
-
-function fallbackResponsiblePerson(event: EventWithDetails): DerivedPerson | null {
-  const fallbackMember = event.members.find((m) => m.role === 'primary')?.family_member
-    ?? event.members[0]?.family_member
-    ?? null
-  if (!fallbackMember) return null
-  return {
-    id: fallbackMember.id,
-    name: fallbackMember.name,
-    initial: fallbackMember.name?.[0]?.toUpperCase() ?? '?',
-    color: fallbackMember.color_hex ?? SHARED_GOLD,
-    role: fallbackMember.role,
-  }
-}
-
-function projectedDriverPerson(
-  driver: { id: string; name: string } | null | undefined,
-  household: FamilyMember[],
-): DerivedPerson | null {
-  if (!driver) return null
-  const member = household.find((candidate) => candidate.id === driver.id)
-    ?? household.find((candidate) => candidate.name.toLowerCase() === driver.name.toLowerCase())
-  return member
-    ? toDerivedPersonFromMember(member)
-    : {
-        id: driver.id,
-        name: driver.name,
-        initial: driver.name[0]?.toUpperCase() ?? '?',
-        color: 'var(--color-casa-navy)',
-      }
-}
-
-function deriveHomeCardResponsibility(
-  event: EventWithDetails,
-  mode: ReturnType<typeof resolveEventMode>,
-  household: FamilyMember[],
-  now: Date,
-) {
-  const persisted = getPersistedPlanOverrides(event)
-  const explicit = projectHomeTransportation(event, persisted.transportationPlan, now)
-  if (explicit) {
-    const drivers = explicit.drivers
-      .map((driver) => projectedDriverPerson(driver, household))
-      .filter((driver): driver is DerivedPerson => driver !== null)
-    const responsible = projectedDriverPerson(explicit.nextDriver, household) ?? drivers[0] ?? null
-    const driverIds = new Set(drivers.map((driver) => driver.id))
-    const driverNames = new Set(drivers.map((driver) => driver.name.toLowerCase()))
-    const attendees = event.members.filter((member) => (
-      !driverIds.has(member.family_member.id) &&
-      !driverNames.has(member.family_member.name.toLowerCase())
-    ))
-    return {
-      responsible,
-      drivers,
-      attendees: attendees.length > 0 ? attendees : event.members,
-      summary: explicit.summary,
-      roleBadge: 'drive' as const,
-      nextLeg: explicit.nextLeg,
-      hasSavedTransportation: true,
-    }
-  }
-
-  const plan = derivePlan(event, mode, { household })
-  const effectiveLegs = applyPersistedDriverOverrides(event, plan.legs, household, persisted.driverOverrides ?? {}, persisted.waits ?? null)
-  const transportLeg = effectiveLegs.find((leg) => leg.kind === 'drop' || leg.kind === 'depart' || leg.kind === 'pickup' || leg.kind === 'return')
-  const firstDriverLeg = transportLeg ?? effectiveLegs.find((leg) => leg.driver)
-  const responsible = firstDriverLeg?.driver ?? fallbackResponsiblePerson(event)
-  const attendees = (() => {
-    if (!responsible) return event.members
-    const withoutResponsible = event.members.filter((m) => m.family_member.id !== responsible.id)
-    return withoutResponsible.length > 0 ? withoutResponsible : event.members
-  })()
-  const name = responsible?.name ?? (mode === 'hosted' ? 'Caregiver' : 'Driver')
-  const stayLeg = effectiveLegs.find((leg) => leg.kind === 'stay')
-  const hasDropOrDepart = effectiveLegs.some((leg) => leg.kind === 'drop' || leg.kind === 'depart')
-  const hasPickupOrReturn = effectiveLegs.some((leg) => leg.kind === 'pickup' || leg.kind === 'return')
-  const summary = mode === 'hosted'
-    ? `${name} supervising`
-    : stayLeg?.waits
-      ? `${name} drives & stays`
-      : hasDropOrDepart && hasPickupOrReturn
-        ? `${name} drives`
-        : hasDropOrDepart
-          ? `${name} drops off`
-          : hasPickupOrReturn
-            ? `${name} picks up`
-            : `${name} drives`
-  return {
-    responsible,
-    drivers: responsible ? [responsible] : [],
-    attendees,
-    summary,
-    roleBadge: mode === 'hosted' ? 'supervise' as const : 'drive' as const,
-    nextLeg: null,
-    hasSavedTransportation: false,
-  }
-}
-
-function toDerivedPersonFromMember(member: FamilyMember | undefined | null): DerivedPerson | null {
-  if (!member) return null
-  return {
-    id: member.id,
-    name: member.name,
-    initial: member.name?.[0]?.toUpperCase() ?? '?',
-    color: member.color_hex ?? SHARED_GOLD,
-    role: member.role,
-  }
-}
-
-function applyPersistedDriverOverrides(
-  event: EventWithDetails,
-  legs: ReturnType<typeof derivePlan>['legs'],
-  household: FamilyMember[],
-  driverOverrides: Record<number, string>,
-  waitsOverride: boolean | null,
-) {
-  const attendeeById = new Map(event.members.map((m) => [m.family_member.id, m.family_member]))
-  const householdById = new Map(household.map((m) => [m.id, m]))
-  const withDriverOverrides = legs.map((leg, index) => {
-    const overrideDriverId = driverOverrides[index]
-    if (!overrideDriverId || !leg.driver) return leg
-    const familyMember = attendeeById.get(overrideDriverId) ?? householdById.get(overrideDriverId)
-    const overrideDriver = toDerivedPersonFromMember(familyMember)
-    return overrideDriver ? { ...leg, driver: overrideDriver } : leg
-  })
-  const waits = waitsOverride ?? Boolean(withDriverOverrides.find((leg) => leg.kind === 'stay')?.waits)
-  return withDriverOverrides.map((leg) => {
-    if (leg.kind !== 'stay') return leg
-    if (!waits) return { ...leg, waits: false }
-    const driveLeg = withDriverOverrides.find((item) => item.kind === 'drop' || item.kind === 'depart')
-    return { ...leg, waits: true, title: `${driveLeg?.driver?.name ?? 'Driver'} waits on site` }
-  })
 }
 
 export default function HomePage() {
@@ -216,7 +70,7 @@ export default function HomePage() {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [pastItemsOpen, setPastItemsOpen] = useState(false)
   const scrollRef = useRef<HTMLElement | null>(null)
-  const nowLineRef = useRef<HTMLLIElement | null>(null)
+  const nowLineRef = useRef<HTMLDivElement | null>(null)
   const events = useMemo<EventWithDetails[]>(() => {
     if (!allTodayEvents) return []
     const memberOk = (ev: EventWithDetails) =>
@@ -475,9 +329,9 @@ export default function HomePage() {
           ) : events.length === 0 ? (
             <EmptyState title="Nothing scheduled" description="Enjoy the quiet." />
           ) : (
-            <ol className="space-y-2">
+            <div className="space-y-2">
               {pastEvents.length > 0 && (
-                <li className="list-none pb-1">
+                <div className="pb-1">
                   <div className="mb-2 flex items-center justify-between gap-3">
                     <div>
                       <Text role="body" as="h4" className="font-semibold text-casa-navy">Earlier today</Text>
@@ -500,12 +354,12 @@ export default function HomePage() {
                       />
                     ))}
                   </div>
-                </li>
+                </div>
               )}
 
               {/* ── Now line ── */}
               {currentAndUpcomingEvents.length > 0 && (
-                <li ref={nowLineRef} className="py-0.5 select-none pointer-events-none" aria-hidden>
+                <div ref={nowLineRef} className="py-0.5 select-none pointer-events-none" aria-hidden>
                   <div className="w-full flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.5)] animate-pulse shrink-0" />
                     <div className="flex-1 h-px bg-red-400/50" />
@@ -514,32 +368,46 @@ export default function HomePage() {
                     </span>
                     <div className="flex-1 h-px bg-red-400/50" />
                   </div>
-                </li>
+                </div>
               )}
 
-              {/* Upcoming events */}
-              {currentAndUpcomingEvents.map((ev, i) => (
-                <TimelineRow
-                  key={ev.id}
-                  event={ev}
-                  now={now}
-                  index={i}
-                  household={family ?? []}
-                  onClick={() => setSelectedEventId(ev.id)}
-                  onComplete={completeReminder}
-                  onSnooze={(event, duration) => {
-                    void snoozeReminderByDuration(event, duration).catch((error) => {
-                      console.error('HomePage: failed to snooze reminder', error)
-                    })
-                  }}
-                  onSendToNeedsYou={(event) => {
-                    void moveReminderToNeedsYou(event).catch((error) => {
-                      console.error('HomePage: failed to move reminder to Needs you', error)
-                    })
-                  }}
-                />
-              ))}
-            </ol>
+              {/* Upcoming events — real events use the calendar's own stacking-view
+                  card (EventCard) so both places render identically; timed reminders
+                  keep their distinct pill treatment, same as the calendar does. */}
+              <AnimatePresence initial={false}>
+                {currentAndUpcomingEvents.map((ev, i) =>
+                  isTimedReminder(ev) ? (
+                    <TimedReminderRow
+                      key={ev.id}
+                      event={ev}
+                      now={now}
+                      index={i}
+                      onClick={() => setSelectedEventId(ev.id)}
+                      onComplete={completeReminder}
+                      onSnooze={(event, duration) => {
+                        void snoozeReminderByDuration(event, duration).catch((error) => {
+                          console.error('HomePage: failed to snooze reminder', error)
+                        })
+                      }}
+                      onSendToNeedsYou={(event) => {
+                        void moveReminderToNeedsYou(event).catch((error) => {
+                          console.error('HomePage: failed to move reminder to Needs you', error)
+                        })
+                      }}
+                    />
+                  ) : (
+                    <EventCard
+                      key={ev.id}
+                      event={ev}
+                      household={family ?? []}
+                      now={now}
+                      isHighlighted={selectedEventId === ev.id}
+                      onClick={() => setSelectedEventId(ev.id)}
+                    />
+                  )
+                )}
+              </AnimatePresence>
+            </div>
           )}
         </section>
 
@@ -559,29 +427,41 @@ export default function HomePage() {
                   Tomorrow · {format(tomorrow, 'EEEE, MMM d')}
                 </Heading>
               </div>
-              <ol className="space-y-2">
-                {tomorrowEvents.map((ev, i) => (
-                  <TimelineRow
-                    key={ev.id}
-                    event={ev}
-                    now={now}
-                    index={i}
-                    household={family ?? []}
-                    onClick={() => setSelectedEventId(ev.id)}
-                    onComplete={completeReminder}
-                    onSnooze={(event, duration) => {
-                      void snoozeReminderByDuration(event, duration).catch((error) => {
-                        console.error('HomePage: failed to snooze reminder', error)
-                      })
-                    }}
-                    onSendToNeedsYou={(event) => {
-                      void moveReminderToNeedsYou(event).catch((error) => {
-                        console.error('HomePage: failed to move reminder to Needs you', error)
-                      })
-                    }}
-                  />
-                ))}
-              </ol>
+              <div className="space-y-2">
+                <AnimatePresence initial={false}>
+                  {tomorrowEvents.map((ev, i) =>
+                    isTimedReminder(ev) ? (
+                      <TimedReminderRow
+                        key={ev.id}
+                        event={ev}
+                        now={now}
+                        index={i}
+                        onClick={() => setSelectedEventId(ev.id)}
+                        onComplete={completeReminder}
+                        onSnooze={(event, duration) => {
+                          void snoozeReminderByDuration(event, duration).catch((error) => {
+                            console.error('HomePage: failed to snooze reminder', error)
+                          })
+                        }}
+                        onSendToNeedsYou={(event) => {
+                          void moveReminderToNeedsYou(event).catch((error) => {
+                            console.error('HomePage: failed to move reminder to Needs you', error)
+                          })
+                        }}
+                      />
+                    ) : (
+                      <EventCard
+                        key={ev.id}
+                        event={ev}
+                        household={family ?? []}
+                        now={now}
+                        isHighlighted={selectedEventId === ev.id}
+                        onClick={() => setSelectedEventId(ev.id)}
+                      />
+                    )
+                  )}
+                </AnimatePresence>
+              </div>
             </motion.section>
           )}
         </AnimatePresence>
@@ -1207,13 +1087,16 @@ function DesktopHeroCard({
   )
 }
 
-/* ── Timeline row ─────────────────────────────────────────────── */
+/* ── Timed reminder row ───────────────────────────────────────────
+   Real events render via the shared calendar EventCard (see the two call
+   sites above); this stays for the one thing EventCard doesn't handle —
+   the timed-reminder pill with its own complete/snooze/move actions,
+   matching the calendar's own CompactReminderCard treatment. ── */
 
-function TimelineRow({
+function TimedReminderRow({
   event,
   now,
   index,
-  household,
   onClick,
   onComplete,
   onSnooze,
@@ -1222,319 +1105,109 @@ function TimelineRow({
   event: EventWithDetails
   now: Date
   index: number
-  household: FamilyMember[]
   onClick: () => void
   onComplete?: (id: string) => void
   onSnooze?: (event: EventWithDetails, duration: SnoozeDuration) => void | Promise<void>
   onSendToNeedsYou?: (event: EventWithDetails) => void | Promise<void>
 }) {
-  const start = getEventStartDate(event)
   const end = getEventEndDate(event)
   const past = isBefore(end, now)
-  const happening = isBefore(start, now) && isAfter(end, now)
-  const color = eventColor(event)
-  const timed = isTimedReminder(event)
-  const mode = resolveEventMode(event)
-  const isHosted = mode === 'hosted'
 
   const [checking, setChecking] = useState(false)
   const [snoozing, setSnoozing] = useState(false)
   const [movingToNeedsYou, setMovingToNeedsYou] = useState(false)
-  const [overrideVersion, setOverrideVersion] = useState(0)
-  const cleanTitle = cleanEventTitle(event.title)
-  const isBirthday = isBirthdayEvent(event)
 
-  // Re-derive responsibility whenever the event panel writes new driver overrides.
-  useEffect(() => {
-    function handleEventUpdated(e: Event) {
-      const detail = (e as CustomEvent<{ eventId?: string }>).detail
-      if (!detail?.eventId || detail.eventId === event.id) {
-        setOverrideVersion((v) => v + 1)
-      }
-    }
-    function handleOverridesUpdated(e: Event) {
-      const detail = (e as CustomEvent<{ eventId?: string }>).detail
-      if (!detail?.eventId || detail.eventId === event.id) {
-        setOverrideVersion((v) => v + 1)
-      }
-    }
-    window.addEventListener('casa:event-updated', handleEventUpdated)
-    window.addEventListener('casa:overrides-updated', handleOverridesUpdated)
-    return () => {
-      window.removeEventListener('casa:event-updated', handleEventUpdated)
-      window.removeEventListener('casa:overrides-updated', handleOverridesUpdated)
-    }
-  }, [event.id])
-
-  const responsibility = useMemo(
-    () => deriveHomeCardResponsibility(event, mode, household, now),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [event, household, mode, now, overrideVersion],
-  )
-  const nextSavedLeg = responsibility.nextLeg
-  const showLiveLeaveBy = !event.all_day && !isHosted && (
-    responsibility.hasSavedTransportation
-      ? Boolean(nextSavedLeg?.destination && nextSavedLeg.timingIso)
-      : !happening && Boolean(event.address || event.location_name)
-  )
-  const showFallbackLeaveBy = !event.all_day && !happening && !isHosted && !(event.address || event.location_name) && Boolean(event.enrichment?.departure_time)
-  const fallbackDepartureAt = event.enrichment?.departure_time ? new Date(event.enrichment.departure_time) : null
-
-  // Timed reminder — slim amber pill in the timeline with dismiss checkbox
-  if (timed) {
-    async function handleCheck(e: React.MouseEvent) {
-      e.stopPropagation()
-      if (checking || snoozing || movingToNeedsYou || !onComplete) return
-      setChecking(true)
-      await new Promise(r => setTimeout(r, 320))
-      onComplete(event.id)
-    }
-    async function handleSnooze(duration: SnoozeDuration) {
-      if (checking || snoozing || movingToNeedsYou || !onSnooze) return
-      setSnoozing(true)
-      try {
-        await onSnooze(event, duration)
-      } finally {
-        setSnoozing(false)
-      }
-    }
-    async function handleMoveToNeedsYou(e: React.MouseEvent) {
-      e.stopPropagation()
-      if (checking || snoozing || movingToNeedsYou || !onSendToNeedsYou) return
-      setMovingToNeedsYou(true)
-      try {
-        await onSendToNeedsYou(event)
-      } finally {
-        setMovingToNeedsYou(false)
-      }
-    }
-    return (
-      <motion.li
-        initial={{ opacity: 0, x: -8 }}
-        animate={{ opacity: past ? 0.4 : 1, x: 0 }}
-        exit={{ opacity: 0, height: 0, marginBottom: 0, overflow: 'hidden' }}
-        whileTap={{ scale: 0.97, opacity: 0.75 }}
-        transition={{ duration: 0.3, delay: index * 0.04 }}
-        className="cursor-pointer"
-        onClick={e => { e.stopPropagation(); onClick() }}
-      >
-        <Card tone="accent" padding="sm" className="relative w-full overflow-hidden pl-5">
-          <span className="absolute left-0 top-0 bottom-0 w-[8px] rounded-l-card bg-casa-warning" />
-          <div className="flex items-center gap-2 pl-1 text-caption font-semibold text-casa-top-pick-band">
-            <IconButton
-              onClick={handleCheck}
-              disabled={checking || snoozing || movingToNeedsYou}
-              variant={checking ? 'primary' : 'secondary'}
-              size="sm"
-              icon={<Check size={16} />}
-              aria-label="Mark reminder done"
-              title="Mark done"
-            />
-            <SnoozeMenu
-              onSnooze={(duration) => { void handleSnooze(duration) }}
-              renderTrigger={({ onClick }) => (
-                <IconButton
-                  onClick={onClick}
-                  disabled={checking || snoozing || movingToNeedsYou || !onSnooze}
-                  variant="secondary"
-                  size="sm"
-                  icon={<SnoozeOneHourIcon className={cn('size-4', snoozing && 'animate-pulse')} />}
-                  aria-label="Snooze reminder"
-                  title="Snooze"
-                />
-              )}
-            />
-            <IconButton
-              onClick={handleMoveToNeedsYou}
-              disabled={checking || snoozing || movingToNeedsYou || !onSendToNeedsYou}
-              variant="secondary"
-              size="sm"
-              icon={<NeedsYouTransferIcon className={cn('size-4', movingToNeedsYou && 'animate-pulse')} />}
-              aria-label="Move reminder to Needs you"
-              title="Move to Needs you"
-            />
-            <Bell size={13} className="shrink-0 text-casa-warning" />
-            <span className="text-casa-muted tabular-nums">
-              {format(start, 'h:mm a')}
-            </span>
-            <span className={cn(checking && 'line-through opacity-50')}>{event.title}</span>
-            {event.members.length > 0 && (
-              <div className="flex gap-1 ml-0.5">
-                {event.members.slice(0, 3).map((m) => (
-                  <CalendarPill
-                    key={m.id}
-                    color={m.family_member?.color_hex ?? SHARED_GOLD}
-                  >
-                    {m.family_member?.name}
-                  </CalendarPill>
-                ))}
-              </div>
-            )}
-          </div>
-        </Card>
-      </motion.li>
-    )
+  async function handleCheck(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (checking || snoozing || movingToNeedsYou || !onComplete) return
+    setChecking(true)
+    await new Promise(r => setTimeout(r, 320))
+    onComplete(event.id)
   }
-
+  async function handleSnooze(duration: SnoozeDuration) {
+    if (checking || snoozing || movingToNeedsYou || !onSnooze) return
+    setSnoozing(true)
+    try {
+      await onSnooze(event, duration)
+    } finally {
+      setSnoozing(false)
+    }
+  }
+  async function handleMoveToNeedsYou(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (checking || snoozing || movingToNeedsYou || !onSendToNeedsYou) return
+    setMovingToNeedsYou(true)
+    try {
+      await onSendToNeedsYou(event)
+    } finally {
+      setMovingToNeedsYou(false)
+    }
+  }
   return (
-    <motion.li
+    <motion.div
       initial={{ opacity: 0, x: -8 }}
-      animate={{ opacity: past ? 0.45 : 1, x: 0 }}
+      animate={{ opacity: past ? 0.4 : 1, x: 0 }}
+      exit={{ opacity: 0, height: 0, marginBottom: 0, overflow: 'hidden' }}
       whileTap={{ scale: 0.97, opacity: 0.75 }}
       transition={{ duration: 0.3, delay: index * 0.04 }}
       className="cursor-pointer"
-      role="button"
-      tabIndex={0}
       onClick={e => { e.stopPropagation(); onClick() }}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault()
-          onClick()
-        }
-      }}
     >
-      <Card
-        padding="sm"
-        className={cn(
-          'relative w-full min-w-0 overflow-hidden pl-5',
-          isBirthday && 'bg-gradient-to-br from-casa-accent-subtle via-casa-surface to-casa-bg',
-        )}
-      >
-        {isBirthday && <BirthdayCardDecoration />}
-        <span
-          className={cn('absolute left-0 top-0 bottom-0 w-[12px] rounded-l-card', happening && 'animate-pulse-gold')}
-          style={{ backgroundColor: color }}
-        />
-        <div className="relative z-10 flex items-start gap-3">
-          <div className="relative shrink-0 pl-1 pt-0.5">
-            <PersonAvatarStack
-              people={responsibility.drivers.map((driver) => ({
-                id: driver.id,
-                name: driver.name,
-                color: driver.color,
-              }))}
-              max={2}
-              size="lg"
-              emptyLabel={responsibility.summary}
-              className={cn(
-                responsibility.responsible?.role === 'caregiver' && 'rounded-full ring-2 ring-casa-gold/55 ring-offset-2 ring-offset-casa-surface',
-              )}
-            />
-            <span
-              className={cn(
-                'absolute right-[-2px] bottom-[-2px] w-5 h-5 rounded-full border-2 border-casa-surface flex items-center justify-center',
-                responsibility.roleBadge === 'drive' ? 'bg-casa-navy' : 'bg-casa-success-strong',
-              )}
-              aria-label={responsibility.roleBadge === 'drive' ? 'Driving role' : 'Supervising role'}
-            >
-              {responsibility.roleBadge === 'drive' ? <DrivingBadgeIcon /> : <SupervisingBadgeIcon />}
-            </span>
-          </div>
-
-          <div className="min-w-0 flex-1">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="font-body font-semibold text-casa-text truncate md:overflow-visible md:text-clip md:whitespace-normal">
-                  {isBirthday && <span className="mr-1" aria-hidden="true">🎂</span>}
-                  {cleanTitle}
-                </p>
-                <div className="flex items-center flex-wrap gap-x-3 gap-y-0.5 mt-1">
-                  <span className="flex items-center gap-1 text-caption text-casa-muted tabular-nums">
-                    <Clock size={11} className="shrink-0" />
-                    {event.all_day ? 'All day' : `${format(start, 'h:mm a')} – ${format(end, 'h:mm a')}`}
-                    {event.location_name && (
-                      <WeatherIcon condition={event.enrichment?.weather_at_event} size={12} />
-                    )}
-                  </span>
-                  {event.location_name && (
-                    isHosted ? (
-                      <span className="text-caption font-semibold uppercase tracking-wide text-casa-muted">At home</span>
-                    ) : (
-                      <span className="flex items-center gap-1 text-caption text-casa-muted truncate max-w-[180px] md:max-w-none md:overflow-visible md:text-clip md:whitespace-normal">
-                        <MapPin size={11} className="shrink-0 text-casa-error" />
-                        {event.location_name}
-                      </span>
-                    )
-                  )}
-                  {isHosted && !event.location_name && (
-                    <span className="text-caption font-semibold uppercase tracking-wide text-casa-muted">At home</span>
-                  )}
-                </div>
-              </div>
-
-              {responsibility.attendees.length > 0 && (
-                <PersonAvatarStack
-                  people={responsibility.attendees.map((m) => ({
-                    id: m.id,
-                    name: m.family_member?.name ?? '?',
-                    color: m.family_member?.color_hex ?? SHARED_GOLD,
-                  }))}
-                  max={3}
-                  size="md"
-                  className="shrink-0"
-                />
-              )}
-            </div>
-
-            <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
-              <span className={cn(
-                'text-caption font-semibold',
-                isHosted ? 'text-casa-success-strong' : 'text-casa-gold',
-              )}>
-                {responsibility.summary}
-              </span>
-              {showLiveLeaveBy && (
-                <>
-                  <span className="text-casa-text-faint text-caption">·</span>
-                  <LeaveByCard
-                    origin={nextSavedLeg?.origin}
-                    destination={nextSavedLeg?.destination ?? event.address ?? event.location_name}
-                    eventStartIso={nextSavedLeg
-                      ? nextSavedLeg.leg.timing === 'arrive_by' ? nextSavedLeg.timingIso : null
-                      : event.start_time}
-                    departureTimeIso={nextSavedLeg?.leg.timing === 'depart_at' ? nextSavedLeg.timingIso : null}
-                    compact
-                    className="!text-casa-gold"
-                  />
-                </>
-              )}
-              {showFallbackLeaveBy && (
-                <>
-                  <span className="text-casa-text-faint text-caption">·</span>
-                  <span className="flex items-center gap-1 text-caption font-semibold text-casa-gold">
-                    <Navigation size={11} className="shrink-0" />
-                    {fallbackDepartureAt ? `Leave by ${format(fallbackDepartureAt, 'h:mm a')}` : 'Leave by soon'}
-                    {event.enrichment?.drive_time_mins && ` · ${event.enrichment.drive_time_mins} min`}
-                  </span>
-                </>
-              )}
-            </div>
-
-            {(isHosted || !event.enrichment?.departure_time) && event.enrichment?.prep_notes && (
-              <p className="text-caption text-casa-muted mt-1 line-clamp-1 md:line-clamp-none">{event.enrichment.prep_notes}</p>
+      <Card tone="accent" padding="sm" className="relative w-full overflow-hidden pl-5">
+        <span className="absolute left-0 top-0 bottom-0 w-[8px] rounded-l-card bg-casa-warning" />
+        <div className="flex items-center gap-2 pl-1 text-caption font-semibold text-casa-top-pick-band">
+          <IconButton
+            onClick={handleCheck}
+            disabled={checking || snoozing || movingToNeedsYou}
+            variant={checking ? 'primary' : 'secondary'}
+            size="sm"
+            icon={<Check size={16} />}
+            aria-label="Mark reminder done"
+            title="Mark done"
+          />
+          <SnoozeMenu
+            onSnooze={(duration) => { void handleSnooze(duration) }}
+            renderTrigger={({ onClick }) => (
+              <IconButton
+                onClick={onClick}
+                disabled={checking || snoozing || movingToNeedsYou || !onSnooze}
+                variant="secondary"
+                size="sm"
+                icon={<SnoozeOneHourIcon className={cn('size-4', snoozing && 'animate-pulse')} />}
+                aria-label="Snooze reminder"
+                title="Snooze"
+              />
             )}
-          </div>
+          />
+          <IconButton
+            onClick={handleMoveToNeedsYou}
+            disabled={checking || snoozing || movingToNeedsYou || !onSendToNeedsYou}
+            variant="secondary"
+            size="sm"
+            icon={<NeedsYouTransferIcon className={cn('size-4', movingToNeedsYou && 'animate-pulse')} />}
+            aria-label="Move reminder to Needs you"
+            title="Move to Needs you"
+          />
+          <Bell size={13} className="shrink-0 text-casa-warning" />
+          <span className="text-casa-muted tabular-nums">
+            {format(getEventStartDate(event), 'h:mm a')}
+          </span>
+          <span className={cn(checking && 'line-through opacity-50')}>{event.title}</span>
+          {event.members.length > 0 && (
+            <div className="flex gap-1 ml-0.5">
+              {event.members.slice(0, 3).map((m) => (
+                <CalendarPill
+                  key={m.id}
+                  color={m.family_member?.color_hex ?? SHARED_GOLD}
+                >
+                  {m.family_member?.name}
+                </CalendarPill>
+              ))}
+            </div>
+          )}
         </div>
       </Card>
-    </motion.li>
-  )
-}
-
-function DrivingBadgeIcon() {
-  return (
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <circle cx="12" cy="12" r="8.5" stroke="white" strokeWidth="2" strokeLinecap="round" />
-      <circle cx="12" cy="12" r="2" stroke="white" strokeWidth="2" />
-      <path d="M12 3.5v6M5.8 16.6l4.1-2.7M18.2 16.6l-4.1-2.7" stroke="white" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  )
-}
-
-function SupervisingBadgeIcon() {
-  return (
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path d="M12 3l7 2.6v5.2c0 4.3-3 7.3-7 8.4-4-1.1-7-4.1-7-8.4V5.6z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+    </motion.div>
   )
 }
 
