@@ -2,6 +2,13 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 
 import { requireEnv } from '../_shared/env.ts'
 import { resolveCaptureCommand } from '../_shared/capture-command-router.mjs'
+import { createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
+
+const providerFetch = createTrackedProviderFetch({
+  functionName: 'capture-command',
+  capability: 'capture-command',
+  trafficClass: 'user',
+})
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -200,7 +207,7 @@ MANDATORY RULES:
   ]
 
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`, {
+    const response = await providerFetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

@@ -41,6 +41,7 @@ import { EventCardSkeletonStack } from '../components/calendar/EventCardSkeleton
 import SnoozeMenu from '../components/shared/SnoozeMenu'
 import type { SnoozeDuration } from '../utils/snoozeDuration'
 import GmailSyncStatusIndicator from '../components/shared/GmailSyncStatusIndicator'
+import SystemHealthBanner from '../components/shared/SystemHealthBanner'
 
 const SHARED_GOLD = 'var(--color-casa-gold)'
 
@@ -439,6 +440,7 @@ export default function HomePage() {
 
         {/* ── Gmail Sync Health Warning Banner ── */}
         <GmailSyncStatusIndicator variant="banner" className="mb-4" />
+        <SystemHealthBanner className="mb-4" />
 
         <HeroCarousel
           now={now}

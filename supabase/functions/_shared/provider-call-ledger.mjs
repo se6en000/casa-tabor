@@ -227,6 +227,75 @@ async function dispatchRateLimitNotification(functionName, model, status) {
   }
 }
 
+// ── AI circuit breaker ────────────────────────────────────────────────────
+// State lives in settings.ai_circuit_breaker, written by the Cost & Usage / System
+// Health pages (manual) and by public.evaluate_system_health() (auto-trip on runaway
+// spend). Read at most once per BREAKER_CACHE_MS per isolate so the check costs
+// nothing noticeable per call. Any read failure FAILS OPEN: a DB hiccup must never
+// be what takes the AI down.
+const BREAKER_CACHE_MS = 30_000
+const CIRCUIT_BREAKER_HEADER = 'x-casa-circuit-breaker'
+let breakerCache = null
+
+export function isTrafficBlockedByBreaker(state, trafficClass, nowMs = Date.now()) {
+  if (!state || state.paused !== true) return false
+  if (state.pause_until) {
+    const until = Date.parse(state.pause_until)
+    if (Number.isFinite(until) && until <= nowMs) return false
+  }
+  if (state.pause_scope === 'all') return true
+  if (state.pause_scope === 'background') return trafficClass !== 'user'
+  return false
+}
+
+async function readBreakerStateFromSettings() {
+  if (typeof Deno === 'undefined') return null
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  if (!supabaseUrl || !serviceKey) return null
+  const response = await fetch(`${supabaseUrl}/rest/v1/settings?key=eq.ai_circuit_breaker&select=value&limit=1`, {
+    headers: { apikey: serviceKey, authorization: `Bearer ${serviceKey}` },
+  })
+  if (!response.ok) throw new Error(`breaker read failed (${response.status})`)
+  const rows = await response.json()
+  return Array.isArray(rows) && rows[0] ? rows[0].value ?? null : null
+}
+
+async function loadBreakerState(reader) {
+  if (reader) {
+    try { return await reader() } catch { return null }
+  }
+  if (breakerCache && Date.now() - breakerCache.fetchedAt < BREAKER_CACHE_MS) return breakerCache.state
+  try {
+    const state = await readBreakerStateFromSettings()
+    breakerCache = { state, fetchedAt: Date.now() }
+    return state
+  } catch (error) {
+    console.error('[provider-call-ledger] circuit breaker read failed; failing open', error)
+    return null
+  }
+}
+
+/** For queue/cron workers: call before doing any work and skip the run while blocked. */
+export async function checkAiCircuitBreaker(trafficClass, reader) {
+  const state = await loadBreakerState(reader)
+  return { blocked: isTrafficBlockedByBreaker(state, trafficClass), state }
+}
+
+export function isCircuitBreakerResponse(response) {
+  return response?.headers?.get?.(CIRCUIT_BREAKER_HEADER) === 'open'
+}
+
+function circuitBreakerResponse(state) {
+  const message = state?.tripped_by === 'auto'
+    ? 'AI is paused: the circuit breaker tripped on unusual usage. Resume it in Settings → System Health.'
+    : 'AI is paused by the circuit breaker. Resume it in Settings → System Health.'
+  return new Response(JSON.stringify({ error: { code: 503, status: 'CIRCUIT_BREAKER_OPEN', message } }), {
+    status: 503,
+    headers: { 'content-type': 'application/json', [CIRCUIT_BREAKER_HEADER]: 'open' },
+  })
+}
+
 export function createTrackedProviderFetch(baseContext) {
   return async function trackedProviderFetch(url, init, callContext = {}) {
     const startedAt = Date.now()
@@ -235,6 +304,33 @@ export function createTrackedProviderFetch(baseContext) {
     const provider = callContext.provider ?? inferProvider(url)
     const model = callContext.model ?? inferModel(provider, url, requestBody)
     const promptChars = callContext.promptChars ?? countPromptCharacters(requestBody)
+    const trafficClass = callContext.trafficClass ?? baseContext.trafficClass ?? 'background'
+    const breakerState = await loadBreakerState(baseContext.breakerStateReader)
+    if (isTrafficBlockedByBreaker(breakerState, trafficClass)) {
+      persistWithoutExtendingUserLatency(insertLedgerRow('ai_provider_calls', {
+        id,
+        idempotency_key: callContext.idempotencyKey ?? id,
+        correlation_id: callContext.correlationId ?? null,
+        request_id: callContext.requestId ?? null,
+        turn_id: callContext.turnId ?? null,
+        function_name: baseContext.functionName,
+        capability: baseContext.capability,
+        lane: callContext.lane ?? baseContext.lane ?? null,
+        call_purpose: callContext.callPurpose ?? baseContext.callPurpose ?? 'generation',
+        call_index: callContext.callIndex ?? 1,
+        traffic_class: trafficClass,
+        provider,
+        model,
+        endpoint: safeEndpoint(url),
+        latency_ms: 0,
+        status: 'cancelled',
+        error_class: 'circuit_breaker_open',
+        prompt_chars: promptChars,
+        tool_count: callContext.toolCount ?? countTools(requestBody),
+        metadata: {},
+      }))
+      return circuitBreakerResponse(breakerState)
+    }
     try {
       const response = await fetch(url, init)
       const responseLatencyMs = Date.now() - startedAt
@@ -259,7 +355,7 @@ export function createTrackedProviderFetch(baseContext) {
           lane: callContext.lane ?? baseContext.lane ?? null,
           call_purpose: callContext.callPurpose ?? baseContext.callPurpose ?? 'generation',
           call_index: callContext.callIndex ?? 1,
-          traffic_class: callContext.trafficClass ?? baseContext.trafficClass ?? 'background',
+          traffic_class: trafficClass,
           provider,
           model,
           endpoint: safeEndpoint(url),
@@ -297,7 +393,7 @@ export function createTrackedProviderFetch(baseContext) {
         lane: callContext.lane ?? baseContext.lane ?? null,
         call_purpose: callContext.callPurpose ?? baseContext.callPurpose ?? 'generation',
         call_index: callContext.callIndex ?? 1,
-        traffic_class: callContext.trafficClass ?? baseContext.trafficClass ?? 'background',
+        traffic_class: trafficClass,
         provider,
         model,
         endpoint: safeEndpoint(url),

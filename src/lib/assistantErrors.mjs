@@ -1,4 +1,7 @@
 export function assistantErrorMessage(code, message) {
+  if (code === 'ai_paused') {
+    return 'Casa AI is paused by the circuit breaker. Resume it in Settings → System Health.'
+  }
   if (code === 'quota_exceeded') {
     return 'AI quota reached for today. Go to Settings → AI to check your billing.'
   }

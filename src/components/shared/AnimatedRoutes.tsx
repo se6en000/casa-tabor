@@ -29,6 +29,7 @@ const CookPage = lazyWithReload(() => import('../../pages/CookPage'), 'cook')
 const CookPrototypeMediumPage = lazyWithReload(() => import('../../pages/CookPrototypeMediumPage'), 'cook-prototype-medium')
 const CookPrototypeLivingCanvasPage = lazyWithReload(() => import('../../pages/CookPrototypeLivingCanvasPage'), 'cook-prototype-living-canvas')
 const StatusDashboardPage = lazyWithReload(() => import('../../pages/StatusDashboardPage'), 'status-dashboard')
+const SystemHealthPage = lazyWithReload(() => import('../../pages/SystemHealthPage'), 'system-health')
 const DataAnalyticsPage = lazyWithReload(() => import('../../pages/DataAnalyticsPage'), 'data-analytics')
 const GroceryIntelligenceSettingsPage = lazyWithReload(() => import('../../pages/GroceryIntelligenceSettingsPage'), 'grocery-intelligence-settings')
 const SavedPlacesSettingsPage = lazyWithReload(() => import('../../pages/SavedPlacesSettingsPage'), 'saved-places-settings')
@@ -101,6 +102,7 @@ export default function AnimatedRoutes() {
             <Route path="screensaver" element={<Navigate to="/settings/display" replace />} />
             <Route path="theme"      element={<Navigate to="/settings/display" replace />} />
             <Route path="status"     element={<StatusDashboardPage />} />
+            <Route path="health"     element={<SystemHealthPage />} />
             <Route path="analytics"  element={<DataAnalyticsPage />} />
             <Route path="grocery-intelligence" element={<GroceryIntelligenceSettingsPage />} />
             <Route path="food-profile" element={<FoodProfileSettingsPage initialTab="diet" />} />

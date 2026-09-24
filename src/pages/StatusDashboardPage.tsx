@@ -24,7 +24,7 @@ import {
   Zap,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { getSetting, setSetting } from '../lib/settingsStore'
+import { getSetting } from '../lib/settingsStore'
 import { cn } from '../utils/cn'
 import {
   Alert,
@@ -353,14 +353,14 @@ export default function StatusDashboardPage() {
       pauseUntil = new Date(Date.now() + ms).toISOString()
     }
 
-    const payload: CircuitBreakerConfig = {
-      paused,
-      pause_scope: paused ? scope : 'none',
-      pause_until: pauseUntil,
-      daily_cost_cap_usd: summary?.circuit_breaker?.daily_cost_cap_usd ?? 2.0,
-    }
-
-    await setSetting('ai_circuit_breaker', payload)
+    // Merges into the stored config server-side, so auto-trip thresholds and
+    // resumed_at survive a pause/resume from this page.
+    const { error: rpcError } = await supabase.rpc('set_ai_circuit_breaker', {
+      p_paused: paused,
+      p_scope: scope,
+      p_pause_until: pauseUntil,
+    })
+    if (rpcError) setError('The circuit breaker could not be changed: ' + rpcError.message)
 
     setCircuitBreakerSaving(false)
     void load()
@@ -516,7 +516,7 @@ export default function StatusDashboardPage() {
                 </div>
                 <p className="text-caption text-casa-muted mt-0.5">
                   {isCircuitBreakerActive
-                    ? ('AI requests return deterministic mock stubs until ' + (summary.circuit_breaker.pause_until ? new Date(summary.circuit_breaker.pause_until).toLocaleTimeString() : 'manually resumed') + '. Queues remain safe.')
+                    ? ('Paused AI calls are refused (never sent to the provider) until ' + (summary.circuit_breaker.pause_until ? new Date(summary.circuit_breaker.pause_until).toLocaleTimeString() : 'manually resumed') + '. Email scanning and indexing skip their runs and catch up after resume.')
                     : 'Pause background automation or all AI calls during heavy development to avoid burning API quota.'}
                 </p>
               </div>

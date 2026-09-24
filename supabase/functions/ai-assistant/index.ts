@@ -37,7 +37,7 @@ import {
   shouldExposeSynthesisTools,
   shouldSynthesizeReadTool,
 } from '../_shared/assistant-read-tool-synthesis.mjs'
-import { createTrackedMapsFetch, createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
+import { checkAiCircuitBreaker, createTrackedMapsFetch, createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
 import {
   classifyAssistantIntent,
   shouldUseTalkPlanCalendarCommandLane,
@@ -343,6 +343,21 @@ function extractGeminiUsage(payload: unknown): { inputTokens: number; cachedInpu
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
+
+  // Answer up front while the AI circuit breaker pauses user traffic. Otherwise the
+  // first blocked provider call (the family-data retrieval embedding) surfaces as a
+  // misleading "could not search your family data" error. HTTP 200 so the client's
+  // non-streaming path renders the message instead of a generic transport failure.
+  if ((await checkAiCircuitBreaker('user')).blocked) {
+    return new Response(JSON.stringify({
+      type: 'error',
+      code: 'ai_paused',
+      message: 'Casa AI is paused by the circuit breaker.',
+    }), {
+      status: 200,
+      headers: { ...CORS, 'content-type': 'application/json' },
+    })
+  }
 
   const sb = createClient(requireEnv('SUPABASE_URL'), requireEnv('SUPABASE_SERVICE_ROLE_KEY'))
   const profileToken = req.headers.get('x-casa-history-session')?.trim()

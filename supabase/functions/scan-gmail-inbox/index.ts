@@ -14,7 +14,7 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { resolveBackgroundLlmConfig } from '../_shared/background-llm-model.mjs'
-import { createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
+import { checkAiCircuitBreaker, createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
 import { canonicalContentFingerprint, canonicalEmailKey, normalizeInternetMessageId } from '../_shared/gmail-canonical-email.mjs'
 import { classifyFamilyEvidenceCandidate, redactFamilyEvidenceText } from '../_shared/family-email-evidence.mjs'
 import { extractGmailMessageContent } from '../_shared/gmail-message-content.mjs'
@@ -1846,6 +1846,15 @@ async function handleGmailScan(req: Request): Promise<Response> {
 
 Deno.serve(async (req) => {
   try {
+    // Skip the whole run while the AI circuit breaker pauses background work, instead of
+    // letting each AI call fail mid-run. Nothing is marked processed and no cursor moves,
+    // so everything that arrives during the pause is picked up after resume.
+    if (req.method !== 'OPTIONS' && (await checkAiCircuitBreaker('background')).blocked) {
+      return new Response(JSON.stringify({ skipped: 'ai_circuit_breaker_open' }), {
+        status: 200,
+        headers: { ...CORS, 'content-type': 'application/json' },
+      })
+    }
     return await handleGmailScan(req)
   } catch (cause) {
     const error = cause instanceof Error ? cause : new Error(String(cause))

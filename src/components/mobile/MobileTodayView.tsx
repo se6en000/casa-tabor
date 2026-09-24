@@ -29,6 +29,7 @@ import {
 import { isReminderOrChore } from '../../lib/heroFocus.mjs'
 import { openEventDetails } from '../../utils/openEventDetails'
 import GmailSyncStatusIndicator from '../shared/GmailSyncStatusIndicator'
+import SystemHealthBanner from '../shared/SystemHealthBanner'
 import { EventSyncStatusDot } from '../calendar/EventSyncStatusDot'
 import { IconButton } from '../ui'
 import { cn } from '../../utils/cn'
@@ -158,6 +159,7 @@ export default function MobileTodayView(props: MobileTodayViewProps) {
     <div className="w-full flex flex-col gap-4 px-4 pt-3 pb-36 overflow-y-auto overscroll-contain">
       {/* ── Gmail Sync Health Warning Banner ── */}
       <GmailSyncStatusIndicator variant="compact" />
+      <SystemHealthBanner />
 
       {/* ══════════════════════════════════════════════════════════════
           1. TO DO'S SECTION

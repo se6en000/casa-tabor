@@ -3,7 +3,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 import { canonicalContentFingerprint } from '../_shared/gmail-canonical-email.mjs'
 import { buildFamilyDataProjection } from '../_shared/family-data-projection.mjs'
 import { chunkFamilyEvidenceText } from '../_shared/family-email-evidence.mjs'
-import { createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
+import { checkAiCircuitBreaker, createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -272,6 +272,15 @@ Deno.serve(async (request) => {
   if (request.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
       status: 405,
+      headers: { ...CORS, 'content-type': 'application/json' },
+    })
+  }
+
+  // Skip before claiming any jobs while the AI circuit breaker pauses background work,
+  // so queued items stay pending (not failed, no attempts burned) until resume.
+  if ((await checkAiCircuitBreaker('background')).blocked) {
+    return new Response(JSON.stringify({ skipped: 'ai_circuit_breaker_open' }), {
+      status: 200,
       headers: { ...CORS, 'content-type': 'application/json' },
     })
   }

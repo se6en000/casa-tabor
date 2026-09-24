@@ -36,3 +36,8 @@ test('assistant errors refuse incomplete recipes instead of presenting partial p
     /left out the partial answer/i,
   )
 })
+
+test('ai_paused error explains the circuit breaker and where to resume it', () => {
+  assert.match(assistantErrorMessage('ai_paused', 'x'), /paused/i)
+  assert.match(assistantErrorMessage('ai_paused', 'x'), /System Health/)
+})

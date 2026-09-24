@@ -23,6 +23,7 @@ import { useHeroIntelligence } from '../../hooks/useHeroIntelligence'
 import MorningLaunchpadWidget from './widgets/MorningLaunchpadWidget'
 import MiddayLogisticsWidget from './widgets/MiddayLogisticsWidget'
 import GmailSyncStatusIndicator from '../shared/GmailSyncStatusIndicator'
+import SystemHealthBanner from '../shared/SystemHealthBanner'
 import HouseholdDispatchCard from './widgets/HouseholdDispatchCard'
 import TodaysScheduleWidget from './widgets/TodaysScheduleWidget'
 import TodaysTodosWidget from './widgets/TodaysTodosWidget'
@@ -225,6 +226,7 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
     <div className="w-full h-full flex flex-col justify-start px-4 sm:px-6 lg:px-8 xl:px-10 pt-5 sm:pt-6 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-8 overflow-y-auto overscroll-contain touch-pan-y scrollbar-hide">
       {/* ── Gmail Sync Health Warning Banner ── */}
       <GmailSyncStatusIndicator variant="banner" className="mb-5 shrink-0" />
+      <SystemHealthBanner className="mb-5 shrink-0" />
 
       {/* ── Ambient status strip: only the real-time child-location badges,
           no greeting text/heading -- removed per live feedback 2026-09-12

@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, useMemo } from 'react'
 import {
   Users, Sun, MessageSquare, Bot, Activity,
   BookmarkCheck, Layers, ChevronRight, LineChart, Brain,
-  Palette, ShoppingCart, Lock, LayoutGrid, ChevronLeft, ChefHat,
+  Palette, ShoppingCart, Lock, LayoutGrid, ChevronLeft, ChefHat, HeartPulse,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import BounceScroll from '../shared/BounceScroll'
@@ -59,6 +59,7 @@ const ADVANCED_GROUPS = [
   {
     label: 'System Telemetry & Costs',
     items: [
+      { to: '/settings/health',  icon: HeartPulse,    label: 'System Health',       desc: 'Alerts, AI circuit breaker & app error log' },
       { to: '/settings/status',  icon: Activity,      label: 'Cost & Token Dashboard', desc: 'AI usage & billing reconciliation' },
       { to: '/settings/analytics', icon: LineChart,   label: 'Orchestration & Graph Health', desc: 'Pipeline telemetry, sub-engine status & graph' },
       { to: '/settings/grocery-intelligence', icon: ShoppingCart, label: 'Grocery Intelligence', desc: 'Taxonomy quality & dedupe signals' },

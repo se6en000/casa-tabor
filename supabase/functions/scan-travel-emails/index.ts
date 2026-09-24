@@ -11,7 +11,7 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { resolveBackgroundLlmConfig } from '../_shared/background-llm-model.mjs'
-import { createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
+import { checkAiCircuitBreaker, createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -980,6 +980,15 @@ This is a family household. Other family members remain at home.`).catch(() => '
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
+  // Skip the whole run while the AI circuit breaker pauses background work, instead of
+  // letting each AI call fail mid-run. Nothing is marked processed and no cursor moves,
+  // so everything that arrives during the pause is picked up after resume.
+  if ((await checkAiCircuitBreaker('background')).blocked) {
+    return new Response(JSON.stringify({ skipped: 'ai_circuit_breaker_open' }), {
+      status: 200,
+      headers: { ...CORS, 'content-type': 'application/json' },
+    })
+  }
 
   const sb = createClient(
     Deno.env.get('SUPABASE_URL')!,
