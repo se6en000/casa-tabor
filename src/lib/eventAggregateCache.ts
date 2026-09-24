@@ -179,6 +179,18 @@ type RangeMeta = { rangeStart?: string; rangeEnd?: string }
  * publishes on each query), so the calendar shows it immediately instead of
  * after a blocking refetch. Idempotent by id; caches that are not loaded yet or
  * do not overlap are left alone -- their next normal fetch will include the row.
+ *
+ * A reminder additionally goes straight into useAllReminders's cache
+ * (['events', 'all-reminders'], a plain EventWithDetails[] -- unbounded by date,
+ * so it has no range meta and the loop above always skips it). Without this, a
+ * brand-new reminder only reached Today's/Tomorrow's Schedule's reminder rows
+ * and Today's To-Dos after the realtime-debounced refetch (800-1200ms jitter
+ * plus real network time) -- a real, user-visible "why did the calendar update
+ * instantly but not the homepage" gap, confirmed live 2026-09-24. Updates and
+ * deletes to an EXISTING reminder were never affected by this -- they already
+ * go through applyEventAggregatePatch/evictEventFromAllCaches, whose
+ * setQueriesData({queryKey:['events']}) + array-shape-aware patcher already
+ * reaches this cache; only first creation had the gap.
  */
 export function addEventToCaches(queryClient: QueryClient, event: EventWithDetails) {
   const eventStart = new Date(event.start_time).getTime()
@@ -200,5 +212,16 @@ export function addEventToCaches(queryClient: QueryClient, event: EventWithDetai
       return { ...current, active }
     })
   }
+
+  if (event.event_type === 'reminder') {
+    queryClient.setQueryData(['events', 'all-reminders'], (current: unknown) => {
+      if (!Array.isArray(current)) return current
+      if (current.some((entry) => isRecord(entry) && entry.id === event.id)) return current
+      return [...current, event].sort(
+        (a, b) => new Date((a as EventWithDetails).start_time).getTime() - new Date((b as EventWithDetails).start_time).getTime(),
+      )
+    })
+  }
+
   queryClient.setQueryData(['event-details', event.id], event)
 }
