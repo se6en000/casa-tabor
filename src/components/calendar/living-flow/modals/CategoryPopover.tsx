@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
   Tag, X, Calendar, Bell, ShoppingBag, Trophy, Stethoscope,
-  PartyPopper, GraduationCap, Utensils, Plane, Church,
+  PartyPopper, GraduationCap, Utensils, Plane,
   Pill, ShoppingCart, BookOpen, Wrench, PawPrint, ClipboardList,
   Check, Plus
 } from 'lucide-react'
@@ -22,7 +22,7 @@ const EVENT_CATEGORIES = [
   { name: 'School', label: 'School / Academics', icon: GraduationCap },
   { name: 'Dining', label: 'Dining & Food', icon: Utensils },
   { name: 'Travel', label: 'Travel / Trip', icon: Plane },
-  { name: 'Community', label: 'Community / Church', icon: Church }
+  { name: 'Maintenance', label: 'Home Maintenance', icon: Wrench }
 ]
 
 const REMINDER_CATEGORIES = [

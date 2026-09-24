@@ -3,7 +3,7 @@ import { format, addDays, isSameDay, differenceInCalendarDays } from 'date-fns'
 import {
   Calendar, Clock, ChevronDown, Minus, Plus, Tag,
   ShoppingBag, Trophy, Stethoscope, PartyPopper,
-  GraduationCap, Utensils, Plane, Church, Pill,
+  GraduationCap, Utensils, Plane, Pill,
   ShoppingCart, BookOpen, Wrench, PawPrint, ClipboardList,
   Check, Bell, X, Pencil, Bed, Moon, Repeat, Sun,
   Link2, Rotate3d,
@@ -57,7 +57,7 @@ const EVENT_CATEGORIES = [
   { name: 'School', label: 'School / Academics', icon: GraduationCap },
   { name: 'Dining', label: 'Dining & Food', icon: Utensils },
   { name: 'Travel', label: 'Travel / Trip', icon: Plane },
-  { name: 'Community', label: 'Community / Church', icon: Church }
+  { name: 'Maintenance', label: 'Home Maintenance', icon: Wrench }
 ]
 
 const REMINDER_CATEGORIES = [
