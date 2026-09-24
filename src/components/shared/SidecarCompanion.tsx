@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, useDragControls } from 'framer-motion'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAppStore } from '../../stores/appStore'
 import { useRollingEvents, fetchEventDetails, type EventWithDetails } from '../../hooks/useCalendarEvents'
@@ -184,6 +184,20 @@ export default function SidecarCompanion({
     // Exact 5/16 (31.25%) rail proportion matching Calm page & Casa Tabor design system
     return Math.min(840, Math.max(420, Math.round(windowWidth * 0.3125)))
   }, [isMobile, windowWidth])
+
+  // 2026-09-24: both the desktop panel (drag="x", swipe right to close) and
+  // the mobile sheet (drag="y", swipe down to close) previously had the drag
+  // gesture live on the ENTIRE panel, not just the grab handle -- so any
+  // vertical scroll attempt inside the sidecar's own content was ambiguous
+  // between "scroll this list" and "drag the whole panel," and Framer
+  // Motion's gesture recognizer would sometimes win, elastically pulling the
+  // panel itself and revealing whatever's behind it (which read as "scrolling
+  // the sidecar also scrolls the page behind it"). dragListener={false} below
+  // plus dragControls.start() wired to just the handle's onPointerDown fixes
+  // this the standard Framer Motion way: dragging only ever initiates from
+  // the handle, so scrolling the sidecar's own content is never contested.
+  const desktopDragControls = useDragControls()
+  const mobileDragControls = useDragControls()
 
   const isCook = routePath.startsWith('/cook')
 
@@ -481,6 +495,8 @@ export default function SidecarCompanion({
           animate={{ y: 0 }}
           exit={{ y: '100%' }}
           drag="y"
+          dragListener={false}
+          dragControls={mobileDragControls}
           dragConstraints={{ top: 0 }}
           dragElastic={{ top: 0, bottom: 0.5 }}
           onDragEnd={(_, info) => {
@@ -492,7 +508,10 @@ export default function SidecarCompanion({
           className="fixed inset-x-0 bottom-0 z-modal h-[88vh] max-h-[88vh] bg-casa-surface rounded-t-3xl shadow-2xl flex flex-col overflow-hidden sm:hidden border-t border-casa-border"
         >
           {/* Mobile Drag Dismiss Handle */}
-          <div className="w-full flex items-center justify-center pt-2.5 pb-1 cursor-grab active:cursor-grabbing touch-none select-none shrink-0">
+          <div
+            className="w-full flex items-center justify-center pt-2.5 pb-1 cursor-grab active:cursor-grabbing touch-none select-none shrink-0"
+            onPointerDown={(e) => mobileDragControls.start(e)}
+          >
             <div className="w-12 h-1.5 rounded-full bg-casa-muted/30" />
           </div>
           {sidecarContent}
@@ -510,6 +529,8 @@ export default function SidecarCompanion({
       exit={{ x: '100%', opacity: 0.9 }}
       transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
       drag="x"
+      dragListener={false}
+      dragControls={desktopDragControls}
       dragConstraints={{ left: 0, right: 0 }}
       dragElastic={{ left: 0, right: 0.5 }}
       dragMomentum={false}
@@ -523,10 +544,17 @@ export default function SidecarCompanion({
       data-touch-keyboard="ignore"
     >
       {/* Drag/swipe-right-to-close grab handle -- mirrors the mobile sheet's
-          drag-down handle, mounted on this axis instead (2026-09-15). */}
+          drag-down handle, mounted on this axis instead (2026-09-15). Sole
+          trigger for the panel's drag gesture (dragListener={false} above) --
+          previously the whole panel listened for drag, so any vertical scroll
+          attempt inside the sidecar's own content was ambiguous with "drag
+          the panel," and could elastically pull the panel itself instead of
+          scrolling, which read as "scrolling the sidecar also moves the page
+          behind it" (2026-09-24). */}
       <div
         className="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 w-11 h-16 flex items-center justify-center cursor-grab active:cursor-grabbing touch-none z-20"
         aria-hidden="true"
+        onPointerDown={(e) => desktopDragControls.start(e)}
       >
         <div className="w-1.5 h-12 rounded-full bg-casa-gold shadow-2xs" />
       </div>
