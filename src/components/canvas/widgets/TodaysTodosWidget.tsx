@@ -264,7 +264,11 @@ export default function TodaysTodosWidget({
                           }
                         />
 
-                        {evt.all_day ? (
+                        {evt.has_due_date === false ? (
+                          <span className="font-sans text-caption font-semibold text-casa-muted/80 shrink-0">
+                            Anytime
+                          </span>
+                        ) : evt.all_day ? (
                           <span className="font-sans text-caption font-semibold text-casa-muted/80 shrink-0">
                             All Day
                           </span>
@@ -391,7 +395,11 @@ export default function TodaysTodosWidget({
                                 icon={<CheckCircle2 size={16} className="text-emerald-600" />}
                               />
 
-                              {evt.all_day ? (
+                              {evt.has_due_date === false ? (
+                                <span className="font-sans text-caption font-semibold text-casa-muted/70 shrink-0">
+                                  Anytime
+                                </span>
+                              ) : evt.all_day ? (
                                 <span className="font-sans text-caption font-semibold text-casa-muted/70 shrink-0">
                                   All Day
                                 </span>
