@@ -2,6 +2,7 @@ import { format, parseISO, subMinutes } from 'date-fns'
 import { Clock, MapPin, ChevronRight, Car, Gift } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { cn } from '../../../utils/cn'
+import { memoWithMinuteNow } from '../../../utils/memoWithMinuteNow'
 import type { EventWithDetails } from '../../../hooks/useCalendarEvents'
 import { useHeroTheme } from '../../../hooks/useHeroTheme'
 import { getEventDisplayDescription } from '../../../utils/eventDescription'
@@ -22,7 +23,7 @@ interface HeroFlybyCardProps {
  * data is already on the event row (event.enrichment / event.checklist),
  * so there's no extra fetch per card.
  */
-export default function HeroFlybyCard({ now, event, onOpenEvent, className }: HeroFlybyCardProps) {
+function HeroFlybyCard({ now, event, onOpenEvent, className }: HeroFlybyCardProps) {
   const { heroTheme } = useHeroTheme(now)
   const isHeroNavy = heroTheme === 'navy'
 
@@ -204,3 +205,8 @@ export default function HeroFlybyCard({ now, event, onOpenEvent, className }: He
     </motion.div>
   )
 }
+
+// 2026-09-24: see memoWithMinuteNow -- part of the kiosk scroll-jank
+// investigation. `now` ticks every 10s from useLiveClock; this widget only
+// ever displays whole minutes, so a plain memo() would never bail out.
+export default memoWithMinuteNow(HeroFlybyCard)

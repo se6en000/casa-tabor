@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { cn } from '../../../utils/cn'
+import { memoWithMinuteNow } from '../../../utils/memoWithMinuteNow'
 import type { EventWithDetails } from '../../../hooks/useCalendarEvents'
 import type { FamilyMember } from '../../../types'
 import { useFamilyRoutineIntelligence } from '../../../hooks/useFamilyRoutineIntelligence'
@@ -61,7 +62,7 @@ interface SchoolDismissalGroup {
   leaveByFormatted?: string
 }
 
-export default function MiddayLogisticsWidget({
+function MiddayLogisticsWidget({
   now = new Date(),
   todayEvents = [],
   openReminders = [],
@@ -974,3 +975,8 @@ export default function MiddayLogisticsWidget({
     </div>
   )
 }
+
+// 2026-09-24: see memoWithMinuteNow -- part of the kiosk scroll-jank
+// investigation. `now` ticks every 10s from useLiveClock; this widget only
+// ever displays whole minutes, so a plain memo() would never bail out.
+export default memoWithMinuteNow(MiddayLogisticsWidget)

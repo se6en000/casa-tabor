@@ -10,6 +10,7 @@ import type { EventWithDetails } from '../../../hooks/useCalendarEvents'
 import type { FamilyMember } from '../../../types'
 import EventCard from '../../calendar/EventCard'
 import CompactReminderCard from '../../calendar/CompactReminderCard'
+import { memoWithMinuteNow } from '../../../utils/memoWithMinuteNow'
 
 interface TodaysScheduleWidgetProps {
   now: Date
@@ -41,7 +42,7 @@ function byStartTime(a: EventWithDetails, b: EventWithDetails) {
  * divider marking where today actually is -- per live feedback 2026-09-12,
  * hiding them behind a toggle just meant the toggle was always left open.
  */
-export default function TodaysScheduleWidget({
+function TodaysScheduleWidget({
   now,
   pastEvents,
   upcomingAppointments,
@@ -196,3 +197,8 @@ export default function TodaysScheduleWidget({
     </div>
   )
 }
+
+// 2026-09-24: see memoWithMinuteNow -- part of the kiosk scroll-jank
+// investigation. `now` ticks every 10s from useLiveClock; this widget only
+// ever displays whole minutes, so a plain memo() would never bail out.
+export default memoWithMinuteNow(TodaysScheduleWidget)

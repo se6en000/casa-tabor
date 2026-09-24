@@ -11,6 +11,7 @@ import {
 import type { DepartureItem } from '../../../hooks/useFamilyRoutineIntelligence' 
 import { motion } from 'framer-motion'
 import { cn } from '../../../utils/cn'
+import { memoWithMinuteNow } from '../../../utils/memoWithMinuteNow'
 import type { EventWithDetails } from '../../../hooks/useCalendarEvents'
 import { useHeroTheme } from '../../../hooks/useHeroTheme'
 import { getEventDisplayDescription } from '../../../utils/eventDescription'
@@ -42,7 +43,7 @@ function formatDurationLong(mins: number): string {
   return `${h}H ${m}M`
 }
 
-export default function ImminentTransitWidget({
+function ImminentTransitWidget({
   now = new Date(),
   event,
   onOpenEvent,
@@ -498,3 +499,8 @@ export default function ImminentTransitWidget({
     </motion.div>
   )
 }
+
+// 2026-09-24: see memoWithMinuteNow -- part of the kiosk scroll-jank
+// investigation. `now` ticks every 10s from useLiveClock; this widget only
+// ever displays whole minutes, so a plain memo() would never bail out.
+export default memoWithMinuteNow(ImminentTransitWidget)

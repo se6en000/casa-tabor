@@ -4,6 +4,7 @@ import {
   Check,
 } from 'lucide-react'
 import { cn } from '../../../utils/cn'
+import { memoWithMinuteNow } from '../../../utils/memoWithMinuteNow'
 import { useFamilyRoutineIntelligence, type DepartureItem } from '../../../hooks/useFamilyRoutineIntelligence'
 import type { EventWithDetails } from '../../../hooks/useCalendarEvents'
 import { useHeroTheme } from '../../../hooks/useHeroTheme'
@@ -15,7 +16,7 @@ interface MorningLaunchpadWidgetProps {
   className?: string
 }
 
-export default function MorningLaunchpadWidget({
+function MorningLaunchpadWidget({
   now = new Date(),
   onOpenEvent,
   className,
@@ -407,3 +408,8 @@ export default function MorningLaunchpadWidget({
     </div>
   )
 }
+
+// 2026-09-24: see memoWithMinuteNow -- part of the kiosk scroll-jank
+// investigation. `now` ticks every 10s from useLiveClock; this widget only
+// ever displays whole minutes, so a plain memo() would never bail out.
+export default memoWithMinuteNow(MorningLaunchpadWidget)

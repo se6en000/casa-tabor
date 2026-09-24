@@ -6,6 +6,7 @@ import { getEventStartDate } from '../../../utils/eventTime'
 import { Button, IconButton, PersonAvatarStack } from '../../ui'
 import { TIER_CARD, TIER_ICON_CHIP, TIER_TITLE } from '../../ui/WidgetContainer'
 import type { EventWithDetails } from '../../../hooks/useCalendarEvents'
+import { memoWithMinuteNow } from '../../../utils/memoWithMinuteNow'
 
 interface TodaysTodosWidgetProps {
   now: Date
@@ -32,7 +33,7 @@ interface TodaysTodosWidgetProps {
  * Deliberately stays small/plain: the whole point of that layout is that
  * Today's Schedule (a separate, promoted widget) carries the visual weight.
  */
-export default function TodaysTodosWidget({
+function TodaysTodosWidget({
   now,
   todayReminders,
   openReminders,
@@ -435,3 +436,8 @@ export default function TodaysTodosWidget({
     </div>
   )
 }
+
+// 2026-09-24: see memoWithMinuteNow -- part of the kiosk scroll-jank
+// investigation. `now` ticks every 10s from useLiveClock; this widget only
+// ever displays whole minutes, so a plain memo() would never bail out.
+export default memoWithMinuteNow(TodaysTodosWidget)

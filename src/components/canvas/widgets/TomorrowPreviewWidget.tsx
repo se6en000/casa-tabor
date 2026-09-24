@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react'
+import { useMemo } from 'react'
 import { Calendar, ChevronDown, ChevronUp } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { cn } from '../../../utils/cn'
@@ -9,6 +9,7 @@ import type { EventWithDetails } from '../../../hooks/useCalendarEvents'
 import type { FamilyMember } from '../../../types'
 import EventCard from '../../calendar/EventCard'
 import CompactReminderCard from '../../calendar/CompactReminderCard'
+import { memoWithMinuteNow } from '../../../utils/memoWithMinuteNow'
 
 interface TomorrowPreviewWidgetProps {
   now: Date
@@ -142,8 +143,10 @@ function TomorrowPreviewWidget({
   )
 }
 
-// tomorrowEvents only changes when tomorrow's actual data changes, not on
-// the home screen's every-10-second clock tick -- memoized so it doesn't
-// re-render along with everything else on ticks that don't touch it
-// (2026-09-13; see the matching HouseholdDispatchCard change).
-export default memo(TomorrowPreviewWidget)
+// 2026-09-24 correction: the 2026-09-13 comment this replaced assumed `now`
+// wasn't a real dependency here, but it is (passed to EventCard/
+// CompactReminderCard for past-event dimming) -- a fresh Date reference
+// every 10s meant the plain memo() below was silently never bailing out.
+// memoWithMinuteNow fixes that: `now` only breaks memo when the minute
+// actually rolls over, which is the only time it could visibly matter here.
+export default memoWithMinuteNow(TomorrowPreviewWidget)
