@@ -89,6 +89,13 @@ test('a reminder soft-deletes: events gets an update with deleted_at, never a de
   const eventsUpdate = updatedTables.find(([table]) => table === 'events')
   assert.ok(eventsUpdate, 'events should receive an update call')
   assert.ok(eventsUpdate[1].deleted_at, 'the update payload should set deleted_at')
+  // events_tombstone_check requires purge_after whenever deleted_at is set -- caught
+  // live 2026-09-24: the first version of this fix omitted it, the constraint
+  // rejected every single tombstone attempt, and the error was silently swallowed
+  // by the caller (LivingFlowSidecar's handleDelete catches and only logs), so the
+  // reminder never actually got soft-deleted even though the UI optimistically hid
+  // it -- exactly the resurrection bug this fix exists to close.
+  assert.ok(eventsUpdate[1].purge_after, 'the update payload should set purge_after (events_tombstone_check requires both together)')
 })
 
 test('get_todo_reminder_deltas always reports a deletion, even for an iOS-sourced row', () => {

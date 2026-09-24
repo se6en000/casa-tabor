@@ -1131,10 +1131,17 @@ export async function deleteCalendarEvent(
   // the delta query no longer suppresses a deletion for an iOS-linked row). Every
   // other event type is unaffected -- still hard-deleted below, unchanged.
   if (eventType === 'reminder') {
+    // events_tombstone_check requires purge_after whenever deleted_at is set --
+    // same 30-day grace-period convention as the recurring-series soft-delete path
+    // (src/lib/routineRecurrenceCoordinator.ts). Caught live: the first version of
+    // this fix omitted it and the UPDATE was rejected by the constraint every time,
+    // silently swallowed by the caller's catch block -- the reminder never actually
+    // got tombstoned even though the UI optimistically hid it.
     const { error: tombstoneError } = await supabase
       .from('events')
       .update({
         deleted_at: new Date().toISOString(),
+        purge_after: new Date(Date.now() + 30 * 86400000).toISOString(),
         status: 'cancelled',
         updated_at: new Date().toISOString(),
       })
