@@ -59,9 +59,19 @@ export interface EventCardProps {
   now?: Date
   isHighlighted?: boolean
   onClick: () => void
+  /** Only StackedView needs this -- its day columns scroll horizontally past
+   * each other (touch-pan-x) while each column's own event list scrolls
+   * vertically (touch-pan-y), so a card inside it genuinely needs both axes
+   * to disambiguate the gesture. Every other place this card renders (the
+   * homepage's Today's/Tomorrow's Schedule) is a plain single-axis vertical
+   * list -- an unconditional touch-pan-x there was a redundant touch-action
+   * region on every single card, found 2026-09-24 chasing kiosk touch-to-
+   * scroll-start latency (see casa_tabor_pi_ux_lag_investigation memory).
+   * Defaults to false since two of the three real call sites don't want it. */
+  enableHorizontalPan?: boolean
 }
 
-export default function EventCard({ event, household, now = new Date(), isHighlighted = false, onClick }: EventCardProps) {
+export default function EventCard({ event, household, now = new Date(), isHighlighted = false, onClick, enableHorizontalPan = false }: EventCardProps) {
   const color = getPrimaryColor(event)
   const enr = event.enrichment
   const urgentAction = event.actions?.find(a => a.is_urgent && !a.completed)
@@ -193,7 +203,8 @@ export default function EventCard({ event, household, now = new Date(), isHighli
       role="button"
       tabIndex={0}
       className={cn(
-        'relative rounded-widget border cursor-pointer touch-pan-x touch-pan-y overflow-hidden transition-[box-shadow,border-color,opacity] duration-150 min-h-control',
+        'relative rounded-widget border cursor-pointer touch-pan-y overflow-hidden transition-[box-shadow,border-color,opacity] duration-150 min-h-control',
+        enableHorizontalPan && 'touch-pan-x',
         'grid grid-cols-[5.75rem_1fr]',
         isHighlighted
           ? 'border-2 border-casa-gold'

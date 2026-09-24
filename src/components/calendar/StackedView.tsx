@@ -172,6 +172,7 @@ export default function StackedView() {
                           now={new Date()}
                           isHighlighted={activeEventId === r.id}
                           onClick={() => openEventInSidecar(r.id)}
+                          enableHorizontalPan
                         />
                       </div>
                     ) : (
@@ -206,6 +207,7 @@ export default function StackedView() {
                             now={new Date()}
                             isHighlighted={activeEventId === event.id}
                             onClick={() => openEventInSidecar(event.id)}
+                            enableHorizontalPan
                           />
                         </motion.div>
                       ) : (
@@ -216,6 +218,7 @@ export default function StackedView() {
                           now={new Date()}
                           isHighlighted={activeEventId === event.id}
                           onClick={() => openEventInSidecar(event.id)}
+                          enableHorizontalPan
                         />
                       ))
                     }
