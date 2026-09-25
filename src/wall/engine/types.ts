@@ -40,7 +40,7 @@ export interface WallEvent {
   location_name: string | null
   address: string | null
   members?: Array<{ family_member_id?: string | null; family_member?: { id: string } | null; role?: string | null }> | null
-  enrichment?: { drive_time_mins: number | null; departure_time: string | null } | null
+  enrichment?: { drive_time_mins: number | null; departure_time: string | null; weather_at_event?: string | null } | null
   plan_override?: {
     transportation_plan?: { legs?: WallPlanLeg[] | null } | null
     mode_override?: string | null
@@ -71,6 +71,8 @@ export interface Trip {
   /** When the driver is back home, when known. */
   homeAt: Date | null
   driveMinutes: number | null
+  /** Forecast at the destination, as stored with the event (e.g. "Overcast, 86°F, 40% rain chance"). */
+  weather?: string | null
 }
 
 export type SegmentKind = 'at_place' | 'activity' | 'drive'

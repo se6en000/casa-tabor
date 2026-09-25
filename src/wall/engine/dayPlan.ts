@@ -305,6 +305,7 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
       arriveAt,
       homeAt,
       driveMinutes,
+      weather: event.enrichment?.weather_at_event ?? null,
     }
     trips.push(trip)
 

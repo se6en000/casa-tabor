@@ -43,6 +43,14 @@ test('school is a bar in the child\'s color with the drop-off and pickup drivers
   assert.equal(liv.notes[0].text, 'Giselle · 3:30')
 })
 
+test('a pickup note gives way to something starting right after the pickup', () => {
+  const score = buildScore(fridayPlan(), members, at(25, 10, 8))
+  // Emme's Spirit Day reminder starts at 2:00, exactly at her pickup.
+  assert.deepEqual(lane(score, 'emme').notes, [])
+  assert.equal(lane(score, 'emme').monograms.at(-1).initial, 'G')
+  assert.equal(lane(score, 'owen').notes[0].text, 'Giselle · 2:00')
+})
+
 test('driving legs sit in the driver\'s lane, in the driver\'s color, labelled with the run', () => {
   const score = buildScore(fridayPlan(), members, at(25, 10, 8))
   const giselle = lane(score, 'giselle')
@@ -92,7 +100,14 @@ test('each lane says where the person is now, or when they next leave', () => {
   assert.equal(lane(score, 'kelly').status, '')
   const early = buildScore(fridayPlan(), members, at(25, 7, 30))
   assert.equal(lane(early, 'jake-id').status, 'Driving · back by 7:45')
-  assert.equal(lane(early, 'emme').status, 'On the way to Palm Beach Public')
+  assert.equal(lane(early, 'emme').status, 'Riding to Palm Beach Public')
+  assert.equal(lane(early, 'liv').status, 'Leaves at 7:42 with Kelly')
+})
+
+test('a child leaving with nobody to drive says so', () => {
+  const withOwen = events.map((e) => (e.id === 'baseball' ? { ...e, members: [{ family_member_id: 'owen', role: 'primary' }] } : e))
+  const score = buildScore(buildDayPlan({ date: SATURDAY, members, routines, events: withOwen }), members, at(26, 9, 0))
+  assert.equal(lane(score, 'owen').status, 'Needs a driver · leaves 12:05')
 })
 
 test('"everyone home by" is the last return of the day, and only when every return is known', () => {

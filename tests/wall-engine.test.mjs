@@ -168,6 +168,14 @@ test('next move while a trip is under way reports it as en route', () => {
   assert.ok(move.trips[0].travelerIds.includes('emme'))
 })
 
+test('a departure due before the trip on the road arrives comes first', () => {
+  // Saturday 12:00: softball left at 11:56 and arrives 12:30; baseball must leave at 12:05.
+  const move = selectNextMove(saturday(), at(26, 12, 0))
+  assert.equal(move.status, 'upcoming')
+  assert.equal(move.trips[0].sourceId, 'baseball')
+  assert.equal(move.minutesUntilLeave, 5)
+})
+
 test('simultaneous departures are shown together', () => {
   // Liv's 18-minute drive: a 7:45 start means leaving 7:27, two minutes after Emme & Owen's 7:25.
   const both = routines.map((r) => (r.memberId === 'liv' ? { ...r, startLocal: '07:45' } : r))

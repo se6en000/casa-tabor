@@ -57,6 +57,8 @@ const MIN_BLOCK_WIDTH = 8
 // A label above a block gets the room up to the next label; with less than this it's dropped.
 const MIN_LABEL_WIDTH = 72
 const LABEL_GAP = 16
+// Room a pickup note ("Giselle · 3:30") needs to the right of the pickup initial.
+const NOTE_WIDTH = 170
 
 const clockTime = (d: Date) => formatWallClock(d).time
 const overlapsTimeline = (start: Date, end: Date) =>
@@ -76,7 +78,7 @@ function pigmentIndexes(members: WallMember[]): Map<string, number> {
   return new Map(ordered.map((m, i) => [m.id, i]))
 }
 
-function laneStatus(memberId: string, segments: LaneSegment[], trips: Trip[], now: Date): string {
+function laneStatus(memberId: string, segments: LaneSegment[], trips: Trip[], now: Date, nameOf: (id: string | null) => string | null): string {
   const t = now.getTime()
   const current = segments.filter((s) => s.start.getTime() <= t && t < s.end.getTime())
   const drive = current.find((s) => s.kind === 'drive')
@@ -85,16 +87,21 @@ function laneStatus(memberId: string, segments: LaneSegment[], trips: Trip[], no
     if (drive.driverId === memberId && trip?.homeAt) return `Driving · back by ${clockTime(trip.homeAt)}`
     const place = segments.find((s) => s.kind === 'at_place' && s.sourceId === drive.sourceId)
     const where = place?.label ?? trip?.destination.name.split(',')[0]
-    if (drive.driverId !== memberId && where && trip?.kind !== 'pickup') return `On the way to ${where}`
+    if (drive.driverId !== memberId && where && trip?.kind !== 'pickup') return `Riding to ${where}`
     return 'On the road'
   }
   const here = current.find((s) => s.kind === 'activity' && s.placeStatus === 'away') ?? current.find((s) => s.kind === 'at_place')
   if (here) return `${here.label} · until ${clockTime(here.end)}`
 
   const nextLeave = trips
-    .filter((trip) => trip.leaveAt && trip.leaveAt.getTime() > t && (trip.driverId === memberId || (trip.driverId === null && trip.travelerIds.includes(memberId))))
+    .filter((trip) => trip.leaveAt && trip.leaveAt.getTime() > t && (trip.driverId === memberId || trip.travelerIds.includes(memberId)))
     .sort((a, b) => a.leaveAt!.getTime() - b.leaveAt!.getTime())[0]
-  if (nextLeave?.leaveAt) return `Leaves at ${clockTime(nextLeave.leaveAt)}`
+  if (!nextLeave?.leaveAt) return ''
+  const leaves = `Leaves at ${clockTime(nextLeave.leaveAt)}`
+  if (!nextLeave.driverId) return `Needs a driver · leaves ${clockTime(nextLeave.leaveAt)}`
+  // A pickup's travelers are waiting somewhere else, not leaving home.
+  if (nextLeave.driverId === memberId) return leaves
+  return nextLeave.kind === 'pickup' ? '' : `${leaves} with ${nameOf(nextLeave.driverId)}`
   return ''
 }
 
@@ -164,7 +171,10 @@ export function buildScore(plan: DayPlan, members: WallMember[], now: Date): Sco
       previous = block
     }
 
-    return { member, pigmentIndex: own, status: laneStatus(member.id, segments, plan.trips, now), blocks, monograms, notes }
+    // A pickup note is dropped when something else starts right after it; the initial still shows who.
+    const clearNotes = notes.filter((note) => !blocks.some((b) => b.kind !== 'place' && b.x >= note.x - 8 && b.x < note.x + NOTE_WIDTH))
+
+    return { member, pigmentIndex: own, status: laneStatus(member.id, segments, plan.trips, now, nameOf), blocks, monograms, notes: clearNotes }
   })
 
   // Everyone home by: the last known return, only when every trip's return is known.

@@ -25,11 +25,12 @@ export function selectNextMove(plan: DayPlan, now: Date): NextMove | null {
   const enRoute = plan.trips
     .filter((trip) => trip.leaveAt && trip.leaveAt.getTime() <= t && trip.arriveAt.getTime() > t)
     .sort((a, b) => a.arriveAt.getTime() - b.arriveAt.getTime())
-  if (enRoute.length > 0) {
+  const upcoming = plan.trips.filter((trip) => departure(trip) > t).sort((a, b) => departure(a) - departure(b))
+
+  // Someone on the road is the move, unless another departure is due before they arrive.
+  if (enRoute.length > 0 && !(upcoming.length > 0 && departure(upcoming[0]) <= enRoute[0].arriveAt.getTime())) {
     return { status: 'en_route', trips: enRoute, leaveAt: enRoute[0].leaveAt, minutesUntilLeave: 0 }
   }
-
-  const upcoming = plan.trips.filter((trip) => departure(trip) > t).sort((a, b) => departure(a) - departure(b))
   if (upcoming.length === 0) return null
   const first = departure(upcoming[0])
   const together = upcoming.filter((trip) => departure(trip) - first <= SIMULTANEOUS_WINDOW_MIN * 60_000)

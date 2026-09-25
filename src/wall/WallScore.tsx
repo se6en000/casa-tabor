@@ -24,6 +24,19 @@ function blockClass(block: ScoreBlock): string {
   }
 }
 
+/** The place may be cut short; the time after the last " · " never is. */
+function LaneStatus({ text }: { text: string }) {
+  const cut = text.lastIndexOf(' · ')
+  const lead = cut === -1 ? text : text.slice(0, cut)
+  const tail = cut === -1 ? null : text.slice(cut)
+  return (
+    <div className="mt-[4px] flex min-w-0 whitespace-nowrap text-wall-detail text-wall-ink-2">
+      <span className="truncate">{lead}</span>
+      {tail && <span className="shrink-0 whitespace-pre">{tail}</span>}
+    </div>
+  )
+}
+
 export default function WallScore({ score, now }: { score: Score | null; now: Date }) {
   const clock = formatWallClock(now)
   const showNow = isOnTimeline(now)
@@ -63,7 +76,7 @@ export default function WallScore({ score, now }: { score: Score | null; now: Da
               </span>
               <div className="min-w-0">
                 <div className="font-display text-wall-name font-bold">{lane.member.name}</div>
-                {lane.status && <div className="mt-[4px] truncate text-wall-detail text-wall-ink-2">{lane.status}</div>}
+                {lane.status && <LaneStatus text={lane.status} />}
               </div>
             </div>
             <div className="w-[20px] shrink-0" />
