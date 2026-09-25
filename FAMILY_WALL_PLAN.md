@@ -212,9 +212,14 @@ Removing stale tests reduces *friction* (they break on harmless refactors), not 
   - Evidence (partial): `74b27cbb` — `src/wall/posture.ts` (`selectPosture`: evening 7 PM–6 AM; launch from 6 AM until the last run leaving before 9 AM arrives, or within 5 min of a departure; calm otherwise; launch layout while loading), `WallCalm.tsx` (250px clock, "A quiet stretch until 1:50." / "Baseball at 12:30 still needs a driver.", whereabouts per person, NEXT line, day ribbon with now line), `WallEvening.tsx` (dark; tomorrow's Score, forecast from the first outing, "Needs a decision" from missing drivers and shared destinations, first-departure card; after midnight it shows the day just begun), `WallView.tsx` switches. Tests: `tests/wall-posture.test.mjs` (10). Rendered from production data at 1:40 PM and 8:15 PM Friday — matches 02b/02c. Engine fix found that way: shared destinations also match by street address (the two Saturday games are stored as "Ferrin Park Field 1" and "Vivian A. Ferrin Memorial Park", same 11921 Okeechobee Blvd), so "one car could do both" now appears for the real games (`tests/wall-engine.test.mjs`).
   - **Remaining:** 02c's "Pack tonight" list — the stored event checklists include surprise-spoiling items (tomorrow's "Kelly's Birthday" lists "Gift for Kelly", "Kids Gift"), so it waits on the surprise-safe privacy rule (open question); on-kiosk check.
 
-- [ ] **P2.5 — Kiosk switch with instant rollback**
+- [~] **P2.5 — Kiosk switch with instant rollback** — Claimed: Claude (Opus 5.5), 2026-09-25
   - Done means: the Pi points at `/wall` behind a single setting; switching back to the old homepage takes one step and is documented here; 7-day soak on the real wall; **Jake signs off.**
-  - Evidence: _
+  - **How to switch (one step each way, from this repo on any machine that can SSH to the Pi):**
+    - Show the Wall: `bash pi/kiosk-view.sh wall`
+    - Back to the old homepage: `bash pi/kiosk-view.sh home`
+    - What it's on now: `bash pi/kiosk-view.sh`
+    - The setting is one word in `~/.config/casa-kiosk/view` on the Pi, read by `pi/start-casa.sh` at launch; deploys never overwrite it (before this, every ship restarted the kiosk on the hard-coded homepage URL, so a hand-edited URL would have been reverted by the next deploy).
+  - Evidence (partial): "kiosk switch" commit. **Remaining:** Jake switches it (his call), 7-day soak, sign-off.
 
 - [x] **P2.6 — Screenshot guard for the Wall** — Claimed: Claude (Opus 5.5), 2026-09-25
   - Done means: the existing Playwright visual-regression workflow (`.github/workflows/visual-regression.yml`) captures `/wall` at 1920×1080 in each posture from fixed fixture data and fails on unintended layout changes; baselines are committed.

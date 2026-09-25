@@ -140,6 +140,14 @@ if [ -z "$CHROMIUM_BIN" ]; then
   exit 1
 fi
 
+# Which screen the wall shows — one setting on the Pi, never overwritten by a deploy.
+# Switch with: bash pi/kiosk-view.sh wall | home   (see FAMILY_WALL_PLAN.md, P2.5)
+KIOSK_VIEW="$(tr -d '[:space:]' 2>/dev/null < /home/jake/.config/casa-kiosk/view || true)"
+case "$KIOSK_VIEW" in
+  wall) KIOSK_URL='https://casa-tabor.vercel.app/wall' ;;
+  *) KIOSK_URL='https://casa-tabor.vercel.app?density=kiosk' ;;
+esac
+
 "$CHROMIUM_BIN" \
   $KIOSK_FLAG \
   --password-store=basic \
@@ -165,5 +173,5 @@ fi
   --check-for-update-interval=31536000 \
   --start-maximized \
   --window-position=0,0 \
-  'https://casa-tabor.vercel.app?density=kiosk' \
+  "$KIOSK_URL" \
   9>&-
