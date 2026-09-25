@@ -42,7 +42,12 @@ TEST_PID=$!
 # on a machine without them (e.g. a Mac) it's skipped with a notice.
 WALL_LOG="$(dirname "$LOG")/wall-visual.log"
 WALL_PID=""
-if ls visual-regression/wall.spec.mjs-snapshots/*-"$(node -p process.platform)".png >/dev/null 2>&1; then
+# Only when this ship touches something that can change how the Wall looks.
+WALL_PATHS='^(src/wall/|src/lib/|src/index\.css|src/design-system/|src/generated/|src/main\.tsx|tests/fixtures/wall|visual-regression/wall|playwright\.wall|package(-lock)?\.json)'
+WALL_TOUCHED=$({ git diff --name-only HEAD; git ls-files --others --exclude-standard; } | grep -E "$WALL_PATHS" | head -1 || true)
+if [ -z "$WALL_TOUCHED" ]; then
+  : # nothing Wall-visible changed
+elif ls visual-regression/wall.spec.mjs-snapshots/*-"$(node -p process.platform)".png >/dev/null 2>&1; then
   npm run test:visual:wall >"$WALL_LOG" 2>&1 &
   WALL_PID=$!
 else
