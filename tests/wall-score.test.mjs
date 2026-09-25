@@ -151,3 +151,24 @@ test('"everyone home by" is the last return of the day, and only when every retu
   const sat = buildScore(buildDayPlan({ date: SATURDAY, members, routines, events: unknown }), members, at(26, 9, 0))
   assert.equal(sat.everyoneHomeBy, null)
 })
+
+test('"Everyone home by" late in the day reads to the left of its line, in a lane where it covers nothing', () => {
+  const thursday = new Date(2026, 9, 1)
+  const plan = buildDayPlan({ date: thursday, members, routines, events })
+  const score = buildScore(plan, members, new Date(2026, 9, 1, 18, 0))
+  const home = score.everyoneHomeBy
+  assert.equal(home.label, 'Everyone home by 9:00')
+  assert.equal(home.flip, true)
+  const span = [home.x - 320, home.x]
+  const chosen = score.lanes[home.laneIndex]
+  assert.ok(chosen, 'a lane is chosen')
+  assert.ok(chosen.blocks.every((b) => b.x + b.width <= span[0] || b.x >= span[1]), `${chosen.member.name}'s lane has a block under the label`)
+  // Giselle (the bottom lane) has a 7:30 reminder there, so it moves up.
+  assert.notEqual(chosen.member.id, 'giselle')
+})
+
+test('"Everyone home by" earlier in the day reads to the right of its line, on the bottom lane', () => {
+  const score = buildScore(fridayPlan(), members, at(25, 7, 12))
+  assert.equal(score.everyoneHomeBy.flip, false)
+  assert.equal(score.everyoneHomeBy.laneIndex, score.lanes.length - 1)
+})

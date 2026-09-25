@@ -11,8 +11,6 @@ const LANE_GUTTER = 20
 const TRACK_LEFT = LANE_HEADER_WIDTH + LANE_GUTTER
 // The stage has 24px to the right of the timeline (padding included); labels may use 16 of it.
 const LABEL_OVERHANG = 16
-// "Everyone home by 9:00" needs about this much room right of its line, or it flips to the left.
-const HOME_LABEL_ROOM = 320
 const HOUR_MARKS = hourMarks()
 const LABEL_LIMIT = TIMELINE_WIDTH + LABEL_OVERHANG
 type LabelFit = Record<string, { left: number; maxWidth: number }>
@@ -42,7 +40,8 @@ function useLabelFit(score: Score | null) {
         const labels = [...track.querySelectorAll<HTMLElement>('[data-block-label]')].flatMap((el) => {
           const key = el.dataset.blockLabel ?? ''
           const block = byKey.get(key)
-          return block ? [{ key, x: block.x, width: el.scrollWidth, maxWidth: block.labelMaxWidth }] : []
+          // scrollWidth rounds; on the kiosk's scaled stage a 219.4px label reads 219 and would be cut to "…", so allow 1px.
+          return block ? [{ key, x: block.x, width: el.scrollWidth + 1, maxWidth: block.labelMaxWidth }] : []
         })
         Object.assign(next, fitLabels(labels, LABEL_LIMIT))
       }
@@ -142,7 +141,7 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col border-b border-wall-rule">
-        {lanes.map((lane) => (
+        {lanes.map((lane, laneIndex) => (
           <div key={lane.member.id} className="flex min-h-0 flex-1 border-t border-wall-rule">
             <div className="flex w-[300px] shrink-0 items-center gap-[14px]">
               <span
@@ -158,6 +157,17 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
             </div>
             <div className="w-[20px] shrink-0" />
             <div data-lane-track={lane.member.id} className="relative w-[1512px]">
+              {score?.everyoneHomeBy?.laneIndex === laneIndex && (
+                // In the lane score.ts chose (where it covers no block); late in the day it reads to the left of its line.
+                <div
+                  className={`absolute bottom-[9px] whitespace-nowrap bg-wall-ground font-display text-wall-heading font-semibold italic text-wall-brass-ink ${
+                    score.everyoneHomeBy.flip ? '-translate-x-full pl-[4px] pr-[8px]' : 'pl-[8px] pr-[4px]'
+                  }`}
+                  style={{ left: score.everyoneHomeBy.x }}
+                >
+                  {score.everyoneHomeBy.label}
+                </div>
+              )}
               {lane.blocks.map((block) => (
                 <div key={block.key}>
                   {block.label && block.kind !== 'place' && (
@@ -249,15 +259,6 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
             className="pointer-events-none absolute bottom-0 top-[32px] border-l border-dashed border-wall-brass"
             style={{ left: TRACK_LEFT + score.everyoneHomeBy.x }}
           />
-          <div
-            className={`absolute bottom-[10px] whitespace-nowrap bg-wall-ground font-display text-wall-heading font-semibold italic text-wall-brass-ink ${
-              // Late in the day there's no room to the right of the line, so it reads to the left of it.
-              score.everyoneHomeBy.x > TIMELINE_WIDTH - HOME_LABEL_ROOM ? '-translate-x-full pl-[4px] pr-[8px]' : 'pl-[8px] pr-[4px]'
-            }`}
-            style={{ left: TRACK_LEFT + score.everyoneHomeBy.x }}
-          >
-            {score.everyoneHomeBy.label}
-          </div>
         </>
       )}
 

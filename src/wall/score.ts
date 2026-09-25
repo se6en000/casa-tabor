@@ -1,7 +1,7 @@
 import { formatWallClock } from './clock.ts'
 import type { DayPlan, LaneSegment, PlaceStatus, Trip, WallMember } from './engine/types'
 import { selectLaneMembers } from './lanes.ts'
-import { isOnTimeline, xForTime } from './timeline.ts'
+import { TIMELINE_WIDTH, isOnTimeline, xForTime } from './timeline.ts'
 
 // Turns a DayPlan into what the Score draws: one lane per person, blocks placed
 // on the 7 AM–9 PM timeline, driver initials on school bars, and the
@@ -50,7 +50,12 @@ export interface ScoreLane {
 
 export interface Score {
   lanes: ScoreLane[]
-  everyoneHomeBy: { x: number; label: string } | null
+  /**
+   * The brass line when the last person is home. `flip`: late in the day there's no room to
+   * the right, so the words read to the left of the line. `laneIndex`: the lowest lane where
+   * the words cover no block (the bottom lane unless something is there).
+   */
+  everyoneHomeBy: { x: number; label: string; flip: boolean; laneIndex: number } | null
 }
 
 const MIN_BLOCK_WIDTH = 8
@@ -59,6 +64,8 @@ const MIN_LABEL_WIDTH = 72
 const LABEL_GAP = 16
 // Room a pickup note ("Giselle · 3:30") needs to the right of the pickup initial.
 const NOTE_WIDTH = 170
+// Room "Everyone home by 9:00" needs beside its line.
+const HOME_LABEL_WIDTH = 320
 
 const clockTime = (d: Date) => formatWallClock(d).time
 const overlapsTimeline = (start: Date, end: Date) =>
@@ -199,7 +206,16 @@ export function buildScore(plan: DayPlan, members: WallMember[], now: Date): Sco
   let everyoneHomeBy: Score['everyoneHomeBy'] = null
   if (plan.trips.length > 0 && plan.trips.every((trip) => trip.homeAt)) {
     const last = new Date(Math.max(...plan.trips.map((trip) => trip.homeAt!.getTime())))
-    if (last > now && isOnTimeline(last)) everyoneHomeBy = { x: xForTime(last), label: `Everyone home by ${clockTime(last)}` }
+    if (last > now && isOnTimeline(last)) {
+      const x = xForTime(last)
+      const flip = x > TIMELINE_WIDTH - HOME_LABEL_WIDTH
+      const [from, to] = flip ? [x - HOME_LABEL_WIDTH, x] : [x, x + HOME_LABEL_WIDTH]
+      const clear = (lane: ScoreLane) => lane.blocks.every((b) => b.x + b.width <= from || b.x >= to)
+      let laneIndex = lanes.length - 1
+      while (laneIndex > 0 && !clear(lanes[laneIndex])) laneIndex -= 1
+      if (!clear(lanes[laneIndex])) laneIndex = lanes.length - 1
+      everyoneHomeBy = { x, label: `Everyone home by ${clockTime(last)}`, flip, laneIndex }
+    }
   }
 
   return { lanes, everyoneHomeBy }

@@ -213,11 +213,16 @@ test('wall: nothing runs off the stage, even late in the day, and the header kee
   // Late labels read in full, from the right edge, not cut to a few letters.
   const cut = await wall.evaluate((stage) =>
     [...stage.querySelectorAll('[data-block-label]')]
-      .filter((el) => ['Pick up the costume for the school play', 'Book club at the Harrisons'].includes(el.textContent.trim()))
-      .filter((el) => el.scrollWidth > el.clientWidth)
+      .filter((el) => ['Pick up the costume for the school play', 'Book club at the Harrisons', 'Pick up Photobook for Liv'].includes(el.textContent.trim()))
+      .filter((el) => {
+        // Fractional text width against the box: scrollWidth rounds, and a 0.4px overflow still shows an ellipsis.
+        const range = document.createRange()
+        range.selectNodeContents(el)
+        return range.getBoundingClientRect().width > el.getBoundingClientRect().width + 0.01
+      })
       .map((el) => el.textContent.trim()),
   )
-  expect(cut.filter((t) => t === 'Book club at the Harrisons')).toEqual([])
+  expect(cut.filter((t) => t !== 'Pick up the costume for the school play')).toEqual([])
   // Labels start at their block; one moves left only as far as it must to stay on the stage,
   // and never into the label before it.
   const placement = await wall.evaluate((stage) => {

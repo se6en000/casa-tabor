@@ -105,6 +105,12 @@ export const events = [
     ] } },
   },
   {
+    // As on the kiosk 2026-09-25: a late reminder with nothing before it, whose width rounds down.
+    id: 'photobook-late', title: 'Pick up Photobook for Liv', event_type: 'reminder', all_day: false,
+    start_time: local(10, 1, 19, 30), end_time: local(10, 1, 19, 45), location_name: null, address: null,
+    members: [{ family_member_id: 'giselle', role: 'primary' }],
+  },
+  {
     id: 'coach-call', title: 'Call the coach about Saturday', event_type: 'reminder', all_day: false,
     start_time: local(10, 1, 19, 15), end_time: local(10, 1, 19, 30), location_name: null, address: null,
     members: [{ family_member_id: 'jake-id', role: 'primary' }],
