@@ -5,7 +5,7 @@ import { saveEventTransportationOverride } from '../lib/eventPlanOverrides'
 import { supabase } from '../lib/supabase'
 import { withDriver } from './editing'
 import type { Trip } from './engine/types'
-import { dayState, withDeparted, withHandOff, withoutDeparted } from './tripState'
+import { dayState, withDeparted, withDismissed, withHandOff, withoutDeparted } from './tripState'
 import { useWallTripState } from './useWallTripState'
 import { useHomeWeather } from '../hooks/useHomeWeather'
 import { useWakeWord } from '../hooks/useWakeWord'
@@ -21,7 +21,7 @@ import WallView from './WallView'
 export default function WallFrame() {
   const now = useMinuteClock()
   const trips = useWallTripState()
-  const { members, today, tomorrow, allEvents, routines, dayOffs } = useWallDay(now, trips.state)
+  const { members, today, tomorrow, week, allEvents, routines, dayOffs } = useWallDay(now, trips.state)
   const queryClient = useQueryClient()
   const tripStateFor = useCallback((date: Date) => dayState(trips.state, date), [trips.state])
   const tripActions = useMemo(() => {
@@ -30,15 +30,16 @@ export default function WallFrame() {
       // The wall's own (minute-aligned) time, so the trip reads as on the road at once.
       leaving: (ids: string[]) => void trips.save(withDeparted(trips.state, day, ids, now)),
       undoLeaving: (ids: string[]) => void trips.save(withoutDeparted(trips.state, day, ids)),
-      handOff: async (trip: Trip, driverId: string) => {
-        // School runs have no event of their own: today's hand-off is kept with the wall's day state.
-        if (trip.source === 'routine') return trips.save(withHandOff(trips.state, day, trip.id, driverId))
+      handOff: async (trip: Trip, driverId: string, date: Date = day) => {
+        // School runs have no event of their own: that day's hand-off is kept with the wall's day state.
+        if (trip.source === 'routine') return trips.save(withHandOff(trips.state, date, trip.id, driverId))
         const event = allEvents.find((e) => e.id === trip.sourceId) as unknown as EventWithDetails | undefined
         if (!event) throw new Error('That event is no longer on the calendar.')
         const name = members.find((m) => m.id === driverId)?.name ?? ''
         const plan = withDriver(event as never, event.plan_override?.transportation_plan, driverId, name)
         await saveEventTransportationOverride({ supabase, queryClient, event, transportationPlan: plan, waits: event.plan_override?.waits, modeOverride: event.plan_override?.mode_override })
       },
+      dismiss: (date: Date, key: string) => trips.save(withDismissed(trips.state, date, key)),
     }
   }, [today?.date, now, trips, allEvents, members, queryClient])
   const { data: currentWeather } = useHomeWeather()
@@ -73,5 +74,5 @@ export default function WallFrame() {
       }}
     />
   ) : null
-  return <WallView now={now} members={members} today={today} tomorrow={tomorrow} currentWeather={currentWeather} checklist={checklist} allEvents={allEvents} routines={routines} dayOffs={dayOffs} onAsk={ask} overlay={band} pointAt={bandOpen ? pointAt : null} openRequest={openRequest} tripStateFor={tripStateFor} tripActions={tripActions} />
+  return <WallView now={now} members={members} today={today} tomorrow={tomorrow} currentWeather={currentWeather} checklist={checklist} allEvents={allEvents} routines={routines} dayOffs={dayOffs} onAsk={ask} overlay={band} pointAt={bandOpen ? pointAt : null} openRequest={openRequest} tripStateFor={tripStateFor} tripActions={tripActions} week={week} />
 }

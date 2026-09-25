@@ -6,7 +6,8 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { buildDayPlan } from './engine/dayPlan'
 import type { WallEvent, WallMember } from './engine/types'
 import WallView from './WallView'
-import { dayState, withDeparted, withHandOff, withoutDeparted, type WallTripState } from './tripState'
+import { withDriver } from './editing'
+import { dayState, withDeparted, withDismissed, withHandOff, withoutDeparted, type WallTripState } from './tripState'
 import { members, routines, events } from '../../tests/fixtures/wall-day-2026-09-25.mjs'
 import type { FamilyRoutine } from '../lib/familyRoutines'
 
@@ -30,13 +31,23 @@ export default function WallFixturePage() {
   next.setDate(next.getDate() + 1)
   // Trip decisions live in memory here (the real wall saves them to settings).
   const [tripState, setTripState] = useState<WallTripState>({})
+  const [evs, setEvs] = useState(events as unknown as WallEvent[])
   const plan = (date: Date) =>
-    buildDayPlan({ date, members: members as WallMember[], routines: routines as unknown as FamilyRoutine[], events: events as unknown as WallEvent[], tripState: dayState(tripState, date) })
+    buildDayPlan({ date, members: members as WallMember[], routines: routines as unknown as FamilyRoutine[], events: evs, tripState: dayState(tripState, date) })
   const tripActions = {
     leaving: (ids: string[]) => setTripState((s) => withDeparted(s, day, ids, now)),
     undoLeaving: (ids: string[]) => setTripState((s) => withoutDeparted(s, day, ids)),
-    handOff: async (trip: { id: string }, driverId: string) => setTripState((s) => withHandOff(s, day, trip.id, driverId)),
+    handOff: async (trip: { id: string; source: string; sourceId: string }, driverId: string, date: Date = day) => {
+      if (trip.source === 'routine') return setTripState((s) => withHandOff(s, date, trip.id, driverId))
+      // Events: the driver goes on the trip plan, as the real save does.
+      const name = members.find((m) => m.id === driverId)?.name ?? ''
+      setEvs((list) => list.map((e) => (e.id === trip.sourceId
+        ? { ...e, plan_override: { ...(e.plan_override ?? {}), transportation_plan: withDriver(e, e.plan_override?.transportation_plan as never, driverId, name) as never } }
+        : e)))
+    },
+    dismiss: async (date: Date, key: string) => setTripState((s) => withDismissed(s, date, key)),
   }
+  const week = [0, 1, 2, 3, 4, 5, 6].map((i) => { const d = new Date(day); d.setDate(d.getDate() + i); return plan(d) })
   return (
     <QueryClientProvider client={queryClient}>
     <MemoryRouter>
@@ -44,7 +55,7 @@ export default function WallFixturePage() {
     <Route path="/calendar" element={<div data-testid="fixture-calendar">Calendar page</div>} />
     <Route path="*" element={
     <div data-testid="wall-fixture" className="h-[1080px] w-[1920px]">
-      <WallView now={now} members={members as WallMember[]} today={plan(day)} tomorrow={plan(next)} currentWeather={WEATHER} checklist={CHECKLIST} allEvents={events as unknown as WallEvent[]} routines={routines as unknown as FamilyRoutine[]} tripStateFor={(date) => dayState(tripState, date)} tripActions={tripActions} />
+      <WallView now={now} members={members as WallMember[]} today={plan(day)} tomorrow={plan(next)} currentWeather={WEATHER} checklist={CHECKLIST} allEvents={evs} routines={routines as unknown as FamilyRoutine[]} tripStateFor={(date) => dayState(tripState, date)} tripActions={tripActions} week={week} />
     </div>
     } />
     </Routes>

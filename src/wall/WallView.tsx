@@ -6,6 +6,8 @@ import type { DayPlan, Trip, WallEvent, WallMember } from './engine/types'
 import { selectNextMove } from './engine/nextMove'
 import { describeNextMove } from './header'
 import type { DayTripState } from './tripState'
+import { decisionsFor, type DecisionAction } from './decisions'
+import WallDecisionsSheet, { type DatedDecision } from './WallDecisions'
 import WallHandOffSheet from './WallHandOffSheet'
 import type { WallChecklistItem } from './packing'
 import { eveningFocus, selectPosture, type Posture } from './posture'
@@ -46,8 +48,13 @@ export interface WallViewProps {
   tripActions?: {
     leaving: (tripIds: string[]) => void
     undoLeaving: (tripIds: string[]) => void
-    handOff: (trip: Trip, driverId: string) => Promise<void>
+    /** Saves on the given day (default today). */
+    handOff: (trip: Trip, driverId: string, date?: Date) => Promise<void>
+    /** Remembers a "keep it as it is" answer for that day. */
+    dismiss: (date: Date, decisionKey: string) => Promise<void>
   }
+  /** Today and the next six days (decisions look this far ahead). */
+  week?: DayPlan[]
 }
 
 const POSTURE_NAMES: Record<Posture, string> = { launch: 'Full day', calm: 'Calm', evening: 'Evening' }
@@ -58,8 +65,10 @@ const POSTURE_NAMES: Record<Posture, string> = { launch: 'Full day', calm: 'Calm
  * minutes); a tap on a calendar item opens its sheet (details, then edit).
  */
 export default function WallView(props: WallViewProps) {
-  const { now, members, today, tomorrow, currentWeather, checklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, openRequest = null, tripStateFor, tripActions } = props
-  const [handOffTrip, setHandOffTrip] = useState<Trip | null>(null)
+  const { now, members, today, tomorrow, currentWeather, checklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, openRequest = null, tripStateFor, tripActions, week = [] } = props
+  // The driver picker: from "Hand off" on the Next Move, or a decision answered "choose a driver".
+  const [handOff, setHandOff] = useState<{ trip: Trip; plan: DayPlan; tripIds: string[]; date: Date } | null>(null)
+  const [decisionsOpen, setDecisionsOpen] = useState(false)
   const [preview, setPreview] = useState<PreviewState | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -108,11 +117,43 @@ export default function WallView(props: WallViewProps) {
       : pointAt
         ? { sourceId: pointAt, draft: false }
         : null,
+    onOpenDecision: tripActions ? () => setDecisionsOpen(true) : undefined,
   }
   const openPerson = (memberId: string) => {
     const id = today ? eventForPerson(today, memberId, now, (sourceId) => eventsById.has(sourceId)) : null
     if (id) setSelectedId(id)
     return Boolean(id)
+  }
+
+  const weekDecisions: DatedDecision[] = useMemo(
+    () =>
+      week
+        .flatMap((plan) =>
+          decisionsFor(plan, members, now, new Set(Object.keys(tripStateFor?.(plan.date).dismissed ?? {}))).map((d) => ({ ...d, date: plan.date })),
+        )
+        .sort((a, b) => a.at.getTime() - b.at.getTime()),
+    [week, members, now, tripStateFor],
+  )
+  const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString()
+  const marksFor = (date: Date | undefined) =>
+    Object.fromEntries(
+      weekDecisions.filter((d) => date && sameDay(d.date, date)).flatMap((d) => d.sourceIds.map((id) => [id, d.key])),
+    ) as Record<string, string>
+  const answer = async (decision: DatedDecision, action: DecisionAction) => {
+    if (!tripActions) return
+    const plan = week.find((p) => sameDay(p.date, decision.date))
+    if (action.type === 'dismiss') return tripActions.dismiss(decision.date, decision.key)
+    if (!plan) return
+    if (action.type === 'pick') {
+      const trip = plan.trips.find((t) => t.id === action.tripIds[0])
+      if (trip) setHandOff({ trip, plan, tripIds: action.tripIds, date: decision.date })
+      setDecisionsOpen(false)
+      return
+    }
+    for (const id of action.tripIds) {
+      const trip = plan.trips.find((t) => t.id === id)
+      if (trip) await tripActions.handOff(trip, action.driverId, decision.date)
+    }
   }
 
   const move = shownToday ? selectNextMove(shownToday, now) : null
@@ -121,7 +162,7 @@ export default function WallView(props: WallViewProps) {
     ? {
         onLeaving: () => tripActions.leaving(moveView.tripIds),
         onUndoLeaving: () => tripActions.undoLeaving(moveView.tripIds),
-        onHandOff: () => setHandOffTrip(move.trips[0]),
+        onHandOff: () => shownToday && setHandOff({ trip: move.trips[0], plan: shownToday, tripIds: [move.trips[0].id], date: shownToday.date }),
       }
     : undefined
 
@@ -129,11 +170,24 @@ export default function WallView(props: WallViewProps) {
   let face
   if (shown.posture === 'evening') {
     const focus = eveningFocus(now)
-    face = <WallEvening now={now} members={members} plan={focus.day === 'today' ? shownToday : shownTomorrow} label={focus.label} focusDay={focus.day} checklist={checklist} interaction={interaction} />
+    const eveningPlan = focus.day === 'today' ? shownToday : shownTomorrow
+    face = (
+      <WallEvening
+        now={now}
+        members={members}
+        plan={eveningPlan}
+        label={focus.label}
+        focusDay={focus.day}
+        checklist={checklist}
+        interaction={{ ...interaction, marks: marksFor(eveningPlan?.date) }}
+        decisions={weekDecisions.filter((d) => eveningPlan && sameDay(d.date, eveningPlan.date))}
+        onAnswer={tripActions ? answer : undefined}
+      />
+    )
   } else if (shown.posture === 'calm') {
-    face = <WallCalm now={now} members={members} plan={shownToday} currentWeather={currentWeather} onSelectPerson={openPerson} />
+    face = <WallCalm now={now} members={members} plan={shownToday} currentWeather={currentWeather} onSelectPerson={openPerson} decisionCount={weekDecisions.length} onOpenDecisions={tripActions ? () => setDecisionsOpen(true) : undefined} />
   } else {
-    face = <WallLaunch now={now} members={members} plan={shownToday} currentWeather={currentWeather} onOpenMenu={openMenu} onAsk={onAsk} interaction={interaction} moveActions={moveActions} />
+    face = <WallLaunch now={now} members={members} plan={shownToday} currentWeather={currentWeather} onOpenMenu={openMenu} onAsk={onAsk} interaction={{ ...interaction, marks: marksFor(shownToday?.date) }} moveActions={moveActions} decisionCount={weekDecisions.length} onOpenDecisions={tripActions ? () => setDecisionsOpen(true) : undefined} />
   }
 
   return (
@@ -164,15 +218,23 @@ export default function WallView(props: WallViewProps) {
           onPreview={setDraftPreview}
         />
       )}
-      {handOffTrip && shownToday && tripActions && (
+      {handOff && tripActions && (
         <WallHandOffSheet
-          trip={handOffTrip}
-          plan={shownToday}
+          trip={handOff.trip}
+          plan={handOff.plan}
           members={members}
           pigmentOf={(id) => pigments.get(id) ?? null}
-          onPick={(driverId) => tripActions.handOff(handOffTrip, driverId)}
-          onClose={() => setHandOffTrip(null)}
+          onPick={async (driverId) => {
+            for (const id of handOff.tripIds) {
+              const trip = handOff.plan.trips.find((t) => t.id === id)
+              if (trip) await tripActions.handOff(trip, driverId, handOff.date)
+            }
+          }}
+          onClose={() => setHandOff(null)}
         />
+      )}
+      {decisionsOpen && tripActions && (
+        <WallDecisionsSheet decisions={weekDecisions} now={now} onAnswer={answer} onClose={() => setDecisionsOpen(false)} />
       )}
       {menuOpen && <WallMenu onClose={() => setMenuOpen(false)} />}
     </div>

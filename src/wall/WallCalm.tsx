@@ -5,6 +5,7 @@ import type { DayPlan, WallMember } from './engine/types'
 import { describeNextMove, weatherLine } from './header'
 import { pigmentStyleFor } from './lanes'
 import { calmHeadline, calmNextLine } from './posture'
+import { DecisionCount } from './WallDecisions'
 import { buildScore, type ScoreBlock } from './score'
 import { TIMELINE_WIDTH, hourMarks, isOnTimeline, xForTime } from './timeline'
 
@@ -30,10 +31,12 @@ export interface WallCalmProps {
   currentWeather?: { temp: number; condition: string } | null
   /** Tapping a person opens what they're in now, or next (returns false when there's nothing to open). */
   onSelectPerson?: (memberId: string) => boolean
+  decisionCount?: number
+  onOpenDecisions?: () => void
 }
 
 /** The calm posture (board 02b): a big clock, where everyone is, and the day in miniature. */
-export default function WallCalm({ now, members, plan, currentWeather, onSelectPerson }: WallCalmProps) {
+export default function WallCalm({ now, members, plan, currentWeather, onSelectPerson, decisionCount = 0, onOpenDecisions }: WallCalmProps) {
   const score = useMemo(() => (plan ? buildScore(plan, members, now) : null), [plan, members, now])
   const next = useMemo(() => (plan ? calmNextLine(describeNextMove(selectNextMove(plan, now), members, now)) : null), [plan, members, now])
   const clock = formatWallClock(now)
@@ -53,7 +56,10 @@ export default function WallCalm({ now, members, plan, currentWeather, onSelectP
         </div>
 
         <div className="flex min-w-0 flex-1 flex-col gap-[26px] pt-[24px]">
-          <div className="font-display text-wall-move font-medium italic">{calmHeadline(plan, now)}</div>
+          <div className="flex items-start justify-between gap-[24px]">
+            <div className="font-display text-wall-move font-medium italic">{calmHeadline(plan, now)}</div>
+          </div>
+          {onOpenDecisions && decisionCount > 0 && <DecisionCount count={decisionCount} onOpen={onOpenDecisions} className="self-start" />}
           <div className="flex flex-col border-b border-wall-rule">
             {lanes.map((lane) => (
               <button

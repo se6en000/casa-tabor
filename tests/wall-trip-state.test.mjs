@@ -19,7 +19,7 @@ test('handing off a school run moves it to the new driver, for that day only', (
   assert.ok(handed.lanes.get('kelly').some((s) => s.kind === 'drive' && s.tripId === id))
   assert.equal(handed.lanes.get('giselle').some((s) => s.tripId === id), false)
   // Another day is untouched.
-  assert.deepEqual(dayState(state, new Date(2026, 8, 28)), { drivers: {}, departed: {} })
+  assert.deepEqual(dayState(state, new Date(2026, 8, 28)), { drivers: {}, departed: {}, dismissed: {} })
 })
 
 test('"Leaving now" makes the trip en route from the moment it was tapped', () => {
@@ -49,4 +49,12 @@ test('"Leaving now" at the wall\'s own minute is on the road at once (the wall c
   const wallNow = at(25, 15, 5) // what the minute clock shows, whatever the seconds
   const left = plan(dayState(withDeparted({}, FRIDAY, [id], wallNow), FRIDAY))
   assert.equal(selectNextMove(left, wallNow).status, 'en_route')
+})
+
+import { withDismissed } from '../src/wall/tripState.ts'
+
+test('a "keep it as it is" answer is remembered for that day only', () => {
+  const state = withDismissed({}, FRIDAY, 'one_car:a+b')
+  assert.deepEqual(dayState(state, FRIDAY).dismissed, { 'one_car:a+b': true })
+  assert.deepEqual(dayState(state, new Date(2026, 8, 26)).dismissed, {})
 })

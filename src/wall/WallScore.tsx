@@ -42,6 +42,9 @@ export interface ScoreInteraction {
   onSelect: (sourceId: string) => void
   selectable: (sourceId: string) => boolean
   highlight?: { sourceId: string; draft: boolean } | null
+  /** Calendar/routine source id → the open decision about it; shown as a "?" on its block. */
+  marks?: Record<string, string>
+  onOpenDecision?: (decisionKey: string) => void
 }
 
 export interface WallScoreProps {
@@ -155,6 +158,24 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
                         interaction.onSelect(block.sourceId)
                       }}
                     />
+                  ))}
+              {interaction?.marks && interaction.onOpenDecision &&
+                lane.blocks
+                  .filter((block, i, all) => interaction.marks![block.sourceId] && all.findIndex((b) => b.sourceId === block.sourceId) === i)
+                  .map((block) => (
+                    <button
+                      key={`mark:${block.key}`}
+                      type="button"
+                      aria-label="Needs a decision"
+                      className="absolute top-[17px] flex h-[44px] w-[44px] -translate-x-1/2 items-center justify-center rounded-full border-2 border-solid border-wall-brass-ink bg-wall-ground p-0 font-display text-wall-heading font-bold text-wall-brass-ink"
+                      style={{ left: Math.max(22, block.x) }}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        interaction.onOpenDecision?.(interaction.marks![block.sourceId])
+                      }}
+                    >
+                      ?
+                    </button>
                   ))}
               {lane.notes.map((note) => (
                 <div

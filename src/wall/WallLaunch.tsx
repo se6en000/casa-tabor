@@ -5,6 +5,7 @@ import { describeNextMove, weatherLine } from './header'
 import NextMovePanel, { type NextMoveActions } from './NextMovePanel'
 import { buildScore } from './score'
 import type { DayPlan, WallMember } from './engine/types'
+import { DecisionCount } from './WallDecisions'
 import { MenuButton, MicButton } from './WallMenu'
 import WallScore, { type ScoreInteraction } from './WallScore'
 
@@ -18,10 +19,12 @@ export interface WallLaunchProps {
   onAsk?: () => void
   interaction?: ScoreInteraction
   moveActions?: NextMoveActions
+  decisionCount?: number
+  onOpenDecisions?: () => void
 }
 
 /** The launch posture (board 02a): clock, Next Move, and the full Score. */
-export default function WallLaunch({ now, members, plan, currentWeather, onOpenMenu, onAsk, interaction, moveActions }: WallLaunchProps) {
+export default function WallLaunch({ now, members, plan, currentWeather, onOpenMenu, onAsk, interaction, moveActions, decisionCount = 0, onOpenDecisions }: WallLaunchProps) {
   const score = useMemo(() => (plan ? buildScore(plan, members, now) : null), [plan, members, now])
   const clock = formatWallClock(now)
   const nextMove = useMemo(() => (plan ? describeNextMove(selectNextMove(plan, now), members, now) : null), [plan, members, now])
@@ -36,6 +39,7 @@ export default function WallLaunch({ now, members, plan, currentWeather, onOpenM
             <MenuButton onOpen={onOpenMenu ?? (() => {})} />
             {onAsk && <MicButton onAsk={onAsk} />}
             <span className="text-wall-label font-semibold tracking-[0.25em] text-wall-brass-ink">MAISON TABOR</span>
+            {onOpenDecisions && <DecisionCount count={decisionCount} onOpen={onOpenDecisions} className="ml-[6px]" />}
           </div>
           <div className="mt-[2px] flex items-baseline gap-[10px]">
             <span className="font-display text-wall-clock font-medium lining-nums">{clock.time}</span>

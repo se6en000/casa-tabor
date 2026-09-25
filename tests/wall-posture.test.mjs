@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { buildDayPlan } from '../src/wall/engine/dayPlan.ts'
-import { selectPosture, eveningFocus, calmHeadline, calmNextLine, forecastLine, decisions } from '../src/wall/posture.ts'
+import { selectPosture, eveningFocus, calmHeadline, calmNextLine, forecastLine } from '../src/wall/posture.ts'
 import { describeNextMove } from '../src/wall/header.ts'
 import { selectNextMove } from '../src/wall/engine/nextMove.ts'
 import { FRIDAY, SATURDAY, at, members, routines, events } from './fixtures/wall-day-2026-09-25.mjs'
@@ -60,11 +60,3 @@ test('tomorrow\'s forecast is read from the first outing that has one', () => {
   assert.equal(forecastLine(saturday), null)
 })
 
-test('decisions: trips with no driver, and trips one car could share', () => {
-  assert.deepEqual(decisions(saturday, at(25, 20, 0)), [
-    'Baseball at 12:30 needs a driver.',
-    'Baseball and Softball are both at Ferrin Park Field 1 at 12:30 — one car could do both.',
-  ])
-  assert.deepEqual(decisions(saturday, at(26, 13, 0)), [])
-  assert.deepEqual(decisions(friday, at(25, 7, 0)), [])
-})

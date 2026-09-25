@@ -13,6 +13,8 @@ export interface WallDay {
   today: DayPlan | null
   /** For the evening posture. */
   tomorrow: DayPlan | null
+  /** Today and the next six days (decisions and the week strip); empty while loading. */
+  week: DayPlan[]
   /** The rolling event cache (the event sheet and its previews rebuild days from it). */
   allEvents: WallEvent[]
   routines: FamilyRoutine[]
@@ -55,5 +57,15 @@ export function useWallDay(now: Date, tripState: WallTripState = {}): WallDay {
     return buildDayPlan({ date, members, routines, events: tomorrowEvents as unknown as WallEvent[], dayOffs: exceptions, tripState: dayState(tripState, date) })
   }, [ready, dayKey, members, routines, exceptions, tomorrowEvents, tripState])
 
-  return { members, today, tomorrow, allEvents, routines, dayOffs: exceptions as DayOff[] }
+  const week = useMemo(() => {
+    if (!ready || !today || !tomorrow) return []
+    const later = [2, 3, 4, 5, 6].map((offset) => {
+      const date = new Date(dayKey)
+      date.setDate(date.getDate() + offset)
+      return buildDayPlan({ date, members, routines, events: allEvents, dayOffs: exceptions, tripState: dayState(tripState, date) })
+    })
+    return [today, tomorrow, ...later]
+  }, [ready, today, tomorrow, dayKey, members, routines, allEvents, exceptions, tripState])
+
+  return { members, today, tomorrow, week, allEvents, routines, dayOffs: exceptions as DayOff[] }
 }

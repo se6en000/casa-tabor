@@ -74,28 +74,3 @@ export function forecastLine(plan: DayPlan | null): string | null {
   return `${sky} at ${clockTime(trip.arriveAt)} · ${placeName(trip)}${rain >= 40 ? ` · ${rain}% chance of rain` : ''}`
 }
 
-const shortTitle = (title: string) => title.split(':')[0].trim()
-
-/** What the family should settle ahead of time: trips with no driver, and trips one car could share. */
-export function decisions(plan: DayPlan | null, now: Date): string[] {
-  if (!plan) return []
-  const items: Array<{ at: number; text: string }> = []
-  for (const trip of plan.trips) {
-    if (trip.driverId || trip.arriveAt <= now) continue
-    items.push({ at: trip.arriveAt.getTime(), text: `${shortTitle(trip.title)} at ${clockTime(trip.arriveAt)} needs a driver.` })
-  }
-  for (const shared of plan.sharedDestinations) {
-    if (shared.arriveAt <= now) continue
-    const titles = shared.tripIds
-      .map((id) => plan.trips.find((t) => t.id === id))
-      .filter((t): t is NonNullable<typeof t> => Boolean(t))
-      .map((t) => shortTitle(t.title))
-      .sort()
-    const place = plan.trips.find((t) => t.id === shared.tripIds[0])
-    items.push({
-      at: shared.arriveAt.getTime(),
-      text: `${titles.join(' and ')} are both at ${place ? placeName(place) : shared.destination} at ${clockTime(shared.arriveAt)} — one car could do both.`,
-    })
-  }
-  return items.sort((a, b) => a.at - b.at).map((item) => item.text)
-}

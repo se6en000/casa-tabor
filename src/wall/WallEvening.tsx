@@ -5,7 +5,9 @@ import type { DayPlan, WallMember } from './engine/types'
 import { Check } from 'lucide-react'
 import { describeNextMove } from './header'
 import { packingGroups, type WallChecklistItem } from './packing'
-import { decisions, forecastLine } from './posture'
+import { forecastLine } from './posture'
+import { DecisionRow, type DatedDecision } from './WallDecisions'
+import type { DecisionAction } from './decisions'
 import { buildScore } from './score'
 import WallScore, { type ScoreInteraction } from './WallScore'
 
@@ -19,13 +21,16 @@ export interface WallEveningProps {
   focusDay: 'today' | 'tomorrow'
   checklist?: WallChecklistItem[]
   interaction?: ScoreInteraction
+  /** Decisions for the day being prepared for. */
+  decisions?: DatedDecision[]
+  onAnswer?: (decision: DatedDecision, action: DecisionAction) => Promise<void>
 }
 
 /** Lines that fit under the Score (group headings count as lines). */
 const PACKING_LINES = 7
 
 /** The evening posture (board 02c): dark, and about the day ahead. */
-export default function WallEvening({ now, members, plan, label, focusDay, checklist = [], interaction }: WallEveningProps) {
+export default function WallEvening({ now, members, plan, label, focusDay, checklist = [], interaction, decisions = [], onAnswer }: WallEveningProps) {
   // Before the day starts, lane statuses read as plans ("Leaves at 11:56").
   const asOf = useMemo(() => {
     if (focusDay === 'today') return now
@@ -36,7 +41,6 @@ export default function WallEvening({ now, members, plan, label, focusDay, check
   }, [now, focusDay])
   const score = useMemo(() => (plan ? buildScore(plan, members, asOf) : null), [plan, members, asOf])
   const first = useMemo(() => (plan ? describeNextMove(selectNextMove(plan, asOf), members, asOf) : null), [plan, members, asOf])
-  const toDecide = decisions(plan, now)
   const packing = useMemo(() => (plan ? packingGroups(plan, checklist) : { groups: [], packed: 0, total: 0 }), [plan, checklist])
   // Fill the space in order; whatever doesn't fit is counted, not dropped silently.
   let linesLeft = PACKING_LINES
@@ -78,13 +82,15 @@ export default function WallEvening({ now, members, plan, label, focusDay, check
       <div className="flex min-h-0 flex-1 gap-[48px]">
         <section aria-label="Needs a decision" className="flex min-w-0 flex-1 flex-col">
           <div className="mb-[10px] text-wall-label font-bold tracking-[0.2em] text-wall-ink-2">
-            {toDecide.length > 0 ? `NEEDS A DECISION · ${toDecide.length}` : 'NOTHING TO DECIDE'}
+            {decisions.length > 0 ? `NEEDS A DECISION · ${decisions.length}` : 'NOTHING TO DECIDE'}
           </div>
-          {toDecide.map((text) => (
-            <div key={text} className="border-t border-wall-rule py-[12px] font-display text-wall-heading font-semibold">
-              {text}
-            </div>
-          ))}
+          {decisions.slice(0, 2).map((d) =>
+            onAnswer ? (
+              <DecisionRow key={d.key} decision={d} now={now} onAnswer={onAnswer} compact />
+            ) : (
+              <div key={d.key} className="border-t border-wall-rule py-[12px] font-display text-wall-heading font-semibold">{d.text}</div>
+            ),
+          )}
         </section>
 
         {packing.total > 0 && (

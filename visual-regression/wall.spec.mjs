@@ -29,7 +29,7 @@ test('wall: a tap previews the next face, and the MT menu opens the rest of the 
 
   await wall.click({ position: { x: 400, y: 600 } })
   await expect(wall.getByText(/Previewing Evening/)).toBeVisible()
-  await expect(wall.getByText('TOMORROW')).toBeVisible()
+  await expect(wall.getByText('TOMORROW', { exact: true })).toBeVisible()
 
   await wall.click({ position: { x: 400, y: 600 } })
   await expect(wall.getByText(/Previewing/)).toHaveCount(0)
@@ -135,4 +135,27 @@ test('wall: "Leaving now" puts the trip on the road (with undo), and "Hand off" 
   await expect(sheet.getByText('Drop off Emme & Owen')).toBeVisible()
   await sheet.getByRole('button', { name: /^Kelly/ }).click()
   await expect(move.getByText('Kelly → Palm Beach Public')).toBeVisible()
+})
+
+test('wall: needs a decision — the count opens the questions, and answers settle them', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T20:15:00')
+  const wall = page.getByTestId('wall-fixture')
+  // Evening: tomorrow's questions are listed with their answers, and marked on the Score.
+  await expect(wall.getByText('NEEDS A DECISION · 1')).toBeVisible()
+  await expect(wall.getByText('Tomorrow · Baseball and Softball are both at Ferrin Park Field 1 at 12:30.')).toBeVisible()
+  await expect(wall.getByRole('button', { name: 'Needs a decision' }).first()).toBeVisible()
+  await expect(wall).toHaveScreenshot('evening-decisions.png')
+
+  await wall.getByRole('button', { name: 'Keep two trips' }).click()
+  await expect(wall.getByText('Tomorrow · Baseball at 12:30 needs a driver.')).toBeVisible()
+  await wall.getByRole('button', { name: 'Kelly', exact: true }).click()
+  await expect(wall.getByText('NOTHING TO DECIDE')).toBeVisible()
+})
+
+test('wall: "One trip" gives both games to one driver', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T20:15:00')
+  const wall = page.getByTestId('wall-fixture')
+  await wall.getByRole('button', { name: 'One trip · Jake' }).click()
+  await expect(wall.getByText('NOTHING TO DECIDE')).toBeVisible()
+  await expect(wall.getByText('Leaves at 11:56').first()).toBeVisible()
 })

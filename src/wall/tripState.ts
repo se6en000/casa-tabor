@@ -10,6 +10,8 @@ export interface DayTripState {
   drivers: Record<string, string | null>
   /** trip id → when "Leaving now" was tapped (ISO). */
   departed: Record<string, string>
+  /** decision key → answered "keep it as it is" (Keep two trips, will manage). */
+  dismissed: Record<string, true>
 }
 
 export type WallTripState = Record<string, Partial<DayTripState>>
@@ -21,7 +23,7 @@ export function dayKey(date: Date): string {
 
 export function dayState(state: WallTripState | null | undefined, date: Date): DayTripState {
   const day = state?.[dayKey(date)]
-  return { drivers: { ...(day?.drivers ?? {}) }, departed: { ...(day?.departed ?? {}) } }
+  return { drivers: { ...(day?.drivers ?? {}) }, departed: { ...(day?.departed ?? {}) }, dismissed: { ...(day?.dismissed ?? {}) } }
 }
 
 function update(state: WallTripState, date: Date, change: (day: DayTripState) => DayTripState): WallTripState {
@@ -39,3 +41,6 @@ export const withDeparted = (state: WallTripState, date: Date, tripIds: string[]
 
 export const withoutDeparted = (state: WallTripState, date: Date, tripIds: string[]): WallTripState =>
   update(state, date, (day) => ({ ...day, departed: Object.fromEntries(Object.entries(day.departed).filter(([id]) => !tripIds.includes(id))) }))
+
+export const withDismissed = (state: WallTripState, date: Date, decisionKey: string): WallTripState =>
+  update(state, date, (day) => ({ ...day, dismissed: { ...day.dismissed, [decisionKey]: true } }))
