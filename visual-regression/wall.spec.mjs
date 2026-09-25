@@ -103,3 +103,17 @@ test('wall: choosing "It\'s at home" in the place picker takes the drive off the
   await expect(sheet.getByText(/^was Ferrin Park Field 1/)).toBeVisible()
   await expect(sheet.getByText('No drive any more: it drops off the road.')).toBeVisible()
 })
+
+test('wall: the Who tab adds a person and changes the driver, with the change spelled out', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T20:15:00')
+  const wall = page.getByTestId('wall-fixture')
+  await wall.getByRole('button', { name: 'Open Softball: Huskies @ RPB Cascade' }).first().click()
+  const sheet = wall.getByRole('region', { name: /details$/ })
+  await sheet.getByRole('button', { name: 'Edit' }).click()
+  await sheet.getByRole('button', { name: /^Who/ }).click()
+  await sheet.getByRole('button', { name: 'Owen', exact: true }).click()
+  await sheet.getByRole('button', { name: /^Giselle free/ }).click()
+  await expect(sheet.getByText('Owen goes too. Giselle drives instead of Jake, leaving at 11:56.')).toBeVisible()
+  await expect(sheet.getByText('was Jake')).toHaveCount(2)
+  await expect(wall).toHaveScreenshot('edit-who.png')
+})

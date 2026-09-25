@@ -3,17 +3,21 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Check, ChevronLeft, Bookmark, Search, X } from 'lucide-react'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
 import { useSavedPlaces, useSavePlace } from '../hooks/useSavedPlaces'
-import { clearReminderDueDate, updateEventSchedule, updateEventTitle, updateEventVenue } from '../lib/eventMutations'
+import { clearReminderDueDate, reconcileTransportationLegTimes, toggleEventAttendee, updateEventSchedule, updateEventTitle, updateEventVenue } from '../lib/eventMutations'
+import { saveEventTransportationOverride } from '../lib/eventPlanOverrides'
+import { syncTransportationAttendees } from '../lib/eventTransportation'
 import { supabase } from '../lib/supabase'
 import type { SavedPlaceCategory } from '../types'
 import { DEFAULT_HOUSEHOLD_COORDINATES } from '../utils/geoDistance'
 import {
   canClearPlace, consequenceLine, dayChips, draftChanges, draftFromEvent, isReminder, previewEvent, savePlanFor,
-  setAllDay, setAnytime, setDay, setPlace, setTitle, stepEnd, stepStart, type DraftPlace, type EditDraft, type EditableEvent,
+  setAllDay, setAnytime, setDay, setDriver, setGoing, setPlace, setTitle, stepEnd, stepStart, withDriver,
+  type DraftPlace, type EditDraft, type EditableEvent,
 } from './editing'
 import type { DayPlan, WallEvent, WallMember } from './engine/types'
 import { clockTime, placeName } from './header'
-import { pigmentStyleFor } from './lanes'
+import { pigmentStyleFor, selectLaneMembers } from './lanes'
+import { driverChoices } from './people'
 import type { WallChecklistItem } from './packing'
 import { SAVE_PLACE_KINDS, placeFromSaved, placeFromSearch, yourPlaces, type PlaceSearchResult } from './places'
 import { toggleChecklistItem } from './useWallChecklist'
@@ -54,6 +58,14 @@ const fmtMinutes = (m: number) => {
   return `${clockTime(d)} ${m % 1440 < 720 ? 'AM' : 'PM'}`
 }
 
+/** The street part of a place's address, without repeating its name ("Ferrin Park Field 1, 11921 …" → "11921 …"). */
+function placeAddressLine(place: DraftPlace): string | null {
+  const parts = place.address.split(',').map((p) => p.trim()).filter(Boolean)
+  const name = (place.name || '').split(',')[0].trim().toLowerCase()
+  const rest = parts[0]?.toLowerCase() === name ? parts.slice(1) : parts
+  return rest.slice(0, 2).join(', ') || null
+}
+
 function isRepeating(event: EditableEvent): boolean {
   const e = event as EditableEvent & { rrule?: string | null; recurrence_master_id?: string | null; series_id?: string | null; record_kind?: string | null }
   return Boolean(e.rrule || e.recurrence_master_id || e.series_id || e.record_kind === 'occurrence')
@@ -74,6 +86,7 @@ export default function WallEventSheet(props: WallEventSheetProps) {
   const { event, members, now, allEvents, buildPlanFor, pigmentOf, checklist, onClose, onPreview } = props
   const queryClient = useQueryClient()
   const [mode, setMode] = useState<Mode>('details')
+  const [tab, setTab] = useState<'when' | 'who'>('when')
   const [draft, setDraft] = useState<EditDraft>(() => draftFromEvent(event))
   const [keyboard, setKeyboard] = useState<KeyboardTarget>(null)
   const [hourPicker, setHourPicker] = useState(false)
@@ -98,7 +111,12 @@ export default function WallEventSheet(props: WallEventSheetProps) {
   const eventDay = midnight(new Date(event.start_time))
   const before = useMemo(() => buildPlanFor(eventDay, allEvents), [buildPlanFor, eventDay.getTime(), allEvents]) // eslint-disable-line react-hooks/exhaustive-deps
   const trip = before.trips.find((t) => t.sourceId === event.id) ?? null
-  const changes = useMemo(() => draftChanges(event, draft), [event, draft])
+  // Everyone with a lane, plus anyone already going (a sitter switched off still shows if she's on this one).
+  const goingCandidates = useMemo(() => {
+    const going = draftFromEvent(event).going
+    return selectLaneMembers(members).concat(members.filter((m) => going.includes(m.id) && !selectLaneMembers(members).includes(m)))
+  }, [members, event])
+  const changes = useMemo(() => draftChanges(event, draft, members), [event, draft, members])
   const preview = useMemo(() => (changes.length > 0 ? previewEvent(event, draft) : null), [changes, event, draft])
   const after = useMemo(() => {
     if (!preview) return null
@@ -130,10 +148,44 @@ export default function WallEventSheet(props: WallEventSheetProps) {
       let current = full
       for (const step of savePlanFor(event, draft)) {
         if (step.kind === 'title') await updateEventTitle(supabase, queryClient, event.id, step.title)
+        if (step.kind === 'people') {
+          // One member at a time, each from the event as the previous step left it.
+          for (const id of [...step.add, ...step.remove]) {
+            const adding = step.add.includes(id)
+            await toggleEventAttendee(supabase, queryClient, current, id, adding, members as never)
+            const person = members.find((m) => m.id === id)
+            const nextMembers = adding
+              ? [...current.members, { id: crypto.randomUUID(), role: 'attendee', family_member: person as never }]
+              : current.members.filter((m) => (m.family_member?.id ?? m.id) !== id)
+            const plan = current.plan_override?.transportation_plan
+            current = {
+              ...current,
+              members: nextMembers,
+              plan_override: plan && current.plan_override
+                ? { ...current.plan_override, transportation_plan: syncTransportationAttendees(plan, nextMembers.map((m) => m.family_member?.name ?? '').filter(Boolean)) }
+                : current.plan_override,
+            }
+          }
+        }
+        if (step.kind === 'driver') {
+          const name = members.find((m) => m.id === step.driverId)?.name ?? ''
+          const plan = withDriver(current as never, current.plan_override?.transportation_plan, step.driverId, name)
+          await saveEventTransportationOverride({ supabase, queryClient, event: current, transportationPlan: plan, waits: current.plan_override?.waits, modeOverride: current.plan_override?.mode_override })
+          current = { ...current, plan_override: { ...(current.plan_override ?? ({} as never)), transportation_plan: plan } }
+        }
         if (step.kind === 'clearDueDate') await clearReminderDueDate(supabase, queryClient, event.id)
         if (step.kind === 'schedule') {
           await updateEventSchedule(supabase, queryClient, current, step.start, step.end, step.allDay)
-          current = { ...current, start_time: step.start.toISOString(), end_time: step.end.toISOString(), all_day: step.allDay }
+          const plan = current.plan_override?.transportation_plan
+          current = {
+            ...current,
+            start_time: step.start.toISOString(),
+            end_time: step.end.toISOString(),
+            all_day: step.allDay,
+            plan_override: plan && current.plan_override && !step.allDay
+              ? { ...current.plan_override, transportation_plan: reconcileTransportationLegTimes(plan, step.start, step.end) }
+              : current.plan_override,
+          }
         }
         if (step.kind === 'venue') await updateEventVenue(supabase, queryClient, current, step.venue, { familyMembers: members as never })
       }
@@ -327,8 +379,25 @@ export default function WallEventSheet(props: WallEventSheetProps) {
 
         {mode === 'edit' && (
           <>
-            <div className={`${eyebrow} text-wall-brass-ink`}>{reminder ? 'EDITING · REMINDER' : 'EDITING'}</div>
+            <div className="flex items-center justify-between">
+              <div className={`${eyebrow} text-wall-brass-ink`}>{reminder ? 'EDITING · REMINDER' : 'EDITING'}</div>
+              <div className="flex gap-[8px]">
+                {(['when', 'who'] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => { setKeyboard(null); setTab(t) }}
+                    className={`h-[52px] rounded-full px-[22px] text-wall-detail font-semibold ${tab === t ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-rule bg-transparent text-wall-ink'}`}
+                  >
+                    {t === 'when' ? 'When & where' : 'Who'}
+                    {(t === 'who' ? ['going', 'driver'] : ['title', 'day', 'start', 'end', 'allDay', 'anytime', 'place']).some((f) => wasOf(f)) && ' •'}
+                  </button>
+                ))}
+              </div>
+            </div>
 
+            {tab === 'when' && (
+            <>
             <div className="flex flex-col gap-[8px]">
               <span className={`${eyebrow} text-wall-ink-2`}>TITLE</span>
               <button
@@ -427,7 +496,7 @@ export default function WallEventSheet(props: WallEventSheetProps) {
                       <span className="truncate text-wall-label text-wall-ink-2">
                         {resolving
                           ? 'Working out the drive…'
-                          : [draft.place.address.split(',').slice(0, 2).join(',').trim() || null, draft.place.driveMinutes ? `${draft.place.driveMinutes} min drive` : null].filter(Boolean).join(' · ')}
+                          : [placeAddressLine(draft.place), draft.place.driveMinutes ? `${draft.place.driveMinutes} min drive` : null].filter(Boolean).join(' · ')}
                       </span>
                     </div>
                     <button type="button" className={pill} onClick={() => { setPlaceQuery(''); setMode('place') }}>
@@ -435,6 +504,91 @@ export default function WallEventSheet(props: WallEventSheetProps) {
                     </button>
                   </div>
                 </div>
+
+                {changes.length > 0 && (
+                  <div className="rounded-[16px] bg-wall-brass/15 px-[22px] py-[16px] text-wall-body">
+                    <b>What changes: </b>
+                    {consequence ?? 'Nothing else on the wall moves.'}
+                  </div>
+                )}
+                {error && <div className="text-wall-body font-semibold text-wall-rust">{error}</div>}
+              </>
+            )}
+            </>
+            )}
+
+            {tab === 'who' && (
+              <>
+                <div className="flex flex-col gap-[12px]">
+                  <div className="flex items-baseline justify-between">
+                    <span className={`${eyebrow} text-wall-ink-2`}>WHO'S GOING</span>
+                    {was('going')}
+                  </div>
+                  <div className="grid grid-cols-3 gap-[12px]">
+                    {goingCandidates.map((m) => {
+                      const on = draft.going.includes(m.id)
+                      const wasOn = draftFromEvent(event).going.includes(m.id)
+                      const pigment = pigmentOf(m.id)
+                      return (
+                        <button
+                          key={m.id}
+                          type="button"
+                          aria-pressed={on}
+                          onClick={() => { touch(); setDraft((d) => setGoing(d, on ? d.going.filter((id) => id !== m.id) : [...d.going, m.id])) }}
+                          className={`flex h-[72px] items-center gap-[14px] rounded-[16px] px-[16px] text-left ${on ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-rule bg-transparent text-wall-ink-2'} ${on !== wasOn ? 'outline-2 outline-solid outline-offset-2 outline-wall-brass-ink' : ''}`}
+                        >
+                          <span
+                            aria-hidden="true"
+                            className={`flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full font-display text-wall-heading font-bold ${on && pigment != null ? `text-wall-on-pigment ${pigmentStyleFor(pigment).solid}` : 'border-2 border-solid border-wall-rule'}`}
+                          >
+                            {m.name.charAt(0)}
+                          </span>
+                          <span className="flex min-w-0 flex-col">
+                            <span className="truncate text-wall-body font-semibold">{m.name}</span>
+                            {on !== wasOn && <span className="text-wall-label text-wall-brass">{on ? 'added' : 'removed'}</span>}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {trip && (
+                  <div className="flex flex-col gap-[12px]">
+                    <div className="flex items-baseline justify-between">
+                      <span className={`${eyebrow} text-wall-ink-2`}>
+                        WHO DRIVES{trip.leaveAt && trip.homeAt ? ` · ${clockTime(trip.leaveAt)} – ${clockTime(trip.homeAt)}` : ''}
+                      </span>
+                      {was('driver')}
+                    </div>
+                    <div className="grid grid-cols-2 gap-[12px]">
+                      {[...driverChoices(before, members, trip, event.id), { memberId: null, name: 'Nobody yet', note: '' }].map((choice) => {
+                        const chosen = draft.driverId === choice.memberId
+                        const pigment = choice.memberId ? pigmentOf(choice.memberId) : null
+                        return (
+                          <button
+                            key={choice.memberId ?? 'nobody'}
+                            type="button"
+                            aria-pressed={chosen}
+                            onClick={() => { touch(); setDraft((d) => setDriver(d, choice.memberId)) }}
+                            className={`flex h-[80px] items-center gap-[14px] rounded-[16px] px-[18px] text-left ${chosen ? 'border-0 bg-wall-ink text-wall-on-pigment' : choice.memberId ? 'border border-solid border-wall-rule bg-transparent text-wall-ink' : 'border border-dashed border-wall-rule bg-transparent text-wall-ink-2'}`}
+                          >
+                            <span
+                              aria-hidden="true"
+                              className={`flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full font-display text-wall-heading font-bold ${pigment != null ? `text-wall-on-pigment ${pigmentStyleFor(pigment).solid}` : 'border-2 border-dashed border-wall-rule'}`}
+                            >
+                              {choice.memberId ? choice.name.charAt(0) : '?'}
+                            </span>
+                            <span className="flex min-w-0 flex-col">
+                              <span className="text-wall-body font-semibold">{choice.name}</span>
+                              {choice.note && <span className={`truncate text-wall-label ${chosen ? 'text-wall-brass' : 'text-wall-ink-2'}`}>{choice.note}</span>}
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {changes.length > 0 && (
                   <div className="rounded-[16px] bg-wall-brass/15 px-[22px] py-[16px] text-wall-body">

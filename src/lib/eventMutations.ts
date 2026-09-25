@@ -30,6 +30,9 @@ import { normalizeAllDayEventRange } from '../utils/allDayEventRange.ts'
 import { serializeToZonedIso } from '../utils/eventTime.ts'
 import type { TravelBehavior } from '../components/calendar/living-flow/types.ts'
 
+/** The household's address when no setting is passed (a trip plan's starting point). */
+export const DEFAULT_HOME_ADDRESS = '3209 Washington Road, West Palm Beach, FL, 33405-1646'
+
 export interface EventVenuePayload {
   name: string
   address: string
@@ -155,7 +158,7 @@ export async function materializeSyntheticRoutineEvent(
 ): Promise<EventWithDetails> {
   const newEventId = crypto.randomUUID()
   const members = options?.familyMembers ?? []
-  const homeAddress = options?.homeAddress || '3209 Washington Road, West Palm Beach, FL, 33405-1646'
+  const homeAddress = options?.homeAddress || DEFAULT_HOME_ADDRESS
 
   const isAllDay = overrides?.isAllDay === true
   const title = (overrides?.title ?? syntheticEvent.title ?? 'New Event').trim()

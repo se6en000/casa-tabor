@@ -1,5 +1,5 @@
-import { reconcileTransportationLegTimes, rescheduledDepartureIso } from '../lib/eventMutations.ts'
-import type { EventTransportationPlan } from '../lib/eventTransportation'
+import { DEFAULT_HOME_ADDRESS, reconcileTransportationLegTimes, rescheduledDepartureIso } from '../lib/eventMutations.ts'
+import { createDefaultTransportationPlan, type EventTransportationPlan } from '../lib/eventTransportation.ts'
 import { clockTime } from './header.ts'
 import type { DayPlan, WallEvent, WallMember } from './engine/types'
 
@@ -36,9 +36,13 @@ export interface EditDraft {
   /** Reminders only: no due date at all. */
   anytime: boolean
   place: DraftPlace
+  /** Member ids going (not counting a driver-only member). */
+  going: string[]
+  /** Who drives (stored on the trip plan); null = nobody yet. */
+  driverId: string | null
 }
 
-export type ChangeField = 'title' | 'day' | 'start' | 'end' | 'allDay' | 'anytime' | 'place'
+export type ChangeField = 'title' | 'day' | 'start' | 'end' | 'allDay' | 'anytime' | 'place' | 'going' | 'driver'
 
 export interface DraftChange {
   field: ChangeField
@@ -51,6 +55,8 @@ export type SaveStep =
   | { kind: 'schedule'; start: Date; end: Date; allDay: boolean }
   | { kind: 'clearDueDate' }
   | { kind: 'venue'; venue: { name: string; address: string; driveMinutes?: number } }
+  | { kind: 'people'; add: string[]; remove: string[] }
+  | { kind: 'driver'; driverId: string | null }
 
 const midnight = (d: Date) => {
   const day = new Date(d)
@@ -92,8 +98,24 @@ export function draftFromEvent(event: EditableEvent): EditDraft {
       address: (event.address ?? '').trim(),
       driveMinutes: event.enrichment?.drive_time_mins ?? null,
     },
+    going: goingIds(event),
+    driverId: event.plan_override?.transportation_plan?.legs?.find((l) => l.driverId)?.driverId
+      ?? memberRefs(event).find((m) => m.role === 'driver')?.id
+      ?? null,
   }
 }
+
+function memberRefs(event: EditableEvent): Array<{ id: string; role: string | null }> {
+  return (event.members ?? [])
+    .map((m) => ({ id: m.family_member_id ?? m.family_member?.id ?? null, role: m.role ?? null }))
+    .filter((m): m is { id: string; role: string | null } => Boolean(m.id))
+}
+
+function goingIds(event: EditableEvent): string[] {
+  return [...new Set(memberRefs(event).filter((m) => m.role !== 'driver').map((m) => m.id))]
+}
+
+const sameSet = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.includes(x))
 
 export function stepStart(draft: EditDraft, delta: number): EditDraft {
   const duration = draft.endMin - draft.startMin
@@ -110,6 +132,8 @@ export const setAllDay = (draft: EditDraft, allDay: boolean): EditDraft => ({ ..
 export const setAnytime = (draft: EditDraft, anytime: boolean): EditDraft => ({ ...draft, anytime })
 export const setTitle = (draft: EditDraft, title: string): EditDraft => ({ ...draft, title })
 export const setPlace = (draft: EditDraft, place: DraftPlace): EditDraft => ({ ...draft, place })
+export const setGoing = (draft: EditDraft, going: string[]): EditDraft => ({ ...draft, going: [...new Set(going)] })
+export const setDriver = (draft: EditDraft, driverId: string | null): EditDraft => ({ ...draft, driverId })
 
 export interface DayChip {
   date: Date
@@ -133,13 +157,14 @@ export function dayChips(now: Date, selected: Date): DayChip[] {
 
 const weekdayShort = (d: Date) => d.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()
 
-export function draftChanges(event: EditableEvent, draft: EditDraft): DraftChange[] {
+export function draftChanges(event: EditableEvent, draft: EditDraft, members: Array<{ id: string; name: string }> = []): DraftChange[] {
   const was = draftFromEvent(event)
+  const nameOf = (id: string) => members.find((m) => m.id === id)?.name ?? ((event.members ?? []).find((m) => (m.family_member_id ?? m.family_member?.id) === id)?.family_member as { name?: string } | undefined)?.name ?? id
   const changes: DraftChange[] = []
   if (draft.title.trim() !== was.title) changes.push({ field: 'title', was: was.title })
   if (draft.anytime !== was.anytime) {
     changes.push({ field: 'anytime', was: was.anytime ? 'Anytime' : `${dayLabel(was.day)} · ${timeLabel(was.startMin)}` })
-    return changes.concat(placeChange(was, draft))
+    return changes.concat(placeChange(was, draft)).concat(peopleChanges(was, draft, nameOf))
   }
   if (draft.day.getTime() !== was.day.getTime()) changes.push({ field: 'day', was: dayLabel(was.day) })
   if (draft.allDay !== was.allDay) changes.push({ field: 'allDay', was: was.allDay ? 'All day' : `${timeLabel(was.startMin)} – ${timeLabel(was.endMin)}` })
@@ -147,7 +172,14 @@ export function draftChanges(event: EditableEvent, draft: EditDraft): DraftChang
     if (draft.startMin !== was.startMin) changes.push({ field: 'start', was: timeLabel(was.startMin) })
     if (draft.endMin !== was.endMin) changes.push({ field: 'end', was: timeLabel(was.endMin) })
   }
-  return changes.concat(placeChange(was, draft))
+  return changes.concat(placeChange(was, draft)).concat(peopleChanges(was, draft, nameOf))
+}
+
+function peopleChanges(was: EditDraft, draft: EditDraft, nameOf: (id: string) => string): DraftChange[] {
+  const out: DraftChange[] = []
+  if (!sameSet(was.going, draft.going)) out.push({ field: 'going', was: was.going.map(nameOf).join(' & ') || 'Nobody' })
+  if (was.driverId !== draft.driverId) out.push({ field: 'driver', was: was.driverId ? nameOf(was.driverId) : 'Nobody yet' })
+  return out
 }
 
 function placeChange(was: EditDraft, draft: EditDraft): DraftChange[] {
@@ -171,7 +203,10 @@ export function previewEvent(event: EditableEvent, draft: EditDraft): EditableEv
   const { start, end } = draftRange(draft)
   const timeMoved = changes.some((c) => c.field === 'day' || c.field === 'start' || c.field === 'end' || c.field === 'allDay')
   const placeMoved = changes.some((c) => c.field === 'place')
-  const plan = event.plan_override?.transportation_plan as EventTransportationPlan | null | undefined
+  const goingMoved = changes.some((c) => c.field === 'going')
+  const driverMoved = changes.some((c) => c.field === 'driver')
+  let plan = event.plan_override?.transportation_plan as EventTransportationPlan | null | undefined
+  if (driverMoved) plan = withDriver(event, plan, draft.driverId)
   const legs = timeMoved && !draft.allDay && plan?.legs ? reconcileTransportationLegTimes(plan, start, end) : plan
   const drive = placeMoved ? draft.place.driveMinutes : event.enrichment?.drive_time_mins ?? null
   const departure = draft.allDay ? null : timeMoved || placeMoved ? rescheduledDepartureIso(start, drive) : event.enrichment?.departure_time ?? null
@@ -185,21 +220,54 @@ export function previewEvent(event: EditableEvent, draft: EditDraft): EditableEv
     location_name: draft.place.name || null,
     address: draft.place.address || null,
     enrichment: { ...(event.enrichment ?? { departure_time: null }), drive_time_mins: drive, departure_time: departure },
-    plan_override: event.plan_override && legs ? { ...event.plan_override, transportation_plan: legs as never } : event.plan_override,
+    members: goingMoved ? previewMembers(event, draft.going) : event.members,
+    plan_override: legs ? { ...(event.plan_override ?? {}), transportation_plan: legs as never } : event.plan_override,
   }
+}
+
+/** The trip plan with a new driver on every leg; a plan is created (as the app does) when there isn't one. */
+export function withDriver(event: EditableEvent, plan: EventTransportationPlan | null | undefined, driverId: string | null, driverName = ''): EventTransportationPlan {
+  if (plan?.legs?.length) {
+    return { ...plan, source: 'manual', legs: plan.legs.map((leg) => ({ ...leg, driverId, driverName: driverId ? driverName : '' })) }
+  }
+  return createDefaultTransportationPlan(event as never, DEFAULT_HOME_ADDRESS, driverId ? { id: driverId, name: driverName } : null)
+}
+
+function previewMembers(event: EditableEvent, going: string[]): EditableEvent['members'] {
+  const existing = event.members ?? []
+  const idOf = (m: NonNullable<EditableEvent['members']>[number]) => m.family_member_id ?? m.family_member?.id ?? null
+  const kept = existing.filter((m) => m.role === 'driver' || going.includes(idOf(m) ?? ''))
+  const added = going.filter((id) => !existing.some((m) => idOf(m) === id)).map((id) => ({ family_member_id: id, role: 'attendee' }))
+  return [...kept, ...added]
 }
 
 /** One sentence on what the engine recalculates, or null when nothing on the wall moves. */
 export function consequenceLine(before: DayPlan, after: DayPlan, eventId: string, members: WallMember[]): string | null {
   const nameOf = (id: string | null) => members.find((m) => m.id === id)?.name ?? null
+  const attending = (plan: DayPlan) =>
+    [...plan.lanes].filter(([, segs]) => segs.some((s) => s.sourceId === eventId && s.kind === 'activity')).map(([id]) => id)
+  const goingBefore = attending(before)
+  const goingAfter = attending(after)
+  const parts: string[] = []
+  const added = goingAfter.filter((id) => !goingBefore.includes(id)).map(nameOf).filter(Boolean)
+  const removed = goingBefore.filter((id) => !goingAfter.includes(id)).map(nameOf).filter(Boolean)
+  if (added.length) parts.push(`${added.join(' & ')} ${added.length > 1 ? 'go' : 'goes'} too.`)
+  if (removed.length) parts.push(`${removed.join(' & ')} ${removed.length > 1 ? "don't" : "doesn't"} go any more.`)
+
   const was = before.trips.find((t) => t.sourceId === eventId)
   const now = after.trips.find((t) => t.sourceId === eventId)
-  if (was && !now) return 'No drive any more: it drops off the road.'
-  if (!now?.leaveAt) return null
-  const who = nameOf(now.driverId) ?? 'Whoever drives'
-  if (!was?.leaveAt) return `${who} leaves at ${clockTime(now.leaveAt)}.`
-  if (was.leaveAt.getTime() === now.leaveAt.getTime()) return null
-  return `${who} leaves at ${clockTime(now.leaveAt)} instead of ${clockTime(was.leaveAt)}.`
+  if (was && !now) parts.push('No drive any more: it drops off the road.')
+  else if (now) {
+    const leaving = now.leaveAt ? `, leaving at ${clockTime(now.leaveAt)}` : ''
+    if (was && was.driverId !== now.driverId) {
+      if (!now.driverId) parts.push('Nobody is driving yet.')
+      else parts.push(was.driverId ? `${nameOf(now.driverId)} drives instead of ${nameOf(was.driverId)}${leaving}.` : `${nameOf(now.driverId)} drives${leaving}.`)
+    } else if (now.leaveAt && (!was?.leaveAt || was.leaveAt.getTime() !== now.leaveAt.getTime())) {
+      const who = nameOf(now.driverId) ?? 'Whoever drives'
+      parts.push(was?.leaveAt ? `${who} leaves at ${clockTime(now.leaveAt)} instead of ${clockTime(was.leaveAt)}.` : `${who} leaves at ${clockTime(now.leaveAt)}.`)
+    }
+  }
+  return parts.length > 0 ? parts.join(' ') : null
 }
 
 /** The existing save paths to run, in order; empty when nothing changed. */
@@ -208,6 +276,11 @@ export function savePlanFor(event: EditableEvent, draft: EditDraft): SaveStep[] 
   const has = (field: ChangeField) => changes.some((c) => c.field === field)
   const steps: SaveStep[] = []
   if (has('title') && draft.title.trim()) steps.push({ kind: 'title', title: draft.title.trim() })
+  if (has('going')) {
+    const was = draftFromEvent(event).going
+    steps.push({ kind: 'people', add: draft.going.filter((id) => !was.includes(id)), remove: was.filter((id) => !draft.going.includes(id)) })
+  }
+  if (has('driver')) steps.push({ kind: 'driver', driverId: draft.driverId })
   if (draft.anytime && has('anytime')) {
     steps.push({ kind: 'clearDueDate' })
   } else if (has('anytime') || has('day') || has('start') || has('end') || has('allDay')) {

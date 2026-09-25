@@ -250,6 +250,7 @@ Removing stale tests reduces *friction* (they break on harmless refactors), not 
 
 - [ ] **P3.3 — "Leaving now" and "Hand off"** — writes to the stored leg driver (P1.4); the change appears on the wall and on the other parent's phone.
   - Evidence: _
+  - Progress: "Change driver" (choosing who drives an event, with free/busy) shipped inside the event sheet's Who tab (P3.8 commit). "Leaving now" and "Hand off" on the Next Move are still to build.
 
 - [ ] **P3.4 — Needs a decision** — engine detects mergeable trips, driver conflicts with work busy blocks, legs with no driver; max 3 shown, each with two answers; answers write data. Tests per rule.
   - Evidence: _
@@ -263,9 +264,10 @@ Removing stale tests reduces *friction* (they break on harmless refactors), not 
 - [ ] **P3.7 — Surprise-safe privacy** — items marked private (e.g. birthday prep) never render on the wall or on the honoree's phone. Test proves it.
   - Evidence: _
 
-- [ ] **P3.8 — Who's going: add or change the people on an event, from the wall** — added 2026-09-25 at Jake's request.
+- [~] **P3.8 — Who's going: add or change the people on an event, from the wall** — added 2026-09-25 at Jake's request.
   - Done means: a design board in the Wall language (Jake approves before build, per P3.0), then in the event sheet's edit mode a "Who's going" row: every family member as a tappable pigment disc, on/off, with "was …" like the other fields; the preview shows the lanes and trips that change ("Owen joins Jake's trip", "nobody is going: this becomes unassigned"); saving reuses `toggleEventAttendee` in `eventMutations.ts` (adds as "attendee"; the engine already counts attendees as going). Drivers stay separate (P3.3), so choosing who goes never quietly makes someone the driver. Behavioral tests for the draft, preview and save steps; a Playwright test on the fixture; verified with a real save on the kiosk.
-  - Evidence: _
+  - Design: board 03g on the canvas, approved by Jake 2026-09-25 ("yup build it").
+  - Evidence (partial): "Who tab" commit — the edit sheet has two tabs, "When & where" and "Who" (the sheet can't fit both at 1080px); Who's going = every lane member (plus anyone already going) as tiles, "added"/"removed" marked; Who drives = people who can drive with free/busy for the trip window from the wall's own plan (`people.ts`), plus "Nobody yet". Draft/preview/save in `editing.ts` (`going`, `driverId`, `withDriver` — reuses `createDefaultTransportationPlan` when there's no trip plan yet); saves chain the updated event through each step (people via `toggleEventAttendee` one member at a time, driver via `saveEventTransportationOverride`, then time and place). "What changes": "Owen goes too. Giselle drives instead of Jake, leaving at 11:56." Tests: `wall-people` (7), Playwright Who-tab test + screenshot. **Remaining:** a real save on the kiosk.
 
 ## Phase 4 — Phone lens
 
