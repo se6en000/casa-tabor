@@ -131,6 +131,19 @@ test('two games at the same park at the same time are flagged as one-car-could-d
   assert.match(plan.sharedDestinations[0].destination, /Ferrin Park/)
 })
 
+test('the same street address counts as the same place, even under different names', () => {
+  // As stored in production: the two games name the park differently but share the address.
+  const renamed = events.map((e) => (e.id === 'baseball'
+    ? { ...e, location_name: 'Vivian A. Ferrin Memorial Park', address: '11921 Okeechobee Blvd, Royal Palm Beach, FL, 33411' }
+    : e))
+  const plan = buildDayPlan({ date: SATURDAY, members, routines, events: renamed })
+  assert.equal(plan.sharedDestinations.length, 1)
+  assert.deepEqual([...plan.sharedDestinations[0].tripIds].sort(), ['event:baseball', 'event:softball'])
+  // Different addresses stay apart.
+  const elsewhere = renamed.map((e) => (e.id === 'baseball' ? { ...e, address: '3645 Gun Club Road, West Palm Beach, FL 33406' } : e))
+  assert.equal(buildDayPlan({ date: SATURDAY, members, routines, events: elsewhere }).sharedDestinations.length, 0)
+})
+
 test('a child with a day off has no school that day', () => {
   const dayOffs = [{ member_id: 'liv', override_type: 'day_off', start_at: at(25, 0, 0).toISOString(), end_at: at(25, 23, 59).toISOString() }]
   const plan = buildDayPlan({ date: FRIDAY, members, routines, events, dayOffs })

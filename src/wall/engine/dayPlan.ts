@@ -125,6 +125,17 @@ function normalizePlace(name: string): string {
   return name.toLowerCase().replace(/\s+/g, ' ').split(',')[0].trim()
 }
 
+/** "11921 okeechobee blvd" from any part of a place or address that starts with a house number. */
+function streetLine(...texts: Array<string | null | undefined>): string | null {
+  for (const text of texts) {
+    for (const part of (text ?? '').split(',')) {
+      const line = part.toLowerCase().replace(/[.#]/g, '').replace(/\s+/g, ' ').trim()
+      if (/^\d+\s+\S+/.test(line)) return line
+    }
+  }
+  return null
+}
+
 export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
   const { date, members, routines, events, dayOffs = [], homeAddress = null } = input
   const { start: dayStart, end: dayEnd } = dayBounds(date)
@@ -326,11 +337,14 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
   // Separate outings to the same place at about the same time: one car could do both.
   const sharedDestinations: SharedDestination[] = []
   const outings = trips.filter((t) => t.source === 'event' && t.destination.name)
+  const street = (t: Trip) => streetLine(t.destination.address, t.destination.name)
+  const samePlace = (a: Trip, b: Trip) =>
+    normalizePlace(a.destination.name) === normalizePlace(b.destination.name) || (street(a) != null && street(a) === street(b))
   const grouped = new Set<string>()
   for (const t of outings) {
     if (grouped.has(t.id)) continue
     const group = outings.filter((o) =>
-      normalizePlace(o.destination.name) === normalizePlace(t.destination.name)
+      samePlace(o, t)
       && Math.abs(o.arriveAt.getTime() - t.arriveAt.getTime()) <= SHARED_ARRIVAL_WINDOW_MIN * MINUTE)
     if (group.length > 1) {
       group.forEach((g) => grouped.add(g.id))

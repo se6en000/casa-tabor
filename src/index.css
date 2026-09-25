@@ -1206,3 +1206,23 @@ html[data-density="kiosk"] .ai-composer-kiosk-only {
   40% { transform: scale(1.2) rotate(45deg); opacity: 1; }
   100% { transform: scale(1.6) rotate(90deg); opacity: 0; }
 }
+
+/* Family Wall evening posture: every wall-* role takes its dark-ground value,
+   so the same components draw light-on-dark without their own dark variants. */
+.wall-evening {
+  --color-wall-ground: var(--color-wall-night-ground);
+  --color-wall-ink: var(--color-wall-night-ink);
+  --color-wall-ink-2: var(--color-wall-night-ink-2);
+  --color-wall-rule: var(--color-wall-night-rule);
+  --color-wall-stone: var(--color-wall-night-stone);
+  --color-wall-brass: var(--color-wall-night-brass);
+  --color-wall-brass-ink: var(--color-wall-night-brass-ink);
+  --color-wall-rust: var(--color-wall-night-rust);
+  --color-wall-on-pigment: var(--color-wall-night-on-pigment);
+  --color-wall-pigment-1: var(--color-wall-night-pigment-1);
+  --color-wall-pigment-2: var(--color-wall-night-pigment-2);
+  --color-wall-pigment-3: var(--color-wall-night-pigment-3);
+  --color-wall-pigment-4: var(--color-wall-night-pigment-4);
+  --color-wall-pigment-5: var(--color-wall-night-pigment-5);
+  --color-wall-pigment-6: var(--color-wall-night-pigment-6);
+}

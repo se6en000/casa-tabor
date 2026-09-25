@@ -24,15 +24,21 @@ export interface NextMoveView {
   initial: string
   title: string
   detail: string
+  /** The trip in the family's words ("Pick up Emme & Owen"). */
+  summary: string
+  /** "starts 12:30 · 29 min drive" */
+  timing: string
+  /** "1:50", or null when the leave time is unknown. */
+  leaveTime: string | null
   /** Another departure at about the same time. */
   also: string | null
   /** null when the leave time is unknown (no drive time). */
   ring: { value: string; unit: string; fraction: number } | null
 }
 
-const clockTime = (d: Date) => formatWallClock(d).time
+export const clockTime = (d: Date) => formatWallClock(d).time
 
-function placeName(trip: Trip): string {
+export function placeName(trip: Trip): string {
   return formatDisplayVenueName(trip.destination.name.split(',')[0].trim()) || 'somewhere'
 }
 
@@ -61,14 +67,18 @@ export function describeNextMove(move: NextMove | null, members: WallMember[], n
   const nameOf = (id: string | null) => members.find((m) => m.id === id)?.name ?? null
   const [trip, ...others] = move.trips
   const driverName = nameOf(trip.driverId)
-  const detail = [trip.title, arrivalPhrase(trip), trip.driveMinutes != null ? `${trip.driveMinutes} min drive` : null]
+  const timing = [arrivalPhrase(trip), trip.driveMinutes != null ? `${trip.driveMinutes} min drive` : null]
     .filter(Boolean)
     .join(' · ')
+  const detail = `${trip.title} · ${timing}`
   const base = {
     driverId: trip.driverId,
     initial: driverName?.charAt(0) ?? '?',
     title: `${whoGoes(trip, nameOf)} → ${placeName(trip)}`,
     detail,
+    timing,
+    summary: trip.title,
+    leaveTime: trip.leaveAt ? clockTime(trip.leaveAt) : null,
     also: others.length > 0
       ? `Also leaving: ${others.map((o) => `${whoGoes(o, nameOf)} → ${placeName(o)}${o.leaveAt ? ` at ${clockTime(o.leaveAt)}` : ''}`).join('; ')}`
       : null,

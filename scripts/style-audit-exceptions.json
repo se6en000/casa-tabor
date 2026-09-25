@@ -280,8 +280,8 @@
         "reason": "Family Wall stage: runtime scale/offset that fits the fixed 1920x1080 stage to the physical screen."
       },
       {
-        "path": "src/wall/WallFrame.tsx",
-        "reason": "Family Wall Score: runtime timeline geometry (hour marks, now line, past veil) positioned from the current time."
+        "path": "src/wall/WallCalm.tsx",
+        "reason": "Family Wall calm posture: the miniature day ribbon positions each person's blocks on a timeline at runtime."
       },
       {
         "path": "src/wall/WallScore.tsx",

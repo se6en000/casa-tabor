@@ -37,7 +37,15 @@ function LaneStatus({ text }: { text: string }) {
   )
 }
 
-export default function WallScore({ score, now }: { score: Score | null; now: Date }) {
+export interface WallScoreProps {
+  score: Score | null
+  now: Date
+  heading?: string
+  /** Shorter lanes, for the evening posture. */
+  compact?: boolean
+}
+
+export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE", compact = false }: WallScoreProps) {
   const clock = formatWallClock(now)
   const showNow = isOnTimeline(now)
   const nowX = xForTime(now)
@@ -46,10 +54,10 @@ export default function WallScore({ score, now }: { score: Score | null; now: Da
   const lanes = score?.lanes ?? []
 
   return (
-    <section aria-label="Today, who's where" className="relative flex h-[500px] shrink-0 flex-col">
+    <section aria-label={heading} className={`relative flex shrink-0 flex-col ${compact ? 'h-[382px]' : 'h-[500px]'}`}>
       <div className="flex h-[32px] shrink-0 items-end">
         <div className="w-[320px] shrink-0 pb-[6px] text-wall-label font-bold tracking-[0.2em] text-wall-ink-2">
-          TODAY · WHO'S WHERE
+          {heading}
         </div>
         <div className="relative h-full w-[1512px] text-wall-label text-wall-ink-2">
           {marks.map((mark) => (

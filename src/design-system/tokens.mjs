@@ -163,6 +163,22 @@ export const DESIGN_TOKENS = {
     'wall-pigment-4': '#A9505A',
     'wall-pigment-5': '#A87B32',
     'wall-pigment-6': '#5E6B45',
+    // Evening posture: the same roles on a dark ground (swapped in by .wall-evening in index.css).
+    'wall-night-ground': '#221E1A',
+    'wall-night-ink': '#EFE8DC',
+    'wall-night-ink-2': '#B9AE9E',
+    'wall-night-rule': '#3B352E',
+    'wall-night-stone': '#3B352E',
+    'wall-night-brass': '#C9A46A',
+    'wall-night-brass-ink': '#C9A46A',
+    'wall-night-rust': '#D07A56',
+    'wall-night-on-pigment': '#221E1A',
+    'wall-night-pigment-1': '#BDB3A5',
+    'wall-night-pigment-2': '#93A7B5',
+    'wall-night-pigment-3': '#B98D9E',
+    'wall-night-pigment-4': '#D2868D',
+    'wall-night-pigment-5': '#D4A65F',
+    'wall-night-pigment-6': '#9DAA83',
   },
   // Fixed sizes on the Wall's 1920x1080 stage (the stage scales as a whole, so
   // these don't follow density or the user font scale). Three viewing
@@ -170,6 +186,8 @@ export const DESIGN_TOKENS = {
   // (16-22px). Nothing on the Wall goes below 16px.
   wallType: {
     'wall-clock': { size: '104px', lineHeight: '0.92' },
+    'wall-clock-calm': { size: '250px', lineHeight: '0.82' },
+    'wall-date-calm': { size: '42px', lineHeight: '1.1' },
     'wall-countdown': { size: '88px', lineHeight: '0.85' },
     'wall-move': { size: '58px', lineHeight: '1' },
     'wall-date': { size: '30px', lineHeight: '1.1' },

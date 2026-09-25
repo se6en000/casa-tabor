@@ -74,3 +74,9 @@ test('weather is phrased around a plan only when rain is likely during an outing
   assert.equal(weatherLine(current, plan, at(26, 13, 0)), '74° and clear')
   assert.equal(weatherLine(null, plan, at(26, 9, 0)), '60% chance of rain at 12:30, Ferrin Park Field 1')
 })
+
+test('timing is the arrival and drive without the trip name', () => {
+  const move = describe(saturday, at(26, 9, 0))
+  assert.equal(move.timing, 'starts 12:30 · 29 min drive')
+  assert.equal(move.summary, 'Softball: Huskies @ RPB Cascade')
+})
