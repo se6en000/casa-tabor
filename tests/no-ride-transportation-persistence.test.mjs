@@ -70,5 +70,13 @@ test('the driver upsert is unconditionally idempotent instead of check-then-inse
   // exactly what raced under rapid toggling -- upsert makes the same call safe
   // regardless of ordering or whether a row already exists.
   assert.match(livingFlowState, /\.from\('event_members'\)\.upsert\(\{/)
-  assert.match(livingFlowState, /\{ onConflict: 'event_id,family_member_id' \}/)
+  assert.match(livingFlowState, /\{ onConflict: 'event_id,family_member_id', ignoreDuplicates: true \}/)
+})
+
+test('choosing a driver never demotes someone already going to "driver" (their row is left alone)', () => {
+  // event_members is unique per (event, person). Updating on conflict turned Kelly's attendee row on
+  // "Kelly BD Night Out" (2026-09-25) into role "driver", so the wall stopped counting her as going.
+  // Who drives lives on the trip plan's legs; the driver row is only added when the person has none.
+  assert.match(livingFlowState, /\{ onConflict: 'event_id,family_member_id', ignoreDuplicates: true \}/)
+  assert.doesNotMatch(livingFlowState, /\{ onConflict: 'event_id,family_member_id' \}/)
 })

@@ -244,3 +244,21 @@ test('wall: nothing runs off the stage, even late in the day, and the header kee
   expect(placement).toEqual([])
   await expect(wall).toHaveScreenshot('late-thursday.png')
 })
+
+for (const moment of MOMENTS) {
+  test(`wall: ${moment.name} — every bar, label and initial sits inside its own lane`, async ({ page }) => {
+    await page.goto(`/__wall-fixture?at=${moment.at}`)
+    const wall = page.getByTestId('wall-fixture')
+    await expect(wall).toBeVisible()
+    await page.evaluate(() => document.fonts.ready)
+    const outside = await wall.evaluate((stage) =>
+      [...stage.querySelectorAll('[data-lane-track]')].flatMap((track) => {
+        const lane = track.getBoundingClientRect()
+        return [...track.querySelectorAll('[data-block-bar], [data-block-label], [data-monogram]')]
+          .filter((el) => { const r = el.getBoundingClientRect(); return r.top < lane.top - 0.5 || r.bottom > lane.bottom + 0.5 })
+          .map((el) => `${track.dataset.laneTrack}: ${el.textContent.trim() || el.dataset.blockBar || 'initial'}`)
+      }),
+    )
+    expect(outside).toEqual([])
+  })
+}

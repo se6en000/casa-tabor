@@ -105,6 +105,14 @@ export interface WallScoreProps {
 
 const MIN_HIT_WIDTH = 56
 
+// Where things sit inside a lane. Full-size lanes are 78px; the evening's compact lanes are
+// about 58px, so everything moves up and the bars get thinner rather than spilling onto the
+// next lane's line (seen on the kiosk 2026-09-25). Written out in full for Tailwind.
+const LANE_GEOMETRY = {
+  full: { label: 'top-[6px]', bar: 'top-[36px] h-[28px]', monogram: 'top-[34px] h-[32px] w-[32px]', note: 'top-[38px]', mark: 'top-[17px]' },
+  compact: { label: 'top-[2px]', bar: 'top-[28px] h-[22px]', monogram: 'top-[26px] h-[26px] w-[26px]', note: 'top-[28px]', mark: 'top-[7px]' },
+} as const
+
 export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE", compact = false, interaction }: WallScoreProps) {
   const highlight = interaction?.highlight
   const ringFor = (sourceId: string) =>
@@ -120,6 +128,7 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
   const marks = showNow ? HOUR_MARKS.filter((mark) => mark.x < nowX - 20 || mark.x > nowX + 70) : HOUR_MARKS
   const lanes = score?.lanes ?? []
   const labels = useLabelFit(score)
+  const at = LANE_GEOMETRY[compact ? 'compact' : 'full']
 
   return (
     <section ref={labels.ref} aria-label={heading} className={`relative flex shrink-0 flex-col ${compact ? 'h-[382px]' : 'h-[500px]'}`}>
@@ -173,7 +182,7 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
                   {block.label && block.kind !== 'place' && (
                     <div
                       data-block-label={laneKey(lane.member.id, block)}
-                      className="absolute top-[6px] truncate whitespace-nowrap text-wall-detail font-semibold"
+                      className={`absolute ${at.label} truncate whitespace-nowrap text-wall-detail font-semibold`}
                       style={labelPlacement(laneKey(lane.member.id, block), block, labels.fit)}
                     >
                       {block.label}
@@ -181,7 +190,7 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
                   )}
                   <div
                     data-block-bar={laneKey(lane.member.id, block)}
-                    className={`absolute top-[36px] flex h-[28px] items-center overflow-hidden rounded-[6px] ${blockClass(block)}${ringFor(block.sourceId)}`}
+                    className={`absolute ${at.bar} flex items-center overflow-hidden rounded-[6px] ${blockClass(block)}${ringFor(block.sourceId)}`}
                     style={{ left: block.x, width: block.width }}
                   >
                     {block.kind === 'place' && (
@@ -194,7 +203,8 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
                 <span
                   key={mono.key}
                   aria-hidden="true"
-                  className={`absolute top-[34px] flex h-[32px] w-[32px] -translate-x-1/2 items-center justify-center rounded-full border-2 text-wall-label font-bold ${
+                  data-monogram
+                  className={`absolute ${at.monogram} flex -translate-x-1/2 items-center justify-center rounded-full border-2 text-wall-label font-bold ${
                     mono.pigmentIndex == null
                       ? 'border-dashed border-wall-ink-2 bg-wall-ground text-wall-ink-2'
                       : `border-wall-ground text-wall-on-pigment ${pigmentStyleFor(mono.pigmentIndex).solid}`
@@ -228,7 +238,7 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
                       key={`mark:${block.key}`}
                       type="button"
                       aria-label="Needs a decision"
-                      className="absolute top-[17px] flex h-[44px] w-[44px] -translate-x-1/2 items-center justify-center rounded-full border-2 border-solid border-wall-brass-ink bg-wall-ground p-0 font-display text-wall-heading font-bold text-wall-brass-ink"
+                      className={`absolute ${at.mark} flex h-[44px] w-[44px] -translate-x-1/2 items-center justify-center rounded-full border-2 border-solid border-wall-brass-ink bg-wall-ground p-0 font-display text-wall-heading font-bold text-wall-brass-ink`}
                       style={{ left: Math.max(22, block.x) }}
                       onClick={(event) => {
                         event.stopPropagation()
@@ -241,7 +251,7 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
               {lane.notes.map((note) => (
                 <div
                   key={note.key}
-                  className="absolute top-[38px] whitespace-nowrap text-wall-label font-semibold"
+                  className={`absolute ${at.note} whitespace-nowrap text-wall-label font-semibold`}
                   style={{ left: note.x + 24 }}
                 >
                   {note.text}

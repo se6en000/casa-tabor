@@ -563,16 +563,17 @@ export function useLivingFlowState(initialEvent: EventWithDetails | null, onClos
         // moment a row already exists for this member on this event -- which
         // happened live on rapid back-and-forth toggling (the pre-fetched
         // existingMemberIds snapshot doesn't see a row an overlapping call is
-        // still writing). Upserting is unconditionally safe here: whether the
-        // row is brand new or already exists under a different role, the
-        // desired end state is the same -- this member is now a driver.
+        // still writing). An existing row is left as it is: someone already
+        // going who also drives stays an attendee (updating it to "driver"
+        // made the wall drop Kelly from her own night out). Who drives is on
+        // the trip plan's legs.
         for (const drvId of relevantDriverIds) {
           await supabase.from('event_members').upsert({
             event_id: currentEvent.id,
             family_member_id: drvId,
             role: 'driver',
             rsvp_status: 'accepted',
-          }, { onConflict: 'event_id,family_member_id' })
+          }, { onConflict: 'event_id,family_member_id', ignoreDuplicates: true })
         }
       }
 

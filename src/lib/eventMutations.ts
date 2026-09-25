@@ -765,10 +765,18 @@ export async function toggleEventAttendee(
     .filter((m) => nextMemberIds.includes(m.id))
     .map((m) => m.name)
 
+  // event_members holds one row per person per event. A "driver" row means this person was
+  // only marked as driving; going outranks that (the trip plan's legs still say who drives),
+  // so it becomes an attendee row rather than a second, duplicate row.
+  const existingRow = (event.members ?? []).find(m => (m.family_member?.id || m.id) === memberId)
+  const promoteDriver = isSelected && existingRow?.role === 'driver'
+
   // 0ms Optimistic UI cache update for attendee avatars and chips
   const targetMember = allFamilyMembers.find((m) => m.id === memberId)
   let nextMembers = event.members ?? []
-  if (isSelected && targetMember) {
+  if (promoteDriver) {
+    nextMembers = nextMembers.map(m => (m === existingRow ? { ...m, role: 'attendee' } : m))
+  } else if (isSelected && targetMember) {
     if (!nextMembers.some(m => (m.family_member?.id || m.id) === memberId)) {
       nextMembers = [
         ...nextMembers,
@@ -788,24 +796,15 @@ export async function toggleEventAttendee(
     updated_at: new Date().toISOString(),
   })
 
-  // 1. Sync transportation plan attendee roster and passengers
-  if (event.plan_override?.transportation_plan) {
-    const updatedPlan = syncTransportationAttendees(
-      event.plan_override.transportation_plan,
-      attendeeNames,
-    )
-    await saveEventTransportationOverride({
-      supabase,
-      queryClient,
-      event,
-      transportationPlan: updatedPlan,
-      waits: event.plan_override.waits,
-      modeOverride: event.plan_override.mode_override,
-    })
-  }
-
-  // 2. Update event_members table
-  if (isSelected) {
+  // 1. Update event_members first: if it fails, the trip roster below is left untouched.
+  if (promoteDriver) {
+    const { error } = await supabase
+      .from('event_members')
+      .update({ role: 'attendee' })
+      .eq('event_id', event.id)
+      .eq('family_member_id', memberId)
+    if (error) throw error
+  } else if (isSelected) {
     const { error } = await supabase
       .from('event_members')
       .insert({
@@ -822,6 +821,22 @@ export async function toggleEventAttendee(
       .eq('event_id', event.id)
       .eq('family_member_id', memberId)
     if (error) throw error
+  }
+
+  // 2. Sync transportation plan attendee roster and passengers
+  if (event.plan_override?.transportation_plan) {
+    const updatedPlan = syncTransportationAttendees(
+      event.plan_override.transportation_plan,
+      attendeeNames,
+    )
+    await saveEventTransportationOverride({
+      supabase,
+      queryClient,
+      event,
+      transportationPlan: updatedPlan,
+      waits: event.plan_override.waits,
+      modeOverride: event.plan_override.mode_override,
+    })
   }
 
   invalidateAllCalendarQueries(queryClient, event.id)

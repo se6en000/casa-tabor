@@ -154,8 +154,11 @@ export default function WallEventSheet(props: WallEventSheetProps) {
             const adding = step.add.includes(id)
             await toggleEventAttendee(supabase, queryClient, current, id, adding, members as never)
             const person = members.find((m) => m.id === id)
+            const hasRow = current.members.some((m) => (m.family_member?.id ?? m.id) === id)
             const nextMembers = adding
-              ? [...current.members, { id: crypto.randomUUID(), role: 'attendee', family_member: person as never }]
+              ? hasRow
+                ? current.members.map((m) => ((m.family_member?.id ?? m.id) === id ? { ...m, role: 'attendee' } : m)) // a driver row becomes "going"
+                : [...current.members, { id: crypto.randomUUID(), role: 'attendee', family_member: person as never }]
               : current.members.filter((m) => (m.family_member?.id ?? m.id) !== id)
             const plan = current.plan_override?.transportation_plan
             current = {
