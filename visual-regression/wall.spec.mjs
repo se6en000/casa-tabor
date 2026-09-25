@@ -262,3 +262,33 @@ for (const moment of MOMENTS) {
     expect(outside).toEqual([])
   })
 }
+
+test('wall: an event or reminder can be deleted from its details, after a clear yes', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T07:12:00')
+  const wall = page.getByTestId('wall-fixture')
+  await wall.getByRole('button', { name: 'Open Pick up Photobook for Liv' }).first().click()
+  const sheet = wall.getByRole('region', { name: 'Pick up Photobook for Liv details' })
+
+  await sheet.getByRole('button', { name: 'Delete' }).click()
+  await expect(sheet.getByText('Delete “Pick up Photobook for Liv”?')).toBeVisible()
+  await expect(wall).toHaveScreenshot('delete-confirm.png')
+  await sheet.getByRole('button', { name: 'Keep it' }).click()
+  await expect(sheet.getByText(/Delete “/)).toHaveCount(0)
+
+  await sheet.getByRole('button', { name: 'Delete' }).click()
+  await sheet.getByRole('button', { name: 'Yes, delete' }).click()
+  await expect(wall.getByRole('region', { name: /details$/ })).toHaveCount(0)
+  await expect(wall.getByText('Pick up Photobook for Liv')).toHaveCount(0)
+  await expect(wall.getByText(/Previewing/)).toHaveCount(0)
+})
+
+test('wall: Edit with nothing changed shows Done, and one tap closes the whole sheet', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T20:15:00')
+  const wall = page.getByTestId('wall-fixture')
+  await wall.getByRole('button', { name: 'Open Softball: Huskies @ RPB Cascade' }).first().click()
+  await wall.getByRole('button', { name: 'Edit' }).click()
+  await expect(wall.getByRole('button', { name: 'Save' })).toHaveCount(0)
+  await wall.getByRole('button', { name: 'Done' }).click()
+  await expect(wall.getByRole('region', { name: /details$/ })).toHaveCount(0)
+  await expect(wall.getByText(/Previewing/)).toHaveCount(0)
+})

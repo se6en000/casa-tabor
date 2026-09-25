@@ -44,6 +44,8 @@ export interface WallEventSheetProps {
   pigmentOf: (memberId: string) => number | null
   checklist: WallChecklistItem[]
   onClose: () => void
+  /** Deletes the event or reminder everywhere it syncs (the app's own delete); absent = no Delete button. */
+  onDelete?: (event: EditableEvent) => Promise<void>
   /** The event as the draft would save it (null when nothing changed), for the Score behind the sheet. */
   onPreview: (event: EditableEvent | null) => void
 }
@@ -83,7 +85,7 @@ function whenLabel(event: EditableEvent, now: Date): string {
 }
 
 export default function WallEventSheet(props: WallEventSheetProps) {
-  const { event, members, now, allEvents, buildPlanFor, pigmentOf, checklist, onClose, onPreview } = props
+  const { event, members, now, allEvents, buildPlanFor, pigmentOf, checklist, onClose, onDelete, onPreview } = props
   const queryClient = useQueryClient()
   const [mode, setMode] = useState<Mode>('details')
   const [tab, setTab] = useState<'when' | 'who'>('when')
@@ -93,6 +95,21 @@ export default function WallEventSheet(props: WallEventSheetProps) {
   const [otherDates, setOtherDates] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Delete asks first, in place of the footer: nothing is removed until "Yes, delete".
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const remove = async () => {
+    if (!onDelete) return
+    setDeleting(true)
+    setError(null)
+    try {
+      await onDelete(event)
+      onClose()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Deleting didn’t work. Nothing was removed.')
+      setDeleting(false)
+    }
+  }
   const lastTouch = useRef(Date.now())
 
   // ── Place picker state ─────────────────────────────────────────────────
@@ -368,15 +385,40 @@ export default function WallEventSheet(props: WallEventSheetProps) {
               </div>
             )}
 
-            <div className="mt-auto flex items-center gap-[14px]">
-              {isRepeating(event) ? (
-                <span className="text-wall-detail text-wall-ink-2">This repeats. Change it from Calendar in the menu for now.</span>
-              ) : (
-                <button type="button" className={darkPill} onClick={() => { setDraft(draftFromEvent(event)); setMode('edit') }}>
-                  Edit
-                </button>
-              )}
-            </div>
+            {confirmDelete ? (
+              <div className="mt-auto flex flex-col gap-[16px] rounded-[22px] border-2 border-solid border-wall-rust px-[28px] py-[22px]">
+                <div className="font-display text-wall-date font-semibold">Delete “{event.title}”?</div>
+                <div className="text-wall-detail text-wall-ink-2">
+                  {isReminder(event) ? 'It comes off the wall and your Reminders.' : 'It comes off the wall and Google Calendar, for everyone.'}
+                </div>
+                {error && <div className="text-wall-detail font-semibold text-wall-rust">{error}</div>}
+                <div className="flex gap-[14px]">
+                  <button type="button" disabled={deleting} onClick={() => void remove()} className="h-[60px] shrink-0 rounded-full border-0 bg-wall-rust px-[32px] text-wall-body font-semibold text-wall-on-pigment">
+                    {deleting ? 'Deleting…' : 'Yes, delete'}
+                  </button>
+                  <button type="button" disabled={deleting} onClick={() => { setConfirmDelete(false); setError(null) }} className={pill}>
+                    Keep it
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-auto flex items-center gap-[14px]">
+                {isRepeating(event) ? (
+                  <span className="text-wall-detail text-wall-ink-2">This repeats. Change or delete it from Calendar in the menu for now.</span>
+                ) : (
+                  <>
+                    <button type="button" className={darkPill} onClick={() => { setDraft(draftFromEvent(event)); setMode('edit') }}>
+                      Edit
+                    </button>
+                    {onDelete && (
+                      <button type="button" className={`${pill} ml-auto text-wall-rust`} onClick={() => { touch(); setConfirmDelete(true) }}>
+                        Delete
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
           </>
         )}
 
@@ -604,8 +646,9 @@ export default function WallEventSheet(props: WallEventSheetProps) {
             )}
 
             <div className="mt-auto flex items-center gap-[14px]">
-              <button type="button" className={darkPill} disabled={saving || changes.length === 0 || !draft.title.trim()} onClick={() => void save()}>
-                {saving ? 'Saving…' : 'Save'}
+              {/* Nothing changed: "Done" closes the whole sheet in one tap, instead of a Save that does nothing. */}
+              <button type="button" className={darkPill} disabled={saving || !draft.title.trim()} onClick={() => (changes.length === 0 ? onClose() : void save())}>
+                {saving ? 'Saving…' : changes.length === 0 ? 'Done' : 'Save'}
               </button>
               <button type="button" className={pill} onClick={() => { setDraft(draftFromEvent(event)); setKeyboard(null); setMode('details') }}>
                 Cancel

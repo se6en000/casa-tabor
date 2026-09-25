@@ -57,6 +57,8 @@ export interface WallViewProps {
   }
   /** Today and the next six days (decisions look this far ahead). */
   week?: DayPlan[]
+  /** Deletes an event or reminder (the event sheet's Delete, after a yes). */
+  deleteEvent?: (event: EditableEvent) => Promise<void>
 }
 
 const POSTURE_NAMES: Record<Posture, string> = { launch: 'Full day', calm: 'Calm', evening: 'Evening' }
@@ -67,7 +69,7 @@ const POSTURE_NAMES: Record<Posture, string> = { launch: 'Full day', calm: 'Calm
  * minutes); a tap on a calendar item opens its sheet (details, then edit).
  */
 export default function WallView(props: WallViewProps) {
-  const { now, members, today, tomorrow, currentWeather, checklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, openRequest = null, tripStateFor, tripActions, week = [] } = props
+  const { now, members, today, tomorrow, currentWeather, checklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, openRequest = null, tripStateFor, tripActions, week = [], deleteEvent } = props
   // The driver picker: from "Hand off" on the Next Move, or a decision answered "choose a driver".
   const [handOff, setHandOff] = useState<{ trip: Trip; plan: DayPlan; tripIds: string[]; date: Date } | null>(null)
   const [decisionsOpen, setDecisionsOpen] = useState(false)
@@ -255,6 +257,7 @@ export default function WallView(props: WallViewProps) {
             setDraftPreview(null)
           }}
           onPreview={setDraftPreview}
+          onDelete={deleteEvent}
         />
       )}
       {handOff && tripActions && (

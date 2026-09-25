@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
+import { deleteCalendarEvent } from '../lib/eventMutations'
 import { saveEventTransportationOverride } from '../lib/eventPlanOverrides'
 import { supabase } from '../lib/supabase'
 import { withDriver } from './editing'
@@ -74,5 +75,5 @@ export default function WallFrame() {
       }}
     />
   ) : null
-  return <WallView now={now} members={members} today={today} tomorrow={tomorrow} currentWeather={currentWeather} checklist={checklist} allEvents={allEvents} routines={routines} dayOffs={dayOffs} onAsk={ask} overlay={band} pointAt={bandOpen ? pointAt : null} openRequest={openRequest} tripStateFor={tripStateFor} tripActions={tripActions} week={week} />
+  return <WallView now={now} members={members} today={today} tomorrow={tomorrow} currentWeather={currentWeather} checklist={checklist} allEvents={allEvents} routines={routines} dayOffs={dayOffs} onAsk={ask} overlay={band} pointAt={bandOpen ? pointAt : null} openRequest={openRequest} tripStateFor={tripStateFor} tripActions={tripActions} week={week} deleteEvent={(event) => deleteCalendarEvent(supabase, queryClient, event.id, event as unknown as EventWithDetails)} />
 }
