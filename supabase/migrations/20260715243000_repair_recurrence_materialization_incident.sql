@@ -7,6 +7,11 @@ declare
   v_count integer;
   v_connection_id uuid;
 begin
+  -- One-time production data repair: on a fresh rebuild the incident rows don't exist.
+  if not exists (select 1 from public.events where series_id = v_series_id) then
+    return;
+  end if;
+
   select count(*) into v_count
   from public.events
   where series_id = v_series_id

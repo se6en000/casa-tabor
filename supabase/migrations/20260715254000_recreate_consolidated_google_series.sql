@@ -12,6 +12,11 @@ begin
     '''recreate_projection'', v_new_revision,'
   );
   if v_revised_definition = v_definition then
+    -- The function's defining migration was later edited to include this fix;
+    -- on a fresh rebuild there is nothing to patch.
+    if position('''recreate_projection'', v_new_revision,' in v_definition) > 0 then
+      return;
+    end if;
     raise exception 'Could not locate the linked-family Google operation type';
   end if;
   execute v_revised_definition;

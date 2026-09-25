@@ -12,6 +12,11 @@ begin
     'errcode = ''P0001'', detail = ''RECURRENCE_REVISION_CONFLICT'''
   );
   if v_revised_definition = v_definition then
+    -- The function's defining migration was later edited to include this fix;
+    -- on a fresh rebuild there is nothing to patch.
+    if position('RECURRENCE_REVISION_CONFLICT' in v_definition) > 0 then
+      return;
+    end if;
     raise exception 'Could not locate the linked-family revision conflict SQLSTATE';
   end if;
   execute v_revised_definition;

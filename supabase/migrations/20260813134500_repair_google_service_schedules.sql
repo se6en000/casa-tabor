@@ -43,7 +43,9 @@ begin
     select 1 from vault.decrypted_secrets
     where name = 'SUPABASE_ANON_KEY'
   ) then
-    raise exception 'SUPABASE_ANON_KEY is missing from vault';
+    -- A fresh rebuild has no vault secrets yet; the jobs below read the key at
+    -- run time, so they start working once SUPABASE_ANON_KEY is added.
+    raise notice 'SUPABASE_ANON_KEY is missing from vault; scheduled jobs will fail until it is set';
   end if;
 
   for v_job in

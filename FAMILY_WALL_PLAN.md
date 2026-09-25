@@ -100,16 +100,19 @@ Removing stale tests reduces *friction* (they break on harmless refactors), not 
 
 ## Phase 0 — Safety net & ship speed
 
-- [~] **P0.1 — Put the database structure in the repo (baseline migration)** — Claimed: Claude (Opus 5.5), 2026-09-25
+- [x] **P0.1 — Put the database structure in the repo (baseline migration)** — Claimed: Claude (Opus 5.5), 2026-09-25
   - Why: if the database were lost, or a test copy were needed, the repo couldn't rebuild it.
-  - Findings 2026-09-25: 13 live tables have no creating migration — `conflicts`, `daily_briefings`, `event_action_items`, `event_checklist_items`, `event_enrichments`, `event_logistics`, `event_members`, `events`, `family_members`, `settings`, `sync_state`, `venues`, `voice_sessions` (+ enums `conflict_type`, `enrichment_confidence`, `event_status`, `family_role`, `notification_type`, `sms_direction`, `voice_intent` to check). Migration history had drifted: 9 changes existed only in production, 23 repo files were recorded in production under different versions, 17 August files were never recorded.
-  - Progress: recovered the 9 production-only migrations verbatim from `supabase_migrations.schema_migrations` into `supabase/migrations/`; renamed the 23 files to their production versions (all references updated; 90 affected tests + full suite 2549/2549 pass). Verified in prod (read-only) that 16 of the 17 unrecorded August files took effect; `20260831191000_personal_artwork_signature_xs.sql` never ran (default is still `md`).
-  - Remaining: (1) record the 16 hand-applied August files as applied in production history (metadata only — needs Jake's OK); (2) apply or delete the never-run signature_xs file (Jake); (3) write the baseline for the 13 tables and prove a clean replay on a Supabase branch (costs roughly $0.01/hour while it exists — needs Jake's OK).
   - Done means:
     - One migration (timestamp before `20260528000100`) creates every untracked table, type/enum, index and RLS policy the live DB has for: `events`, `event_members`, `family_members`, `settings`, `event_enrichments`, `event_logistics`, `event_checklist_items`, plus any other table found referenced in code but not created by a migration (list them here).
     - Idempotent (`if not exists` / guarded), and recorded as already-applied in production's migration history **without executing against prod** (e.g. `supabase migration repair`). No production data touched.
     - Proven: all migrations apply cleanly, in order, to a fresh empty database (Supabase branch or local); the diff between that result and production's schema for these tables is empty.
-  - Evidence: _
+  - Evidence (2026-09-25):
+    - Untracked tables found: `conflicts`, `daily_briefings`, `event_action_items`, `event_checklist_items`, `event_enrichments`, `event_logistics`, `event_members`, `events`, `family_members`, `settings`, `sync_state`, `venues`, `voice_sessions`, plus `google_tokens` (used one migration before its creator), and the hand-built production shapes of `sms_log` and `sensor_readings`; 7 enums. All in `20260527000000_baseline_untracked_core_tables.sql` (pre-history shape: live schema minus what later migrations add).
+    - History reconciled: 9 production-only migrations recovered verbatim; 23 files renamed to their production versions; 16 hand-applied August files recorded as applied; never-run `personal_artwork_signature_xs` deleted (Jake). New `20260925170000_capture_production_drift.sql` captures changes made directly in production (4 function bodies, 6 indexes, 1 unique constraint, 5 hand-added `sensor_readings` columns, removed views/index/check) — every statement is a no-op on production.
+    - Rebuild fixes (repo files only; production already ran the originals, which stay in its history table): guards added to 4 function-text patches whose target was later edited in place, 4 one-time production data repairs (skip when their rows don't exist), the vault check in `20260813134500` (warn instead of fail), the job-id-specific `20260909165158` (now finds jobs by function), and `20260528000500_sms_log`.
+    - Baseline and drift migration recorded as applied via `supabase migration repair` (never executed on production). Production history now has 236 records = 236 repo files, all with SQL.
+    - Proof: throwaway Supabase branch `p01-rebuild-check`, public schema wiped, all 236 repo migrations replayed from empty with zero errors; schema fingerprint vs production **identical** in all 10 categories — 101 tables, 1,371 columns (types, nullability, defaults), 409 constraints, 401 indexes, 91 policies, 70 triggers, 119 function bodies, 7 enums, 3 views, 99 RLS tables. Branch deleted afterwards. Full suite 2549/2549 and guardrails 4/4 pass.
+    - Rebuild note: a rebuilt database needs its vault secrets (e.g. `SUPABASE_ANON_KEY`) set before scheduled jobs work. Supabase's own preview branches replay production's stored (original) statements, which still contain the pre-guard versions, so they fail; use the repo files for rebuilds.
 
 - [ ] **P0.2 — Make the slow tests fast without losing coverage**
   - Why: 15 tests cost ~73 s of every ship.
@@ -142,6 +145,11 @@ Removing stale tests reduces *friction* (they break on harmless refactors), not 
 
 - [ ] **P0.8 — Freeze the old homepage**
   - Done means: a note at the top of `src/components/canvas/CalmKioskView.tsx` and in `CLAUDE.md`: bug fixes only, no new features or redesigns. Jake confirms.
+  - Evidence: _
+
+- [ ] **P0.9 — Kiosk light sensor can't record readings (found during P0.1)**
+  - Why: production's `sensor_readings` table is the original hand-built design (uuid `id`, 0 rows), but `20260608000100_sensor_readings.sql` and the Pi bridge expect a single row with `id = 'latest'`. The bridge's writes likely fail, so ambient-light auto-brightness may be silently broken — and the Wall's calm/evening postures depend on dimming.
+  - Done means: Jake confirms whether auto-brightness should work; if yes, the table matches what the bridge writes (migration in repo), the bridge writes successfully (row visible in SQL), and brightness responds on the physical kiosk.
   - Evidence: _
 
 ## Phase 1 — The trip engine (one source of truth)

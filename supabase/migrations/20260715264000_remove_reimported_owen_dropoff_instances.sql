@@ -12,6 +12,11 @@ begin
     return;
   end if;
 
+  -- One-time production data repair: on a fresh rebuild the canonical series doesn't exist.
+  if not exists (select 1 from public.event_series where id = v_series_id) then
+    return;
+  end if;
+
   select count(*) into v_count
   from public.event_series
   where id = v_series_id

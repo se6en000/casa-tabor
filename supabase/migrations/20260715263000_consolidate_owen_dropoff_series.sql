@@ -23,6 +23,11 @@ begin
     return;
   end if;
 
+  -- One-time production data repair: on a fresh rebuild the Owen Drop Off rows don't exist.
+  if not exists (select 1 from public.events where title ilike '%Owen%Drop%Off%') then
+    return;
+  end if;
+
   select count(*) into v_count
   from public.events
   where title ilike '%Owen%Drop%Off%'

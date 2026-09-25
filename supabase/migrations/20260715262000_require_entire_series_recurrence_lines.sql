@@ -19,6 +19,11 @@ begin
   select * into v_selected from public.events where id = p_selected_event_id;$body$
   );
   if v_revised_definition = v_definition then
+    -- The function's defining migration was later edited to include this guard;
+    -- on a fresh rebuild there is nothing to patch.
+    if position('Entire series updates require recurrence_lines' in v_definition) > 0 then
+      return;
+    end if;
     raise exception 'Could not install the entire-series recurrence guard';
   end if;
   execute v_revised_definition;

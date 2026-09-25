@@ -12,6 +12,11 @@ begin
     'md5(p_plan::text)'
   );
   if v_revised_definition = v_definition then
+    -- 20260715220000 was later edited to already use md5(p_plan::text);
+    -- on a fresh rebuild there is nothing to patch.
+    if position('md5(p_plan::text)' in v_definition) > 0 then
+      return;
+    end if;
     raise exception 'Could not locate shadow migration plan hash expression';
   end if;
   execute v_revised_definition;
