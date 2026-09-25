@@ -7,6 +7,8 @@ applyTo: "src/**/*.{ts,tsx,css}"
 
 Treat the current design system as the required source of truth for every user-facing change.
 
+**Exception — the Family Wall (`src/wall/`):** it has its own small component set and must not reuse the primitives below or anything in `src/components/canvas/**`. Its colors and type sizes are registered as tokens in `src/design-system/tokens.mjs`, with no raw hex in components. See `FAMILY_WALL_PLAN.md` and its linked design canvas.
+
 ## Reuse before creating
 
 - Search `src/components/ui/`, `src/design-system/`, and the Design System gallery before writing UI.

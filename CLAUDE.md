@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Active program: The Family Wall
+
+**Read `FAMILY_WALL_PLAN.md` before starting any homepage, kiosk, calendar-display, logistics, or test/ship-speed work.** It is the shared checklist for the Wall rebuild: claim an item before starting, check it off only with evidence (commit SHA, a test that runs the code, live verification), and update it in the same commit as the work. The old homepage (`src/components/canvas/**`) is frozen — bug fixes only, no redesigns — until the plan retires it.
+
 ## What this is
 
 Casa Tabor is a household operations app: React 19 + TypeScript + Vite frontend, Supabase (Postgres + Edge Functions) backend, deployed to Vercel and run full-screen on a wall-mounted Raspberry Pi kiosk (Chromium), plus mobile/tablet web. It covers calendar, grocery, cooking/recipes, music, family/todo tracking, an AI assistant with voice (Alexa-style), Google Calendar sync, Gmail-based "household email intelligence" (auto-classifying/acting on household email), SMS, and push notifications.
@@ -12,7 +16,7 @@ Casa Tabor is a household operations app: React 19 + TypeScript + Vite frontend,
 npm run dev                 # vite dev server
 npm run build                # tokens:check + style:check + certify:experience + tsc -b + vite build (see Quality Gate below)
 npm run lint                 # eslint .
-npm test                     # node --test tests/*.test.mjs  (~2200 tests)
+npm test                     # node --test tests/*.test.mjs  (~2500 tests)
 node --test tests/<file>.test.mjs   # run a single test file
 npm run guardrails:check     # npx vitest run tests/guardrails/  (architecture guardrail tests, separate from npm test)
 npm run test:visual          # playwright visual regression (chromium)
@@ -72,7 +76,7 @@ bash scripts/supabase-cli.sh functions deploy FUNCTION_NAME --project-ref sjiejy
 - `functions/` — ~65 Deno edge functions: Gmail scanning (`scan-gmail-inbox`), Google Calendar two-way sync (`sync-calendars`, `push-to-google`, `process-google-sync-jobs`, webhook handlers), AI assistant/agent endpoints (`ai-assistant`, `ai-agent-read/write/shadow`), grocery intelligence, recipe extraction, weather/geocoding/ETA enrichment, SMS/push notifications, admin ops. Shared helpers live in `functions/_shared/` (includes the canonical order/tracking resolver).
 - `migrations/` — timestamped SQL migrations (200+). Every FK needs an index; multi-table writes go through a single RPC/transaction, not sequential client calls; `pg_cron` jobs must be >=15min interval with a 10s timeout — see Database Guardrails below.
 
-**Household email intelligence subsystem** — a specific initiative documented in full in `PROJECT.md` (interface contracts, milestones, feature inventory): classifies household Gmail into 6 archetypes (`logistics_parcels`, `executive_actions`, `temporal_appointments`, `lifecycle_updates`, `estate_knowledge`, `promotional_noise`), canonicalizes vendor orders/carrier tracking into composite thread keys, and maintains an active-learning rule store (`household_capture_rules`). Ground-truth fixtures: `tests/fixtures/email-benchmark.json`; eval runner: `scripts/email-benchmark-eval.mjs`.
+**Household email intelligence subsystem** — a specific initiative documented in full in `docs/email-intelligence/PROJECT.md` (interface contracts, milestones, feature inventory): classifies household Gmail into 6 archetypes (`logistics_parcels`, `executive_actions`, `temporal_appointments`, `lifecycle_updates`, `estate_knowledge`, `promotional_noise`), canonicalizes vendor orders/carrier tracking into composite thread keys, and maintains an active-learning rule store (`household_capture_rules`). Ground-truth fixtures: `tests/fixtures/email-benchmark.json`; eval runner: `scripts/email-benchmark-eval.mjs`.
 
 **Pi kiosk** (`pi/`): the systemd services/scripts that run the kiosk browser session on the wall-mounted Raspberry Pi (`casa-kiosk.service`, `casa-watchdog.*`, `start-casa.sh`, sensor bridge, cast/whisper bridges) and the refresh/health-check scripts used during deploys.
 
@@ -85,6 +89,7 @@ Full detail: `.github/instructions/design-system.instructions.md`. Key points:
 - Built for a wall-mounted touch display viewed from a distance: semantic typography roles only (no arbitrary font sizes), density-aware touch targets (>=44px), no reliance on hover/tiny icons/color-alone.
 - **No raw Unicode emojis anywhere in the UI** — use Lucide icons instead (renders inconsistently across kiosk/iOS/Android/web).
 - When extending the system, add the primitive to `src/components/ui/` + tokens/variants to `src/design-system/`, document it in `DesignSystemGalleryPage.tsx`, and migrate duplicate implementations.
+- **Exception — the Family Wall (`src/wall/`):** it deliberately has its own small component set and does not reuse the old UI primitives or anything in `src/components/canvas/**`. Its colors and type sizes are still registered as tokens in `src/design-system/tokens.mjs` (so the gates stay meaningful); no raw hex in components. Build to the approved design canvas linked in `FAMILY_WALL_PLAN.md`.
 
 ## Database & query guardrails (strict, CI-enforced)
 
@@ -99,8 +104,7 @@ Full detail: `GUARDRAILS.md`. Enforced by `tests/guardrails/*.test.ts` (`npm run
 ## Other repo-specific instructions in effect
 
 These live under `.github/instructions/*.instructions.md` (scoped via `applyTo`) and `AGENTS.md`; read the file directly for full text when touching that area:
-- **TDD protocol** (`AGENTS.md`): write the failing test first, stop for review, then implement, with terminal-log/screenshot proof — never mark work done without it.
+- **Test-first protocol** (`AGENTS.md`): write a test that runs the code first, implement, ship, verify live, record evidence — no stopping for review between steps; stop only for product decisions, required design approvals, or real blockers.
 - **Engineering baseline** (`pro-fix-framework.instructions.md`): fix root causes, reuse existing helpers, proportional validation; don't invoke subagents for ordinary changes.
 - **Response style**: code-only answers for coding tasks unless explanation is requested; keep non-code replies short.
 - **Alexa architecture lens** (`alexa.instructions.md`): voice/assistant work is judged against Alexa-grade latency/determinism standards; debug via the `ai_drawer_debug_events` Supabase table first, Pi logs only as fallback.
-- `.agents/` contains orchestration/subagent coordination artifacts only — never source code.

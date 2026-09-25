@@ -2,7 +2,7 @@
  * Deterministic Entity & Canonical Order Resolver
  * Pure ES Module (zero external dependencies) for Edge Functions, Node test runner, and Client.
  *
- * Conforms to CanonicalEntityResult in PROJECT.md.
+ * Conforms to CanonicalEntityResult in docs/email-intelligence/PROJECT.md.
  */
 
 export const VENDOR_ALIASES = [
