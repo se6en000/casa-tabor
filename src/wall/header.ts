@@ -75,7 +75,10 @@ export function describeNextMove(move: NextMove | null, members: WallMember[], n
   const timing = [arrivalPhrase(trip), trip.driveMinutes != null ? `${trip.driveMinutes} min drive` : null]
     .filter(Boolean)
     .join(' · ')
-  const detail = `${trip.title} · ${timing}`
+  // A pickup that goes straight on: "Pick up Liv, then on to CityPlace", and any lateness there.
+  const summary = trip.onward ? `${trip.title}, then on to ${trip.onward.place}` : trip.title
+  const late = trip.onward && trip.onward.lateBy > 0 ? `about ${trip.onward.lateBy} min late at ${trip.onward.place}` : null
+  const detail = [summary, timing, late].filter(Boolean).join(' · ')
   const sameDriver = move.trips.filter((t) => t.driverId === trip.driverId)
   const base = {
     tripIds: sameDriver.map((t) => t.id),
@@ -86,7 +89,7 @@ export function describeNextMove(move: NextMove | null, members: WallMember[], n
     title: `${whoGoes(trip, nameOf)} → ${placeName(trip)}`,
     detail,
     timing,
-    summary: trip.title,
+    summary,
     leaveTime: trip.leaveAt ? clockTime(trip.leaveAt) : null,
     also: others.length > 0
       ? `Also leaving: ${others.map((o) => `${whoGoes(o, nameOf)} → ${placeName(o)}${o.leaveAt ? ` at ${clockTime(o.leaveAt)}` : ''}`).join('; ')}`

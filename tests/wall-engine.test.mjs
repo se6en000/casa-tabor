@@ -293,3 +293,41 @@ test('a reminder stays with the person who does it: "Pick up Photobook for Liv" 
   assert.equal(inLane('jake-id'), true)
   assert.equal(inLane('liv'), false)
 })
+
+// Friday 2026-09-25 as it happened: Giselle picks Liv up at 3:30 and the hangout at CityPlace
+// starts at 3:30 with Giselle driving. That's one trip, school → CityPlace, not two at once.
+const hangout = (driverId = 'giselle', driverName = 'Giselle') => ({
+  id: 'hangout', title: 'Liv and Layla Hangout', event_type: 'event', all_day: false,
+  start_time: at(25, 15, 30).toISOString(), end_time: at(25, 18, 0).toISOString(),
+  location_name: 'CityPlace', address: '700 S Rosemary Ave, West Palm Beach, FL 33401',
+  members: [{ family_member_id: 'liv', role: 'primary' }],
+  enrichment: { drive_time_mins: 13, departure_time: null },
+  plan_override: { transportation_plan: { legs: [
+    { purpose: 'appointment', timing: 'arrive_by', time: '15:30', driverId, driverName },
+    { purpose: 'return', timing: 'depart_at', time: '18:00', driverId, driverName },
+  ] } },
+})
+
+test('a pickup that goes straight on to the next place is one trip: school → CityPlace', () => {
+  const plan = buildDayPlan({ date: FRIDAY, members, routines, events: [...events, hangout()] })
+  const pickup = trip(plan, (t) => t.kind === 'pickup' && t.travelerIds.includes('liv'))
+  const outing = trip(plan, (t) => t.id === 'event:hangout')
+  assert.equal(pickup.continuesTo, 'event:hangout')
+  assert.equal(outing.chainedFrom, pickup.id)
+  assert.equal(time(outing.leaveAt), time(at(25, 15, 30)), 'leaves from school at pickup time')
+  assert.equal(outing.arrivesLateBy, 13, 'about 13 minutes after it starts (estimated with the drive from home)')
+
+  const giselle = plan.lanes.get('giselle').filter((s) => s.kind === 'drive')
+  for (const a of giselle) for (const b of giselle) {
+    if (a !== b) assert.ok(!(a.start < b.end && b.start < a.end), `Giselle's drives overlap: ${a.label} / ${b.label}`)
+  }
+  const livDrives = plan.lanes.get('liv').filter((s) => s.kind === 'drive' && s.start >= at(25, 15, 0) && s.end <= at(25, 16, 0))
+  assert.deepEqual(livDrives.map((s) => [s.label, time(s.start), time(s.end)]), [['Pick up Liv → CityPlace', time(at(25, 15, 30)), time(at(25, 15, 43))]])
+})
+
+test('with different drivers there is no chain (and nothing is merged)', () => {
+  const plan = buildDayPlan({ date: FRIDAY, members, routines, events: [...events, hangout('kelly', 'Kelly')] })
+  const pickup = trip(plan, (t) => t.kind === 'pickup' && t.travelerIds.includes('liv'))
+  assert.equal(pickup.continuesTo, undefined)
+  assert.equal(trip(plan, (t) => t.id === 'event:hangout').chainedFrom, undefined)
+})

@@ -80,3 +80,21 @@ test('timing is the arrival and drive without the trip name', () => {
   assert.equal(move.timing, 'starts 12:30 · 29 min drive')
   assert.equal(move.summary, 'Softball: Huskies @ RPB Cascade')
 })
+
+test('a pickup that goes straight on says so, and says when it will be late', () => {
+  const hangout = {
+    id: 'hangout', title: 'Liv and Layla Hangout', event_type: 'event', all_day: false,
+    start_time: at(25, 15, 30).toISOString(), end_time: at(25, 18, 0).toISOString(),
+    location_name: 'CityPlace', address: '700 S Rosemary Ave, West Palm Beach, FL 33401',
+    members: [{ family_member_id: 'liv', role: 'primary' }],
+    enrichment: { drive_time_mins: 13, departure_time: null },
+    plan_override: { transportation_plan: { legs: [
+      { purpose: 'appointment', timing: 'arrive_by', time: '15:30', driverId: 'giselle', driverName: 'Giselle' },
+    ] } },
+  }
+  const now = at(25, 15, 0)
+  const plan = buildDayPlan({ date: FRIDAY, members, routines, events: [...events, hangout] })
+  const view = describeNextMove(selectNextMove(plan, now), members, now)
+  assert.match(view.summary, /^Pick up Liv, then on to CityPlace$/)
+  assert.match(view.detail, /about 13 min late at CityPlace/)
+})

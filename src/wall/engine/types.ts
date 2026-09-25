@@ -75,6 +75,13 @@ export interface Trip {
   weather?: string | null
   /** When "Leaving now" was tapped on the wall; null otherwise. */
   departedAt?: Date | null
+  /** A pickup that goes straight on to another trip's place: that trip's id, the place, and any lateness there. */
+  continuesTo?: string
+  onward?: { place: string; lateBy: number }
+  /** A trip that starts where a pickup left off (not from home): the pickup's id. */
+  chainedFrom?: string
+  /** Minutes after the start the travelers get there, when a chain makes them late (estimated). */
+  arrivesLateBy?: number
 }
 
 export type SegmentKind = 'at_place' | 'activity' | 'drive'

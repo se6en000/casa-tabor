@@ -36,6 +36,8 @@ const MINUTE = 60_000
 const SHARED_ARRIVAL_WINDOW_MIN = 30
 /** A calendar event this close to a routine run, at the same school, is a synced copy of it. */
 const ROUTINE_MIRROR_WINDOW_MIN = 15
+// A trip that starts this long before a pickup can still be chained onto it (it would just start late).
+const CHAIN_EARLY_MIN = 15
 /** A stored departure more than this long before arrival (or after it) is treated as bad data. */
 const MAX_PLAUSIBLE_LEAD_MIN = 6 * 60
 
@@ -347,6 +349,44 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
 
     if (!driverId) gaps.push({ kind: 'no_driver', sourceId: event.id, title: event.title, at: leaveAt ?? arriveAt })
     if (participants.length === 0) gaps.push({ kind: 'no_person', sourceId: event.id, title: event.title, at: arriveAt })
+  }
+
+  // A pickup that goes straight on to the next place is one trip (school → CityPlace):
+  // same driver, a picked-up child is going there, and that trip would otherwise have
+  // to leave home before the pickup is back. The drive from school is estimated with
+  // the drive from home (the only drive time known for that place).
+  for (const pickup of trips.filter((t) => t.kind === 'pickup' && t.driverId && t.homeAt)) {
+    const next = trips.find((o) =>
+      o.source === 'event' && !o.chainedFrom && !o.departedAt && o.driverId === pickup.driverId && o.leaveAt
+      && o.travelerIds.some((id) => pickup.travelerIds.includes(id))
+      && o.leaveAt < pickup.homeAt!
+      && o.arriveAt.getTime() >= pickup.arriveAt.getTime() - CHAIN_EARLY_MIN * MINUTE)
+    if (!next) continue
+    const drive = next.driveMinutes ?? pickup.driveMinutes ?? 0
+    const arrive = new Date(Math.max(next.arriveAt.getTime(), addMinutes(pickup.arriveAt, drive).getTime()))
+    const onwardPlace = (next.destination.name || 'the next place').split(',')[0].trim()
+    const label = `${pickup.title} → ${onwardPlace}`
+    const goingOn = pickup.travelerIds.filter((id) => next.travelerIds.includes(id))
+    for (const [memberId, segments] of lanes) {
+      const own = memberId === pickup.driverId || goingOn.includes(memberId)
+      if (!own) continue
+      // The drive home from the pickup now runs on to the next place...
+      for (const s of segments) {
+        if (s.tripId === pickup.id && s.end.getTime() === pickup.homeAt!.getTime()) {
+          s.end = arrive
+          s.label = label
+        }
+      }
+      // ...so the separate drive there from home goes.
+      lanes.set(memberId, segments.filter((s) => !(s.tripId === next.id && s.end.getTime() === next.arriveAt.getTime())))
+    }
+    const lateBy = Math.round((arrive.getTime() - next.arriveAt.getTime()) / MINUTE)
+    next.leaveAt = pickup.arriveAt
+    next.chainedFrom = pickup.id
+    if (lateBy > 0) next.arrivesLateBy = lateBy
+    pickup.continuesTo = next.id
+    pickup.onward = { place: onwardPlace, lateBy: Math.max(0, lateBy) }
+    pickup.homeAt = addMinutes(arrive, drive)
   }
 
   // Separate outings to the same place at about the same time: one car could do both.
