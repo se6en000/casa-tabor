@@ -1,4 +1,5 @@
 import type { DayPlan, WallMember } from './engine/types'
+import type { WallChecklistItem } from './packing'
 import { eveningFocus, selectPosture } from './posture'
 import WallCalm from './WallCalm'
 import WallEvening from './WallEvening'
@@ -11,14 +12,16 @@ export interface WallViewProps {
   today: DayPlan | null
   tomorrow: DayPlan | null
   currentWeather?: { temp: number; condition: string } | null
+  /** Checklist items for the day's events ("Pack tonight"). */
+  checklist?: WallChecklistItem[]
 }
 
 /** The whole Wall, drawn from data only (no fetching), so it can be rendered from fixtures. */
-export default function WallView({ now, members, today, tomorrow, currentWeather }: WallViewProps) {
+export default function WallView({ now, members, today, tomorrow, currentWeather, checklist = [] }: WallViewProps) {
   const posture = selectPosture(today, now)
   if (posture === 'evening') {
     const focus = eveningFocus(now)
-    return <WallEvening now={now} members={members} plan={focus.day === 'today' ? today : tomorrow} label={focus.label} focusDay={focus.day} />
+    return <WallEvening now={now} members={members} plan={focus.day === 'today' ? today : tomorrow} label={focus.label} focusDay={focus.day} checklist={checklist} />
   }
   if (posture === 'calm') return <WallCalm now={now} members={members} plan={today} currentWeather={currentWeather} />
   return <WallLaunch now={now} members={members} plan={today} currentWeather={currentWeather} />

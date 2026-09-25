@@ -1,4 +1,7 @@
+import { useMemo } from 'react'
 import { useHomeWeather } from '../hooks/useHomeWeather'
+import { packingEventIds } from './packing'
+import { useWallChecklist } from './useWallChecklist'
 import { useMinuteClock } from './useMinuteClock'
 import { useWallDay } from './useWallDay'
 import WallView from './WallView'
@@ -8,5 +11,7 @@ export default function WallFrame() {
   const now = useMinuteClock()
   const { members, today, tomorrow } = useWallDay(now)
   const { data: currentWeather } = useHomeWeather()
-  return <WallView now={now} members={members} today={today} tomorrow={tomorrow} currentWeather={currentWeather} />
+  const eventIds = useMemo(() => [today, tomorrow].flatMap((plan) => (plan ? packingEventIds(plan) : [])), [today, tomorrow])
+  const checklist = useWallChecklist(eventIds)
+  return <WallView now={now} members={members} today={today} tomorrow={tomorrow} currentWeather={currentWeather} checklist={checklist} />
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Switch the wall kiosk between the Family Wall and the old homepage.
+# Switch the wall kiosk between the Family Wall (the default) and the old homepage.
 #   bash pi/kiosk-view.sh wall    # show https://casa-tabor.vercel.app/wall
 #   bash pi/kiosk-view.sh home    # back to the old homepage (instant rollback)
 #   bash pi/kiosk-view.sh         # print the current setting
@@ -10,7 +10,7 @@ PI_HOST="${PI_HOST:-jake@192.168.86.118}"
 VIEW="${1:-}"
 
 if [ -z "$VIEW" ]; then
-  ssh "$PI_HOST" "cat ~/.config/casa-kiosk/view 2>/dev/null || echo home"
+  ssh "$PI_HOST" "cat ~/.config/casa-kiosk/view 2>/dev/null || echo wall"
   exit 0
 fi
 case "$VIEW" in

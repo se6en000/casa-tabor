@@ -210,7 +210,8 @@ Removing stale tests reduces *friction* (they break on harmless refactors), not 
 
 - [~] **P2.4 — Postures** — launch / calm (dimmed, whereabouts, ribbon) / evening (dark, tomorrow). Switching rules tested (launch when something is due within 5 min or during the morning rush; evening after 7 PM). Matches 02b and 02c. — Claimed: Claude (Opus 5.5), 2026-09-25
   - Evidence (partial): `74b27cbb` — `src/wall/posture.ts` (`selectPosture`: evening 7 PM–6 AM; launch from 6 AM until the last run leaving before 9 AM arrives, or within 5 min of a departure; calm otherwise; launch layout while loading), `WallCalm.tsx` (250px clock, "A quiet stretch until 1:50." / "Baseball at 12:30 still needs a driver.", whereabouts per person, NEXT line, day ribbon with now line), `WallEvening.tsx` (dark; tomorrow's Score, forecast from the first outing, "Needs a decision" from missing drivers and shared destinations, first-departure card; after midnight it shows the day just begun), `WallView.tsx` switches. Tests: `tests/wall-posture.test.mjs` (10). Rendered from production data at 1:40 PM and 8:15 PM Friday — matches 02b/02c. Engine fix found that way: shared destinations also match by street address (the two Saturday games are stored as "Ferrin Park Field 1" and "Vivian A. Ferrin Memorial Park", same 11921 Okeechobee Blvd), so "one car could do both" now appears for the real games (`tests/wall-engine.test.mjs`).
-  - **Remaining:** 02c's "Pack tonight" list — the stored event checklists include surprise-spoiling items (tomorrow's "Kelly's Birthday" lists "Gift for Kelly", "Kids Gift"), so it waits on the surprise-safe privacy rule (open question); on-kiosk check.
+  - "Pack tonight" added ("Pack tonight" commit): `src/wall/packing.ts` (checklist items of the day's outings and timed activities only, grouped "Softball · 12:30", packed count), `useWallChecklist.ts` (keyed under `events`, so the calendar realtime channel refreshes it), shown in the evening beside "Needs a decision"; overflow counted as "+2 more". Tests: `tests/wall-packing.test.mjs` (3); evening screenshot baseline updated. Shows all items for now (decision log) — surprise-safe filtering to revisit before Kelly has access.
+  - **Remaining:** on-kiosk check.
 
 - [~] **P2.5 — Kiosk switch with instant rollback** — Claimed: Claude (Opus 5.5), 2026-09-25
   - Done means: the Pi points at `/wall` behind a single setting; switching back to the old homepage takes one step and is documented here; 7-day soak on the real wall; **Jake signs off.**
@@ -218,12 +219,13 @@ Removing stale tests reduces *friction* (they break on harmless refactors), not 
     - Show the Wall: `bash pi/kiosk-view.sh wall`
     - Back to the old homepage: `bash pi/kiosk-view.sh home`
     - What it's on now: `bash pi/kiosk-view.sh`
+    - Since 2026-09-25 (Jake's call) the Wall is the default when no setting exists; `home` is the rollback.
     - The setting is one word in `~/.config/casa-kiosk/view` on the Pi, read by `pi/start-casa.sh` at launch; deploys never overwrite it (before this, every ship restarted the kiosk on the hard-coded homepage URL, so a hand-edited URL would have been reverted by the next deploy).
   - Evidence (partial): `3a80c087` — `pi/start-casa.sh` reads the setting (default: old homepage; deployed, kiosk confirmed still on the homepage after the ship), `pi/kiosk-view.sh`. **Remaining:** Jake switches it (his call), 7-day soak, sign-off.
 
 - [x] **P2.6 — Screenshot guard for the Wall** — Claimed: Claude (Opus 5.5), 2026-09-25
   - Done means: the existing Playwright visual-regression workflow (`.github/workflows/visual-regression.yml`) captures `/wall` at 1920×1080 in each posture from fixed fixture data and fails on unintended layout changes; baselines are committed.
-  - Criteria changed 2026-09-25 by Claude: that CI workflow has failed on every run since at least 2026-08-10 (stale `design-system` baselines in all 6 profiles plus flaky old-homepage `living-canvas` checks), so a Wall check inside it could never block anything. The guard runs instead as its own config inside `scripts/ship.sh`, alongside the tests, and **blocks the deploy** on a difference. Per-platform baselines (Linux, from the Pi that ships); on a machine without them it's skipped with a notice. Fixing or retiring the broken CI checks is a separate question for Jake.
+  - Criteria changed 2026-09-25 by Claude: that CI workflow has failed on every run since at least 2026-08-10 (stale `design-system` baselines in all 6 profiles plus flaky old-homepage `living-canvas` checks), so a Wall check inside it could never block anything. The guard runs instead as its own config inside `scripts/ship.sh`, alongside the tests, and **blocks the deploy** on a difference. Per-platform baselines (Linux, from the Pi that ships); on a machine without them it's skipped with a notice. Jake chose to retire the broken checks (decision log): `design-system.spec.mjs` + baselines and `living-canvas.spec.mjs` removed; the remaining accessibility and experience-certification checks pass locally (23/23, twice).
   - Evidence: `44877d73` — `/__wall-fixture?at=…` (visual-test mode only, not in production builds: checked the built bundle), `visual-regression/wall.spec.mjs` (launch before school, launch with a missing driver, calm afternoon, evening before the games), `playwright.wall.config.mjs` (≤300 differing pixels, 1 retry), baselines in `visual-regression/wall.spec.mjs-snapshots/*-linux.png`, `npm run test:visual:wall` / `:update`. Stable across 6 runs; a 1px shift of the lane blocks fails it (1,604 pixels differ). Adds ~20 s to a ship (86 s), so it runs only when the ship touches Wall-visible files (`src/wall`, `src/lib`, styles/tokens, the fixture, the guard itself, packages); other ships are unaffected.
 
 ## Phase 3 — Interactive Wall
@@ -293,13 +295,12 @@ record bundle size before/after; re-run the full suite after each batch.
 | 2026-09-25 | Build the Wall frame (P2.0/P2.1) now, ahead of Phase 0/1, so the kiosk can watch `/wall` while it's built; Jake points the kiosk there himself | Jake |
 | 2026-09-25 | Lanes = everyone switched on by the existing "show on home screen" setting (Giselle stays: she does most of the kids' driving and must be visible for conflicts), plus any sitter/driver switched off who has something that day | Jake |
 | 2026-09-25 | Repair the AI-written event times already stored in production, using the same rules that now validate new ones | Jake |
+| 2026-09-25 | "Pack tonight" shows every checklist item for now — no surprise-safe filtering yet, since Kelly doesn't use the app during testing. **Revisit before Kelly (or anyone being celebrated) gets access.** | Jake |
+| 2026-09-25 | Retire the broken visual checks (`design-system` baselines, old-homepage `living-canvas`) rather than refresh them | Jake |
+| 2026-09-25 | The kiosk shows the Wall by default | Jake |
 | 2026-09-25 | Old email-intelligence docs moved to `docs/email-intelligence/`; `.agents/` run artifacts removed from the repo (still in git history) | Jake |
 
 ## Open questions for Jake
-
-- The GitHub visual-regression workflow has been red since at least 2026-08-10 (stale `design-system` baselines, flaky old-homepage `living-canvas` checks). Refresh the design-system baselines, or retire those checks with the old homepage (P5)?
-
-- Surprise-safe packing list (P2.4): event checklists are AI-written and include gifts for the person being celebrated (tomorrow: "Gift for Kelly" on "Kelly's Birthday"). Hide checklist items from birthday/celebration events on the wall entirely, or show them only on the phone of whoever isn't the honoree?
 
 - Which calendars are Jake's and Kelly's work calendars (for busy/free in P3.6)?
 - Is 120 s an acceptable ship target (P0.7), or tighter?

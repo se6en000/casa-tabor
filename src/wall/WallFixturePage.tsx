@@ -7,6 +7,14 @@ import { members, routines, events } from '../../tests/fixtures/wall-day-2026-09
 import type { FamilyRoutine } from '../lib/familyRoutines'
 
 const WEATHER = { temp: 84, condition: 'Partly cloudy' }
+const CHECKLIST = [
+  { id: 'c1', event_id: 'softball', label: 'Glove', checked: true, sort_order: 1 },
+  { id: 'c2', event_id: 'softball', label: 'Water bottle', checked: false, sort_order: 2 },
+  { id: 'c3', event_id: 'softball', label: 'Cleats', checked: false, sort_order: 3 },
+  { id: 'c4', event_id: 'baseball', label: 'Glove', checked: false, sort_order: 1 },
+  { id: 'c5', event_id: 'baseball', label: 'Cleats', checked: false, sort_order: 2 },
+  { id: 'c6', event_id: 'birthday', label: 'Birthday card', checked: false, sort_order: 1 },
+]
 
 export default function WallFixturePage() {
   const now = new Date(new URLSearchParams(window.location.search).get('at') ?? '2026-09-25T07:12:00')
@@ -18,7 +26,7 @@ export default function WallFixturePage() {
     buildDayPlan({ date, members: members as WallMember[], routines: routines as unknown as FamilyRoutine[], events: events as unknown as WallEvent[] })
   return (
     <div data-testid="wall-fixture" className="h-[1080px] w-[1920px]">
-      <WallView now={now} members={members as WallMember[]} today={plan(day)} tomorrow={plan(next)} currentWeather={WEATHER} />
+      <WallView now={now} members={members as WallMember[]} today={plan(day)} tomorrow={plan(next)} currentWeather={WEATHER} checklist={CHECKLIST} />
     </div>
   )
 }

@@ -143,9 +143,10 @@ fi
 # Which screen the wall shows — one setting on the Pi, never overwritten by a deploy.
 # Switch with: bash pi/kiosk-view.sh wall | home   (see FAMILY_WALL_PLAN.md, P2.5)
 KIOSK_VIEW="$(tr -d '[:space:]' 2>/dev/null < /home/jake/.config/casa-kiosk/view || true)"
+# Default is the Family Wall (Jake, 2026-09-25); 'home' is the rollback to the old homepage.
 case "$KIOSK_VIEW" in
-  wall) KIOSK_URL='https://casa-tabor.vercel.app/wall' ;;
-  *) KIOSK_URL='https://casa-tabor.vercel.app?density=kiosk' ;;
+  home) KIOSK_URL='https://casa-tabor.vercel.app?density=kiosk' ;;
+  *) KIOSK_URL='https://casa-tabor.vercel.app/wall' ;;
 esac
 
 "$CHROMIUM_BIN" \
