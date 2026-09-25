@@ -147,10 +147,11 @@ Removing stale tests reduces *friction* (they break on harmless refactors), not 
   - Done means: a note at the top of `src/components/canvas/CalmKioskView.tsx` and in `CLAUDE.md`: bug fixes only, no new features or redesigns. Jake confirms.
   - Evidence (2026-09-25): freeze note at the top of `src/components/canvas/CalmKioskView.tsx` and in `CLAUDE.md` (Active program section) and `AGENTS.md`; decision recorded in the Decision log (Jake, 2026-09-25).
 
-- [ ] **P0.9 — Kiosk light sensor can't record readings (found during P0.1)**
+- [x] **P0.9 — Kiosk light sensor can't record readings (found during P0.1) — NOT A BUG, closed**
   - Why: production's `sensor_readings` table is the original hand-built design (uuid `id`, 0 rows), but `20260608000100_sensor_readings.sql` and the Pi bridge expect a single row with `id = 'latest'`. The bridge's writes likely fail, so ambient-light auto-brightness may be silently broken — and the Wall's calm/evening postures depend on dimming.
   - Done means: Jake confirms whether auto-brightness should work; if yes, the table matches what the bridge writes (migration in repo), the bridge writes successfully (row visible in SQL), and brightness responds on the physical kiosk.
-  - Evidence: _
+  - Criteria changed 2026-09-25 by Claude: the premise was wrong, so there was nothing to fix. The bridge writes a fixed UUID row (`SUPABASE_SENSOR_ID` in `pi/sensor-bridge/main.py`), which production's uuid `id` accepts; the `id = 'latest'` design only exists in the old `20260608000100` file.
+  - Evidence (2026-09-25, on the kiosk): `casa-sensor-bridge` user service running; `GET 127.0.0.1:8765/room-tone` returned lux 143.1, brightness 38, display_on true — auto-brightness works locally and never depended on the table. The table is empty because `settings.display_config.sensor_push_enabled = false`, and the bridge deliberately clears the row when pushing is off. Deployed `/home/jake/sensor-bridge/main.py` is identical to the repo copy.
 
 ## Phase 1 — The trip engine (one source of truth)
 
