@@ -183,3 +183,40 @@ test('wall: the week strip shows another day\'s Score, and comes back to today',
   await expect(wall.getByText("TODAY · WHO'S WHERE")).toBeVisible()
   await expect(wall.getByText(/Previewing/)).toHaveCount(0)
 })
+
+test('wall: nothing runs off the stage, even late in the day, and the header keeps its weather line', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-10-01T18:00:00')
+  const wall = page.getByTestId('wall-fixture')
+  await wall.click({ position: { x: 400, y: 1000 } }) // calm → full day
+  await expect(wall.getByText("TODAY · WHO'S WHERE")).toBeVisible()
+  await expect(wall.getByText(/Pick up the costume/).first()).toBeVisible()
+  await expect(wall.getByText(/Everyone home by/)).toBeVisible()
+  await page.evaluate(() => document.fonts.ready) // measure with the real faces, not the fallback
+  const outside = await wall.evaluate((stage) => {
+    const edge = stage.getBoundingClientRect().right
+    return [...stage.querySelectorAll('*')]
+      .filter((el) => el.children.length === 0 && el.textContent.trim() && el.getBoundingClientRect().right > edge + 0.5)
+      .map((el) => el.textContent.trim())
+  })
+  expect(outside).toEqual([])
+  // The header column is a fixed height: nothing in it may be squeezed so its text gets cut.
+  const squeezed = await wall.locator('header').first().evaluate((header) =>
+    [...header.querySelectorAll('*')]
+      .filter((el) => {
+        const style = getComputedStyle(el)
+        // Squeezed = a clipping box shorter than one line of its own text (font-metric overhang alone doesn't count).
+        return el.children.length === 0 && el.textContent.trim() && style.overflowY !== 'visible' && el.clientHeight < parseFloat(style.lineHeight) - 1
+      })
+      .map((el) => el.textContent.trim()),
+  )
+  expect(squeezed).toEqual([])
+  // Late labels read in full, from the right edge, not cut to a few letters.
+  const cut = await wall.evaluate((stage) =>
+    [...stage.querySelectorAll('[data-block-label]')]
+      .filter((el) => ['Pick up the costume for the school play', 'Book club at the Harrisons'].includes(el.textContent.trim()))
+      .filter((el) => el.scrollWidth > el.clientWidth)
+      .map((el) => el.textContent.trim()),
+  )
+  expect(cut).toEqual([])
+  await expect(wall).toHaveScreenshot('late-thursday.png')
+})

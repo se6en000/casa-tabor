@@ -69,7 +69,7 @@ export default function WallLaunch({ now, members, plan, currentWeather, onOpenM
         <div className="flex w-[520px] shrink-0 flex-col gap-[6px]">
           <div className="flex items-center gap-[12px]">
             <MenuButton onOpen={onOpenMenu ?? (() => {})} />
-            {onAsk && <MicButton onAsk={onAsk} />}
+            {onAsk && <MicButton onAsk={onAsk} small className="ml-[4px]" />}
             <span className="text-wall-label font-semibold tracking-[0.25em] text-wall-brass-ink">MAISON TABOR</span>
             {onOpenDecisions && <DecisionCount count={decisionCount} onOpen={onOpenDecisions} className="ml-[6px]" />}
           </div>

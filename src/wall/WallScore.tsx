@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import { formatWallClock } from './clock'
 import { pigmentStyleFor } from './lanes'
 import type { Score, ScoreBlock } from './score'
@@ -7,7 +8,20 @@ import { TIMELINE_WIDTH, hourMarks, isOnTimeline, xForTime } from './timeline'
 const LANE_HEADER_WIDTH = 300
 const LANE_GUTTER = 20
 const TRACK_LEFT = LANE_HEADER_WIDTH + LANE_GUTTER
+// The stage has 24px to the right of the timeline (padding included); labels may use 16 of it.
+const LABEL_OVERHANG = 16
+// "Everyone home by 9:00" needs about this much room right of its line, or it flips to the left.
+const HOME_LABEL_ROOM = 320
 const HOUR_MARKS = hourMarks()
+// A label with less room than this before the right edge reads leftward from the edge instead.
+const RIGHT_EDGE_ROOM = 240
+const RIGHT_EDGE_LABEL_MAX = 420
+
+function labelPlacement(block: ScoreBlock): CSSProperties {
+  const room = TIMELINE_WIDTH + LABEL_OVERHANG - block.x
+  if (room < RIGHT_EDGE_ROOM) return { right: -LABEL_OVERHANG, maxWidth: RIGHT_EDGE_LABEL_MAX, textAlign: 'right' }
+  return { left: block.x, maxWidth: Math.min(block.labelMaxWidth ?? Infinity, room) }
+}
 
 function blockClass(block: ScoreBlock): string {
   const pigment = pigmentStyleFor(block.pigmentIndex)
@@ -113,8 +127,9 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
                 <div key={block.key}>
                   {block.label && block.kind !== 'place' && (
                     <div
+                      data-block-label
                       className="absolute top-[6px] truncate whitespace-nowrap text-wall-detail font-semibold"
-                      style={{ left: block.x, maxWidth: Math.min(block.labelMaxWidth ?? Infinity, TIMELINE_WIDTH + 60 - block.x) }}
+                      style={labelPlacement(block)}
                     >
                       {block.label}
                     </div>
@@ -199,7 +214,10 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
             style={{ left: TRACK_LEFT + score.everyoneHomeBy.x }}
           />
           <div
-            className="absolute bottom-[10px] whitespace-nowrap bg-wall-ground pl-[8px] pr-[4px] font-display text-wall-heading font-semibold italic text-wall-brass-ink"
+            className={`absolute bottom-[10px] whitespace-nowrap bg-wall-ground font-display text-wall-heading font-semibold italic text-wall-brass-ink ${
+              // Late in the day there's no room to the right of the line, so it reads to the left of it.
+              score.everyoneHomeBy.x > TIMELINE_WIDTH - HOME_LABEL_ROOM ? '-translate-x-full pl-[4px] pr-[8px]' : 'pl-[8px] pr-[4px]'
+            }`}
             style={{ left: TRACK_LEFT + score.everyoneHomeBy.x }}
           >
             {score.everyoneHomeBy.label}

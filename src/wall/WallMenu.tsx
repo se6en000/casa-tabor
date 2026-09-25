@@ -30,7 +30,8 @@ export function MenuButton({ onOpen, className = '' }: { onOpen: () => void; cla
 }
 
 /** The mic: dark, beside the MT monogram on every face (board 03b). */
-export function MicButton({ onAsk, className = '' }: { onAsk: () => void; className?: string }) {
+/** `small` sits in a 44px row beside the MT monogram (the launch header), where the full size would squeeze the clock column. */
+export function MicButton({ onAsk, className = '', small = false }: { onAsk: () => void; className?: string; small?: boolean }) {
   return (
     <button
       type="button"
@@ -39,9 +40,9 @@ export function MicButton({ onAsk, className = '' }: { onAsk: () => void; classN
         event.stopPropagation()
         onAsk()
       }}
-      className={`flex h-[56px] w-[56px] shrink-0 items-center justify-center rounded-full border-0 bg-wall-ink p-0 text-wall-night-brass ring-[6px] ring-wall-brass/35 ${className}`}
+      className={`flex shrink-0 items-center justify-center rounded-full border-0 bg-wall-ink p-0 text-wall-night-brass ${small ? 'h-[44px] w-[44px] ring-[4px]' : 'h-[56px] w-[56px] ring-[6px]'} ring-wall-brass/35 ${className}`}
     >
-      <Mic size={24} strokeWidth={1.8} />
+      <Mic size={small ? 20 : 24} strokeWidth={1.8} />
     </button>
   )
 }

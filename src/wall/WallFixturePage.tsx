@@ -55,7 +55,7 @@ export default function WallFixturePage() {
     <Route path="/calendar" element={<div data-testid="fixture-calendar">Calendar page</div>} />
     <Route path="*" element={
     <div data-testid="wall-fixture" className="h-[1080px] w-[1920px]">
-      <WallView now={now} members={members as WallMember[]} today={plan(day)} tomorrow={plan(next)} currentWeather={WEATHER} checklist={CHECKLIST} allEvents={evs} routines={routines as unknown as FamilyRoutine[]} tripStateFor={(date) => dayState(tripState, date)} tripActions={tripActions} week={week} />
+      <WallView now={now} members={members as WallMember[]} today={plan(day)} tomorrow={plan(next)} currentWeather={WEATHER} checklist={CHECKLIST} allEvents={evs} routines={routines as unknown as FamilyRoutine[]} tripStateFor={(date) => dayState(tripState, date)} tripActions={tripActions} week={week} onAsk={() => {}} />
     </div>
     } />
     </Routes>

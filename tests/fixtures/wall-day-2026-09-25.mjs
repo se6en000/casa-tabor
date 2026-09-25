@@ -92,4 +92,21 @@ export const events = [
     location_name: 'Palm Beach Public Elementary School', address: null,
     members: [],
   },
+  // Thursday runs late: labels and "Everyone home by" sit at the right edge of the Score.
+  {
+    id: 'book-club', title: 'Book club at the Harrisons', event_type: 'event', all_day: false,
+    start_time: local(10, 1, 19, 30), end_time: local(10, 1, 20, 45),
+    location_name: '412 Flamingo Dr, West Palm Beach, FL 33401', address: '412 Flamingo Dr, West Palm Beach, FL 33401',
+    members: [{ family_member_id: 'kelly', role: 'primary' }],
+    enrichment: { drive_time_mins: 15, departure_time: local(10, 1, 19, 15) },
+    plan_override: { transportation_plan: { legs: [
+      { purpose: 'appointment', timing: 'arrive_by', time: '19:30', driverId: 'kelly', driverName: 'Kelly' },
+      { purpose: 'return', timing: 'depart_at', time: '20:45', driverId: 'kelly', driverName: 'Kelly' },
+    ] } },
+  },
+  {
+    id: 'costume', title: 'Pick up the costume for the school play', event_type: 'reminder', all_day: false,
+    start_time: local(10, 1, 20, 30), end_time: local(10, 1, 20, 45), location_name: null, address: null,
+    members: [{ family_member_id: 'jake-id', role: 'primary' }],
+  },
 ]
