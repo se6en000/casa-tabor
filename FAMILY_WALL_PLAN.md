@@ -43,7 +43,7 @@ in the same commit as the work. Jake reviews it on GitHub.
 
 - **Logic:** behavioral tests with realistic fixtures (real-shaped events, members, places). Test the edge cases
   named in the item. A function that decides what the family sees gets a test that proves the decision.
-- **Wall UI:** fixed 1920×1080 stage, no scrolling; nothing smaller than 16px; tokens only from `src/wall/`;
+- **Wall UI:** fixed 1920×1080 stage, no scrolling; nothing smaller than 16px; only `wall-*` tokens (in `src/design-system/tokens.mjs`), no raw hex;
   **zero imports from the old homepage** (`src/components/canvas/**`, `useHeroIntelligence`, `heroFocus`,
   `useCalmKioskPresenter`). Live-verified on the Pi kiosk, not just a browser.
 - **Data:** no schema change without a migration file in `supabase/migrations/` (FK index + RLS per `GUARDRAILS.md`).
@@ -100,8 +100,11 @@ Removing stale tests reduces *friction* (they break on harmless refactors), not 
 
 ## Phase 0 — Safety net & ship speed
 
-- [ ] **P0.1 — Put the database structure in the repo (baseline migration)**
+- [~] **P0.1 — Put the database structure in the repo (baseline migration)** — Claimed: Claude (Opus 5.5), 2026-09-25
   - Why: if the database were lost, or a test copy were needed, the repo couldn't rebuild it.
+  - Findings 2026-09-25: 13 live tables have no creating migration — `conflicts`, `daily_briefings`, `event_action_items`, `event_checklist_items`, `event_enrichments`, `event_logistics`, `event_members`, `events`, `family_members`, `settings`, `sync_state`, `venues`, `voice_sessions` (+ enums `conflict_type`, `enrichment_confidence`, `event_status`, `family_role`, `notification_type`, `sms_direction`, `voice_intent` to check). Migration history had drifted: 9 changes existed only in production, 23 repo files were recorded in production under different versions, 17 August files were never recorded.
+  - Progress: recovered the 9 production-only migrations verbatim from `supabase_migrations.schema_migrations` into `supabase/migrations/`; renamed the 23 files to their production versions (all references updated; 90 affected tests + full suite 2549/2549 pass). Verified in prod (read-only) that 16 of the 17 unrecorded August files took effect; `20260831191000_personal_artwork_signature_xs.sql` never ran (default is still `md`).
+  - Remaining: (1) record the 16 hand-applied August files as applied in production history (metadata only — needs Jake's OK); (2) apply or delete the never-run signature_xs file (Jake); (3) write the baseline for the 13 tables and prove a clean replay on a Supabase branch (costs roughly $0.01/hour while it exists — needs Jake's OK).
   - Done means:
     - One migration (timestamp before `20260528000100`) creates every untracked table, type/enum, index and RLS policy the live DB has for: `events`, `event_members`, `family_members`, `settings`, `event_enrichments`, `event_logistics`, `event_checklist_items`, plus any other table found referenced in code but not created by a migration (list them here).
     - Idempotent (`if not exists` / guarded), and recorded as already-applied in production's migration history **without executing against prod** (e.g. `supabase migration repair`). No production data touched.
@@ -151,6 +154,7 @@ Removing stale tests reduces *friction* (they break on harmless refactors), not 
   - Done means:
     - Pure function(s) in `src/wall/engine/` turn events + routines + members + places + ETAs into per-person lanes (at-a-place blocks, driving legs, busy blocks) for any date. Wraps the reuse-map modules; copies none of them.
     - Anything that requires travel is a trip **regardless of item type** (reminders included).
+    - Reports which members are active today (driving, caring for someone, or attending); the Wall passes that to `selectLaneMembers` so a sitter switched off on the home screen gets a lane on days they're involved (rule and tests already in `src/wall/lanes.ts`).
     - Behavioral tests with a fixture of the real Fri Sep 25 / Sat Sep 26 day: the 10:25 photobook pickup is a trip (leave 10:10, driver Jake); the 4:30 violin lesson is at home, not a trip; school blocks come from routines; Saturday's softball + baseball at Ferrin Park are detected as a mergeable pair.
   - Evidence: _
 
@@ -259,6 +263,7 @@ record bundle size before/after; re-run the full suite after each batch.
 | 2026-09-25 | Assistant and event details must share the Wall design language; design them before building (P3.0) | Jake |
 | 2026-09-25 | Agents no longer stop for review after writing a failing test; stops only for product decisions, required design approvals, or blockers (`AGENTS.md`) | Jake |
 | 2026-09-25 | Build the Wall frame (P2.0/P2.1) now, ahead of Phase 0/1, so the kiosk can watch `/wall` while it's built; Jake points the kiosk there himself | Jake |
+| 2026-09-25 | Lanes = everyone switched on by the existing "show on home screen" setting (Giselle stays: she does most of the kids' driving and must be visible for conflicts), plus any sitter/driver switched off who has something that day | Jake |
 | 2026-09-25 | Old email-intelligence docs moved to `docs/email-intelligence/`; `.agents/` run artifacts removed from the repo (still in git history) | Jake |
 
 ## Open questions for Jake
@@ -266,4 +271,3 @@ record bundle size before/after; re-run the full suite after each batch.
 - Which calendars are Jake's and Kelly's work calendars (for busy/free in P3.6)?
 - Is 120 s an acceptable ship target (P0.7), or tighter?
 - Besides Claude Code, which agents/tools will work on this repo (so their instruction files point here too)?
-- Giselle (caregiver, can drive) shows on the home screen, so the Wall gives her a lane. Always show her lane, or only on days she's driving or caring for someone?

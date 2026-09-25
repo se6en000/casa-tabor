@@ -1127,7 +1127,7 @@ export async function deleteCalendarEvent(
   // carry the deletion out via ios_reminder_id. The Apple-side reminder stayed
   // alive, and the next iOS->Casa poll saw it as unlinked/new and recreated it in
   // Casa -- confirmed live 2026-09-24 (see the matching migration,
-  // 20260924210000_todo_reminder_delete_sync.sql, for the other half of this fix:
+  // 20260924133533_todo_reminder_delete_sync.sql, for the other half of this fix:
   // the delta query no longer suppresses a deletion for an iOS-linked row). Every
   // other event type is unaffected -- still hard-deleted below, unchanged.
   if (eventType === 'reminder') {

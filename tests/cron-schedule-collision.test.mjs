@@ -15,7 +15,7 @@ import test from 'node:test'
 // the existing gmail (2,17,32,47) and calendar-sync (7,22,37,52) jobs already
 // follow the right pattern (offset minutes, not '*/15'); the two jobs
 // resumed today should have matched that convention from the start.
-const MIGRATION = 'supabase/migrations/20260923001500_stagger_colliding_cron_schedules.sql'
+const MIGRATION = 'supabase/migrations/20260923001827_stagger_colliding_cron_schedules.sql'
 const read = (rel) => readFileSync(new URL(`../${rel}`, import.meta.url), 'utf8')
 
 test('a migration staggers the colliding cron schedules', () => {

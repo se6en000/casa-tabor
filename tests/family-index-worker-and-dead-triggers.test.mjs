@@ -21,8 +21,8 @@ import test from 'node:test'
 const read = (rel) => readFileSync(new URL(`../${rel}`, import.meta.url), 'utf8')
 const exists = (rel) => existsSync(new URL(`../${rel}`, import.meta.url))
 
-const WORKER = 'supabase/migrations/20260921183000_resume_family_data_index_worker.sql'
-const DROPS = 'supabase/migrations/20260921184000_drop_dead_event_dispatch_triggers.sql'
+const WORKER = 'supabase/migrations/20260922225043_resume_family_data_index_worker.sql'
+const DROPS = 'supabase/migrations/20260922225053_drop_dead_event_dispatch_triggers.sql'
 
 test('index worker migration releases stranded jobs and reschedules the cron within the cron guardrails', () => {
   assert.ok(exists(WORKER), `${WORKER} must exist`)

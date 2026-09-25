@@ -65,7 +65,7 @@ function VendorTransactionsList({ vendor, range }: { vendor: string; range: Vend
  * Vendor spend summary for Deliveries. amount_cents is only populated
  * where the classifier (or the one-time historical backfill) found a real
  * transaction total, so this is a floor on real spend, not a complete ledger --
- * see migration 20260911181708_prep_item_vendor_spend.sql. Deliberately scoped
+ * see migration 20260911181817_prep_item_vendor_spend.sql. Deliberately scoped
  * to totals only for v1 (no groceries-vs-discretionary split yet).
  */
 export default function VendorSpendCard() {

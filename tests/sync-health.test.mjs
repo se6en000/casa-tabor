@@ -19,7 +19,7 @@ const groceryPageSource = readFileSync(
   'utf8',
 )
 const migrationSource = readFileSync(
-  new URL('../supabase/migrations/20260917120000_grocery_sync_heartbeat.sql', import.meta.url),
+  new URL('../supabase/migrations/20260917232152_grocery_sync_heartbeat.sql', import.meta.url),
   'utf8',
 )
 

@@ -1,6 +1,6 @@
 // Casa -> iOS "To Do" reminders export, structural twin of sync-casa-to-ios
 // (grocery/Shopping) but for the app's Today's To-Dos (events with
-// event_type = 'reminder'). See supabase/migrations/20260917130000_todo_reminder_sync.sql
+// event_type = 'reminder'). See supabase/migrations/20260917233050_todo_reminder_sync.sql
 // for get_todo_reminder_deltas, which does the events<->event_ios_reminder_links
 // join server-side.
 import { createClient } from 'npm:@supabase/supabase-js@2'

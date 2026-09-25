@@ -3,11 +3,11 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
 const migrationSource = readFileSync(
-  new URL('../supabase/migrations/20260917130000_todo_reminder_sync.sql', import.meta.url),
+  new URL('../supabase/migrations/20260917233050_todo_reminder_sync.sql', import.meta.url),
   'utf8',
 )
 const dueDateMigrationSource = readFileSync(
-  new URL('../supabase/migrations/20260917150000_todo_reminder_date_only_default_time.sql', import.meta.url),
+  new URL('../supabase/migrations/20260918000038_todo_reminder_date_only_default_time.sql', import.meta.url),
   'utf8',
 )
 const casaToIosSource = readFileSync(

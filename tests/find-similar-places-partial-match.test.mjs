@@ -18,7 +18,7 @@ import test from 'node:test'
 // longer full name), leaving the WHERE clause's own similarity(...) > 0.4
 // filter to reject it outright before scoring is even relevant.
 const raw = readFileSync(
-  new URL('../supabase/migrations/20260922200000_fix_find_similar_places_partial_match.sql', import.meta.url),
+  new URL('../supabase/migrations/20260923000515_fix_find_similar_places_partial_match.sql', import.meta.url),
   'utf8',
 )
 // Strip full-line SQL comments so assertions can't accidentally match this

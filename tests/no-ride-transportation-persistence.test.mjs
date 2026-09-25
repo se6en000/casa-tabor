@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 const fixMigration = readFileSync(
-  new URL('../supabase/migrations/20260911191253_fix_no_ride_transportation_plan_constraint.sql', import.meta.url),
+  new URL('../supabase/migrations/20260911191314_fix_no_ride_transportation_plan_constraint.sql', import.meta.url),
   'utf8',
 )
 const livingFlowState = readFileSync(

@@ -6,7 +6,7 @@ import test from 'node:test'
 // EVERY run since it was created on 2026-09-15 -- confirmed live via
 // cron.job_run_details: 668/668 runs `ERROR: unrecognized configuration
 // parameter "app.supabase_url"`. Its migration
-// (20260915190000_pg_cron_morning_prep_sweep.sql) reads
+// (20260916000243_pg_cron_morning_prep_sweep.sql) reads
 // current_setting('app.supabase_url'/'app.supabase_anon_key'), custom GUCs
 // that were never set anywhere in this database (grep across all migrations
 // confirms this cron job is the only place that pattern is used at all -- no
@@ -14,7 +14,7 @@ import test from 'node:test'
 // from vault.decrypted_secrets(SUPABASE_ANON_KEY) instead (see the
 // 20260921183000 index-worker fix and 20260814223000's repair pattern).
 const read = (rel) => readFileSync(new URL(`../${rel}`, import.meta.url), 'utf8')
-const FIX = 'supabase/migrations/20260922190000_fix_morning_prep_cron_vault_auth.sql'
+const FIX = 'supabase/migrations/20260922233348_fix_morning_prep_cron_vault_auth.sql'
 
 test('morning-prep cron is rescheduled off vault.decrypted_secrets, not the nonexistent app.* GUCs', () => {
   assert.ok(existsSync(new URL(`../${FIX}`, import.meta.url)), `${FIX} must exist`)

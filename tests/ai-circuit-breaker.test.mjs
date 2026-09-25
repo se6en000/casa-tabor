@@ -136,7 +136,7 @@ test('capture-command routes its Gemini call through the tracked (ledgered, brea
   assert.doesNotMatch(src, /await fetch\(`https:\/\/generativelanguage/)
 })
 
-const migration = source('supabase/migrations/20260923210000_system_health_and_ai_circuit_breaker.sql')
+const migration = source('supabase/migrations/20260924011404_system_health_and_ai_circuit_breaker.sql')
 
 test('health migration: alerts table is locked down, read only through RPCs', () => {
   assert.match(migration, /create table if not exists public\.system_alerts/)

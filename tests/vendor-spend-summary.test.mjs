@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 const migration = readFileSync(
-  new URL('../supabase/migrations/20260911181708_prep_item_vendor_spend.sql', import.meta.url),
+  new URL('../supabase/migrations/20260911181817_prep_item_vendor_spend.sql', import.meta.url),
   'utf8',
 )
 const usePrepItems = readFileSync(new URL('../src/hooks/usePrepItems.ts', import.meta.url), 'utf8')

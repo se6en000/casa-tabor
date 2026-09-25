@@ -1,5 +1,5 @@
 // One-time backfill for the new prep_items.amount_cents column (see migration
-// 20260911181708_prep_item_vendor_spend.sql). Historical rows never had a real
+// 20260911181817_prep_item_vendor_spend.sql). Historical rows never had a real
 // extracted amount -- this re-runs the same $-amount regex the UI has always
 // used for display (extractAmount in src/utils/actionInspectionSynthesis.ts)
 // against each row's description/event_title, so the new vendor-spend summary

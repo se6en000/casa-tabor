@@ -128,7 +128,7 @@ test('chat create_event executor writes event + members through the same RPC', (
 })
 
 test('upsert_event_bundle migration: typed uuid id, lat/lng, optional saved_place, callable by the app roles', () => {
-  const path = 'supabase/migrations/20260921180000_upsert_event_bundle_client_create.sql'
+  const path = 'supabase/migrations/20260922225034_upsert_event_bundle_client_create.sql'
   assert.ok(existsSync(new URL(`../${path}`, import.meta.url)), `${path} must exist`)
   const sql = read(path)
   assert.match(sql, /create or replace function public\.upsert_event_bundle\(p_payload jsonb\)/i)

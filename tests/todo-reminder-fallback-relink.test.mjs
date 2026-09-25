@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 const migrationSource = readFileSync(
-  new URL('../supabase/migrations/20260919180000_todo_reminder_fallback_relink.sql', import.meta.url),
+  new URL('../supabase/migrations/20260919223923_todo_reminder_fallback_relink.sql', import.meta.url),
   'utf8',
 )
 

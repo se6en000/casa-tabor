@@ -10,7 +10,7 @@ import test from 'node:test'
 // role. A render loop must never turn error REPORTING into its own incident.
 
 const migration = readFileSync(
-  new URL('../supabase/migrations/20260923190000_client_error_log.sql', import.meta.url),
+  new URL('../supabase/migrations/20260923033914_client_error_log.sql', import.meta.url),
   'utf8',
 )
 test('client_error_log grants nothing to anon/authenticated -- writes only via the service-role Edge Function', () => {

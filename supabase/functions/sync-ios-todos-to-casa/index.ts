@@ -10,7 +10,7 @@
 // Wire contract confirmed against the actual live Mac script (2026-09-17):
 // { reminder_id, title, completed, deleted, updated_at, due_date?, due_has_time? }.
 // due_date/due_has_time are optional -- upsert_todo_reminder_from_ios defaults
-// a missing due date to end-of-today itself (see 20260917140000_todo_reminder_due_date.sql).
+// a missing due date to end-of-today itself (see 20260917234657_todo_reminder_due_date.sql).
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { requireEnv } from '../_shared/env.ts'
 

@@ -23,7 +23,7 @@ const reminderCardSource = readFileSync(
   'utf8',
 )
 const schemaMigrationSource = readFileSync(
-  new URL('../supabase/migrations/20260917160000_reminder_has_due_date.sql', import.meta.url),
+  new URL('../supabase/migrations/20260918021759_reminder_has_due_date.sql', import.meta.url),
   'utf8',
 )
 

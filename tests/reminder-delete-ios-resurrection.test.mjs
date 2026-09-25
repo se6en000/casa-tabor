@@ -28,7 +28,7 @@ import test from 'node:test'
 // echo-loop suppression stays for ordinary updates, never for a tombstone.
 
 const eventMutations = readFileSync(new URL('../src/lib/eventMutations.ts', import.meta.url), 'utf8')
-const deltaMigration = readFileSync(new URL('../supabase/migrations/20260924210000_todo_reminder_delete_sync.sql', import.meta.url), 'utf8')
+const deltaMigration = readFileSync(new URL('../supabase/migrations/20260924133533_todo_reminder_delete_sync.sql', import.meta.url), 'utf8')
 
 test('deleteCalendarEvent soft-deletes reminders (tombstone) instead of hard-deleting', () => {
   const fnBody = eventMutations.slice(

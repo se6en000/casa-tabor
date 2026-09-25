@@ -84,6 +84,21 @@ test('lanes show the people the family chose for the home screen, in their order
   assert.deepEqual(selectLaneMembers(family).map((m) => m.name), ['Jake', 'Kelly', 'Liv', 'Emme', 'Owen', 'Giselle'])
 })
 
+test('a sitter who is off the home screen gets a lane only on days they have something', () => {
+  const family = [
+    { id: 'j', name: 'Jake', sort_order: 1, show_on_home_sidebar: true, role: 'parent', can_drive: true },
+    { id: 'g', name: 'Giselle', sort_order: 7, show_on_home_sidebar: true, role: 'caregiver', can_drive: true },
+    { id: 's', name: 'Sam', sort_order: 8, show_on_home_sidebar: false, role: 'caregiver', can_drive: true },
+    { id: 'm', name: 'Milo', sort_order: 9, show_on_home_sidebar: false, role: 'child', can_drive: false },
+    { id: 'tf', name: 'Tabor Family', sort_order: 5, show_on_home_sidebar: false, role: 'child', can_drive: false },
+  ]
+  const names = (active) => selectLaneMembers(family, active).map((m) => m.name)
+  assert.deepEqual(names(new Set()), ['Jake', 'Giselle'])
+  assert.deepEqual(names(new Set(['s'])), ['Jake', 'Giselle', 'Sam'])
+  // hidden non-drivers (a household placeholder, a hidden child) never pop in
+  assert.deepEqual(names(new Set(['m', 'tf'])), ['Jake', 'Giselle'])
+})
+
 test('each lane gets a distinct pigment and the palette wraps', () => {
   const firstSix = [0, 1, 2, 3, 4, 5].map(pigmentClassFor)
   assert.equal(new Set(firstSix).size, 6)

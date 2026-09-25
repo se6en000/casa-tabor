@@ -3,12 +3,12 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
 const migrationSource = readFileSync(
-  new URL('../supabase/migrations/20260918120000_narrow_casa_edit_tracking_trigger.sql', import.meta.url),
+  new URL('../supabase/migrations/20260918154653_narrow_casa_edit_tracking_trigger.sql', import.meta.url),
   'utf8',
 )
 
 // Real bug found live 2026-09-18: the casa-edit-tracking trigger
-// (20260918000000_todo_reminder_casa_edit_tracking.sql) fired on ANY update
+// (20260918001228_todo_reminder_casa_edit_tracking.sql) fired on ANY update
 // to `events`, including background automation unrelated to a real edit.
 // That flipped last_modified_source back to 'casa' for iOS-originated
 // reminders that were never tagged with a [casa_id:...] note on the Mac
