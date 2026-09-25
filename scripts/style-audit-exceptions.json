@@ -274,6 +274,14 @@
       {
         "path": "src/components/calendar/EventCard.tsx",
         "reason": "Event and family-member colors are runtime-derived (moved out of StackedView.tsx, same reason)."
+      },
+      {
+        "path": "src/wall/WallStage.tsx",
+        "reason": "Family Wall stage: runtime scale/offset that fits the fixed 1920x1080 stage to the physical screen."
+      },
+      {
+        "path": "src/wall/WallFrame.tsx",
+        "reason": "Family Wall Score: runtime timeline geometry (hour marks, now line, past veil) positioned from the current time."
       }
     ],
     "nativeControlRecreations": [

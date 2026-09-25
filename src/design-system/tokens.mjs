@@ -145,6 +145,39 @@ export const DESIGN_TOKENS = {
     'night-muted': '#6B6B7B',
     'night-border': '#2A2A3E',
     'night-gold': '#A08050',
+    // Family Wall (src/wall). Limestone ground, ink, brass; rust is reserved
+    // for "move now". Pigments are assigned to people by lane order.
+    'wall-ground': '#E7E0D4',
+    'wall-ground-calm': '#DDD5C8',
+    'wall-ink': '#26221D',
+    'wall-ink-2': '#5E564B',
+    'wall-rule': '#CBC1B1',
+    'wall-stone': '#D6CCBC',
+    'wall-brass': '#A88450',
+    'wall-brass-ink': '#7A5A26',
+    'wall-rust': '#9A4A2A',
+    'wall-on-pigment': '#F6F1E8',
+    'wall-pigment-1': '#4A4640',
+    'wall-pigment-2': '#5F7382',
+    'wall-pigment-3': '#6E4556',
+    'wall-pigment-4': '#A9505A',
+    'wall-pigment-5': '#A87B32',
+    'wall-pigment-6': '#5E6B45',
+  },
+  // Fixed sizes on the Wall's 1920x1080 stage (the stage scales as a whole, so
+  // these don't follow density or the user font scale). Three viewing
+  // distances: across the room (56px+), walking past (24-30px), standing at it
+  // (16-22px). Nothing on the Wall goes below 16px.
+  wallType: {
+    'wall-clock': { size: '104px', lineHeight: '0.92' },
+    'wall-countdown': { size: '88px', lineHeight: '0.85' },
+    'wall-move': { size: '58px', lineHeight: '1' },
+    'wall-date': { size: '30px', lineHeight: '1.1' },
+    'wall-name': { size: '30px', lineHeight: '1' },
+    'wall-heading': { size: '24px', lineHeight: '1.15' },
+    'wall-body': { size: '22px', lineHeight: '1.35' },
+    'wall-detail': { size: '18px', lineHeight: '1.35' },
+    'wall-label': { size: '16px', lineHeight: '1.3' },
   },
   fontFamily: {
     display: "'Cormorant Garamond', Georgia, serif",

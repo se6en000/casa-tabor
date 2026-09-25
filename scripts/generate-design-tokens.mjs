@@ -42,6 +42,10 @@ function renderTheme() {
     lines.push(`  --text-${key}: var(--ds-type-${key});`)
     lines.push(`  --text-${key}--line-height: ${token.lineHeight};`)
   }
+  for (const [key, token] of Object.entries(DESIGN_TOKENS.wallType)) {
+    lines.push(`  --text-${key}: ${token.size};`)
+    lines.push(`  --text-${key}--line-height: ${token.lineHeight};`)
+  }
 
   lines.push(
     '  --ds-font-scale: 1;',

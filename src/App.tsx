@@ -1,4 +1,4 @@
-import { useState, useEffect, Component, type ReactNode } from 'react'
+import { useState, useEffect, Component, Suspense, lazy, type ReactNode } from 'react'
 import { BrowserRouter, useLocation } from 'react-router-dom'
 import { QueryClient, useQueryClient } from '@tanstack/react-query'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
@@ -318,6 +318,21 @@ function AppShell() {
   )
 }
 
+const WallRoot = lazy(() => import('./wall/WallRoot'))
+
+// /wall is the Family Wall and renders without the old app shell.
+function RootSwitch() {
+  const { pathname } = useLocation()
+  if (pathname === '/wall' || pathname.startsWith('/wall/')) {
+    return (
+      <Suspense fallback={<div className="fixed inset-0 bg-wall-ground" />}>
+        <WallRoot />
+      </Suspense>
+    )
+  }
+  return <AppShell />
+}
+
 export default function App() {
   return (
     <AppErrorBoundary>
@@ -334,7 +349,7 @@ export default function App() {
           <PinGate>
             <BrowserRouter>
               <AppErrorBoundary>
-                <AppShell />
+                <RootSwitch />
               </AppErrorBoundary>
             </BrowserRouter>
           </PinGate>
