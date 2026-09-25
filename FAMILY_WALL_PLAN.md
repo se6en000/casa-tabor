@@ -141,7 +141,7 @@ Removing stale tests reduces *friction* (they break on harmless refactors), not 
 
 - [~] **P0.7 — Ship target met**
   - Done means: three consecutive real ships complete in ≤ 120 s end-to-end (timings pasted here).
-  - Evidence (partial): ship 1 — `155239b8`, 2026-09-25, **59 s** end-to-end (was 204–285 s). Needs two more consecutive ships ≤ 120 s. Note: the first ship on a fresh clone has a cold type-check cache (~45 s more).
+  - Evidence (partial): ship 1 — `155239b8`, 2026-09-25, **59 s** end-to-end (was 204–285 s). Ship 2 — `689f815d`, **64 s**. Needs one more consecutive ship ≤ 120 s. Note: the first ship on a fresh clone has a cold type-check cache (~45 s more).
 
 - [x] **P0.8 — Freeze the old homepage**
   - Done means: a note at the top of `src/components/canvas/CalmKioskView.tsx` and in `CLAUDE.md`: bug fixes only, no new features or redesigns. Jake confirms.
