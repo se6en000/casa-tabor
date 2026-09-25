@@ -65,6 +65,7 @@ export function initPointerGestures(): () => void {
   let axisLocked: ScrollDir | null = null
   let scrollEl: HTMLElement | null = null
   let swipeTarget: HTMLElement | null = null
+  let downTarget: Element | null = null
   let pointerId: number | null = null
   let inertiaRAF = 0
   let suppressNextClick = false
@@ -108,6 +109,7 @@ export function initPointerGestures(): () => void {
     dragging = false
     axisLocked = null
     scrollEl = null
+    downTarget = e.target as Element
     swipeTarget = (e.target as Element)?.closest('[data-swipe-nav]') as HTMLElement | null
   }
 
@@ -122,10 +124,21 @@ export function initPointerGestures(): () => void {
     if (!dragging) {
       if (Math.abs(totalDx) < DRAG_THRESHOLD && Math.abs(totalDy) < DRAG_THRESHOLD) return
       dragging = true
-      // Lock the gesture axis on first real movement.
+      // Lock the gesture axis on first real movement. Resolved from the
+      // ORIGINAL pointerdown target, not this move event's target: without
+      // explicit pointer capture, e.target on a pointermove reflects whatever
+      // element is currently under the cursor, which can drift mid-gesture
+      // (e.g. a drag that starts on the fixed sidecar panel but crosses into
+      // the page content behind/beside it) -- re-deriving the scrollable
+      // ancestor from that drifted target could resolve to a completely
+      // different scrollable region than the one actually being dragged,
+      // making the wrong element scroll (found 2026-09-24, reported as
+      // "dragging on the sidecar also scrolls the [page] rail" -- this mouse-
+      // drag-as-touch fallback only ever runs for non-touch pointers, so a
+      // real touchscreen using this app never exercises this path at all).
       if (Math.abs(totalDx) > Math.abs(totalDy)) {
         axisLocked = 'horizontal'
-        const horizEl = findScrollable(e.target as Element, 'horizontal')
+        const horizEl = findScrollable(downTarget, 'horizontal')
         if (horizEl) {
           scrollEl = horizEl
           swipeTarget = null // Prefer scrolling the horizontal container over page swipe
@@ -134,7 +147,7 @@ export function initPointerGestures(): () => void {
         }
       } else {
         axisLocked = 'vertical'
-        scrollEl = findScrollable(e.target as Element, 'vertical')
+        scrollEl = findScrollable(downTarget, 'vertical')
       }
       document.body.style.userSelect = 'none'
     }

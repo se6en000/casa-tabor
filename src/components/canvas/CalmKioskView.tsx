@@ -557,11 +557,22 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
         </div>
         </div>
 
-        <div className="relative lg:min-h-0">
+        {/* lg:flex-1 lg:min-h-0 here is load-bearing, not decorative: this div's
+            own parent is `flex flex-col` (the right grid column), and a
+            flex-col's default cross-axis stretch only affects WIDTH, not
+            height -- a plain block child with no flex-basis of its own just
+            sizes to its own content instead of filling the available height,
+            which BounceScroll's `h-full` then has nothing real to resolve
+            against. Without this, the rail's true scrollable height is
+            whatever it happens to compute to rather than a guaranteed match
+            for the actual available viewport space (found 2026-09-24, after
+            a user report of content being unreachable at the bottom of the
+            rail -- this was the most likely structural cause). */}
+        <div className="relative lg:min-h-0 lg:flex-1">
         {isDesktop ? (
           <BounceScroll
             className="lg:h-full"
-            innerClassName="flex flex-col gap-8 lg:pr-1 lg:pb-8 scrollbar-hide"
+            innerClassName="flex flex-col gap-8 lg:pr-1 lg:pb-16 scrollbar-hide"
             innerRef={scheduleRailRef}
             onScroll={handleScheduleRailScroll}
           >
