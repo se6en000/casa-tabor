@@ -1,3 +1,5 @@
+// FROZEN (2026-09-25): the old homepage is being replaced by the Family Wall
+// (src/wall, FAMILY_WALL_PLAN.md). Bug fixes only — no new features or redesigns.
 import { useState, useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react'
 import {
   Utensils,
