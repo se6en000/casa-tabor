@@ -145,8 +145,10 @@ fi
 KIOSK_VIEW="$(tr -d '[:space:]' 2>/dev/null < /home/jake/.config/casa-kiosk/view || true)"
 # Default is the Family Wall (Jake, 2026-09-25); 'home' is the rollback to the old homepage.
 case "$KIOSK_VIEW" in
-  home) KIOSK_URL='https://casa-tabor.vercel.app?density=kiosk' ;;
-  *) KIOSK_URL='https://casa-tabor.vercel.app/wall' ;;
+  # wallHome=0 un-marks the kiosk, so the old app's Home button stays on the old home screen.
+  home) KIOSK_URL='https://casa-tabor.vercel.app/?density=kiosk&wallHome=0' ;;
+  # kiosk=1 marks this browser as the wall kiosk: Home and idle minutes lead back to the Wall.
+  *) KIOSK_URL='https://casa-tabor.vercel.app/wall?kiosk=1&density=kiosk' ;;
 esac
 
 "$CHROMIUM_BIN" \

@@ -5,6 +5,7 @@ import { describeNextMove, weatherLine } from './header'
 import NextMovePanel from './NextMovePanel'
 import { buildScore } from './score'
 import type { DayPlan, WallMember } from './engine/types'
+import { MenuButton } from './WallMenu'
 import WallScore from './WallScore'
 
 export interface WallLaunchProps {
@@ -13,10 +14,11 @@ export interface WallLaunchProps {
   /** null while today's data is loading. */
   plan: DayPlan | null
   currentWeather?: { temp: number; condition: string } | null
+  onOpenMenu?: () => void
 }
 
 /** The launch posture (board 02a): clock, Next Move, and the full Score. */
-export default function WallLaunch({ now, members, plan, currentWeather }: WallLaunchProps) {
+export default function WallLaunch({ now, members, plan, currentWeather, onOpenMenu }: WallLaunchProps) {
   const score = useMemo(() => (plan ? buildScore(plan, members, now) : null), [plan, members, now])
   const clock = formatWallClock(now)
   const nextMove = useMemo(() => (plan ? describeNextMove(selectNextMove(plan, now), members, now) : null), [plan, members, now])
@@ -28,12 +30,7 @@ export default function WallLaunch({ now, members, plan, currentWeather }: WallL
       <header className="flex h-[220px] shrink-0 items-stretch gap-[48px]">
         <div className="flex w-[520px] shrink-0 flex-col gap-[6px]">
           <div className="flex items-center gap-[12px]">
-            <span
-              aria-hidden="true"
-              className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-wall-brass font-display text-wall-detail font-bold text-wall-brass-ink"
-            >
-              MT
-            </span>
+            <MenuButton onOpen={onOpenMenu ?? (() => {})} />
             <span className="text-wall-label font-semibold tracking-[0.25em] text-wall-brass-ink">MAISON TABOR</span>
           </div>
           <div className="mt-[2px] flex items-baseline gap-[10px]">

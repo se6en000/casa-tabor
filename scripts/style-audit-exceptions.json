@@ -290,6 +290,10 @@
     ],
     "nativeControlRecreations": [
       {
+        "path": "src/wall/WallMenu.tsx",
+        "reason": "Family Wall: its own small component set by design (CLAUDE.md Wall exception) — the MT menu button and the menu's close button, styled with wall-* tokens."
+      },
+      {
         "path": "src/components/shared/TouchKeyboard.tsx",
         "reason": "Specialized virtual-keyboard keys require keyboard-specific interaction and repeat behavior."
       },

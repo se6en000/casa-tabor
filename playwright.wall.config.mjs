@@ -8,8 +8,8 @@ export default defineConfig({
   snapshotPathTemplate: '{testDir}/{testFileName}-snapshots/{arg}-{platform}{ext}',
   reporter: 'line',
   retries: 1,
-  // Tight on purpose: a block moved by 1px changes ~1,600 pixels; font antialiasing noise stays well under 300.
-  expect: { toHaveScreenshot: { animations: 'disabled', maxDiffPixels: 300 } },
+  // Tight on purpose: a thin new element (the 44px MT ring) changes only ~80 pixels; runs on the Pi repeat exactly.
+  expect: { toHaveScreenshot: { animations: 'disabled', maxDiffPixels: 40 } },
   use: {
     baseURL: 'http://127.0.0.1:4175',
     browserName: 'chromium',
