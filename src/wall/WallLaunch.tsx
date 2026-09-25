@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { formatWallClock, formatWallDate } from './clock'
 import { selectNextMove } from './engine/nextMove'
 import { describeNextMove, weatherLine } from './header'
-import NextMovePanel from './NextMovePanel'
+import NextMovePanel, { type NextMoveActions } from './NextMovePanel'
 import { buildScore } from './score'
 import type { DayPlan, WallMember } from './engine/types'
 import { MenuButton, MicButton } from './WallMenu'
@@ -17,10 +17,11 @@ export interface WallLaunchProps {
   onOpenMenu?: () => void
   onAsk?: () => void
   interaction?: ScoreInteraction
+  moveActions?: NextMoveActions
 }
 
 /** The launch posture (board 02a): clock, Next Move, and the full Score. */
-export default function WallLaunch({ now, members, plan, currentWeather, onOpenMenu, onAsk, interaction }: WallLaunchProps) {
+export default function WallLaunch({ now, members, plan, currentWeather, onOpenMenu, onAsk, interaction, moveActions }: WallLaunchProps) {
   const score = useMemo(() => (plan ? buildScore(plan, members, now) : null), [plan, members, now])
   const clock = formatWallClock(now)
   const nextMove = useMemo(() => (plan ? describeNextMove(selectNextMove(plan, now), members, now) : null), [plan, members, now])
@@ -46,7 +47,7 @@ export default function WallLaunch({ now, members, plan, currentWeather, onOpenM
 
         <div className="w-px shrink-0 bg-wall-rule" />
 
-        <NextMovePanel view={nextMove} pigmentIndex={driverPigment} />
+        <NextMovePanel view={nextMove} pigmentIndex={driverPigment} actions={moveActions} />
       </header>
 
       <WallScore score={score} now={now} interaction={interaction} />

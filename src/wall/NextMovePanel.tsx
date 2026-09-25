@@ -5,8 +5,14 @@ const RING_SIZE = 176
 const RING_RADIUS = 80
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS
 
+export interface NextMoveActions {
+  onLeaving: () => void
+  onUndoLeaving: () => void
+  onHandOff: () => void
+}
+
 /** The header's one instruction: who leaves for where, and a countdown ring to the leave time. */
-export default function NextMovePanel({ view, pigmentIndex }: { view: NextMoveView | null; pigmentIndex: number | null }) {
+export default function NextMovePanel({ view, pigmentIndex, actions }: { view: NextMoveView | null; pigmentIndex: number | null; actions?: NextMoveActions }) {
   if (!view) {
     return (
       <section aria-label="Next move" className="flex min-w-0 flex-1 flex-col justify-center gap-[10px]">
@@ -58,7 +64,26 @@ export default function NextMovePanel({ view, pigmentIndex }: { view: NextMoveVi
           <span className="truncate font-display text-wall-move font-semibold leading-none">{view.title}</span>
         </div>
         <div className="truncate text-wall-body text-wall-ink">{view.detail}</div>
-        {view.also && <div className="truncate text-wall-detail text-wall-ink-2">{view.also}</div>}
+        {view.also && !actions && <div className="truncate text-wall-detail text-wall-ink-2">{view.also}</div>}
+        {actions && (
+          <div className="mt-[2px] flex gap-[12px]">
+            {view.status === 'upcoming' && view.driverId && (
+              <button type="button" className="h-[48px] rounded-full border-0 bg-wall-ink px-[24px] text-wall-detail font-semibold text-wall-on-pigment" onClick={(e) => { e.stopPropagation(); actions.onLeaving() }}>
+                Leaving now
+              </button>
+            )}
+            {view.status === 'en_route' && view.departed && (
+              <button type="button" className="h-[48px] rounded-full border border-solid border-wall-ink-2 bg-transparent px-[24px] text-wall-detail font-semibold text-wall-ink" onClick={(e) => { e.stopPropagation(); actions.onUndoLeaving() }}>
+                Not yet (undo)
+              </button>
+            )}
+            {view.status === 'upcoming' && (
+              <button type="button" className="h-[48px] rounded-full border border-solid border-wall-ink-2 bg-transparent px-[24px] text-wall-detail font-semibold text-wall-ink" onClick={(e) => { e.stopPropagation(); actions.onHandOff() }}>
+                {view.driverId ? 'Hand off' : 'Choose a driver'}
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </section>
   )

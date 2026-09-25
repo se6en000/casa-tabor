@@ -28,6 +28,8 @@ export interface BuildDayPlanInput {
   dayOffs?: DayOff[]
   /** The family's home address (settings); an event there counts as at home. */
   homeAddress?: string | null
+  /** Decisions made on the wall for this day: hand-offs of routine runs, and "Leaving now". */
+  tripState?: { drivers: Record<string, string | null>; departed: Record<string, string> }
 }
 
 const MINUTE = 60_000
@@ -137,7 +139,8 @@ function streetLine(...texts: Array<string | null | undefined>): string | null {
 }
 
 export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
-  const { date, members, routines, events, dayOffs = [], homeAddress = null } = input
+  const { date, members, routines, events, dayOffs = [], homeAddress = null, tripState = { drivers: {}, departed: {} } } = input
+  const departedAt = (tripId: string) => (tripState.departed[tripId] ? new Date(tripState.departed[tripId]) : null)
   const { start: dayStart, end: dayEnd } = dayBounds(date)
 
   const lanes = new Map<string, LaneSegment[]>(members.map((m) => [m.id, []]))
@@ -193,20 +196,25 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
     }
   }
   for (const run of runs.values()) {
-    const { driverId } = run
+    const tripId = `routine:${run.kind}:${normalizePlace(run.venueName)}:${run.arriveAt.getTime()}`
+    // A hand-off made on the wall for today replaces the routine's driver.
+    const handedOff = Object.prototype.hasOwnProperty.call(tripState.drivers, tripId)
+    const driverId = handedOff ? tripState.drivers[tripId] : run.driverId
     const names = run.travelerIds.map(nameOf).join(' & ')
     const title = `${run.kind === 'dropoff' ? 'Drop off' : 'Pick up'} ${names}`
-    const leaveAt = addMinutes(run.arriveAt, -run.driveMinutes)
+    const departed = departedAt(tripId)
+    const leaveAt = departed && departed < run.arriveAt ? departed : addMinutes(run.arriveAt, -run.driveMinutes)
     const homeAt = addMinutes(run.arriveAt, run.driveMinutes)
     const trip: Trip = {
-      id: `routine:${run.kind}:${normalizePlace(run.venueName)}:${run.arriveAt.getTime()}`,
+      id: tripId,
       kind: run.kind,
       sourceId: run.sourceId,
       source: 'routine',
       title,
       travelerIds: run.travelerIds,
       driverId,
-      driverSource: driverId ? 'routine' : null,
+      driverSource: handedOff ? (driverId ? 'handoff' : null) : driverId ? 'routine' : null,
+      departedAt: departed,
       destination: { name: run.venueName, address: run.venueAddress },
       leaveAt,
       arriveAt: run.arriveAt,
@@ -297,7 +305,9 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
     const lead = stored ? (arriveAt.getTime() - stored.getTime()) / MINUTE : NaN
     const arrivesOnTime = stored != null && (driveMinutes == null || stored.getTime() + driveMinutes * MINUTE <= arriveAt.getTime())
     const departure = stored && lead >= 0 && lead <= MAX_PLAUSIBLE_LEAD_MIN && arrivesOnTime ? stored : null
-    const leaveAt = departure ?? (driveMinutes != null ? addMinutes(arriveAt, -driveMinutes) : null)
+    const departed = departedAt(`event:${event.id}`)
+    const planned = departure ?? (driveMinutes != null ? addMinutes(arriveAt, -driveMinutes) : null)
+    const leaveAt = departed && departed < arriveAt ? departed : planned
     const returnLeg = legs.find((l) => l.purpose === 'return')
     const returnAt = returnLeg ? legTime(returnLeg, end) : end
     const homeAt = driveMinutes != null ? addMinutes(returnAt, driveMinutes) : null
@@ -317,6 +327,7 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
       homeAt,
       driveMinutes,
       weather: event.enrichment?.weather_at_event ?? null,
+      departedAt: departed,
     }
     trips.push(trip)
 

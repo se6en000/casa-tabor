@@ -2,7 +2,11 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import type { FamilyRoutine } from '../lib/familyRoutines'
 import type { EditableEvent } from './editing'
 import { buildDayPlan, type DayOff } from './engine/dayPlan'
-import type { DayPlan, WallEvent, WallMember } from './engine/types'
+import type { DayPlan, Trip, WallEvent, WallMember } from './engine/types'
+import { selectNextMove } from './engine/nextMove'
+import { describeNextMove } from './header'
+import type { DayTripState } from './tripState'
+import WallHandOffSheet from './WallHandOffSheet'
 import type { WallChecklistItem } from './packing'
 import { eveningFocus, selectPosture, type Posture } from './posture'
 import { nextPreview, shownPosture, type PreviewState } from './preview'
@@ -36,6 +40,14 @@ export interface WallViewProps {
   pointAt?: string | null
   /** Open this item's sheet ("Open it" in the band); the nonce repeats a request. */
   openRequest?: { id: string; nonce: number } | null
+  /** Decisions made on the wall for a day (hand-offs, "Leaving now"), applied to previews too. */
+  tripStateFor?: (date: Date) => DayTripState
+  /** "Leaving now", its undo, and "Hand off" from the Next Move. */
+  tripActions?: {
+    leaving: (tripIds: string[]) => void
+    undoLeaving: (tripIds: string[]) => void
+    handOff: (trip: Trip, driverId: string) => Promise<void>
+  }
 }
 
 const POSTURE_NAMES: Record<Posture, string> = { launch: 'Full day', calm: 'Calm', evening: 'Evening' }
@@ -46,7 +58,8 @@ const POSTURE_NAMES: Record<Posture, string> = { launch: 'Full day', calm: 'Calm
  * minutes); a tap on a calendar item opens its sheet (details, then edit).
  */
 export default function WallView(props: WallViewProps) {
-  const { now, members, today, tomorrow, currentWeather, checklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, openRequest = null } = props
+  const { now, members, today, tomorrow, currentWeather, checklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, openRequest = null, tripStateFor, tripActions } = props
+  const [handOffTrip, setHandOffTrip] = useState<Trip | null>(null)
   const [preview, setPreview] = useState<PreviewState | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -54,8 +67,8 @@ export default function WallView(props: WallViewProps) {
 
   const eventsById = useMemo(() => new Map(allEvents.map((e) => [e.id, e as EditableEvent])), [allEvents])
   const buildPlanFor = useCallback(
-    (date: Date, events: WallEvent[]) => buildDayPlan({ date, members, routines, events, dayOffs }),
-    [members, routines, dayOffs],
+    (date: Date, events: WallEvent[]) => buildDayPlan({ date, members, routines, events, dayOffs, tripState: tripStateFor?.(date) }),
+    [members, routines, dayOffs, tripStateFor],
   )
   const pigments = useMemo(() => pigmentIndexes(members), [members])
   const selected = selectedId ? eventsById.get(selectedId) ?? null : null
@@ -102,6 +115,16 @@ export default function WallView(props: WallViewProps) {
     return Boolean(id)
   }
 
+  const move = shownToday ? selectNextMove(shownToday, now) : null
+  const moveView = describeNextMove(move, members, now)
+  const moveActions = tripActions && moveView && move
+    ? {
+        onLeaving: () => tripActions.leaving(moveView.tripIds),
+        onUndoLeaving: () => tripActions.undoLeaving(moveView.tripIds),
+        onHandOff: () => setHandOffTrip(move.trips[0]),
+      }
+    : undefined
+
   const openMenu = () => setMenuOpen(true)
   let face
   if (shown.posture === 'evening') {
@@ -110,7 +133,7 @@ export default function WallView(props: WallViewProps) {
   } else if (shown.posture === 'calm') {
     face = <WallCalm now={now} members={members} plan={shownToday} currentWeather={currentWeather} onSelectPerson={openPerson} />
   } else {
-    face = <WallLaunch now={now} members={members} plan={shownToday} currentWeather={currentWeather} onOpenMenu={openMenu} onAsk={onAsk} interaction={interaction} />
+    face = <WallLaunch now={now} members={members} plan={shownToday} currentWeather={currentWeather} onOpenMenu={openMenu} onAsk={onAsk} interaction={interaction} moveActions={moveActions} />
   }
 
   return (
@@ -139,6 +162,16 @@ export default function WallView(props: WallViewProps) {
             setDraftPreview(null)
           }}
           onPreview={setDraftPreview}
+        />
+      )}
+      {handOffTrip && shownToday && tripActions && (
+        <WallHandOffSheet
+          trip={handOffTrip}
+          plan={shownToday}
+          members={members}
+          pigmentOf={(id) => pigments.get(id) ?? null}
+          onPick={(driverId) => tripActions.handOff(handOffTrip, driverId)}
+          onClose={() => setHandOffTrip(null)}
         />
       )}
       {menuOpen && <WallMenu onClose={() => setMenuOpen(false)} />}

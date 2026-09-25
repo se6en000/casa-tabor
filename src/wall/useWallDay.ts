@@ -4,6 +4,7 @@ import { useFamilyMembers } from '../hooks/useFamilyMembers'
 import { useMemberAvailability } from '../hooks/useMemberAvailability'
 import { deserializeRoutineFromAvailabilityRules, type FamilyRoutine } from '../lib/familyRoutines'
 import { buildDayPlan, type DayOff } from './engine/dayPlan'
+import { dayState, type WallTripState } from './tripState'
 import type { DayPlan, WallEvent, WallMember } from './engine/types'
 
 export interface WallDay {
@@ -23,7 +24,7 @@ export interface WallDay {
  * routines and days off (member availability), and slices of the rolling event
  * cache. Rebuilt when the data changes or the date rolls over, not every minute.
  */
-export function useWallDay(now: Date): WallDay {
+export function useWallDay(now: Date, tripState: WallTripState = {}): WallDay {
   const dayKey = now.toDateString()
   const { data: familyMembers } = useFamilyMembers()
   const members = useMemo(() => (familyMembers ?? []) as unknown as WallMember[], [familyMembers])
@@ -43,15 +44,16 @@ export function useWallDay(now: Date): WallDay {
 
   const today = useMemo(() => {
     if (!ready || !todayEvents) return null
-    return buildDayPlan({ date: new Date(dayKey), members, routines, events: todayEvents as unknown as WallEvent[], dayOffs: exceptions })
-  }, [ready, dayKey, members, routines, exceptions, todayEvents])
+    const date = new Date(dayKey)
+    return buildDayPlan({ date, members, routines, events: todayEvents as unknown as WallEvent[], dayOffs: exceptions, tripState: dayState(tripState, date) })
+  }, [ready, dayKey, members, routines, exceptions, todayEvents, tripState])
 
   const tomorrow = useMemo(() => {
     if (!ready || !tomorrowEvents) return null
     const date = new Date(dayKey)
     date.setDate(date.getDate() + 1)
-    return buildDayPlan({ date, members, routines, events: tomorrowEvents as unknown as WallEvent[], dayOffs: exceptions })
-  }, [ready, dayKey, members, routines, exceptions, tomorrowEvents])
+    return buildDayPlan({ date, members, routines, events: tomorrowEvents as unknown as WallEvent[], dayOffs: exceptions, tripState: dayState(tripState, date) })
+  }, [ready, dayKey, members, routines, exceptions, tomorrowEvents, tripState])
 
   return { members, today, tomorrow, allEvents, routines, dayOffs: exceptions as DayOff[] }
 }

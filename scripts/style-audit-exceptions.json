@@ -310,6 +310,14 @@
         "reason": "Family Wall: the assistant band's mic, yes/no and follow-up buttons (boards 03b/03c), part of the Wall's own component set."
       },
       {
+        "path": "src/wall/NextMovePanel.tsx",
+        "reason": "Family Wall: the Next Move's Leaving now / Hand off / undo buttons (board 02a), part of the Wall's own component set."
+      },
+      {
+        "path": "src/wall/WallHandOffSheet.tsx",
+        "reason": "Family Wall: the hand-off driver tiles and close button, part of the Wall's own component set."
+      },
+      {
         "path": "src/wall/WallMenu.tsx",
         "reason": "Family Wall: its own small component set by design (CLAUDE.md Wall exception) — the MT menu button and the menu's close button, styled with wall-* tokens."
       },

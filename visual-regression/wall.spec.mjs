@@ -117,3 +117,22 @@ test('wall: the Who tab adds a person and changes the driver, with the change sp
   await expect(sheet.getByText('was Jake')).toHaveCount(2)
   await expect(wall).toHaveScreenshot('edit-who.png')
 })
+
+test('wall: "Leaving now" puts the trip on the road (with undo), and "Hand off" gives it to someone else', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T07:12:00')
+  const wall = page.getByTestId('wall-fixture')
+  const move = wall.getByRole('region', { name: 'Next move' })
+  await expect(move.getByText('NEXT MOVE · LEAVE BY 7:25')).toBeVisible()
+  await expect(wall).toHaveScreenshot('next-move-actions.png')
+
+  await move.getByRole('button', { name: 'Leaving now' }).click()
+  await expect(move.getByText('ON THE ROAD · THERE BY 7:35')).toBeVisible()
+  await move.getByRole('button', { name: 'Not yet (undo)' }).click()
+  await expect(move.getByText('NEXT MOVE · LEAVE BY 7:25')).toBeVisible()
+
+  await move.getByRole('button', { name: 'Hand off' }).click()
+  const sheet = wall.getByRole('region', { name: 'Hand off' })
+  await expect(sheet.getByText('Drop off Emme & Owen')).toBeVisible()
+  await sheet.getByRole('button', { name: /^Kelly/ }).click()
+  await expect(move.getByText('Kelly → Palm Beach Public')).toBeVisible()
+})

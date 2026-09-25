@@ -62,7 +62,7 @@ export interface Trip {
   /** Who drives. null = nobody assigned (never guessed). */
   driverId: string | null
   /** Where the driver came from: saved plan, routine, event member role, or the traveler driving themself. */
-  driverSource: 'plan' | 'routine' | 'event_member' | 'self' | null
+  driverSource: 'plan' | 'routine' | 'event_member' | 'self' | 'handoff' | null
   destination: { name: string; address: string | null }
   /** When to leave home. null when the drive time is unknown. */
   leaveAt: Date | null
@@ -73,6 +73,8 @@ export interface Trip {
   driveMinutes: number | null
   /** Forecast at the destination, as stored with the event (e.g. "Overcast, 86°F, 40% rain chance"). */
   weather?: string | null
+  /** When "Leaving now" was tapped on the wall; null otherwise. */
+  departedAt?: Date | null
 }
 
 export type SegmentKind = 'at_place' | 'activity' | 'drive'

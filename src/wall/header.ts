@@ -34,6 +34,11 @@ export interface NextMoveView {
   also: string | null
   /** null when the leave time is unknown (no drive time). */
   ring: { value: string; unit: string; fraction: number } | null
+  /** The trips this move covers (the first, plus any leaving with the same driver). */
+  tripIds: string[]
+  /** "Leaving now" was tapped for this move (so it can be undone). */
+  departed: boolean
+  status: 'upcoming' | 'en_route'
 }
 
 export const clockTime = (d: Date) => formatWallClock(d).time
@@ -71,7 +76,11 @@ export function describeNextMove(move: NextMove | null, members: WallMember[], n
     .filter(Boolean)
     .join(' · ')
   const detail = `${trip.title} · ${timing}`
+  const sameDriver = move.trips.filter((t) => t.driverId === trip.driverId)
   const base = {
+    tripIds: sameDriver.map((t) => t.id),
+    departed: Boolean(trip.departedAt),
+    status: move.status,
     driverId: trip.driverId,
     initial: driverName?.charAt(0) ?? '?',
     title: `${whoGoes(trip, nameOf)} → ${placeName(trip)}`,
