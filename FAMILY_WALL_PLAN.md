@@ -185,7 +185,7 @@ Removing stale tests reduces *friction* (they break on harmless refactors), not 
     - Coverage: every upcoming (14-day) out-of-home event has a drive time — **10 of 10** (SQL on production; 9 Google-synced copies of school-routine days excluded, since the engine uses the routine's own estimate). The two games that were missing one (Lake Lytal, Olympia Park) were re-enriched: 15 and 25 min. Origin is the home address from settings (`enrich-event` builds it from `homeConfig`).
     - Root-cause fix deployed: `supabase/functions/_shared/event-time-sanity.mjs` validates every AI-written time before it is saved — `plausibleDepartureIso` (must be ≤ 6 h before the start and arrive on time, else start − drive time, else null) and `sanitizeStepTimeIso` (wrong-date step times are moved onto the event's date if the clock time fits, else dropped). Used in `enrich-event` for the enrichment row, every logistics step, and the departure backfill. Tests that run it: `tests/event-time-sanity.test.mjs` (8). `npm run functions:typecheck`: no new errors. Live check: re-enriched Saturday's baseball game → departure saved as **2026-09-26 12:10** (was 2020-dated; the model's 12:15 would have arrived late for a 20 min drive), steps dated 2026.
     - The Wall engine applies the same rules to stored departures (`tests/wall-engine.test.mjs`: wrong-year and would-arrive-late cases).
-    - Still open (Jake): repair the existing bad rows — 226 enrichment departures and 661 logistics step times already stored wrong. The AI-written step *plans* can also be internally inconsistent (e.g. leave 12:15, arrive 12:35 for a 12:30 start); only their dates are fixed, and the Wall doesn't use them.
+    - Repair of the existing bad rows approved by Jake 2026-09-25. Counted across all stored events (not only upcoming ones), using the same `event-time-sanity.mjs` rules: 888 of 1,050 enrichment departures and 3,249 of 4,054 logistics step times change. **Not yet applied** — the write to production was blocked by the agent permission guard; Jake runs it (guarded: each row changes only if it still holds the old value). The AI-written step *plans* can also be internally inconsistent (e.g. leave 12:15, arrive 12:35 for a 12:30 start); only their dates are fixed, and the Wall doesn't use them.
     - Note for P3.4: `enrich-event` also lets the model fill in an event's location when none was given, which is how "Academic Scholarship Webinar" got a physical school address; the engine treats it as a trip needing a driver, which "Needs a decision" should ask about.
 
 ## Phase 2 — Wall v1 (read-only) on the kiosk
@@ -199,7 +199,7 @@ Removing stale tests reduces *friction* (they break on harmless refactors), not 
   - Criteria changed 2026-09-25 by Claude: tokens live in `src/design-system/tokens.mjs` (P2.0), not `src/wall/tokens`, so the existing token/style gates cover them — decided with Jake alongside the CLAUDE.md design exception.
   - Evidence (partial): `77a5c5c8` — `/wall` renders outside the old app shell (`src/App.tsx` RootSwitch, lazy 6 KB chunk) with auto-update and existing display-sleep kept; `computeStageFit` scales/letterboxes the 1920×1080 stage; frame shows live minute-aligned clock, date, empty Next Move slot, and one lane per home-screen member (Jake, Kelly, Liv, Emme, Owen, Giselle) with hour axis, brass now-line and veiled past. Tests that run the code: `tests/wall-frame.test.mjs` (10 tests: stage fit, minute clock, date/clock format, timeline mapping, lane selection, pigments); import guardrail `tests/wall-isolation.test.mjs`. Live-verified 2026-09-25 on production at 1920 wide in Chrome, no console errors. **Remaining:** verify on the physical Pi kiosk once Jake points it at `/wall`.
 
-- [ ] **P2.2 — The Score** — lanes × time, brass now-line, veiled past, driver monograms at drop-off and pickup, hatched driving legs in the driver's color, work shown only as "Work", "everyone home by" marker. Matches board 02a. Live on kiosk.
+- [~] **P2.2 — The Score** — lanes × time, brass now-line, veiled past, driver monograms at drop-off and pickup, hatched driving legs in the driver's color, work shown only as "Work", "everyone home by" marker. Matches board 02a. Live on kiosk. — Claimed: Claude (Opus 5.5), 2026-09-25
   - Evidence: _
 
 - [ ] **P2.3 — Header** — large clock, date, weather phrased as a consequence when it touches a plan, Next Move with countdown ring. Matches 02a.
@@ -282,11 +282,10 @@ record bundle size before/after; re-run the full suite after each batch.
 | 2026-09-25 | Agents no longer stop for review after writing a failing test; stops only for product decisions, required design approvals, or blockers (`AGENTS.md`) | Jake |
 | 2026-09-25 | Build the Wall frame (P2.0/P2.1) now, ahead of Phase 0/1, so the kiosk can watch `/wall` while it's built; Jake points the kiosk there himself | Jake |
 | 2026-09-25 | Lanes = everyone switched on by the existing "show on home screen" setting (Giselle stays: she does most of the kids' driving and must be visible for conflicts), plus any sitter/driver switched off who has something that day | Jake |
+| 2026-09-25 | Repair the AI-written event times already stored in production, using the same rules that now validate new ones | Jake |
 | 2026-09-25 | Old email-intelligence docs moved to `docs/email-intelligence/`; `.agents/` run artifacts removed from the repo (still in git history) | Jake |
 
 ## Open questions for Jake
-
-- Repair the bad times already stored in production — 226 enrichment departures (recompute as start − drive time) and 661 logistics step times (move onto the event's date, or clear)? New ones are now validated; the Wall already ignores bad ones; the old homepage may show wrong times from them.
 
 - Which calendars are Jake's and Kelly's work calendars (for busy/free in P3.6)?
 - Is 120 s an acceptable ship target (P0.7), or tighter?

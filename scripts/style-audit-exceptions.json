@@ -282,6 +282,10 @@
       {
         "path": "src/wall/WallFrame.tsx",
         "reason": "Family Wall Score: runtime timeline geometry (hour marks, now line, past veil) positioned from the current time."
+      },
+      {
+        "path": "src/wall/WallScore.tsx",
+        "reason": "Family Wall Score: lane blocks, driver initials and markers are positioned on the timeline from event times at runtime."
       }
     ],
     "nativeControlRecreations": [
