@@ -76,8 +76,13 @@ test('LivingFlowSidecar & useLivingFlowState recurrence deletion and Google sync
       'utf-8'
     )
     assert.match(
+      // 2026-09-24: renamed to desiredIsFlippedToAi as part of decoupling the
+      // animated/interactive flip state from the raw store value (fixing a
+      // rapid-flip race condition) -- same guarantee, same literal
+      // right-hand side, just no longer the variable driving the animation
+      // directly (see sidecar-flip-animation-race.test.mjs for that).
       sidecarCompanionSrc,
-      /const isFlippedToAi = sidecarTab === 'ai'/,
+      /const desiredIsFlippedToAi = sidecarTab === 'ai'/,
       'SidecarCompanion must only flip to AI when sidecarTab is explicitly "ai"'
     )
     assert.match(

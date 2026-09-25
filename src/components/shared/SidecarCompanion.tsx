@@ -357,16 +357,42 @@ export default function SidecarCompanion({
   }
 
   const isActionView = sidecarTab === 'action' && Boolean(selectedSidecarActionId)
-  const isFlippedToAi = sidecarTab === 'ai'
-  const isFrontView = !isFlippedToAi
+
+  // 2026-09-24: rapidly flipping (Flip to Copilot -> Flip to Event, or vice
+  // versa, faster than the 0.42s rotateY animation) could leave the card
+  // stuck mid-rotation with wrong pointer-events -- since isFrontView/
+  // aria-hidden/pointer-events all toggled INSTANTLY off the raw sidecarTab
+  // value while the visual rotation was still animating, a second flip
+  // triggered before the first settled could desync "what's visually facing
+  // the viewer" from "what's actually receiving touch/scroll input." Reproduced
+  // live: rapid flip-flip-then-scroll could leave the panel visually
+  // distorted or even trigger an unrelated close. Fixed by decoupling the
+  // ANIMATED/interactive state (displayedIsFlippedToAi) from the raw store
+  // value (sidecarTab) -- a rapid second flip while one is still in-flight
+  // now just queues, applying once the current animation's onAnimationComplete
+  // fires, instead of interrupting it. This is a general fix regardless of
+  // which of the several call sites changed sidecarTab.
+  const desiredIsFlippedToAi = sidecarTab === 'ai'
+  const [displayedIsFlippedToAi, setDisplayedIsFlippedToAi] = useState(desiredIsFlippedToAi)
+  const [isFlipAnimating, setIsFlipAnimating] = useState(false)
+  useEffect(() => {
+    if (isFlipAnimating) return
+    if (desiredIsFlippedToAi !== displayedIsFlippedToAi) {
+      setIsFlipAnimating(true)
+      setDisplayedIsFlippedToAi(desiredIsFlippedToAi)
+    }
+  }, [desiredIsFlippedToAi, displayedIsFlippedToAi, isFlipAnimating])
+
+  const isFrontView = !displayedIsFlippedToAi
 
   const sidecarContent = (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden relative w-full h-full sidecar-flip-viewport">
       <motion.div
         className="w-full h-full relative sidecar-flip-card"
         initial={false}
-        animate={{ rotateY: isFlippedToAi ? 180 : 0 }}
+        animate={{ rotateY: displayedIsFlippedToAi ? 180 : 0 }}
         transition={{ duration: 0.42, ease: [0.34, 1.3, 0.64, 1] }}
+        onAnimationComplete={() => setIsFlipAnimating(false)}
       >
         {/* Face 1: Action Inspection or Event Details View (Front Face) */}
         <div
