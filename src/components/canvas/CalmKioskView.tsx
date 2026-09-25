@@ -295,27 +295,6 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
       </div>
 
       <div className={cn(mobileSubTab === 'schedule' ? 'flex flex-col' : 'hidden lg:flex lg:flex-col')}>
-        <TodaysTodosWidget
-          now={now}
-          todayReminders={todayReminders}
-          openReminders={openReminders}
-          overdueReminders={overdueReminders}
-          activeReminders={activeReminders}
-          completedReminders={completedReminders}
-          collapsed={todosSectionCollapsed}
-          onToggleCollapsed={toggleTodosSection}
-          showOverdue={showOverdueTodos}
-          onToggleOverdue={toggleOverdueTodos}
-          expanded={todosExpanded}
-          onToggleExpanded={() => setTodosExpanded(!todosExpanded)}
-          completedCollapsed={completedSectionCollapsed}
-          onToggleCompleted={toggleCompletedSection}
-          onToggleReminder={handleToggleReminder}
-          onOpenEvent={onOpenEvent}
-        />
-      </div>
-
-      <div className={cn(mobileSubTab === 'schedule' ? 'flex flex-col' : 'hidden lg:flex lg:flex-col')}>
         <TomorrowPreviewWidget
           now={now}
           tomorrowEvents={tomorrowEvents}
@@ -433,17 +412,19 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
           row height is set by the tallest occupant either way), so each side
           gets its own flex column instead. Every card keeps the same gap-8
           to whatever comes next in ITS column, regardless of the other
-          column's total height. Left: Hero, Ahead. Right: Schedule,
-          To-Dos, Tomorrow -- Hero and Schedule still land side by side at the
+          column's total height. Left: Hero, To-Dos, Ahead. Right: Schedule,
+          Tomorrow -- Hero and Schedule still land side by side at the
           top since each leads its own column. (Tonight's Kitchen removed
           from this column 2026-09-18, per direct request -- the flex-col
-          gap-8 column closes up automatically with nothing else needed.)
+          gap-8 column closes up automatically with nothing else needed.
+          To-Dos moved from the right rail to sit between Hero and Ahead in
+          the left rail 2026-09-25, per direct request.)
           At lg:, this row fills the remaining viewport height (flex-1 +
           min-h-0 on the grid, itself inside the outer lg:overflow-hidden
           container) and the two columns get genuinely SEPARATE scroll
           contexts (2026-09-24, per direct request, replacing an earlier
-          position:sticky version): left column (Hero + Ahead) never
-          scrolls at all, right column (Schedule/To-Dos/Tomorrow) gets its
+          position:sticky version): left column (Hero, To-Dos, Ahead) never
+          scrolls at all, right column (Schedule/Tomorrow) gets its
           own `overflow-y-auto`. Scrolling one can never move the other --
           they aren't sharing a scroll surface the way a sticky sidebar
           would. `items-stretch` at lg: (the grid default) is what gives
@@ -542,6 +523,27 @@ export default function CalmKioskView({ onOpenEvent }: CalmKioskViewProps) {
             )}
           </AnimatePresence>
             }
+          />
+        </div>
+
+        <div className={cn(mobileSubTab === 'schedule' ? 'flex flex-col' : 'hidden lg:flex lg:flex-col')}>
+          <TodaysTodosWidget
+            now={now}
+            todayReminders={todayReminders}
+            openReminders={openReminders}
+            overdueReminders={overdueReminders}
+            activeReminders={activeReminders}
+            completedReminders={completedReminders}
+            collapsed={todosSectionCollapsed}
+            onToggleCollapsed={toggleTodosSection}
+            showOverdue={showOverdueTodos}
+            onToggleOverdue={toggleOverdueTodos}
+            expanded={todosExpanded}
+            onToggleExpanded={() => setTodosExpanded(!todosExpanded)}
+            completedCollapsed={completedSectionCollapsed}
+            onToggleCompleted={toggleCompletedSection}
+            onToggleReminder={handleToggleReminder}
+            onOpenEvent={onOpenEvent}
           />
         </div>
 
