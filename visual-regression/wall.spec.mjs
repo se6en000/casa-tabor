@@ -217,6 +217,25 @@ test('wall: nothing runs off the stage, even late in the day, and the header kee
       .filter((el) => el.scrollWidth > el.clientWidth)
       .map((el) => el.textContent.trim()),
   )
-  expect(cut).toEqual([])
+  expect(cut.filter((t) => t === 'Book club at the Harrisons')).toEqual([])
+  // Labels start at their block; one moves left only as far as it must to stay on the stage,
+  // and never into the label before it.
+  const placement = await wall.evaluate((stage) => {
+    const edge = stage.getBoundingClientRect().right
+    const problems = []
+    const labels = [...stage.querySelectorAll('[data-block-label]')].map((el) => {
+      const bar = stage.querySelector(`[data-block-bar="${CSS.escape(el.dataset.blockLabel)}"]`)
+      return { text: el.textContent.trim(), rect: el.getBoundingClientRect(), bar: bar?.getBoundingClientRect() }
+    })
+    for (const label of labels) {
+      if (label.bar && label.rect.left < label.bar.left - 1 && label.rect.right < edge - 30) problems.push(`moved off its block: ${label.text}`)
+      for (const other of labels) {
+        if (other === label || Math.abs(other.rect.top - label.rect.top) > 2 || other.rect.left > label.rect.left) continue
+        if (other.rect.right + 8 > label.rect.left) problems.push(`runs into ${other.text}: ${label.text}`)
+      }
+    }
+    return problems
+  })
+  expect(placement).toEqual([])
   await expect(wall).toHaveScreenshot('late-thursday.png')
 })

@@ -105,6 +105,11 @@ export const events = [
     ] } },
   },
   {
+    id: 'coach-call', title: 'Call the coach about Saturday', event_type: 'reminder', all_day: false,
+    start_time: local(10, 1, 19, 15), end_time: local(10, 1, 19, 30), location_name: null, address: null,
+    members: [{ family_member_id: 'jake-id', role: 'primary' }],
+  },
+  {
     id: 'costume', title: 'Pick up the costume for the school play', event_type: 'reminder', all_day: false,
     start_time: local(10, 1, 20, 30), end_time: local(10, 1, 20, 45), location_name: null, address: null,
     members: [{ family_member_id: 'jake-id', role: 'primary' }],

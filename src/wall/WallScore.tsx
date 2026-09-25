@@ -1,5 +1,6 @@
-import type { CSSProperties } from 'react'
+import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import { formatWallClock } from './clock'
+import { fitLabels } from './labelFit'
 import { pigmentStyleFor } from './lanes'
 import type { Score, ScoreBlock } from './score'
 import { TIMELINE_WIDTH, hourMarks, isOnTimeline, xForTime } from './timeline'
@@ -13,14 +14,47 @@ const LABEL_OVERHANG = 16
 // "Everyone home by 9:00" needs about this much room right of its line, or it flips to the left.
 const HOME_LABEL_ROOM = 320
 const HOUR_MARKS = hourMarks()
-// A label with less room than this before the right edge reads leftward from the edge instead.
-const RIGHT_EDGE_ROOM = 240
-const RIGHT_EDGE_LABEL_MAX = 420
+const LABEL_LIMIT = TIMELINE_WIDTH + LABEL_OVERHANG
+type LabelFit = Record<string, { left: number; maxWidth: number }>
 
-function labelPlacement(block: ScoreBlock): CSSProperties {
-  const room = TIMELINE_WIDTH + LABEL_OVERHANG - block.x
-  if (room < RIGHT_EDGE_ROOM) return { right: -LABEL_OVERHANG, maxWidth: RIGHT_EDGE_LABEL_MAX, textAlign: 'right' }
-  return { left: block.x, maxWidth: Math.min(block.labelMaxWidth ?? Infinity, room) }
+// Block keys are unique within a lane only (a shared trip appears in several).
+const laneKey = (memberId: string, block: ScoreBlock) => `${memberId}:${block.key}`
+
+/** Before measuring: at the block, cut at the next label or the edge. */
+function labelPlacement(key: string, block: ScoreBlock, fit: LabelFit): CSSProperties {
+  return fit[key] ?? { left: block.x, maxWidth: Math.min(block.labelMaxWidth ?? Infinity, LABEL_LIMIT - block.x) }
+}
+
+/** Measures the labels' real widths so a late one can move left instead of being cut at the edge (labelFit.ts). */
+function useLabelFit(score: Score | null) {
+  const ref = useRef<HTMLElement>(null)
+  const [fit, setFit] = useState<LabelFit>({})
+  useLayoutEffect(() => {
+    let live = true
+    const measure = () => {
+      const root = ref.current
+      if (!root || !live || !score) return
+      const next: LabelFit = {}
+      for (const lane of score.lanes) {
+        const track = root.querySelector<HTMLElement>(`[data-lane-track="${CSS.escape(lane.member.id)}"]`)
+        if (!track) continue
+        const byKey = new Map(lane.blocks.map((block) => [laneKey(lane.member.id, block), block] as const))
+        const labels = [...track.querySelectorAll<HTMLElement>('[data-block-label]')].flatMap((el) => {
+          const key = el.dataset.blockLabel ?? ''
+          const block = byKey.get(key)
+          return block ? [{ key, x: block.x, width: el.scrollWidth, maxWidth: block.labelMaxWidth }] : []
+        })
+        Object.assign(next, fitLabels(labels, LABEL_LIMIT))
+      }
+      setFit((current) => (JSON.stringify(current) === JSON.stringify(next) ? current : next))
+    }
+    measure()
+    void document.fonts?.ready.then(measure)
+    return () => {
+      live = false
+    }
+  }, [score])
+  return { ref, fit }
 }
 
 function blockClass(block: ScoreBlock): string {
@@ -86,9 +120,10 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
   // Hide the hour label the "now" time label would sit on top of.
   const marks = showNow ? HOUR_MARKS.filter((mark) => mark.x < nowX - 20 || mark.x > nowX + 70) : HOUR_MARKS
   const lanes = score?.lanes ?? []
+  const labels = useLabelFit(score)
 
   return (
-    <section aria-label={heading} className={`relative flex shrink-0 flex-col ${compact ? 'h-[382px]' : 'h-[500px]'}`}>
+    <section ref={labels.ref} aria-label={heading} className={`relative flex shrink-0 flex-col ${compact ? 'h-[382px]' : 'h-[500px]'}`}>
       <div className="flex h-[32px] shrink-0 items-end">
         <div className="w-[320px] shrink-0 pb-[6px] text-wall-label font-bold tracking-[0.2em] text-wall-ink-2">
           {heading}
@@ -122,19 +157,20 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
               </div>
             </div>
             <div className="w-[20px] shrink-0" />
-            <div className="relative w-[1512px]">
+            <div data-lane-track={lane.member.id} className="relative w-[1512px]">
               {lane.blocks.map((block) => (
                 <div key={block.key}>
                   {block.label && block.kind !== 'place' && (
                     <div
-                      data-block-label
+                      data-block-label={laneKey(lane.member.id, block)}
                       className="absolute top-[6px] truncate whitespace-nowrap text-wall-detail font-semibold"
-                      style={labelPlacement(block)}
+                      style={labelPlacement(laneKey(lane.member.id, block), block, labels.fit)}
                     >
                       {block.label}
                     </div>
                   )}
                   <div
+                    data-block-bar={laneKey(lane.member.id, block)}
                     className={`absolute top-[36px] flex h-[28px] items-center overflow-hidden rounded-[6px] ${blockClass(block)}${ringFor(block.sourceId)}`}
                     style={{ left: block.x, width: block.width }}
                   >
