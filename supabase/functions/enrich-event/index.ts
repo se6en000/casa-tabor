@@ -11,6 +11,7 @@ import { resolveBackgroundLlmConfig } from '../_shared/background-llm-model.mjs'
 import { createTrackedProviderFetch } from '../_shared/provider-call-ledger.mjs'
 import { parseLastJsonObject } from '../_shared/json-output.mjs'
 import { pickBestDirectoryMatch } from '../_shared/directory-match.mjs'
+import { plausibleDepartureIso, sanitizeStepTimeIso } from '../_shared/event-time-sanity.mjs'
 
 interface UsageAccum { inputTokens: number; outputTokens: number }
 interface ResolvedDestination {
@@ -258,6 +259,8 @@ Deno.serve(async (req) => {
   }
 
   const row = { ...enrichment, event_id, enriched_by: `${llmConfig.provider}/${llmConfig.model}`, enriched_at: new Date().toISOString(), updated_at: new Date().toISOString() }
+  // The model's departure_time often has the wrong date; keep it only if it fits just before the start.
+  row.departure_time = plausibleDepartureIso(row.departure_time, event.start_time as string, row.drive_time_mins)
 
   // Strip fields that don't belong in event_enrichments
   const { location_name: aiLocationName, address: aiAddress, attendees: aiAttendees, primary_attendee: aiPrimaryRaw, title: aiTitleRaw, concise_description: aiConcise, ...enrichmentFields } = row as typeof row & { location_name?: string; address?: string; attendees?: string[]; primary_attendee?: string; title?: string; concise_description?: string }
@@ -450,14 +453,20 @@ Deno.serve(async (req) => {
           logisticsSteps.map((step, i) => {
             const { drive_time_mins, ...stepWithoutDriveTime } = step
             void drive_time_mins
-            return { ...stepWithoutDriveTime, event_id, sort_order: i + 1 }
+            const time = sanitizeStepTimeIso(step.time, event.start_time as string, event.end_time as string)
+            return { ...stepWithoutDriveTime, time, event_id, sort_order: i + 1 }
           })
         )
 
         // Backfill enrichment travel fields if LLM returned them
         const travelPatch: Record<string, unknown> = {}
         const depStep = logisticsSteps.find(s => s.step_type === 'departure')
-        if (depStep?.time) travelPatch.departure_time = depStep.time
+        if (depStep?.time) {
+          const stepTime = sanitizeStepTimeIso(depStep.time, event.start_time as string, event.end_time as string)
+          const driveMinutes = logisticsSteps[0]?.drive_time_mins ?? row.drive_time_mins
+          const departure = plausibleDepartureIso(stepTime, event.start_time as string, driveMinutes)
+          if (departure) travelPatch.departure_time = departure
+        }
         if (logisticsSteps[0]?.drive_time_mins) travelPatch.drive_time_mins = logisticsSteps[0].drive_time_mins
         if (Object.keys(travelPatch).length > 0) {
           await sb.from('event_enrichments').update(travelPatch).eq('event_id', event_id)

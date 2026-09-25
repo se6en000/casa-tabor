@@ -6,6 +6,7 @@ const local = (month, day, hour, minute) => new Date(2026, month - 1, day, hour,
 
 export const FRIDAY = new Date(2026, 8, 25)
 export const SATURDAY = new Date(2026, 8, 26)
+export const TUESDAY = new Date(2026, 8, 29)
 export const at = (day, hour, minute) => new Date(2026, 8, day, hour, minute)
 
 export const members = [
@@ -30,6 +31,8 @@ export const routines = [
     id: 'routine-emme', memberId: 'emme', title: 'School', routineType: 'school',
     venueName: 'Palm Beach Public Elementary School', venueAddress: '', daysOfWeek: weekdays,
     startLocal: '07:35', endLocal: '14:00', dropoffDriverName: 'Jake', dropoffDriverId: 'jake-id', pickupDriverName: 'Giselle', enabled: true,
+    syncMode: 'exceptions_only',
+    dayOverrides: [{ dayOfWeek: 2, label: 'Early Beethoven Strings', startLocal: '07:00', endLocal: '14:00', dropoffDriverName: 'Jake', dropoffDriverId: 'jake-id', pickupDriverName: 'Giselle', enabled: true }],
   },
   {
     id: 'routine-owen', memberId: 'owen', title: 'School', routineType: 'school',
@@ -81,5 +84,12 @@ export const events = [
       { purpose: 'appointment', timing: 'arrive_by', time: '12:30', driverId: 'jake-id', driverName: 'Jake' },
       { purpose: 'return', timing: 'depart_at', time: '14:30', driverId: 'jake-id', driverName: 'Jake' },
     ] } },
+  },
+  {
+    // Google-synced copy of Emme's Tuesday routine exception (as stored in production).
+    id: 'strings-mirror', title: 'Drop off Emme @ Palm Beach Public Elementary School · Early Beethoven Strings', event_type: 'event', all_day: false,
+    start_time: local(9, 29, 7, 0), end_time: local(9, 29, 7, 15),
+    location_name: 'Palm Beach Public Elementary School', address: null,
+    members: [],
   },
 ]

@@ -32,6 +32,8 @@ export interface BuildDayPlanInput {
 
 const MINUTE = 60_000
 const SHARED_ARRIVAL_WINDOW_MIN = 30
+/** A calendar event this close to a routine run, at the same school, is a synced copy of it. */
+const ROUTINE_MIRROR_WINDOW_MIN = 15
 /** A stored departure more than this long before arrival (or after it) is treated as bad data. */
 const MAX_PLAUSIBLE_LEAD_MIN = 6 * 60
 
@@ -212,12 +214,25 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
     }
   }
 
+  // Routine exception days are also synced to Google and come back as calendar
+  // events; the routine (with its day override) is the source of truth.
+  const isRoutineMirror = (event: WallEvent, start: Date) => {
+    const place = normalizePlace(event.location_name || event.address || '')
+    if (!place) return false
+    return [...runs.values()].some((run) => {
+      const venue = normalizePlace(run.venueName)
+      return (place === venue || place.includes(venue) || venue.includes(place))
+        && Math.abs(start.getTime() - run.arriveAt.getTime()) <= ROUTINE_MIRROR_WINDOW_MIN * MINUTE
+    })
+  }
+
   // Calendar events.
   for (const event of events) {
     const start = new Date(event.start_time)
     const end = new Date(event.end_time)
     if (!(start < dayEnd && end > dayStart)) continue
     if (event.status === 'cancelled') continue
+    if (isRoutineMirror(event, start)) continue
 
     const refs = (event.members ?? [])
       .map((m) => ({ id: m.family_member_id ?? m.family_member?.id ?? null, role: m.role ?? null }))
@@ -265,11 +280,12 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
     const driveMinutes = event.enrichment?.drive_time_mins ?? null
     const appointment = legs.find((l) => l.purpose === 'appointment' && l.timing === 'arrive_by')
     const arriveAt = appointment ? legTime(appointment, start) : start
-    // Enrichment departure times are AI-written and sometimes have the wrong date;
-    // trust one only if it falls in the hours just before arrival.
+    // Enrichment departure times are AI-written and sometimes have the wrong date
+    // or would arrive late; trust one only if it fits the hours just before arrival.
     const stored = event.enrichment?.departure_time ? new Date(event.enrichment.departure_time) : null
     const lead = stored ? (arriveAt.getTime() - stored.getTime()) / MINUTE : NaN
-    const departure = stored && lead >= 0 && lead <= MAX_PLAUSIBLE_LEAD_MIN ? stored : null
+    const arrivesOnTime = stored != null && (driveMinutes == null || stored.getTime() + driveMinutes * MINUTE <= arriveAt.getTime())
+    const departure = stored && lead >= 0 && lead <= MAX_PLAUSIBLE_LEAD_MIN && arrivesOnTime ? stored : null
     const leaveAt = departure ?? (driveMinutes != null ? addMinutes(arriveAt, -driveMinutes) : null)
     const returnLeg = legs.find((l) => l.purpose === 'return')
     const returnAt = returnLeg ? legTime(returnLeg, end) : end

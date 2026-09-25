@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { buildDayPlan } from '../src/wall/engine/dayPlan.ts'
 import { selectNextMove } from '../src/wall/engine/nextMove.ts'
-import { FRIDAY, SATURDAY, at, members, routines, events } from './fixtures/wall-day-2026-09-25.mjs'
+import { FRIDAY, SATURDAY, TUESDAY, at, members, routines, events } from './fixtures/wall-day-2026-09-25.mjs'
 
 const friday = () => buildDayPlan({ date: FRIDAY, members, routines, events })
 const saturday = () => buildDayPlan({ date: SATURDAY, members, routines, events })
@@ -115,6 +115,15 @@ test('saturday games: the driver comes from the saved plan, and a missing driver
   assert.deepEqual(kinds, ['no_driver', 'no_person'])
 })
 
+test('a stored departure that would arrive late is replaced by arrival minus drive time', () => {
+  // The model's plan for the real baseball game after the enrichment fix: leave 12:15, 20 min drive, 12:30 start.
+  const late = events.map((e) => (e.id === 'baseball'
+    ? { ...e, enrichment: { drive_time_mins: 20, departure_time: at(26, 12, 15).toISOString() } }
+    : e))
+  const baseball = buildDayPlan({ date: SATURDAY, members, routines, events: late }).trips.find((t) => t.sourceId === 'baseball')
+  assert.equal(time(baseball.leaveAt), time(at(26, 12, 10)))
+})
+
 test('two games at the same park at the same time are flagged as one-car-could-do-both', () => {
   const plan = saturday()
   assert.equal(plan.sharedDestinations.length, 1)
@@ -128,6 +137,19 @@ test('a child with a day off has no school that day', () => {
   assert.equal(plan.lanes.get('liv').some((s) => s.kind === 'at_place'), false)
   assert.equal(plan.trips.some((t) => t.travelerIds.includes('liv')), false)
   assert.ok(plan.trips.some((t) => t.travelerIds.includes('emme')))
+})
+
+test('a routine exception day uses the routine override, and its Google-synced copy is not a second trip', () => {
+  const plan = buildDayPlan({ date: TUESDAY, members, routines, events })
+  const emme = plan.trips.filter((t) => t.kind === 'dropoff' && t.travelerIds.includes('emme'))
+  assert.equal(emme.length, 1)
+  assert.equal(time(emme[0].arriveAt), time(at(29, 7, 0)))
+  assert.equal(emme[0].source, 'routine')
+  assert.equal(plan.trips.some((t) => t.sourceId === 'strings-mirror'), false)
+  assert.equal(plan.gaps.some((g) => g.sourceId === 'strings-mirror'), false)
+  // Owen has no Tuesday override, so he still goes at 7:35, as a separate run.
+  const owen = plan.trips.find((t) => t.kind === 'dropoff' && t.travelerIds.includes('owen'))
+  assert.equal(time(owen.arriveAt), time(at(29, 7, 35)))
 })
 
 // ---- Next Move (P1.3) ---------------------------------------------------------
