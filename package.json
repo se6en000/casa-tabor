@@ -10,6 +10,8 @@
     "test": "node --test --experimental-test-isolation=none tests/*.test.mjs",
     "test:visual": "playwright test",
     "test:visual:update": "playwright test --update-snapshots=all",
+    "test:visual:wall": "playwright test --config playwright.wall.config.mjs",
+    "test:visual:wall:update": "playwright test --config playwright.wall.config.mjs --update-snapshots=all",
     "lint": "eslint .",
     "preview": "vite preview",
     "deploy": "bash scripts/deploy.sh",

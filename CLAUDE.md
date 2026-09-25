@@ -21,6 +21,8 @@ node --test tests/<file>.test.mjs   # run a single test file
 npm run guardrails:check     # npx vitest run tests/guardrails/  (architecture guardrail tests, separate from npm test)
 npm run test:visual          # playwright visual regression (chromium)
 npm run test:visual:update   # update visual snapshots
+npm run test:visual:wall     # Family Wall screenshot guard (1920x1080, each posture, fixture data); also runs inside scripts/ship.sh
+npm run test:visual:wall:update  # after an intended Wall visual change: regenerate, look at the PNGs, commit them
 npm run preview              # preview production build
 ```
 

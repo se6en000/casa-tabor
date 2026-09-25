@@ -192,7 +192,7 @@ Removing stale tests reduces *friction* (they break on harmless refactors), not 
 
 - [x] **P2.0 — Wall tokens in the design-token system** — Claimed: Claude (Opus 5.5), 2026-09-25
   - Done means: the Wall palette (limestone, brass, ink, rust, five person pigments plus their dark-posture variants) and the distance type scale (across-the-room / walking-past / standing-at-it sizes) are registered in `src/design-system/tokens.mjs` and generated CSS; `tokens:check` and `style:check` pass; no raw hex in `src/wall/` components.
-  - Evidence (partial): `77a5c5c8` — `wall-*` colors (ground, ink, rule, stone, brass, rust, six pigments) in `staticColor`; new `wallType` group (fixed stage px, 16px minimum) emitted by `generate-design-tokens.mjs`; tokens/style/certify gates pass; no hex in `src/wall/`. Dark-posture variants added with P2.4 (the "Wall postures" commit): `wall-night-*` colors in `staticColor` and a `.wall-evening` rule in `src/index.css` that points every `wall-*` role at its night value, so the same components draw light-on-dark; calm sizes `wall-clock-calm` (250px) and `wall-date-calm` (42px). `tokens:check`, `style:check`, `certify:experience` pass; still no hex in `src/wall/`.
+  - Evidence (partial): `77a5c5c8` — `wall-*` colors (ground, ink, rule, stone, brass, rust, six pigments) in `staticColor`; new `wallType` group (fixed stage px, 16px minimum) emitted by `generate-design-tokens.mjs`; tokens/style/certify gates pass; no hex in `src/wall/`. Dark-posture variants added with P2.4 (the `74b27cbb`): `wall-night-*` colors in `staticColor` and a `.wall-evening` rule in `src/index.css` that points every `wall-*` role at its night value, so the same components draw light-on-dark; calm sizes `wall-clock-calm` (250px) and `wall-date-calm` (42px). `tokens:check`, `style:check`, `certify:experience` pass; still no hex in `src/wall/`.
 
 - [~] **P2.1 — Wall shell** — Claimed: Claude (Opus 5.5), 2026-09-25
   - Done means: `/wall` route; fixed 1920×1080 stage (scales to the physical screen); `src/wall/tokens` (limestone / brass / ink, person pigments, rust reserved for "move now"); a guardrail test that fails if anything in `src/wall/` imports old-homepage code.
@@ -209,16 +209,17 @@ Removing stale tests reduces *friction* (they break on harmless refactors), not 
   - **Remaining:** on-kiosk check, as for P2.2.
 
 - [~] **P2.4 — Postures** — launch / calm (dimmed, whereabouts, ribbon) / evening (dark, tomorrow). Switching rules tested (launch when something is due within 5 min or during the morning rush; evening after 7 PM). Matches 02b and 02c. — Claimed: Claude (Opus 5.5), 2026-09-25
-  - Evidence (partial): "Wall postures" commit — `src/wall/posture.ts` (`selectPosture`: evening 7 PM–6 AM; launch from 6 AM until the last run leaving before 9 AM arrives, or within 5 min of a departure; calm otherwise; launch layout while loading), `WallCalm.tsx` (250px clock, "A quiet stretch until 1:50." / "Baseball at 12:30 still needs a driver.", whereabouts per person, NEXT line, day ribbon with now line), `WallEvening.tsx` (dark; tomorrow's Score, forecast from the first outing, "Needs a decision" from missing drivers and shared destinations, first-departure card; after midnight it shows the day just begun), `WallView.tsx` switches. Tests: `tests/wall-posture.test.mjs` (10). Rendered from production data at 1:40 PM and 8:15 PM Friday — matches 02b/02c. Engine fix found that way: shared destinations also match by street address (the two Saturday games are stored as "Ferrin Park Field 1" and "Vivian A. Ferrin Memorial Park", same 11921 Okeechobee Blvd), so "one car could do both" now appears for the real games (`tests/wall-engine.test.mjs`).
+  - Evidence (partial): `74b27cbb` — `src/wall/posture.ts` (`selectPosture`: evening 7 PM–6 AM; launch from 6 AM until the last run leaving before 9 AM arrives, or within 5 min of a departure; calm otherwise; launch layout while loading), `WallCalm.tsx` (250px clock, "A quiet stretch until 1:50." / "Baseball at 12:30 still needs a driver.", whereabouts per person, NEXT line, day ribbon with now line), `WallEvening.tsx` (dark; tomorrow's Score, forecast from the first outing, "Needs a decision" from missing drivers and shared destinations, first-departure card; after midnight it shows the day just begun), `WallView.tsx` switches. Tests: `tests/wall-posture.test.mjs` (10). Rendered from production data at 1:40 PM and 8:15 PM Friday — matches 02b/02c. Engine fix found that way: shared destinations also match by street address (the two Saturday games are stored as "Ferrin Park Field 1" and "Vivian A. Ferrin Memorial Park", same 11921 Okeechobee Blvd), so "one car could do both" now appears for the real games (`tests/wall-engine.test.mjs`).
   - **Remaining:** 02c's "Pack tonight" list — the stored event checklists include surprise-spoiling items (tomorrow's "Kelly's Birthday" lists "Gift for Kelly", "Kids Gift"), so it waits on the surprise-safe privacy rule (open question); on-kiosk check.
 
 - [ ] **P2.5 — Kiosk switch with instant rollback**
   - Done means: the Pi points at `/wall` behind a single setting; switching back to the old homepage takes one step and is documented here; 7-day soak on the real wall; **Jake signs off.**
   - Evidence: _
 
-- [ ] **P2.6 — Screenshot guard for the Wall**
+- [x] **P2.6 — Screenshot guard for the Wall** — Claimed: Claude (Opus 5.5), 2026-09-25
   - Done means: the existing Playwright visual-regression workflow (`.github/workflows/visual-regression.yml`) captures `/wall` at 1920×1080 in each posture from fixed fixture data and fails on unintended layout changes; baselines are committed.
-  - Evidence: _
+  - Criteria changed 2026-09-25 by Claude: that CI workflow has failed on every run since at least 2026-08-10 (stale `design-system` baselines in all 6 profiles plus flaky old-homepage `living-canvas` checks), so a Wall check inside it could never block anything. The guard runs instead as its own config inside `scripts/ship.sh`, alongside the tests, and **blocks the deploy** on a difference. Per-platform baselines (Linux, from the Pi that ships); on a machine without them it's skipped with a notice. Fixing or retiring the broken CI checks is a separate question for Jake.
+  - Evidence: "Wall screenshot guard" commit — `/__wall-fixture?at=…` (visual-test mode only, not in production builds: checked the built bundle), `visual-regression/wall.spec.mjs` (launch before school, launch with a missing driver, calm afternoon, evening before the games), `playwright.wall.config.mjs` (≤300 differing pixels, 1 retry), baselines in `visual-regression/wall.spec.mjs-snapshots/*-linux.png`, `npm run test:visual:wall` / `:update`. Stable across 6 runs; a 1px shift of the lane blocks fails it (1,604 pixels differ).
 
 ## Phase 3 — Interactive Wall
 
@@ -290,6 +291,8 @@ record bundle size before/after; re-run the full suite after each batch.
 | 2026-09-25 | Old email-intelligence docs moved to `docs/email-intelligence/`; `.agents/` run artifacts removed from the repo (still in git history) | Jake |
 
 ## Open questions for Jake
+
+- The GitHub visual-regression workflow has been red since at least 2026-08-10 (stale `design-system` baselines, flaky old-homepage `living-canvas` checks). Refresh the design-system baselines, or retire those checks with the old homepage (P5)?
 
 - Surprise-safe packing list (P2.4): event checklists are AI-written and include gifts for the person being celebrated (tomorrow: "Gift for Kelly" on "Kelly's Birthday"). Hide checklist items from birthday/celebration events on the wall entirely, or show them only on the phone of whoever isn't the honoree?
 

@@ -38,10 +38,24 @@ step "1-2/6 Tests + gates/build, side by side (tokens/style/certify/types/vite v
 TEST_LOG="$(dirname "$LOG")/tests.log"
 npm test >"$TEST_LOG" 2>&1 &
 TEST_PID=$!
+# Family Wall screenshot guard (P2.6), alongside. Baselines are per platform;
+# on a machine without them (e.g. a Mac) it's skipped with a notice.
+WALL_LOG="$(dirname "$LOG")/wall-visual.log"
+WALL_PID=""
+if ls visual-regression/wall.spec.mjs-snapshots/*-"$(node -p process.platform)".png >/dev/null 2>&1; then
+  npm run test:visual:wall >"$WALL_LOG" 2>&1 &
+  WALL_PID=$!
+else
+  printf '  \033[33m! no Wall screenshot baselines for this platform; guard skipped\033[0m\n'
+fi
 npx vercel link --yes --scope casa-projects --project casa-tabor >>"$LOG" 2>&1 || true
 if npx vercel build --prod --yes >>"$LOG" 2>&1; then BUILD_RC=0; else BUILD_RC=$?; fi
 if wait "$TEST_PID"; then TEST_RC=0; else TEST_RC=$?; fi
 if [ "$TEST_RC" -ne 0 ]; then LOG="$TEST_LOG"; fail "tests failed"; fi
+if [ -n "$WALL_PID" ] && ! wait "$WALL_PID"; then
+  LOG="$WALL_LOG"
+  fail "Wall screenshots changed — if intended, run npm run test:visual:wall:update, look at the new PNGs, and ship again"
+fi
 cat "$TEST_LOG" >>"$LOG"
 [ "$BUILD_RC" -eq 0 ] || fail "gates or build failed"
 ok "tests pass, gates + build passed"

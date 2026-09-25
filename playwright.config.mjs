@@ -4,6 +4,8 @@ import { VISUAL_MATRIX } from './visual-regression/matrix.mjs'
 export default defineConfig({
   testDir: './visual-regression',
   testMatch: '*.spec.mjs',
+  // The Family Wall has its own guard: playwright.wall.config.mjs.
+  testIgnore: 'wall.spec.mjs',
   snapshotPathTemplate: '{testDir}/{testFileName}-snapshots/{arg}-{projectName}{ext}',
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
