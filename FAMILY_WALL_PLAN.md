@@ -234,10 +234,10 @@ Removing stale tests reduces *friction* (they break on harmless refactors), not 
 
 ## Phase 3 — Interactive Wall
 
-- [~] **P3.0 — Design: assistant + event details in the Wall language**
+- [x] **P3.0 — Design: assistant + event details in the Wall language**
   - Done means: new boards on the design canvas for (a) talking to the assistant (voice-first; where the conversation appears on a wall with no tabs) and (b) opening an event's details (over the Score). **Jake approves before build.**
   - Evidence: _
-  - Claimed: Claude (Opus 5.5), 2026-09-25. Boards 03a (event details: a sheet from the right over a veiled Score, tapped block outlined; trip drawn like the Score with leave/arrive/ends/home; place + drive; this event's pack list; Change driver / directions / Ask about this / Edit), 03b (asking: a dark band from the bottom, the question in large italics, a spoken-style answer, and the wall outlines what it's talking about), 03c (adding by voice: a draft card showing exactly what will be saved and where it lands in the person's day; missing facts are asked, never guessed) on the design canvas https://claude.ai/artifact/G56Z8ixXCTxpyYRHAtBtiC (version 4), with five decisions for Jake on the canvas. **Waiting on Jake's approval.**
+  - Claimed: Claude (Opus 5.5), 2026-09-25. Boards 03a (event details: a sheet from the right over a veiled Score, tapped block outlined; trip drawn like the Score with leave/arrive/ends/home; place + drive; this event's pack list; Change driver / directions / Ask about this / Edit), 03b (asking: a dark band from the bottom, the question in large italics, a spoken-style answer, and the wall outlines what it's talking about), 03c (adding by voice: a draft card showing exactly what will be saved and where it lands in the person's day; missing facts are asked, never guessed) on the design canvas https://claude.ai/artifact/G56Z8ixXCTxpyYRHAtBtiC (version 4), with five decisions for Jake on the canvas. **Approved by Jake 2026-09-25** ("I love all of it"); canvas version 5 adds the voice decision. Correction made on the canvas: the Pi's current wake word is "Alexa" (built-in model on the Pi), not "Hey Casa" as the first boards said; a custom "Hey Casa" model is a later nice-to-have.
 
 - [ ] **P3.1 — Event details (Wall style)**, reusing existing event data and mutation paths (`eventMutations.ts`, recurrence editor core). All edits proven with behavioral tests and live on kiosk.
   - Evidence: _
@@ -303,9 +303,13 @@ record bundle size before/after; re-run the full suite after each batch.
 | 2026-09-25 | "Pack tonight" shows every checklist item for now — no surprise-safe filtering yet, since Kelly doesn't use the app during testing. **Revisit before Kelly (or anyone being celebrated) gets access.** | Jake |
 | 2026-09-25 | Retire the broken visual checks (`design-system` baselines, old-homepage `living-canvas`) rather than refresh them | Jake |
 | 2026-09-25 | The kiosk shows the Wall by default | Jake |
+| 2026-09-25 | P3.0 boards approved (event details sheet, assistant band, voice draft card) | Jake |
+| 2026-09-25 | Voice starts two ways, both always on: a mic button beside the MT monogram in every face, and the wake word heard on the Pi (today "Alexa"; "Hey Casa" later); either one raises the same band | Jake (left to Claude's design call) |
 | 2026-09-25 | Old email-intelligence docs moved to `docs/email-intelligence/`; `.agents/` run artifacts removed from the repo (still in git history) | Jake |
 
 ## Open questions for Jake
+
+- P3 defaults awaiting OK: anyone at the wall can change things during family testing (add "who's this?" before driver/time changes later); "Edit" sends the event to the phone of whoever tapped; the band says "You asked" until voices can be told apart.
 
 - Which calendars are Jake's and Kelly's work calendars (for busy/free in P3.6)?
 - Is 120 s an acceptable ship target (P0.7), or tighter?
