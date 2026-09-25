@@ -41,3 +41,11 @@ test('wall: a tap previews the next face, and the MT menu opens the rest of the 
   await wall.getByRole('button', { name: 'Back to the Wall' }).click()
   await expect(wall.getByRole('link', { name: 'Calendar' })).toHaveCount(0)
 })
+
+test('wall: a menu item opens that part of the app', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T13:40:00')
+  const wall = page.getByTestId('wall-fixture')
+  await wall.getByRole('button', { name: 'Open menu' }).click()
+  await wall.getByRole('link', { name: 'Calendar' }).click()
+  await expect(page.getByTestId('fixture-calendar')).toBeVisible()
+})

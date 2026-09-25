@@ -1,6 +1,6 @@
 // Visual-test only (VITE_VISUAL_TEST_MODE): the Wall drawn from the fixed test
 // fixture at the moment given by ?at=, for the screenshot guard (P2.6).
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { buildDayPlan } from './engine/dayPlan'
 import type { WallEvent, WallMember } from './engine/types'
 import WallView from './WallView'
@@ -27,9 +27,14 @@ export default function WallFixturePage() {
     buildDayPlan({ date, members: members as WallMember[], routines: routines as unknown as FamilyRoutine[], events: events as unknown as WallEvent[] })
   return (
     <MemoryRouter>
+    <Routes>
+    <Route path="/calendar" element={<div data-testid="fixture-calendar">Calendar page</div>} />
+    <Route path="*" element={
     <div data-testid="wall-fixture" className="h-[1080px] w-[1920px]">
       <WallView now={now} members={members as WallMember[]} today={plan(day)} tomorrow={plan(next)} currentWeather={WEATHER} checklist={CHECKLIST} />
     </div>
+    } />
+    </Routes>
     </MemoryRouter>
   )
 }
