@@ -322,6 +322,14 @@
         "reason": "Family Wall: its own small component set by design (CLAUDE.md Wall exception) — the MT menu button and the menu's close button, styled with wall-* tokens."
       },
       {
+        "path": "src/wall/WallPackingSheet.tsx",
+        "reason": "Family Wall: packing lines (tap to check off) and the sheet's close button, part of the Wall's own component set."
+      },
+      {
+        "path": "src/wall/WallEvening.tsx",
+        "reason": "Family Wall: the evening's packing headings (open the event) and See all, part of the Wall's own component set."
+      },
+      {
         "path": "src/wall/WallWeek.tsx",
         "reason": "Family Wall: the week strip's day cells, part of the Wall's own component set."
       },

@@ -4,7 +4,8 @@ import { selectNextMove } from './engine/nextMove'
 import type { DayPlan, WallMember } from './engine/types'
 import { Check } from 'lucide-react'
 import { describeNextMove } from './header'
-import { packingGroups, type WallChecklistItem } from './packing'
+import { fitPacking, packingGroups, type WallChecklistItem } from './packing'
+import { PackingItem } from './WallPackingSheet'
 import { forecastLine } from './posture'
 import { DecisionRow, type DatedDecision } from './WallDecisions'
 import type { DecisionAction } from './decisions'
@@ -24,13 +25,19 @@ export interface WallEveningProps {
   /** Decisions for the day being prepared for. */
   decisions?: DatedDecision[]
   onAnswer?: (decision: DatedDecision, action: DecisionAction) => Promise<void>
+  /** Tick or untick a packing item (a tap on its line). */
+  onToggleItem?: (item: WallChecklistItem) => void
+  /** Open the event a packing group belongs to (a tap on its heading). */
+  onOpenEvent?: (eventId: string) => void
+  /** Everything to pack, in a sheet. */
+  onSeeAllPacking?: () => void
 }
 
 /** Lines that fit under the Score (group headings count as lines). */
 const PACKING_LINES = 7
 
 /** The evening posture (board 02c): dark, and about the day ahead. */
-export default function WallEvening({ now, members, plan, label, focusDay, checklist = [], interaction, decisions = [], onAnswer }: WallEveningProps) {
+export default function WallEvening({ now, members, plan, label, focusDay, checklist = [], interaction, decisions = [], onAnswer, onToggleItem, onOpenEvent, onSeeAllPacking }: WallEveningProps) {
   // Before the day starts, lane statuses read as plans ("Leaves at 11:56").
   const asOf = useMemo(() => {
     if (focusDay === 'today') return now
@@ -42,19 +49,8 @@ export default function WallEvening({ now, members, plan, label, focusDay, check
   const score = useMemo(() => (plan ? buildScore(plan, members, asOf) : null), [plan, members, asOf])
   const first = useMemo(() => (plan ? describeNextMove(selectNextMove(plan, asOf), members, asOf) : null), [plan, members, asOf])
   const packing = useMemo(() => (plan ? packingGroups(plan, checklist) : { groups: [], packed: 0, total: 0 }), [plan, checklist])
-  // Fill the space in order; whatever doesn't fit is counted, not dropped silently.
-  let linesLeft = PACKING_LINES
-  let hidden = 0
-  const shownGroups = packing.groups.flatMap((group) => {
-    if (linesLeft < 2) {
-      hidden += group.items.length
-      return []
-    }
-    const items = group.items.slice(0, linesLeft - 1)
-    hidden += group.items.length - items.length
-    linesLeft -= 1 + items.length
-    return [{ ...group, items }]
-  })
+  // Fill the space in order; packed things fold into one line; the rest is counted, not dropped.
+  const { groups: shownGroups, hidden } = useMemo(() => fitPacking(packing.groups, PACKING_LINES), [packing.groups])
   const forecast = forecastLine(plan)
   const clock = formatWallClock(now)
   const weekday = asOf.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase()
@@ -95,26 +91,43 @@ export default function WallEvening({ now, members, plan, label, focusDay, check
 
         {packing.total > 0 && (
           <section aria-label="Pack tonight" className="flex min-w-0 flex-1 flex-col">
-            <div className="mb-[10px] text-wall-label font-bold tracking-[0.2em] text-wall-ink-2">
-              PACK TONIGHT · {packing.packed} OF {packing.total} PACKED
+            <div className="mb-[4px] flex h-[44px] items-center justify-between gap-[16px]">
+              <span className="text-wall-label font-bold tracking-[0.2em] text-wall-ink-2">PACK TONIGHT · {packing.packed} OF {packing.total} PACKED</span>
+              {onSeeAllPacking && (
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    onSeeAllPacking()
+                  }}
+                  className="h-[44px] shrink-0 rounded-full border border-solid border-wall-ink-2 bg-transparent px-[18px] text-wall-detail font-semibold text-wall-ink"
+                >
+                  {hidden > 0 ? `See all · ${hidden} more` : 'See all'}
+                </button>
+              )}
             </div>
             {shownGroups.map((group) => (
               <div key={group.eventId} className="flex flex-col">
-                <div className="h-[40px] truncate whitespace-nowrap border-t border-wall-rule pt-[8px] font-display text-wall-heading font-bold">{group.heading}</div>
-                {group.items.map((item) => (
-                  <div key={item.id} className="flex h-[40px] items-center gap-[14px] pl-[4px]">
-                    <span
-                      aria-hidden="true"
-                      className={`flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[4px] border-2 ${item.checked ? 'border-wall-brass bg-wall-brass text-wall-ground' : 'border-wall-ink-2'}`}
-                    >
-                      {item.checked && <Check size={16} strokeWidth={3} />}
-                    </span>
-                    <span className={`truncate text-wall-body ${item.checked ? 'text-wall-ink-2 line-through' : ''}`}>{item.label}</span>
+                <button
+                  type="button"
+                  disabled={!onOpenEvent}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    onOpenEvent?.(group.eventId)
+                  }}
+                  className="h-[44px] w-full truncate whitespace-nowrap border-0 border-t border-solid border-wall-rule bg-transparent p-0 pt-[6px] text-left font-display text-wall-heading font-bold text-wall-ink"
+                >
+                  {group.heading}
+                </button>
+                {group.items.map((item) => <PackingItem key={item.id} item={item} onToggle={onToggleItem} />)}
+                {group.showPacked && (
+                  <div className="flex h-[40px] items-center gap-[10px] pl-[4px] text-wall-detail text-wall-ink-2">
+                    <Check size={18} strokeWidth={2.5} aria-hidden="true" />
+                    {group.packed} packed
                   </div>
-                ))}
+                )}
               </div>
             ))}
-            {hidden > 0 && <div className="mt-[4px] text-wall-detail text-wall-ink-2">+{hidden} more</div>}
           </section>
         )}
 

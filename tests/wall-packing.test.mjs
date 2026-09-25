@@ -30,3 +30,41 @@ test('items are grouped under their event with its time, packed ones counted', (
 test('nothing to pack: no groups', () => {
   assert.deepEqual(packingGroups(saturday, []).groups, [])
 })
+
+import { fitPacking } from '../src/wall/packing.ts'
+
+const group = (eventId, heading, items) => ({ eventId, heading, items: items.map(([label, checked], i) => ({ id: `${eventId}-${i}`, event_id: eventId, label, checked, sort_order: i })) })
+
+test('packed items fold into one "N packed" line instead of a line each', () => {
+  const fit = fitPacking([group('bday', "Kelly's Birthday · 7:00", [['Card', true], ['Gift', false], ['Kids gift', true]])], 7)
+  assert.deepEqual(fit.groups[0].items.map((i) => i.label), ['Gift'])
+  assert.equal(fit.groups[0].packed, 2)
+  assert.equal(fit.hidden, 0)
+})
+
+test('what does not fit is counted as "more", and only things still to pack count', () => {
+  const fit = fitPacking([
+    group('a', 'A · 7:00', [['1', false], ['2', false], ['3', true]]),
+    group('b', 'B · 9:00', [['4', false], ['5', false], ['6', false], ['7', false]]),
+  ], 6)
+  // A: heading + 2 + "1 packed" = 4 lines; B: heading + 1 item = the last 2.
+  assert.deepEqual(fit.groups.map((g) => g.items.map((i) => i.label)), [['1', '2'], ['4']])
+  assert.equal(fit.hidden, 3)
+})
+
+test('a group that is all packed shows just its heading and the packed count', () => {
+  const fit = fitPacking([group('done', 'Yoga · 9:00', [['Mat', true], ['Water', true]])], 7)
+  assert.deepEqual(fit.groups[0].items, [])
+  assert.equal(fit.groups[0].packed, 2)
+})
+
+test('when space runs out, a thing still to pack wins over the "N packed" line', () => {
+  const fit = fitPacking([
+    group('a', 'A · 7:00', [['1', false], ['2', false], ['3', false]]),
+    group('b', 'B · 9:00', [['Glove', true], ['Water', false], ['Cleats', false]]),
+  ], 6)
+  assert.deepEqual(fit.groups[1].items.map((i) => i.label), ['Water'])
+  assert.equal(fit.groups[1].packed, 1) // counted, shown only if there's a line left
+  assert.equal(fit.groups[1].showPacked, false)
+  assert.equal(fit.hidden, 1)
+})

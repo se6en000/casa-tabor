@@ -292,3 +292,25 @@ test('wall: Edit with nothing changed shows Done, and one tap closes the whole s
   await expect(wall.getByRole('region', { name: /details$/ })).toHaveCount(0)
   await expect(wall.getByText(/Previewing/)).toHaveCount(0)
 })
+
+test('wall: pack tonight — a tap checks a line off (it folds away), See all opens everything, a heading opens its event', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T20:15:00')
+  const wall = page.getByTestId('wall-fixture')
+  const pack = wall.getByRole('region', { name: 'Pack tonight' })
+  await expect(pack.getByText('PACK TONIGHT · 1 OF 6 PACKED')).toBeVisible()
+
+  await pack.getByRole('button', { name: 'Birthday card' }).click()
+  await expect(pack.getByText('PACK TONIGHT · 2 OF 6 PACKED')).toBeVisible()
+  await expect(pack.getByRole('button', { name: 'Birthday card' })).toHaveCount(0) // folded into "1 packed"
+  await expect(wall.getByText(/Previewing/)).toHaveCount(0) // a tap on a line isn't a tap on the wall
+  await expect(wall).toHaveScreenshot('pack-tonight.png')
+
+  await pack.getByRole('button', { name: 'See all' }).click()
+  const sheet = wall.getByRole('region', { name: 'Everything to pack' })
+  await sheet.getByRole('button', { name: 'Birthday card' }).click() // untick it again
+  await expect(sheet.getByText('PACK TONIGHT · 1 OF 6 PACKED')).toBeVisible()
+  await sheet.getByRole('button', { name: 'Close' }).click()
+
+  await pack.getByRole('button', { name: /^Softball/ }).click()
+  await expect(wall.getByRole('region', { name: 'Softball: Huskies @ RPB Cascade details' })).toBeVisible()
+})

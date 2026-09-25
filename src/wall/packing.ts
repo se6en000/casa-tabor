@@ -55,3 +55,36 @@ export function packingGroups(plan: DayPlan, items: WallChecklistItem[]): { grou
   const all = groups.flatMap((g) => g.items)
   return { groups, packed: all.filter((i) => i.checked).length, total: all.length }
 }
+
+export interface FittedPackingGroup extends PackingGroup {
+  /** How many of this event's items are already packed. */
+  packed: number
+  /** Whether the "N packed" line fits (things still to pack come first). */
+  showPacked: boolean
+}
+
+/**
+ * What fits in `lines` rows under the evening Score: each event's heading, the things
+ * still to pack, and one "N packed" line for what's done. Whatever doesn't fit is
+ * counted (only things still to pack), never dropped silently.
+ */
+export function fitPacking(groups: PackingGroup[], lines: number): { groups: FittedPackingGroup[]; hidden: number } {
+  let left = lines
+  let hidden = 0
+  const fitted: FittedPackingGroup[] = []
+  for (const group of groups) {
+    const open = group.items.filter((i) => !i.checked)
+    const packed = group.items.length - open.length
+    if (left < 2) {
+      hidden += open.length
+      continue
+    }
+    // Things still to pack take the lines first; the "N packed" line only if one is left.
+    const items = open.slice(0, left - 1)
+    hidden += open.length - items.length
+    const showPacked = packed > 0 && left - 1 - items.length > 0
+    left -= 1 + items.length + (showPacked ? 1 : 0)
+    fitted.push({ ...group, items, packed, showPacked })
+  }
+  return { groups: fitted, hidden }
+}

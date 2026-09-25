@@ -9,7 +9,8 @@ import type { DayTripState } from './tripState'
 import { decisionsFor, type DecisionAction } from './decisions'
 import WallDecisionsSheet, { type DatedDecision } from './WallDecisions'
 import WallHandOffSheet from './WallHandOffSheet'
-import type { WallChecklistItem } from './packing'
+import { packingGroups, type WallChecklistItem } from './packing'
+import WallPackingSheet from './WallPackingSheet'
 import { eveningFocus, selectPosture, type Posture } from './posture'
 import { PREVIEW_MS, nextPreview, shownPosture, type PreviewState } from './preview'
 import { pigmentIndexes } from './score'
@@ -59,6 +60,8 @@ export interface WallViewProps {
   week?: DayPlan[]
   /** Deletes an event or reminder (the event sheet's Delete, after a yes). */
   deleteEvent?: (event: EditableEvent) => Promise<void>
+  /** Ticks or unticks a packing item. */
+  toggleChecklist?: (item: WallChecklistItem) => void
 }
 
 const POSTURE_NAMES: Record<Posture, string> = { launch: 'Full day', calm: 'Calm', evening: 'Evening' }
@@ -69,10 +72,11 @@ const POSTURE_NAMES: Record<Posture, string> = { launch: 'Full day', calm: 'Calm
  * minutes); a tap on a calendar item opens its sheet (details, then edit).
  */
 export default function WallView(props: WallViewProps) {
-  const { now, members, today, tomorrow, currentWeather, checklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, openRequest = null, tripStateFor, tripActions, week = [], deleteEvent } = props
+  const { now, members, today, tomorrow, currentWeather, checklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, openRequest = null, tripStateFor, tripActions, week = [], deleteEvent, toggleChecklist } = props
   // The driver picker: from "Hand off" on the Next Move, or a decision answered "choose a driver".
   const [handOff, setHandOff] = useState<{ trip: Trip; plan: DayPlan; tripIds: string[]; date: Date } | null>(null)
   const [decisionsOpen, setDecisionsOpen] = useState(false)
+  const [packingOpen, setPackingOpen] = useState(false)
   const [preview, setPreview] = useState<PreviewState | null>(null)
   // Another day tapped in the week strip: shown until a tap elsewhere, "Back to today", or 2 idle minutes.
   const [dayPreview, setDayPreview] = useState<{ date: Date; until: number } | null>(null)
@@ -195,6 +199,9 @@ export default function WallView(props: WallViewProps) {
         interaction={{ ...interaction, marks: marksFor(eveningPlan?.date) }}
         decisions={weekDecisions.filter((d) => eveningPlan && sameDay(d.date, eveningPlan.date))}
         onAnswer={tripActions ? answer : undefined}
+        onToggleItem={toggleChecklist}
+        onOpenEvent={(id) => eventsById.has(id) && setSelectedId(id)}
+        onSeeAllPacking={() => setPackingOpen(true)}
       />
     )
   } else if (shown.posture === 'calm') {
@@ -278,6 +285,12 @@ export default function WallView(props: WallViewProps) {
       {decisionsOpen && tripActions && (
         <WallDecisionsSheet decisions={weekDecisions} now={now} onAnswer={answer} onClose={() => setDecisionsOpen(false)} />
       )}
+      {packingOpen && toggleChecklist && shown.posture === 'evening' && (() => {
+        const focus = eveningFocus(now)
+        const plan = focus.day === 'today' ? shownToday : shownTomorrow
+        const packing = plan ? packingGroups(plan, checklist) : { groups: [], packed: 0, total: 0 }
+        return <WallPackingSheet groups={packing.groups} packed={packing.packed} total={packing.total} onToggle={toggleChecklist} onClose={() => setPackingOpen(false)} />
+      })()}
       {menuOpen && <WallMenu onClose={() => setMenuOpen(false)} />}
     </div>
   )

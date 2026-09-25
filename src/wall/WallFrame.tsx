@@ -13,7 +13,7 @@ import { useWakeWord } from '../hooks/useWakeWord'
 import type { FamilyMember } from '../types'
 import WallAssistantBand from './WallAssistantBand'
 import { packingEventIds } from './packing'
-import { useWallChecklist } from './useWallChecklist'
+import { toggleChecklistItem, useWallChecklist } from './useWallChecklist'
 import { useMinuteClock } from './useMinuteClock'
 import { useWallDay } from './useWallDay'
 import WallView from './WallView'
@@ -75,5 +75,5 @@ export default function WallFrame() {
       }}
     />
   ) : null
-  return <WallView now={now} members={members} today={today} tomorrow={tomorrow} currentWeather={currentWeather} checklist={checklist} allEvents={allEvents} routines={routines} dayOffs={dayOffs} onAsk={ask} overlay={band} pointAt={bandOpen ? pointAt : null} openRequest={openRequest} tripStateFor={tripStateFor} tripActions={tripActions} week={week} deleteEvent={(event) => deleteCalendarEvent(supabase, queryClient, event.id, event as unknown as EventWithDetails)} />
+  return <WallView now={now} members={members} today={today} tomorrow={tomorrow} currentWeather={currentWeather} checklist={checklist} allEvents={allEvents} routines={routines} dayOffs={dayOffs} onAsk={ask} overlay={band} pointAt={bandOpen ? pointAt : null} openRequest={openRequest} tripStateFor={tripStateFor} tripActions={tripActions} week={week} deleteEvent={(event) => deleteCalendarEvent(supabase, queryClient, event.id, event as unknown as EventWithDetails)} toggleChecklist={(item) => void toggleChecklistItem(queryClient, item.id, !item.checked)} />
 }

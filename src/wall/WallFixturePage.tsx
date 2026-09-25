@@ -32,6 +32,7 @@ export default function WallFixturePage() {
   // Trip decisions live in memory here (the real wall saves them to settings).
   const [tripState, setTripState] = useState<WallTripState>({})
   const [evs, setEvs] = useState(events as unknown as WallEvent[])
+  const [checklist, setChecklist] = useState(CHECKLIST)
   const plan = (date: Date) =>
     buildDayPlan({ date, members: members as WallMember[], routines: routines as unknown as FamilyRoutine[], events: evs, tripState: dayState(tripState, date) })
   const tripActions = {
@@ -55,7 +56,7 @@ export default function WallFixturePage() {
     <Route path="/calendar" element={<div data-testid="fixture-calendar">Calendar page</div>} />
     <Route path="*" element={
     <div data-testid="wall-fixture" className="h-[1080px] w-[1920px]">
-      <WallView now={now} members={members as WallMember[]} today={plan(day)} tomorrow={plan(next)} currentWeather={WEATHER} checklist={CHECKLIST} allEvents={evs} routines={routines as unknown as FamilyRoutine[]} tripStateFor={(date) => dayState(tripState, date)} tripActions={tripActions} week={week} onAsk={() => {}} deleteEvent={async (event) => setEvs((list) => list.filter((e) => e.id !== event.id))} />
+      <WallView now={now} members={members as WallMember[]} today={plan(day)} tomorrow={plan(next)} currentWeather={WEATHER} checklist={checklist} allEvents={evs} routines={routines as unknown as FamilyRoutine[]} tripStateFor={(date) => dayState(tripState, date)} tripActions={tripActions} week={week} onAsk={() => {}} deleteEvent={async (event) => setEvs((list) => list.filter((e) => e.id !== event.id))} toggleChecklist={(item) => setChecklist((list) => list.map((i) => (i.id === item.id ? { ...i, checked: !i.checked } : i)))} />
     </div>
     } />
     </Routes>
