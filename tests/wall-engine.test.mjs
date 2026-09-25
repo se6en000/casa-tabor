@@ -273,3 +273,23 @@ test('unchanged: a parent alone at their own appointment is the only traveler; a
   assert.equal(baseball.driverId, null)
   assert.deepEqual(baseball.travelerIds, [])
 })
+
+test('an event at home is in the lane of everyone in it, not only the primary (Jaida watching Owen and Emme, 2026-09-26)', () => {
+  const sitter = {
+    id: 'jaida', title: 'Jaida Watching Owen and Emme', event_type: 'event', all_day: false,
+    start_time: at(26, 12, 0).toISOString(), end_time: at(26, 15, 0).toISOString(),
+    location_name: 'Home', address: '3209 Washington Road, West Palm Beach, FL, 33405-1646',
+    members: [{ family_member_id: 'emme', role: 'primary' }, { family_member_id: 'owen', role: 'attendee' }],
+  }
+  const plan = buildDayPlan({ date: SATURDAY, members, routines, events: [sitter] })
+  const inLane = (id) => (plan.lanes.get(id) ?? []).some((s) => s.sourceId === 'jaida' && s.kind === 'activity')
+  assert.equal(inLane('emme'), true)
+  assert.equal(inLane('owen'), true)
+})
+
+test('a reminder stays with the person who does it: "Pick up Photobook for Liv" is in Jake\'s lane, not Liv\'s', () => {
+  const plan = buildDayPlan({ date: FRIDAY, members, routines, events })
+  const inLane = (id) => (plan.lanes.get(id) ?? []).some((s) => s.sourceId === 'photobook')
+  assert.equal(inLane('jake-id'), true)
+  assert.equal(inLane('liv'), false)
+})

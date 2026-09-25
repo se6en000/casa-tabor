@@ -258,7 +258,9 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
       .filter((m): m is { id: string; role: string | null } => Boolean(m.id))
     const participants = [...new Set(refs.filter((m) => m.role !== 'driver').map((m) => m.id))]
     const primaries = refs.filter((m) => m.role === 'primary').map((m) => m.id)
-    const owners = primaries.length > 0 ? primaries : participants
+    // A reminder belongs to whoever does it ("Pick up Photobook for Liv" is Jake's job);
+    // an event belongs to everyone in it ("Jaida watching Owen and Emme" is both kids').
+    const owners = event.event_type === 'reminder' && primaries.length > 0 ? primaries : participants
 
     if (event.all_day) {
       allDay.push({ sourceId: event.id, title: event.title, memberIds: participants })
