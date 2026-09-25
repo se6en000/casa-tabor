@@ -159,3 +159,27 @@ test('wall: "One trip" gives both games to one driver', async ({ page }) => {
   await expect(wall.getByText('NOTHING TO DECIDE')).toBeVisible()
   await expect(wall.getByText('Leaves at 11:56').first()).toBeVisible()
 })
+
+test('wall: the week strip shows another day\'s Score, and comes back to today', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T07:12:00')
+  const wall = page.getByTestId('wall-fixture')
+  const week = wall.getByRole('region', { name: 'Next seven days' })
+  await expect(week.getByRole('button', { name: /^Today/ })).toHaveAttribute('aria-pressed', 'true')
+
+  await week.getByRole('button', { name: /^Saturday, September 26/ }).click()
+  await expect(wall.getByText("SATURDAY · WHO'S WHERE")).toBeVisible()
+  await expect(wall.getByText('LOOKING AHEAD')).toBeVisible()
+  await expect(wall.getByText(/First out: Jake → Ferrin Park Field 1 · leave 11:56/)).toBeVisible()
+  await expect(wall.getByText(/Previewing/)).toHaveCount(0)
+  await expect(wall).toHaveScreenshot('week-saturday.png')
+
+  await wall.getByRole('button', { name: 'Back to today' }).click()
+  await expect(wall.getByText("TODAY · WHO'S WHERE")).toBeVisible()
+
+  // A tap anywhere else on the wall also comes back to today (not on to the next face).
+  await week.getByRole('button', { name: /^Sunday/ }).click()
+  await expect(wall.getByText("SUNDAY · WHO'S WHERE")).toBeVisible()
+  await wall.getByText('LOOKING AHEAD').click()
+  await expect(wall.getByText("TODAY · WHO'S WHERE")).toBeVisible()
+  await expect(wall.getByText(/Previewing/)).toHaveCount(0)
+})

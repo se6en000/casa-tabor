@@ -322,6 +322,14 @@
         "reason": "Family Wall: its own small component set by design (CLAUDE.md Wall exception) — the MT menu button and the menu's close button, styled with wall-* tokens."
       },
       {
+        "path": "src/wall/WallWeek.tsx",
+        "reason": "Family Wall: the week strip's day cells, part of the Wall's own component set."
+      },
+      {
+        "path": "src/wall/WallLaunch.tsx",
+        "reason": "Family Wall: the \"Back to today\" button shown while another day is on show, part of the Wall's own component set."
+      },
+      {
         "path": "src/wall/WallDecisions.tsx",
         "reason": "Family Wall: the decision answer buttons, the TO DECIDE count and the sheet's close button, part of the Wall's own component set."
       },

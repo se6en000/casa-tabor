@@ -11,7 +11,7 @@ import WallDecisionsSheet, { type DatedDecision } from './WallDecisions'
 import WallHandOffSheet from './WallHandOffSheet'
 import type { WallChecklistItem } from './packing'
 import { eveningFocus, selectPosture, type Posture } from './posture'
-import { nextPreview, shownPosture, type PreviewState } from './preview'
+import { PREVIEW_MS, nextPreview, shownPosture, type PreviewState } from './preview'
 import { pigmentIndexes } from './score'
 import { eventForPerson } from './selection'
 import WallCalm from './WallCalm'
@@ -19,6 +19,8 @@ import WallEvening from './WallEvening'
 import WallEventSheet from './WallEventSheet'
 import WallLaunch from './WallLaunch'
 import WallMenu, { MenuButton, MicButton } from './WallMenu'
+import WallWeek from './WallWeek'
+import { weekDays } from './week'
 import type { ScoreInteraction } from './WallScore'
 
 export interface WallViewProps {
@@ -70,6 +72,8 @@ export default function WallView(props: WallViewProps) {
   const [handOff, setHandOff] = useState<{ trip: Trip; plan: DayPlan; tripIds: string[]; date: Date } | null>(null)
   const [decisionsOpen, setDecisionsOpen] = useState(false)
   const [preview, setPreview] = useState<PreviewState | null>(null)
+  // Another day tapped in the week strip: shown until a tap elsewhere, "Back to today", or 2 idle minutes.
+  const [dayPreview, setDayPreview] = useState<{ date: Date; until: number } | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [draftPreview, setDraftPreview] = useState<EditableEvent | null>(null)
@@ -91,7 +95,10 @@ export default function WallView(props: WallViewProps) {
   const shownTomorrow = useMemo(() => withDraft(tomorrow), [withDraft, tomorrow])
 
   const auto = selectPosture(today, now)
-  const shown = shownPosture(auto, preview, Date.now())
+  const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString()
+  const lookAhead = dayPreview && Date.now() < dayPreview.until && !sameDay(dayPreview.date, now) ? dayPreview.date : null
+  // Looking at another day is always the full Score.
+  const shown = lookAhead ? { posture: 'launch' as Posture, preview: false } : shownPosture(auto, preview, Date.now())
 
   // Drop the preview exactly when it lapses (the minute clock alone could keep it up to a minute longer).
   useEffect(() => {
@@ -99,6 +106,11 @@ export default function WallView(props: WallViewProps) {
     const timer = window.setTimeout(() => setPreview(null), Math.max(0, preview.until - Date.now()))
     return () => window.clearTimeout(timer)
   }, [preview])
+  useEffect(() => {
+    if (!dayPreview) return
+    const timer = window.setTimeout(() => setDayPreview(null), Math.max(0, dayPreview.until - Date.now()))
+    return () => window.clearTimeout(timer)
+  }, [dayPreview])
 
   useEffect(() => {
     if (openRequest) setSelectedId(openRequest.id)
@@ -134,7 +146,6 @@ export default function WallView(props: WallViewProps) {
         .sort((a, b) => a.at.getTime() - b.at.getTime()),
     [week, members, now, tripStateFor],
   )
-  const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString()
   const marksFor = (date: Date | undefined) =>
     Object.fromEntries(
       weekDecisions.filter((d) => date && sameDay(d.date, date)).flatMap((d) => d.sourceIds.map((id) => [id, d.key])),
@@ -187,11 +198,39 @@ export default function WallView(props: WallViewProps) {
   } else if (shown.posture === 'calm') {
     face = <WallCalm now={now} members={members} plan={shownToday} currentWeather={currentWeather} onSelectPerson={openPerson} decisionCount={weekDecisions.length} onOpenDecisions={tripActions ? () => setDecisionsOpen(true) : undefined} />
   } else {
-    face = <WallLaunch now={now} members={members} plan={shownToday} currentWeather={currentWeather} onOpenMenu={openMenu} onAsk={onAsk} interaction={{ ...interaction, marks: marksFor(shownToday?.date) }} moveActions={moveActions} decisionCount={weekDecisions.length} onOpenDecisions={tripActions ? () => setDecisionsOpen(true) : undefined} />
+    const lookPlan = lookAhead ? withDraft(week.find((p) => sameDay(p.date, lookAhead)) ?? null) : null
+    const launchPlan = lookAhead ? lookPlan : shownToday
+    const startOf = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate())
+    face = (
+      <WallLaunch
+        now={now}
+        members={members}
+        plan={launchPlan}
+        currentWeather={currentWeather}
+        onOpenMenu={openMenu}
+        onAsk={onAsk}
+        interaction={{ ...interaction, marks: marksFor(launchPlan?.date) }}
+        moveActions={moveActions}
+        decisionCount={weekDecisions.length}
+        onOpenDecisions={tripActions ? () => setDecisionsOpen(true) : undefined}
+        day={lookAhead ? { asOf: startOf(lookAhead), onBack: () => setDayPreview(null) } : null}
+        week={
+          week.length > 1 ? (
+            <WallWeek
+              days={weekDays(week, members, weekDecisions, now)}
+              members={members}
+              pigmentOf={(id) => pigments.get(id) ?? null}
+              shownKey={(lookAhead ?? now).toDateString()}
+              onSelect={(date) => setDayPreview(sameDay(date, now) ? null : { date, until: Date.now() + PREVIEW_MS })}
+            />
+          ) : null
+        }
+      />
+    )
   }
 
   return (
-    <div className="relative h-full w-full" onClick={() => setPreview((state) => nextPreview(auto, state, Date.now()))}>
+    <div className="relative h-full w-full" onClick={() => (lookAhead ? setDayPreview(null) : setPreview((state) => nextPreview(auto, state, Date.now())))}>
       {face}
       {shown.posture !== 'launch' && <MenuButton onOpen={openMenu} className="absolute right-[44px] top-[44px]" />}
       {shown.posture !== 'launch' && onAsk && <MicButton onAsk={onAsk} className="absolute right-[108px] top-[38px]" />}
