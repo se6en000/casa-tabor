@@ -93,7 +93,7 @@ export default function WallEvening({ now, members, plan, label, focusDay, check
             </div>
             {shownGroups.map((group) => (
               <div key={group.eventId} className="flex flex-col">
-                <div className="flex h-[40px] items-end border-t border-wall-rule pb-[4px] font-display text-wall-heading font-bold">{group.heading}</div>
+                <div className="h-[40px] truncate whitespace-nowrap border-t border-wall-rule pt-[8px] font-display text-wall-heading font-bold">{group.heading}</div>
                 {group.items.map((item) => (
                   <div key={item.id} className="flex h-[40px] items-center gap-[14px] pl-[4px]">
                     <span
