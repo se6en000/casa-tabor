@@ -262,6 +262,10 @@ Removing stale tests reduces *friction* (they break on harmless refactors), not 
 - [ ] **P3.7 — Surprise-safe privacy** — items marked private (e.g. birthday prep) never render on the wall or on the honoree's phone. Test proves it.
   - Evidence: _
 
+- [ ] **P3.8 — Who's going: add or change the people on an event, from the wall** — added 2026-09-25 at Jake's request.
+  - Done means: a design board in the Wall language (Jake approves before build, per P3.0), then in the event sheet's edit mode a "Who's going" row: every family member as a tappable pigment disc, on/off, with "was …" like the other fields; the preview shows the lanes and trips that change ("Owen joins Jake's trip", "nobody is going: this becomes unassigned"); saving reuses `toggleEventAttendee` in `eventMutations.ts` (adds as "attendee"; the engine already counts attendees as going). Drivers stay separate (P3.3), so choosing who goes never quietly makes someone the driver. Behavioral tests for the draft, preview and save steps; a Playwright test on the fixture; verified with a real save on the kiosk.
+  - Evidence: _
+
 ## Phase 4 — Phone lens
 
 - [ ] **P4.1 — "My day" on the phone** — my moves, what others covered, my personal to-dos, private items. Matches 02d.
@@ -308,6 +312,7 @@ record bundle size before/after; re-run the full suite after each batch.
 | 2026-09-25 | P3.0 boards approved (event details sheet, assistant band, voice draft card) | Jake |
 | 2026-09-25 | Voice starts two ways, both always on: a mic button beside the MT monogram in every face, and the wake word heard on the Pi (today "Alexa"; "Hey Casa" later); either one raises the same band | Jake (left to Claude's design call) |
 | 2026-09-25 | Edit on the wall by touch (not sent to the phone), starting with times, dates, titles and places of events and reminders; places from saved places or Google Maps, with saving new ones | Jake |
+| 2026-09-25 | Add/change the people on an event from the wall (P3.8) | Jake |
 | 2026-09-25 | Old email-intelligence docs moved to `docs/email-intelligence/`; `.agents/` run artifacts removed from the repo (still in git history) | Jake |
 
 ## Open questions for Jake
