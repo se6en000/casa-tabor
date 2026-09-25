@@ -168,13 +168,14 @@ Removing stale tests reduces *friction* (they break on harmless refactors), not 
 
 ## Phase 2 — Wall v1 (read-only) on the kiosk
 
-- [ ] **P2.0 — Wall tokens in the design-token system**
+- [~] **P2.0 — Wall tokens in the design-token system** — Claimed: Claude (Opus 5.5), 2026-09-25
   - Done means: the Wall palette (limestone, brass, ink, rust, five person pigments plus their dark-posture variants) and the distance type scale (across-the-room / walking-past / standing-at-it sizes) are registered in `src/design-system/tokens.mjs` and generated CSS; `tokens:check` and `style:check` pass; no raw hex in `src/wall/` components.
-  - Evidence: _
+  - Evidence (partial): `77a5c5c8` — `wall-*` colors (ground, ink, rule, stone, brass, rust, six pigments) in `staticColor`; new `wallType` group (fixed stage px, 16px minimum) emitted by `generate-design-tokens.mjs`; tokens/style/certify gates pass; no hex in `src/wall/`. **Remaining:** dark-posture (evening) variants — do with P2.4.
 
-- [ ] **P2.1 — Wall shell**
+- [~] **P2.1 — Wall shell** — Claimed: Claude (Opus 5.5), 2026-09-25
   - Done means: `/wall` route; fixed 1920×1080 stage (scales to the physical screen); `src/wall/tokens` (limestone / brass / ink, person pigments, rust reserved for "move now"); a guardrail test that fails if anything in `src/wall/` imports old-homepage code.
-  - Evidence: _
+  - Criteria changed 2026-09-25 by Claude: tokens live in `src/design-system/tokens.mjs` (P2.0), not `src/wall/tokens`, so the existing token/style gates cover them — decided with Jake alongside the CLAUDE.md design exception.
+  - Evidence (partial): `77a5c5c8` — `/wall` renders outside the old app shell (`src/App.tsx` RootSwitch, lazy 6 KB chunk) with auto-update and existing display-sleep kept; `computeStageFit` scales/letterboxes the 1920×1080 stage; frame shows live minute-aligned clock, date, empty Next Move slot, and one lane per home-screen member (Jake, Kelly, Liv, Emme, Owen, Giselle) with hour axis, brass now-line and veiled past. Tests that run the code: `tests/wall-frame.test.mjs` (10 tests: stage fit, minute clock, date/clock format, timeline mapping, lane selection, pigments); import guardrail `tests/wall-isolation.test.mjs`. Live-verified 2026-09-25 on production at 1920 wide in Chrome, no console errors. **Remaining:** verify on the physical Pi kiosk once Jake points it at `/wall`.
 
 - [ ] **P2.2 — The Score** — lanes × time, brass now-line, veiled past, driver monograms at drop-off and pickup, hatched driving legs in the driver's color, work shown only as "Work", "everyone home by" marker. Matches board 02a. Live on kiosk.
   - Evidence: _
@@ -265,3 +266,4 @@ record bundle size before/after; re-run the full suite after each batch.
 - Which calendars are Jake's and Kelly's work calendars (for busy/free in P3.6)?
 - Is 120 s an acceptable ship target (P0.7), or tighter?
 - Besides Claude Code, which agents/tools will work on this repo (so their instruction files point here too)?
+- Giselle (caregiver, can drive) shows on the home screen, so the Wall gives her a lane. Always show her lane, or only on days she's driving or caring for someone?
