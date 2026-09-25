@@ -9,7 +9,9 @@ export default defineConfig({
   reporter: 'line',
   retries: 1,
   // Tight on purpose: a thin new element (the 44px MT ring) changes only ~80 pixels; runs on the Pi repeat exactly.
-  expect: { toHaveScreenshot: { animations: 'disabled', maxDiffPixels: 40 } },
+  // The first page loads compile the fixture on the dev server; two workers starting together can
+  // take more than the default 5 s to show it (this only waits longer; screenshots stay strict).
+  expect: { timeout: 20_000, toHaveScreenshot: { animations: 'disabled', maxDiffPixels: 40 } },
   use: {
     baseURL: 'http://127.0.0.1:4175',
     browserName: 'chromium',
