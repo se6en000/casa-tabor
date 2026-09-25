@@ -42,3 +42,11 @@ test('state older than a week is dropped when something new is saved', () => {
   const next = withHandOff(old, FRIDAY, 'y', 'jake-id')
   assert.deepEqual(Object.keys(next), [dayKey(FRIDAY)])
 })
+
+test('"Leaving now" at the wall\'s own minute is on the road at once (the wall clock is minute-aligned)', () => {
+  const base = plan()
+  const id = lipickup(base).id
+  const wallNow = at(25, 15, 5) // what the minute clock shows, whatever the seconds
+  const left = plan(dayState(withDeparted({}, FRIDAY, [id], wallNow), FRIDAY))
+  assert.equal(selectNextMove(left, wallNow).status, 'en_route')
+})

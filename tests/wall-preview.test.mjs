@@ -40,3 +40,8 @@ test('the kiosk URL sets or clears the wall-home flag', () => {
   assert.equal(wallHomeFlagFromUrl('/', '?density=kiosk&wallHome=0'), '0')
   assert.equal(wallHomeFlagFromUrl('/wall', ''), null)
 })
+
+test('a preview of the face the wall would show anyway is no preview', () => {
+  const p = nextPreview('calm', null, t0) // previewing "launch"
+  assert.deepEqual(shownPosture('launch', p, t0 + 1000), { posture: 'launch', preview: false })
+})

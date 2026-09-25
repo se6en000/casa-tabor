@@ -27,7 +27,8 @@ export default function WallFrame() {
   const tripActions = useMemo(() => {
     const day = today?.date ?? now
     return {
-      leaving: (ids: string[]) => void trips.save(withDeparted(trips.state, day, ids, new Date())),
+      // The wall's own (minute-aligned) time, so the trip reads as on the road at once.
+      leaving: (ids: string[]) => void trips.save(withDeparted(trips.state, day, ids, now)),
       undoLeaving: (ids: string[]) => void trips.save(withoutDeparted(trips.state, day, ids)),
       handOff: async (trip: Trip, driverId: string) => {
         // School runs have no event of their own: today's hand-off is kept with the wall's day state.

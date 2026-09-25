@@ -16,7 +16,8 @@ const active = (state: PreviewState | null, nowMs: number) => (state && nowMs < 
 
 export function shownPosture(auto: Posture, state: PreviewState | null, nowMs: number): { posture: Posture; preview: boolean } {
   const live = active(state, nowMs)
-  return live ? { posture: live.posture, preview: true } : { posture: auto, preview: false }
+  // Once the wall would show that face anyway, it isn't a preview any more.
+  return live && live.posture !== auto ? { posture: live.posture, preview: true } : { posture: auto, preview: false }
 }
 
 /** The preview after one more tap; null means back to automatic. */
