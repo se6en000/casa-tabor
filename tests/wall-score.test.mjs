@@ -119,6 +119,22 @@ test('during an item at home or with no place, the lane says what it is and unti
   assert.equal(lane(buildScore(plan, members, at(25, 16, 40)), 'emme').status, 'Home · Emme Practice Violin with Meredith · until 5:15')
 })
 
+test('kids riding along read: leaving with Jake, riding to the park, then at the park', () => {
+  const coffee = {
+    id: 'coffee', title: 'Meet Coffee Lady 8:15 - tape up flyers', event_type: 'event', all_day: false,
+    start_time: at(26, 8, 0).toISOString(), end_time: at(26, 9, 0).toISOString(),
+    location_name: 'George Petty Park', address: '3050 Washington Rd, West Palm Beach, FL, 33405',
+    members: [{ family_member_id: 'jake-id', role: 'primary' }, { family_member_id: 'emme', role: 'attendee' }, { family_member_id: 'owen', role: 'attendee' }],
+    enrichment: { drive_time_mins: 5, departure_time: null },
+  }
+  const plan = buildDayPlan({ date: SATURDAY, members, routines, events: [...events, coffee] })
+  for (const kid of ['emme', 'owen']) {
+    assert.equal(lane(buildScore(plan, members, at(26, 7, 0)), kid).status, 'Leaves at 7:55 with Jake')
+    assert.equal(lane(buildScore(plan, members, at(26, 7, 57)), kid).status, 'Riding to George Petty Park')
+    assert.equal(lane(buildScore(plan, members, at(26, 8, 30)), kid).status, 'George Petty Park · until 9:00')
+  }
+})
+
 test('a child leaving with nobody to drive says so', () => {
   const withOwen = events.map((e) => (e.id === 'baseball' ? { ...e, members: [{ family_member_id: 'owen', role: 'primary' }] } : e))
   const score = buildScore(buildDayPlan({ date: SATURDAY, members, routines, events: withOwen }), members, at(26, 9, 0))

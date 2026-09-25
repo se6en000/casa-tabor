@@ -208,3 +208,68 @@ test('a reminder with a place drives the next move like any event', () => {
   assert.equal(move.trips[0].sourceId, 'photobook')
   assert.equal(move.minutesUntilLeave, 10)
 })
+
+// ---- Riding along (P2.8) -------------------------------------------------------
+// Saturday's real "Meet Coffee Lady" at George Petty Park: Jake (primary, drives), Emme and Owen going too.
+const pettyPark = 'George Petty Park'
+const pettyAddress = '3050 Washington Rd, West Palm Beach, FL, 33405'
+const coffee = {
+  id: 'coffee', title: 'Meet Coffee Lady 8:15 - tape up flyers', event_type: 'event', all_day: false,
+  start_time: at(26, 8, 0).toISOString(), end_time: at(26, 9, 0).toISOString(),
+  location_name: pettyPark, address: pettyAddress,
+  members: [{ family_member_id: 'jake-id', role: 'primary' }, { family_member_id: 'emme', role: 'attendee' }, { family_member_id: 'owen', role: 'attendee' }],
+  enrichment: { drive_time_mins: 5, departure_time: null },
+}
+const withCoffee = (event = coffee) => buildDayPlan({ date: SATURDAY, members, routines, events: [...events, event] })
+
+test('a parent driving themself takes the kids along: they are travelers, the driver is still the parent', () => {
+  const trip = withCoffee().trips.find((t) => t.sourceId === 'coffee')
+  assert.equal(trip.driverId, 'jake-id')
+  assert.equal(trip.driverSource, 'self')
+  assert.deepEqual([...trip.travelerIds].sort(), ['emme', 'jake-id', 'owen'])
+})
+
+test('riders get the outing and their rides in their own lanes, the driver gets it and his drives, nobody gets it twice', () => {
+  const plan = withCoffee()
+  for (const kid of ['emme', 'owen']) {
+    const segs = plan.lanes.get(kid).filter((s) => s.sourceId === 'coffee')
+    assert.equal(segs.filter((s) => s.kind === 'activity').length, 1)
+    assert.equal(segs.find((s) => s.kind === 'activity').placeStatus, 'away')
+    const rides = segs.filter((s) => s.kind === 'drive')
+    assert.equal(rides.length, 2)
+    assert.ok(rides.every((s) => s.driverId === 'jake-id'))
+  }
+  const jake = plan.lanes.get('jake-id').filter((s) => s.sourceId === 'coffee')
+  assert.equal(jake.filter((s) => s.kind === 'activity').length, 1)
+  assert.equal(jake.filter((s) => s.kind === 'drive').length, 2)
+})
+
+test('as stored in production: a saved plan with Jake driving, on the same road as home, is an outing with everyone', () => {
+  const stored = {
+    ...coffee,
+    plan_override: { transportation_plan: { legs: [
+      { purpose: 'appointment', timing: 'arrive_by', time: '08:00', driverId: 'jake-id', driverName: 'Jake' },
+      { purpose: 'return', timing: 'depart_at', time: '09:00', driverId: 'jake-id', driverName: 'Jake' },
+    ] } },
+  }
+  const trip = withCoffee(stored).trips.find((t) => t.sourceId === 'coffee')
+  assert.ok(trip, 'George Petty Park (3050 Washington Rd) is not home')
+  assert.equal(trip.driverSource, 'plan')
+  assert.deepEqual([...trip.travelerIds].sort(), ['emme', 'jake-id', 'owen'])
+})
+
+test('unchanged: a parent alone at their own appointment is the only traveler; a saved driver and a missing driver are as before', () => {
+  const alone = events.map((e) => (e.id === 'photobook'
+    ? { ...e, members: [{ family_member_id: 'jake-id', role: 'primary' }], location_name: 'Photobook Shop', address: 'Publix Plaza, Palm Beach', enrichment: { drive_time_mins: 15, departure_time: null } }
+    : e))
+  const photobook = buildDayPlan({ date: FRIDAY, members, routines, events: alone }).trips.find((t) => t.sourceId === 'photobook')
+  assert.deepEqual(photobook.travelerIds, ['jake-id'])
+  assert.equal(photobook.driverSource, 'self')
+  const sat = saturday()
+  const softball = sat.trips.find((t) => t.sourceId === 'softball')
+  assert.equal(softball.driverSource, 'plan')
+  assert.deepEqual(softball.travelerIds, ['jake-id'])
+  const baseball = sat.trips.find((t) => t.sourceId === 'baseball')
+  assert.equal(baseball.driverId, null)
+  assert.deepEqual(baseball.travelerIds, [])
+})

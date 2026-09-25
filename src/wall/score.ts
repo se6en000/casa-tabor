@@ -90,7 +90,13 @@ function laneStatus(memberId: string, segments: LaneSegment[], trips: Trip[], no
     if (drive.driverId !== memberId && where && trip?.kind !== 'pickup') return `Riding to ${where}`
     return 'On the road'
   }
-  const here = current.find((s) => s.kind === 'activity' && s.placeStatus === 'away') ?? current.find((s) => s.kind === 'at_place')
+  // Where someone is: the place, like school ("Bak Middle School · until 3:30").
+  const out = current.find((s) => s.kind === 'activity' && s.placeStatus === 'away')
+  if (out) {
+    const place = trips.find((t) => t.sourceId === out.sourceId)?.destination.name.split(',')[0].trim()
+    return `${place || out.label} · until ${clockTime(out.end)}`
+  }
+  const here = current.find((s) => s.kind === 'at_place')
   if (here) return `${here.label} · until ${clockTime(here.end)}`
   const doing = current.find((s) => s.kind === 'activity')
   if (doing) return `${doing.placeStatus === 'home' ? 'Home · ' : ''}${doing.label} · until ${clockTime(doing.end)}`

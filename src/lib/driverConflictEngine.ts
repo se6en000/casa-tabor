@@ -144,8 +144,9 @@ export function isEventAtHome(evt: EventWithDetails | null | undefined): boolean
     return true
   }
 
-  // 2. Household address match
-  if (addr.includes('3209 washington') || addr.includes('washington road') || addr.includes('washington rd')) {
+  // 2. Household address match — by house number: Washington Rd is a long road, and
+  // other places on it (George Petty Park, 3050) are not home (2026-09-25).
+  if (addr.includes('3209 washington')) {
     return true
   }
 
@@ -157,7 +158,7 @@ export function isEventAtHome(evt: EventWithDetails | null | undefined): boolean
   // 4. Common home lessons & activities without off-site address
   if (
     (title.includes('practice violin') || title.includes('violin practice') || title.includes('piano practice')) &&
-    (!addr || addr.includes('3209 washington') || addr.includes('washington road') || loc === 'home' || !loc)
+    (!addr || addr.includes('3209 washington') || loc === 'home' || !loc)
   ) {
     return true
   }

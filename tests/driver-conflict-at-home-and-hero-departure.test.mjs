@@ -26,6 +26,9 @@ test('isEventAtHome accurately detects home locations and no-drive overrides', (
   assert.equal(isEventAtHome({ location_name: 'Home (No Drive)', address: '' }), true)
   assert.equal(isEventAtHome({ location_name: 'Home Studio', address: '3209 Washington Road' }), true)
   assert.equal(isEventAtHome({ location_name: '', address: '3209 Washington Road, West Palm Beach, FL' }), true)
+  // Another house on the same road is not home (2026-09-25: George Petty Park, 3050 Washington Rd, read as home).
+  assert.equal(isEventAtHome({ location_name: 'George Petty Park', address: '3050 Washington Rd, West Palm Beach, FL, 33405' }), false)
+  assert.equal(isEventAtHome({ location_name: 'Neighbor', address: '3300 Washington Road, West Palm Beach, FL' }), false)
   assert.equal(isEventAtHome({
     location_name: 'Violin Lesson',
     address: '',

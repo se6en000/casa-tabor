@@ -256,7 +256,7 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
     const refs = (event.members ?? [])
       .map((m) => ({ id: m.family_member_id ?? m.family_member?.id ?? null, role: m.role ?? null }))
       .filter((m): m is { id: string; role: string | null } => Boolean(m.id))
-    const participants = refs.filter((m) => m.role !== 'driver').map((m) => m.id)
+    const participants = [...new Set(refs.filter((m) => m.role !== 'driver').map((m) => m.id))]
     const primaries = refs.filter((m) => m.role === 'primary').map((m) => m.id)
     const owners = primaries.length > 0 ? primaries : participants
 
@@ -294,7 +294,9 @@ export function buildDayPlan(input: BuildDayPlanInput): DayPlan {
       driverId = participants[0]
       driverSource = 'self'
     }
-    const travelerIds = driverSource === 'self' && driverId ? [driverId] : participants
+    // Everyone going travels; a self-driver is one of them, so a parent driving
+    // takes the kids along (who drives is decided above and doesn't change here).
+    const travelerIds = participants
 
     const driveMinutes = event.enrichment?.drive_time_mins ?? null
     const appointment = legs.find((l) => l.purpose === 'appointment' && l.timing === 'arrive_by')
