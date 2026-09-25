@@ -326,6 +326,37 @@ export default function SidecarCompanion({
     }
   }, [sidecarTab, selectedEvent?.start_time, selectedSidecarActionId])
 
+  // 2026-09-24: rapidly flipping (Flip to Copilot -> Flip to Event, or vice
+  // versa, faster than the 0.42s rotateY animation) could leave the card
+  // stuck mid-rotation with wrong pointer-events -- since isFrontView/
+  // aria-hidden/pointer-events all toggled INSTANTLY off the raw sidecarTab
+  // value while the visual rotation was still animating, a second flip
+  // triggered before the first settled could desync "what's visually facing
+  // the viewer" from "what's actually receiving touch/scroll input." Reproduced
+  // live: rapid flip-flip-then-scroll could leave the panel visually
+  // distorted or even trigger an unrelated close. Fixed by decoupling the
+  // ANIMATED/interactive state (displayedIsFlippedToAi) from the raw store
+  // value (sidecarTab) -- a rapid second flip while one is still in-flight
+  // now just queues, applying once the current animation's onAnimationComplete
+  // fires, instead of interrupting it. This is a general fix regardless of
+  // which of the several call sites changed sidecarTab.
+  //
+  // MUST stay above the `if (!aiDrawerOpen || isCook) return null` below --
+  // a first attempt placed these hooks after that early return and shipped
+  // a real Rules-of-Hooks violation (React error number 310, live crash on the
+  // second sidecar open) caught immediately in live verification, since the
+  // hook count differed between "sidecar closed" and "sidecar open" renders.
+  const desiredIsFlippedToAi = sidecarTab === 'ai'
+  const [displayedIsFlippedToAi, setDisplayedIsFlippedToAi] = useState(desiredIsFlippedToAi)
+  const [isFlipAnimating, setIsFlipAnimating] = useState(false)
+  useEffect(() => {
+    if (isFlipAnimating) return
+    if (desiredIsFlippedToAi !== displayedIsFlippedToAi) {
+      setIsFlipAnimating(true)
+      setDisplayedIsFlippedToAi(desiredIsFlippedToAi)
+    }
+  }, [desiredIsFlippedToAi, displayedIsFlippedToAi, isFlipAnimating])
+
   if (!aiDrawerOpen || isCook) return null
 
   const handleAskAiAboutEvent = (promptText?: string) => {
@@ -357,32 +388,6 @@ export default function SidecarCompanion({
   }
 
   const isActionView = sidecarTab === 'action' && Boolean(selectedSidecarActionId)
-
-  // 2026-09-24: rapidly flipping (Flip to Copilot -> Flip to Event, or vice
-  // versa, faster than the 0.42s rotateY animation) could leave the card
-  // stuck mid-rotation with wrong pointer-events -- since isFrontView/
-  // aria-hidden/pointer-events all toggled INSTANTLY off the raw sidecarTab
-  // value while the visual rotation was still animating, a second flip
-  // triggered before the first settled could desync "what's visually facing
-  // the viewer" from "what's actually receiving touch/scroll input." Reproduced
-  // live: rapid flip-flip-then-scroll could leave the panel visually
-  // distorted or even trigger an unrelated close. Fixed by decoupling the
-  // ANIMATED/interactive state (displayedIsFlippedToAi) from the raw store
-  // value (sidecarTab) -- a rapid second flip while one is still in-flight
-  // now just queues, applying once the current animation's onAnimationComplete
-  // fires, instead of interrupting it. This is a general fix regardless of
-  // which of the several call sites changed sidecarTab.
-  const desiredIsFlippedToAi = sidecarTab === 'ai'
-  const [displayedIsFlippedToAi, setDisplayedIsFlippedToAi] = useState(desiredIsFlippedToAi)
-  const [isFlipAnimating, setIsFlipAnimating] = useState(false)
-  useEffect(() => {
-    if (isFlipAnimating) return
-    if (desiredIsFlippedToAi !== displayedIsFlippedToAi) {
-      setIsFlipAnimating(true)
-      setDisplayedIsFlippedToAi(desiredIsFlippedToAi)
-    }
-  }, [desiredIsFlippedToAi, displayedIsFlippedToAi, isFlipAnimating])
-
   const isFrontView = !displayedIsFlippedToAi
 
   const sidecarContent = (
