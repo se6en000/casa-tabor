@@ -5,7 +5,7 @@ Labels are a heuristic starting point (import/read patterns); correct any file b
 
 | Label | Meaning | Count |
 |---|---|---|
-| keep | Runs real code | 201 |
+| keep | Runs real code | 202 |
 | convert | Only reads source text; replace with a test that runs the code when that code is next touched | 121 |
 | retire-with:homepage | Pins old-homepage code; delete in the same commit as that code (FAMILY_WALL_PLAN.md P5) | 35 |
 
@@ -365,6 +365,7 @@ Labels are a heuristic starting point (import/read patterns); correct any file b
 | verify-place-address.test.mjs | keep |
 | visual-regression-matrix.test.mjs | keep |
 | wake-catchup-sync.test.mjs | convert |
+| wall-engine.test.mjs | keep |
 | wall-frame.test.mjs | keep |
 | wall-isolation.test.mjs | convert |
 | youtube-cast-sync.test.mjs | keep |

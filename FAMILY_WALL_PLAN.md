@@ -155,28 +155,32 @@ Removing stale tests reduces *friction* (they break on harmless refactors), not 
 
 ## Phase 1 — The trip engine (one source of truth)
 
-- [ ] **P1.1 — Define the Trip model**
+- [x] **P1.1 — Define the Trip model**
   - Done means: `src/wall/engine/types.ts` defines a Trip/leg: who travels, who drives, from, to (place + label), leave-at, arrive-at, return leg, source event id, kind (drop-off, pickup, errand, appointment, game, …), confidence (computed vs. confirmed). Short doc comment per field. Reviewed against every board in the design.
-  - Evidence: _
+  - Evidence (2026-09-25): `src/wall/engine/types.ts` — `Trip` (travelers, driver + where the driver came from, destination, leaveAt/arriveAt/homeAt, drive minutes; `driverId: null` means nobody assigned, never a guess), `LaneSegment` (at a place / activity / driving, with the driver for the hatch color), `PlaceStatus` (home / away / unknown), `DayGap`, `SharedDestination`, `DayPlan` (lanes, trips, active members, unplaced items, all-day notes). Mapped to the design: Score lanes ← `lanes`; Next Move ← `Trip` via `selectNextMove`; Needs a decision ← `gaps` + `sharedDestinations`; whereabouts ← at-place segments; sitter lanes ← `activeMemberIds`.
 
-- [ ] **P1.2 — Build the engine: day → lanes**
+- [x] **P1.2 — Build the engine: day → lanes**
   - Done means:
     - Pure function(s) in `src/wall/engine/` turn events + routines + members + places + ETAs into per-person lanes (at-a-place blocks, driving legs, busy blocks) for any date. Wraps the reuse-map modules; copies none of them.
     - Anything that requires travel is a trip **regardless of item type** (reminders included).
     - Reports which members are active today (driving, caring for someone, or attending); the Wall passes that to `selectLaneMembers` so a sitter switched off on the home screen gets a lane on days they're involved (rule and tests already in `src/wall/lanes.ts`).
     - Behavioral tests with a fixture of the real Fri Sep 25 / Sat Sep 26 day: the 10:25 photobook pickup is a trip (leave 10:10, driver Jake); the 4:30 violin lesson is at home, not a trip; school blocks come from routines; Saturday's softball + baseball at Ferrin Park are detected as a mergeable pair.
-  - Evidence: _
+  - Criteria changed 2026-09-25 by Claude: production's photobook reminder has **no place, address or drive time** (the 10:10 leave time in the mockup was invented), so the engine cannot honestly make it a trip. Tested instead: it is kept, marked place-unknown (not home), listed in `unplaced`, and never dropped for being a reminder; the same reminder *with* a place becomes a trip (leave 10:10). "Busy blocks" moved to P3.6 (work busy/free), where their data source lands.
+  - Evidence (2026-09-25): `src/wall/engine/dayPlan.ts` `buildDayPlan()` — wraps `familyRoutines` (times, overrides, venue names, drive estimates) and `driverConflictEngine.isEventAtHome`; copies neither. Tests that run it: `tests/wall-engine.test.mjs` (18 tests) on `tests/fixtures/wall-day-2026-09-25.mjs` (production-shaped Fri/Sat): school blocks from routines; Emme+Owen share one Jake drop-off (7:25→7:35) even though one routine names Jake by id and the other by name; Liv drop-off Kelly 7:42; both pickups Giselle, who becomes active; photobook kept as place-unknown; reminder-with-place is a trip; explicit home never a trip; no school on weekends or a child's day off; softball driver from the saved plan; baseball with no driver/person → two gaps, never a guess; the two Ferrin Park games flagged as one-car-could-do-both; trips in departure order. Live check against production data (2026-09-25) produced exactly these trips and gaps.
+  - Found while building (real data): production enrichment wrote departure times with the wrong date for 226 of 365 events (see P1.5); the engine ignores any stored departure more than 6 h before arrival and uses arrival − drive time instead (tested with baseball's real 2020-dated value).
 
-- [ ] **P1.3 — "Next Move" selector**
+- [x] **P1.3 — "Next Move" selector**
   - Done means: one function answers "what must someone do next, who, where, leave when" from the engine output; tests cover a reminder that needs a drive, an at-home event, simultaneous departures, an event already in progress, and nothing-left-today.
-  - Evidence: _
+  - Evidence (2026-09-25): `src/wall/engine/nextMove.ts` `selectNextMove()`; tests in `tests/wall-engine.test.mjs`: before school (Emme & Owen, leave in 25 min), en route at 7:30, simultaneous departures grouped (within 5 min), nothing left after the last pickup even with an at-home lesson later, and a reminder with a place drives the next move (leave in 10 min). On live data: 7:00 → Emme & Owen drop-off; 1:45 PM → Giselle's pickup in 5 min.
 
-- [ ] **P1.4 — Store the driver on each leg**
+- [~] **P1.4 — Store the driver on each leg**
   - Done means: migration adds the performing member to trip legs (e.g. `event_logistics.member_id`, FK index, RLS); backfill from `event_members.role = 'driver'` and routines; the event editor and the AI write to it; the engine prefers stored drivers over inferred ones. SQL check of coverage recorded here.
-  - Evidence: _
+  - Criteria changed 2026-09-25 by Claude: the health check was incomplete — drivers per leg **are** stored, in `event_plan_overrides.transportation_plan.legs[].driverId` (next 14 days on 2026-09-25: 14 of 34 events have a plan; 14 of 26 legs name a driver), and the event editor and AI already write there. No new column is needed. Done now means: the engine reads plan drivers first and never defaults to a guessed parent (done, tested); the Wall's "Leaving now"/"Hand off" (P3.3) write to those legs; and coverage is reported with a SQL check.
+  - Evidence (partial): engine side done — see P1.2 (softball driver from plan; baseball with no driver is a gap, not "Jake").
 
 - [ ] **P1.5 — Drive-time coverage**
   - Done means: every non-home event with a location in the next 14 days has a drive time from home (≥ 95%, SQL query and result recorded); default origin is the home address setting.
+  - Finding 2026-09-25: 226 of 365 stored `event_enrichments.departure_time` values are more than 6 h from the event (215 have the wrong year), written from May 29 to today; 79 are upcoming. Root cause: `supabase/functions/enrich-event` stores the AI's `departure_time` text unvalidated (`normalizeText(read('departure_time'))`). Fix: validate it deterministically (must fall in the hours before the start; otherwise derive start − drive minutes, or null), plus a repair of existing rows — the repair changes production data, so it waits for Jake's OK.
   - Evidence: _
 
 ## Phase 2 — Wall v1 (read-only) on the kiosk
@@ -276,6 +280,8 @@ record bundle size before/after; re-run the full suite after each batch.
 | 2026-09-25 | Old email-intelligence docs moved to `docs/email-intelligence/`; `.agents/` run artifacts removed from the repo (still in git history) | Jake |
 
 ## Open questions for Jake
+
+- Repair the 226 wrong-date departure times in production (recompute from drive time, or clear them)? The Wall already ignores them; the old homepage may show wrong countdowns from them.
 
 - Which calendars are Jake's and Kelly's work calendars (for busy/free in P3.6)?
 - Is 120 s an acceptable ship target (P0.7), or tighter?
