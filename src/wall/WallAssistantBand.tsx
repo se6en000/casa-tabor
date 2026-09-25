@@ -8,7 +8,7 @@ import { getAssistantDeviceId } from '../lib/assistantTelemetry'
 import { invalidateAllCalendarQueries } from '../lib/eventMutations'
 import { supabase } from '../lib/supabase'
 import type { FamilyMember } from '../types'
-import { answerEventId, bandAnswer, bandState, latestExchange, pendingAction } from './assistant'
+import { answerEventId, bandAnswer, bandState, latestExchange, pendingAction, voiceFinal } from './assistant'
 import { readActionResult, requestArgsFor, responseBody } from './assistantActions'
 
 // The assistant band (boards 03b/03c): a dark band from the bottom. It listens,
@@ -36,6 +36,8 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   const [note, setNote] = useState<string | null>(null)
   const [working, setWorking] = useState(false)
   const lastTouch = useRef(Date.now())
+  const captured = useRef('')
+  const stopRef = useRef<() => void>(() => {})
 
   const { question, answer } = latestExchange(messages)
   const pending = pendingAction(messages)
@@ -92,9 +94,15 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
     },
     onFinalTranscript: (text) => {
       lastTouch.current = Date.now()
+      const step = voiceFinal(captured.current, text)
+      captured.current = step.captured
+      if (step.captured) setInterim(step.captured)
+      if (!step.toSend) return
       setInterim('')
       setNote(null)
-      void send(text)
+      void send(step.toSend)
+      // Press-to-talk, like the full assistant: the mic turns off after each question.
+      stopRef.current()
     },
     onDismiss: onClose,
     onConfirm: () => void confirm(),
@@ -106,10 +114,13 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
     },
   })
 
+  stopRef.current = () => void speech.stop()
+
   // Start listening on open, and again each time the mic or wake word asks.
   useEffect(() => {
     lastTouch.current = Date.now()
     setInterim('')
+    captured.current = ''
     void speech.start()
   }, [listenNonce]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => void speech.stop(), []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -146,7 +157,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
         <button
           type="button"
           aria-label={speech.listening ? 'Stop listening' : 'Talk'}
-          onClick={() => (speech.listening ? speech.finish() : void speech.start())}
+          onClick={() => { if (speech.listening) speech.finish(); else { captured.current = ''; void speech.start() } }}
           className={`flex h-[132px] w-[132px] items-center justify-center rounded-full border-2 border-solid border-wall-night-brass bg-transparent p-0 text-wall-night-brass ${speech.listening ? 'ring-[14px] ring-wall-night-brass/25' : ''}`}
         >
           <Mic size={44} strokeWidth={1.6} />
@@ -188,7 +199,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
               Open it
             </button>
           )}
-          <button type="button" className={pill} onClick={() => { setNote(null); void speech.start() }}>
+          <button type="button" className={pill} onClick={() => { setNote(null); captured.current = ''; void speech.start() }}>
             Ask something else
           </button>
           <button type="button" className={pill} onClick={onClose}>

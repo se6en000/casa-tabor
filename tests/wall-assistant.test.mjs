@@ -58,3 +58,14 @@ test('the action result: done with the new event, a clash that needs a second ye
   assert.deepEqual(readActionResult({ success: false, error: 'Nope' }, {}), { kind: 'error', message: 'Nope' })
   assert.deepEqual(readActionResult(null, {}), { kind: 'error', message: 'That didn’t work. Nothing was changed.' })
 })
+
+import { voiceFinal } from '../src/wall/assistant.ts'
+
+test('the speech hook gives the words, then "__SEND__" to send them; the marker itself is never sent', () => {
+  let step = voiceFinal('', 'What time do we leave for softball tomorrow')
+  assert.deepEqual(step, { captured: 'What time do we leave for softball tomorrow', toSend: null })
+  step = voiceFinal(step.captured, '__SEND__')
+  assert.deepEqual(step, { captured: '', toSend: 'What time do we leave for softball tomorrow' })
+  assert.deepEqual(voiceFinal('', '__SEND__'), { captured: '', toSend: null })
+  assert.deepEqual(voiceFinal('', '   '), { captured: '', toSend: null })
+})

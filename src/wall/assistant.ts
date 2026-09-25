@@ -51,3 +51,11 @@ export function bandState(input: { listening: boolean; loading: boolean; answer:
   if (input.pending) return 'NEEDS A YES'
   return input.answer ? 'ANSWERED' : 'READY'
 }
+
+/** useSpeechInput's protocol: a final transcript, then "__SEND__" meaning "send what was captured". */
+export const SEND_MARKER = '__SEND__'
+
+export function voiceFinal(captured: string, text: string): { captured: string; toSend: string | null } {
+  if (text === SEND_MARKER) return { captured: '', toSend: captured.trim() || null }
+  return { captured: text.trim(), toSend: null }
+}
