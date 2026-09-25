@@ -1,3 +1,4 @@
+import { Mic } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 // The MT monogram opens the rest of the app. On the kiosk, each page's Home
@@ -24,6 +25,23 @@ export function MenuButton({ onOpen, className = '' }: { onOpen: () => void; cla
       className={`flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full border border-wall-brass bg-transparent p-0 font-display text-wall-detail font-bold text-wall-brass-ink ${className}`}
     >
       MT
+    </button>
+  )
+}
+
+/** The mic: dark, beside the MT monogram on every face (board 03b). */
+export function MicButton({ onAsk, className = '' }: { onAsk: () => void; className?: string }) {
+  return (
+    <button
+      type="button"
+      aria-label="Talk to Casa"
+      onClick={(event) => {
+        event.stopPropagation()
+        onAsk()
+      }}
+      className={`flex h-[56px] w-[56px] shrink-0 items-center justify-center rounded-full border-0 bg-wall-ink p-0 text-wall-night-brass ring-[6px] ring-wall-brass/35 ${className}`}
+    >
+      <Mic size={24} strokeWidth={1.8} />
     </button>
   )
 }

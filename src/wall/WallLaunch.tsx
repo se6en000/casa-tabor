@@ -5,7 +5,7 @@ import { describeNextMove, weatherLine } from './header'
 import NextMovePanel from './NextMovePanel'
 import { buildScore } from './score'
 import type { DayPlan, WallMember } from './engine/types'
-import { MenuButton } from './WallMenu'
+import { MenuButton, MicButton } from './WallMenu'
 import WallScore, { type ScoreInteraction } from './WallScore'
 
 export interface WallLaunchProps {
@@ -15,11 +15,12 @@ export interface WallLaunchProps {
   plan: DayPlan | null
   currentWeather?: { temp: number; condition: string } | null
   onOpenMenu?: () => void
+  onAsk?: () => void
   interaction?: ScoreInteraction
 }
 
 /** The launch posture (board 02a): clock, Next Move, and the full Score. */
-export default function WallLaunch({ now, members, plan, currentWeather, onOpenMenu, interaction }: WallLaunchProps) {
+export default function WallLaunch({ now, members, plan, currentWeather, onOpenMenu, onAsk, interaction }: WallLaunchProps) {
   const score = useMemo(() => (plan ? buildScore(plan, members, now) : null), [plan, members, now])
   const clock = formatWallClock(now)
   const nextMove = useMemo(() => (plan ? describeNextMove(selectNextMove(plan, now), members, now) : null), [plan, members, now])
@@ -32,6 +33,7 @@ export default function WallLaunch({ now, members, plan, currentWeather, onOpenM
         <div className="flex w-[520px] shrink-0 flex-col gap-[6px]">
           <div className="flex items-center gap-[12px]">
             <MenuButton onOpen={onOpenMenu ?? (() => {})} />
+            {onAsk && <MicButton onAsk={onAsk} />}
             <span className="text-wall-label font-semibold tracking-[0.25em] text-wall-brass-ink">MAISON TABOR</span>
           </div>
           <div className="mt-[2px] flex items-baseline gap-[10px]">

@@ -114,6 +114,10 @@
   --text-wall-clock-calm--line-height: 0.82;
   --text-wall-date-calm: 42px;
   --text-wall-date-calm--line-height: 1.1;
+  --text-wall-quote: 44px;
+  --text-wall-quote--line-height: 1.1;
+  --text-wall-answer: 28px;
+  --text-wall-answer--line-height: 1.4;
   --text-wall-countdown: 88px;
   --text-wall-countdown--line-height: 0.85;
   --text-wall-move: 58px;

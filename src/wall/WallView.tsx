@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { FamilyRoutine } from '../lib/familyRoutines'
 import type { EditableEvent } from './editing'
 import { buildDayPlan, type DayOff } from './engine/dayPlan'
@@ -12,7 +12,7 @@ import WallCalm from './WallCalm'
 import WallEvening from './WallEvening'
 import WallEventSheet from './WallEventSheet'
 import WallLaunch from './WallLaunch'
-import WallMenu, { MenuButton } from './WallMenu'
+import WallMenu, { MenuButton, MicButton } from './WallMenu'
 import type { ScoreInteraction } from './WallScore'
 
 export interface WallViewProps {
@@ -28,6 +28,14 @@ export interface WallViewProps {
   allEvents?: WallEvent[]
   routines?: FamilyRoutine[]
   dayOffs?: DayOff[]
+  /** Opens the assistant band (the mic button beside MT). */
+  onAsk?: () => void
+  /** The band, drawn over the wall. */
+  overlay?: ReactNode
+  /** The item the assistant's answer is about: outlined like a selection. */
+  pointAt?: string | null
+  /** Open this item's sheet ("Open it" in the band); the nonce repeats a request. */
+  openRequest?: { id: string; nonce: number } | null
 }
 
 const POSTURE_NAMES: Record<Posture, string> = { launch: 'Full day', calm: 'Calm', evening: 'Evening' }
@@ -38,7 +46,7 @@ const POSTURE_NAMES: Record<Posture, string> = { launch: 'Full day', calm: 'Calm
  * minutes); a tap on a calendar item opens its sheet (details, then edit).
  */
 export default function WallView(props: WallViewProps) {
-  const { now, members, today, tomorrow, currentWeather, checklist = [], allEvents = [], routines = [], dayOffs = [] } = props
+  const { now, members, today, tomorrow, currentWeather, checklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, openRequest = null } = props
   const [preview, setPreview] = useState<PreviewState | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -70,6 +78,10 @@ export default function WallView(props: WallViewProps) {
     return () => window.clearTimeout(timer)
   }, [preview])
 
+  useEffect(() => {
+    if (openRequest) setSelectedId(openRequest.id)
+  }, [openRequest])
+
   // An event deleted elsewhere closes its sheet.
   useEffect(() => {
     if (selectedId && !eventsById.has(selectedId)) setSelectedId(null)
@@ -78,7 +90,11 @@ export default function WallView(props: WallViewProps) {
   const interaction: ScoreInteraction = {
     onSelect: setSelectedId,
     selectable: (id) => eventsById.has(id),
-    highlight: selectedId ? { sourceId: selectedId, draft: Boolean(draftPreview) } : null,
+    highlight: selectedId
+      ? { sourceId: selectedId, draft: Boolean(draftPreview) }
+      : pointAt
+        ? { sourceId: pointAt, draft: false }
+        : null,
   }
   const openPerson = (memberId: string) => {
     const id = today ? eventForPerson(today, memberId, now, (sourceId) => eventsById.has(sourceId)) : null
@@ -94,13 +110,15 @@ export default function WallView(props: WallViewProps) {
   } else if (shown.posture === 'calm') {
     face = <WallCalm now={now} members={members} plan={shownToday} currentWeather={currentWeather} onSelectPerson={openPerson} />
   } else {
-    face = <WallLaunch now={now} members={members} plan={shownToday} currentWeather={currentWeather} onOpenMenu={openMenu} interaction={interaction} />
+    face = <WallLaunch now={now} members={members} plan={shownToday} currentWeather={currentWeather} onOpenMenu={openMenu} onAsk={onAsk} interaction={interaction} />
   }
 
   return (
     <div className="relative h-full w-full" onClick={() => setPreview((state) => nextPreview(auto, state, Date.now()))}>
       {face}
       {shown.posture !== 'launch' && <MenuButton onOpen={openMenu} className="absolute right-[44px] top-[44px]" />}
+      {shown.posture !== 'launch' && onAsk && <MicButton onAsk={onAsk} className="absolute right-[108px] top-[38px]" />}
+      {!selected && overlay}
       {shown.preview && !selected && (
         <div className="pointer-events-none absolute left-1/2 top-[8px] -translate-x-1/2 whitespace-nowrap rounded-full bg-wall-ink px-[18px] py-[4px] text-wall-label font-semibold text-wall-on-pigment">
           Previewing {POSTURE_NAMES[shown.posture]} · tap for the next · back to {POSTURE_NAMES[auto]} on its own

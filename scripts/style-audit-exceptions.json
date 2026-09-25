@@ -306,6 +306,10 @@
         "reason": "Family Wall: each whereabouts row is one tap target that opens that person's current or next event."
       },
       {
+        "path": "src/wall/WallAssistantBand.tsx",
+        "reason": "Family Wall: the assistant band's mic, yes/no and follow-up buttons (boards 03b/03c), part of the Wall's own component set."
+      },
+      {
         "path": "src/wall/WallMenu.tsx",
         "reason": "Family Wall: its own small component set by design (CLAUDE.md Wall exception) — the MT menu button and the menu's close button, styled with wall-* tokens."
       },

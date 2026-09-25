@@ -188,6 +188,8 @@ export const DESIGN_TOKENS = {
     'wall-clock': { size: '104px', lineHeight: '0.92' },
     'wall-clock-calm': { size: '250px', lineHeight: '0.82' },
     'wall-date-calm': { size: '42px', lineHeight: '1.1' },
+    'wall-quote': { size: '44px', lineHeight: '1.1' },
+    'wall-answer': { size: '28px', lineHeight: '1.4' },
     'wall-countdown': { size: '88px', lineHeight: '0.85' },
     'wall-move': { size: '58px', lineHeight: '1' },
     'wall-date': { size: '30px', lineHeight: '1.1' },
