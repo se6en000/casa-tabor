@@ -3,7 +3,7 @@
 // Bump CACHE_NAME whenever the CACHING STRATEGY below changes (not on every
 // deploy — deploys are handled correctly regardless, see below). Bumping
 // forces old cache generations to be cleared on the next activate.
-const CACHE_NAME = 'casa-tabor-shell-v1';
+const CACHE_NAME = 'casa-tabor-shell-v2'; // v2 (2026-09-25): drops v1 caches that stored an HTML page as a script
 
 // Correctness constraint (see tests/service-worker-offline-shell.test.mjs and
 // the reload-loop incident documented in scripts/ship.sh/CLAUDE.md): this
@@ -39,6 +39,10 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+function isHtml(response) {
+  return (response.headers.get('content-type') || '').includes('text/html');
+}
+
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return; // never cache/intercept writes
@@ -71,9 +75,13 @@ self.addEventListener('fetch', (event) => {
       (async () => {
         const cache = await caches.open(CACHE_NAME);
         const cached = await cache.match(request);
-        if (cached) return cached;
+        // A hashed asset is never HTML. During a deploy the server can answer a
+        // not-yet-live asset URL with the app's HTML page (200); caching that
+        // cache-first left the kiosk blank until a hard reload (2026-09-25).
+        if (cached && !isHtml(cached)) return cached;
+        if (cached) await cache.delete(request);
         const fresh = await fetch(request);
-        void cache.put(request, fresh.clone());
+        if (fresh.ok && !isHtml(fresh)) void cache.put(request, fresh.clone());
         return fresh;
       })()
     );
