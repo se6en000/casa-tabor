@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "npm run tokens:check && npm run style:check && npm run certify:experience && tsc -b && vite build && npm run check:bundle-size",
     "check:bundle-size": "node scripts/check-bundle-size.mjs",
-    "test": "node --test tests/*.test.mjs",
+    "test": "node --test --experimental-test-isolation=none tests/*.test.mjs",
     "test:visual": "playwright test",
     "test:visual:update": "playwright test --update-snapshots=all",
     "lint": "eslint .",
@@ -39,7 +39,9 @@
     "style:report": "node scripts/style-audit.mjs --json",
     "style:check": "node scripts/style-audit.mjs --check",
     "certify:experience": "node scripts/experience-certification.mjs",
-    "functions:typecheck": "node scripts/deno-typecheck.mjs"
+    "functions:typecheck": "node scripts/deno-typecheck.mjs",
+    "test:isolated": "node --test tests/*.test.mjs",
+    "test:live": "CASA_LIVE_TESTS=1 node --test tests/granular-ai-telemetry-and-rate-limits.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.2",
@@ -77,5 +79,8 @@
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.59.2",
     "vite": "^8.0.12"
+  },
+  "engines": {
+    "node": ">=22.8"
   }
 }

@@ -121,6 +121,12 @@ test('StatusDashboardPage: renders rate limit banner, dev circuit breaker, hourl
 })
 
 test('live Supabase database verification: get_cost_dashboard_summary RPC returns complete data', async (t) => {
+  // Talks to the production database, so it only runs on demand (npm run test:live);
+  // a ship should never fail because the network or production hiccupped.
+  if (process.env.CASA_LIVE_TESTS !== '1') {
+    t.skip('Live DB check runs only with CASA_LIVE_TESTS=1 (npm run test:live)')
+    return
+  }
   const envPath = resolve('.env.local')
   if (!existsSync(envPath)) {
     t.skip('Skipping live DB check — .env.local not found')

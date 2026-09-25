@@ -15,18 +15,41 @@ const settingsPageSource = readFileSync(
   'utf8',
 )
 
-function evaluatePyBrightness(lux, artMode = false, dimOffset = 0.0) {
+// Every (lux, artMode, dimOffset) the tests below check. lux_to_brightness is a
+// pure function of these inputs, so one Python process evaluates them all —
+// importing the bridge once instead of once per check (was ~45 s, now ~1.5 s).
+const MONOTONIC_LUX = [0.05, 0.1, 0.5, 2.0, 10.0, 50.0, 150.0, 400.0, 800.0]
+const CASES = [
+  [0.05, false, 0.0], [0.05, true, 0.30], [0.05, true, 0.50], [0.05, true, 0.80], [0.10, true, 0.50],
+  ...MONOTONIC_LUX.flatMap((lx) => [[lx, false, 0.0], [lx, true, 0.50]]),
+  [800.0, false, 0.0], [800.0, true, 0.30], [800.0, true, 0.50],
+  [50.0, false, 0.0], [50.0, true, 0.30], [50.0, true, 0.50],
+]
+
+const caseKey = (lux, artMode, dimOffset) => `${lux}|${artMode}|${dimOffset}`
+
+const brightnessByCase = (() => {
   const script = `
-import sys
+import sys, json
 sys.path.insert(0, ${JSON.stringify(sensorBridgeDir)})
 import main
 
-main._art_mode_active = ${artMode ? 'True' : 'False'}
-main._art_dim_offset = ${dimOffset}
-print(main.lux_to_brightness(${lux}))
+out = []
+for lux, art_mode, dim_offset in json.loads(sys.argv[1]):
+    main._art_mode_active = art_mode
+    main._art_dim_offset = dim_offset
+    out.append(main.lux_to_brightness(lux))
+print(json.dumps(out))
 `
-  const output = execFileSync('python3', ['-c', script], { encoding: 'utf8' }).trim()
-  return parseInt(output, 10)
+  const output = execFileSync('python3', ['-c', script, JSON.stringify(CASES)], { encoding: 'utf8' }).trim()
+  const values = JSON.parse(output)
+  return new Map(CASES.map(([lux, art, dim], i) => [caseKey(lux, art, dim), values[i]]))
+})()
+
+function evaluatePyBrightness(lux, artMode = false, dimOffset = 0.0) {
+  const key = caseKey(lux, artMode, dimOffset)
+  assert.ok(brightnessByCase.has(key), `add (${key}) to CASES`)
+  return brightnessByCase.get(key)
 }
 
 test('Frontend UI StepPicker allows full 0% to 90% range for Dim below ambient', () => {
@@ -56,7 +79,7 @@ test('lux_to_brightness reaches DDC 0 in near pitch-black rooms (<= 0.1 lux)', (
 })
 
 test('lux_to_brightness is strictly monotonic with ambient lux in both active and art modes', () => {
-  const luxValues = [0.05, 0.1, 0.5, 2.0, 10.0, 50.0, 150.0, 400.0, 800.0]
+  const luxValues = MONOTONIC_LUX
 
   let prevActive = -1
   let prevArt50 = -1

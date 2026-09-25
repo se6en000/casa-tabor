@@ -114,26 +114,26 @@ Removing stale tests reduces *friction* (they break on harmless refactors), not 
     - Proof: throwaway Supabase branch `p01-rebuild-check`, public schema wiped, all 236 repo migrations replayed from empty with zero errors; schema fingerprint vs production **identical** in all 10 categories — 101 tables, 1,371 columns (types, nullability, defaults), 409 constraints, 401 indexes, 91 policies, 70 triggers, 119 function bodies, 7 enums, 3 views, 99 RLS tables. Branch deleted afterwards. Full suite 2549/2549 and guardrails 4/4 pass.
     - Rebuild note: a rebuilt database needs its vault secrets (e.g. `SUPABASE_ANON_KEY`) set before scheduled jobs work. Supabase's own preview branches replay production's stored (original) statements, which still contain the pre-guard versions, so they fail; use the repo files for rebuilds.
 
-- [ ] **P0.2 — Make the slow tests fast without losing coverage**
+- [x] **P0.2 — Make the slow tests fast without losing coverage**
   - Why: 15 tests cost ~73 s of every ship.
   - Done means:
     - `tests/ambient-photometric-brightness.test.mjs` runs in < 2 s total (e.g. a fixed, representative set of lux points instead of a brute-force sweep) and still asserts the same properties (monotonic, pitch-black → 0, daylight ratio, evening lamp).
     - The recurrence timezone test, certification tests and any other test > 1 s are either < 1 s or have a written reason here.
     - Full suite ≤ 20 s on the Pi.
-  - Evidence: _
+  - Evidence (2026-09-25): brightness file 45 s → 0.7 s — `lux_to_brightness` is a pure function, so all 27 cases run in one Python process instead of one process each; same 6 assertions pass. Whole suite now runs in a single Node process (`npm test` = `node --test --experimental-test-isolation=none`, requires Node ≥ 22.8; `npm run test:isolated` keeps the old per-file mode): **90 s → 14–15 s**, 2549/2549 pass on two consecutive runs. Remaining tests over 1 s, with reasons: recurrence host-timezone test (~3 s) must start child processes because a process's time zone is fixed at startup; the two experience-certification tests (~1 s each) scan all of `src/` and duplicate the build's `certify:experience` gate — candidates to drop in P0.6.
 
-- [ ] **P0.3 — Remove network dependencies from the ship gate**
+- [x] **P0.3 — Remove network dependencies from the ship gate**
   - Why: a ship shouldn't fail because the internet or production DB hiccupped.
   - Done means: tests that hit live services (e.g. the live Supabase RPC check in `tests/granular-ai-telemetry-and-rate-limits.test.mjs`) move to an on-demand health script (`npm run db:health` or similar); the ship gate runs fully offline.
-  - Evidence: _
+  - Evidence (2026-09-25): the only network-dependent test (live `get_cost_dashboard_summary` check in `tests/granular-ai-telemetry-and-rate-limits.test.mjs`) now skips unless `CASA_LIVE_TESTS=1`; `npm run test:live` runs it on demand (8/8 pass live). Audit of all test files found no other real network calls (`event-description-display` only contains a URL string; `ai-circuit-breaker` mocks fetch).
 
-- [ ] **P0.4 — Parallelize ship.sh and print step timings**
+- [~] **P0.4 — Parallelize ship.sh and print step timings**
   - Done means: tests and the build/type check run concurrently; each step prints its duration; a failure in either still stops the ship; `SKIP_KIOSK=1` still works.
-  - Evidence: _
+  - Evidence (partial, 2026-09-25): `scripts/ship.sh` runs `npm test` in the background while `vercel build` runs; either failing stops the ship before commit (test failures show the test log); every step prints its duration. `bash -n` passes and `tests/route-code-splitting.test.mjs` (reads ship.sh) passes. **Remaining:** proven by a real ship (see P0.7).
 
-- [ ] **P0.5 — Type-check speed**
+- [x] **P0.5 — Type-check speed**
   - Done means: `tsc -b` on a no-change rebuild is < 25 s, or this item records exactly why not and what was tried (incremental build info, project references, TypeScript native preview).
-  - Evidence: _
+  - Evidence (2026-09-25): root cause — with `noEmit` and no `incremental`, `tsc -b` (TypeScript 6.0.3) looked for output files that never exist, so it re-checked everything every time. Added `"incremental": true` to `tsconfig.app.json` and `tsconfig.node.json`: no-change re-check **45 s → 0.5 s**; after a one-line edit ~5–6 s; a deliberate type error is still caught (exit 1).
 
 - [ ] **P0.6 — Test inventory (label, don't delete)**
   - Done means: `tests/MANIFEST.md` lists all test files with one label each — `keep` (runs code, still relevant), `convert` (source-text test on live code; replace with a behavioral test when that code is next touched), `retire-with:<surface>` (pins code the Wall will retire; deleted in the same commit as that code). Counts per label are recorded here.

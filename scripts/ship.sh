@@ -19,8 +19,9 @@ PI_IP="${PI_HOST#*@}"
 COMMIT_MSG="${1:-}"
 LOG="$(mktemp -d)/ship.log"
 
-step() { printf '\n\033[1;36m▸ %s\033[0m\n' "$1"; }
-ok()   { printf '  \033[1;32m✓\033[0m %s\n' "$1"; }
+STEP_START=$(date +%s)
+step() { STEP_START=$(date +%s); printf '\n\033[1;36m▸ %s\033[0m\n' "$1"; }
+ok()   { printf '  \033[1;32m✓\033[0m %s \033[2m(%ss)\033[0m\n' "$1" "$(( $(date +%s) - STEP_START ))"; }
 fail() {
   printf '  \033[1;31m✗ %s\033[0m\n' "$1"
   echo "  ---- last 40 lines of $LOG ----"
@@ -31,14 +32,19 @@ fail() {
 START=$(date +%s)
 PRE_BUILD_SHA=$(git rev-parse HEAD)
 
-step "1/6 Tests (node --test)"
-npm test >"$LOG" 2>&1 || fail "tests failed"
-ok "tests pass"
-
-step "2/6 Gates + build (tokens/style/certify/types/vite, run once via vercel build)"
+step "1-2/6 Tests + gates/build, side by side (tokens/style/certify/types/vite via vercel build)"
+# Tests don't depend on the build, so they run in the background while the
+# build runs; either failing stops the ship before anything is committed.
+TEST_LOG="$(dirname "$LOG")/tests.log"
+npm test >"$TEST_LOG" 2>&1 &
+TEST_PID=$!
 npx vercel link --yes --scope casa-projects --project casa-tabor >>"$LOG" 2>&1 || true
-npx vercel build --prod --yes >>"$LOG" 2>&1 || fail "gates or build failed"
-ok "gates + build passed"
+if npx vercel build --prod --yes >>"$LOG" 2>&1; then BUILD_RC=0; else BUILD_RC=$?; fi
+if wait "$TEST_PID"; then TEST_RC=0; else TEST_RC=$?; fi
+if [ "$TEST_RC" -ne 0 ]; then LOG="$TEST_LOG"; fail "tests failed"; fi
+cat "$TEST_LOG" >>"$LOG"
+[ "$BUILD_RC" -eq 0 ] || fail "gates or build failed"
+ok "tests pass, gates + build passed"
 
 step "3/6 Commit"
 if [ -n "$(git status --porcelain)" ]; then
