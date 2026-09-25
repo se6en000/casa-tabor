@@ -104,6 +104,14 @@ test('each lane says where the person is now, or when they next leave', () => {
   assert.equal(lane(early, 'liv').status, 'Leaves at 7:42 with Kelly')
 })
 
+test('after a pickup the child reads as home, with what comes next', () => {
+  const score = buildScore(fridayPlan(), members, at(25, 14, 18))
+  assert.equal(lane(score, 'owen').status, 'Home since 2:10')
+  assert.equal(lane(score, 'emme').status, 'Home · Emme Practice Violin with Meredith · 4:30')
+  // Someone never collected today just shows what's next.
+  assert.equal(lane(buildScore(fridayPlan(), members, at(25, 9, 0)), 'jake-id').status, 'Pick up Photobook for Liv · 10:25')
+})
+
 test('a child leaving with nobody to drive says so', () => {
   const withOwen = events.map((e) => (e.id === 'baseball' ? { ...e, members: [{ family_member_id: 'owen', role: 'primary' }] } : e))
   const score = buildScore(buildDayPlan({ date: SATURDAY, members, routines, events: withOwen }), members, at(26, 9, 0))

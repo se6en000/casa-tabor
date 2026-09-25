@@ -96,7 +96,17 @@ function laneStatus(memberId: string, segments: LaneSegment[], trips: Trip[], no
   const nextLeave = trips
     .filter((trip) => trip.leaveAt && trip.leaveAt.getTime() > t && (trip.driverId === memberId || trip.travelerIds.includes(memberId)))
     .sort((a, b) => a.leaveAt!.getTime() - b.leaveAt!.getTime())[0]
-  if (!nextLeave?.leaveAt) return ''
+  if (!nextLeave?.leaveAt) {
+    // Collected and driven home today (per the plan), and/or something still to come.
+    const homeAt = trips
+      .filter((trip) => trip.kind === 'pickup' && trip.travelerIds.includes(memberId) && trip.homeAt && trip.homeAt.getTime() <= t)
+      .map((trip) => trip.homeAt!)
+      .sort((a, b) => b.getTime() - a.getTime())[0]
+    const later = segments.find((s) => s.kind === 'activity' && s.start.getTime() > t)
+    const upNext = later ? `${later.label} · ${clockTime(later.start)}` : null
+    if (homeAt) return upNext ? `Home · ${upNext}` : `Home since ${clockTime(homeAt)}`
+    return upNext ?? ''
+  }
   const leaves = `Leaves at ${clockTime(nextLeave.leaveAt)}`
   if (!nextLeave.driverId) return `Needs a driver · leaves ${clockTime(nextLeave.leaveAt)}`
   // A pickup's travelers are waiting somewhere else, not leaving home.
