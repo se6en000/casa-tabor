@@ -69,6 +69,11 @@ test('wall: tapping an item opens its details; Edit shows what changes before sa
   await sheet.getByRole('button', { name: 'Softball: Huskies @ RPB Cascade', exact: true }).click()
   await wall.getByRole('button', { name: 'x', exact: true }).click()
   await expect(sheet.getByText('Softball: Huskies @ RPB Cascadex')).toBeVisible()
+  // The end of a long title stays in view while typing (found on the kiosk: it was cut off).
+  for (let i = 0; i < 24; i += 1) await wall.getByRole('button', { name: 'x', exact: true }).click()
+  const field = sheet.getByRole('button', { name: /Cascadexxxxxxxxxxxxxxxxxxxxxxxxx$/ })
+  expect(await field.evaluate((el) => { const text = el.firstElementChild; return text.scrollWidth <= text.clientWidth + 1 })).toBe(true)
+  for (let i = 0; i < 24; i += 1) await wall.getByRole('button', { name: 'Delete' }).click()
   await expect(sheet.getByText('was Softball: Huskies @ RPB Cascade')).toBeVisible()
   await wall.getByRole('button', { name: 'Done' }).click()
 

@@ -336,8 +336,11 @@ export default function WallEventSheet(props: WallEventSheetProps) {
                 onClick={() => setKeyboard('title')}
                 className={`flex min-h-[72px] items-center rounded-[14px] bg-wall-ground px-[20px] text-left font-display text-wall-date font-semibold text-wall-ink ${keyboard === 'title' ? 'border-[3px] border-solid border-wall-brass-ink' : 'border border-solid border-wall-rule'}`}
               >
-                <span className="truncate">{draft.title || ' '}</span>
-                {keyboard === 'title' && <span aria-hidden="true" className="ml-[3px] h-[36px] w-[3px] bg-wall-ink" />}
+                {/* While typing, wrap so the end (where you're typing) is always visible. */}
+                <span className={keyboard === 'title' ? 'min-w-0 break-words py-[8px]' : 'truncate'}>
+                  {draft.title || ' '}
+                  {keyboard === 'title' && <span aria-hidden="true" className="ml-[3px] inline-block h-[32px] w-[3px] translate-y-[5px] bg-wall-ink" />}
+                </span>
               </button>
               {was('title')}
             </div>
