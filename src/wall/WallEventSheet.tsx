@@ -122,7 +122,7 @@ export default function WallEventSheet(props: WallEventSheetProps) {
     if (!preview) return null
     return buildPlanFor(midnight(new Date(preview.start_time)), allEvents.map((e) => (e.id === event.id ? preview : e)))
   }, [preview, allEvents, buildPlanFor, event.id])
-  const consequence = after ? consequenceLine(before, after, event.id, members) : null
+  const consequence = after ? consequenceLine(before, after, event.id, members, { before: draftFromEvent(event).going, after: draft.going }) : null
   const wasOf = (field: string) => changes.find((c) => c.field === field)?.was ?? null
 
   useEffect(() => onPreview(mode === 'details' ? null : preview), [preview, mode]) // eslint-disable-line react-hooks/exhaustive-deps

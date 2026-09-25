@@ -112,6 +112,13 @@ test('after a pickup the child reads as home, with what comes next', () => {
   assert.equal(lane(buildScore(fridayPlan(), members, at(25, 9, 0)), 'jake-id').status, 'Pick up Photobook for Liv · 10:25')
 })
 
+test('during an item at home or with no place, the lane says what it is and until when', () => {
+  assert.equal(lane(buildScore(fridayPlan(), members, at(25, 16, 40)), 'emme').status, 'Emme Practice Violin with Meredith · until 5:15')
+  const atHome = events.map((e) => (e.id === 'violin' ? { ...e, location_name: 'Home' } : e))
+  const plan = buildDayPlan({ date: FRIDAY, members, routines, events: atHome })
+  assert.equal(lane(buildScore(plan, members, at(25, 16, 40)), 'emme').status, 'Home · Emme Practice Violin with Meredith · until 5:15')
+})
+
 test('a child leaving with nobody to drive says so', () => {
   const withOwen = events.map((e) => (e.id === 'baseball' ? { ...e, members: [{ family_member_id: 'owen', role: 'primary' }] } : e))
   const score = buildScore(buildDayPlan({ date: SATURDAY, members, routines, events: withOwen }), members, at(26, 9, 0))

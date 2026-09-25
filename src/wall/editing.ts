@@ -242,12 +242,19 @@ function previewMembers(event: EditableEvent, going: string[]): EditableEvent['m
 }
 
 /** One sentence on what the engine recalculates, or null when nothing on the wall moves. */
-export function consequenceLine(before: DayPlan, after: DayPlan, eventId: string, members: WallMember[]): string | null {
+export function consequenceLine(
+  before: DayPlan,
+  after: DayPlan,
+  eventId: string,
+  members: WallMember[],
+  /** Who's going before and after the edit; when given, it names changes the wall itself doesn't draw. */
+  going?: { before: string[]; after: string[] },
+): string | null {
   const nameOf = (id: string | null) => members.find((m) => m.id === id)?.name ?? null
   const attending = (plan: DayPlan) =>
     [...plan.lanes].filter(([, segs]) => segs.some((s) => s.sourceId === eventId && s.kind === 'activity')).map(([id]) => id)
-  const goingBefore = attending(before)
-  const goingAfter = attending(after)
+  const goingBefore = going?.before ?? attending(before)
+  const goingAfter = going?.after ?? attending(after)
   const parts: string[] = []
   const added = goingAfter.filter((id) => !goingBefore.includes(id)).map(nameOf).filter(Boolean)
   const removed = goingBefore.filter((id) => !goingAfter.includes(id)).map(nameOf).filter(Boolean)

@@ -67,3 +67,12 @@ test('friday is unaffected', () => {
   const d = setDriver(draftFromEvent(softball), 'giselle')
   assert.deepEqual(planWith(FRIDAY, replace(previewEvent(softball, d))).trips.map((t) => t.driverId), planWith(FRIDAY, events).trips.map((t) => t.driverId))
 })
+
+test('adding someone to an at-home item still says so, even though the wall only draws its main person', () => {
+  const photobook = { ...events.find((e) => e.id === 'photobook'), location_name: 'Home' }
+  const list = events.map((e) => (e.id === 'photobook' ? photobook : e))
+  const d = setGoing(draftFromEvent(photobook), [...draftFromEvent(photobook).going, 'owen'])
+  const fri = (l) => buildDayPlan({ date: FRIDAY, members, routines, events: l })
+  const going = { before: draftFromEvent(photobook).going, after: d.going }
+  assert.equal(consequenceLine(fri(list), fri(list.map((e) => (e.id === 'photobook' ? previewEvent(photobook, d) : e))), 'photobook', members, going), 'Owen goes too.')
+})

@@ -92,6 +92,8 @@ function laneStatus(memberId: string, segments: LaneSegment[], trips: Trip[], no
   }
   const here = current.find((s) => s.kind === 'activity' && s.placeStatus === 'away') ?? current.find((s) => s.kind === 'at_place')
   if (here) return `${here.label} · until ${clockTime(here.end)}`
+  const doing = current.find((s) => s.kind === 'activity')
+  if (doing) return `${doing.placeStatus === 'home' ? 'Home · ' : ''}${doing.label} · until ${clockTime(doing.end)}`
 
   const nextLeave = trips
     .filter((trip) => trip.leaveAt && trip.leaveAt.getTime() > t && (trip.driverId === memberId || trip.travelerIds.includes(memberId)))
