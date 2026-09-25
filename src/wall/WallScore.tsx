@@ -37,15 +37,32 @@ function LaneStatus({ text }: { text: string }) {
   )
 }
 
+/** Tapping a calendar item on the Score opens its sheet; the open one is outlined (dashed while editing). */
+export interface ScoreInteraction {
+  onSelect: (sourceId: string) => void
+  selectable: (sourceId: string) => boolean
+  highlight?: { sourceId: string; draft: boolean } | null
+}
+
 export interface WallScoreProps {
   score: Score | null
   now: Date
   heading?: string
   /** Shorter lanes, for the evening posture. */
   compact?: boolean
+  interaction?: ScoreInteraction
 }
 
-export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE", compact = false }: WallScoreProps) {
+const MIN_HIT_WIDTH = 56
+
+export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE", compact = false, interaction }: WallScoreProps) {
+  const highlight = interaction?.highlight
+  const ringFor = (sourceId: string) =>
+    highlight?.sourceId === sourceId
+      ? highlight.draft
+        ? ' outline-2 outline-dashed outline-offset-4 outline-wall-brass-ink'
+        : ' outline-[3px] outline-solid outline-offset-4 outline-wall-brass-ink'
+      : ''
   const clock = formatWallClock(now)
   const showNow = isOnTimeline(now)
   const nowX = xForTime(now)
@@ -100,7 +117,7 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
                     </div>
                   )}
                   <div
-                    className={`absolute top-[36px] flex h-[28px] items-center overflow-hidden rounded-[6px] ${blockClass(block)}`}
+                    className={`absolute top-[36px] flex h-[28px] items-center overflow-hidden rounded-[6px] ${blockClass(block)}${ringFor(block.sourceId)}`}
                     style={{ left: block.x, width: block.width }}
                   >
                     {block.kind === 'place' && (
@@ -123,6 +140,22 @@ export default function WallScore({ score, now, heading = "TODAY · WHO'S WHERE"
                   {mono.initial}
                 </span>
               ))}
+              {interaction &&
+                lane.blocks
+                  .filter((block) => interaction.selectable(block.sourceId))
+                  .map((block) => (
+                    <button
+                      key={`hit:${block.key}`}
+                      type="button"
+                      aria-label={`Open ${block.label ?? 'this'}`}
+                      className="absolute top-0 h-full border-0 bg-transparent p-0"
+                      style={{ left: block.x - Math.max(0, (MIN_HIT_WIDTH - block.width) / 2), width: Math.max(block.width, MIN_HIT_WIDTH) }}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        interaction.onSelect(block.sourceId)
+                      }}
+                    />
+                  ))}
               {lane.notes.map((note) => (
                 <div
                   key={note.key}

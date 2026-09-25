@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, type QueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import type { WallChecklistItem } from './packing'
 
@@ -23,4 +23,11 @@ export function useWallChecklist(eventIds: string[]): WallChecklistItem[] {
     staleTime: 5 * 60 * 1000,
   })
   return data ?? []
+}
+
+/** Tick or untick one item; the wall's checklist refreshes right away. */
+export async function toggleChecklistItem(queryClient: QueryClient, id: string, checked: boolean): Promise<void> {
+  const { error } = await supabase.from('event_checklist_items').update({ checked }).eq('id', id)
+  if (error) throw error
+  await queryClient.invalidateQueries({ queryKey: ['events', 'wall-checklist'] })
 }

@@ -1,9 +1,9 @@
 import { useMemo } from 'react'
-import { useTodayEvents, useTomorrowEvents } from '../hooks/useCalendarEvents'
+import { useRollingEvents, useTodayEvents, useTomorrowEvents } from '../hooks/useCalendarEvents'
 import { useFamilyMembers } from '../hooks/useFamilyMembers'
 import { useMemberAvailability } from '../hooks/useMemberAvailability'
 import { deserializeRoutineFromAvailabilityRules, type FamilyRoutine } from '../lib/familyRoutines'
-import { buildDayPlan } from './engine/dayPlan'
+import { buildDayPlan, type DayOff } from './engine/dayPlan'
 import type { DayPlan, WallEvent, WallMember } from './engine/types'
 
 export interface WallDay {
@@ -12,6 +12,10 @@ export interface WallDay {
   today: DayPlan | null
   /** For the evening posture. */
   tomorrow: DayPlan | null
+  /** The rolling event cache (the event sheet and its previews rebuild days from it). */
+  allEvents: WallEvent[]
+  routines: FamilyRoutine[]
+  dayOffs: DayOff[]
 }
 
 /**
@@ -27,6 +31,8 @@ export function useWallDay(now: Date): WallDay {
   const { rules, exceptions, isLoading: availabilityLoading } = useMemberAvailability(memberIds)
   const { data: todayEvents } = useTodayEvents(now)
   const { data: tomorrowEvents } = useTomorrowEvents(now)
+  const { data: rollingEvents } = useRollingEvents(now)
+  const allEvents = useMemo(() => (rollingEvents ?? []) as unknown as WallEvent[], [rollingEvents])
 
   const routines = useMemo(
     () => members.map((m) => deserializeRoutineFromAvailabilityRules(m.id, rules)).filter((r): r is FamilyRoutine => Boolean(r)),
@@ -47,5 +53,5 @@ export function useWallDay(now: Date): WallDay {
     return buildDayPlan({ date, members, routines, events: tomorrowEvents as unknown as WallEvent[], dayOffs: exceptions })
   }, [ready, dayKey, members, routines, exceptions, tomorrowEvents])
 
-  return { members, today, tomorrow }
+  return { members, today, tomorrow, allEvents, routines, dayOffs: exceptions as DayOff[] }
 }

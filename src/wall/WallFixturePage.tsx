@@ -1,5 +1,6 @@
 // Visual-test only (VITE_VISUAL_TEST_MODE): the Wall drawn from the fixed test
 // fixture at the moment given by ?at=, for the screenshot guard (P2.6).
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { buildDayPlan } from './engine/dayPlan'
 import type { WallEvent, WallMember } from './engine/types'
@@ -8,6 +9,8 @@ import { members, routines, events } from '../../tests/fixtures/wall-day-2026-09
 import type { FamilyRoutine } from '../lib/familyRoutines'
 
 const WEATHER = { temp: 84, condition: 'Partly cloudy' }
+// No network in the fixture: saved places load empty and nothing is ever saved.
+const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, enabled: false } } })
 const CHECKLIST = [
   { id: 'c1', event_id: 'softball', label: 'Glove', checked: true, sort_order: 1 },
   { id: 'c2', event_id: 'softball', label: 'Water bottle', checked: false, sort_order: 2 },
@@ -26,15 +29,17 @@ export default function WallFixturePage() {
   const plan = (date: Date) =>
     buildDayPlan({ date, members: members as WallMember[], routines: routines as unknown as FamilyRoutine[], events: events as unknown as WallEvent[] })
   return (
+    <QueryClientProvider client={queryClient}>
     <MemoryRouter>
     <Routes>
     <Route path="/calendar" element={<div data-testid="fixture-calendar">Calendar page</div>} />
     <Route path="*" element={
     <div data-testid="wall-fixture" className="h-[1080px] w-[1920px]">
-      <WallView now={now} members={members as WallMember[]} today={plan(day)} tomorrow={plan(next)} currentWeather={WEATHER} checklist={CHECKLIST} />
+      <WallView now={now} members={members as WallMember[]} today={plan(day)} tomorrow={plan(next)} currentWeather={WEATHER} checklist={CHECKLIST} allEvents={events as unknown as WallEvent[]} routines={routines as unknown as FamilyRoutine[]} />
     </div>
     } />
     </Routes>
     </MemoryRouter>
+    </QueryClientProvider>
   )
 }

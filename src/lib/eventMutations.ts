@@ -419,6 +419,15 @@ export async function materializeSyntheticRoutineEvent(
   }
 }
 
+/**
+ * The leave time saved when an event moves: start minus the drive and a 5-minute
+ * buffer. The Wall's edit preview uses the same rule, so it shows what will be saved.
+ */
+export function rescheduledDepartureIso(startDate: Date, driveMins: number | null | undefined): string | null {
+  if (driveMins === undefined || driveMins === null || driveMins <= 0) return null
+  return new Date(startDate.getTime() - (driveMins + 5) * 60_000).toISOString()
+}
+
 export async function updateEventTitle(
   supabase: SupabaseClient,
   queryClient: QueryClient,
@@ -455,9 +464,7 @@ export async function updateEventSchedule(
   }
 
   const driveMins = isAllDay ? null : event.enrichment?.drive_time_mins
-  const newDepTimeIso = (!isAllDay && driveMins !== undefined && driveMins !== null && driveMins > 0)
-    ? new Date(startDate.getTime() - (driveMins + 5) * 60_000).toISOString()
-    : null
+  const newDepTimeIso = isAllDay ? null : rescheduledDepartureIso(startDate, driveMins)
 
   publishEventAggregatePatch(queryClient, event.id, {
     start_time: startIso,

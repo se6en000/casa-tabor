@@ -6,7 +6,7 @@ import NextMovePanel from './NextMovePanel'
 import { buildScore } from './score'
 import type { DayPlan, WallMember } from './engine/types'
 import { MenuButton } from './WallMenu'
-import WallScore from './WallScore'
+import WallScore, { type ScoreInteraction } from './WallScore'
 
 export interface WallLaunchProps {
   now: Date
@@ -15,10 +15,11 @@ export interface WallLaunchProps {
   plan: DayPlan | null
   currentWeather?: { temp: number; condition: string } | null
   onOpenMenu?: () => void
+  interaction?: ScoreInteraction
 }
 
 /** The launch posture (board 02a): clock, Next Move, and the full Score. */
-export default function WallLaunch({ now, members, plan, currentWeather, onOpenMenu }: WallLaunchProps) {
+export default function WallLaunch({ now, members, plan, currentWeather, onOpenMenu, interaction }: WallLaunchProps) {
   const score = useMemo(() => (plan ? buildScore(plan, members, now) : null), [plan, members, now])
   const clock = formatWallClock(now)
   const nextMove = useMemo(() => (plan ? describeNextMove(selectNextMove(plan, now), members, now) : null), [plan, members, now])
@@ -46,7 +47,7 @@ export default function WallLaunch({ now, members, plan, currentWeather, onOpenM
         <NextMovePanel view={nextMove} pigmentIndex={driverPigment} />
       </header>
 
-      <WallScore score={score} now={now} />
+      <WallScore score={score} now={now} interaction={interaction} />
     </div>
   )
 }

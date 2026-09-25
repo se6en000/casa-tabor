@@ -73,7 +73,7 @@ function span(start: Date, end: Date): { x: number; width: number } | null {
 }
 
 /** Colors follow the person (family order), not the row, so lanes appearing never recolor anyone. */
-function pigmentIndexes(members: WallMember[]): Map<string, number> {
+export function pigmentIndexes(members: WallMember[]): Map<string, number> {
   const ordered = [...members].sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999) || a.name.localeCompare(b.name))
   return new Map(ordered.map((m, i) => [m.id, i]))
 }

@@ -7,7 +7,7 @@ import { describeNextMove } from './header'
 import { packingGroups, type WallChecklistItem } from './packing'
 import { decisions, forecastLine } from './posture'
 import { buildScore } from './score'
-import WallScore from './WallScore'
+import WallScore, { type ScoreInteraction } from './WallScore'
 
 export interface WallEveningProps {
   now: Date
@@ -18,13 +18,14 @@ export interface WallEveningProps {
   label: string
   focusDay: 'today' | 'tomorrow'
   checklist?: WallChecklistItem[]
+  interaction?: ScoreInteraction
 }
 
 /** Lines that fit under the Score (group headings count as lines). */
 const PACKING_LINES = 7
 
 /** The evening posture (board 02c): dark, and about the day ahead. */
-export default function WallEvening({ now, members, plan, label, focusDay, checklist = [] }: WallEveningProps) {
+export default function WallEvening({ now, members, plan, label, focusDay, checklist = [], interaction }: WallEveningProps) {
   // Before the day starts, lane statuses read as plans ("Leaves at 11:56").
   const asOf = useMemo(() => {
     if (focusDay === 'today') return now
@@ -72,7 +73,7 @@ export default function WallEvening({ now, members, plan, label, focusDay, check
         </div>
       </header>
 
-      <WallScore score={score} now={asOf} heading={`${weekday} · WHO'S WHERE`} compact />
+      <WallScore score={score} now={asOf} heading={`${weekday} · WHO'S WHERE`} compact interaction={interaction} />
 
       <div className="flex min-h-0 flex-1 gap-[48px]">
         <section aria-label="Needs a decision" className="flex min-w-0 flex-1 flex-col">

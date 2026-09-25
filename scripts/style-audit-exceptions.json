@@ -290,6 +290,22 @@
     ],
     "nativeControlRecreations": [
       {
+        "path": "src/wall/WallEventSheet.tsx",
+        "reason": "Family Wall: the event sheet (details, edit form, place picker) is part of the Wall's own component set (CLAUDE.md Wall exception); wall-* tokens, finger-sized targets."
+      },
+      {
+        "path": "src/wall/WallKeyboard.tsx",
+        "reason": "Family Wall: the on-screen keyboard's keys (board 03e); a shared Button can't be sized/laid out as a keyboard."
+      },
+      {
+        "path": "src/wall/WallScore.tsx",
+        "reason": "Family Wall: transparent hit targets over Score blocks so a tap opens the event (sized to the lane, at least 56px wide)."
+      },
+      {
+        "path": "src/wall/WallCalm.tsx",
+        "reason": "Family Wall: each whereabouts row is one tap target that opens that person's current or next event."
+      },
+      {
         "path": "src/wall/WallMenu.tsx",
         "reason": "Family Wall: its own small component set by design (CLAUDE.md Wall exception) — the MT menu button and the menu's close button, styled with wall-* tokens."
       },

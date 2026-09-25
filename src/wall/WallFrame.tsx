@@ -9,9 +9,9 @@ import WallView from './WallView'
 /** The Wall with live data: the minute clock, today's and tomorrow's plans, and the home weather. */
 export default function WallFrame() {
   const now = useMinuteClock()
-  const { members, today, tomorrow } = useWallDay(now)
+  const { members, today, tomorrow, allEvents, routines, dayOffs } = useWallDay(now)
   const { data: currentWeather } = useHomeWeather()
   const eventIds = useMemo(() => [today, tomorrow].flatMap((plan) => (plan ? packingEventIds(plan) : [])), [today, tomorrow])
   const checklist = useWallChecklist(eventIds)
-  return <WallView now={now} members={members} today={today} tomorrow={tomorrow} currentWeather={currentWeather} checklist={checklist} />
+  return <WallView now={now} members={members} today={today} tomorrow={tomorrow} currentWeather={currentWeather} checklist={checklist} allEvents={allEvents} routines={routines} dayOffs={dayOffs} />
 }

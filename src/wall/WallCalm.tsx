@@ -28,10 +28,12 @@ export interface WallCalmProps {
   members: WallMember[]
   plan: DayPlan | null
   currentWeather?: { temp: number; condition: string } | null
+  /** Tapping a person opens what they're in now, or next (returns false when there's nothing to open). */
+  onSelectPerson?: (memberId: string) => boolean
 }
 
 /** The calm posture (board 02b): a big clock, where everyone is, and the day in miniature. */
-export default function WallCalm({ now, members, plan, currentWeather }: WallCalmProps) {
+export default function WallCalm({ now, members, plan, currentWeather, onSelectPerson }: WallCalmProps) {
   const score = useMemo(() => (plan ? buildScore(plan, members, now) : null), [plan, members, now])
   const next = useMemo(() => (plan ? calmNextLine(describeNextMove(selectNextMove(plan, now), members, now)) : null), [plan, members, now])
   const clock = formatWallClock(now)
@@ -54,7 +56,15 @@ export default function WallCalm({ now, members, plan, currentWeather }: WallCal
           <div className="font-display text-wall-move font-medium italic">{calmHeadline(plan, now)}</div>
           <div className="flex flex-col border-b border-wall-rule">
             {lanes.map((lane) => (
-              <div key={lane.member.id} className="flex h-[70px] items-center gap-[18px] border-t border-wall-rule">
+              <button
+                key={lane.member.id}
+                type="button"
+                className="flex h-[70px] items-center gap-[18px] border-0 border-t border-solid border-wall-rule bg-transparent p-0 text-left text-wall-ink"
+                onClick={(event) => {
+                  // Only swallow the tap when it opened something; otherwise it previews the next face.
+                  if (onSelectPerson?.(lane.member.id)) event.stopPropagation()
+                }}
+              >
                 <span
                   aria-hidden="true"
                   className={`flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full font-display text-wall-heading font-bold text-wall-on-pigment ${pigmentStyleFor(lane.pigmentIndex).solid}`}
@@ -63,7 +73,7 @@ export default function WallCalm({ now, members, plan, currentWeather }: WallCal
                 </span>
                 <span className="w-[130px] shrink-0 truncate font-display text-wall-name font-bold">{lane.member.name}</span>
                 <span className="truncate text-wall-body">{lane.status || 'Nothing on the calendar'}</span>
-              </div>
+              </button>
             ))}
           </div>
         </div>
