@@ -127,9 +127,9 @@ Removing stale tests reduces *friction* (they break on harmless refactors), not 
   - Done means: tests that hit live services (e.g. the live Supabase RPC check in `tests/granular-ai-telemetry-and-rate-limits.test.mjs`) move to an on-demand health script (`npm run db:health` or similar); the ship gate runs fully offline.
   - Evidence (2026-09-25): the only network-dependent test (live `get_cost_dashboard_summary` check in `tests/granular-ai-telemetry-and-rate-limits.test.mjs`) now skips unless `CASA_LIVE_TESTS=1`; `npm run test:live` runs it on demand (8/8 pass live). Audit of all test files found no other real network calls (`event-description-display` only contains a URL string; `ai-circuit-breaker` mocks fetch).
 
-- [~] **P0.4 — Parallelize ship.sh and print step timings**
+- [x] **P0.4 — Parallelize ship.sh and print step timings**
   - Done means: tests and the build/type check run concurrently; each step prints its duration; a failure in either still stops the ship; `SKIP_KIOSK=1` still works.
-  - Evidence (partial, 2026-09-25): `scripts/ship.sh` runs `npm test` in the background while `vercel build` runs; either failing stops the ship before commit (test failures show the test log); every step prints its duration. `bash -n` passes and `tests/route-code-splitting.test.mjs` (reads ship.sh) passes. **Remaining:** proven by a real ship (see P0.7).
+  - Evidence (partial, 2026-09-25): `scripts/ship.sh` runs `npm test` in the background while `vercel build` runs; either failing stops the ship before commit (test failures show the test log); every step prints its duration. `bash -n` passes and `tests/route-code-splitting.test.mjs` (reads ship.sh) passes. Proven by the real ship `155239b8` (2026-09-25): tests + gates/build side by side 17 s, commit 0 s, push 2 s, deploy 14 s, live check 3 s, kiosk refresh 23 s.
 
 - [x] **P0.5 — Type-check speed**
   - Done means: `tsc -b` on a no-change rebuild is < 25 s, or this item records exactly why not and what was tried (incremental build info, project references, TypeScript native preview).
@@ -139,9 +139,9 @@ Removing stale tests reduces *friction* (they break on harmless refactors), not 
   - Done means: `tests/MANIFEST.md` lists all test files with one label each — `keep` (runs code, still relevant), `convert` (source-text test on live code; replace with a behavioral test when that code is next touched), `retire-with:<surface>` (pins code the Wall will retire; deleted in the same commit as that code). Counts per label are recorded here.
   - Evidence: _
 
-- [ ] **P0.7 — Ship target met**
+- [~] **P0.7 — Ship target met**
   - Done means: three consecutive real ships complete in ≤ 120 s end-to-end (timings pasted here).
-  - Evidence: _
+  - Evidence (partial): ship 1 — `155239b8`, 2026-09-25, **59 s** end-to-end (was 204–285 s). Needs two more consecutive ships ≤ 120 s. Note: the first ship on a fresh clone has a cold type-check cache (~45 s more).
 
 - [ ] **P0.8 — Freeze the old homepage**
   - Done means: a note at the top of `src/components/canvas/CalmKioskView.tsx` and in `CLAUDE.md`: bug fixes only, no new features or redesigns. Jake confirms.
