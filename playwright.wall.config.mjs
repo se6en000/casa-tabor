@@ -1,10 +1,10 @@
 import { defineConfig } from '@playwright/test'
 
-// Screenshot guard for the Family Wall (P2.6): one 1920x1080 kiosk profile.
+// Screenshot guard for the Family Wall (P2.6), 1920x1080, and the phone (Phase 4), 390x844.
 // Baselines are per platform, since font rendering differs between Linux and macOS.
 export default defineConfig({
   testDir: './visual-regression',
-  testMatch: 'wall.spec.mjs',
+  testMatch: ['wall.spec.mjs', 'phone.spec.mjs'],
   snapshotPathTemplate: '{testDir}/{testFileName}-snapshots/{arg}-{platform}{ext}',
   reporter: 'line',
   retries: 1,

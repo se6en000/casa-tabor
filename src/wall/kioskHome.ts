@@ -47,3 +47,9 @@ export function writeWallHomeFlag(flag: '1' | '0'): void {
     // Storage blocked: the kiosk just won't redirect Home.
   }
 }
+
+/** Where "/" goes: the Wall (kiosk, desktops), the phone lens (phones, Phase 4), or nowhere (?classic=1, other paths). */
+export function homeRedirect(pathname: string, search: string, flag: string | null, screen: { wide: boolean }): '/wall' | '/phone' | null {
+  if (pathname !== '/' || new URLSearchParams(search).get('classic') === '1') return null
+  return shouldSendHomeToWall(pathname, search, flag, screen) ? '/wall' : '/phone'
+}

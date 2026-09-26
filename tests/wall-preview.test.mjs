@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { nextPreview, shownPosture, PREVIEW_MS } from '../src/wall/preview.ts'
-import { shouldSendHomeToWall, wallHomeFlagFromUrl } from '../src/wall/kioskHome.ts'
+import { homeRedirect, shouldSendHomeToWall, wallHomeFlagFromUrl } from '../src/wall/kioskHome.ts'
 
 const t0 = 1_000_000
 
@@ -51,4 +51,12 @@ test('the kiosk URL sets or clears the wall-home flag', () => {
 test('a preview of the face the wall would show anyway is no preview', () => {
   const p = nextPreview('calm', null, t0) // previewing "launch"
   assert.deepEqual(shownPosture('launch', p, t0 + 1000), { posture: 'launch', preview: false })
+})
+
+test('"/" opens the Wall on the kiosk and desktops, and the phone lens on phones (Phase 4); ?classic=1 still opens the old home', () => {
+  assert.equal(homeRedirect('/', '', null, { wide: true }), '/wall')
+  assert.equal(homeRedirect('/', '', '1', { wide: false }), '/wall') // the kiosk, whatever its width
+  assert.equal(homeRedirect('/', '', null, { wide: false }), '/phone')
+  assert.equal(homeRedirect('/', '?classic=1', null, { wide: false }), null)
+  assert.equal(homeRedirect('/calendar', '', null, { wide: false }), null)
 })

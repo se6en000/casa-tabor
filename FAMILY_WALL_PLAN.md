@@ -298,9 +298,29 @@ The kiosk showed only the page background for ~8 minutes after shipping `138d17f
 
 ## Phase 4 — Phone lens
 
-- [~] **P4.0 — Phone design (board section 05, 05a–05h), for Jake's approval before building** — added 2026-09-25 at Jake's request ("we need more mobile screens … my stuff but also everyone else's events … add, the scanner … the rest of the app refreshed"). Boards: Me, Family (everyone's events), Week, an event, Add (type / say / scan / from an email), Scan review (several items from one flyer, ticked), Keep from… (the explicit surprise control: suggested from the title, confirmed by a person; the wall hides it, the named person's phone never gets it), More (grocery, meals, music, briefing, places, settings). Whose phone it is: the profile + PIN chosen at "Who is using Casa?". Evidence: posted to the canvas 2026-09-25; waiting on approval.
+- [x] **P4.0 — Phone design (board section 05, 05a–05h), for Jake's approval before building** — added 2026-09-25 at Jake's request ("we need more mobile screens … my stuff but also everyone else's events … add, the scanner … the rest of the app refreshed"). Boards: Me, Family (everyone's events), Week, an event, Add (type / say / scan / from an email), Scan review (several items from one flyer, ticked), Keep from… (the explicit surprise control: suggested from the title, confirmed by a person; the wall hides it, the named person's phone never gets it), More (grocery, meals, music, briefing, places, settings). Whose phone it is: the profile + PIN chosen at "Who is using Casa?". Evidence: posted to the canvas 2026-09-25; approved by Jake 2026-09-25 ("phone boards approved") with one note: on 05a the move times need a "Leave by" label and a bold time. Jake's answers: Liv gets her own phone view (own PIN); Giselle sees family things that involve the kids, not Jake's and Kelly's own; "from an email" is out of this round (desktop, later).
 
-- [ ] **P4.1 — "My day" on the phone** — my moves, what others covered, my personal to-dos, private items. Matches 02d.
+- [~] **P4.1 — "My day" on the phone** — my moves, what others covered, my personal to-dos, private items. Matches 02d / 05a (with the "Leave by" note).
+  - Done means: an isolated `src/phone/` surface (pure view + fixture page + data frame, like the Wall), at `/phone`; "/" opens it on phone-sized screens once signed in; whose phone it is comes from the profile chosen at "Who is using Casa?"; the tab bar (Me · Family · + · Week · More); the Me screen. Behavioral tests for the lens logic; Playwright at 390×844 on a fixture; checked on a real phone-sized browser against production.
+  - Evidence: _
+  - Claimed: Claude (Opus 5.5), 2026-09-25. Built: `src/phone/` — `lens.ts` (`meView`: next move, moves with a leave-by time, what others covered, prep kept from a celebration's honoree, my own reminders; `familyItems`), `PhoneView.tsx` (pure; tab bar Me · Family · + · Week · More; the hand-off sheet with free/busy), `PhoneFrame.tsx` (live data, viewer = the unlocked profile), `PhoneFixturePage` at `/__phone-fixture`; `/phone` route; "/" on a phone-sized screen opens it (`homeRedirect`). The Wall and the phone now share `useFamilyDay` (one set of trip actions). Jake's 05a note done (moves read "Leave by" over a bold time). Phone type/colour tokens (`phone-*`). Tests: `phone-lens` (8), `wall-preview` (home redirect), `visual-regression/phone.spec.mjs` (5 at 390×844, run with the Wall guard and in ship.sh).
+
+- [~] **P4.3 — Family and Week on the phone (05b, 05c)** — everyone's events as a list filtered by person; the seven days from the wall's week data. Tests; Playwright.
+  - Evidence: _
+
+- [ ] **P4.4 — An event on the phone (05d)** — who's going, the trip (Leaving now / Hand off, same data as the wall), get & pack, Keep from…; edit and delete through the same save paths as the wall. Tests; Playwright.
+  - Evidence: _
+
+- [ ] **P4.5 — Adding on the phone (05e, 05f)** — type it (the edit sheet, blank), say it (the existing assistant), scan it (the existing document scanner, restyled; several items from one flyer, ticked). "From an email" deferred (desktop). Tests; Playwright; one real add from the phone.
+  - Evidence: _
+
+- [ ] **P4.6 — Keep from… (05g)** — an explicit list of people an event is hidden from, suggested from a celebration title and confirmed by a person; the wall hides it for everyone, the named person's phone never gets it, others see it marked. Stored without a schema change (settings key, like `wall_trip_state`). Tests prove each rule.
+  - Evidence: _
+
+- [ ] **P4.7 — Each person's lens** — parents see everything not kept from them; Liv (child, her own PIN) sees her own things and the family's events, minus anything kept from her; Giselle (caregiver) sees family things that involve the kids and the trips she drives, not Jake's and Kelly's own events. Tests per person.
+  - Evidence: _
+
+- [~] **P4.8 — More (05h)** — grocery, meals, music, briefing, places, settings, as tiles into the existing pages. Playwright.
   - Evidence: _
 
 - [ ] **P4.2 — Personal to-dos leave the wall** — personal items appear only on their owner's phone.

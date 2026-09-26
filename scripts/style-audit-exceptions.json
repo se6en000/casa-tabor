@@ -322,6 +322,10 @@
         "reason": "Family Wall: its own small component set by design (CLAUDE.md Wall exception) — the MT menu button and the menu's close button, styled with wall-* tokens."
       },
       {
+        "path": "src/phone/PhoneView.tsx",
+        "reason": "The phone lens (Phase 4, board section 05): its own small component set in the Wall's language (tabs, chips, check lines, the hand-off sheet), styled with wall-*/phone-* tokens."
+      },
+      {
         "path": "src/wall/WallTomorrowNote.tsx",
         "reason": "Family Wall: the tomorrow line (opens tomorrow), part of the Wall's own component set."
       },

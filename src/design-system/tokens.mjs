@@ -179,6 +179,9 @@ export const DESIGN_TOKENS = {
     'wall-night-pigment-4': '#D2868D',
     'wall-night-pigment-5': '#D4A65F',
     'wall-night-pigment-6': '#9DAA83',
+    // The phone (src/phone, board section 05): the wall's palette on a lighter ground.
+    'phone-ground': '#F1ECE3',
+    'phone-card': '#E6DED1',
   },
   // Fixed sizes on the Wall's 1920x1080 stage (the stage scales as a whole, so
   // these don't follow density or the user font scale). Three viewing
@@ -198,6 +201,14 @@ export const DESIGN_TOKENS = {
     'wall-body': { size: '22px', lineHeight: '1.35' },
     'wall-detail': { size: '18px', lineHeight: '1.35' },
     'wall-label': { size: '16px', lineHeight: '1.3' },
+    // The phone (board section 05): read in the hand, so smaller than the wall's
+    // across-the-room sizes; labels are small capitals, never below 12px.
+    'phone-title': { size: '32px', lineHeight: '1.05' },
+    'phone-move': { size: '30px', lineHeight: '1.05' },
+    'phone-heading': { size: '22px', lineHeight: '1.15' },
+    'phone-body': { size: '16px', lineHeight: '1.35' },
+    'phone-detail': { size: '14px', lineHeight: '1.35' },
+    'phone-label': { size: '12px', lineHeight: '1.3' },
   },
   fontFamily: {
     display: "'Cormorant Garamond', Georgia, serif",

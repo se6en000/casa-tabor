@@ -1,6 +1,6 @@
 import { useState, useEffect, Component, Suspense, lazy, type ReactNode } from 'react'
 import { BrowserRouter, Navigate, useLocation } from 'react-router-dom'
-import { isWideScreen, readWallHomeFlag, shouldSendHomeToWall, wallHomeFlagFromUrl, writeWallHomeFlag } from './wall/kioskHome'
+import { homeRedirect, isWideScreen, readWallHomeFlag, wallHomeFlagFromUrl, writeWallHomeFlag } from './wall/kioskHome'
 import { useReturnToWall } from './wall/useReturnToWall'
 import { QueryClient, useQueryClient } from '@tanstack/react-query'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
@@ -322,6 +322,7 @@ function AppShell() {
 }
 
 const WallRoot = lazy(() => import('./wall/WallRoot'))
+const PhoneFrame = lazy(() => import('./phone/PhoneFrame'))
 
 // /wall is the Family Wall and renders without the old app shell.
 function RootSwitch() {
@@ -329,7 +330,16 @@ function RootSwitch() {
   // The wall kiosk treats the Family Wall as home (src/wall/kioskHome.ts).
   const urlFlag = wallHomeFlagFromUrl(pathname, search)
   if (urlFlag) writeWallHomeFlag(urlFlag)
-  if (shouldSendHomeToWall(pathname, search, urlFlag ?? readWallHomeFlag(), { wide: isWideScreen() })) return <Navigate to="/wall" replace />
+  const home = homeRedirect(pathname, search, urlFlag ?? readWallHomeFlag(), { wide: isWideScreen() })
+  if (home) return <Navigate to={home} replace />
+  // The phone lens (Phase 4): the same family day, one person's view.
+  if (pathname === '/phone') {
+    return (
+      <Suspense fallback={<div className="fixed inset-0 bg-phone-ground" />}>
+        <PhoneFrame />
+      </Suspense>
+    )
+  }
   if (pathname === '/wall' || pathname.startsWith('/wall/')) {
     return (
       <Suspense fallback={<div className="fixed inset-0 bg-wall-ground" />}>

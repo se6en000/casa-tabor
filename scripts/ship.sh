@@ -43,7 +43,7 @@ TEST_PID=$!
 WALL_LOG="$(dirname "$LOG")/wall-visual.log"
 WALL_PID=""
 # Only when this ship touches something that can change how the Wall looks.
-WALL_PATHS='^(src/wall/|src/lib/|src/index\.css|src/design-system/|src/generated/|src/main\.tsx|tests/fixtures/wall|visual-regression/wall|playwright\.wall|package(-lock)?\.json)'
+WALL_PATHS='^(src/wall/|src/phone/|src/App\.tsx|visual-regression/phone|src/lib/|src/index\.css|src/design-system/|src/generated/|src/main\.tsx|tests/fixtures/wall|visual-regression/wall|playwright\.wall|package(-lock)?\.json)'
 WALL_TOUCHED=$({ git diff --name-only HEAD; git ls-files --others --exclude-standard; } | grep -E "$WALL_PATHS" | head -1 || true)
 if [ -z "$WALL_TOUCHED" ]; then
   : # nothing Wall-visible changed
