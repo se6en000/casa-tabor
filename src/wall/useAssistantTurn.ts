@@ -8,6 +8,11 @@ import { supabase } from '../lib/supabase'
 import type { FamilyMember } from '../types'
 import { answerEventId, latestExchange, pendingAction } from './assistant'
 import { readActionResult, requestArgsFor, responseBody } from './assistantActions'
+import { conversationForReport, type ReportConversation } from './bugReport'
+
+// The last conversation with something in it, kept past its band or sheet closing, so a
+// report opened afterwards still carries it.
+let lastConversation: ReportConversation | null = null
 
 /**
  * One conversation with the assistant as the Wall's band and the phone both hold it:
@@ -24,7 +29,9 @@ export function useAssistantTurn({ surface, events, family, onSessionEnd }: { su
   // When each message first appeared (messages carry no time of their own), for bug reports.
   useEffect(() => {
     for (const m of messages) if (!seenAt.current[m.id]) seenAt.current[m.id] = new Date().toISOString()
-  }, [messages])
+    if (messages.length > 0) lastConversation = { messages, seenAt: { ...seenAt.current }, sessionId: session?.id ?? null }
+  }, [messages, session?.id])
+  const forReport = useCallback(() => conversationForReport({ messages, seenAt: seenAt.current, sessionId: session?.id ?? null }, lastConversation), [messages, session?.id])
 
   const { question, answer } = latestExchange(messages)
   const pending = pendingAction(messages)
@@ -74,5 +81,5 @@ export function useAssistantTurn({ surface, events, family, onSessionEnd }: { su
     setNote('Okay, nothing changed.')
   }, [pending, updateMessageToolStatus])
 
-  return { messages, loading, send, session, question, answer, pending, pointAt, confirm, cancel, working, note, setNote, seenAt }
+  return { messages, loading, send, session, question, answer, pending, pointAt, confirm, cancel, working, note, setNote, forReport }
 }

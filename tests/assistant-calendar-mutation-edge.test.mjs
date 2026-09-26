@@ -53,6 +53,24 @@ test('findTargetEventFromText does not substring-match a connector word inside a
   assert.equal(real?.id, 'haircut-real')
 })
 
+test('findTargetEventFromText: "the yoga appointment" finds Kelly Yoga — filler words don\'t count, and the best match wins', () => {
+  // Jake, 2026-09-26 8:03 (a bug report from the wall): "Move the yoga appointment up to
+  // 8 30 a.m." got "Which event would you like to update?" with Kelly Yoga listed. "the"
+  // counted as a title word, so "The Park Press" and "Coffeein the park" matched too.
+  const events = [
+    { id: 'press', title: 'The Park Press Vol. 4 - Your Neighborhood Monthly Newsletter' },
+    { id: 'yoga', title: 'Kelly Yoga' },
+    { id: 'coffee', title: 'Meet Coffee Lady 8:15 - tape up flyers' },
+    { id: 'park', title: 'Coffeein the park' },
+    { id: 'jaida', title: 'Jaida Watching Owen and Emme' },
+    { id: 'kelly-dinner', title: 'Kelly dinner with the girls' },
+  ]
+  assert.equal(findTargetEventFromText('Move the yoga appointment up to 8 30 a.m.', events)?.id, 'yoga')
+  assert.equal(findTargetEventFromText('push kelly yoga back to 830', events)?.id, 'yoga', 'two words beat one')
+  assert.equal(findTargetEventFromText('move the kelly thing to 9', events), null, 'a tie still asks')
+  assert.equal(findTargetEventFromText("What's on Saturday?", events), null)
+})
+
 test('active event shifts preserve duration and support relational scheduling', () => {
   const shifted = resolveActiveCalendarMutation('Move that trip back two days.', event, [event], { utcOffset: '-04:00' })
   assert.equal(shifted.args.start, '2026-07-14T14:00:00.000Z')

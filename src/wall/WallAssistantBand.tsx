@@ -29,7 +29,7 @@ export interface WallAssistantBandProps {
 }
 
 export default function WallAssistantBand({ listenNonce, events, family, onClose, onPointAt, onOpenEvent }: WallAssistantBandProps) {
-  const { messages, loading, send, session, question, answer, pending, pointAt, confirm, cancel, working, note, setNote, seenAt } = useAssistantTurn({ surface: 'wall', events, family, onSessionEnd: onClose })
+  const { loading, send, question, answer, pending, pointAt, confirm, cancel, working, note, setNote, forReport } = useAssistantTurn({ surface: 'wall', events, family, onSessionEnd: onClose })
   const [interim, setInterim] = useState('')
   const lastTouch = useRef(Date.now())
   const captured = useRef('')
@@ -132,10 +132,11 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   }
   const submitReport = async () => {
     setReportState('sending')
+    const conversation = forReport()
     const report = buildBugReport({
-      messages,
-      seenAt: seenAt.current,
-      sessionId: session?.id ?? null,
+      messages: conversation.messages,
+      seenAt: conversation.seenAt,
+      sessionId: conversation.sessionId,
       heard: heardRef.current,
       categories,
       expected,
@@ -153,7 +154,8 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
         pendingTool: pending?.toolAction?.tool ?? null,
         loading,
         online: navigator.onLine,
-        messageCount: messages.length,
+        messageCount: conversation.messages.length,
+        previousConversation: conversation.previous,
       },
     })
     try {

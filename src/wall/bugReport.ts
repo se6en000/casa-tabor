@@ -20,6 +20,22 @@ export interface BugReportInput {
   context: Record<string, string | number | boolean | null>
 }
 
+export interface ReportConversation {
+  messages: AIMessage[]
+  seenAt: Record<string, string>
+  sessionId: string | null
+}
+
+/**
+ * What a report sends: this conversation, or — when the band or sheet was closed and
+ * reopened just to report — the one before it (Jake, 2026-09-26: "this was the previous
+ * conversation", sent with none).
+ */
+export function conversationForReport(current: ReportConversation, last: ReportConversation | null): ReportConversation & { previous: boolean } {
+  if (current.messages.length === 0 && last && last.messages.length > 0) return { ...last, previous: true }
+  return { ...current, previous: false }
+}
+
 export function buildBugReport(input: BugReportInput) {
   const { messages, seenAt, sessionId, heard, categories, expected, happened, context } = input
   const conversation = messages.map((m) => {

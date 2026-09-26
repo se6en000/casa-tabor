@@ -46,3 +46,13 @@ test('a report with no words from the person still says what kind of problem it 
   const r = buildBugReport({ ...base, expected: '', happened: '', categories: ["Didn't hear me"] })
   assert.equal(r.detail, "Didn't hear me")
 })
+
+test('a report sent after the band closed carries the conversation before it (Jake: "this was the previous conversation")', async () => {
+  const { conversationForReport } = await import('../src/wall/bugReport.ts')
+  const previous = { messages: [{ id: 'u1', role: 'user', content: 'Move the yoga appointment up to 8 30 a.m.' }], seenAt: { u1: '2026-09-26T12:03:57Z' }, sessionId: 's-old' }
+  const empty = { messages: [], seenAt: {}, sessionId: 's-new' }
+  assert.deepEqual(conversationForReport(empty, previous), { ...previous, previous: true })
+  const current = { messages: [{ id: 'u2', role: 'user', content: 'what is on saturday' }], seenAt: {}, sessionId: 's-now' }
+  assert.deepEqual(conversationForReport(current, previous), { ...current, previous: false })
+  assert.deepEqual(conversationForReport(empty, null), { ...empty, previous: false })
+})

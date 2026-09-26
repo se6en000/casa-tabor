@@ -127,24 +127,32 @@ export function findTargetEventFromText(text, events, options = {}) {
     'water', 'bottle', 'guards', 'hours', 'before', 'visit', 'please', 'today',
     'tomorrow', 'event', 'appointment', 'meeting', 'reminder', 'schedule', 'time',
     'with', 'from', 'into', 'also', 'that', 'this', 'will', 'have', 'been',
+    // Sentence glue and the change words themselves: "Move the yoga appointment up
+    // to 8 30" is about yoga, and "the" is in half the calendar's titles.
+    'the', 'and', 'for', 'our', 'you', 'can', 'her', 'his', 'its', 'my', 'thing',
+    'move', 'moved', 'push', 'shift', 'bump', 'reschedule', 'cancel', 'delete', 'remove',
+    'edit', 'set', 'make', 'earlier', 'later', 'instead', 'back', 'forward', 'until', 'then',
   ])
 
   const tokens = input
     .replace(/[^\w\s]/g, ' ')
     .split(/\s+/)
-    .filter((t) => t.length >= 3 && !stopWords.has(t))
+    .filter((t) => t.length >= 3 && !stopWords.has(t) && !/^\d+$/.test(t))
 
   if (tokens.length > 0) {
-    const tokenMatches = events.filter((e) => {
-      const eTitle = String(e.title ?? '').toLowerCase()
-      // Whole-word match, not substring: a bare connector word like "and" (real
-      // sentence glue in a compound request, not an identifying word) must not
-      // match merely because it appears inside an unrelated word, e.g. "and" inside
-      // "Grandpa" -- tokens only ever contain \w characters (see the replace/split
-      // above), so no escaping is needed to embed them in a RegExp safely.
-      return tokens.some((token) => new RegExp(`\\b${token}\\b`, 'i').test(eTitle))
-    })
-    if (tokenMatches.length === 1) return tokenMatches[0]
+    // Each event scores the request's words found in its title. Whole-word match, not
+    // substring: a bare connector word like "and" must not match inside "Grandpa" --
+    // tokens only ever contain \w characters (see the replace/split above), so no
+    // escaping is needed to embed them in a RegExp safely.
+    const scored = events
+      .map((e) => {
+        const eTitle = String(e.title ?? '').toLowerCase()
+        return { e, score: tokens.filter((token) => new RegExp(`\\b${token}\\b`, 'i').test(eTitle)).length }
+      })
+      .filter((m) => m.score > 0)
+      .sort((a, b) => b.score - a.score)
+    // Only a clear best ("kelly yoga" over another Kelly event); a tie grounds nothing.
+    if (scored.length === 1 || (scored.length > 1 && scored[0].score > scored[1].score)) return scored[0].e
   }
 
   return null

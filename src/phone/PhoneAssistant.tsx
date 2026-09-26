@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useProfileSession } from '../contexts/useProfileSession'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
 import { useSpeechInput } from '../hooks/useSpeechInput'
@@ -16,7 +16,7 @@ const canListen = typeof window !== 'undefined' && ('SpeechRecognition' in windo
 export default function PhoneAssistant({ events, family, onClose, onOpenEvent }: { events: EventWithDetails[]; family: FamilyMember[]; onClose: () => void; onOpenEvent: (id: string) => void }) {
   const { profile } = useProfileSession()
   const turn = useAssistantTurn({ surface: 'phone', events, family })
-  const { messages, loading, send, session, answer, pending, pointAt, confirm, cancel, working, note, setNote, seenAt } = turn
+  const { messages, loading, send, answer, pending, pointAt, confirm, cancel, working, note, setNote, forReport } = turn
   const [interim, setInterim] = useState('')
   const captured = useRef('')
   const heard = useRef('')
@@ -42,7 +42,9 @@ export default function PhoneAssistant({ events, family, onClose, onOpenEvent }:
     onCancel: cancel,
     hasPendingAction: Boolean(pending),
   })
-  stopRef.current = () => void speech.stop()
+  useEffect(() => {
+    stopRef.current = () => void speech.stop()
+  })
 
   const lines = useMemo(() => phoneTranscript(messages), [messages])
   const thinking = loading || Boolean(answer?.streaming)
@@ -71,10 +73,11 @@ export default function PhoneAssistant({ events, family, onClose, onOpenEvent }:
       onConfirm={() => void confirm()}
       onCancel={cancel}
       onReport={async ({ categories, expected, happened }) => {
+        const conversation = forReport()
         await sendBugReport(buildBugReport({
-          messages,
-          seenAt: seenAt.current,
-          sessionId: session?.id ?? null,
+          messages: conversation.messages,
+          seenAt: conversation.seenAt,
+          sessionId: conversation.sessionId,
           heard: heard.current,
           categories,
           expected,
@@ -92,7 +95,8 @@ export default function PhoneAssistant({ events, family, onClose, onOpenEvent }:
             pendingTool: pending?.toolAction?.tool ?? null,
             loading,
             online: navigator.onLine,
-            messageCount: messages.length,
+            messageCount: conversation.messages.length,
+            previousConversation: conversation.previous,
           },
         }))
       }}
