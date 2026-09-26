@@ -17,7 +17,7 @@ test('an add says when, where it lands in the first person’s day, and who can 
   assert.equal(card.lane.memberId, 'liv')
   assert.ok(card.lane.segments.some((s) => s.sourceId === 'new'), 'the draft is in Liv’s lane')
   assert.ok(card.lane.segments.some((s) => /Bak Middle/.test(s.label)), 'with her school day')
-  assert.equal(card.leaveBy, '3:36')
+  assert.equal(card.leaveBy, '3:31', 'the 24-min drive plus the app’s 5-min buffer, as the edit sheet and a saved event have it')
   assert.ok(card.drivers.length >= 2)
   assert.ok(card.drivers.every((d) => typeof d.note === 'string'))
   assert.deepEqual(card.touches, ['Nothing else then for Liv'])

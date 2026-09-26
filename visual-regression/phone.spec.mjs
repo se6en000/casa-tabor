@@ -257,7 +257,7 @@ test('phone: Ask Casa — the one draft, revised in place, says what just change
   await expect(card).toHaveCount(1)
   await expect(card.getByText('Dentist · Liv')).toBeVisible()
   await expect(card.getByText('Just changed: 3:30 → 4:00')).toBeVisible()
-  await expect(card.getByText('3:36')).toBeVisible()
+  await expect(card.getByText('3:31')).toBeVisible()
   await expect(card.getByText('Kelly · free')).toBeVisible()
   await expect(phone).toHaveScreenshot('phone-ask-draft.png')
 })

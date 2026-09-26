@@ -91,7 +91,8 @@ function draftEvent(action: CardAction, ctx: CardContext): { event: EditableEven
         location_name: place,
         address: place,
         members: people.map((id, i) => ({ family_member_id: id, role: i === 0 ? 'primary' : 'attendee' })),
-        ...(place && ctx.driveMinutes != null ? { enrichment: { drive_time_mins: ctx.driveMinutes } } : {}),
+        // Leave-by by the app's rule (drive + buffer), as the edit sheet and a saved event have it.
+        ...(place && ctx.driveMinutes != null ? { enrichment: { drive_time_mins: ctx.driveMinutes, departure_time: a.all_day === true ? null : rescheduledDepartureIso(new Date(start), ctx.driveMinutes) } } : {}),
       } as EditableEvent,
     }
   }

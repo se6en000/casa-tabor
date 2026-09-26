@@ -391,7 +391,7 @@ test('wall assistant: a draft shows the thread, what just changed, where it land
   await expect(section.getByText('“Actually make it 4”')).toBeVisible()
   await expect(section.getByText('Just changed: 3:30 → 4:00')).toBeVisible()
   await expect(section.getByText('Dentist · Liv')).toBeVisible()
-  await expect(section.getByText('3:36')).toBeVisible()
+  await expect(section.getByText('3:31')).toBeVisible()
   await expect(section.getByText('Kelly · free')).toBeVisible()
   await expect(section.getByText('Nothing else then for Liv')).toBeVisible()
   await page.evaluate(() => document.fonts.ready)
