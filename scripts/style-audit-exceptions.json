@@ -290,6 +290,10 @@
       {
         "path": "src/wall/WallAssistantCard.tsx",
         "reason": "Family Wall: the assistant card's lane preview (board 06a) positions the person's day and the draft on a timeline from event times at runtime."
+      },
+      {
+        "path": "src/phone/PhoneAssistantCard.tsx",
+        "reason": "Phone (Family Wall family): the assistant card's lane preview (board 06e) positions the person's day and the draft on a timeline from event times at runtime."
       }
     ],
     "nativeControlRecreations": [
@@ -392,6 +396,10 @@
       {
         "path": "src/wall/WallAssistantCard.tsx",
         "reason": "Family Wall: the assistant card's yes / change / no and driver buttons (boards 06a/06b), part of the Wall's own component set."
+      },
+      {
+        "path": "src/phone/PhoneAssistantCard.tsx",
+        "reason": "Phone (Family Wall family): the assistant card's yes / no and driver buttons and the which-one tiles (boards 06e/06f), part of the Wall's own component set."
       }
     ]
   }

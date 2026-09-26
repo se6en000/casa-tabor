@@ -4,7 +4,11 @@ import type { EventWithDetails } from '../hooks/useCalendarEvents'
 import { useSpeechInput } from '../hooks/useSpeechInput'
 import { sendBugReport } from '../lib/remoteVoiceTrace'
 import type { FamilyMember } from '../types'
-import { cardText, voiceFinal } from '../wall/assistant'
+import { cardText, nextStep, voiceFinal, whichOne } from '../wall/assistant'
+import { assistantCard, replacedAction } from '../wall/assistantCard'
+import type { DayPlan, WallEvent, WallMember } from '../wall/engine/types'
+import { pigmentIndexes } from '../wall/score'
+import { routeEta, useDriveMinutes, type DriveLookup } from '../wall/useDriveMinutes'
 import { buildBugReport } from '../wall/bugReport'
 import { useAssistantTurn } from '../wall/useAssistantTurn'
 import { phoneTranscript } from './assistant'
@@ -13,10 +17,32 @@ import PhoneAssistantView from './PhoneAssistantView'
 const canListen = typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)
 
 /** Say it with live data: the same assistant and the same yes as the wall's band. */
-export default function PhoneAssistant({ events, family, onClose, onOpenEvent }: { events: EventWithDetails[]; family: FamilyMember[]; onClose: () => void; onOpenEvent: (id: string) => void }) {
+export default function PhoneAssistant({ events, family, members, planDay, onClose, onOpenEvent, useTurn = useAssistantTurn, lookupDrive = routeEta }: {
+  events: EventWithDetails[]
+  family: FamilyMember[]
+  /** The family and the Wall's engine for one day: the card is told from them, as on the wall. */
+  members: WallMember[]
+  planDay: (date: Date, events: WallEvent[]) => DayPlan | null
+  onClose: () => void
+  onOpenEvent: (id: string) => void
+  /** The conversation and the drive lookup; the screenshot fixture passes canned ones. */
+  useTurn?: typeof useAssistantTurn
+  lookupDrive?: DriveLookup
+}) {
   const { profile } = useProfileSession()
-  const turn = useAssistantTurn({ surface: 'phone', events, family })
-  const { messages, loading, send, answer, pending, pointAt, confirm, cancel, working, note, setNote, forReport } = turn
+  const turn = useTurn({ surface: 'phone', events, family })
+  const { messages, loading, send, answer, pending, pointAt, confirm, cancel, working, note, setNote, forReport, setPendingArgs } = turn
+
+  // The same card as the wall's band (boards 06e/06f).
+  const action = pending?.toolAction ?? null
+  const driveMinutes = useDriveMinutes(action, events, lookupDrive)
+  const card = useMemo(
+    () => (action ? assistantCard({ tool: action.tool, args: action.args }, replacedAction(messages, pending), { events: events as unknown as WallEvent[], members, planDay, driveMinutes }) : null),
+    [action, messages, pending, events, members, planDay, driveMinutes],
+  )
+  const pigments = useMemo(() => pigmentIndexes(members), [members])
+  const which = pending || loading ? null : whichOne(answer, events as never)
+  const offer = pending || which || answer?.streaming ? null : nextStep(answer)
   const [interim, setInterim] = useState('')
   const captured = useRef('')
   const heard = useRef('')
@@ -104,6 +130,12 @@ export default function PhoneAssistant({ events, family, onClose, onOpenEvent }:
         stopRef.current()
         onClose()
       }}
+      card={card}
+      which={which}
+      offer={offer}
+      members={members}
+      pigmentOf={(id) => pigments.get(id) ?? null}
+      onPickDriver={(name) => setPendingArgs({ driver_name: name })}
     />
   )
 }

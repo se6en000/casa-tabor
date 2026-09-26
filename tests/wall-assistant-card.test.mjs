@@ -88,3 +88,17 @@ test('a change to a new place uses the drive looked up for it', () => {
   assert.equal(card.place, 'Wellington Regional Park')
   assert.equal(card.leaveBy, '11:45')
 })
+
+test('the lane preview: a window from 8 AM that takes in the day, the draft marked, room after it for its name', async () => {
+  const { laneView } = await import('../src/wall/assistantCard.ts')
+  const card = assistantCard(add({ location: 'Palm Beach Pediatric Dentistry' }), null, ctx({ driveMinutes: 24 }))
+  const view = laneView(card)
+  assert.equal(view.from, 7, 'school drop-off starts before 8')
+  assert.ok(view.to >= 20, 'three hours of room after the drive home')
+  const draft = view.blocks.find((b) => b.draft && b.kind !== 'drive')
+  assert.ok(draft && draft.left > 0 && draft.width > 0)
+  assert.ok(view.blocks.some((b) => !b.draft && /Bak Middle/.test(b.label)))
+  assert.ok(view.labelLeft >= draft.left + draft.width, 'the name sits after the draft and its drive home')
+  assert.equal(view.label, '4:00 Dentist')
+  assert.equal(laneView({ ...card, allDay: true }), null)
+})

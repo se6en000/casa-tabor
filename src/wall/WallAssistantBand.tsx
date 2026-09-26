@@ -7,12 +7,12 @@ import WallKeyboard from './WallKeyboard'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
 import { useSpeechInput } from '../hooks/useSpeechInput'
 import type { FamilyMember } from '../types'
-import { supabase } from '../lib/supabase'
 import { bandAnswer, bandState, cardText, nextStep, threadTurns, voiceFinal, whichOne } from './assistant'
 import { assistantCard, replacedAction } from './assistantCard'
 import type { DayPlan, WallEvent, WallMember } from './engine/types'
 import { pigmentIndexes } from './score'
 import { useAssistantTurn } from './useAssistantTurn'
+import { routeEta, useDriveMinutes, type DriveLookup } from './useDriveMinutes'
 import WallAssistantCard from './WallAssistantCard'
 import { pigmentStyleFor } from './lanes'
 
@@ -46,28 +46,7 @@ export interface WallAssistantBandProps {
   /** The conversation; the screenshot fixture passes a canned one. */
   useTurn?: typeof useAssistantTurn
   /** Drive minutes to a place, arriving at a time; the fixture passes a fixed one. */
-  lookupDrive?: (place: string, arrival: string) => Promise<number | null>
-}
-
-async function routeEta(place: string, arrival: string): Promise<number | null> {
-  const { data } = await supabase.functions.invoke('route-eta', { body: { destination: place, arrival_time: arrival, buffer_mins: 5 } })
-  const eta = data as { found?: boolean; drive_time_mins?: number } | null
-  return eta?.found && typeof eta.drive_time_mins === 'number' ? eta.drive_time_mins : null
-}
-
-/** Drive time to an add's place (the `route-eta` lookup the edit sheet uses), once per place and time. */
-function useDriveMinutes(place: string | null, arrival: string | null, lookup: (place: string, arrival: string) => Promise<number | null>): number | null {
-  const [known, setKnown] = useState<Record<string, number | null>>({})
-  const key = place && arrival ? `${place}|${arrival}` : null
-  useEffect(() => {
-    if (!key || key in known || !place || !arrival) return
-    let live = true
-    void lookup(place, arrival).catch(() => null).then((minutes) => {
-      if (live) setKnown((k) => ({ ...k, [key]: minutes }))
-    })
-    return () => { live = false }
-  }, [key]) // eslint-disable-line react-hooks/exhaustive-deps
-  return key ? known[key] ?? null : null
+  lookupDrive?: DriveLookup
 }
 
 export default function WallAssistantBand({ listenNonce, events, family, onClose, onPointAt, onOpenEvent, members, planDay, onDraft, useTurn = useAssistantTurn, lookupDrive = routeEta }: WallAssistantBandProps) {
@@ -76,9 +55,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
   // The card: the action waiting for a yes, told from the wall's engine (boards 06a/06b).
   const action = pending?.toolAction ?? null
   // A new place (an add's, or a change's) needs its drive looked up for leave-by.
-  const newPlace = action && (action.tool === 'create_event' || action.tool === 'update_event') && typeof action.args.location === 'string' ? action.args.location.trim() || null : null
-  const arrival = typeof action?.args.start === 'string' ? action.args.start : events.find((e) => e.id === action?.args.id)?.start_time ?? null
-  const driveMinutes = useDriveMinutes(newPlace, arrival, lookupDrive)
+  const driveMinutes = useDriveMinutes(action, events, lookupDrive)
   const card = useMemo(
     () => (action ? assistantCard({ tool: action.tool, args: action.args }, replacedAction(messages, pending), { events: events as unknown as WallEvent[], members, planDay, driveMinutes }) : null),
     [action, messages, pending, events, members, planDay, driveMinutes],

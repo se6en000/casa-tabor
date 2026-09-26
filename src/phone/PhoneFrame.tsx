@@ -1,3 +1,6 @@
+import { useCallback } from 'react'
+import { buildDayPlan } from '../wall/engine/dayPlan'
+import type { WallEvent } from '../wall/engine/types'
 import { useProfileSession } from '../contexts/useProfileSession'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
 import { deleteCalendarEvent } from '../lib/eventMutations'
@@ -16,7 +19,12 @@ import { scanDocumentFiles } from '../utils/documentScanner'
 /** The phone with live data: the same family day as the Wall, seen by whoever unlocked this phone. */
 export default function PhoneFrame() {
   const { profile } = useProfileSession()
-  const { now, members, week, allEvents, tripActions, checklist, queryClient, keep, setKeptFrom } = useFamilyDay({ kind: 'member', memberId: profile?.memberId ?? '' })
+  const { now, members, week, allEvents, routines, dayOffs, tripStateFor, tripActions, checklist, queryClient, keep, setKeptFrom } = useFamilyDay({ kind: 'member', memberId: profile?.memberId ?? '' })
+  // The assistant's card is told from the same engine as the wall's (board 06e).
+  const planDay = useCallback(
+    (date: Date, events: WallEvent[]) => buildDayPlan({ date, members, routines, events, dayOffs, tripState: tripStateFor?.(date) }),
+    [members, routines, dayOffs, tripStateFor],
+  )
   const { data: contacts = [] } = useSavedContacts()
   const { data: places = [] } = useSavedPlaces()
   return (
@@ -33,7 +41,7 @@ export default function PhoneFrame() {
       deleteEvent={(event) => deleteCalendarEvent(supabase, queryClient, event.id, event as unknown as EventWithDetails)}
       createEvent={(args) => createEventByTouch(queryClient, args, 'phone')}
       scan={(files) => scanDocumentFiles(files, members.map((m) => ({ id: m.id, name: m.name, full_name: m.full_name ?? null })))}
-      assistant={({ onClose, onOpenEvent }) => <PhoneAssistant events={allEvents as unknown as EventWithDetails[]} family={members as unknown as FamilyMember[]} onClose={onClose} onOpenEvent={onOpenEvent} />}
+      assistant={({ onClose, onOpenEvent }) => <PhoneAssistant events={allEvents as unknown as EventWithDetails[]} family={members as unknown as FamilyMember[]} members={members} planDay={planDay} onClose={onClose} onOpenEvent={onOpenEvent} />}
       keepFrom={keep}
       setKeptFrom={setKeptFrom}
       contacts={contacts}

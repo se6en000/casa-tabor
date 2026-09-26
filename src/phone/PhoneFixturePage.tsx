@@ -1,6 +1,12 @@
 // Visual-test only (VITE_VISUAL_TEST_MODE): the phone drawn from the Wall's fixed test
 // fixture at ?at=, as ?viewer= (a member id), for the Playwright guard at 390x844.
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import { ProfileSessionContext } from '../contexts/useProfileSession'
+import type { EventWithDetails } from '../hooks/useCalendarEvents'
+import type { FamilyRoutine } from '../lib/familyRoutines'
+import type { FamilyMember } from '../types'
+import { fixtureTurn } from '../wall/assistantFixture'
+import PhoneAssistant from './PhoneAssistant'
 import { useFixtureFonts } from '../wall/fixtureFonts'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { buildDayPlan } from '../wall/engine/dayPlan'
@@ -69,6 +75,8 @@ export default function PhoneFixturePage() {
   const params = new URLSearchParams(window.location.search)
   const now = new Date(params.get('at') ?? '2026-09-25T07:12:00')
   const viewerId = params.get('viewer') ?? 'jake-id'
+  const ask = params.get('ask')
+  const askTurn = useMemo(() => (ask ? fixtureTurn(ask) : null), [ask])
   const [tripState, setTripState] = useState<WallTripState>({})
   const [checklist, setChecklist] = useState(CHECKLIST)
   const [evs, setEvs] = useState(events as unknown as WallEvent[])
@@ -101,7 +109,21 @@ export default function PhoneFixturePage() {
               setKeptFrom={async (eventId, ids) => setKeep((k) => withKeptFrom(k, eventId, ids))}
               checklist={checklist}
               scan={async () => SCANNED}
-              assistant={({ onClose }) => (
+              assistant={({ onClose, onOpenEvent }) => askTurn ? (
+                // A canned conversation through the real Ask Casa (design section 06): `?ask=add|change|which|answer`.
+                <ProfileSessionContext.Provider value={{ profile: null, unlock: async () => {}, signOut: () => {} }}>
+                  <PhoneAssistant
+                    events={evs as unknown as EventWithDetails[]}
+                    family={members as unknown as FamilyMember[]}
+                    members={members as WallMember[]}
+                    planDay={(date, list) => buildDayPlan({ date, members: members as WallMember[], routines: routines as unknown as FamilyRoutine[], events: list, tripState: dayState(tripState, date) })}
+                    onClose={onClose}
+                    onOpenEvent={onOpenEvent}
+                    useTurn={askTurn}
+                    lookupDrive={async () => 24}
+                  />
+                </ProfileSessionContext.Provider>
+              ) : (
                 <FixtureAssistant
                   onClose={onClose}
                   onAdd={() => setEvs((list) => [...list, {

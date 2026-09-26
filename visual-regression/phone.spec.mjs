@@ -239,3 +239,50 @@ test("phone: Giselle's lens — the kids' things and what she drives, not Jake's
   await phone.getByRole('button', { name: /^THU/ }).click()
   await expect(phone.getByText('Book club at the Harrisons')).toBeVisible()
 })
+
+// Ask Casa with the assistant's cards (design section 06e/06f), from canned conversations (`?ask=`).
+const askScene = async (page, scene) => {
+  await page.goto(`/__phone-fixture?at=2026-09-25T13:40:00&viewer=jake-id&ask=${scene}`)
+  const phone = page.getByTestId('phone-fixture')
+  await expect(phone).toBeVisible()
+  await page.evaluate(() => document.fonts.ready)
+  await phone.getByRole('button', { name: 'Add something' }).click()
+  await phone.getByRole('region', { name: 'Add something' }).getByRole('button', { name: /Say it/ }).click()
+  return { phone, ask: phone.getByRole('region', { name: 'Ask Casa' }) }
+}
+
+test('phone: Ask Casa — the one draft, revised in place, says what just changed, where it lands and who can drive', async ({ page }) => {
+  const { phone, ask } = await askScene(page, 'add')
+  const card = ask.getByLabel('Draft')
+  await expect(card).toHaveCount(1)
+  await expect(card.getByText('Dentist · Liv')).toBeVisible()
+  await expect(card.getByText('Just changed: 3:30 → 4:00')).toBeVisible()
+  await expect(card.getByText('3:36')).toBeVisible()
+  await expect(card.getByText('Kelly · free')).toBeVisible()
+  await expect(phone).toHaveScreenshot('phone-ask-draft.png')
+})
+
+test('phone: Ask Casa — a change says before → after, and a driver can be picked on it', async ({ page }) => {
+  const { phone, ask } = await askScene(page, 'change')
+  const card = ask.getByLabel('Draft')
+  await expect(card.getByText('12:30 – 2:30 PM')).toBeVisible()
+  await expect(card.getByText('12:26')).toBeVisible()
+  await expect(phone).toHaveScreenshot('phone-ask-change.png')
+  await card.getByRole('button', { name: 'Kelly · free' }).click()
+  await expect(card.getByRole('button', { name: 'Kelly · free' })).toHaveAttribute('aria-pressed', 'true')
+})
+
+test('phone: Ask Casa — "which one?" as tiles, the change kept; a tap answers with the name', async ({ page }) => {
+  const { phone, ask } = await askScene(page, 'which')
+  await expect(ask.getByText('Your change is kept: → 5:00 PM')).toBeVisible()
+  await expect(phone).toHaveScreenshot('phone-ask-which.png')
+  await ask.getByRole('button', { name: /Softball: Huskies/ }).click()
+  await expect(ask.getByText('Softball: Huskies @ RPB Cascade', { exact: true }).last()).toBeVisible()
+  await expect(ask.getByText('Your change is kept: → 5:00 PM')).toHaveCount(0)
+})
+
+test('phone: Ask Casa — an answer that offers something gets a one-tap yes', async ({ page }) => {
+  const { ask } = await askScene(page, 'answer')
+  await ask.getByRole('button', { name: 'Yes, do that' }).click()
+  await expect(ask.getByText('Yes, do that', { exact: true })).toBeVisible()
+})

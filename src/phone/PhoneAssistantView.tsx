@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { ArrowUp, Bug, ChevronLeft, Loader2, Mic } from 'lucide-react'
 import { REPORT_CATEGORIES } from '../wall/bugReport'
 import type { PhoneLine } from './assistant'
+import type { WhichOne } from '../wall/assistant'
+import type { AssistantCard } from '../wall/assistantCard'
+import type { WallMember } from '../wall/engine/types'
+import { PhoneCard, PhoneWhich } from './PhoneAssistantCard'
 
 // Say it (board 05e): the family's assistant on the phone — the same one the wall's band
 // talks to. Type (or use the keyboard's dictation, or the mic), read the answer, and a
@@ -24,11 +28,21 @@ export interface PhoneAssistantViewProps {
   onCancel: () => void
   onReport: (report: { categories: string[]; expected: string; happened: string }) => Promise<void>
   onClose: () => void
+  /** The draft told from the family's day (board 06e); without it, `pending` is shown as words. */
+  card?: AssistantCard | null
+  /** "Which one?" as tiles (board 06f); a tap sends the name. */
+  which?: WhichOne | null
+  /** A one-tap yes when the answer offers to do something. */
+  offer?: { label: string; say: string } | null
+  members?: WallMember[]
+  pigmentOf?: (memberId: string) => number | null
+  /** A change can take a driver right on the card. */
+  onPickDriver?: (name: string) => void
 }
 
 const EXAMPLES = ['What’s on Saturday?', 'Who’s driving Liv tomorrow?', 'Add Jaida watching the kids Saturday 12 to 3']
 
-export default function PhoneAssistantView({ lines, thinking, pending, working, note, mic, onOpenEvent, onSend, onConfirm, onCancel, onReport, onClose }: PhoneAssistantViewProps) {
+export default function PhoneAssistantView({ lines, thinking, pending, working, note, mic, onOpenEvent, onSend, onConfirm, onCancel, onReport, onClose, card = null, which = null, offer = null, members = [], pigmentOf = () => null, onPickDriver }: PhoneAssistantViewProps) {
   const [text, setText] = useState('')
   const [reporting, setReporting] = useState(false)
   const [categories, setCategories] = useState<string[]>([])
@@ -38,7 +52,7 @@ export default function PhoneAssistantView({ lines, thinking, pending, working, 
   const endRef = useRef<HTMLDivElement>(null)
 
   // The newest line in view as the conversation grows.
-  useEffect(() => endRef.current?.scrollIntoView({ block: 'end' }), [lines.length, thinking, pending, note])
+  useEffect(() => endRef.current?.scrollIntoView({ block: 'end' }), [lines.length, thinking, pending, note, card, which])
 
   const submit = (value: string) => {
     const q = value.trim()
@@ -133,7 +147,9 @@ export default function PhoneAssistantView({ lines, thinking, pending, working, 
             {thinking && (
               <div className="flex items-center gap-[8px] text-phone-detail text-wall-ink-2"><Loader2 size={16} className="animate-spin" aria-hidden="true" /> Thinking…</div>
             )}
-            {pending && (
+            {card ? (
+              <PhoneCard card={card} members={members} pigmentOf={pigmentOf} working={working} onYes={onConfirm} onNo={onCancel} onPickDriver={card.kind === 'change' ? onPickDriver : undefined} />
+            ) : pending && (
               <div className="flex flex-col gap-[12px] rounded-[18px] bg-wall-on-pigment p-[16px]">
                 <div className="text-phone-label font-bold tracking-[0.16em] text-wall-brass-ink">DRAFT · NOT SAVED YET</div>
                 <div className="font-display text-phone-heading font-bold">{pending}</div>
@@ -143,9 +159,13 @@ export default function PhoneAssistantView({ lines, thinking, pending, working, 
                 </div>
               </div>
             )}
+            {which && !thinking && <PhoneWhich which={which} members={members} pigmentOf={pigmentOf} onPick={submit} onNeither={() => submit('Never mind')} />}
             {note && <div className="text-phone-body font-semibold text-wall-ink">{note}</div>}
-            {onOpenEvent && !pending && (
-              <button type="button" onClick={onOpenEvent} className={`${pill} self-start`}>Open it</button>
+            {(offer || onOpenEvent) && !pending && !thinking && (
+              <div className="flex flex-wrap gap-[8px]">
+                {offer && <button type="button" onClick={() => submit(offer.say)} className={dark}>{offer.label}</button>}
+                {onOpenEvent && <button type="button" onClick={onOpenEvent} className={pill}>Open it</button>}
+              </div>
             )}
             <div ref={endRef} />
           </div>

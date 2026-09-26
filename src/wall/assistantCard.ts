@@ -227,3 +227,51 @@ export function replacedAction<T extends { toolAction?: { tool: string; args: Re
   return null
 }
 
+
+export interface LaneView {
+  /** The window, in hours of the day. */
+  from: number
+  to: number
+  ticks: number[]
+  /** Positions in percent of the lane's width. */
+  blocks: Array<{ kind: LaneSegment['kind']; label: string; left: number; width: number; draft: boolean }>
+  label: string
+  labelLeft: number
+  /** Near the end of the day the name goes before the draft instead (right edge, in percent). */
+  labelBefore: boolean
+}
+
+/** "Softball" from "Softball: Huskies @ RPB Cascade". */
+function shortName(title: string): string {
+  const head = title.split(/[:·(—]/)[0].trim()
+  return head.split(' ').slice(0, 3).join(' ')
+}
+
+/** Where the draft lands in the person's day, laid out for the card's lane preview (board 06a). */
+export function laneView(card: AssistantCard): LaneView | null {
+  if (!card.lane || card.allDay) return null
+  const hourOf = (d: Date) => d.getHours() + d.getMinutes() / 60
+  const segments = card.lane.segments.filter((s) => s.end > s.start)
+  const labelAt = new Date(Math.max(card.end.getTime(), ...segments.filter((s) => s.sourceId === card.eventId).map((s) => s.end.getTime())))
+  const hours = [...segments.flatMap((s) => [s.start, s.end]), card.start, card.end].map(hourOf)
+  const from = Math.max(0, Math.min(8, Math.floor(Math.min(...hours))))
+  // 8 AM – 6 PM at least, widened to take in the day, with room after the draft for its name.
+  const to = Math.min(24, Math.max(18, Math.ceil(Math.max(...hours)), Math.ceil(hourOf(labelAt)) + 3))
+  const at = (d: Date) => ((hourOf(d) - from) / (to - from)) * 100
+  const span = (a: Date, b: Date) => ((b.getTime() - a.getTime()) / 3_600_000 / (to - from)) * 100
+  const blocks = [
+    ...segments.filter((s) => s.sourceId !== card.eventId).map((s) => ({ kind: s.kind, label: s.kind === 'drive' ? '' : s.label, left: at(s.start), width: span(s.start, s.end), draft: false })),
+    ...segments.filter((s) => s.sourceId === card.eventId && s.kind === 'drive').map((s) => ({ kind: s.kind, label: '', left: at(s.start), width: span(s.start, s.end), draft: true })),
+    { kind: 'activity' as const, label: card.title, left: at(card.start), width: span(card.start, card.end), draft: true },
+  ]
+  const labelBefore = hourOf(labelAt) > to - 2.5
+  return {
+    from,
+    to,
+    ticks: Array.from({ length: Math.floor((to - from) / 2) + 1 }, (_, i) => from + i * 2),
+    blocks,
+    label: `${clock(card.start)} ${shortName(card.title)}`,
+    labelLeft: labelBefore ? at(card.start) : at(labelAt),
+    labelBefore,
+  }
+}
