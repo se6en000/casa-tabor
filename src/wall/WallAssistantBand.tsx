@@ -141,7 +141,9 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
       // Press-to-talk, like the full assistant: the mic turns off after each question.
       stopRef.current()
     },
-    onDismiss: onClose,
+    onDismiss: () => {
+      if (!reportingRef.current) onClose()
+    },
     onConfirm: () => void confirm(),
     onCancel: cancel,
     hasPendingAction: Boolean(pending),
@@ -184,8 +186,10 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
 
   const openReport = () => {
     lastTouch.current = Date.now()
-    stopRef.current()
+    // Before stopping the mic: stopping with no question asked is the band's "close" path.
+    reportingRef.current = true
     setReporting(true)
+    stopRef.current()
     setReportState('idle')
   }
   const submitReport = async () => {
