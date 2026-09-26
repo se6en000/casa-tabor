@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { FamilyRoutine } from '../lib/familyRoutines'
-import type { EditableEvent } from './editing'
+import { blankEvent, type EditableEvent } from './editing'
 import { buildDayPlan, type DayOff } from './engine/dayPlan'
 import type { DayPlan, Trip, WallEvent, WallMember } from './engine/types'
 import { selectNextMove } from './engine/nextMove'
@@ -20,7 +20,7 @@ import WallCalm from './WallCalm'
 import WallEvening from './WallEvening'
 import WallEventSheet from './WallEventSheet'
 import WallLaunch from './WallLaunch'
-import WallMenu, { MenuButton, MicButton } from './WallMenu'
+import WallMenu, { AddButton, MenuButton, MicButton } from './WallMenu'
 import WallWeek from './WallWeek'
 import { weekDays } from './week'
 import type { ScoreInteraction } from './WallScore'
@@ -63,6 +63,8 @@ export interface WallViewProps {
   deleteEvent?: (event: EditableEvent) => Promise<void>
   /** Ticks or unticks a packing item. */
   toggleChecklist?: (item: WallChecklistItem) => void
+  /** Adds an event or reminder (the + sheet), through the calendar's own create call. */
+  createEvent?: (args: Record<string, unknown>) => Promise<void>
 }
 
 const POSTURE_NAMES: Record<Posture, string> = { launch: 'Full day', calm: 'Calm', evening: 'Evening' }
@@ -77,7 +79,7 @@ const WAKE_MS = 5 * 60_000
  * face lives in the MT menu. A tap on a calendar item opens its sheet.
  */
 export default function WallView(props: WallViewProps) {
-  const { now, members, today, tomorrow, currentWeather, checklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, openRequest = null, tripStateFor, tripActions, week = [], deleteEvent, toggleChecklist } = props
+  const { now, members, today, tomorrow, currentWeather, checklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, openRequest = null, tripStateFor, tripActions, week = [], deleteEvent, toggleChecklist, createEvent } = props
   // The driver picker: from "Hand off" on the Next Move, or a decision answered "choose a driver".
   const [handOff, setHandOff] = useState<{ trip: Trip; plan: DayPlan; tripIds: string[]; date: Date } | null>(null)
   const [decisionsOpen, setDecisionsOpen] = useState(false)
@@ -88,6 +90,8 @@ export default function WallView(props: WallViewProps) {
   // A touch on Calm wakes the full day until this time (5 idle minutes).
   const [awakeUntil, setAwakeUntil] = useState(0)
   const [menuOpen, setMenuOpen] = useState(false)
+  // The + sheet: a blank item on the day on show.
+  const [adding, setAdding] = useState<EditableEvent | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [draftPreview, setDraftPreview] = useState<EditableEvent | null>(null)
 
@@ -101,7 +105,12 @@ export default function WallView(props: WallViewProps) {
 
   // While editing, the wall behind the sheet shows the day as it would be saved.
   const withDraft = useCallback(
-    (plan: DayPlan | null) => (plan && draftPreview ? buildPlanFor(plan.date, allEvents.map((e) => (e.id === draftPreview.id ? draftPreview : e))) : plan),
+    (plan: DayPlan | null) => {
+      if (!plan || !draftPreview) return plan
+      // A new item (not in the list yet) is added; an edited one replaces itself.
+      const known = allEvents.some((e) => e.id === draftPreview.id)
+      return buildPlanFor(plan.date, known ? allEvents.map((e) => (e.id === draftPreview.id ? draftPreview : e)) : [...allEvents, draftPreview])
+    },
     [draftPreview, allEvents, buildPlanFor],
   )
   const shownToday = useMemo(() => withDraft(today), [withDraft, today])
@@ -262,6 +271,7 @@ export default function WallView(props: WallViewProps) {
         currentWeather={currentWeather}
         onOpenMenu={openMenu}
         onAsk={onAsk}
+        onAdd={createEvent ? () => setAdding(blankEvent(dayOnShow, now, 'event')) : undefined}
         interaction={{ ...interaction, marks: marksFor(shownToday?.date) }}
         moveActions={moveActions}
         decisionCount={weekDecisions.length}
@@ -285,6 +295,7 @@ export default function WallView(props: WallViewProps) {
       {face}
       {!onLaunchFace && <MenuButton onOpen={openMenu} className="absolute right-[44px] top-[44px]" />}
       {!onLaunchFace && onAsk && <MicButton onAsk={onAsk} className="absolute right-[108px] top-[38px]" />}
+      {!onLaunchFace && createEvent && <AddButton onAdd={() => setAdding(blankEvent(dayOnShow, now, 'event'))} className="absolute right-[184px] top-[44px]" />}
       {!selected && overlay}
       {shown.preview && !selected && (
         <div className="pointer-events-none absolute left-1/2 top-[8px] -translate-x-1/2 whitespace-nowrap rounded-full bg-wall-ink px-[18px] py-[4px] text-wall-label font-semibold text-wall-on-pigment">
@@ -307,6 +318,24 @@ export default function WallView(props: WallViewProps) {
           }}
           onPreview={setDraftPreview}
           onDelete={deleteEvent}
+        />
+      )}
+      {adding && !selected && (
+        <WallEventSheet
+          key="new"
+          event={adding}
+          members={members}
+          now={now}
+          allEvents={allEvents}
+          buildPlanFor={buildPlanFor}
+          pigmentOf={(id) => pigments.get(id) ?? null}
+          checklist={checklist}
+          onClose={() => {
+            setAdding(null)
+            setDraftPreview(null)
+          }}
+          onPreview={setDraftPreview}
+          onCreate={createEvent}
         />
       )}
       {handOff && tripActions && (

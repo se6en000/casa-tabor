@@ -47,3 +47,14 @@ test('each day counts the prep still to do for its own events', () => {
   const days = weekDays(week, members, [], at(25, 7, 12), kit)
   assert.deepEqual(days.map((d) => d.toDo), [0, 2, 0, 0, 0, 0, 0])
 })
+
+test("today counts only prep for what hasn't happened yet", () => {
+  const kit = [
+    { id: 'p', event_id: 'photobook', label: 'Card', checked: false, sort_order: 1 }, // 10:25 AM
+    { id: 'v', event_id: 'violin', label: 'Violin', checked: false, sort_order: 1 },  // 4:30 PM
+  ]
+  const morning = weekDays(week, members, [], at(25, 7, 12), kit)
+  assert.equal(morning[0].toDo, 2)
+  const evening = weekDays(week, members, [], at(25, 20, 0), kit)
+  assert.equal(evening[0].toDo, 0)
+})

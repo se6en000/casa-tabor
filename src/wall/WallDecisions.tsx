@@ -98,7 +98,7 @@ export function DecisionCount({ count, onOpen, className = '' }: { count: number
     <button
       type="button"
       onClick={(e) => { e.stopPropagation(); onOpen() }}
-      className={`flex h-[44px] items-center gap-[10px] rounded-full border border-solid border-wall-brass bg-transparent px-[18px] text-wall-label font-bold tracking-[0.15em] text-wall-brass-ink ${className}`}
+      className={`flex h-[44px] shrink-0 items-center gap-[10px] whitespace-nowrap rounded-full border border-solid border-wall-brass bg-transparent px-[16px] text-wall-label font-bold tracking-[0.15em] text-wall-brass-ink ${className}`}
     >
       <span aria-hidden="true" className="flex h-[24px] w-[24px] items-center justify-center rounded-full bg-wall-brass-ink text-wall-on-pigment">{count}</span>
       TO DECIDE

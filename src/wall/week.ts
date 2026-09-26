@@ -23,6 +23,13 @@ export interface WeekDay {
 
 const dayKey = (date: Date) => date.toDateString()
 
+/** When a calendar item is over on this day (the end of its last block on the Score). */
+function lastEnd(plan: DayPlan, sourceId: string): number {
+  let end = 0
+  for (const segments of plan.lanes.values()) for (const s of segments) if (s.sourceId === sourceId) end = Math.max(end, s.end.getTime())
+  return end
+}
+
 export function weekDays(week: DayPlan[], members: WallMember[], decisions: Array<{ date: Date }>, now: Date, checklist: WallChecklistItem[] = []): WeekDay[] {
   return week.map((plan) => {
     const firstLeave = plan.trips
@@ -43,7 +50,10 @@ export function weekDays(week: DayPlan[], members: WallMember[], decisions: Arra
       memberIds,
       firstOut: firstLeave ? `First out ${formatWallClock(firstLeave).time}` : memberIds.length ? 'No trips' : 'Nothing planned',
       decisionCount: decisions.filter((d) => dayKey(d.date) === dayKey(plan.date)).length,
-      toDo: packingGroups(plan, checklist).groups.flatMap((g) => g.items).filter((i) => !i.checked).length,
+      toDo: packingGroups(plan, checklist).groups
+        // Today, only what hasn't happened yet: prep for this morning's errand is moot at 8 PM.
+        .filter((g) => !isToday || lastEnd(plan, g.eventId) > now.getTime())
+        .flatMap((g) => g.items).filter((i) => !i.checked).length,
     }
   })
 }

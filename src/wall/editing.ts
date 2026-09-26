@@ -306,3 +306,42 @@ export function savePlanFor(event: EditableEvent, draft: EditDraft): SaveStep[] 
   }
   return steps
 }
+
+// Adding by touch (board 04d): the same draft, starting from a blank item.
+
+/** The id a not-yet-saved item carries while it's being drafted. */
+export const NEW_EVENT_ID = 'new'
+
+/** A blank event or reminder on `day`: the next full hour if that's today, else 9 AM; an hour long (a reminder: 15 minutes). */
+export function blankEvent(day: Date, now: Date, kind: 'event' | 'reminder'): EditableEvent {
+  const sameDay = midnight(day).getTime() === midnight(now).getTime()
+  const startMin = sameDay ? Math.min(DAY_MIN - 60, (now.getHours() + 1) * 60) : 9 * 60
+  const start = atMinutes(day, startMin)
+  const end = new Date(start.getTime() + (kind === 'reminder' ? 15 : 60) * MINUTE)
+  return {
+    id: NEW_EVENT_ID,
+    title: '',
+    event_type: kind,
+    all_day: false,
+    start_time: start.toISOString(),
+    end_time: end.toISOString(),
+    location_name: null,
+    address: null,
+    members: [],
+  }
+}
+
+/** The arguments for the calendar's own create call (`execute-ai-action` create_event), from a draft. */
+export function createArgs(draft: EditDraft, kind: 'event' | 'reminder', members: Array<{ id: string; name: string }>): Record<string, unknown> {
+  const start = draft.allDay ? atMinutes(draft.day, 0) : atMinutes(draft.day, draft.startMin)
+  const end = draft.allDay ? atMinutes(draft.day, DAY_MIN) : atMinutes(draft.day, draft.endMin)
+  const location = (draft.place.address || draft.place.name).trim()
+  return {
+    title: draft.title.trim(),
+    start: start.toISOString(),
+    end: end.toISOString(),
+    event_type: kind,
+    ...(location ? { location } : {}),
+    members: draft.going.map((id) => members.find((m) => m.id === id)?.name).filter(Boolean),
+  }
+}

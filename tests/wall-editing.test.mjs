@@ -118,3 +118,37 @@ test('friday\'s events are untouched by a saturday edit', () => {
   const fri = planWith(FRIDAY, replace(previewEvent(softball, d)))
   assert.deepEqual(fri.trips.map((t) => t.sourceId).sort(), planWith(FRIDAY, events).trips.map((t) => t.sourceId).sort())
 })
+
+import { blankEvent, createArgs, NEW_EVENT_ID } from '../src/wall/editing.ts'
+
+test('a new event starts blank on the day on show: the next full hour today, 9 AM on another day', () => {
+  const today = blankEvent(new Date(2026, 8, 25), new Date(2026, 8, 25, 14, 20), 'event')
+  assert.equal(today.id, NEW_EVENT_ID)
+  assert.equal(today.title, '')
+  assert.equal(new Date(today.start_time).getHours(), 15)
+  assert.equal((new Date(today.end_time) - new Date(today.start_time)) / 60000, 60)
+  const saturday = blankEvent(new Date(2026, 8, 26), new Date(2026, 8, 25, 14, 20), 'reminder')
+  assert.equal(new Date(saturday.start_time).getHours(), 9)
+  assert.equal(saturday.event_type, 'reminder')
+  assert.equal((new Date(saturday.end_time) - new Date(saturday.start_time)) / 60000, 15)
+})
+
+test('adding sends the calendar\'s own create call: title, times, kind, place, and who is going by name', () => {
+  const event = blankEvent(new Date(2026, 8, 26), new Date(2026, 8, 25, 20, 0), 'event')
+  const draft = { ...draftFromEvent(event), title: '  Jaida watching Owen and Emme ', startMin: 12 * 60, endMin: 15 * 60,
+    place: { name: 'Home', address: '3209 Washington Road, West Palm Beach, FL 33405', driveMinutes: null }, going: ['emme', 'owen'] }
+  const args = createArgs(draft, 'event', members)
+  assert.equal(args.title, 'Jaida watching Owen and Emme')
+  assert.equal(new Date(args.start).getTime(), new Date(2026, 8, 26, 12, 0).getTime())
+  assert.equal(new Date(args.end).getTime(), new Date(2026, 8, 26, 15, 0).getTime())
+  assert.equal(args.event_type, 'event')
+  assert.equal(args.location, '3209 Washington Road, West Palm Beach, FL 33405')
+  assert.deepEqual(args.members, ['Emme', 'Owen'])
+})
+
+test('with no place, no location is sent (never a guess)', () => {
+  const event = blankEvent(new Date(2026, 8, 26), new Date(2026, 8, 25, 20, 0), 'reminder')
+  const args = createArgs({ ...draftFromEvent(event), title: 'Order the cake' }, 'reminder', members)
+  assert.equal('location' in args, false)
+  assert.deepEqual(args.members, [])
+})

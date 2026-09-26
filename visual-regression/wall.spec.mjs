@@ -319,3 +319,48 @@ test('wall: pack tonight — a tap checks a line off (it folds away), See all op
   await pack.getByRole('button', { name: /^Kelly's Birthday/ }).click()
   await expect(wall.getByRole('region', { name: /^Kelly's Birthday details/ })).toBeVisible()
 })
+
+test('wall: + adds an event by touch — blank on the day on show, the Score previews it, "Add it" puts it on the wall', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T07:12:00')
+  const wall = page.getByTestId('wall-fixture')
+  await wall.getByRole('region', { name: 'Next seven days' }).getByRole('button', { name: /^Saturday, September 26/ }).click()
+  await wall.getByRole('button', { name: 'Add something' }).click()
+  const sheet = wall.getByRole('region', { name: 'Adding something' })
+  await expect(sheet.getByRole('button', { name: 'Event' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(sheet.getByRole('button', { name: 'Add it' })).toBeDisabled() // no title yet
+
+  const keyboard = wall.getByRole('region', { name: 'Keyboard' })
+  for (const key of 'jaida') await keyboard.getByRole('button', { name: new RegExp(`^${key}$`, 'i') }).click()
+  await keyboard.getByRole('button', { name: 'Done', exact: true }).click()
+  await sheet.getByRole('button', { name: 'Who' }).click()
+  await sheet.getByRole('button', { name: /^Owen/ }).click()
+  await expect(wall).toHaveScreenshot('add-event.png')
+
+  await sheet.getByRole('button', { name: 'Add it' }).click()
+  await expect(wall.getByRole('region', { name: 'Adding something' })).toHaveCount(0)
+  await expect(wall.getByText(/^jaida$/i).first()).toBeVisible() // on Owen's lane, Saturday 9 AM
+})
+
+test('wall: the brand row (MT, mic, +, name, to decide) stays on one line', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T07:12:00')
+  const wall = page.getByTestId('wall-fixture')
+  await page.evaluate(() => document.fonts.ready)
+  const wrapped = await wall.getByRole('banner').evaluate((header) => {
+    const row = header.querySelector('button[aria-label="Open menu"]').parentElement
+    // Count the lines each piece of text is laid out on.
+    const lines = (el) => {
+      const range = document.createRange()
+      range.selectNodeContents(el)
+      // Boxes that overlap vertically share a line (a badge and its text sit at different heights).
+      let count = 0
+      let bottom = -Infinity
+      for (const r of [...range.getClientRects()].filter((r) => r.width > 0).sort((a, b) => a.top - b.top)) {
+        if (r.top >= bottom - 2) count += 1
+        bottom = Math.max(bottom, r.bottom)
+      }
+      return count
+    }
+    return [...row.children].filter((el) => el.textContent.trim() && lines(el) > 1).map((el) => el.textContent.trim())
+  })
+  expect(wrapped).toEqual([])
+})

@@ -1,4 +1,4 @@
-import { Mic } from 'lucide-react'
+import { Mic, Plus } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import type { Posture } from './posture'
 
@@ -44,6 +44,23 @@ export function MicButton({ onAsk, className = '', small = false }: { onAsk: () 
       className={`flex shrink-0 items-center justify-center rounded-full border-0 bg-wall-ink p-0 text-wall-night-brass ${small ? 'h-[44px] w-[44px] ring-[4px]' : 'h-[56px] w-[56px] ring-[6px]'} ring-wall-brass/35 ${className}`}
     >
       <Mic size={small ? 20 : 24} strokeWidth={1.8} />
+    </button>
+  )
+}
+
+/** Adding by touch (board 04d): beside the mic. */
+export function AddButton({ onAdd, className = '' }: { onAdd: () => void; className?: string }) {
+  return (
+    <button
+      type="button"
+      aria-label="Add something"
+      onClick={(event) => {
+        event.stopPropagation()
+        onAdd()
+      }}
+      className={`flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full border border-solid border-wall-ink bg-transparent p-0 text-wall-ink ${className}`}
+    >
+      <Plus size={20} strokeWidth={2} />
     </button>
   )
 }

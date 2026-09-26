@@ -10,7 +10,7 @@ import { supabase } from '../lib/supabase'
 import type { SavedPlaceCategory } from '../types'
 import { DEFAULT_HOUSEHOLD_COORDINATES } from '../utils/geoDistance'
 import {
-  canClearPlace, consequenceLine, dayChips, draftChanges, draftFromEvent, isReminder, previewEvent, savePlanFor,
+  canClearPlace, consequenceLine, createArgs, NEW_EVENT_ID, dayChips, draftChanges, draftFromEvent, isReminder, previewEvent, savePlanFor,
   setAllDay, setAnytime, setDay, setDriver, setGoing, setPlace, setTitle, stepEnd, stepStart, withDriver,
   type DraftPlace, type EditDraft, type EditableEvent,
 } from './editing'
@@ -46,6 +46,8 @@ export interface WallEventSheetProps {
   onClose: () => void
   /** Deletes the event or reminder everywhere it syncs (the app's own delete); absent = no Delete button. */
   onDelete?: (event: EditableEvent) => Promise<void>
+  /** Adding by touch (event id NEW_EVENT_ID): saves through the calendar's own create call. */
+  onCreate?: (args: Record<string, unknown>) => Promise<void>
   /** The event as the draft would save it (null when nothing changed), for the Score behind the sheet. */
   onPreview: (event: EditableEvent | null) => void
 }
@@ -85,12 +87,15 @@ function whenLabel(event: EditableEvent, now: Date): string {
 }
 
 export default function WallEventSheet(props: WallEventSheetProps) {
-  const { event, members, now, allEvents, buildPlanFor, pigmentOf, checklist, onClose, onDelete, onPreview } = props
+  const { event, members, now, allEvents, buildPlanFor, pigmentOf, checklist, onClose, onDelete, onCreate, onPreview } = props
   const queryClient = useQueryClient()
-  const [mode, setMode] = useState<Mode>('details')
+  // Adding by touch: the same sheet, opening straight into editing with the keyboard on the title.
+  const isNew = event.id === NEW_EVENT_ID
+  const [kind, setKind] = useState<'event' | 'reminder'>(event.event_type === 'reminder' ? 'reminder' : 'event')
+  const [mode, setMode] = useState<Mode>(isNew ? 'edit' : 'details')
   const [tab, setTab] = useState<'when' | 'who'>('when')
   const [draft, setDraft] = useState<EditDraft>(() => draftFromEvent(event))
-  const [keyboard, setKeyboard] = useState<KeyboardTarget>(null)
+  const [keyboard, setKeyboard] = useState<KeyboardTarget>(isNew ? 'title' : null)
   const [hourPicker, setHourPicker] = useState(false)
   const [otherDates, setOtherDates] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -134,13 +139,30 @@ export default function WallEventSheet(props: WallEventSheetProps) {
     return selectLaneMembers(members).concat(members.filter((m) => going.includes(m.id) && !selectLaneMembers(members).includes(m)))
   }, [members, event])
   const changes = useMemo(() => draftChanges(event, draft, members), [event, draft, members])
-  const preview = useMemo(() => (changes.length > 0 ? previewEvent(event, draft) : null), [changes, event, draft])
+  // A new item is always previewed (it's all new); an existing one once something changed.
+  const preview = useMemo(
+    () => (isNew ? { ...previewEvent(event, draft), title: draft.title.trim() || 'New', event_type: kind } : changes.length > 0 ? previewEvent(event, draft) : null),
+    [isNew, kind, changes, event, draft],
+  )
   const after = useMemo(() => {
     if (!preview) return null
-    return buildPlanFor(midnight(new Date(preview.start_time)), allEvents.map((e) => (e.id === event.id ? preview : e)))
-  }, [preview, allEvents, buildPlanFor, event.id])
+    const events = isNew ? [...allEvents, preview] : allEvents.map((e) => (e.id === event.id ? preview : e))
+    return buildPlanFor(midnight(new Date(preview.start_time)), events)
+  }, [preview, allEvents, buildPlanFor, event.id, isNew])
   const consequence = after ? consequenceLine(before, after, event.id, members, { before: draftFromEvent(event).going, after: draft.going }) : null
-  const wasOf = (field: string) => changes.find((c) => c.field === field)?.was ?? null
+  const wasOf = (field: string) => (isNew ? null : changes.find((c) => c.field === field)?.was ?? null)
+  const create = async () => {
+    if (!onCreate) return
+    setSaving(true)
+    setError(null)
+    try {
+      await onCreate(createArgs(draft, kind, members))
+      onClose()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Adding didn’t work. Nothing was added.')
+      setSaving(false)
+    }
+  }
 
   useEffect(() => onPreview(mode === 'details' ? null : preview), [preview, mode]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => onPreview(null), []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -299,7 +321,7 @@ export default function WallEventSheet(props: WallEventSheetProps) {
   }
   const [head, ...rest] = event.title.split(':')
   const own = checklist.filter((item) => item.event_id === event.id).sort((a, b) => a.sort_order - b.sort_order)
-  const reminder = isReminder(event)
+  const reminder = isNew ? kind === 'reminder' : isReminder(event)
 
   return (
     <div
@@ -312,7 +334,7 @@ export default function WallEventSheet(props: WallEventSheetProps) {
     >
       <div className="pointer-events-none absolute inset-0 bg-wall-ink/20" />
       <section
-        aria-label={`${event.title} details`}
+        aria-label={isNew ? "Adding something" : `${event.title} details`}
         className="absolute right-0 top-0 flex h-[1080px] w-[780px] flex-col gap-[22px] rounded-l-[28px] bg-wall-on-pigment px-[56px] py-[40px] font-body text-wall-ink shadow-[-24px_0_60px_rgba(38,34,29,0.18)]"
         onClick={(e) => e.stopPropagation()}
       >
@@ -425,7 +447,23 @@ export default function WallEventSheet(props: WallEventSheetProps) {
         {mode === 'edit' && (
           <>
             <div className="flex items-center justify-between">
-              <div className={`${eyebrow} text-wall-brass-ink`}>{reminder ? 'EDITING · REMINDER' : 'EDITING'}</div>
+              {isNew ? (
+                <div className="flex rounded-full border border-solid border-wall-rule p-[4px]">
+                  {(['event', 'reminder'] as const).map((k) => (
+                    <button
+                      key={k}
+                      type="button"
+                      aria-pressed={kind === k}
+                      onClick={() => setKind(k)}
+                      className={`h-[48px] rounded-full border-0 px-[22px] text-wall-detail font-semibold ${kind === k ? 'bg-wall-ink text-wall-on-pigment' : 'bg-transparent text-wall-ink'}`}
+                    >
+                      {k === 'event' ? 'Event' : 'Reminder'}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className={`${eyebrow} text-wall-brass-ink`}>{reminder ? 'EDITING · REMINDER' : 'EDITING'}</div>
+              )}
               <div className="flex gap-[8px]">
                 {(['when', 'who'] as const).map((t) => (
                   <button
@@ -647,13 +685,19 @@ export default function WallEventSheet(props: WallEventSheetProps) {
 
             <div className="mt-auto flex items-center gap-[14px]">
               {/* Nothing changed: "Done" closes the whole sheet in one tap, instead of a Save that does nothing. */}
-              <button type="button" className={darkPill} disabled={saving || !draft.title.trim()} onClick={() => (changes.length === 0 ? onClose() : void save())}>
-                {saving ? 'Saving…' : changes.length === 0 ? 'Done' : 'Save'}
-              </button>
-              <button type="button" className={pill} onClick={() => { setDraft(draftFromEvent(event)); setKeyboard(null); setMode('details') }}>
+              {isNew ? (
+                <button type="button" className={darkPill} disabled={saving || !draft.title.trim()} onClick={() => void create()}>
+                  {saving ? 'Adding…' : 'Add it'}
+                </button>
+              ) : (
+                <button type="button" className={darkPill} disabled={saving || !draft.title.trim()} onClick={() => (changes.length === 0 ? onClose() : void save())}>
+                  {saving ? 'Saving…' : changes.length === 0 ? 'Done' : 'Save'}
+                </button>
+              )}
+              <button type="button" className={pill} onClick={() => { if (isNew) { onClose(); return } setDraft(draftFromEvent(event)); setKeyboard(null); setMode('details') }}>
                 Cancel
               </button>
-              <span className="ml-auto text-wall-label text-wall-ink-2">Updates Google Calendar too</span>
+              <span className="ml-auto text-wall-label text-wall-ink-2">{isNew ? "Goes on Google Calendar too" : "Updates Google Calendar too"}</span>
             </div>
           </>
         )}

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
-import { deleteCalendarEvent } from '../lib/eventMutations'
+import { deleteCalendarEvent, invalidateAllCalendarQueries } from '../lib/eventMutations'
+import { getAssistantDeviceId } from '../lib/assistantTelemetry'
+import { readActionResult, responseBody } from './assistantActions'
 import { saveEventTransportationOverride } from '../lib/eventPlanOverrides'
 import { supabase } from '../lib/supabase'
 import { withDriver } from './editing'
@@ -76,5 +78,27 @@ export default function WallFrame() {
       }}
     />
   ) : null
-  return <WallView now={now} members={members} today={today} tomorrow={tomorrow} currentWeather={currentWeather} checklist={checklist} allEvents={allEvents} routines={routines} dayOffs={dayOffs} onAsk={ask} overlay={band} pointAt={bandOpen ? pointAt : null} openRequest={openRequest} tripStateFor={tripStateFor} tripActions={tripActions} week={week} deleteEvent={(event) => deleteCalendarEvent(supabase, queryClient, event.id, event as unknown as EventWithDetails)} toggleChecklist={(item) => void toggleChecklistItem(queryClient, item.id, !item.checked)} />
+  // Adding by touch: the same create call voice uses (people, place, drive time and Google
+  // sync all happen there). The time was chosen on purpose, so a clash doesn't block it.
+  const createEvent = async (args: Record<string, unknown>) => {
+    const actionId = crypto.randomUUID()
+    const requestArgs = { ...args, allow_calendar_conflicts: true }
+    const { data, error } = await supabase.functions.invoke('execute-ai-action', {
+      body: {
+        tool: 'create_event',
+        args: requestArgs,
+        action_id: actionId,
+        correlation_id: `wall-add:${actionId}`,
+        lane: 'touch',
+        device_id: getAssistantDeviceId(),
+        client_trace_source: 'wall-add-sheet',
+        confirmed_by_user: true,
+      },
+    })
+    const result = readActionResult(await responseBody(data, error), requestArgs)
+    if (result.kind !== 'done') throw new Error(result.kind === 'error' ? result.message : 'That clashes with something already on the calendar.')
+    invalidateAllCalendarQueries(queryClient, result.eventId ?? '')
+  }
+
+  return <WallView now={now} members={members} today={today} tomorrow={tomorrow} currentWeather={currentWeather} checklist={checklist} allEvents={allEvents} routines={routines} dayOffs={dayOffs} onAsk={ask} overlay={band} pointAt={bandOpen ? pointAt : null} openRequest={openRequest} tripStateFor={tripStateFor} tripActions={tripActions} week={week} deleteEvent={(event) => deleteCalendarEvent(supabase, queryClient, event.id, event as unknown as EventWithDetails)} toggleChecklist={(item) => void toggleChecklistItem(queryClient, item.id, !item.checked)} createEvent={createEvent} />
 }
