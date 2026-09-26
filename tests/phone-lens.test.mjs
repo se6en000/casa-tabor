@@ -92,3 +92,17 @@ test('all-day items head the day on the phone, with their people (and for nobody
   assert.equal(familyItems(saturday, members, null)[0].title, 'Grandma visiting')
   assert.equal(familyItems(saturday, members, 'kelly').some((i) => i.title === 'Grandma visiting'), true) // for everyone
 })
+
+test('the next move says where the trip is in time: leave by, should be on the way, there now', () => {
+  const at = (h, m) => new Date(2026, 8, 25, h, m)
+  const phase = (now) => meView({ viewerId: 'jake-id', plan: friday, members, events, checklist: [], now }).next
+  assert.deepEqual([phase(at(7, 12)).phase, phase(at(7, 12)).eyebrow], ['before', 'LEAVE BY 7:25'])
+  assert.deepEqual([phase(at(7, 30)).phase, phase(at(7, 30)).eyebrow], ['late', 'SHOULD BE ON THE WAY · THERE BY 7:35'])
+  assert.deepEqual([phase(at(7, 38)).phase, phase(at(7, 38)).eyebrow], ['there', 'THERE NOW · BACK BY 7:45'])
+})
+
+test('the next move carries where to drive, for Directions', () => {
+  const next = meView({ viewerId: 'jake-id', plan: saturday, members, events, checklist: [], now: new Date(2026, 8, 26, 9, 0) }).next
+  assert.match(next.address, /Ferrin Park Field 1/)
+  assert.equal(next.eventId, 'softball')
+})

@@ -58,6 +58,12 @@ export default function PhoneFixturePage() {
               onToggleItem={(item) => setChecklist((list) => list.map((i) => (i.id === item.id ? { ...i, checked: !i.checked } : i)))}
               saveEvent={async (event, draft) => setEvs((list) => list.map((e) => (e.id === event.id ? previewEvent(event, draft) : e)))}
               deleteEvent={async (event) => setEvs((list) => list.filter((e) => e.id !== event.id))}
+              createEvent={async (args) => setEvs((list) => [...list, {
+                id: `added-${list.length}`, title: String(args.title), event_type: String(args.event_type), all_day: false,
+                start_time: String(args.start), end_time: String(args.end),
+                location_name: (args.location as string) ?? null, address: (args.location as string) ?? null,
+                members: (args.members as string[]).map((name) => ({ family_member_id: (members as WallMember[]).find((m) => m.name === name)?.id ?? name, role: 'attendee' })),
+              } as unknown as WallEvent])}
             />
           </div>
         } />

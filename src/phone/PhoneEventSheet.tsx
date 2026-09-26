@@ -4,7 +4,7 @@ import { Check, ChevronLeft, MapPin, Minus, Plus } from 'lucide-react'
 import type { Trip, WallMember } from '../wall/engine/types'
 import { pigmentStyleFor } from '../wall/lanes'
 import type { WallChecklistItem } from '../wall/packing'
-import { dayChips, draftChanges, draftFromEvent, setDay, setGoing, setTitle, stepEnd, stepStart, type EditDraft, type EditableEvent } from '../wall/editing'
+import { createArgs, dayChips, draftChanges, draftFromEvent, NEW_EVENT_ID, setDay, setGoing, setPlace, setTitle, stepEnd, stepStart, type EditDraft, type EditableEvent } from '../wall/editing'
 import type { EventView } from './lens'
 
 // Board 05d: one event on the phone — when and where, who's going, the trip, get &
@@ -31,11 +31,18 @@ export interface PhoneEventSheetProps {
   onToggleItem?: (item: WallChecklistItem) => void
   saveEvent?: (event: EditableEvent, draft: EditDraft) => Promise<void>
   deleteEvent?: (event: EditableEvent) => Promise<void>
+  /** Open straight into editing (the card's Edit). */
+  initialMode?: 'details' | 'edit'
+  /** Adding (a blank event, id NEW_EVENT_ID): the calendar's own create call. */
+  createEvent?: (args: Record<string, unknown>) => Promise<void>
 }
 
-export default function PhoneEventSheet({ view, members, pigments, viewerId, now, onClose, onHandOff, onLeaving, onToggleItem, saveEvent, deleteEvent }: PhoneEventSheetProps) {
+export default function PhoneEventSheet({ view, members, pigments, viewerId, now, initialMode = 'details', onClose, onHandOff, onLeaving, onToggleItem, saveEvent, deleteEvent, createEvent }: PhoneEventSheetProps) {
   const event = view.event as EditableEvent
-  const [mode, setMode] = useState<'details' | 'edit' | 'delete'>('details')
+  // Adding: the same sheet, straight into editing, blank.
+  const isNew = event.id === NEW_EVENT_ID
+  const [kind, setKind] = useState<'event' | 'reminder'>(event.event_type === 'reminder' ? 'reminder' : 'event')
+  const [mode, setMode] = useState<'details' | 'edit' | 'delete'>(isNew || (initialMode === 'edit' && !view.repeating) ? 'edit' : 'details')
   const [draft, setDraft] = useState<EditDraft>(() => draftFromEvent(event))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -66,6 +73,15 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
       <div className="flex shrink-0 items-center justify-between border-0 border-b border-solid border-wall-stone bg-phone-ground px-[20px] pb-[10px] pt-[max(14px,calc(env(safe-area-inset-top)+6px))]">
         <button type="button" aria-label="Back" onClick={onClose} className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-solid border-wall-stone bg-transparent p-0 text-wall-ink"><ChevronLeft size={20} /></button>
         {mode === 'details' && !view.repeating && saveEvent && <button type="button" className={pill} onClick={() => { setDraft(draftFromEvent(event)); setMode('edit') }}>Edit</button>}
+        {isNew && (
+          <div className="flex rounded-full border border-solid border-wall-stone p-[3px]">
+            {(['event', 'reminder'] as const).map((k) => (
+              <button key={k} type="button" aria-pressed={kind === k} onClick={() => setKind(k)} className={`h-[38px] rounded-full border-0 px-[16px] text-phone-detail font-semibold ${kind === k ? 'bg-wall-ink text-wall-on-pigment' : 'bg-transparent text-wall-ink'}`}>
+                {k === 'event' ? 'Event' : 'Reminder'}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       <div className="flex-1 overflow-y-auto overscroll-contain px-[20px] pb-[max(30px,calc(env(safe-area-inset-bottom)+16px))]">
 
@@ -147,8 +163,19 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
         <div className="mt-[14px] flex flex-col gap-[18px]">
           <label className="flex flex-col gap-[6px]">
             <span className={label}>TITLE</span>
-            <input value={draft.title} onChange={(e) => setDraft((d) => setTitle(d, e.target.value))} className="h-[52px] rounded-[12px] border border-solid border-wall-stone bg-wall-on-pigment px-[14px] font-display text-phone-heading font-semibold text-wall-ink" />
+            <input value={draft.title} autoFocus={isNew} placeholder={isNew ? (kind === 'reminder' ? 'What to remember' : 'What is it?') : undefined} onChange={(e) => setDraft((d) => setTitle(d, e.target.value))} className="h-[52px] rounded-[12px] border border-solid border-wall-stone bg-wall-on-pigment px-[14px] font-display text-phone-heading font-semibold text-wall-ink" />
           </label>
+          {isNew && (
+            <label className="flex flex-col gap-[6px]">
+              <span className={label}>PLACE</span>
+              <input
+                value={draft.place.name}
+                placeholder="Home, a place, or an address (optional)"
+                onChange={(e) => setDraft((d) => setPlace(d, { name: e.target.value, address: '', driveMinutes: null }))}
+                className="h-[48px] rounded-[12px] border border-solid border-wall-stone bg-wall-on-pigment px-[14px] text-phone-body text-wall-ink"
+              />
+            </label>
+          )}
           <div className="flex flex-col gap-[6px]">
             <span className={label}>DAY</span>
             <div className="flex gap-[6px] overflow-x-auto">
@@ -183,12 +210,22 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
           </div>
           {error && <div className="text-phone-detail font-semibold text-wall-rust">{error}</div>}
           <div className="flex gap-[8px]">
-            <button type="button" disabled={busy || !draft.title.trim()} className={`${dark} flex-1`} onClick={() => (changes.length === 0 ? onClose() : saveEvent && void run(() => saveEvent(event, draft), 'Saving didn’t work. Nothing was changed.'))}>
-              {busy ? 'Saving…' : changes.length === 0 ? 'Done' : 'Save'}
-            </button>
-            <button type="button" className={pill} onClick={() => setMode('details')}>Cancel</button>
+            {isNew ? (
+              <button type="button" disabled={busy || !draft.title.trim()} className={`${dark} flex-1`} onClick={() => createEvent && void run(() => createEvent(createArgs(draft, kind, members)), 'Adding didn’t work. Nothing was added.')}>
+                {busy ? 'Adding…' : 'Add it'}
+              </button>
+            ) : (
+              <button type="button" disabled={busy || !draft.title.trim()} className={`${dark} flex-1`} onClick={() => (changes.length === 0 ? onClose() : saveEvent && void run(() => saveEvent(event, draft), 'Saving didn’t work. Nothing was changed.'))}>
+                {busy ? 'Saving…' : changes.length === 0 ? 'Done' : 'Save'}
+              </button>
+            )}
+            <button type="button" className={pill} onClick={() => (isNew ? onClose() : setMode('details'))}>Cancel</button>
           </div>
-          <Link to={`/calendar?event=${event.id}`} className="self-start text-phone-detail text-wall-ink-2">More options (place, repeats) in Calendar</Link>
+          {isNew ? (
+            <span className="text-phone-detail text-wall-ink-2">Goes on Google Calendar too.</span>
+          ) : (
+            <Link to={`/calendar?event=${event.id}`} className="self-start text-phone-detail text-wall-ink-2">More options (place, repeats) in Calendar</Link>
+          )}
         </div>
       )}
       </div>

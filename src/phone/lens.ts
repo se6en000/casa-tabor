@@ -17,6 +17,14 @@ export interface PhoneMove {
   summary: string
   travelerIds: string[]
   departed: boolean
+  /** Where the trip is in time (the card must never say "leave by 7:50" at 8:42). */
+  phase: 'before' | 'late' | 'there' | 'departed'
+  /** "LEAVE BY 7:25", "SHOULD BE ON THE WAY · THERE BY 7:35", "THERE NOW · BACK BY 7:45". */
+  eyebrow: string
+  /** Where to drive (for Directions). */
+  address: string
+  /** The calendar item behind it (for Edit); null for a school run. */
+  eventId: string | null
 }
 
 export interface MeView {
@@ -33,8 +41,30 @@ export interface MeView {
 
 const upcoming = (trip: Trip, now: Date) => (trip.homeAt ?? trip.arriveAt).getTime() > now.getTime()
 
-function move(trip: Trip): PhoneMove {
+function move(trip: Trip, now: Date): PhoneMove {
+  const t = now.getTime()
+  const phase: PhoneMove['phase'] = trip.departedAt
+    ? 'departed'
+    : trip.leaveAt && t < trip.leaveAt.getTime()
+      ? 'before'
+      : !trip.leaveAt && t < trip.arriveAt.getTime()
+        ? 'before'
+        : t < trip.arriveAt.getTime()
+          ? 'late'
+          : 'there'
+  const arrive = clockTime(trip.arriveAt)
+  const eyebrow = phase === 'departed'
+    ? `ON THE ROAD · THERE BY ${arrive}`
+    : phase === 'before'
+      ? trip.leaveAt ? `LEAVE BY ${clockTime(trip.leaveAt)}` : `THERE BY ${arrive}`
+      : phase === 'late'
+        ? `SHOULD BE ON THE WAY · THERE BY ${arrive}`
+        : trip.homeAt ? `THERE NOW · BACK BY ${clockTime(trip.homeAt)}` : 'THERE NOW'
   return {
+    phase,
+    eyebrow,
+    address: (trip.destination.address || trip.destination.name || '').trim(),
+    eventId: trip.source === 'event' ? trip.sourceId : null,
     tripIds: [trip.id],
     title: placeName(trip),
     leaveBy: trip.leaveAt ? clockTime(trip.leaveAt) : null,
@@ -50,7 +80,7 @@ export function meView(input: { viewerId: string; plan: DayPlan | null; members:
   const nameOf = (id: string | null) => members.find((m) => m.id === id)?.name ?? 'Someone'
   const byLeave = (a: Trip, b: Trip) => (a.leaveAt ?? a.arriveAt).getTime() - (b.leaveAt ?? b.arriveAt).getTime()
 
-  const mine = plan.trips.filter((t) => t.driverId === viewerId && upcoming(t, now)).sort(byLeave).map(move)
+  const mine = plan.trips.filter((t) => t.driverId === viewerId && upcoming(t, now)).sort(byLeave).map((t) => move(t, now))
   const covered = plan.trips
     .filter((t) => t.driverId && t.driverId !== viewerId && upcoming(t, now))
     .sort(byLeave)

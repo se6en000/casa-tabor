@@ -113,3 +113,32 @@ test('phone: Hand off from an event gives the trip to someone else', async ({ pa
   await phone.getByRole('region', { name: 'Hand off' }).getByRole('button', { name: /Kelly/ }).click()
   await expect(phone.getByText('Kelly drives', { exact: true })).toBeVisible()
 })
+
+test('phone: + → Type it adds an event on the day being looked at, with who is going', async ({ page }) => {
+  const phone = await open(page, '2026-09-25T10:00:00', 'jake-id')
+  await phone.getByRole('button', { name: 'Add something' }).click()
+  await phone.getByRole('region', { name: 'Add something' }).getByRole('button', { name: /Type it/ }).click()
+  const sheet = phone.getByRole('region', { name: /on the phone/ })
+  await expect(sheet.getByRole('button', { name: 'Add it' })).toBeDisabled()
+  await sheet.getByRole('textbox').first().fill('Haircut')
+  await sheet.getByPlaceholder(/Home, a place/).fill('Great Clips')
+  await sheet.getByRole('button', { name: 'Owen', exact: true }).click()
+  await expect(phone).toHaveScreenshot('phone-add.png')
+  await sheet.getByRole('button', { name: 'Add it' }).click()
+  await expect(phone.getByRole('region', { name: /on the phone/ })).toHaveCount(0)
+  await phone.getByRole('button', { name: 'Family' }).click()
+  await expect(phone.getByRole('button', { name: /Haircut/ })).toBeVisible()
+})
+
+test('phone: the next-move card — Directions first, the right words mid-trip, Edit opens straight into editing', async ({ page }) => {
+  let phone = await open(page, '2026-09-25T07:38:00', 'jake-id')
+  let card = phone.getByRole('region', { name: 'Your next move' })
+  await expect(card.getByText('THERE NOW · BACK BY 7:45')).toBeVisible() // not "leave by 7:25" at 7:38
+  await expect(card.getByRole('button', { name: 'Leaving now' })).toHaveCount(0)
+  phone = await open(page, '2026-09-26T09:00:00', 'jake-id')
+  card = phone.getByRole('region', { name: 'Your next move' })
+  await expect(card.getByRole('link', { name: /Directions/ })).toHaveAttribute('href', /destination=Ferrin%20Park%20Field%201/)
+  await expect(phone).toHaveScreenshot('phone-card.png')
+  await card.getByRole('button', { name: 'Edit' }).click()
+  await expect(phone.getByRole('region', { name: /on the phone/ }).getByText('TITLE')).toBeVisible()
+})

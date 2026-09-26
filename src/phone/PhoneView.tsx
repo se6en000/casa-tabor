@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { CalendarDays, Check, ChefHat, Grid2x2, Lock, MapPin, Monitor, Music, Newspaper, Plus, Settings, ShoppingCart, User, Users, X } from 'lucide-react'
+import { CalendarDays, Check, ChefHat, Grid2x2, Lock, MapPin, Monitor, Music, Navigation, Newspaper, Plus, Settings, ShoppingCart, User, Users, X } from 'lucide-react'
 import type { DayPlan, Trip, WallEvent, WallMember } from '../wall/engine/types'
 import { pigmentStyleFor } from '../wall/lanes'
 import type { WallChecklistItem } from '../wall/packing'
@@ -10,6 +10,8 @@ import { weekDays } from '../wall/week'
 import type { EditDraft, EditableEvent } from '../wall/editing'
 import { eventView, familyItems, meView, type PhoneMove } from './lens'
 import PhoneEventSheet from './PhoneEventSheet'
+import PhoneAddSheet from './PhoneAddSheet'
+import { blankEvent } from '../wall/editing'
 
 // The phone (board section 05): one person's lens on the same family day the wall
 // draws. Drawn from data only, so it renders from fixtures (PhoneFixturePage).
@@ -33,8 +35,8 @@ export interface PhoneViewProps {
   checklist: WallChecklistItem[]
   tripActions?: PhoneTripActions
   onToggleItem?: (item: WallChecklistItem) => void
-  /** The + (adding comes in P4.5). */
-  onAdd?: () => void
+  /** Adding (the + → Type it): the calendar's own create call. */
+  createEvent?: (args: Record<string, unknown>) => Promise<void>
   /** Saves an edit from the event sheet (the same steps as the wall). */
   saveEvent?: (event: EditableEvent, draft: EditDraft) => Promise<void>
   deleteEvent?: (event: EditableEvent) => Promise<void>
@@ -70,12 +72,15 @@ function CheckLine({ item, onToggle }: { item: { id: string; label: string; chec
   )
 }
 
-export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, onAdd, saveEvent, deleteEvent }: PhoneViewProps) {
+export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, createEvent, saveEvent, deleteEvent }: PhoneViewProps) {
   const [tab, setTab] = useState<Tab>('me')
   const [filter, setFilter] = useState<string | null>(null)
   const [dayIndex, setDayIndex] = useState<number | null>(null)
   const [handOff, setHandOff] = useState<{ trip: Trip; plan: DayPlan } | null>(null)
   const [openId, setOpenId] = useState<string | null>(null)
+  const [openMode, setOpenMode] = useState<'details' | 'edit'>('details')
+  const [addOpen, setAddOpen] = useState(false)
+  const [adding, setAdding] = useState<EditableEvent | null>(null)
   const [busy, setBusy] = useState(false)
   const pigments = useMemo(() => pigmentIndexes(members), [members])
   const viewer = members.find((m) => m.id === viewerId) ?? null
@@ -118,9 +123,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
 
       {me.next ? (
         <section aria-label="Your next move" className="flex flex-col gap-[6px] rounded-[20px] bg-wall-ink p-[18px] text-wall-on-pigment">
-          <div className="text-phone-label font-bold tracking-[0.16em] text-wall-night-rust">
-            {me.next.departed ? 'ON THE ROAD' : me.next.leaveBy ? `LEAVE BY ${me.next.leaveBy}` : 'NEXT'}
-          </div>
+          <div className={`text-phone-label font-bold tracking-[0.16em] ${me.next.phase === 'there' ? 'text-wall-night-brass' : 'text-wall-night-rust'}`}>{me.next.eyebrow}</div>
           <div className="font-display text-phone-move font-semibold">{me.next.title}</div>
           <div className="text-phone-body text-wall-stone">{me.next.summary}</div>
           {me.next.travelerIds.filter((id) => id !== viewerId).length > 0 && (
@@ -128,16 +131,28 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
               with {me.next.travelerIds.filter((id) => id !== viewerId).map((id) => <Disc key={id} id={id} members={members} pigments={pigments} size="h-[22px] w-[22px] text-phone-label" />)}
             </div>
           )}
-          {tripActions && (
-            <div className="mt-[8px] flex gap-[8px]">
-              {ahead ? null : me.next.departed ? (
-                <button type="button" onClick={() => tripActions.undoLeaving(me.next!.tripIds)} className="h-[44px] flex-1 rounded-full border border-solid border-wall-ink-2 bg-transparent text-phone-body font-semibold text-wall-on-pigment">Not yet (undo)</button>
-              ) : (
-                <button type="button" onClick={() => tripActions.leaving(me.next!.tripIds)} className="h-[44px] flex-1 rounded-full border-0 bg-wall-on-pigment text-phone-body font-bold text-wall-ink">Leaving now</button>
-              )}
-              <button type="button" onClick={() => askHandOff(tripOf(me.next!))} className="h-[44px] flex-1 rounded-full border border-solid border-wall-ink-2 bg-transparent text-phone-body font-semibold text-wall-on-pigment">Hand off</button>
-            </div>
+          {/* Directions first: it's what you reach for (Jake, 2026-09-26). */}
+          {me.next.address && (
+            <a
+              href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(me.next.address)}`}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-[8px] flex h-[48px] items-center justify-center gap-[8px] rounded-full bg-wall-on-pigment text-phone-body font-bold text-wall-ink no-underline"
+            >
+              <Navigation size={18} aria-hidden="true" /> Directions
+            </a>
           )}
+          <div className="flex gap-[8px]">
+            {tripActions && !ahead && (me.next.departed ? (
+              <button type="button" onClick={() => tripActions.undoLeaving(me.next!.tripIds)} className="h-[44px] flex-1 rounded-full border border-solid border-wall-ink-2 bg-transparent text-phone-body font-semibold text-wall-on-pigment">Not yet (undo)</button>
+            ) : me.next.phase !== 'there' ? (
+              <button type="button" onClick={() => tripActions.leaving(me.next!.tripIds)} className="h-[44px] flex-1 rounded-full border border-solid border-wall-ink-2 bg-transparent text-phone-body font-semibold text-wall-on-pigment">Leaving now</button>
+            ) : null)}
+            {tripActions && <button type="button" onClick={() => askHandOff(tripOf(me.next!))} className="h-[44px] flex-1 rounded-full border border-solid border-wall-ink-2 bg-transparent text-phone-body font-semibold text-wall-on-pigment">Hand off</button>}
+            {me.next.eventId && openable(me.next.eventId) && (
+              <button type="button" onClick={() => { setOpenMode('edit'); setOpenId(me.next!.eventId) }} className="h-[44px] flex-1 rounded-full border border-solid border-wall-ink-2 bg-transparent text-phone-body font-semibold text-wall-on-pigment">Edit</button>
+            )}
+          </div>
         </section>
       ) : (
         <div className="rounded-[20px] bg-phone-card p-[18px] font-display text-phone-heading italic text-wall-ink-2">Nothing for you to drive {ahead ? 'tomorrow' : 'today'}.</div>
@@ -335,7 +350,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
       <nav aria-label="Sections" className="flex shrink-0 items-center justify-between border-0 border-t border-solid border-wall-stone bg-wall-on-pigment px-[14px] pb-[max(18px,env(safe-area-inset-bottom))] pt-[6px]">
         {tabButton(tabs[0])}
         {tabButton(tabs[1])}
-        <button type="button" aria-label="Add something" onClick={onAdd} disabled={!onAdd} className="-mt-[18px] flex h-[56px] w-[56px] items-center justify-center rounded-full border-0 bg-wall-ink p-0 text-wall-on-pigment shadow-[0_6px_16px_rgba(38,34,29,0.25)]">
+        <button type="button" aria-label="Add something" onClick={() => setAddOpen(true)} disabled={!createEvent} className="-mt-[18px] flex h-[56px] w-[56px] items-center justify-center rounded-full border-0 bg-wall-ink p-0 text-wall-on-pigment shadow-[0_6px_16px_rgba(38,34,29,0.25)]">
           <Plus size={26} strokeWidth={2.2} />
         </button>
         {tabButton(tabs[2])}
@@ -350,12 +365,37 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
           pigments={pigments}
           viewerId={viewerId}
           now={now}
-          onClose={() => setOpenId(null)}
+          initialMode={openMode}
+          onClose={() => { setOpenId(null); setOpenMode('details') }}
           onHandOff={tripActions ? askHandOff : undefined}
           onLeaving={tripActions ? (trip) => tripActions.leaving([trip.id]) : undefined}
           onToggleItem={onToggleItem}
           saveEvent={saveEvent}
           deleteEvent={deleteEvent}
+        />
+      )}
+
+      {addOpen && (
+        <PhoneAddSheet
+          onClose={() => setAddOpen(false)}
+          onType={() => {
+            setAddOpen(false)
+            // On the day being looked at: Family's day, or tomorrow in the evening.
+            const day = tab === 'family' ? (shownDay?.date ?? now) : (focus?.date ?? now)
+            setAdding(blankEvent(day, now, 'event'))
+          }}
+        />
+      )}
+      {adding && (
+        <PhoneEventSheet
+          key="new"
+          view={{ event: adding, when: '', place: { name: '', address: null, driveMinutes: null }, going: [], trip: null, prep: [], repeating: false }}
+          members={members}
+          pigments={pigments}
+          viewerId={viewerId}
+          now={now}
+          onClose={() => setAdding(null)}
+          createEvent={createEvent}
         />
       )}
 
