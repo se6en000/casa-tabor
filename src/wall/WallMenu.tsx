@@ -58,7 +58,8 @@ export function AddButton({ onAdd, className = '' }: { onAdd: () => void; classN
         event.stopPropagation()
         onAdd()
       }}
-      className={`flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full border border-solid border-wall-ink bg-transparent p-0 text-wall-ink ${className}`}
+      // Brass like the MT button, so it reads on the daytime ground and the evening's dark one.
+      className={`flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full border border-solid border-wall-brass bg-transparent p-0 text-wall-brass-ink ${className}`}
     >
       <Plus size={20} strokeWidth={2} />
     </button>
