@@ -11,16 +11,20 @@ import { useMinuteClock } from './useMinuteClock'
 import { useWallChecklist } from './useWallChecklist'
 import { useWallDay } from './useWallDay'
 import { useWallTripState } from './useWallTripState'
+import { useKeepFrom } from './useKeepFrom'
+import type { Audience } from './audience'
 
 /**
  * The family's day as the Wall and the phone both see it: the minute clock, the day
  * plans for the week, the week's prep, and the trip actions ("Leaving now", "Hand off",
- * a decision's "keep it"), which save the same way from either surface.
+ * a decision's "keep it"), which save the same way from either surface. `audience` is who's
+ * looking: the wall, or one person's phone (what's kept from them, Giselle's lens).
  */
-export function useFamilyDay() {
+export function useFamilyDay(audience: Audience = { kind: 'wall' }) {
   const now = useMinuteClock()
   const trips = useWallTripState()
-  const day = useWallDay(now, trips.state)
+  const { keep, setKeptFrom } = useKeepFrom()
+  const day = useWallDay(now, trips.state, audience, keep)
   const { members, today, tomorrow, week, allEvents } = day
   const queryClient = useQueryClient()
   const tripStateFor = useCallback((date: Date) => dayState(trips.state, date), [trips.state])
@@ -45,5 +49,5 @@ export function useFamilyDay() {
   // Prep for the whole week: the week strip counts it, and any day can be opened.
   const eventIds = useMemo(() => (week.length ? week : [today, tomorrow]).flatMap((plan) => (plan ? packingEventIds(plan) : [])), [week, today, tomorrow])
   const checklist = useWallChecklist(eventIds)
-  return { now, ...day, tripStateFor, tripActions, checklist, queryClient }
+  return { now, ...day, tripStateFor, tripActions, checklist, queryClient, keep, setKeptFrom }
 }

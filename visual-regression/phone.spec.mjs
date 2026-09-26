@@ -206,3 +206,33 @@ test('phone: + → Say it asks the assistant; a change waits for a yes; the bug 
   await phone.getByRole('button', { name: /TOMORROW/ }).click()
   await expect(phone.getByRole('button', { name: /Jaida watching the kids/ })).toBeVisible()
 })
+
+test('phone: Keep from… — a celebration suggests it; kept, it is marked for everyone else', async ({ page }) => {
+  const phone = await open(page, '2026-09-26T07:30:00', 'jake-id')
+  await phone.getByRole('button', { name: 'Family' }).click()
+  await phone.getByRole('button', { name: /Kelly's Birthday/ }).click()
+  const sheet = phone.getByRole('region', { name: /Kelly's Birthday on the phone/ })
+  await expect(sheet.getByText('Everyone can see it, and it’s on the wall.')).toBeVisible()
+  await expect(sheet.getByRole('button', { name: 'Keep from Jake' })).toHaveCount(0) // never from yourself
+  await sheet.getByRole('button', { name: 'Keep it from Kelly' }).click()
+  await expect(sheet.getByRole('button', { name: 'Keep from Kelly' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(sheet.getByText('Not on the wall, and never on Kelly’s phone.')).toBeVisible()
+  await sheet.getByText('KEEP FROM').scrollIntoViewIfNeeded()
+  await expect(phone).toHaveScreenshot('phone-keep-from.png')
+  await sheet.getByRole('button', { name: 'Back' }).click()
+  await expect(phone.getByText('KEPT FROM KELLY')).toBeVisible()
+})
+
+test("phone: Giselle's lens — the kids' things and what she drives, not Jake's and Kelly's own", async ({ page }) => {
+  let phone = await open(page, '2026-09-25T10:00:00', 'giselle')
+  await phone.getByRole('button', { name: 'Family' }).click()
+  await expect(phone.getByText('Emme Practice Violin with Meredith')).toBeVisible()
+  await expect(phone).toHaveScreenshot('phone-giselle-family.png')
+  await phone.getByRole('button', { name: 'Week' }).click()
+  await phone.getByRole('button', { name: /^THU/ }).click()
+  await expect(phone.getByText('Book club at the Harrisons')).toHaveCount(0)
+  phone = await open(page, '2026-09-25T10:00:00', 'jake-id')
+  await phone.getByRole('button', { name: 'Week' }).click()
+  await phone.getByRole('button', { name: /^THU/ }).click()
+  await expect(phone.getByText('Book club at the Harrisons')).toBeVisible()
+})

@@ -11,6 +11,7 @@ import PhoneView from './PhoneView'
 import PhoneAssistantView from './PhoneAssistantView'
 import type { PhoneLine } from './assistant'
 import { previewEvent, withDriver } from '../wall/editing'
+import { eventsFor, routinesFor, withKeptFrom, type KeepFrom } from '../wall/audience'
 
 const CHECKLIST = [
   { id: 'c1', event_id: 'softball', label: 'Glove', checked: true, sort_order: 1 },
@@ -71,11 +72,16 @@ export default function PhoneFixturePage() {
   const [tripState, setTripState] = useState<WallTripState>({})
   const [checklist, setChecklist] = useState(CHECKLIST)
   const [evs, setEvs] = useState(events as unknown as WallEvent[])
+  const [keep, setKeep] = useState<KeepFrom>({})
+  // Only what this phone's person may see, as the live phone does (audience.ts).
+  const audience = { kind: 'member' as const, memberId: viewerId }
+  const shown = eventsFor(audience, evs, members as WallMember[], keep)
+  const shownRoutines = routinesFor(audience, routines as unknown as Array<{ memberId: string }>, members as WallMember[])
   const week = Array.from({ length: 7 }, (_, i) => {
     const date = new Date(now)
     date.setHours(0, 0, 0, 0)
     date.setDate(date.getDate() + i)
-    return buildDayPlan({ date, members: members as WallMember[], routines: routines as never, events: evs, tripState: dayState(tripState, date) })
+    return buildDayPlan({ date, members: members as WallMember[], routines: shownRoutines as never, events: shown, tripState: dayState(tripState, date) })
   })
   const day = week[0].date
   // Nothing until every font weight is in, so screenshots never catch a fallback face.
@@ -90,7 +96,9 @@ export default function PhoneFixturePage() {
               viewerId={viewerId}
               members={members as WallMember[]}
               week={week}
-              events={evs}
+              events={shown}
+              keepFrom={keep}
+              setKeptFrom={async (eventId, ids) => setKeep((k) => withKeptFrom(k, eventId, ids))}
               checklist={checklist}
               scan={async () => SCANNED}
               assistant={({ onClose }) => (

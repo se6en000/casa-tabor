@@ -6,6 +6,7 @@ import { deserializeRoutineFromAvailabilityRules, type FamilyRoutine } from '../
 import { buildDayPlan, type DayOff } from './engine/dayPlan'
 import { dayState, type WallTripState } from './tripState'
 import type { DayPlan, WallEvent, WallMember } from './engine/types'
+import { eventsFor, routinesFor, type Audience, type KeepFrom } from './audience'
 
 export interface WallDay {
   members: WallMember[]
@@ -25,8 +26,11 @@ export interface WallDay {
  * Today's and tomorrow's plans from the app's shared caches: family members,
  * routines and days off (member availability), and slices of the rolling event
  * cache. Rebuilt when the data changes or the date rolls over, not every minute.
+ * `audience` is who's looking (the wall, or one person's phone): only what they may see
+ * goes into the plans (audience.ts).
  */
-export function useWallDay(now: Date, tripState: WallTripState = {}): WallDay {
+export function useWallDay(now: Date, tripState: WallTripState = {}, audience: Audience = { kind: 'wall' }, keep: KeepFrom = {}): WallDay {
+  const audienceKey = audience.kind === 'wall' ? 'wall' : audience.memberId
   const dayKey = now.toDateString()
   const { data: familyMembers } = useFamilyMembers()
   const members = useMemo(() => (familyMembers ?? []) as unknown as WallMember[], [familyMembers])
@@ -35,27 +39,32 @@ export function useWallDay(now: Date, tripState: WallTripState = {}): WallDay {
   const { data: todayEvents } = useTodayEvents(now)
   const { data: tomorrowEvents } = useTomorrowEvents(now)
   const { data: rollingEvents } = useRollingEvents(now)
-  const allEvents = useMemo(() => (rollingEvents ?? []) as unknown as WallEvent[], [rollingEvents])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- audienceKey stands for audience
+  const shown = useMemo(() => (list: WallEvent[]) => eventsFor(audience, list, members, keep), [audienceKey, members, keep])
+  const allEvents = useMemo(() => shown((rollingEvents ?? []) as unknown as WallEvent[]), [rollingEvents, shown])
+  const todayShown = useMemo(() => (todayEvents ? shown(todayEvents as unknown as WallEvent[]) : null), [todayEvents, shown])
+  const tomorrowShown = useMemo(() => (tomorrowEvents ? shown(tomorrowEvents as unknown as WallEvent[]) : null), [tomorrowEvents, shown])
 
   const routines = useMemo(
-    () => members.map((m) => deserializeRoutineFromAvailabilityRules(m.id, rules)).filter((r): r is FamilyRoutine => Boolean(r)),
-    [members, rules],
+    () => routinesFor(audience, members.map((m) => deserializeRoutineFromAvailabilityRules(m.id, rules)).filter((r): r is FamilyRoutine => Boolean(r)), members),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- audienceKey stands for audience
+    [members, rules, audienceKey],
   )
   // Wait for routines too, so school runs don't pop in after the rest of the day.
   const ready = Boolean(familyMembers) && !availabilityLoading
 
   const today = useMemo(() => {
-    if (!ready || !todayEvents) return null
+    if (!ready || !todayShown) return null
     const date = new Date(dayKey)
-    return buildDayPlan({ date, members, routines, events: todayEvents as unknown as WallEvent[], dayOffs: exceptions, tripState: dayState(tripState, date) })
-  }, [ready, dayKey, members, routines, exceptions, todayEvents, tripState])
+    return buildDayPlan({ date, members, routines, events: todayShown, dayOffs: exceptions, tripState: dayState(tripState, date) })
+  }, [ready, dayKey, members, routines, exceptions, todayShown, tripState])
 
   const tomorrow = useMemo(() => {
-    if (!ready || !tomorrowEvents) return null
+    if (!ready || !tomorrowShown) return null
     const date = new Date(dayKey)
     date.setDate(date.getDate() + 1)
-    return buildDayPlan({ date, members, routines, events: tomorrowEvents as unknown as WallEvent[], dayOffs: exceptions, tripState: dayState(tripState, date) })
-  }, [ready, dayKey, members, routines, exceptions, tomorrowEvents, tripState])
+    return buildDayPlan({ date, members, routines, events: tomorrowShown, dayOffs: exceptions, tripState: dayState(tripState, date) })
+  }, [ready, dayKey, members, routines, exceptions, tomorrowShown, tripState])
 
   const week = useMemo(() => {
     if (!ready || !today || !tomorrow) return []

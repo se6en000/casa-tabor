@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Check, ChevronLeft, MapPin, Minus, Plus } from 'lucide-react'
+import { Check, ChevronLeft, Lock, MapPin, Minus, Plus } from 'lucide-react'
 import type { Trip, WallMember } from '../wall/engine/types'
 import { pigmentStyleFor } from '../wall/lanes'
 import type { WallChecklistItem } from '../wall/packing'
@@ -35,9 +35,13 @@ export interface PhoneEventSheetProps {
   initialMode?: 'details' | 'edit'
   /** Adding (a blank event, id NEW_EVENT_ID): the calendar's own create call. */
   createEvent?: (args: Record<string, unknown>) => Promise<void>
+  /** Keep from… (05g): who it's kept from, who the title suggests, and the change. */
+  keptFrom?: string[]
+  suggestKeepFrom?: string[]
+  onKeepFrom?: (memberIds: string[]) => Promise<void>
 }
 
-export default function PhoneEventSheet({ view, members, pigments, viewerId, now, initialMode = 'details', onClose, onHandOff, onLeaving, onToggleItem, saveEvent, deleteEvent, createEvent }: PhoneEventSheetProps) {
+export default function PhoneEventSheet({ view, members, pigments, viewerId, now, initialMode = 'details', onClose, onHandOff, onLeaving, onToggleItem, saveEvent, deleteEvent, createEvent, keptFrom = [], suggestKeepFrom = [], onKeepFrom }: PhoneEventSheetProps) {
   const event = view.event as EditableEvent
   // Adding: the same sheet, straight into editing, blank.
   const isNew = event.id === NEW_EVENT_ID
@@ -45,18 +49,22 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
   const [mode, setMode] = useState<'details' | 'edit' | 'delete'>(isNew || (initialMode === 'edit' && !view.repeating) ? 'edit' : 'details')
   const [draft, setDraft] = useState<EditDraft>(() => draftFromEvent(event))
   const [busy, setBusy] = useState(false)
+  // Keep from… stays one quiet button until it's wanted (or already in use).
+  const [keepOpen, setKeepOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const nameOf = (id: string | null) => members.find((m) => m.id === id)?.name ?? ''
+  const names = (ids: string[]) => ids.map(nameOf).join(' & ')
   const disc = (id: string, size = 'h-[36px] w-[36px] text-phone-body') => (
     <span aria-hidden="true" className={`flex shrink-0 items-center justify-center rounded-full font-display font-bold text-wall-on-pigment ${size} ${pigmentStyleFor(pigments.get(id) ?? 0).solid}`}>{nameOf(id).charAt(0)}</span>
   )
   const changes = draftChanges(event, draft, members)
-  const run = async (work: () => Promise<void>, failed: string) => {
+  const run = async (work: () => Promise<void>, failed: string, stayOpen = false) => {
     setBusy(true)
     setError(null)
     try {
       await work()
-      onClose()
+      if (stayOpen) setBusy(false)
+      else onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : failed)
       setBusy(false)
@@ -140,6 +148,48 @@ export default function PhoneEventSheet({ view, members, pigments, viewerId, now
                   <span className={item.checked ? 'text-wall-ink-2 line-through' : ''}>{item.label}</span>
                 </button>
               ))}
+            </div>
+          )}
+
+          {onKeepFrom && !isNew && (
+            <div className="flex flex-col gap-[8px]">
+              {(keepOpen || keptFrom.length > 0 || suggestKeepFrom.length > 0) && <div className={label}>KEEP FROM</div>}
+              {keptFrom.length === 0 && suggestKeepFrom.length > 0 && (
+                <div className="flex flex-col gap-[10px] rounded-[16px] bg-phone-card p-[14px]">
+                  <div className="text-phone-body">A surprise for {names(suggestKeepFrom)}? Keep it off the wall and off {names(suggestKeepFrom)}’s phone.</div>
+                  <button type="button" disabled={busy} className={dark} onClick={() => void run(() => onKeepFrom(suggestKeepFrom), 'That didn’t save. Nothing changed.', true)}>
+                    Keep it from {names(suggestKeepFrom)}
+                  </button>
+                </div>
+              )}
+              {!keepOpen && keptFrom.length === 0 ? (
+                <button type="button" onClick={() => setKeepOpen(true)} className={`${pill} flex items-center gap-[6px] self-start`}>
+                  <Lock size={16} aria-hidden="true" /> Keep from…
+                </button>
+              ) : (
+              <div className="flex flex-wrap gap-[8px]">
+                {members.filter((m) => m.show_on_home_sidebar !== false && m.id !== viewerId).map((m) => {
+                  const on = keptFrom.includes(m.id)
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      aria-pressed={on}
+                      aria-label={`Keep from ${m.name}`}
+                      disabled={busy}
+                      onClick={() => void run(() => onKeepFrom(on ? keptFrom.filter((id) => id !== m.id) : [...keptFrom, m.id]), 'That didn’t save. Nothing changed.', true)}
+                      className={`flex h-[44px] items-center gap-[6px] rounded-full px-[12px] text-phone-detail font-semibold ${on ? 'border-0 bg-wall-ink text-wall-on-pigment' : 'border border-solid border-wall-stone bg-transparent text-wall-ink'}`}
+                    >
+                      {on && <Lock size={14} aria-hidden="true" />}{m.name}
+                    </button>
+                  )
+                })}
+              </div>
+              )}
+              <div className="text-phone-detail text-wall-ink-2">
+                {keptFrom.length > 0 ? `Not on the wall, and never on ${names(keptFrom)}’s phone.` : 'Everyone can see it, and it’s on the wall.'}
+              </div>
+              {error && mode === 'details' && <div className="text-phone-detail font-semibold text-wall-rust">{error}</div>}
             </div>
           )}
 

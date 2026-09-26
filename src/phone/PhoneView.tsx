@@ -16,6 +16,7 @@ import PhoneScanSheet from './PhoneScanSheet'
 import type { ScannedItem } from '../utils/documentScanner'
 import type { SavedContact, SavedPlace } from '../types'
 import { blankEvent } from '../wall/editing'
+import { keepFromSuggestion, keptFrom as keptFromOf, type KeepFrom } from '../wall/audience'
 
 // The phone (board section 05): one person's lens on the same family day the wall
 // draws. Drawn from data only, so it renders from fixtures (PhoneFixturePage).
@@ -51,6 +52,9 @@ export interface PhoneViewProps {
   scan?: (files: File[]) => Promise<{ summary: string; items: ScannedItem[] }>
   /** Say it (the + → Say it): the assistant, drawn by the frame (live) or the fixture (scripted). */
   assistant?: (props: { onClose: () => void; onOpenEvent: (id: string) => void }) => ReactNode
+  /** Keep from… (05g): who each event is kept from, and the change. */
+  keepFrom?: KeepFrom
+  setKeptFrom?: (eventId: string, memberIds: string[]) => Promise<void>
 }
 
 /** Like the wall's evening: from 7 PM the phone looks at tomorrow. */
@@ -83,7 +87,7 @@ function CheckLine({ item, onToggle }: { item: { id: string; label: string; chec
   )
 }
 
-export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, createEvent, saveEvent, deleteEvent, scan, assistant, contacts = [], places = [] }: PhoneViewProps) {
+export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, createEvent, saveEvent, deleteEvent, scan, assistant, keepFrom = {}, setKeptFrom, contacts = [], places = [] }: PhoneViewProps) {
   const [tab, setTab] = useState<Tab>('me')
   const [filter, setFilter] = useState<string | null>(null)
   const [dayIndex, setDayIndex] = useState<number | null>(null)
@@ -266,6 +270,11 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
             <span className="flex min-w-0 flex-1 flex-col gap-[2px]">
               <span className="text-phone-body font-semibold">{i.title}</span>
               {i.sub && <span className="text-phone-detail text-wall-ink-2">{i.sub}</span>}
+              {keptFromOf(keepFrom, i.id).length > 0 && (
+                <span className="flex items-center gap-[4px] text-phone-label font-bold tracking-[0.12em] text-wall-brass-ink">
+                  <Lock size={12} strokeWidth={2.5} aria-hidden="true" /> KEPT FROM {keptFromOf(keepFrom, i.id).map((id) => members.find((m) => m.id === id)?.name ?? '').join(' & ').toUpperCase()}
+                </span>
+              )}
             </span>
             <span className="flex shrink-0 gap-[2px] self-center">
               {i.people.map((id) => <Disc key={id} id={id} members={members} pigments={pigments} size="h-[26px] w-[26px] text-phone-label" />)}
@@ -393,6 +402,9 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
           onToggleItem={onToggleItem}
           saveEvent={saveEvent}
           deleteEvent={deleteEvent}
+          keptFrom={keptFromOf(keepFrom, openId!)}
+          suggestKeepFrom={opened.event ? keepFromSuggestion(opened.event, members, keepFrom) : []}
+          onKeepFrom={setKeptFrom ? (ids) => setKeptFrom(openId!, ids) : undefined}
         />
       )}
 
