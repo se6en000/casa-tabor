@@ -298,6 +298,8 @@ The kiosk showed only the page background for ~8 minutes after shipping `138d17f
 
 ## Phase 4 — Phone lens
 
+- [~] **P4.0 — Phone design (board section 05, 05a–05h), for Jake's approval before building** — added 2026-09-25 at Jake's request ("we need more mobile screens … my stuff but also everyone else's events … add, the scanner … the rest of the app refreshed"). Boards: Me, Family (everyone's events), Week, an event, Add (type / say / scan / from an email), Scan review (several items from one flyer, ticked), Keep from… (the explicit surprise control: suggested from the title, confirmed by a person; the wall hides it, the named person's phone never gets it), More (grocery, meals, music, briefing, places, settings). Whose phone it is: the profile + PIN chosen at "Who is using Casa?". Evidence: posted to the canvas 2026-09-25; waiting on approval.
+
 - [ ] **P4.1 — "My day" on the phone** — my moves, what others covered, my personal to-dos, private items. Matches 02d.
   - Evidence: _
 
