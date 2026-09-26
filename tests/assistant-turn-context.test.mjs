@@ -130,17 +130,30 @@ test('dropping the draft is its own yes/no: alone it just closes, with a questio
   assert.equal(readTurnResolution({ closes_draft: true, act: 'revise_draft', changes: { place: 'X' } }, { draft }).act, 'other', "a closed draft isn't revised")
 })
 
-test('a change that only names a busy day asks which one; any other evidence goes ahead', () => {
-  const a = { id: 'a', all_day: false, event_type: 'event' }
-  const b = { id: 'b', all_day: false, event_type: 'event' }
-  const note = { id: 'n', all_day: false, event_type: 'reminder' }
-  const change = (identifiedBy) => ({ act: 'change', identifiedBy })
-  assert.deepEqual(sameDayChoices(change('day'), a, [a, b, note]).map((e) => e.id), ['a', 'b'])
-  assert.deepEqual(sameDayChoices(change(null), a, [a, b]).map((e) => e.id), ['a', 'b'], 'no evidence given counts as day only')
-  assert.equal(sameDayChoices(change('name'), a, [a, b]), null)
-  assert.equal(sameDayChoices(change('conversation'), a, [a, b]), null)
-  assert.equal(sameDayChoices(change('day'), a, [a, note]), null, 'the only real item that day')
-  assert.equal(sameDayChoices({ act: 'question' }, a, [a, b]), null)
+test("a change only goes ahead when the person's words point at the item; otherwise, on a busy day, Casa asks which", async () => {
+  const { sameDayChoices, wordsPointTo } = await import('../supabase/functions/_shared/assistant-turn-context.mjs')
+  const emmy = { id: 'a', title: 'Emmy is watching Owen', start_time: '2026-09-27T16:00:00Z', all_day: false, event_type: 'event' }
+  const box = { id: 'b', title: 'HelloFresh delivery', start_time: '2026-09-27T19:00:00Z', all_day: false, event_type: 'event' }
+  const note = { id: 'n', title: 'Call the vet', start_time: '2026-09-27T14:00:00Z', all_day: false, event_type: 'reminder' }
+  const o = (latestText, conversationIds = []) => ({ latestText, conversationIds, utcOffset: '-04:00' })
+  assert.deepEqual(sameDayChoices(box, [emmy, box, note], o('push the Sunday one to 5 pm')).map((e) => e.id), ['a', 'b'])
+  assert.equal(sameDayChoices(box, [emmy, box], o('move the hellofresh box to 5')), null, 'a title word')
+  assert.equal(sameDayChoices(box, [emmy, box], o('push the 3 pm one to 5')), null, 'its time')
+  assert.equal(sameDayChoices(box, [emmy, box], o('push it to 5', ['b'])), null, 'just talked about')
+  assert.equal(sameDayChoices(box, [box, note], o('move my thing on Sunday')), null, 'the only real item that day')
+  assert.equal(wordsPointTo(emmy, 'the 12 one', [], '-04:00'), false, 'a bare number is not a time')
+  assert.equal(wordsPointTo(emmy, 'the noon one at 12 pm', [], '-04:00'), true)
+})
+
+test('a bare weekday is settled by the server to the next one on the calendar', async () => {
+  const { settleDate } = await import('../supabase/functions/_shared/assistant-turn-context.mjs')
+  const now = '2026-09-26T21:40:00Z' // Saturday 5:40 PM local
+  assert.equal(settleDate('2026-10-06', 'weekday', now, '-04:00'), '2026-09-29', 'drifted a week: pulled back')
+  assert.equal(settleDate('2026-09-29', 'weekday', now, '-04:00'), '2026-09-29')
+  assert.equal(settleDate('2026-09-26', 'weekday', now, '-04:00'), '2026-09-26', 'today counts')
+  assert.equal(settleDate('2026-10-06', 'next_week', now, '-04:00'), '2026-10-06', 'next week stays')
+  assert.equal(settleDate('2026-10-06', 'date', now, '-04:00'), '2026-10-06')
+  assert.equal(settleDate(null, 'weekday', now, '-04:00'), null)
 })
 
 test('weekdays are looked up in a table of the next two weeks, never computed by the model', async () => {
@@ -151,4 +164,25 @@ test('weekdays are looked up in a table of the next two weeks, never computed by
   assert.equal(table[3], '2026-09-29 Tuesday, Sep 29')
   assert.equal(table.length, 15)
   assert.equal(dayTable('2026-09-27T02:30:00Z', '-04:00').split('\n')[0], '2026-09-26 Saturday, Sep 26 (today)', 'late evening is still today locally')
+})
+
+test('answering "which one?" keeps the change asked for; the time used to pick the item is not a new time', async () => {
+  const { carryOverChange } = await import('../supabase/functions/_shared/assistant-turn-context.mjs')
+  const box = { id: 'b', start_time: '2026-09-27T19:00:00Z' } // 3 PM local
+  assert.deepEqual(carryOverChange({ start: '17:00' }, { start: '15:00' }, box, '-04:00'), { start: '17:00' })
+  assert.deepEqual(carryOverChange({ start: '17:00' }, null, box, '-04:00'), { start: '17:00' })
+  assert.deepEqual(carryOverChange({ start: '17:00' }, { start: '18:00' }, box, '-04:00'), { start: '18:00' }, 'a new time in the answer wins')
+  assert.deepEqual(carryOverChange({ start: '17:00' }, { place: 'Porch' }, box, '-04:00'), { start: '17:00', place: 'Porch' })
+  assert.equal(carryOverChange(null, null, box, '-04:00'), null)
+})
+
+test('after "which one?", naming just the item is a complete change (the asked-for change is pending)', () => {
+  assert.equal(readTurnResolution({ act: 'change', event_id: 'a' }, { knownIds: ['a'] }).act, 'other')
+  assert.equal(readTurnResolution({ act: 'change', event_id: 'a' }, { knownIds: ['a'], pendingChange: true }).act, 'change')
+})
+
+test('a question the listed calendar can answer is marked so; anything else is not', () => {
+  assert.equal(readTurnResolution({ act: 'question', answerable: true }).answerable, true)
+  assert.equal(readTurnResolution({ act: 'question' }).answerable, false)
+  assert.equal(readTurnResolution({ act: 'other', answerable: true }).answerable, false)
 })

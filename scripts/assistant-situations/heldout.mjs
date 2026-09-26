@@ -24,7 +24,7 @@ export const HELDOUT = {
   ],
   'change-the-first-one': [
     ['{day}, what is on it', 'read me {day}'],
-    ['bump the earliest one by 30 minutes', 'the first item, can it start half an hour later'],
+    ['bump the earliest one back 30 minutes', 'the first item, can it start half an hour later'],
   ],
   'kid-outing-then-handoff': [
     ['has somebody got {kid} covered for {spoken} {weekday}', "{weekday}'s {spoken} — who's driving {kid}"],

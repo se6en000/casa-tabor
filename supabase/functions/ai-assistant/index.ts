@@ -19,7 +19,7 @@ import { normalizeAssistantExperienceMode } from '../_shared/assistant-experienc
 import { resolveLlmWorkload } from '../_shared/llm-workload-config.mjs'
 import { formatLocal, humanWhen, localNowLine, localizeTimestamps } from '../_shared/assistant-local-time.mjs'
 import { driversLine } from '../_shared/assistant-event-drivers.mjs'
-import { applyDraftChanges, buildTurnPrompt, changeArgs, hasTurnToRead, newItemArgs, openDraft, readTurnResolution, referentIds, sameDayChoices } from '../_shared/assistant-turn-context.mjs'
+import { applyDraftChanges, buildTurnPrompt, changeArgs, hasTurnToRead, newItemArgs, openDraft, readTurnResolution, referentIds, sameDayChoices, settleDate, carryOverChange } from '../_shared/assistant-turn-context.mjs'
 import { buildGeminiGenerationConfig } from '../_shared/gemini-generation-config.mjs'
 import {
   resolveTalkPlanIntentGate,
@@ -265,7 +265,7 @@ async function geminiJson(sb: TurnDb, prompt: string, purpose: string, cid: stri
   }
 }
 
-type TurnReferent = { id: string; title: string; start_time: string; end_time: string; all_day: boolean; event_type: string | null; updated_at?: string; people: string[]; drivers: string[]; place: string | null; repeating: boolean }
+type TurnReferent = { id: string; title: string; start_time: string; end_time: string; all_day: boolean; event_type: string | null; updated_at?: string; people: string[]; drivers: string[]; place: string | null; address: string | null; repeating: boolean }
 
 /** The calendar items a conversation is about, with who's on them and who drives. */
 async function loadReferents(sb: TurnDb, ids: string[], family: Array<{ id: string; name: string }>): Promise<TurnReferent[]> {
@@ -293,6 +293,7 @@ async function loadReferents(sb: TurnDb, ids: string[], family: Array<{ id: stri
         .filter((m) => m.event_id === id && m.role !== 'driver').map((m) => nameOf(m.family_member_id)).filter((n): n is string => Boolean(n)),
       drivers: [...new Set(legs.map((l) => nameOf(l.driverId ?? null)).filter((n): n is string => Boolean(n)))],
       place: String(e.location_name ?? e.address ?? '').split(',')[0].trim() || null,
+      address: [e.location_name, e.address].filter((v, i, all) => v && all.indexOf(v) === i).join(' — ') || null,
       repeating: Boolean(e.series_id || e.recurrence_master_id || e.rrule || (e.record_kind && e.record_kind !== 'single')),
     }]
   })
@@ -304,9 +305,9 @@ type TurnContext = {
   card: { tool: string; args: Record<string, unknown>; about: TurnReferent | null } | null
   cancelledDraft: { tool: string } | null
   /** A question about one calendar item, answered from its facts. */
-  answer: { text: string; about: TurnReferent } | null
-  /** A change that could mean several items: which one? */
-  clarify: { question: string; candidates: TurnReferent[] } | null
+  answer: { text: string; about: TurnReferent | null; mentioned: TurnReferent[] } | null
+  /** A change that could mean several items: which one? (The change is kept for the answer.) */
+  clarify: { question: string; candidates: TurnReferent[]; changes: Record<string, unknown> | null } | null
   referents: TurnReferent[]
   originalText: string | null
   ms: number
@@ -364,7 +365,16 @@ async function readTurn(
     const referents = ids.flatMap((id) => loaded.filter((e) => e.id === id))
     const upcoming = loaded.filter((e) => !ids.includes(e.id))
     const raw = await geminiJson(sb, buildTurnPrompt({ messages, draft, referents, upcoming, family, nowLine, utcOffset, nowIso: String(context?.currentDate ?? new Date().toISOString()) }), 'turn-context', cid, TURN_CONTEXT_TIMEOUT_MS)
-    const resolution = readTurnResolution(raw, { draft, knownIds: loaded.map((e) => e.id) })
+    const asked = context?.conversationState as { activeEntityType?: string; pendingMutation?: { tool?: string } } | undefined
+    const pendingChange = asked?.activeEntityType === 'calendar_clarification' && asked.pendingMutation?.tool === 'turn_change'
+    const resolution = readTurnResolution(raw, { draft, knownIds: loaded.map((e) => e.id), pendingChange })
+    // Days are settled here, not by the model: a bare weekday is the next one.
+    const nowIso = String(context?.currentDate ?? new Date().toISOString())
+    const settle = (fields: Record<string, unknown> | null) => {
+      if (fields && typeof fields.date === 'string') fields.date = settleDate(fields.date, fields.date_basis as string, nowIso, utcOffset)
+    }
+    settle(resolution.newItem as Record<string, unknown> | null)
+    settle(resolution.draftChanges as Record<string, unknown> | null)
     const originalText = String(messages.at(-1)?.content ?? '')
     const about = resolution.eventId ? loaded.find((e) => e.id === resolution.eventId) ?? null : null
     const out: TurnContext = { ...none, resolution, referents: about && !referents.includes(about) ? [about, ...referents] : referents, originalText }
@@ -376,25 +386,46 @@ async function readTurn(
       const args = newItemArgs(resolution.newItem, { utcOffset, familyNames })
       if (args) out.card = { tool: 'create_event', args, about: null }
     } else if (resolution.act === 'change' && about && !about.repeating) {
+      // Answering Casa's "which one?": apply the change asked for then to the item picked now.
+      const asked = context?.conversationState as { activeEntityType?: string; candidateEvents?: Array<{ id: string }>; pendingMutation?: { tool?: string; args?: Record<string, unknown> } } | undefined
+      if (asked?.activeEntityType === 'calendar_clarification' && asked.pendingMutation?.tool === 'turn_change' && asked.candidateEvents?.some((c) => c.id === about.id)) {
+        resolution.draftChanges = carryOverChange(asked.pendingMutation.args ?? null, resolution.draftChanges as Record<string, unknown> | null, about, utcOffset)
+      }
       const dayOf = (e: TurnReferent) => formatLocal(e.start_time, utcOffset).split(',').slice(0, 2).join(',')
-      const choices = sameDayChoices(resolution, about, loaded.filter((e) => dayOf(e) === dayOf(about))) as TurnReferent[] | null
+      const choices = sameDayChoices(about, loaded.filter((e) => dayOf(e) === dayOf(about)), { latestText: originalText, conversationIds: ids, utcOffset }) as TurnReferent[] | null
       if (choices) {
         const when = (e: TurnReferent) => formatLocal(e.start_time, utcOffset).split(', ').pop()
-        out.clarify = { question: `Which one did you mean: ${choices.map((e) => `${e.title} at ${when(e)}`).join(', or ')}?`, candidates: choices }
+        out.clarify = { question: `Which one did you mean: ${choices.map((e) => `${e.title} at ${when(e)}`).join(', or ')}?`, candidates: choices, changes: resolution.draftChanges as Record<string, unknown> | null }
       } else {
         const args = changeArgs(about, resolution.draftChanges, { utcOffset, familyNames })
         if (args) out.card = { tool: 'update_event', args, about }
       }
     } else if (resolution.act === 'clarify' && resolution.clarifyQuestion) {
-      out.clarify = { question: resolution.clarifyQuestion, candidates: (resolution.candidates as string[]).flatMap((id: string) => loaded.filter((e) => e.id === id)) }
-    } else if (resolution.act === 'question' && about) {
-      const text = await answerFromCalendar(sb, resolution.standalone ?? originalText, [about, ...loaded.filter((e) => e !== about)], context, cid)
-      out.answer = { text, about }
+      out.clarify = { question: resolution.clarifyQuestion, candidates: (resolution.candidates as string[]).flatMap((id: string) => loaded.filter((e) => e.id === id)), changes: resolution.draftChanges as Record<string, unknown> | null }
+    } else if (resolution.act === 'question' && (about || resolution.answerable)) {
+      // About one item, or answerable from the next two weeks it's holding: answered from those facts.
+      const focus = about ? [about, ...loaded.filter((e) => e !== about)] : [...referents, ...loaded.filter((e) => !referents.includes(e))]
+      const { text, mentioned } = await answerFromCalendar(sb, resolution.standalone ?? originalText, focus, context, cid)
+      out.answer = { text, about, mentioned }
     }
     return { ...out, ms: Date.now() - started }
   } catch (error) {
     console.warn(`[ai-assistant][${cid}] turn context skipped: ${error instanceof Error ? error.message : String(error)}`)
     return { ...none, ms: Date.now() - started }
+  }
+}
+
+/** The conversation state after an answer: the one item it was about, or the items it named in order. */
+function answerState(mentioned: TurnReferent[], about: TurnReferent | null): Record<string, unknown> | null {
+  const items = mentioned.length ? mentioned : about ? [about] : []
+  if (items.length === 1) return eventConversationState(items[0], new Date())
+  if (items.length === 0) return null
+  const starts = items.map((e) => Date.parse(e.start_time)).filter(Number.isFinite)
+  const ends = items.map((e) => Date.parse(e.end_time)).filter(Number.isFinite)
+  try {
+    return calendarRangeConversationState({ start: new Date(Math.min(...starts)).toISOString(), end: new Date(Math.max(...ends, Math.min(...starts) + 60e3)).toISOString(), label: 'the items just listed' }, items, new Date())
+  } catch {
+    return null
   }
 }
 
@@ -405,21 +436,22 @@ async function answerFromCalendar(
   events: TurnReferent[],
   context: Record<string, unknown> | null | undefined,
   cid: string,
-): Promise<string> {
+): Promise<{ text: string; mentioned: TurnReferent[] }> {
   const utcOffset = (context?.utcOffset as string) ?? '-04:00'
   let known = events
   if (known.length < 2) {
     const family = (Array.isArray(context?.family) ? context.family : []) as Array<{ id: string; name: string }>
     known = await loadReferents(sb, [...new Set([...events.map((e) => e.id), ...(await loadUpcomingIds(sb))])], family)
   }
-  const line = (e: TurnReferent) => `- ${e.title} — ${formatLocal(e.start_time, utcOffset)}${e.all_day ? ' (all day)' : ''}${e.people.length ? ` — people: ${e.people.join(', ')}` : ''} — drivers: ${e.drivers.length ? e.drivers.join(', ') : 'none set'}${e.place ? ` — place: ${e.place}` : ''}${e.event_type === 'reminder' ? ' (a reminder)' : ''}`
-  const out = await geminiJson(sb, `You are Casa, a family's home assistant. Answer the question from the family calendar below in one to three plain spoken sentences, local times. The first item is the one the question is about. If the calendar doesn't say, say so plainly. Don't propose or make any change.
+  const line = (e: TurnReferent) => `- [${e.id}] ${e.title} — ${formatLocal(e.start_time, utcOffset)}${e.all_day ? ' (all day)' : ''}${e.people.length ? ` — people: ${e.people.join(', ')}` : ''} — drivers: ${e.drivers.length ? e.drivers.join(', ') : 'none set'}${e.address ? ` — place: ${e.address}` : ''}${e.event_type === 'reminder' ? ' (a reminder)' : ''}`
+  const out = await geminiJson(sb, `You are Casa, a family's home assistant. Answer the question from the family calendar below in plain spoken sentences, local times — short, but name every item a list question asks for. Items are in order of relevance: the first is what the question is about when it's about one thing. If the calendar doesn't say, say so plainly. Don't propose or make any change.
 Now: ${localNowLine(String(context?.currentDate ?? new Date().toISOString()), utcOffset)}
 Calendar:
 ${known.map(line).join('\n')}
 Question: ${question}
-Return JSON {"answer": "..."}`, 'question-answer', cid, 6000) as { answer?: string }
-  return String(out?.answer ?? '').trim() || 'I couldn’t find that on the calendar.'
+Never say the [ids] out loud. Return JSON {"answer": "...", "mentioned": [the ids of the calendar items your answer names, in the order it names them]}`, 'question-answer', cid, 6000) as { answer?: string; mentioned?: string[] }
+  const mentioned = (Array.isArray(out?.mentioned) ? out.mentioned : []).flatMap((id) => known.filter((e) => e.id === id))
+  return { text: String(out?.answer ?? '').trim() || 'I couldn’t find that on the calendar.', mentioned }
 }
 
 async function saveUndatedCalendarDraft(
@@ -1089,7 +1121,7 @@ Deno.serve(async (req) => {
       payload: {
         type: 'text',
         text: turnContext.clarify.question,
-        conversation_state: calendarClarificationConversationState(turnContext.clarify.candidates, latestUserText ?? '', new Date()),
+        conversation_state: calendarClarificationConversationState(turnContext.clarify.candidates, { tool: 'turn_change', args: turnContext.clarify.changes ?? {} }, new Date()),
         semantic_intent: 'conversation.clarify',
         correlation_id: cid,
       },
@@ -1101,7 +1133,8 @@ Deno.serve(async (req) => {
       payload: {
         type: 'text',
         text: turnContext.answer.text,
-        conversation_state: eventConversationState(turnContext.answer.about, new Date()),
+        // What the answer named, in order, so "the first one" or "that" next means it.
+        conversation_state: answerState(turnContext.answer.mentioned, turnContext.answer.about) ?? incomingConversationState ?? null,
         semantic_intent: 'conversation.question',
         correlation_id: cid,
       },
@@ -6758,9 +6791,10 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
     const proposesChange = (out.payload.type === 'tool_action' && WRITE_TOOLS.has(String(out.payload.tool))) || out.payload.type === 'tool_action_batch'
     if (turnResolution?.isQuestion && proposesChange) {
       appendServerTrace('server_ai_assistant_question_kept', String(out.payload.tool ?? out.payload.type), { tool: out.payload.tool ?? null })
-      const text = await answerFromCalendar(sb, turnResolution.standalone ?? latestUserText ?? '', turnContext?.referents ?? [], context, cid)
-        .catch(() => 'I couldn’t find that just now.')
-      out = { status: 200, payload: { type: 'text', text, conversation_state: incomingConversationState ?? null, semantic_intent: 'conversation.question_kept', correlation_id: cid } }
+      const answered = await answerFromCalendar(sb, turnResolution.standalone ?? latestUserText ?? '', turnContext?.referents ?? [], context, cid)
+        .catch(() => ({ text: 'I couldn’t find that just now.', mentioned: [] as TurnReferent[] }))
+      const text = answered.text
+      out = { status: 200, payload: { type: 'text', text, conversation_state: answerState(answered.mentioned, null) ?? incomingConversationState ?? null, semantic_intent: 'conversation.question_kept', correlation_id: cid } }
     }
     // The turn also dropped the open card ("never mind — what time is …?"): close it with the answer.
     if (turnResolution?.closesDraft && !out.payload.closes_draft && out.payload.type !== 'tool_action') out.payload.closes_draft = true
@@ -6768,7 +6802,6 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
       out.payload.turn_context = {
         act: turnResolution.act,
         closes_draft: turnResolution.closesDraft,
-        identified_by: turnResolution.identifiedBy,
         standalone: turnResolution.standalone,
         is_question: turnResolution.isQuestion,
         event_id: turnResolution.eventId,

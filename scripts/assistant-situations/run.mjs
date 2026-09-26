@@ -63,7 +63,9 @@ const HEADROOM = 0.5
 async function aiHeadroom() {
   const [breaker] = await sql(`select value from settings where key = 'ai_circuit_breaker'`)
   const b = typeof breaker?.value === 'string' ? JSON.parse(breaker.value) : breaker?.value ?? {}
-  const [hour] = await sql(`select count(*)::int as calls, coalesce(sum(total_tokens), 0)::bigint as tokens from ai_provider_calls where occurred_at > now() - interval '1 hour'`)
+  // The breaker's own window: the last hour, or since it was last resumed if that's later.
+  const since = b.resumed_at && Date.parse(b.resumed_at) > Date.now() - 3600e3 ? new Date(b.resumed_at).toISOString() : new Date(Date.now() - 3600e3).toISOString()
+  const [hour] = await sql(`select count(*)::int as calls, coalesce(sum(total_tokens), 0)::bigint as tokens from ai_provider_calls where occurred_at >= '${since}'`)
   return { paused: b.paused === true, calls: hour.calls, tokens: Number(hour.tokens), callCap: b.hourly_call_cap ?? 600, tokenCap: b.hourly_token_cap ?? 1500000 }
 }
 const PER_TURN_CALLS = 4

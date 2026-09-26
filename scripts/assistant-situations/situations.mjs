@@ -112,7 +112,7 @@ export const SITUATIONS = [
     gist: 'A short follow-up ("and the next day?") keeps asking the same question about another day.',
     bind: (w) => {
       const days = busyDays(w, 1)
-      return days.length >= 2 && { dayA: days[0].name, dayB: days[1].name, facts: { [days[0].name]: w.allOn(days[0].date), [days[1].name]: w.allOn(days[1].date) } }
+      return days.length >= 2 && { dayA: days[0].name, dayB: days[1].name, facts: { [`${days[0].name} ${days[0].date}`]: w.allOn(days[0].date), [`${days[1].name} ${days[1].date}`]: w.allOn(days[1].date) } }
     },
     turns: [
       {
@@ -134,7 +134,7 @@ export const SITUATIONS = [
       const day = busyDays(w, 2)[0]
       if (!day) return null
       const first = day.events[0]
-      return { day: day.name, facts: { onThatDay: w.allOn(day.date), firstTimedItem: first.title, itsDrivers: first.drivers, itsPeople: first.people } }
+      return { day: day.name, facts: { day: `${day.name} ${day.date}`, onThatDay: w.allOn(day.date), firstTimedItem: first.title, itsDrivers: first.drivers, itsPeople: first.people } }
     },
     turns: [
       {
@@ -156,7 +156,7 @@ export const SITUATIONS = [
       const day = busyDays(w, 2)[0]
       if (!day) return null
       const first = day.events[0]
-      return { day: day.name, firstId: first.id, movedTo: at(first.start_time, 30), facts: { onThatDay: w.allOn(day.date) } }
+      return { day: day.name, firstId: first.id, movedTo: at(first.start_time, 30), facts: { day: `${day.name} ${day.date}`, onThatDay: w.allOn(day.date) } }
     },
     turns: [
       {
@@ -206,7 +206,7 @@ export const SITUATIONS = [
       const ev = w.timed.find((e) => e.local.date > w.todayLocal && e.place && e.hasTrip && e.people.some((p) => w.kids.some((k) => k.name === p)) && e.spoken.length > 3)
       if (!ev) return null
       const kid = ev.people.find((p) => w.kids.some((k) => k.name === p))
-      return { kid, spoken: ev.spoken, facts: { title: ev.title, date: ev.local.date, starts: ev.local.hhmm, place: ev.place } }
+      return { kid, spoken: ev.spoken, facts: { title: ev.title, date: ev.local.date, starts: ev.local.hhmm, place: ev.address ?? ev.place } }
     },
     turns: [
       {
@@ -229,7 +229,7 @@ export const SITUATIONS = [
       if (!day) return null
       const second = day.events[1]
       const local = w.localParts(second.start_time)
-      return { day: day.name, secondTitle: second.title.split(/[:(]/)[0].trim(), secondId: second.id, date: local.date, facts: { onThatDay: w.allOn(day.date) } }
+      return { day: day.name, secondTitle: second.title.split(/[:(]/)[0].trim(), secondId: second.id, date: local.date, facts: { day: `${day.name} ${day.date}`, onThatDay: w.allOn(day.date) } }
     },
     turns: [
       {

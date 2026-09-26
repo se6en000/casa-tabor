@@ -57,6 +57,7 @@ export async function loadWorld(now = new Date()) {
       /** A trip: the calendar has a drive planned for it. */
       hasTrip: Array.isArray(plan?.legs) && plan.legs.length > 0,
       place: (e.location_name || e.address || '').split(',')[0].trim() || null,
+      address: [e.location_name, e.address].filter((v, i, all) => v && all.indexOf(v) === i).join(' — ') || null,
       /** How a person would name it out loud: "softball" from "Softball: Huskies @ Wellington". */
       spoken: e.title.split(/[:@·(–—]| - /)[0].trim().toLowerCase(),
     }

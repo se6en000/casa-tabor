@@ -138,27 +138,27 @@ Then the act — what they want (besides dropping the draft). Decide in this ord
 - "revise_draft": changes or adds something to the draft above, which stays the same item — give "changes". If they say the draft is about the wrong item, that isn't a revision: it's a "change" (or "add") for the right one.
 - "confirm_draft": says yes / go ahead to the draft and nothing else.
 - "add": asks Casa to put something new on the calendar (an event or a reminder) — give "new_item".
-- "change": asks or suggests changing one thing already on the calendar — its time, day, length, place, title, who's going or who drives — give "event_id", "identified_by" and "changes". (Deleting is "other".) When the person corrects which item they meant, carry over the change they asked for before.
+- "change": asks or suggests changing one thing already on the calendar — its time, day, length, place, title, who's going or who drives — give "event_id" and "changes". (Deleting is "other".) When the person corrects which item they meant, carry over the change they asked for before.
 - "clarify": asks to change something, but more than one calendar item fits what they said (for example several on the day they named, and nothing in the message tells them apart) — give "candidates" (their ids) and "question" (asking which, naming them). Never pick one when it's unclear; "my" or "the" doesn't make it clear.
-- "question": asks for information about the family's plans — give "event_id" if it's about one calendar item.
+- "question": asks for information about the family's plans — give "event_id" if it's about one calendar item, and "answerable": true when everything needed to answer is in the calendar items listed above (false if it needs anything else — older things, emails, contacts, the web).
 - "other": deleting things, and anything not about the family's plans — groceries, recipes, contacts, general knowledge, small talk.
 Asking whether someone could take, drive, join or move a calendar item is suggesting a change: "change".
 
 "standalone": the latest message the way the person would say it if they had said everything at once — short, plain and complete, making sense with no conversation before it. A question stays a question; a request starts with what to do, then the thing itself in a few words, then who, when and where. Resolve every reference — pronouns, positions in a list Casa gave, "that one"-style pointers, and shortened follow-ups that repeat the previous question or request with a different day, person or item — to the actual titles, names, days and times. Change only what's needed to make it stand on its own; if it already does, return it word for word. Keep the person's meaning exactly: don't answer it, and don't add anything they didn't say or clearly mean.
 "is_question": true if it only asks for information — who, when, where, what, or whether something is so. A change suggested in question form (could someone else…, what if…, can we … instead) is a request to change, not a question: it becomes a card the person still has to say yes to.
 "event_id": the id in [brackets] of the one calendar item the message is about, or null. Only ids listed above.
-"identified_by" (change): how the message (with the conversation) points to that item — "name" (says its name or a clear part of it), "conversation" (it's the item just being talked about), "time" (says its time), "kind" (says what kind of thing it is, and only one thing that day is that kind), or "day" (only says the day).
-"new_item" (add): {"title": a short calendar name for the thing itself (not the request), "date": "YYYY-MM-DD", "start": "HH:MM" or null, "end": "HH:MM" or null, "duration_minutes": number or null, "all_day": boolean, "place": string or null, "people": [family names it's for], "kind": "event" | "reminder"}. Leave date or start null if the person didn't give them — never guess.
-"changes" (revise_draft or change): only what changes — "title", "date" ("YYYY-MM-DD"), "start"/"end" ("HH:MM", 24-hour, local), "duration_minutes", "place", "add_people", "remove_people", "all_day", "notes", "kind" ("event" | "reminder"), "driver" (the family member who'll drive).
-Dates: always take them from the Days list. Times: 24-hour local; read a bare hour as the sensible part of the day for that kind of thing, in the context of any time already set. A new start without an end keeps the length.
+"new_item" (add): {"title": a short calendar name for the thing itself (not the request), "date": "YYYY-MM-DD", "date_basis": how they gave the day — "weekday" (only a weekday name), "next_week" (a weekday in the week after this one, e.g. said "next week"), "date" (a calendar date), "relative" (today, tomorrow, in N days), "start": "HH:MM" or null, "end": "HH:MM" or null, "duration_minutes": number or null, "all_day": boolean, "place": string or null, "people": [family names it's for], "kind": "event" | "reminder"}. Leave date or start null if the person didn't give them — never guess.
+"changes" (revise_draft or change): only what changes — "title", "date" ("YYYY-MM-DD", with "date_basis" as above), "start"/"end" ("HH:MM", 24-hour, local), "duration_minutes", "place", "add_people", "remove_people", "all_day", "notes", "kind" ("event" | "reminder"), "driver" (the family member who'll drive).
+Dates: always take them from the Days list. In scheduling, pushing or moving something back (or out) means later; moving it up (or forward, or earlier) means earlier. Times: 24-hour local; read a bare hour as the sensible part of the day for that kind of thing, in the context of any time already set. A new start without an end keeps the length.
 
-Return only JSON: {"closes_draft": true|false, "act": "...", "standalone": "...", "is_question": true|false, "event_id": "..." or null, "identified_by": "..." or null, "new_item": {...} or null, "changes": {...} or null, "candidates": [ids] or null, "question": "..." or null}`
+Return only JSON: {"closes_draft": true|false, "act": "...", "standalone": "...", "is_question": true|false, "event_id": "..." or null "new_item": {...} or null, "changes": {...} or null, "candidates": [ids] or null, "question": "..." or null, "answerable": true|false}`
 }
 
 const ACTS = ['none', 'revise_draft', 'cancel_draft', 'confirm_draft', 'add', 'change', 'clarify', 'question', 'other']
 
 /** The model's answer, checked: anything unusable means "go on with the turn as it was said". */
-export function readTurnResolution(raw, { draft, knownIds } = {}) {
+/** @param {unknown} raw @param {{ draft?: object | null, knownIds?: string[], pendingChange?: boolean }} [options] */
+export function readTurnResolution(raw, { draft = null, knownIds = [], pendingChange = false } = {}) {
   const r = raw && typeof raw === 'object' ? raw : {}
   let act = ACTS.includes(r.act) ? r.act : 'other'
   const standalone = typeof r.standalone === 'string' && r.standalone.trim() ? r.standalone.trim().slice(0, 600) : null
@@ -172,13 +172,14 @@ export function readTurnResolution(raw, { draft, knownIds } = {}) {
   // Each act needs what it acts on; without it the turn goes on to the full assistant.
   if (['revise_draft', 'confirm_draft'].includes(act) && (!draft || closesDraft)) act = 'other'
   if (act === 'revise_draft' && !changes) act = 'other'
-  if (act === 'change' && (!eventId || !changes)) act = 'other'
+  // Answering "which one?" names only the item; the change asked for before is still pending.
+  if (act === 'change' && (!eventId || (!changes && !pendingChange))) act = 'other'
   if (act === 'add' && !newItem) act = 'other'
   const candidates = Array.isArray(r.candidates) ? r.candidates.filter((id) => (knownIds ?? []).includes(id)).slice(0, 6) : []
   const question = typeof r.question === 'string' && r.question.trim() ? r.question.trim().slice(0, 400) : null
   if (act === 'clarify' && (candidates.length < 2 || !question)) act = 'other'
-  const identifiedBy = ['name', 'conversation', 'time', 'kind', 'day'].includes(r.identified_by) ? r.identified_by : null
-  return { act, closesDraft, identifiedBy, standalone, isQuestion: act === 'question' || (r.is_question === true && act !== 'change' && act !== 'add' && act !== 'none'), eventId, draftChanges: changes, newItem, candidates, clarifyQuestion: question }
+  const answerable = act === 'question' && r.answerable === true
+  return { act, closesDraft, answerable, standalone, isQuestion: act === 'question' || (r.is_question === true && act !== 'change' && act !== 'add' && act !== 'none'), eventId, draftChanges: changes, newItem, candidates, clarifyQuestion: question }
 }
 
 const HHMM = /^([01]?\d|2[0-3]):([0-5]\d)$/
@@ -270,13 +271,65 @@ export function changeArgs(event, changes, { utcOffset, familyNames } = {}) {
   return Object.keys(args).some((k) => k !== 'id' && k !== 'expected_updated_at') ? args : null
 }
 
+const TITLE_STOP = new Set(['the', 'and', 'for', 'with', 'from', 'this', 'that', 'event', 'appointment', 'meeting', 'reminder', 'drop', 'pick', 'off', 'day', 'time'])
+const words = (text) => String(text ?? '').toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !TITLE_STOP.has(w))
+
 /**
- * Whether a change only named a day that has more than one item on it — then Casa asks
- * which, listing them, instead of picking one. Evidence-based, not wording-based.
+ * Whether the person's own words point at this calendar item: a real word of its title,
+ * its time, or it's one of the items the conversation was just about. Checked by the
+ * server — never taken from the model's say-so.
  */
-export function sameDayChoices(resolution, target, sameDay) {
-  if (resolution?.act !== 'change' || !target) return null
-  if (resolution.identifiedBy && resolution.identifiedBy !== 'day') return null
+export function wordsPointTo(event, latestText, conversationIds, utcOffset) {
+  if ((conversationIds ?? []).includes(event.id)) return true
+  const said = String(latestText ?? '').toLowerCase()
+  const saidWords = new Set(words(said))
+  if (words(event.title).some((w) => saidWords.has(w))) return true
+  const t = localParts(event.start_time, utcOffset)
+  if (!t || event.all_day) return false
+  const [h, m] = t.hhmm.split(':').map(Number)
+  const h12 = h % 12 === 0 ? 12 : h % 12
+  const forms = m ? [`${h12}:${String(m).padStart(2, '0')}`, t.hhmm] : [`${h12} ?(am|pm|o'?clock)`, `${h12}:00`, t.hhmm, `at ${h12}\\b`]
+  return forms.some((f) => new RegExp(`\\b${f}`, 'i').test(said))
+}
+
+/**
+ * A change whose item the person's words don't point to, on a day with more than one
+ * item: Casa asks which (listing them) instead of picking one.
+ */
+export function sameDayChoices(target, sameDay, { latestText, conversationIds, utcOffset } = {}) {
+  if (!target || wordsPointTo(target, latestText, conversationIds, utcOffset)) return null
   const choices = (sameDay ?? []).filter((e) => !e.all_day && e.event_type !== 'reminder')
   return choices.length >= 2 && choices.some((e) => e.id === target.id) ? choices.slice(0, 6) : null
+}
+
+/**
+ * The day the person meant, settled by the server: a bare weekday is the next one on the
+ * calendar (today counts), never a later one the model drifted to.
+ */
+export function settleDate(date, basis, nowIso, utcOffset) {
+  if (typeof date !== 'string' || !DATE.test(date) || basis !== 'weekday') return date
+  const today = localParts(nowIso ?? new Date().toISOString(), utcOffset)?.date
+  if (!today) return date
+  const weekday = new Date(`${date}T12:00:00Z`).getUTCDay()
+  const base = Date.parse(`${today}T12:00:00Z`)
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(base + i * 86400e3)
+    if (d.getUTCDay() === weekday) return d.toISOString().slice(0, 10)
+  }
+  return date
+}
+
+/**
+ * Answering Casa's "which one?": the change asked for before is kept, applied to the item
+ * picked; a time or day in the answer that is just the item's own (how they picked it) is
+ * not a new time.
+ */
+export function carryOverChange(storedChanges, answerChanges, target, utcOffset) {
+  const stored = storedChanges && typeof storedChanges === 'object' ? storedChanges : {}
+  const answer = { ...(answerChanges && typeof answerChanges === 'object' ? answerChanges : {}) }
+  const own = localParts(target?.start_time, utcOffset)
+  if (own && answer.start === own.hhmm) delete answer.start
+  if (own && answer.date === own.date) delete answer.date
+  const merged = { ...stored, ...answer }
+  return Object.keys(merged).length > 0 ? merged : null
 }

@@ -42,7 +42,7 @@ Return a JSON array of strings.`, { temperature: 1 })
 
 /** Did this answer do what the turn needed? Graded on meaning, not wording. */
 export async function judge({ conversation, reply, gist, facts }) {
-  const out = await gemini(`You are grading a family home assistant. Grade on meaning, not wording; be strict about facts.
+  const out = await gemini(`You are grading a family home assistant. Grade on meaning, not wording; be strict about facts. The calendar facts below are the truth — judge only against them, never against assumptions about what things usually are. Extra true details from the calendar are fine.
 Conversation so far:
 ${conversation.map((m) => `${m.role === 'user' ? 'PERSON' : 'ASSISTANT'}: ${m.content}`).join('\n')}
 ASSISTANT'S REPLY TO GRADE: ${reply}
