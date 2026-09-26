@@ -1,6 +1,7 @@
 {
   "version": "5",
   "specifiers": {
+    "npm:@axe-core/playwright@^4.13.0": "4.13.0_playwright-core@1.63.0",
     "npm:@eslint/js@^10.0.1": "10.0.1_eslint@10.10.0",
     "npm:@playwright/test@^1.61.1": "1.63.0",
     "npm:@supabase/supabase-js@2": "2.116.0",
@@ -39,6 +40,13 @@
     "npm:zustand@^5.0.13": "5.0.15_@types+react@19.3.0_react@19.3.0"
   },
   "npm": {
+    "@axe-core/playwright@4.13.0_playwright-core@1.63.0": {
+      "integrity": "sha512-6YLx+kxXu5GJceG4ozFg+33a2EMTdjYwWGloJ3sb9Kta5pp+ZNS53uxGVog5JetIY8s++P5UrtX+cri+u0VAVg==",
+      "dependencies": [
+        "axe-core",
+        "playwright-core"
+      ]
+    },
     "@babel/code-frame@7.29.7": {
       "integrity": "sha512-Aup7aUOfpbAUg2ROOJN6Iw5f9DMBlzu0mIkm/malLQFN/YQgO48wCj0Kxa3sEHJvPVFg7siR+qRInwXd2qhQKw==",
       "dependencies": [
@@ -779,6 +787,9 @@
         "minimalistic-assert",
         "safer-buffer"
       ]
+    },
+    "axe-core@4.13.0": {
+      "integrity": "sha512-UzGt8zg7Ny8djbYMhxl2zuEevVa7r2gJjYY5Lwr1xM7+XU2nd6CkIWFTVcCIbAP63vSz71NaVyyuSk9lHKcy0A=="
     },
     "balanced-match@4.0.4": {
       "integrity": "sha512-BLrgEcRTwX2o6gGxGOCNyMvGSp35YofuYzw9h1IMTRmKqttAZZVU67bdb9Pr2vUHA8+j3i2tJfjO6C6+4myGTA=="
@@ -1676,6 +1687,7 @@
   "workspace": {
     "packageJson": {
       "dependencies": [
+        "npm:@axe-core/playwright@^4.13.0",
         "npm:@eslint/js@^10.0.1",
         "npm:@playwright/test@^1.61.1",
         "npm:@supabase/supabase-js@^2.106.2",

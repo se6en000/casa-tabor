@@ -17,6 +17,7 @@ import {
 } from '../_shared/llm-model-policy.mjs'
 import { normalizeAssistantExperienceMode } from '../_shared/assistant-experience-mode.mjs'
 import { resolveLlmWorkload } from '../_shared/llm-workload-config.mjs'
+import { formatLocal, localNowLine } from '../_shared/assistant-local-time.mjs'
 import { buildGeminiGenerationConfig } from '../_shared/gemini-generation-config.mjs'
 import {
   resolveTalkPlanIntentGate,
@@ -3243,16 +3244,7 @@ Deno.serve(async (req) => {
 
   // Convert a UTC ISO string to a human-readable local time string using the user's offset
   function toLocal(iso: string): string {
-    if (!iso) return ''
-    const offsetMatch = utcOffset.match(/([+-])(\d{2}):(\d{2})/)
-    if (!offsetMatch) return iso
-    const sign = offsetMatch[1] === '+' ? 1 : -1
-    const offsetMs = sign * (parseInt(offsetMatch[2]) * 60 + parseInt(offsetMatch[3])) * 60000
-    const local = new Date(new Date(iso).getTime() + offsetMs)
-    return local.toLocaleString('en-US', {
-      weekday: 'short', month: 'short', day: 'numeric',
-      hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'UTC'
-    })
+    return formatLocal(iso, utcOffset)
   }
 
   if (talkPlanCommandLane && intentRouting.profile === 'grocery' && groceryFrame) {
@@ -4081,7 +4073,8 @@ Deno.serve(async (req) => {
   const customInstructions = (customRow.data?.value as { text?: string } | null)?.text?.trim() || ''
 
   const systemInstruction = `You are the Casa Tabor family assistant — a smart, warm, conversational AI for the ${familyNames} family.
-Current date/time: ${context.currentDate}
+Current local date/time: ${localNowLine(context.currentDate as string, (context.utcOffset as string) ?? '-04:00')} — "today" is this local date. Always speak in local time; never mention UTC to the family.
+(The same moment in UTC, for tool arguments only: ${context.currentDate})
 User's local UTC offset: ${context.utcOffset ?? '-04:00'} (use this for all times you generate)
 Home city: ${context.homeCity ?? 'West Palm Beach'}
 TEMPORAL ASSUMPTIONS (default unless user clearly overrides):
@@ -4226,7 +4219,7 @@ The current conversation is grounded to event ID ${incomingConversationState.act
 Use only the matching database event loaded by Casa. Never copy event facts from earlier assistant prose.
 If that event is unavailable, say so and search again instead of guessing.` : ''}
 
-${includeEventContext ? `UPCOMING EVENTS SNAPSHOT (next ${PROMPT_EVENT_WINDOW_DAYS} days, capped; use search_events for anything outside snapshot):\n${eventsText}` : ''}
+${includeEventContext ? `UPCOMING EVENTS SNAPSHOT (next ${PROMPT_EVENT_WINDOW_DAYS} days, capped; use search_events for anything outside snapshot). Event times here are already local time; updated_at values are UTC timestamps used only when editing:\n${eventsText}` : ''}
 ${includeGroceryContext ? `\nGROCERY LIST (unchecked items):\n${groceryText}\n${defaultListId ? `Default list ID: ${defaultListId}` : ''}` : ''}
 ${includeRecipeContext ? `\nRECIPE LIBRARY SNAPSHOT (recent):\n${recipesText || 'No recipes saved yet.'}` : ''}
 ${includeFoodProfileContext && foodProfileText ? `\nFOOD PROFILE (household dietary needs & preferences — honor for all meal/grocery/recipe suggestions):\n${foodProfileText}` : ''}
@@ -4490,6 +4483,9 @@ ${RECOVERY_AND_CONFLICT_GUARDRAILS}`
           title: e.title,
           start: e.start_time,
           end: e.end_time,
+          // The same times as the family says them (the raw ones above are UTC).
+          start_local: toLocal(e.start_time),
+          end_local: toLocal(e.end_time),
           updated_at: e.updated_at,
           location: e.location_name,
           address: e.address,
