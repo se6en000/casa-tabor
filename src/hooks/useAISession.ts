@@ -96,6 +96,8 @@ export interface AIMessage {
         expectedFollowUp: 'none'
         establishedAt: string
       }
+  /** The server called off the card that was waiting for a yes ("never mind"). */
+  closesDraft?: boolean
   toolAction?: {
     tool: string
     args: Record<string, unknown>

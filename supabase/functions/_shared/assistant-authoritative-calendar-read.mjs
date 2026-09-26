@@ -29,11 +29,12 @@ export function buildAuthoritativeCalendarRead(range, events, utcOffset) {
 }
 
 export function calendarReadSynthesisPrompt(userText, result) {
-  const eventLines = result.events.map(formatPromptEvent)
-  const contextLines = result.sameDayContext.map(formatPromptEvent)
+  // Local times only: handed "2026-09-28T13:00:00+00:00", the model sometimes said "1:00 PM UTC" (2026-09-26).
+  const eventLines = result.events.map((event) => formatPromptEvent(event, result.scope.utcOffset))
+  const contextLines = result.sameDayContext.map((event) => formatPromptEvent(event, result.scope.utcOffset))
   return [
     `User request: ${String(userText ?? '').trim()}`,
-    `Requested range: ${result.scope.label} (${result.scope.start} to ${result.scope.end}, UTC offset ${result.scope.utcOffset}).`,
+    `Requested range: ${result.scope.label} (local time).`,
     `${result.count} authoritative calendar items are in the requested range.`,
     eventLines.length > 0 ? `Requested items:\n${eventLines.join('\n')}` : 'Requested items: none.',
     contextLines.length > 0 ? `Later same-day context:\n${contextLines.join('\n')}` : '',
@@ -72,8 +73,8 @@ function promptEvent(event) {
   }
 }
 
-function formatPromptEvent(event) {
-  return `- ${event.eventType}: ${event.title} | ${event.allDay ? 'all day' : `${event.start} to ${event.end}`}${event.members.length > 0 ? ` | people: ${event.members.join(', ')}` : ''}${event.location ? ` | location: ${event.location}` : ''}`
+function formatPromptEvent(event, utcOffset) {
+  return `- ${event.eventType}: ${event.title} | ${event.allDay ? 'all day' : `${formatLocalTime(event.start, utcOffset)} to ${formatLocalTime(event.end, utcOffset)}`}${event.members.length > 0 ? ` | people: ${event.members.join(', ')}` : ''}${event.location ? ` | location: ${event.location}` : ''}`
 }
 
 function formatLocalTime(value, utcOffset) {

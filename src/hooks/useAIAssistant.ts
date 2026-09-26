@@ -26,6 +26,7 @@ export type { AIMessage }
 // streaming `final` SSE event and the non-streaming JSON body.
 interface AssistantServerPayload {
   type?: string
+  closes_draft?: boolean
   code?: string
   message?: string
   text?: string
@@ -546,6 +547,8 @@ export function useAIAssistant(ctx: AssistantContext) {
         role: 'assistant',
         content: (data?.text ?? '') as string,
         conversationState: data?.conversation_state,
+        // "Never mind" to an open card: the server says so, and the card closes.
+        ...(data?.closes_draft === true ? { closesDraft: true } : {}),
         ...sourceMetadata,
       }
     }
@@ -561,7 +564,11 @@ export function useAIAssistant(ctx: AssistantContext) {
                 ? { ...message, toolAction: { ...message.toolAction, status: 'cancelled' as const } }
                 : message
             ))
-          : prev
+          : assistantMsg.closesDraft
+            ? prev.map((message) => (message.toolAction?.status === 'pending'
+                ? { ...message, toolAction: { ...message.toolAction, status: 'cancelled' as const } }
+                : message))
+            : prev
         const updated = [...revised, assistantMsg]
         if (activeSession) persistSessionMessages(activeSession.id, updated)
         if (typeof window !== 'undefined') {

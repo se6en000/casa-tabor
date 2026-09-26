@@ -86,3 +86,12 @@ test('calendar availability uses the same authoritative range path as calendar l
     /\['calendar\.list', 'calendar\.availability'\]\.includes\(calendarFrame\?\.intent[\s\S]{0,300}buildAuthoritativeCalendarRead/,
   )
 })
+
+test('the read gives the model local times, never raw UTC timestamps (a 9 AM review was said as "1:00 PM UTC")', async () => {
+  const { buildAuthoritativeCalendarRead, calendarReadSynthesisPrompt } = await import('../supabase/functions/_shared/assistant-authoritative-calendar-read.mjs')
+  const range = { start: '2026-09-28T04:00:00.000Z', end: '2026-09-29T04:00:00.000Z', label: 'Monday' }
+  const events = [{ id: 'p', title: 'Portfolio trigger review', start_time: '2026-09-28T13:00:00+00:00', end_time: '2026-09-28T13:30:00+00:00', all_day: false, event_type: 'event', members: ['Jake'] }]
+  const prompt = calendarReadSynthesisPrompt('What is on Monday?', buildAuthoritativeCalendarRead(range, events, '-04:00'))
+  assert.match(prompt, /Portfolio trigger review \| 9:00 AM to 9:30 AM/)
+  assert.doesNotMatch(prompt, /T13:00/)
+})
