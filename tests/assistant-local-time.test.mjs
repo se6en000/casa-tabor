@@ -17,3 +17,18 @@ test('an event time is shown in local time, with no zone left to guess', () => {
 test('without an offset it falls back to Eastern daylight time, like the rest of the assistant', () => {
   assert.equal(formatLocal('2026-09-26T13:00:00Z'), 'Sat, Sep 26, 9:00 AM')
 })
+
+test('a caller that already sends local words (the QA sweep) keeps them as they are', () => {
+  assert.equal(localNowLine('Friday, September 25, 2026 at 8:55 PM EDT', '2026-09-25T20:55:00-04:00'), 'Friday, September 25, 2026 at 8:55 PM EDT')
+})
+
+import { localizeTimestamps } from '../supabase/functions/_shared/assistant-local-time.mjs'
+
+test('evidence text: every timestamp with a zone becomes local words (the yoga answer said "today, Friday" for Saturday 8 AM)', () => {
+  const excerpt = 'Title: KT Yoga\nStarts: 2026-09-26T12:00:00+00:00\nEnds: 2026-09-26T13:00:00Z'
+  assert.equal(localizeTimestamps(excerpt, '-04:00'), 'Title: KT Yoga\nStarts: Sat, Sep 26, 8:00 AM (local)\nEnds: Sat, Sep 26, 9:00 AM (local)')
+})
+
+test('dates without a time or zone are left alone (they are already calendar dates)', () => {
+  assert.equal(localizeTimestamps('Due 2026-09-26; ref 2026-09-26T12:00', '-04:00'), 'Due 2026-09-26; ref 2026-09-26T12:00')
+})

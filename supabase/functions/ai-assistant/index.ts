@@ -17,7 +17,7 @@ import {
 } from '../_shared/llm-model-policy.mjs'
 import { normalizeAssistantExperienceMode } from '../_shared/assistant-experience-mode.mjs'
 import { resolveLlmWorkload } from '../_shared/llm-workload-config.mjs'
-import { formatLocal, localNowLine } from '../_shared/assistant-local-time.mjs'
+import { formatLocal, localNowLine, localizeTimestamps } from '../_shared/assistant-local-time.mjs'
 import { buildGeminiGenerationConfig } from '../_shared/gemini-generation-config.mjs'
 import {
   resolveTalkPlanIntentGate,
@@ -1525,8 +1525,9 @@ Deno.serve(async (req) => {
       }
     }
   }
+  // Evidence documents state times in UTC; hand them to the model in local words.
   const familyEvidenceText = familyRetrieval.evidence.length > 0
-    ? JSON.stringify(familyRetrieval.evidence)
+    ? localizeTimestamps(JSON.stringify(familyRetrieval.evidence), (context?.utcOffset as string | undefined) ?? '-04:00')
     : ''
   const providerRoleWordPattern =
     /\b(doctors?|dentists?|orthodontists?|dermatologists?|therapists?|coach(?:es)?|providers?|counselors?|tutors?|vets?|veterinarians?)\b/i

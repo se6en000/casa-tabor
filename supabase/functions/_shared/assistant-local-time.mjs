@@ -26,11 +26,26 @@ export function formatLocal(iso, utcOffset = DEFAULT_OFFSET) {
 
 /** "Friday, September 25, 2026, 8:48 PM (local time, UTC-04:00)": now, as the family would say it. */
 export function localNowLine(iso, utcOffset = DEFAULT_OFFSET) {
+  // Only a machine timestamp needs converting; a caller that already sent local words keeps them.
+  if (!/^\d{4}-\d{2}-\d{2}T/.test(String(iso)) || Number.isNaN(new Date(iso).getTime())) return String(iso)
   const shift = offsetMs(utcOffset) ?? 0
   const local = new Date(new Date(iso).getTime() + shift)
   const text = local.toLocaleString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
     hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'UTC',
   })
-  return `${text.replace(' at ', ', ')} (local time, UTC${utcOffset ?? DEFAULT_OFFSET})`
+  const offset = String(utcOffset ?? DEFAULT_OFFSET).match(/[+-]\d{2}:\d{2}$/)?.[0] ?? DEFAULT_OFFSET
+  return `${text.replace(' at ', ', ')} (local time, UTC${offset})`
+}
+
+// A timestamp that says its zone (Z or ±hh:mm); bare dates and zoneless times are left as they are.
+const ZONED_TIMESTAMP = /\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})(?![\d:])/g
+
+/**
+ * Evidence documents state event times in UTC ("Starts: 2026-09-26T12:00:00+00:00"); left
+ * alone, the model does the zone math and gets the day or hour wrong. Rewrites each into
+ * local words ("Sat, Sep 26, 8:00 AM (local)") before the text reaches the prompt.
+ */
+export function localizeTimestamps(text, utcOffset = DEFAULT_OFFSET) {
+  return String(text ?? '').replace(ZONED_TIMESTAMP, (iso) => `${formatLocal(iso, utcOffset)} (local)`)
 }
