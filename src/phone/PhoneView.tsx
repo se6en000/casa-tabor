@@ -11,6 +11,8 @@ import type { EditDraft, EditableEvent } from '../wall/editing'
 import { eventView, familyItems, meView, type PhoneMove } from './lens'
 import PhoneEventSheet from './PhoneEventSheet'
 import PhoneAddSheet from './PhoneAddSheet'
+import PhonePeople from './PhonePeople'
+import type { SavedContact, SavedPlace } from '../types'
 import { blankEvent } from '../wall/editing'
 
 // The phone (board section 05): one person's lens on the same family day the wall
@@ -35,6 +37,9 @@ export interface PhoneViewProps {
   checklist: WallChecklistItem[]
   tripActions?: PhoneTripActions
   onToggleItem?: (item: WallChecklistItem) => void
+  /** People (More → People): saved contacts and places, for call / text / directions. */
+  contacts?: SavedContact[]
+  places?: SavedPlace[]
   /** Adding (the + → Type it): the calendar's own create call. */
   createEvent?: (args: Record<string, unknown>) => Promise<void>
   /** Saves an edit from the event sheet (the same steps as the wall). */
@@ -72,7 +77,7 @@ function CheckLine({ item, onToggle }: { item: { id: string; label: string; chec
   )
 }
 
-export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, createEvent, saveEvent, deleteEvent }: PhoneViewProps) {
+export default function PhoneView({ now, viewerId, members, week, events, checklist, tripActions, onToggleItem, createEvent, saveEvent, deleteEvent, contacts = [], places = [] }: PhoneViewProps) {
   const [tab, setTab] = useState<Tab>('me')
   const [filter, setFilter] = useState<string | null>(null)
   const [dayIndex, setDayIndex] = useState<number | null>(null)
@@ -80,6 +85,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   const [openId, setOpenId] = useState<string | null>(null)
   const [openMode, setOpenMode] = useState<'details' | 'edit'>('details')
   const [addOpen, setAddOpen] = useState(false)
+  const [peopleOpen, setPeopleOpen] = useState(false)
   const [adding, setAdding] = useState<EditableEvent | null>(null)
   const [busy, setBusy] = useState(false)
   const pigments = useMemo(() => pigmentIndexes(members), [members])
@@ -298,6 +304,13 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
   const moreScreen = (
     <div className="flex flex-col gap-[16px]">
       <h1 className="m-0 font-display text-phone-title font-bold text-wall-ink">More</h1>
+      <button type="button" onClick={() => setPeopleOpen(true)} className="flex min-h-[72px] items-center gap-[14px] rounded-[18px] border border-solid border-wall-stone bg-wall-on-pigment px-[16px] py-[12px] text-left text-wall-ink">
+        <span className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full bg-phone-card"><Users size={20} /></span>
+        <span className="flex flex-col gap-[2px]">
+          <span className="font-display text-phone-heading font-bold">People</span>
+          <span className="text-phone-detail text-wall-ink-2">Find someone · call, text, directions</span>
+        </span>
+      </button>
       <div className="grid grid-cols-2 gap-[10px]">
         {tiles.map((t) => (
           <Link key={t.label} to={t.to} className="flex h-[124px] flex-col justify-between rounded-[18px] border border-solid border-wall-stone bg-wall-on-pigment p-[14px] text-wall-ink no-underline">
@@ -375,6 +388,7 @@ export default function PhoneView({ now, viewerId, members, week, events, checkl
         />
       )}
 
+      {peopleOpen && <PhonePeople contacts={contacts} places={places} onClose={() => setPeopleOpen(false)} />}
       {addOpen && (
         <PhoneAddSheet
           onClose={() => setAddOpen(false)}

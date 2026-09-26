@@ -322,6 +322,10 @@
         "reason": "Family Wall: its own small component set by design (CLAUDE.md Wall exception) — the MT menu button and the menu's close button, styled with wall-* tokens."
       },
       {
+        "path": "src/phone/PhonePeople.tsx",
+        "reason": "The phone lens (Phase 4): People's back button, styled with wall-*/phone-* tokens."
+      },
+      {
         "path": "src/phone/PhoneAddSheet.tsx",
         "reason": "The phone lens (Phase 4, board 05e): the + sheet's ways in, styled with wall-*/phone-* tokens."
       },

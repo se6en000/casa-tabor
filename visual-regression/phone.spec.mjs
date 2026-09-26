@@ -142,3 +142,17 @@ test('phone: the next-move card — Directions first, the right words mid-trip, 
   await card.getByRole('button', { name: 'Edit' }).click()
   await expect(phone.getByRole('region', { name: /on the phone/ }).getByText('TITLE')).toBeVisible()
 })
+
+test('phone: People — find someone, then call, text or drive there', async ({ page }) => {
+  const phone = await open(page)
+  await phone.getByRole('button', { name: 'More' }).click()
+  await phone.getByRole('button', { name: /People/ }).click()
+  const people = phone.getByRole('region', { name: 'People' })
+  await people.getByRole('searchbox', { name: 'Find a person' }).fill('coach')
+  await expect(people.getByText('Coach Mike')).toBeVisible()
+  await expect(people.getByText('Layla Brooks')).toHaveCount(0)
+  await expect(people.getByRole('link', { name: /Call/ })).toHaveAttribute('href', 'tel:+15615550101')
+  await expect(people.getByRole('link', { name: /Directions/ })).toHaveAttribute('href', /destination=11921%20Okeechobee/)
+  await people.getByRole('searchbox', { name: 'Find a person' }).fill('')
+  await expect(phone).toHaveScreenshot('phone-people.png')
+})

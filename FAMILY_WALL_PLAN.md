@@ -328,6 +328,7 @@ The kiosk showed only the page background for ~8 minutes after shipping `138d17f
 
 - [~] **P4.8 — More (05h)** — grocery, meals, music, briefing, places, settings, as tiles into the existing pages. Playwright.
   - Evidence: _
+  - People (Jake 2026-09-26: "a contact look up so I want to find a person and get their address and drive there or call"): More → People searches the 126 saved contacts by name, alias, relationship ("coach") or place, confirmed and often-seen first, dismissed never; each card has Call / Text (tel:/sms: with a +1 number) and Directions (their address, or their saved place's). `contacts.ts` (3 tests), `PhonePeople.tsx`, Playwright "People".
 
 - [ ] **P4.2 — Personal to-dos leave the wall** — personal items appear only on their owner's phone.
   - Evidence: _

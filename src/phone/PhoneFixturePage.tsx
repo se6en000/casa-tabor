@@ -16,6 +16,13 @@ const CHECKLIST = [
   { id: 'c6', event_id: 'birthday', label: 'Birthday card', checked: false, sort_order: 1 },
 ]
 
+const PLACES = [{ id: 'p-ferrin', name: 'Ferrin Park', address: '11921 Okeechobee Blvd', city: 'Royal Palm Beach', state: 'FL', zip: '33411' }]
+const CONTACTS = [
+  { id: 'c1', name: 'Coach Mike', aliases: ['Mike Alvarez'], relationship: "Liv's softball coach", phone: '(561) 555-0101', email: null, address: null, primary_place_id: 'p-ferrin', confirmed: true, occurrence_count: 12, dismissed_at: null },
+  { id: 'c2', name: 'Layla Brooks', aliases: [], relationship: "Liv's friend", phone: null, email: null, address: '700 S Rosemary Ave, West Palm Beach, FL', primary_place_id: null, confirmed: true, occurrence_count: 3, dismissed_at: null },
+  { id: 'c3', name: 'Meredith', aliases: [], relationship: 'violin teacher', phone: '561-555-0199', email: null, address: null, primary_place_id: null, confirmed: false, occurrence_count: 20, dismissed_at: null },
+]
+
 export default function PhoneFixturePage() {
   const fontsReady = useFixtureFonts()
   const params = new URLSearchParams(window.location.search)
@@ -45,6 +52,8 @@ export default function PhoneFixturePage() {
               week={week}
               events={evs}
               checklist={checklist}
+              contacts={CONTACTS as never}
+              places={PLACES as never}
               tripActions={{
                 leaving: (ids) => setTripState((s) => withDeparted(s, day, ids, now)),
                 undoLeaving: (ids) => setTripState((s) => withoutDeparted(s, day, ids)),
