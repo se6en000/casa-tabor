@@ -184,7 +184,8 @@ test('wall: from 1 PM tomorrow speaks up on the full day, and a tap opens it', a
   await page.goto('/__wall-fixture?at=2026-09-25T13:40:00')
   const wall = page.getByTestId('wall-fixture')
   const note = wall.getByRole('button', { name: /^TOMORROW/ })
-  await expect(note).toContainText("Kelly's Birthday: Birthday card still to do")
+  await expect(note).toContainText('Baseball: Glove and Cleats still to do')
+  await expect(note).not.toContainText('Birthday') // a celebration's prep never reaches the wall
   await expect(wall).toHaveScreenshot('tomorrow-note.png')
   await note.click()
   await expect(wall.getByText("SATURDAY · WHO'S WHERE")).toBeVisible()
@@ -302,22 +303,22 @@ test('wall: pack tonight — a tap checks a line off (it folds away), See all op
   await page.goto('/__wall-fixture?at=2026-09-25T20:15:00')
   const wall = page.getByTestId('wall-fixture')
   const pack = wall.getByRole('region', { name: 'Pack tonight' })
-  await expect(pack.getByText('GET & PACK · 1 OF 6 DONE')).toBeVisible()
+  await expect(pack.getByText('GET & PACK · 1 OF 5 DONE')).toBeVisible()
 
-  await pack.getByRole('button', { name: 'Birthday card' }).click()
-  await expect(pack.getByText('GET & PACK · 2 OF 6 DONE')).toBeVisible()
-  await expect(pack.getByRole('button', { name: 'Birthday card' })).toHaveCount(0) // folded into "1 packed"
+  await pack.getByRole('button', { name: 'Water bottle' }).click()
+  await expect(pack.getByText('GET & PACK · 2 OF 5 DONE')).toBeVisible()
+  await expect(pack.getByRole('button', { name: 'Water bottle' })).toHaveCount(0) // folded into "2 packed"
   await expect(wall.getByText(/Previewing/)).toHaveCount(0) // a tap on a line isn't a tap on the wall
   await expect(wall).toHaveScreenshot('pack-tonight.png')
 
   await pack.getByRole('button', { name: 'See all' }).click()
   const sheet = wall.getByRole('region', { name: 'Everything to pack' })
-  await sheet.getByRole('button', { name: 'Birthday card' }).click() // untick it again
-  await expect(sheet.getByText('GET & PACK · 1 OF 6 DONE')).toBeVisible()
+  await sheet.getByRole('button', { name: 'Water bottle' }).click() // untick it again
+  await expect(sheet.getByText('GET & PACK · 1 OF 5 DONE')).toBeVisible()
   await sheet.getByRole('button', { name: 'Close' }).click()
 
-  await pack.getByRole('button', { name: /^Kelly's Birthday/ }).click()
-  await expect(wall.getByRole('region', { name: /^Kelly's Birthday details/ })).toBeVisible()
+  await pack.getByRole('button', { name: /^Baseball/ }).click()
+  await expect(wall.getByRole('region', { name: /^Baseball: Huskies @ RPB Cascade details/ })).toBeVisible()
 })
 
 test('wall: + adds an event by touch — blank on the day on show, the Score previews it, "Add it" puts it on the wall', async ({ page }) => {
@@ -363,4 +364,14 @@ test('wall: the brand row (MT, mic, +, name, to decide) stays on one line', asyn
     return [...row.children].filter((el) => el.textContent.trim() && lines(el) > 1).map((el) => el.textContent.trim())
   })
   expect(wrapped).toEqual([])
+})
+
+test('wall: surprise-safe — the wall shows "Kelly\'s Birthday" and nothing more (no card, no gift, not even a count)', async ({ page }) => {
+  await page.goto('/__wall-fixture?at=2026-09-25T20:15:00')
+  const wall = page.getByTestId('wall-fixture')
+  await expect(wall.getByText("Kelly's Birthday").first()).toBeVisible()
+  await expect(wall.getByText('Birthday card')).toHaveCount(0)
+  await expect(wall.getByRole('region', { name: 'Pack tonight' }).getByText(/Kelly's Birthday/)).toHaveCount(0)
+  await wall.getByRole('button', { name: "Open Kelly's Birthday" }).first().click()
+  await expect(wall.getByRole('region', { name: /^Kelly's Birthday details/ }).getByText('Birthday card')).toHaveCount(0)
 })
