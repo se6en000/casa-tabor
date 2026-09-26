@@ -1,4 +1,5 @@
 import type { DayPlan, LaneSegment, WallEvent, WallMember } from './engine/types'
+import { reconcileTransportationLegTimes, rescheduledDepartureIso } from '../lib/eventMutations.ts'
 import { NEW_EVENT_ID, withDriver, type EditableEvent } from './editing.ts'
 import { driverChoices } from './people.ts'
 
@@ -23,6 +24,8 @@ export interface CardContext {
 
 export interface AssistantCard {
   kind: 'add' | 'change'
+  /** The event as it would be saved, for the Score's preview behind the band. */
+  event: WallEvent
   eventId: string
   title: string
   start: Date
@@ -109,10 +112,18 @@ function draftEvent(action: CardAction, ctx: CardContext): { event: EditableEven
       ...(target.members ?? []).filter((m) => !remove.has(m.family_member_id ?? m.family_member?.id ?? null)),
       ...add.filter((id) => !memberIds(target).includes(id)).map((id) => ({ family_member_id: id, role: 'attendee' })),
     ]
+    // The drive follows the change, by the same rules as saving (editing.ts `previewEvent`).
+    let plan = target.plan_override?.transportation_plan as Parameters<typeof reconcileTransportationLegTimes>[0] | null | undefined
     const driver = str(a.driver_name)
-    if (driver) {
-      const driverId = idOf(ctx.members, driver)
-      next.plan_override = { ...(target.plan_override ?? {}), transportation_plan: withDriver(target as EditableEvent, target.plan_override?.transportation_plan as never, driverId, driver) } as WallEvent['plan_override']
+    if (driver) plan = withDriver(target as EditableEvent, plan as never, idOf(ctx.members, driver), driver) as never
+    const start = new Date(next.start_time)
+    const timeMoved = start.getTime() !== new Date(target.start_time).getTime() || new Date(next.end_time).getTime() !== new Date(target.end_time).getTime()
+    const placeMoved = Boolean(str(a.location)) && str(a.location) !== (target.location_name ?? '')
+    if (timeMoved && !next.all_day && plan?.legs) plan = reconcileTransportationLegTimes(plan, start, new Date(next.end_time))
+    if (plan !== target.plan_override?.transportation_plan) next.plan_override = { ...(target.plan_override ?? {}), transportation_plan: plan } as WallEvent['plan_override']
+    if (timeMoved || placeMoved) {
+      const drive = placeMoved ? ctx.driveMinutes ?? null : target.enrichment?.drive_time_mins ?? null
+      next.enrichment = { ...(target.enrichment ?? { departure_time: null }), drive_time_mins: drive, departure_time: next.all_day ? null : rescheduledDepartureIso(start, drive) }
     }
     return { event: next, target }
   }
@@ -184,6 +195,7 @@ export function assistantCard(action: CardAction | null, previous: CardAction | 
   const movedTime = target != null && (new Date(target.start_time).getTime() !== start.getTime() || new Date(target.end_time).getTime() !== end.getTime())
   return {
     kind: action.tool === 'create_event' ? 'add' : 'change',
+    event,
     eventId: event.id,
     title: event.title,
     start,

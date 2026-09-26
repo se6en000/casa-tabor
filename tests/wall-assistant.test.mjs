@@ -83,3 +83,64 @@ test('a confirmation card reads as words: no markdown', async () => {
   const { cardText } = await import('../src/wall/assistant.ts')
   assert.equal(cardText('Create: **Emmy is watching Owen** · Sun, Sep 27 · 12 – 1 PM'), 'Create: Emmy is watching Owen · Sun, Sep 27 · 12 – 1 PM')
 })
+
+test('the thread keeps the turns before the latest question in view, short and plain', async () => {
+  const { threadTurns } = await import('../src/wall/assistant.ts')
+  const messages = [
+    msg('user', 'Add a dentist appointment for Liv on Tuesday at 3:30'),
+    msg('assistant', '**Drafted it.** Where is it?'),
+    msg('user', 'It is at Palm Beach Pediatric Dentistry'),
+    msg('assistant', 'Added the place.'),
+    msg('user', 'Actually make it 4'),
+    msg('assistant', 'Moved it to 4.'),
+  ]
+  assert.deepEqual(threadTurns(messages), [
+    { role: 'user', text: 'Add a dentist appointment for Liv on Tuesday at 3:30' },
+    { role: 'assistant', text: 'Drafted it. Where is it?' },
+    { role: 'user', text: 'It is at Palm Beach Pediatric Dentistry' },
+    { role: 'assistant', text: 'Added the place.' },
+  ])
+  assert.equal(threadTurns(messages, 2).length, 2, 'only the last few')
+  assert.deepEqual(threadTurns([msg('user', 'hi')]), [])
+})
+
+test('"which one?" offers the server’s candidates as tiles, with the change it keeps', async () => {
+  const { whichOne } = await import('../src/wall/assistant.ts')
+  const sun = (h, m) => new Date(2026, 8, 27, h, m).toISOString()
+  const events = [
+    { id: 'emmy', title: 'Emmy is watching Owen', start_time: sun(12, 0), end_time: sun(13, 0), all_day: false, members: [{ family_member_id: 'emme', role: 'primary' }, { family_member_id: 'owen', role: 'attendee' }] },
+    { id: 'hf', title: 'HelloFresh delivery', start_time: sun(15, 0), end_time: sun(15, 0), all_day: false, members: [{ family_member_id: 'jake-id', role: 'driver' }] },
+  ]
+  const answer = msg('assistant', 'There are two things on Sunday. Which one should move to 5:00?', {
+    conversationState: {
+      activeEntityType: 'calendar_clarification',
+      candidateEvents: [{ id: 'emmy', title: 'Emmy is watching Owen', start: sun(12, 0), version: null }, { id: 'hf', title: 'HelloFresh delivery', start: sun(15, 0), version: null }, { id: 'gone', title: 'Gone', start: null, version: null }],
+      pendingMutation: { tool: 'update_event', args: { start: sun(17, 0), end: sun(18, 0) } },
+      expectedFollowUp: 'calendar_clarification',
+      establishedAt: '',
+    },
+  })
+  const which = whichOne(answer, events)
+  assert.deepEqual(which.choices.map((c) => [c.id, c.when, c.peopleIds]), [
+    ['emmy', 'SUN · 12:00 – 1:00 PM', ['emme', 'owen']],
+    ['hf', 'SUN · 3:00 PM', []],
+  ])
+  assert.equal(which.choices[0].say, 'Emmy is watching Owen')
+  assert.equal(which.kept, '→ 5:00 PM')
+  const drive = { ...answer, conversationState: { ...answer.conversationState, pendingMutation: { tool: 'update_event', args: { driver_name: 'Kelly' } } } }
+  assert.equal(whichOne(drive, events).kept, '→ Kelly drives')
+  const del = { ...answer, conversationState: { ...answer.conversationState, pendingMutation: { tool: 'delete_event', args: {} } } }
+  assert.equal(whichOne(del, events).kept, '→ remove it')
+  assert.equal(whichOne(msg('assistant', 'x'), events), null)
+})
+
+test('an answer that offers to do something gets a one-tap yes', async () => {
+  const { nextStep } = await import('../src/wall/assistant.ts')
+  assert.deepEqual(nextStep(msg('assistant', "Jake's free then. Want me to make him the driver?")), { label: 'Yes, do that', say: 'Yes, do that' })
+  assert.deepEqual(nextStep(msg('assistant', 'Should I add it for Tuesday too?')), { label: 'Yes, do that', say: 'Yes, do that' })
+  assert.deepEqual(nextStep(msg('assistant', "Kelly's free. Want me to make her the driver? Jake would be off the hook.")), { label: 'Yes, do that', say: 'Yes, do that' }, 'the offer need not be last')
+  assert.equal(nextStep(msg('assistant', 'I can do that if you want me to.')), null, 'not a question')
+  assert.equal(nextStep(msg('assistant', 'Kelly drives. Leave by 1:28.')), null)
+  assert.equal(nextStep(msg('assistant', 'Which one do you mean?')), null, 'a question back is not an offer')
+  assert.equal(nextStep(null), null)
+})

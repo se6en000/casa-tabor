@@ -1,4 +1,5 @@
 import type { AIMessage } from '../hooks/useAISession'
+import { timeRange } from './assistantCard.ts'
 
 // The Wall's assistant band (boards 03b/03c): what it shows, derived from the
 // existing assistant's messages. Pure, so it's tested without the network.
@@ -65,4 +66,67 @@ export function voiceFinal(captured: string, text: string): { captured: string; 
 /** A confirmation card's words: the server's display text without its markdown. */
 export function cardText(displayText: string): string {
   return displayText.replace(/\*\*|__|`/g, '')
+}
+
+/** The turns before the latest question (board 06a's thread), so nobody wonders what it remembers. */
+export function threadTurns(messages: AIMessage[], max = 4): Array<{ role: 'user' | 'assistant'; text: string }> {
+  const lastUser = messages.map((m) => m.role).lastIndexOf('user')
+  return messages
+    .slice(0, Math.max(0, lastUser))
+    .filter((m) => m.content.trim())
+    .slice(-max)
+    .map((m) => ({ role: m.role, text: m.role === 'assistant' ? bandAnswer(m.content, 160) : m.content.trim() }))
+}
+
+interface ChoiceEvent {
+  id: string
+  title: string
+  start_time: string
+  end_time: string
+  all_day?: boolean | null
+  members?: Array<{ family_member_id?: string | null; role?: string | null }> | null
+}
+
+export interface WhichOne {
+  choices: Array<{ id: string; title: string; when: string; peopleIds: string[]; say: string }>
+  /** The change that waits for the pick ("→ 5:00 PM"), or null when it can't be told. */
+  kept: string | null
+}
+
+const wallTime = (d: Date) => d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+
+/** "Which one?" (board 06c): the server's candidates as tiles; a tap says the name, as a voice answer would. */
+export function whichOne(answer: AIMessage | null, events: ChoiceEvent[]): WhichOne | null {
+  const state = answer?.conversationState
+  if (!state || state.activeEntityType !== 'calendar_clarification') return null
+  const choices = state.candidateEvents.flatMap((c) => {
+    const e = events.find((x) => x.id === c.id)
+    if (!e) return []
+    const start = new Date(e.start_time)
+    const end = new Date(e.end_time)
+    const day = start.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()
+    const time = e.all_day ? 'ALL DAY' : end > start ? timeRange(start, end) : wallTime(start)
+    const peopleIds = (e.members ?? []).filter((m) => m.role !== 'driver').map((m) => m.family_member_id).filter((id): id is string => Boolean(id))
+    return [{ id: e.id, title: e.title, when: `${day} · ${time}`, peopleIds, say: e.title }]
+  })
+  if (choices.length === 0) return null
+  const { tool, args } = state.pendingMutation
+  const start = typeof args.start === 'string' ? new Date(args.start) : null
+  const kept = tool === 'delete_event'
+    ? '→ remove it'
+    : start && Number.isFinite(start.getTime())
+      ? `→ ${wallTime(start)}`
+      : typeof args.driver_name === 'string' && args.driver_name.trim()
+        ? `→ ${args.driver_name.trim()} drives`
+        : null
+  return { choices, kept }
+}
+
+/** An answer that offers to do something ("Want me to make him the driver?") gets a one-tap yes (board 06d). */
+export function nextStep(answer: AIMessage | null): { label: string; say: string } | null {
+  if (!answer || answer.toolAction) return null
+  // The offer is a question, wherever it sits ("Want me to make her the driver? Jake would be off the hook.").
+  const sentences = answer.content.trim().split(/(?<=[.!?])\s+/)
+  if (!sentences.some((x) => x.endsWith('?') && /\b(want me to|should I|shall I|would you like me to|do you want me to)\b/i.test(x))) return null
+  return { label: 'Yes, do that', say: 'Yes, do that' }
 }

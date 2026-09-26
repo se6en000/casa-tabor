@@ -379,3 +379,60 @@ test('wall: surprise-safe — the wall shows "Kelly\'s Birthday" and nothing mor
   await wall.getByRole('button', { name: "Open Kelly's Birthday" }).first().click()
   await expect(wall.getByRole('region', { name: /^Kelly's Birthday details/ }).getByText('Birthday card')).toHaveCount(0)
 })
+
+// The assistant's cards and thread (design section 06), from canned conversations (`?band=`).
+const band = (page, scene) => page.goto(`/__wall-fixture?at=2026-09-25T13:40:00&band=${scene}`)
+
+test('wall assistant: a draft shows the thread, what just changed, where it lands, leave by and who is free to drive', async ({ page }) => {
+  await band(page, 'add')
+  const section = page.getByRole('region', { name: 'Assistant' })
+  await expect(section.getByText('THIS CONVERSATION')).toBeVisible()
+  await expect(section.getByText('It’s at Palm Beach Pediatric Dentistry')).toBeVisible()
+  await expect(section.getByText('“Actually make it 4”')).toBeVisible()
+  await expect(section.getByText('Just changed: 3:30 → 4:00')).toBeVisible()
+  await expect(section.getByText('Dentist · Liv')).toBeVisible()
+  await expect(section.getByText('3:36')).toBeVisible()
+  await expect(section.getByText('Kelly · free')).toBeVisible()
+  await expect(section.getByText('Nothing else then for Liv')).toBeVisible()
+  await page.evaluate(() => document.fonts.ready)
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('assistant-draft.png')
+  await section.getByRole('button', { name: 'Yes, add it' }).click()
+  await expect(section.getByText('DRAFT · NOT SAVED YET')).toHaveCount(0)
+})
+
+test('wall assistant: a change shows before → after, previews its own day on the Score, and a driver can be picked on the card', async ({ page }) => {
+  await band(page, 'change')
+  const section = page.getByRole('region', { name: 'Assistant' })
+  await expect(section.getByText('12:30 – 2:30 PM')).toBeVisible()
+  await expect(section.getByText('1:00 – 3:00 PM').first()).toBeVisible()
+  await expect(section.getByText('12:26')).toBeVisible()
+  // The Score behind shows Saturday, with the moved game.
+  await expect(page.getByText('Saturday, September 26')).toBeVisible()
+  await expect(page.getByText('Leaves at 12:26')).toBeVisible()
+  await page.evaluate(() => document.fonts.ready)
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('assistant-change.png')
+  await section.getByRole('button', { name: 'Kelly · free' }).click()
+  await expect(section.getByRole('button', { name: 'Kelly · free' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(section.getByRole('button', { name: 'Jake · free' })).toHaveAttribute('aria-pressed', 'false')
+})
+
+test('wall assistant: "which one?" offers tiles and keeps the change; a tap answers with the name', async ({ page }) => {
+  await band(page, 'which')
+  const section = page.getByRole('region', { name: 'Assistant' })
+  await expect(section.getByText('Your change is kept: → 5:00 PM')).toBeVisible()
+  await page.evaluate(() => document.fonts.ready)
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('assistant-which.png')
+  await section.getByRole('button', { name: /Baseball: Huskies/ }).click()
+  await expect(section.getByText('“Baseball: Huskies @ RPB Cascade”')).toBeVisible()
+})
+
+test('wall assistant: an answer that offers something gets a one-tap yes, and opens what it is about', async ({ page }) => {
+  await band(page, 'answer')
+  const section = page.getByRole('region', { name: 'Assistant' })
+  await expect(section.getByRole('button', { name: 'Yes, do that' })).toBeVisible()
+  await expect(section.getByRole('button', { name: 'Open Softball' })).toBeVisible()
+  await page.evaluate(() => document.fonts.ready)
+  await expect(page.getByTestId('wall-fixture')).toHaveScreenshot('assistant-answer.png')
+  await section.getByRole('button', { name: 'Yes, do that' }).click()
+  await expect(section.getByText('“Yes, do that”')).toBeVisible()
+})

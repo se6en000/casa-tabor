@@ -45,6 +45,8 @@ export interface WallViewProps {
   overlay?: ReactNode
   /** The item the assistant's answer is about: outlined like a selection. */
   pointAt?: string | null
+  /** The assistant's draft or change waiting for a yes: previewed on the Score, on its day. */
+  assistantDraft?: WallEvent | null
   /** Open this item's sheet ("Open it" in the band); the nonce repeats a request. */
   openRequest?: { id: string; nonce: number } | null
   /** Decisions made on the wall for a day (hand-offs, "Leaving now"), applied to previews too. */
@@ -80,7 +82,7 @@ const WAKE_MS = 5 * 60_000
  * face lives in the MT menu. A tap on a calendar item opens its sheet.
  */
 export default function WallView(props: WallViewProps) {
-  const { now, members, today, tomorrow, currentWeather, checklist: allChecklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, openRequest = null, tripStateFor, tripActions, week = [], deleteEvent, toggleChecklist, createEvent } = props
+  const { now, members, today, tomorrow, currentWeather, checklist: allChecklist = [], allEvents = [], routines = [], dayOffs = [], onAsk, overlay, pointAt = null, assistantDraft = null, openRequest = null, tripStateFor, tripActions, week = [], deleteEvent, toggleChecklist, createEvent } = props
   // The driver picker: from "Hand off" on the Next Move, or a decision answered "choose a driver".
   const [handOff, setHandOff] = useState<{ trip: Trip; plan: DayPlan; tripIds: string[]; date: Date } | null>(null)
   const [decisionsOpen, setDecisionsOpen] = useState(false)
@@ -107,14 +109,16 @@ export default function WallView(props: WallViewProps) {
   const selected = selectedId ? eventsById.get(selectedId) ?? null : null
 
   // While editing, the wall behind the sheet shows the day as it would be saved.
+  // The same goes for the assistant's card while it waits for a yes.
+  const draft: WallEvent | null = draftPreview ?? assistantDraft
   const withDraft = useCallback(
     (plan: DayPlan | null) => {
-      if (!plan || !draftPreview) return plan
+      if (!plan || !draft) return plan
       // A new item (not in the list yet) is added; an edited one replaces itself.
-      const known = allEvents.some((e) => e.id === draftPreview.id)
-      return buildPlanFor(plan.date, known ? allEvents.map((e) => (e.id === draftPreview.id ? draftPreview : e)) : [...allEvents, draftPreview])
+      const known = allEvents.some((e) => e.id === draft.id)
+      return buildPlanFor(plan.date, known ? allEvents.map((e) => (e.id === draft.id ? draft : e)) : [...allEvents, draft])
     },
-    [draftPreview, allEvents, buildPlanFor],
+    [draft, allEvents, buildPlanFor],
   )
   const shownToday = useMemo(() => withDraft(today), [withDraft, today])
   const shownTomorrow = useMemo(() => withDraft(tomorrow), [withDraft, tomorrow])
@@ -127,7 +131,11 @@ export default function WallView(props: WallViewProps) {
   const focus = eveningFocus(now)
   // The day the wall shows by itself: tomorrow in the evening (today after midnight), else today.
   const autoDay = evening && focus.day === 'tomorrow' ? (tomorrow?.date ?? now) : now
-  const picked = dayPreview && Date.now() < dayPreview.until ? dayPreview.date : null
+  // The assistant's draft shows its own day (a change to Sunday previews Sunday).
+  const draftDay = assistantDraft && !selectedId ? new Date(assistantDraft.start_time) : null
+  const picked = draftDay && Number.isFinite(draftDay.getTime()) && !sameDay(draftDay, autoDay)
+    ? draftDay
+    : dayPreview && Date.now() < dayPreview.until ? dayPreview.date : null
   const dayOnShow = picked ?? autoDay
   const planFor = (date: Date) =>
     sameDay(date, now) ? shownToday : tomorrow && sameDay(date, tomorrow.date) ? shownTomorrow : withDraft(week.find((p) => sameDay(p.date, date)) ?? null)
@@ -166,8 +174,10 @@ export default function WallView(props: WallViewProps) {
     selectable: (id) => eventsById.has(id),
     highlight: selectedId
       ? { sourceId: selectedId, draft: Boolean(draftPreview) }
-      : pointAt
-        ? { sourceId: pointAt, draft: false }
+      : assistantDraft
+        ? { sourceId: assistantDraft.id, draft: true }
+        : pointAt
+          ? { sourceId: pointAt, draft: false }
         : null,
     onOpenDecision: tripActions ? () => setDecisionsOpen(true) : undefined,
   }

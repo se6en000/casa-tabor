@@ -286,6 +286,10 @@
       {
         "path": "src/wall/WallScore.tsx",
         "reason": "Family Wall Score: lane blocks, driver initials and markers are positioned on the timeline from event times at runtime."
+      },
+      {
+        "path": "src/wall/WallAssistantCard.tsx",
+        "reason": "Family Wall: the assistant card's lane preview (board 06a) positions the person's day and the draft on a timeline from event times at runtime."
       }
     ],
     "nativeControlRecreations": [
@@ -384,6 +388,10 @@
       {
         "path": "src/components/calendar/living-flow/components/LivingHeroTitleCard.tsx",
         "reason": "Specialized inline micro-steppers, night preset chips, and living header pills for tactile kiosk event editing."
+      },
+      {
+        "path": "src/wall/WallAssistantCard.tsx",
+        "reason": "Family Wall: the assistant card's yes / change / no and driver buttons (boards 06a/06b), part of the Wall's own component set."
       }
     ]
   }

@@ -1,6 +1,11 @@
 // Visual-test only (VITE_VISUAL_TEST_MODE): the Wall drawn from the fixed test
 // fixture at the moment given by ?at=, for the screenshot guard (P2.6).
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import { ProfileSessionContext } from '../contexts/useProfileSession'
+import type { EventWithDetails } from '../hooks/useCalendarEvents'
+import type { FamilyMember } from '../types'
+import { fixtureTurn } from './assistantFixture'
+import WallAssistantBand from './WallAssistantBand'
 import { useFixtureFonts } from './fixtureFonts'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -50,6 +55,29 @@ export default function WallFixturePage() {
     },
     dismiss: async (date: Date, key: string) => setTripState((s) => withDismissed(s, date, key)),
   }
+  // The assistant band with a canned conversation (design section 06): `?band=add|change|which|answer`.
+  const scene = new URLSearchParams(window.location.search).get('band')
+  const useTurn = useMemo(() => (scene ? fixtureTurn(scene) : null), [scene])
+  const [bandOpen, setBandOpen] = useState(true)
+  const [assistantDraft, setAssistantDraft] = useState<WallEvent | null>(null)
+  const [pointAt, setPointAt] = useState<string | null>(null)
+  const band = useTurn && bandOpen ? (
+    <ProfileSessionContext.Provider value={{ profile: null, unlock: async () => {}, signOut: () => {} }}>
+      <WallAssistantBand
+        listenNonce={0}
+        events={evs as unknown as EventWithDetails[]}
+        family={members as unknown as FamilyMember[]}
+        onClose={() => setBandOpen(false)}
+        onPointAt={setPointAt}
+        onOpenEvent={() => setBandOpen(false)}
+        members={members as WallMember[]}
+        planDay={(date, list) => buildDayPlan({ date, members: members as WallMember[], routines: routines as unknown as FamilyRoutine[], events: list, tripState: dayState(tripState, date) })}
+        onDraft={setAssistantDraft}
+        useTurn={useTurn}
+        lookupDrive={async () => 24}
+      />
+    </ProfileSessionContext.Provider>
+  ) : null
   const week = [0, 1, 2, 3, 4, 5, 6].map((i) => { const d = new Date(day); d.setDate(d.getDate() + i); return plan(d) })
   // Nothing until every font weight is in, so screenshots never catch a fallback face.
   if (!fontsReady) return null
@@ -60,7 +88,7 @@ export default function WallFixturePage() {
     <Route path="/calendar" element={<div data-testid="fixture-calendar">Calendar page</div>} />
     <Route path="*" element={
     <div data-testid="wall-fixture" className="h-[1080px] w-[1920px]">
-      <WallView now={now} members={members as WallMember[]} today={plan(day)} tomorrow={plan(next)} currentWeather={WEATHER} checklist={checklist} allEvents={evs} routines={routines as unknown as FamilyRoutine[]} tripStateFor={(date) => dayState(tripState, date)} tripActions={tripActions} week={week} onAsk={() => {}} deleteEvent={async (event) => setEvs((list) => list.filter((e) => e.id !== event.id))}
+      <WallView now={now} members={members as WallMember[]} today={plan(day)} tomorrow={plan(next)} currentWeather={WEATHER} checklist={checklist} allEvents={evs} routines={routines as unknown as FamilyRoutine[]} tripStateFor={(date) => dayState(tripState, date)} tripActions={tripActions} week={week} onAsk={() => {}} overlay={band} pointAt={band ? pointAt : null} assistantDraft={band ? assistantDraft : null} deleteEvent={async (event) => setEvs((list) => list.filter((e) => e.id !== event.id))}
         createEvent={async (args) => setEvs((list) => [...list, {
           id: `added-${list.length}`, title: String(args.title), event_type: String(args.event_type), all_day: false,
           start_time: String(args.start), end_time: String(args.end),

@@ -7,8 +7,14 @@ import WallKeyboard from './WallKeyboard'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
 import { useSpeechInput } from '../hooks/useSpeechInput'
 import type { FamilyMember } from '../types'
-import { bandAnswer, bandState, cardText, voiceFinal } from './assistant'
+import { supabase } from '../lib/supabase'
+import { bandAnswer, bandState, cardText, nextStep, threadTurns, voiceFinal, whichOne } from './assistant'
+import { assistantCard, replacedAction } from './assistantCard'
+import type { DayPlan, WallEvent, WallMember } from './engine/types'
+import { pigmentIndexes } from './score'
 import { useAssistantTurn } from './useAssistantTurn'
+import WallAssistantCard from './WallAssistantCard'
+import { pigmentStyleFor } from './lanes'
 
 // The assistant band (boards 03b/03c): a dark band from the bottom. It listens,
 // shows what it heard large, answers in a sentence or two, points at the wall,
@@ -16,6 +22,12 @@ import { useAssistantTurn } from './useAssistantTurn'
 // existing one (useAIAssistant, execute-ai-action); only the presentation is new.
 
 const ANSWER_IDLE_MS = 60_000
+
+/** "Open softball" from "Softball: Huskies @ Wellington Knights"; long titles give their first words. */
+const shortTitle = (title: string) => {
+  const head = title.split(/[:·(—-]/)[0].trim()
+  return head.length <= 24 ? head : head.split(' ').slice(0, 3).join(' ')
+}
 
 export interface WallAssistantBandProps {
   /** Changes each time the band should (re)start listening: the mic button or the wake word. */
@@ -26,10 +38,61 @@ export interface WallAssistantBandProps {
   /** The calendar item the latest answer is about (the wall outlines it), or null. */
   onPointAt: (eventId: string | null) => void
   onOpenEvent: (eventId: string) => void
+  /** The Wall's people and its engine for one day: the card is told from them. */
+  members: WallMember[]
+  planDay: (date: Date, events: WallEvent[]) => DayPlan | null
+  /** The draft or change waiting for a yes, so the Score behind the band can preview it. */
+  onDraft: (event: WallEvent | null) => void
+  /** The conversation; the screenshot fixture passes a canned one. */
+  useTurn?: typeof useAssistantTurn
+  /** Drive minutes to a place, arriving at a time; the fixture passes a fixed one. */
+  lookupDrive?: (place: string, arrival: string) => Promise<number | null>
 }
 
-export default function WallAssistantBand({ listenNonce, events, family, onClose, onPointAt, onOpenEvent }: WallAssistantBandProps) {
-  const { loading, send, question, answer, pending, pointAt, confirm, cancel, working, note, setNote, forReport } = useAssistantTurn({ surface: 'wall', events, family, onSessionEnd: onClose })
+async function routeEta(place: string, arrival: string): Promise<number | null> {
+  const { data } = await supabase.functions.invoke('route-eta', { body: { destination: place, arrival_time: arrival, buffer_mins: 5 } })
+  const eta = data as { found?: boolean; drive_time_mins?: number } | null
+  return eta?.found && typeof eta.drive_time_mins === 'number' ? eta.drive_time_mins : null
+}
+
+/** Drive time to an add's place (the `route-eta` lookup the edit sheet uses), once per place and time. */
+function useDriveMinutes(place: string | null, arrival: string | null, lookup: (place: string, arrival: string) => Promise<number | null>): number | null {
+  const [known, setKnown] = useState<Record<string, number | null>>({})
+  const key = place && arrival ? `${place}|${arrival}` : null
+  useEffect(() => {
+    if (!key || key in known || !place || !arrival) return
+    let live = true
+    void lookup(place, arrival).catch(() => null).then((minutes) => {
+      if (live) setKnown((k) => ({ ...k, [key]: minutes }))
+    })
+    return () => { live = false }
+  }, [key]) // eslint-disable-line react-hooks/exhaustive-deps
+  return key ? known[key] ?? null : null
+}
+
+export default function WallAssistantBand({ listenNonce, events, family, onClose, onPointAt, onOpenEvent, members, planDay, onDraft, useTurn = useAssistantTurn, lookupDrive = routeEta }: WallAssistantBandProps) {
+  const { messages, loading, send, question, answer, pending, pointAt, confirm, cancel, working, note, setNote, forReport, setPendingArgs } = useTurn({ surface: 'wall', events, family, onSessionEnd: onClose })
+
+  // The card: the action waiting for a yes, told from the wall's engine (boards 06a/06b).
+  const action = pending?.toolAction ?? null
+  // A new place (an add's, or a change's) needs its drive looked up for leave-by.
+  const newPlace = action && (action.tool === 'create_event' || action.tool === 'update_event') && typeof action.args.location === 'string' ? action.args.location.trim() || null : null
+  const arrival = typeof action?.args.start === 'string' ? action.args.start : events.find((e) => e.id === action?.args.id)?.start_time ?? null
+  const driveMinutes = useDriveMinutes(newPlace, arrival, lookupDrive)
+  const card = useMemo(
+    () => (action ? assistantCard({ tool: action.tool, args: action.args }, replacedAction(messages, pending), { events: events as unknown as WallEvent[], members, planDay, driveMinutes }) : null),
+    [action, messages, pending, events, members, planDay, driveMinutes],
+  )
+  const pigments = useMemo(() => pigmentIndexes(members), [members])
+  // Reported when the draft itself changes, not each time the card is rebuilt.
+  const draftKey = card ? JSON.stringify(card.event) : ''
+  const draftRef = useRef<WallEvent | null>(null)
+  draftRef.current = card?.event ?? null
+  useEffect(() => onDraft(draftRef.current), [draftKey, onDraft])
+  useEffect(() => () => onDraft(null), [onDraft])
+  const which = pending ? null : whichOne(answer, events as never)
+  const offer = pending || which ? null : nextStep(answer?.streaming ? null : answer)
+  const thread = threadTurns(messages)
   const [interim, setInterim] = useState('')
   const lastTouch = useRef(Date.now())
   const captured = useRef('')
@@ -272,12 +335,72 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
       <button type="button" aria-label="Report a problem" onClick={openReport} className="absolute right-[40px] top-[36px] flex h-[48px] w-[48px] items-center justify-center rounded-full border border-solid border-wall-ink-2 bg-transparent p-0 text-wall-night-ink-2">
         <Bug size={22} />
       </button>
-      <div className="flex min-w-0 flex-1 flex-col gap-[18px]">
-        <div className="text-wall-label font-bold tracking-[0.2em] text-wall-night-ink-2">{shownQuestion ? 'YOU ASKED' : 'LISTENING'}</div>
+      {(thread.length > 0 || card) && (
+        <div className="flex w-[520px] shrink-0 flex-col gap-[14px]">
+          <div className="text-wall-label font-bold tracking-[0.2em] text-wall-night-ink-2">THIS CONVERSATION</div>
+          <div className="flex flex-col gap-[12px] text-wall-detail leading-[1.35]">
+            {thread.map((t, i) => (
+              <div key={i} className={t.role === 'user' ? 'max-w-[440px] self-end rounded-[18px_18px_6px_18px] bg-wall-night-stone px-[16px] py-[12px] text-wall-on-pigment' : 'max-w-[440px] text-wall-night-ink-2'}>
+                {t.text}
+              </div>
+            ))}
+          </div>
+          {card && (
+            <>
+              <div className="mt-[6px] text-wall-label font-bold tracking-[0.2em] text-wall-night-brass">{shownQuestion ? 'YOU JUST SAID' : 'LISTENING'}</div>
+              {shownQuestion && <div className="font-display text-wall-quote font-medium italic">“{shownQuestion}”</div>}
+              {answerText && <div className="text-wall-body text-wall-night-ink-2">{answerText}</div>}
+            </>
+          )}
+        </div>
+      )}
+
+      {card ? (
+        <div className="flex min-w-0 flex-1 flex-col gap-[14px] pr-[64px]">
+          <WallAssistantCard
+            card={card}
+            members={members}
+            pigmentOf={(id) => pigments.get(id) ?? null}
+            working={working}
+            onYes={() => void confirm()}
+            onChange={() => { setNote(null); captured.current = ''; void speech.start() }}
+            onNo={cancel}
+            onPickDriver={card.kind === 'change' ? (name) => setPendingArgs({ driver_name: name }) : undefined}
+          />
+          {note && <div className="text-wall-body text-wall-night-brass">{note}</div>}
+        </div>
+      ) : (
+      <div className="flex min-w-0 flex-1 flex-col gap-[18px] pr-[64px]">
+        <div className="text-wall-label font-bold tracking-[0.2em] text-wall-night-ink-2">{shownQuestion ? (thread.length > 0 ? 'YOU JUST ASKED' : 'YOU ASKED') : 'LISTENING'}</div>
         <div className="font-display text-wall-quote font-medium italic">
           {shownQuestion ? `“${shownQuestion}”` : 'Ask about the day, or ask to add something.'}
         </div>
         {answerText && <div className="max-w-[1180px] text-wall-answer">{answerText}</div>}
+
+        {which && (
+          <div className="flex flex-col gap-[16px]">
+            <div className="flex gap-[24px]">
+              {which.choices.slice(0, 3).map((c) => (
+                <button key={c.id} type="button" disabled={loading} onClick={() => { setNote(null); void send(c.say) }} className="flex min-w-0 flex-1 flex-col gap-[12px] rounded-[22px] border-0 bg-wall-on-pigment px-[28px] py-[24px] text-left text-wall-ink">
+                  <span className="text-wall-detail font-bold tracking-[0.12em] text-wall-ink-2">{c.when}</span>
+                  <span className="line-clamp-2 font-display text-wall-date font-semibold leading-none">{c.title}</span>
+                  {c.peopleIds.length > 0 && (
+                    <span className="flex gap-[8px]">
+                      {c.peopleIds.map((id) => {
+                        const m = members.find((x) => x.id === id)
+                        return <span key={id} className={`flex h-[36px] w-[36px] items-center justify-center rounded-full font-display text-wall-detail font-bold text-wall-on-pigment ${pigmentStyleFor(pigments.get(id) ?? 0).solid}`}>{m?.name.charAt(0) ?? '?'}</span>
+                      })}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-[16px]">
+              {which.kept && <span className="rounded-full bg-wall-night-brass/15 px-[18px] py-[10px] text-wall-detail font-semibold text-wall-night-brass">Your change is kept: {which.kept}</span>}
+              <button type="button" className={pill} onClick={() => void send('Never mind')}>Neither — never mind</button>
+            </div>
+          </div>
+        )}
 
         {pending?.toolAction && (
           <div className="flex flex-col gap-[16px] rounded-[22px] bg-wall-on-pigment px-[32px] py-[24px] text-wall-ink">
@@ -298,9 +421,14 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
         {note && <div className="text-wall-body text-wall-night-brass">{note}</div>}
 
         <div className="mt-auto flex gap-[14px]">
+          {offer && (
+            <button type="button" className={lightPill} disabled={loading} onClick={() => { setNote(null); void send(offer.say) }}>
+              {offer.label}
+            </button>
+          )}
           {pointAt && events.some((e) => e.id === pointAt) && (
-            <button type="button" className={lightPill} onClick={() => onOpenEvent(pointAt)}>
-              Open it
+            <button type="button" className={offer ? pill : lightPill} onClick={() => onOpenEvent(pointAt)}>
+              Open {shortTitle(events.find((e) => e.id === pointAt)?.title ?? '') || 'it'}
             </button>
           )}
           <button type="button" className={pill} onClick={() => { setNote(null); captured.current = ''; void speech.start() }}>
@@ -311,6 +439,7 @@ export default function WallAssistantBand({ listenNonce, events, family, onClose
           </button>
         </div>
       </div>
+      )}
     </section>
   )
 }

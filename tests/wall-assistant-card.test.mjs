@@ -73,3 +73,18 @@ test('the card it replaced is the latest earlier one of the same kind and target
 test('times read like a wall clock', () => {
   assert.equal(timeRange(new Date(2026, 8, 25, 11, 30), new Date(2026, 8, 25, 13, 0)), '11:30 AM – 1:00 PM')
 })
+
+test('a moved event leaves at the moved time: the drive follows it, as saving would', () => {
+  const move = { tool: 'update_event', args: { id: 'softball', start: local(26, 13, 0), end: local(26, 15, 0) } }
+  const card = assistantCard(move, null, ctx())
+  assert.equal(card.leaveBy, '12:26', 'the 29-min drive plus the app’s 5-min buffer')
+  const drive = card.lane.segments.find((s) => s.sourceId === 'softball' && s.kind === 'drive')
+  assert.equal(drive.start.getHours() * 60 + drive.start.getMinutes(), 12 * 60 + 26)
+})
+
+test('a change to a new place uses the drive looked up for it', () => {
+  const move = { tool: 'update_event', args: { id: 'softball', location: 'Wellington Regional Park' } }
+  const card = assistantCard(move, null, ctx({ driveMinutes: 40 }))
+  assert.equal(card.place, 'Wellington Regional Park')
+  assert.equal(card.leaveBy, '11:45')
+})

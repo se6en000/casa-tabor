@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
+import { buildDayPlan } from './engine/dayPlan'
+import type { WallEvent } from './engine/types'
 import type { EventWithDetails } from '../hooks/useCalendarEvents'
 import { deleteCalendarEvent } from '../lib/eventMutations'
 import { supabase } from '../lib/supabase'
@@ -26,6 +28,12 @@ export default function WallFrame() {
     setListenNonce((n) => n + 1)
   }, [])
   const closeBand = useCallback(() => setBandOpen(false), [])
+  // The assistant's card is told from the same engine the wall runs; its draft is previewed on the Score.
+  const [assistantDraft, setAssistantDraft] = useState<WallEvent | null>(null)
+  const planDay = useCallback(
+    (date: Date, events: WallEvent[]) => buildDayPlan({ date, members, routines, events, dayOffs, tripState: tripStateFor?.(date) }),
+    [members, routines, dayOffs, tripStateFor],
+  )
   useWakeWord(bandOpen, false, true)
   useEffect(() => {
     document.addEventListener('open-ai-chat', ask)
@@ -38,6 +46,9 @@ export default function WallFrame() {
       family={members as unknown as FamilyMember[]}
       onClose={closeBand}
       onPointAt={setPointAt}
+      members={members}
+      planDay={planDay}
+      onDraft={setAssistantDraft}
       onOpenEvent={(id) => {
         setBandOpen(false)
         setOpenRequest({ id, nonce: Date.now() })
@@ -46,5 +57,5 @@ export default function WallFrame() {
   ) : null
   const createEvent = (args: Record<string, unknown>) => createEventByTouch(queryClient, args, 'wall')
 
-  return <WallView now={now} members={members} today={today} tomorrow={tomorrow} currentWeather={currentWeather} checklist={checklist} allEvents={allEvents} routines={routines} dayOffs={dayOffs} onAsk={ask} overlay={band} pointAt={bandOpen ? pointAt : null} openRequest={openRequest} tripStateFor={tripStateFor} tripActions={tripActions} week={week} deleteEvent={(event) => deleteCalendarEvent(supabase, queryClient, event.id, event as unknown as EventWithDetails)} toggleChecklist={(item) => void toggleChecklistItem(queryClient, item.id, !item.checked)} createEvent={createEvent} />
+  return <WallView now={now} members={members} today={today} tomorrow={tomorrow} currentWeather={currentWeather} checklist={checklist} allEvents={allEvents} routines={routines} dayOffs={dayOffs} onAsk={ask} overlay={band} pointAt={bandOpen ? pointAt : null} assistantDraft={bandOpen ? assistantDraft : null} openRequest={openRequest} tripStateFor={tripStateFor} tripActions={tripActions} week={week} deleteEvent={(event) => deleteCalendarEvent(supabase, queryClient, event.id, event as unknown as EventWithDetails)} toggleChecklist={(item) => void toggleChecklistItem(queryClient, item.id, !item.checked)} createEvent={createEvent} />
 }

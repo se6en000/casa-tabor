@@ -81,5 +81,11 @@ export function useAssistantTurn({ surface, events, family, onSessionEnd }: { su
     setNote('Okay, nothing changed.')
   }, [pending, updateMessageToolStatus])
 
-  return { messages, loading, send, session, question, answer, pending, pointAt, confirm, cancel, working, note, setNote, forReport }
+  /** Changes the waiting action in place (a driver picked on the card), without a round trip. */
+  const setPendingArgs = useCallback((patch: Record<string, unknown>) => {
+    if (!pending?.toolAction) return
+    updateMessageToolStatus(pending.id, 'pending', { args: { ...pending.toolAction.args, ...patch } } as never)
+  }, [pending, updateMessageToolStatus])
+
+  return { messages, loading, send, session, question, answer, pending, pointAt, confirm, cancel, working, note, setNote, forReport, setPendingArgs }
 }
