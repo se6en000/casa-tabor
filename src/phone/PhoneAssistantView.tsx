@@ -127,7 +127,7 @@ export default function PhoneAssistantView({ lines, thinking, pending, working, 
               l.role === 'user' ? (
                 <div key={l.id} className="max-w-[85%] self-end rounded-[18px] rounded-br-[6px] bg-wall-ink px-[14px] py-[10px] text-phone-body text-wall-on-pigment">{l.text}</div>
               ) : (
-                <div key={l.id} className="max-w-[92%] text-phone-body text-wall-ink">{l.text}</div>
+                <div key={l.id} className="max-w-[92%] whitespace-pre-line text-phone-body text-wall-ink">{l.text}</div>
               ),
             )}
             {thinking && (

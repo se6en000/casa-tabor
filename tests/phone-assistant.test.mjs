@@ -13,7 +13,12 @@ test('the phone shows the whole conversation as plain text, questions and answer
     { id: 'a3', role: 'assistant', content: '', streaming: true },
   ])
   assert.deepEqual(lines.map((l) => [l.id, l.role]), [['u1', 'user'], ['a1', 'assistant'], ['u2', 'user'], ['a2', 'assistant']])
-  assert.ok(lines[1].text.startsWith('Kelly drives. '))
+  assert.ok(lines[1].text.startsWith('Kelly drives.\n'))
   assert.ok(lines[1].text.endsWith('at 9:30.'), 'not clipped on the phone')
   assert.equal(lines[3].text, 'Add “Jaida watching the kids” · Sat 12–3 PM')
+})
+
+test('a list answer stays a list on the phone: one item per line, markdown gone', () => {
+  const [line] = phoneTranscript([{ id: 'a', role: 'assistant', content: 'There are 2 calendar items Saturday:\n- **8:00 AM** — Kelly Yoga\n- 10:30 AM — Softball\n\nAnything else?' }])
+  assert.equal(line.text, 'There are 2 calendar items Saturday:\n8:00 AM — Kelly Yoga\n10:30 AM — Softball\nAnything else?')
 })
