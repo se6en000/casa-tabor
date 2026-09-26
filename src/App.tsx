@@ -1,4 +1,5 @@
-import { useState, useEffect, Component, Suspense, lazy, type ReactNode } from 'react'
+import { useState, useEffect, Component, Suspense, type ReactNode } from 'react'
+import { CHUNK_RELOAD_GAP_MS, isChunkLoadError, lazyWithReload } from './utils/lazyWithReload'
 import { BrowserRouter, Navigate, useLocation } from 'react-router-dom'
 import { homeRedirect, isWideScreen, phoneRedirect, readWallHomeFlag, wallHomeFlagFromUrl, writeWallHomeFlag } from './wall/kioskHome'
 import { useReturnToWall } from './wall/useReturnToWall'
@@ -49,7 +50,13 @@ const IS_SAFE_MODE = SAFE_MODE === '1' || SAFE_MODE === 'true' || SAFE_MODE === 
 class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null }
   static getDerivedStateFromError(error: Error) { return { error } }
-  componentDidCatch(error: Error) { reportClientError(error, 'react-error-boundary') }
+  retryTimer: number | undefined
+  componentDidCatch(error: Error) {
+    reportClientError(error, 'react-error-boundary')
+    // A chunk that didn't arrive (usually mid-deploy) is retried on its own: the kiosk has nobody to tap Reload.
+    if (isChunkLoadError(error)) this.retryTimer = window.setTimeout(() => window.location.reload(), CHUNK_RELOAD_GAP_MS)
+  }
+  componentWillUnmount() { window.clearTimeout(this.retryTimer) }
   render() {
     if (this.state.error) {
       return (
@@ -321,8 +328,8 @@ function AppShell() {
   )
 }
 
-const WallRoot = lazy(() => import('./wall/WallRoot'))
-const PhoneFrame = lazy(() => import('./phone/PhoneFrame'))
+const WallRoot = lazyWithReload(() => import('./wall/WallRoot'), 'WallRoot')
+const PhoneFrame = lazyWithReload(() => import('./phone/PhoneFrame'), 'PhoneFrame')
 
 // /wall is the Family Wall and renders without the old app shell.
 function RootSwitch() {
