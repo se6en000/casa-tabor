@@ -11,7 +11,10 @@ const CACHE = join(dirname(fileURLToPath(import.meta.url)), 'font-cache')
 const FONT_HOSTS = /^https:\/\/fonts\.(googleapis|gstatic)\.com\//
 
 export function serveFontsFromCache(test) {
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page }) => routeFonts(page))
+}
+
+export async function routeFonts(page) {
     await page.route(FONT_HOSTS, async (route) => {
       const url = route.request().url()
       const key = createHash('sha1').update(url).digest('hex').slice(0, 16)
@@ -29,5 +32,4 @@ export function serveFontsFromCache(test) {
       }
       return route.fulfill({ response })
     })
-  })
 }

@@ -5,6 +5,7 @@ import { defineConfig } from '@playwright/test'
 export default defineConfig({
   testDir: './visual-regression',
   testMatch: ['wall.spec.mjs', 'phone.spec.mjs'],
+  globalSetup: './visual-regression/warmup.mjs',
   snapshotPathTemplate: '{testDir}/{testFileName}-snapshots/{arg}-{platform}{ext}',
   reporter: 'line',
   retries: 1,
