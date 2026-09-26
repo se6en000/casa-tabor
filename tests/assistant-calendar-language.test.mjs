@@ -466,3 +466,16 @@ test('calendar concepts tolerate common typed and STT forms', () => {
     'event.move',
   )
 })
+
+test('only a change to an event asks "which event would you like to update?" — a question about the day never does', async () => {
+  const { asksWhichEventToChange } = await import('../supabase/functions/_shared/assistant-calendar-language.mjs')
+  for (const q of ["What's on Saturday?", 'What is on today?', 'what do we have saturday', 'whats next', 'how many things tomorrow']) {
+    assert.equal(asksWhichEventToChange(parseCalendarLanguage(q)?.intent), false, q)
+  }
+  assert.equal(asksWhichEventToChange(parseCalendarLanguage('can u move the brthday dinner to thursday at 6')?.intent), true)
+  assert.equal(asksWhichEventToChange('event.delete'), true)
+  assert.equal(asksWhichEventToChange('event.edit'), true)
+  assert.equal(asksWhichEventToChange('event.create'), false)
+  assert.equal(asksWhichEventToChange('event.time'), false)
+  assert.equal(asksWhichEventToChange(undefined), false)
+})

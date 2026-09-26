@@ -53,6 +53,14 @@ export const CALENDAR_INTENTS = Object.freeze([
   'event.delete',
 ])
 
+// Changing an event with no event named ("move it to 6") is the one case where the
+// assistant asks which event; a question about the day ("what's on Saturday?") never is.
+const EVENT_CHANGE_INTENTS = new Set(['event.move', 'event.edit', 'event.delete'])
+
+export function asksWhichEventToChange(intent) {
+  return EVENT_CHANGE_INTENTS.has(intent)
+}
+
 export const CALENDAR_UTTERANCE_CORPUS = Object.freeze([
   ...LIST_OPENERS.flatMap((opener) => DAY_SCOPES.map((scope) => ({
     text: `${opener} ${CALENDAR_OBJECTS[0]} ${scope}`,

@@ -83,8 +83,11 @@ test('the "which event would you like to update" fallback requires a real classi
   // truthy intent keeps this fallback for genuine ambiguous mutations
   // (event.move/edit/delete with no specific target) while letting anything the
   // classifier doesn't recognize at all reach the planner instead.
+  // 2026-09-26: "a real intent" still let reads in — "What's on Saturday?" (calendar.list)
+  // got "Which event would you like to update?" on every surface. Only a change asks now
+  // (asksWhichEventToChange, tested in assistant-calendar-language.test.mjs).
   const fallbackBlock = server.split('Which event would you like to update?')[0].slice(-800)
-  assert.match(fallbackBlock, /Boolean\(calendarFrame\?\.intent\)/)
+  assert.match(fallbackBlock, /asksWhichEventToChange\(calendarFrame\?\.intent\)/)
   assert.doesNotMatch(fallbackBlock, /!\['event\.create'\]\.includes\(calendarFrame\?\.intent \?\? ''\)/)
 })
 

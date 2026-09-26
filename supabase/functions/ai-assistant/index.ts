@@ -94,6 +94,7 @@ import {
   isBareCalendarAddRequest,
   isCalendarLikeLanguage,
   parseCalendarLanguage,
+  asksWhichEventToChange,
 } from '../_shared/assistant-calendar-language.mjs'
 import {
   isQuantifiedCalendarDelete,
@@ -2460,7 +2461,9 @@ Deno.serve(async (req) => {
     }
   }
   // Only assume "this must be about an existing event" when the classifier
-  // actually said so (event.move/edit/delete/etc with no specific target).
+  // actually said so (event.move/edit/delete with no specific target). A
+  // question about the day ("what's on Saturday?", calendar.list) is answered
+  // by the authoritative calendar read further down, never by this.
   // When it drew a complete blank (calendarFrame is null or has no intent at
   // all -- a message the regex classifier just doesn't recognize), guessing
   // "update" and listing random unrelated events is a worse failure than
@@ -2472,8 +2475,7 @@ Deno.serve(async (req) => {
     latestUserText &&
     !activeConversationEvent &&
     (allEvents ?? []).length > 0 &&
-    Boolean(calendarFrame?.intent) &&
-    calendarFrame?.intent !== 'event.create'
+    asksWhichEventToChange(calendarFrame?.intent)
   ) {
     const upcomingCandidates = (allEvents ?? [])
       .filter((e: { start_time: string }) => new Date(e.start_time).getTime() >= now.getTime() - 4 * 3600000)
