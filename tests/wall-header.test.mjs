@@ -29,8 +29,13 @@ test('within 15 minutes of leaving the move turns urgent', () => {
 test('a departure hours away is shown in hours', () => {
   const move = describe(friday, at(25, 10, 50))
   assert.equal(move.title, 'Giselle → Palm Beach Public')
-  assert.deepEqual([move.ring.value, move.ring.unit], ['3', 'HRS'])
+  assert.deepEqual([move.ring.value, move.ring.unit], ['3:00', 'HRS'])
   assert.equal(move.ring.fraction, 1)
+})
+
+test('hours and minutes, never rounded up: 95 minutes is 1:35, not "2 HRS" (Jake, 2026-09-26)', () => {
+  const move = describe(friday, at(25, 12, 15)) // Giselle leaves 1:50
+  assert.deepEqual([move.ring.value, move.ring.unit], ['1:35', 'HRS'])
 })
 
 test('two departures together: the second is mentioned, not hidden', () => {

@@ -4,7 +4,7 @@ import type { DayPlan } from './engine/types'
 import { packingGroups, type WallChecklistItem } from './packing.ts'
 
 // Which face the wall shows, and the few sentences the calm and evening faces say.
-//   launch  — the full Score: the morning rush, someone out on a trip, or a departure within 2 hours.
+//   launch  — the full Score: the morning rush, someone out on a trip, or a departure within the hour.
 //   calm    — nothing on the road for a while: big clock, whereabouts, a miniature of the day.
 //   evening — 7 PM to 6 AM, dark: tomorrow's plan.
 // (Approved with the navigation board, 2026-09-25. A touch on calm wakes the full day; see WallView.)
@@ -13,8 +13,8 @@ export type Posture = 'launch' | 'calm' | 'evening'
 
 const EVENING_START_HOUR = 19
 const NIGHT_END_HOUR = 6
-/** The full day this many minutes before a departure. */
-const LAUNCH_LEAD_MIN = 120
+/** The full day this many minutes before a departure (Jake, 2026-09-26: 2 hours kept calm from ever showing on a busy afternoon). */
+const LAUNCH_LEAD_MIN = 60
 /** Departures before this hour make up the morning rush. */
 const MORNING_RUSH_END_HOUR = 9
 
@@ -63,7 +63,11 @@ export function calmHeadline(plan: DayPlan | null, now: Date): string {
 export function calmNextLine(view: NextMoveView | null): string | null {
   if (!view) return null
   const parts = [view.leaveTime, view.title, view.summary]
-  if (view.ring) parts.push(`in ${view.ring.value} ${view.ring.unit.toLowerCase()}`)
+  if (view.ring) {
+    // Words in a sentence: "in 2 hr 10 min" (the ring itself says 2:10).
+    const [h, m] = view.ring.value.split(':').map(Number)
+    parts.push(view.ring.unit === 'HRS' ? `in ${h} hr${m ? ` ${m} min` : ''}` : `in ${view.ring.value} ${view.ring.unit.toLowerCase()}`)
+  }
   return parts.filter(Boolean).join(' · ')
 }
 

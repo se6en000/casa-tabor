@@ -63,8 +63,8 @@ function arrivalPhrase(trip: Trip): string {
 
 function countdown(minutes: number): { value: string; unit: string } {
   if (minutes < MINUTES_LIMIT) return { value: String(minutes), unit: 'MIN' }
-  const hours = Math.round(minutes / 60)
-  return { value: String(hours), unit: hours === 1 ? 'HR' : 'HRS' }
+  // "1:35", never rounded: 95 minutes read as "2 HRS" looked like two hours away (Jake, 2026-09-26).
+  return { value: `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')}`, unit: 'HRS' }
 }
 
 export function describeNextMove(move: NextMove | null, members: WallMember[], now: Date): NextMoveView | null {

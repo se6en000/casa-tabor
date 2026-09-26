@@ -195,7 +195,8 @@ test('wall: from 1 PM tomorrow speaks up on the full day, and a tap opens it', a
 })
 
 test('wall: nothing runs off the stage, even late in the day, and the header keeps its weather line', async ({ page }) => {
-  await page.goto('/__wall-fixture?at=2026-10-01T18:00:00')
+  // 6:20: the full day, within the hour of the book club's 7:15 departure (calm until then).
+  await page.goto('/__wall-fixture?at=2026-10-01T18:20:00')
   const wall = page.getByTestId('wall-fixture')
   await expect(wall.getByText("TODAY · WHO'S WHERE")).toBeVisible()
   await expect(wall.getByText(/Pick up the costume/).first()).toBeVisible()

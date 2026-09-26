@@ -194,6 +194,8 @@ export const DESIGN_TOKENS = {
     'wall-quote': { size: '44px', lineHeight: '1.1' },
     'wall-answer': { size: '28px', lineHeight: '1.4' },
     'wall-countdown': { size: '88px', lineHeight: '0.85' },
+    // Hours and minutes ("1:35") inside the same ring: smaller, so four digits and a colon fit.
+    'wall-countdown-long': { size: '60px', lineHeight: '0.85' },
     'wall-move': { size: '58px', lineHeight: '1' },
     'wall-date': { size: '30px', lineHeight: '1.1' },
     'wall-name': { size: '30px', lineHeight: '1' },

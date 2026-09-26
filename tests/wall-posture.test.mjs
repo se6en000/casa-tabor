@@ -17,9 +17,9 @@ test('the morning rush is launch, from 6 AM until the last school run arrives', 
   assert.equal(selectPosture(friday, at(25, 8, 30)), 'calm')
 })
 
-test('a departure within 2 hours is the full day; further out is calm', () => {
-  assert.equal(selectPosture(friday, at(25, 11, 49)), 'calm') // Giselle leaves 1:50
-  assert.equal(selectPosture(friday, at(25, 11, 50)), 'launch')
+test('a departure within the hour is the full day; further out is calm (Jake, 2026-09-26: was 2 hours)', () => {
+  assert.equal(selectPosture(friday, at(25, 12, 49)), 'calm') // Giselle leaves 1:50
+  assert.equal(selectPosture(friday, at(25, 12, 50)), 'launch')
 })
 
 test('while someone is out on a trip, it stays the full day', () => {
@@ -29,7 +29,8 @@ test('while someone is out on a trip, it stays the full day', () => {
 
 test('a weekend with no school runs has no morning rush', () => {
   assert.equal(selectPosture(saturday, at(26, 7, 0)), 'calm')
-  assert.equal(selectPosture(saturday, at(26, 10, 0)), 'launch') // softball leaves 11:56, within 2 hours
+  assert.equal(selectPosture(saturday, at(26, 10, 55)), 'calm') // softball leaves 11:56
+  assert.equal(selectPosture(saturday, at(26, 10, 56)), 'launch') // within the hour
 })
 
 test('from 7 PM until 5 AM it is evening', () => {
@@ -86,4 +87,9 @@ test('tomorrow with a question but nothing to pack still speaks up; with nothing
   const done = kit.map((i) => ({ ...i, checked: true }))
   assert.equal(tomorrowLine(saturday, done, 1, at(25, 14, 0)), '1 to decide · first out 11:56')
   assert.equal(tomorrowLine(saturday, done, 0, at(25, 14, 0)), null)
+})
+
+test('the calm line says hours in words: "in 2 hr 10 min"', () => {
+  const view = describeNextMove(selectNextMove(friday, at(25, 11, 40)), members, at(25, 11, 40))
+  assert.equal(calmNextLine(view), '1:50 · Giselle → Palm Beach Public · Pick up Emme & Owen · in 2 hr 10 min')
 })

@@ -122,6 +122,8 @@
   --text-wall-answer--line-height: 1.4;
   --text-wall-countdown: 88px;
   --text-wall-countdown--line-height: 0.85;
+  --text-wall-countdown-long: 60px;
+  --text-wall-countdown-long--line-height: 0.85;
   --text-wall-move: 58px;
   --text-wall-move--line-height: 1;
   --text-wall-date: 30px;

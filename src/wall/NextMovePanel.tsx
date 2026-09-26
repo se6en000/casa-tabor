@@ -43,7 +43,7 @@ export default function NextMovePanel({ view, pigmentIndex, actions }: { view: N
             />
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="font-display text-wall-countdown font-semibold leading-[0.85] lining-nums">{view.ring.value}</span>
+            <span className={`font-display font-semibold leading-[0.85] lining-nums ${view.ring.value.includes(':') ? 'text-wall-countdown-long' : 'text-wall-countdown'}`}>{view.ring.value}</span>
             <span className="mt-[6px] text-wall-label font-bold tracking-[0.2em] text-wall-ink-2">{view.ring.unit}</span>
           </div>
         </div>
