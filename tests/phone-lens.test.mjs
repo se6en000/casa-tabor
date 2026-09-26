@@ -106,3 +106,10 @@ test('the next move carries where to drive, for Directions', () => {
   assert.match(next.address, /Ferrin Park Field 1/)
   assert.equal(next.eventId, 'softball')
 })
+
+test("an all-day event says its own day: Kelly's Birthday (stored at UTC midnight) is SAT, not FRI", () => {
+  // Live 2026-09-26: the phone said "FRI · ALL DAY" — UTC midnight read as Friday 8 PM here.
+  const birthday = { id: 'bd', title: "Kelly's Birthday", event_type: 'event', all_day: true, start_time: '2026-09-26T00:00:00+00:00', end_time: '2026-09-26T23:59:59+00:00', members: [] }
+  const view = eventView({ eventId: 'bd', plan: null, events: [birthday], members, viewerId: 'jake-id', checklist: [] })
+  assert.equal(view.when, 'SAT · ALL DAY')
+})

@@ -1,4 +1,7 @@
 import { expect, test } from '@playwright/test'
+import { serveFontsFromCache } from './fontCache.mjs'
+
+serveFontsFromCache(test)
 
 // The phone (Phase 4, board section 05) at 390x844, drawn from the Wall's fixed fixture
 // (tests/fixtures/wall-day-2026-09-25.mjs) at ?at=, as ?viewer=. Runs with the Wall guard.

@@ -189,7 +189,9 @@ export function eventView(input: { eventId: string; plan: DayPlan | null; events
   if (!event) return empty
   const start = new Date(event.start_time)
   const end = new Date(event.end_time)
-  const day = start.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()
+  // An all-day item is its calendar date, whatever zone its midnight was stored in.
+  const dayOf = event.all_day ? new Date(`${String(event.start_time).slice(0, 10)}T12:00:00`) : start
+  const day = dayOf.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()
   const meridiem = (d: Date) => (d.getHours() < 12 ? 'AM' : 'PM')
   const reminder = (event as WallEvent & { event_type?: string | null }).event_type === 'reminder'
   const when = event.all_day

@@ -1,4 +1,7 @@
 import { expect, test } from '@playwright/test'
+import { serveFontsFromCache } from './fontCache.mjs'
+
+serveFontsFromCache(test)
 
 // The Family Wall at 1920x1080 in each posture, drawn from the fixed fixture
 // (tests/fixtures/wall-day-2026-09-25.mjs). Run with `npm run test:visual:wall`.
