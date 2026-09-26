@@ -1,0 +1,217 @@
+import type { DayPlan, LaneSegment, WallEvent, WallMember } from './engine/types'
+import { NEW_EVENT_ID, withDriver, type EditableEvent } from './editing.ts'
+import { driverChoices } from './people.ts'
+
+// The assistant's card (design section 06, approved 2026-09-26): what an add or a change
+// will do, told from the wall's own engine — where it lands in the person's day, when to
+// leave, who's free to drive, what it clashes with — and what the latest turn just
+// changed. Pure: the caller plans the day (`planDay`), so this is tested without the app.
+
+export interface CardAction {
+  tool: string
+  args: Record<string, unknown>
+}
+
+export interface CardContext {
+  events: WallEvent[]
+  members: WallMember[]
+  /** The wall's engine for one day, with these events. */
+  planDay: (date: Date, events: WallEvent[]) => DayPlan | null
+  /** Drive time to an add's place, once looked up (`route-eta`); null when unknown. */
+  driveMinutes?: number | null
+}
+
+export interface AssistantCard {
+  kind: 'add' | 'change'
+  eventId: string
+  title: string
+  start: Date
+  end: Date
+  allDay: boolean
+  /** "Tue, Sep 29 · 4:00 – 5:00 PM" */
+  when: string
+  /** A change that moves the time: what it was ("12:00 – 1:00 PM"). */
+  before: string | null
+  place: string | null
+  peopleIds: string[]
+  /** What the latest turn changed on the card: "3:30 → 4:00", "place added", "Liv added". */
+  justChanged: string[]
+  /** The first person's day with the draft in it, for the lane preview. */
+  lane: { memberId: string; segments: LaneSegment[] } | null
+  /** "3:36", or null when the drive isn't known. */
+  leaveBy: string | null
+  /** "Bak Middle School" when it chains on from a pickup instead of leaving home. */
+  leavesFrom: string | null
+  /** Who can drive it, with the one chosen; null when there's no drive. */
+  drivers: Array<{ memberId: string; name: string; note: string; chosen: boolean }> | null
+  /** "Clashes with School (Liv)", or "Nothing else then for Emme and Owen". */
+  touches: string[]
+}
+
+const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
+const names = (v: unknown) => (Array.isArray(v) ? v.map((n) => String(n).trim()).filter(Boolean) : [])
+
+function clock(d: Date): string {
+  const h = d.getHours()
+  const m = d.getMinutes()
+  return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, '0')}`
+}
+const meridiem = (d: Date) => (d.getHours() < 12 ? 'AM' : 'PM')
+
+/** "4:00 – 5:00 PM", "11:30 AM – 1:00 PM". */
+export function timeRange(start: Date, end: Date): string {
+  return `${clock(start)}${meridiem(start) === meridiem(end) ? '' : ` ${meridiem(start)}`} – ${clock(end)} ${meridiem(end)}`
+}
+
+const dayLabel = (d: Date) => d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+const idOf = (members: WallMember[], name: string) => members.find((m) => m.name.toLowerCase() === name.toLowerCase())?.id ?? null
+const memberIds = (e: WallEvent) => (e.members ?? []).filter((m) => m.role !== 'driver').map((m) => m.family_member_id ?? m.family_member?.id).filter((id): id is string => Boolean(id))
+
+/** The event the action would save, in the wall's own shape. */
+function draftEvent(action: CardAction, ctx: CardContext): { event: EditableEvent; target: WallEvent | null } | null {
+  const a = action.args
+  if (action.tool === 'create_event') {
+    const start = str(a.start)
+    const end = str(a.end)
+    if (!start || !end) return null
+    const place = str(a.location) || null
+    const people = names(a.members).map((n) => idOf(ctx.members, n)).filter((id): id is string => Boolean(id))
+    return {
+      target: null,
+      event: {
+        id: NEW_EVENT_ID,
+        title: str(a.title) || 'New item',
+        event_type: str(a.event_type) || 'event',
+        all_day: a.all_day === true,
+        start_time: start,
+        end_time: end,
+        location_name: place,
+        address: place,
+        members: people.map((id, i) => ({ family_member_id: id, role: i === 0 ? 'primary' : 'attendee' })),
+        ...(place && ctx.driveMinutes != null ? { enrichment: { drive_time_mins: ctx.driveMinutes } } : {}),
+      } as EditableEvent,
+    }
+  }
+  if (action.tool === 'update_event') {
+    const target = ctx.events.find((e) => e.id === a.id)
+    if (!target) return null
+    const next: EditableEvent = { ...(target as EditableEvent) }
+    if (str(a.title)) next.title = str(a.title)
+    if (str(a.start)) next.start_time = str(a.start)
+    if (str(a.end)) next.end_time = str(a.end)
+    if (str(a.location)) {
+      next.location_name = str(a.location)
+      next.address = str(a.location)
+    }
+    const add = names(a.members_add).map((n) => idOf(ctx.members, n)).filter((id): id is string => Boolean(id))
+    const remove = new Set(names(a.members_remove).map((n) => idOf(ctx.members, n)))
+    next.members = [
+      ...(target.members ?? []).filter((m) => !remove.has(m.family_member_id ?? m.family_member?.id ?? null)),
+      ...add.filter((id) => !memberIds(target).includes(id)).map((id) => ({ family_member_id: id, role: 'attendee' })),
+    ]
+    const driver = str(a.driver_name)
+    if (driver) {
+      const driverId = idOf(ctx.members, driver)
+      next.plan_override = { ...(target.plan_override ?? {}), transportation_plan: withDriver(target as EditableEvent, target.plan_override?.transportation_plan as never, driverId, driver) } as WallEvent['plan_override']
+    }
+    return { event: next, target }
+  }
+  return null
+}
+
+/** What the latest turn changed, against the card it replaced. */
+function whatChanged(previous: CardAction | null, action: CardAction, members: WallMember[]): string[] {
+  if (!previous || previous.tool !== action.tool || (previous.args.id ?? null) !== (action.args.id ?? null)) return []
+  const p = previous.args
+  const a = action.args
+  const out: string[] = []
+  const ps = str(p.start) ? new Date(str(p.start)) : null
+  const as = str(a.start) ? new Date(str(a.start)) : null
+  if (ps && as && ps.getTime() !== as.getTime()) {
+    const sameDay = ps.toDateString() === as.toDateString()
+    out.push(sameDay ? `${clock(ps)} → ${clock(as)}` : `${dayLabel(ps)} ${clock(ps)} → ${dayLabel(as)} ${clock(as)}`)
+  }
+  if (str(a.location) && str(a.location) !== str(p.location)) out.push(str(p.location) ? 'new place' : 'place added')
+  const before = new Set([...names(p.members), ...names(p.members_add)].map((n) => n.toLowerCase()))
+  for (const n of [...names(a.members), ...names(a.members_add)]) {
+    if (!before.has(n.toLowerCase())) out.push(`${members.find((m) => m.name.toLowerCase() === n.toLowerCase())?.name ?? n} added`)
+  }
+  if (str(a.title) && str(p.title) && str(a.title) !== str(p.title)) out.push('renamed')
+  if (str(a.driver_name) && str(a.driver_name) !== str(p.driver_name)) out.push(`${str(a.driver_name)} drives`)
+  return out
+}
+
+export function assistantCard(action: CardAction | null, previous: CardAction | null, ctx: CardContext): AssistantCard | null {
+  if (!action) return null
+  const built = draftEvent(action, ctx)
+  if (!built) return null
+  const { event, target } = built
+  const start = new Date(event.start_time)
+  const end = new Date(event.end_time)
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) return null
+  const allDay = event.all_day === true
+  const day = new Date(start)
+  day.setHours(0, 0, 0, 0)
+
+  // The day as the wall would plan it with this saved: the target replaced, the add added.
+  const others = ctx.events.filter((e) => e.id !== event.id)
+  const plan = ctx.planDay(day, [...others, event])
+  const people = memberIds(event)
+  const trip = plan?.trips.find((t) => t.source === 'event' && t.sourceId === event.id) ?? null
+
+  const lanePerson = people[0] ?? null
+  const lane = plan && lanePerson ? { memberId: lanePerson, segments: plan.lanes.get(lanePerson) ?? [] } : null
+
+  // What else is going on for these people while it happens.
+  const clashes = allDay || !plan
+    ? []
+    : people.flatMap((id) => (plan.lanes.get(id) ?? [])
+      .filter((s) => s.sourceId !== event.id && s.kind !== 'drive' && s.start < end && s.end > start)
+      .map((s) => `Clashes with ${s.label} (${ctx.members.find((m) => m.id === id)?.name ?? ''})`))
+  const nameList = people.map((id) => ctx.members.find((m) => m.id === id)?.name).filter(Boolean) as string[]
+  const touches = clashes.length > 0
+    ? [...new Set(clashes)]
+    : nameList.length > 0 && !allDay
+      ? [`Nothing else then for ${nameList.length > 1 ? `${nameList.slice(0, -1).join(', ')} and ${nameList.at(-1)}` : nameList[0]}`]
+      : []
+
+  const chainedFrom = trip?.chainedFrom ? plan?.trips.find((t) => t.id === trip.chainedFrom) : null
+  const chosen = str(action.args.driver_name).toLowerCase()
+  const drivers = plan && trip
+    ? driverChoices(plan, ctx.members, trip, event.id).map((c) => ({ ...c, chosen: chosen ? c.name.toLowerCase() === chosen : c.memberId === trip.driverId }))
+    : null
+
+  const movedTime = target != null && (new Date(target.start_time).getTime() !== start.getTime() || new Date(target.end_time).getTime() !== end.getTime())
+  return {
+    kind: action.tool === 'create_event' ? 'add' : 'change',
+    eventId: event.id,
+    title: event.title,
+    start,
+    end,
+    allDay,
+    when: `${dayLabel(start)} · ${allDay ? 'all day' : timeRange(start, end)}`,
+    before: movedTime && target
+      ? `${new Date(target.start_time).toDateString() === start.toDateString() ? '' : `${dayLabel(new Date(target.start_time))} · `}${timeRange(new Date(target.start_time), new Date(target.end_time))}`
+      : null,
+    place: (event.location_name || event.address || '').trim() || null,
+    peopleIds: people,
+    justChanged: whatChanged(previous, action, ctx.members),
+    lane,
+    leaveBy: trip?.leaveAt ? clock(trip.leaveAt) : null,
+    leavesFrom: chainedFrom ? chainedFrom.destination.name || null : null,
+    drivers,
+    touches,
+  }
+}
+
+/** The previous card this one replaced: the latest earlier action of the same kind and target. */
+export function replacedAction<T extends { toolAction?: { tool: string; args: Record<string, unknown>; status?: string } | null }>(messages: T[], current: T | null): CardAction | null {
+  if (!current?.toolAction) return null
+  const i = messages.lastIndexOf(current)
+  for (let j = i - 1; j >= 0; j--) {
+    const t = messages[j].toolAction
+    if (t && t.tool === current.toolAction.tool && (t.args.id ?? null) === (current.toolAction.args.id ?? null)) return { tool: t.tool, args: t.args }
+  }
+  return null
+}
+
